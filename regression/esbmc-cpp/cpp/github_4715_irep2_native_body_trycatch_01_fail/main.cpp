@@ -1,6 +1,6 @@
 // __ESBMC_assert is a built-in intrinsic; no include needed.
 
-// W1-loc Phase C (esbmc/esbmc#4715): under --irep2-native-body a source-level
+// W1-loc Phase C (esbmc/esbmc#4715): under native conversion a source-level
 // try/catch (code_cpp_catch2t) is delegated to the legacy convert()/convert_catch
 // rather than forcing a whole-function fallback, so the statements around it --
 // the local declarations and the trailing return here -- convert natively while

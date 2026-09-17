@@ -131,6 +131,9 @@ private:
    */
   exprt build_constant_from_arg() const;
 
+  std::optional<BigInt>
+  try_fold_constant_arith_json(const nlohmann::json &node) const;
+
   /*
    * Folds bytes.fromhex("..") over a constant hex string into a byte array.
    */
@@ -142,6 +145,19 @@ private:
   void get_function_type();
 
   /*
+   * The AST node of the named class, from the main module or, when the main
+   * module's body does not hold it, from the module that defines it (#7546).
+   */
+  nlohmann::json find_class_node(const std::string &name) const;
+  bool resolves_to_staticmethod(
+    const nlohmann::json &class_node,
+    const std::string &method) const;
+  const symbolt *
+  find_inherited_classmethod(const std::string &func_symbol_id) const;
+  std::optional<exprt>
+  build_post_init_forward_call(const std::string &func_symbol_id);
+
+  /*
    * Retrieves the object (caller) name from the AST.
    */
   std::string get_object_name() const;
@@ -150,7 +166,7 @@ private:
    * Resolves the list symbol for a list method call.
    * Handles both a plain name (e.g. mylist.append()) and a subscript of
    * a nested list (e.g. nested[0].append()) by looking up the inner list
-   * symbol via list_type_map.  Returns nullptr when not found.
+   * symbol via the element-type registry.  Returns nullptr when not found.
    * On return, `display_name` holds a human-readable identifier suitable
    * for error messages (e.g. "mylist" or "nested[0]").
    */
@@ -354,6 +370,11 @@ private:
    * Rewrites the argument AST node into an integer Constant holding the given
    * code point and returns the resulting int expression. Helper for handle_ord.
    */
+  /// Code point of a constant char array -- what chr() folds to -- or nullopt
+  /// when @p e is not one. bytes are long_long_int arrays and are excluded, so
+  /// ord(b"\xc3") keeps its existing behaviour rather than becoming an error.
+  std::optional<int> folded_char_array_codepoint(const exprt &e) const;
+
   exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
 
   /*
@@ -418,6 +439,8 @@ private:
   exprt handle_set_method() const;
 
   // List method detection and handling
+  bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
+  bool receiver_is_binop_or_list_symbol() const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;
@@ -455,9 +478,7 @@ private:
   exprt validate_re_module_args() const;
 
   bool is_any_call() const;
-  exprt handle_any();
   bool is_all_call() const;
-  exprt handle_all();
 
   // Convert an IR expression to its Python truthiness value.
   // Handles None, bool, int, float, complex, pointer types.
@@ -588,6 +609,100 @@ private:
    * Honours reverse=<constant bool>; returns nullopt for any other shape.
    */
   std::optional<exprt> try_fold_sorted();
+  std::optional<exprt> try_materialize_numpy_tolist();
+  std::optional<exprt> try_reduce_numpy_descriptor_method();
+
+  // a.sort(): in-place ascending sort over a concrete 1-D ndarray. Unlike
+  // sum/mean/argmin/..., this mutates its receiver (np.sort(a) instead
+  // returns a new array), so it cannot be normalized into the
+  // dispatch_rewrite_methods free-function shape; it is handled here as its
+  // own method. Returns nullopt for anything but a `<array>.sort()` call, so
+  // an unrelated (e.g. list) receiver falls through to its own handler
+  // unchanged.
+  std::optional<exprt> try_numpy_inplace_sort();
+
+  // a.sort()'s own axis= keyword scan: a literal integer or throws. Split
+  // out of try_numpy_inplace_sort to keep that function's own decision
+  // count down.
+  long long extract_numpy_inplace_sort_axis() const;
+
+  // reject_numpy_view_mutating_method_call (called from
+  // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
+  // reshape view is not a copy (writes to it are meaningful) but sort() has
+  // no support for writing through one yet. Split out to keep
+  // try_numpy_inplace_sort's own decision count down.
+  void reject_numpy_sort_write_through_view(
+    const nlohmann::json &receiver_node) const;
+
+  // One-line dispatch guard combining the two numpy method fast paths above
+  // so handle_general_function_call()'s own decision count does not grow
+  // with each one -- same reasoning as numpy_call_expr.cpp's
+  // get_arange_expr()/try_get_pointer_view_call_result().
+  std::optional<exprt> try_numpy_tolist_or_inplace_sort();
+
+  // axis= handling for any()/all(), covering both call shapes
+  // try_reduce_numpy_descriptor_method() resolves a receiver for. Returns
+  // nullopt (no axis given) so the caller falls through to its own
+  // flattened reduction unchanged. Split out to keep that function's own
+  // decision count down.
+  std::optional<exprt> try_reduce_any_all_along_axis(
+    const std::string &func_name,
+    const std::string &qualifier,
+    const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized,
+    std::size_t positional_offset);
+
+  // The k-th output slot's inner run (a column when axis==0, a row when
+  // axis==1), combined via the same truthiness reduction the flattened path
+  // uses. Split out of try_reduce_any_all_along_axis for the same reason.
+  exprt reduce_any_all_axis_slice(
+    const std::vector<exprt> &elems,
+    const std::vector<std::size_t> &shape,
+    long long normalized_axis,
+    std::size_t k,
+    ReduceOp op) const;
+
+  // np.any(a_1d, axis=0)/np.all(a_1d, axis=0): the only valid axis for a
+  // 1-D array reduces the whole array to a single scalar (matching real
+  // numpy's 0-d result), not a 1-element array. Split out of
+  // try_reduce_any_all_along_axis for the same reason as
+  // reduce_any_all_axis_slice.
+  exprt
+  reduce_any_all_rank1(const std::vector<exprt> &elems, ReduceOp op) const;
+
+  // Validates the materialized receiver's rank (1-D or 2-D only) and rejects
+  // a zero-size array (no reduction identity for any/all). Split out of
+  // try_reduce_any_all_along_axis to keep that function's own decision
+  // count down.
+  static void validate_any_all_axis_shape(
+    const std::vector<std::size_t> &shape,
+    const std::string &func_name,
+    const std::string &qualifier);
+
+  // Who any()/all()'s array operand is, and how the rest of
+  // try_reduce_numpy_descriptor_method must read the call: the method
+  // form's own error-message qualifier ("numpy.ndarray.") and a
+  // positional_offset of 0 (any real argument arrives via keywords only), or
+  // the free-function form's ("numpy.") and an offset of 1 (the array is
+  // call_["args"][0], so exactly one positional argument is expected).
+  struct any_all_receiver
+  {
+    std::pair<std::vector<std::size_t>, std::vector<exprt>> materialized;
+    std::string qualifier;
+    std::size_t positional_offset;
+  };
+
+  // Resolves the receiver above, trying the method form first and the
+  // free-function form second. nullopt means neither call_["func"]["value"]
+  // nor (if present) call_["args"][0] is a materializable numpy descriptor,
+  // so the caller should decline entirely. Split out of
+  // try_reduce_numpy_descriptor_method to keep that function's own decision
+  // count down.
+  std::optional<any_all_receiver>
+  resolve_any_all_receiver(const std::string &func_name);
+
+  /// Internal keys-list symbol id behind a `<name>.keys()` argument.
+  std::string dict_keys_list_id_for_call(const nlohmann::json &arg) const;
+
   std::optional<exprt> fold_sorted_int_list(
     const std::string &list_id,
     size_t map_size,
@@ -615,6 +730,53 @@ private:
    * Returns nullopt for any other function shape or non-array parameter.
    */
   std::optional<exprt> try_fold_identity_array_return();
+
+  /**
+   * Suffix selecting the models/random.py variant that matches a sequence
+   * argument's type: "_float" or "_str" for a list of those, "_chars" for a
+   * str, and "" for a list of ints and for any argument this cannot type,
+   * which keeps the base model it had before the dispatch existed.
+   *
+   * @param seq  the converted sequence argument.
+   * @param func_name  "choice" or "sample", used in the diagnostic.
+   * @return the suffix to append to the model function name.
+   * @throws std::runtime_error naming func_name for a tuple, which no model
+   *         parameter can take and on which the list model would raise a
+   *         spurious memory-safety claim; and from
+   *         element_type_registry::homogeneous_element_type for a list whose
+   *         elements mix incompatibly.
+   */
+  std::string
+  random_sequence_suffix(const exprt &seq, const std::string &func_name);
+
+  /**
+   * Selects an element of a tuple for random.choice(), inline.
+   *
+   * A model function cannot take a tuple, whose arity and member types vary
+   * per call site, so the choice is folded into a nested conditional over a
+   * nondet index instead.
+   *
+   * @param seq  the converted sequence argument.
+   * @return the selected element, or nullopt when @p seq is not a tuple.
+   * @throws std::runtime_error on an empty tuple, which has no element to
+   *         select, and on a tuple whose members differ in type, which one
+   *         conditional cannot carry.
+   */
+  std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
+
+  /**
+   * Folds sum() over a numeric tuple into a chain of additions.
+   *
+   * The sum/sum_float models iterate a list representation a tuple struct does
+   * not have, so they would return garbage.
+   *
+   * @param is_user_imported  whether a user import shadows the builtin.
+   * @param is_numpy_model_call  whether the call is inside models/numpy.py.
+   * @return the folded sum, or nullopt when the call is not sum() over a
+   *         numeric tuple.
+   */
+  std::optional<exprt>
+  fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
 
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
@@ -665,6 +827,17 @@ private:
     symbolt *obj_symbol,
     const symbolt *func_symbol,
     const locationt &location);
+
+  /*
+   * Reconciles a converted call argument with its parameter's type: passes
+   * an already-tagged argument through, boxes a concrete numeric/string
+   * scalar into a tagged-object temporary, or throws otherwise.
+   */
+  exprt coerce_tagged_argument(
+    exprt arg,
+    const typet &param_type,
+    const locationt &location) const;
+
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
@@ -680,6 +853,14 @@ private:
   const symbolt *cached_find_symbol(const std::string &id) const;
 
 protected:
+  // any/all's np.<f>(a, ...) free-function form is dispatched entirely
+  // through numpy_call_expr::get() (is_numpy_call() routes it there before
+  // this class's own table-driven dispatch ever runs), so that subclass
+  // needs to reach these directly rather than through is_any_call()'s
+  // table entry.
+  exprt handle_any();
+  exprt handle_all();
+
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;

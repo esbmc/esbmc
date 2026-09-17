@@ -1,0 +1,4 @@
+CORE
+cbmc_ensures_fresh_over_fail.goto
+--binary --function alloc_one
+^VERIFICATION FAILED$

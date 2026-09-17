@@ -1,0 +1,4 @@
+CORE
+main.c
+--assertion-coverage --proof-cache proof-store
+^WARNING: Proof cache: inactive \(coverage measurement\); every claim will be solved and none stored$

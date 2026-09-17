@@ -35,6 +35,12 @@ exprt build_typecast(const exprt &from, const typet &t);
 // Address-of an lvalue `obj` (symbol/member/index source).
 exprt build_address_of(const exprt &obj);
 
+// A function name used as a value decays to a function pointer, as it already
+// does in call-argument position. Storing the code symbol itself aborts
+// conversion with "got invalid code for function" (#6640). Non-function
+// expressions are returned unchanged.
+exprt decay_function_to_pointer(const exprt &value);
+
 // Dereference `ptr` to a value of type `t`.
 exprt build_dereference(const exprt &ptr, const typet &t);
 
@@ -96,6 +102,9 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 
 // `a % b : t` over same-width operands (modulus2t asserts width consistency).
 exprt build_mod(const exprt &a, const exprt &b, const typet &t);
+
+// `a * b : t` over same-width operands (mul2t asserts width consistency).
+exprt build_mul(const exprt &a, const exprt &b, const typet &t);
 
 // Equality `a == b` over same-typed operands. migrate lowers a legacy
 // "=" node to equality2tc(migrate(a), migrate(b)), so this is the

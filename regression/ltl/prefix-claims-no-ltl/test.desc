@@ -4,5 +4,5 @@ test.ba-2.c -DLTL_PREFIX_BOUND=10 --multi-property
 Solving claim 'LTL_BAD
 Solving claim 'LTL_FAILING
 Solving claim 'LTL_SUCCEEDING
-FAILED: 'LTL_FAILING
+^ +FAILED .*LTL_FAILING$
 ^VERIFICATION FAILED$

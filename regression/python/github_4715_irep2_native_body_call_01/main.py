@@ -1,4 +1,4 @@
-# Exercises the --irep2-native-body IREP2-native code_function_call2t
+# Exercises the IREP2-native code_function_call2t
 # dispatcher (W1-loc spike Phase C, esbmc/esbmc#4715): bump()/reset()'s
 # global-variable bodies are side-effect-free assignments, and each call to
 # them from bump_twice()/run() is a bare "foo();" statement (return value

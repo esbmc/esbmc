@@ -12,6 +12,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
@@ -143,6 +144,76 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 static expr2tc distribute_steps_over_if(const expr2tc &e);
 
+/// Records what a forall2t/exists2t binds while its body is walked, so the
+/// index fold in dereference_expr_nonscalar leaves the bound variable alone:
+/// the rename callback carries no quantifier context and would substitute the
+/// like-named program variable's SSA value (rename_quantified guards the same
+/// concern at the renaming layer, #7024). Constructing one over any other
+/// expression does nothing.
+class dereferencet::quantifier_scopet
+{
+public:
+  quantifier_scopet(dereferencet &deref, const expr2tc &expr) : deref(deref)
+  {
+    if (!is_forall2t(expr) && !is_exists2t(expr))
+      return;
+
+    /* Reached through a pointer -- `void *q = &i; __ESBMC_forall(q, ...
+     * p->buf[i] ...)` -- the binder reads as `q` while binding `i`, so there
+     * is no name to exclude and the whole body has to stay out of the fold. */
+    name = quantifier_direct_bound_name(
+      is_forall2t(expr) ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1);
+    active = true;
+    if (name.empty())
+      deref.opaque_binders++;
+    else
+      deref.quantifier_bound_vars.insert(name);
+  }
+
+  quantifier_scopet(const quantifier_scopet &) = delete;
+  quantifier_scopet &operator=(const quantifier_scopet &) = delete;
+
+  ~quantifier_scopet()
+  {
+    if (!active)
+      return;
+    if (name.empty())
+    {
+      deref.opaque_binders--;
+      return;
+    }
+    // erase(iterator), not erase(key): an inner scope that rebound the same
+    // name must not drop the outer scope's entry too.
+    auto it = deref.quantifier_bound_vars.find(name);
+    if (it != deref.quantifier_bound_vars.end())
+      deref.quantifier_bound_vars.erase(it);
+  }
+
+private:
+  dereferencet &deref;
+  irep_idt name;
+  bool active = false;
+};
+
+bool dereferencet::mentions_bound_var(const expr2tc &expr) const
+{
+  if (quantifier_bound_vars.empty() || is_nil_expr(expr))
+    return false;
+  if (is_symbol2t(expr))
+    return quantifier_bound_vars.count(to_symbol2t(expr).thename) != 0;
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &e) {
+    if (!found)
+      found = mentions_bound_var(e);
+  });
+  return found;
+}
+
+bool dereferencet::may_fold_index(const expr2tc &index) const
+{
+  return opaque_binders == 0 && !mentions_bound_var(index);
+}
+
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
@@ -202,9 +273,12 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
     break;
   }
 
+  case expr2t::forall_id:
+  case expr2t::exists_id:
   default:
   {
     // Recurse over the operands
+    quantifier_scopet scope(*this, expr);
     expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
       if (is_nil_expr(e))
         return;
@@ -345,6 +419,19 @@ void dereferencet::dereference_addrof_expr(
   // arithmetic that contains another dereference. So we need to re-deref this
   // new expression.
   dereference_expr(expr, guard, mode);
+}
+
+/* Once per type: this fires on every access, so a program that reads a packed
+ * struct in a loop otherwise buries its own output. */
+static void warn_unchecked_packed_alignment(const type2tc &structure)
+{
+  static std::set<irep_idt> reported;
+  irep_idt name = struct_union_name(structure);
+  if (reported.insert(name).second)
+    log_warning(
+      "not checking alignment for access to packed {} {}",
+      get_type_id(*structure),
+      name.as_string());
 }
 
 static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
@@ -495,10 +582,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
       !is_aligned_member(expr, ns))
     {
-      log_warning(
-        "not checking alignment for access to packed {} {}",
-        get_type_id(*structure->type),
-        struct_union_name(structure->type).as_string());
+      warn_unchecked_packed_alignment(structure->type);
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
@@ -508,6 +592,23 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
+
+    /* Now free of dereferences, fold in any value symex already knows for
+     * the index (e.g. an array index stored in a struct field): a constant
+     * index keeps this access on the constant-offset path, which produces a
+     * member/index reference. A symbolic index degenerates to a whole-object
+     * byte_extract/byte_update that constant propagation cannot see through:
+     * the assignment drops the object's recorded constant, later guards over
+     * it become undecidable and loops unwind to the bound (#7311).
+     *
+     * may_fold_index keeps quantified indices out: the rename callback would
+     * replace a bound symbol with the like-named program variable's SSA
+     * value, collapsing the quantified body to a constant (#7024 shape). */
+    if (!is_constant_int2t(index.index) && may_fold_index(index.index))
+    {
+      dereference_callback.rename(index.index);
+      simplify(index.index);
+    }
     return dereference_expr_nonscalar(index.source_value, guard, mode, base);
   }
 
@@ -578,12 +679,16 @@ expr2tc dereferencet::dereference(
   if (!known_exhaustive)
     value = make_failed_symbol(type);
 
+  // Where p can land: every target build_reference_to() produced a guard for.
+  expr2tc resolved = gen_false_expr();
+
   for (const expr2tc &target : points_to_set)
   {
     expr2tc new_value, pointer_guard;
 
     new_value = build_reference_to(
       target, mode, src, type, guard, lexical_offset, pointer_guard);
+    resolved = or2tc(resolved, pointer_guard);
 
     if (is_nil_expr(new_value))
       continue;
@@ -605,6 +710,9 @@ expr2tc dereferencet::dereference(
     else
       value = if2tc(type, pointer_guard, new_value, value);
   }
+
+  if (!known_exhaustive && (is_write(mode) || is_free(mode)))
+    deref_invalid_ptr(src, guard, mode, resolved);
 
   if (is_internal(mode))
   {
@@ -651,29 +759,6 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   migrate_namespace_lookup = old_ns;
 
   return value;
-}
-
-// Parameter names are not part of a function's type (C++ [dcl.fct]p5, C11
-// 6.7.6.3p15), but irep2 type equality compares argument_names too. An
-// out-of-line virtual definition gives its parameters fresh symbol ids, so the
-// vtable slot and the function symbol end up with code types that differ in
-// nothing else -- enough for the virtual call to lose its target (#6749).
-static bool same_function_pointer_ignoring_argument_names(
-  const type2tc &a,
-  const type2tc &b)
-{
-  if (!is_pointer_type(a) || !is_pointer_type(b))
-    return false;
-
-  const type2tc &sub_a = to_pointer_type(a).subtype;
-  const type2tc &sub_b = to_pointer_type(b).subtype;
-  if (!is_code_type(sub_a) || !is_code_type(sub_b))
-    return false;
-
-  const code_type2t &ca = to_code_type(sub_a);
-  const code_type2t &cb = to_code_type(sub_b);
-  return ca.arguments == cb.arguments && ca.ret_type == cb.ret_type &&
-         ca.ellipsis == cb.ellipsis;
 }
 
 bool dereferencet::dereference_type_compare(
@@ -766,7 +851,10 @@ void dereferencet::check_pointer_alignment(
 
   expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
   simplify(ptr_offset_bits);
-  check_alignment(access_size_bits, ptr_offset_bits, guard);
+  /* The object is not known here -- build_reference_to() has yet to unpack the
+   * descriptor -- so this pre-check keeps assuming the base carries the width.
+   * The object-aware sites below make the claim that actually bites. */
+  check_alignment(access_size_bits, ptr_offset_bits, guard, expr2tc());
 }
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
@@ -821,7 +909,7 @@ expr2tc dereferencet::build_reference_to(
     type2tc nullptrtype = pointer_type2tc(type);
     expr2tc null_ptr = symbol2tc(nullptrtype, "NULL");
 
-    expr2tc pointer_guard = same_object2tc(deref_expr, null_ptr);
+    pointer_guard = same_object2tc(deref_expr, null_ptr);
 
     guard2tc tmp_guard(guard);
     tmp_guard.add(pointer_guard);
@@ -949,15 +1037,39 @@ expr2tc dereferencet::build_reference_to(
 void dereferencet::deref_invalid_ptr(
   const expr2tc &deref_expr,
   const guard2tc &guard,
-  modet mode)
+  modet mode,
+  const expr2tc &resolved)
 {
   if (is_internal(mode))
     // The caller just wants a list of references -- ensuring that the correct
     // assertions fire is a problem for something or someone else
     return;
 
+  // Per-target call: dereference() checks WRITE and FREE once, after the loop.
+  if (is_nil_expr(resolved) && (is_write(mode) || is_free(mode)))
+    return;
+
   // constraint that it actually is an invalid pointer
   expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
+
+  /* obj(p) can be a real object outside the value set: invalid_pointer passes
+   * it, and symex models no write or free there. */
+  if (!is_nil_expr(resolved))
+  {
+    expr2tc unmodelled = not2tc(resolved);
+    if (is_free(mode))
+    {
+      // valid_object is the alloc bit, so this also passes an alloca block.
+      type2tc offs_type = get_int_type(config.ansi_c.address_width);
+      unmodelled = and2tc(
+        unmodelled,
+        or2tc(
+          not2tc(valid_object2tc(deref_expr)),
+          notequal2tc(
+            pointer_offset2tc(offs_type, deref_expr), gen_zero(offs_type))));
+    }
+    invalid_pointer_expr = or2tc(invalid_pointer_expr, unmodelled);
+  }
 
   expr2tc validity_test;
   std::string foo;
@@ -1087,7 +1199,12 @@ void dereferencet::build_reference_rec(
   // no-op, so return any value of the target type (issue #723).
   if (type_byte_size_bits(type) == 0)
   {
-    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
+    // Still not gen_zero for a member-less union: it now answers with a
+    // zero-member constant_union2t, and everything downstream of here assumes
+    // a union constant has exactly one initialiser (constant_union2t in
+    // irep2_expr.h, and the assert in build_reference_rec's constant_union2t
+    // arm). A nondet symbol of the target type is a zero-width value nothing
+    // reads, and keeps that invariant intact.
     value = (is_union_type(type) && to_union_type(type).members.empty())
               ? make_failed_symbol(type)
               : gen_zero(type);
@@ -1383,7 +1500,7 @@ void dereferencet::construct_from_array(
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard);
+    check_alignment(deref_size, std::move(mod), guard, value);
 
   if (!overflows_boundaries)
   {
@@ -1511,14 +1628,17 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (m_size == 0)
     {
-      // This field has no size: it's most likely a struct that has no members.
-      // Just skip over it: we can never correctly build a reference to a field
-      // in that struct, because there are no fields. The next field in the
+      // This field has no size: either a struct with no members, or an array
+      // with no elements -- a flexible array member (C17 6.7.2.1p18) or a GNU
+      // `[0]` member (#5393). Just skip over it: we can never correctly build a
+      // reference to a field in it, because it has none. The next field in the
       // current struct lies at the same offset and is probably what the pointer
-      // is supposed to point at.
+      // is supposed to point at; a flexible array member is the struct's last,
+      // so the loop then falls out and the access is reported out of bounds,
+      // which is what it is.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
+      assert(is_struct_type(it) || is_union_type(it) || is_array_type(it));
       assert(!is_struct_type(type));
       i++;
       continue;
@@ -2192,10 +2312,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         expr2tc target = value; // The byte array;
 
         simplify(array_offset);
-        if (is_array_type(target_type))
-          construct_from_array(target, array_offset, target_type, tmp, mode);
-        else
-          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        construct_struct_member_from_byte_array(
+          target, array_offset, target_type, tmp, mode);
         fields.push_back(target);
 
         // Update dynamic offset into array
@@ -2227,6 +2345,22 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     return;
   }
+}
+
+void dereferencet::construct_struct_member_from_byte_array(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (is_array_type(type) && type_byte_size_bits(type) == 0)
+    value = gen_zero(type);
+  else if (is_array_type(type))
+    construct_from_array(value, offset, type, guard, mode);
+  else
+    build_reference_rec(value, offset, type, guard, mode);
 }
 
 /**************************** Dereference utilities ***************************/
@@ -2271,7 +2405,14 @@ std::vector<expr2tc> dereferencet::extract_bytes(
   unsigned int num_bytes,
   const expr2tc &offset) const
 {
-  assert(num_bytes != 0);
+  /* A zero-width object has no bytes to extract, and the stitching below reads
+   * bytes[num_bytes - 1] -- an out-of-bounds access in ESBMC itself rather than
+   * a verdict. Callers must build zero-width values without stitching. */
+  if (num_bytes == 0)
+  {
+    log_error("dereference: cannot read a zero-width object");
+    abort();
+  }
 
   std::vector<expr2tc> bytes;
   bytes.reserve(num_bytes);
@@ -2334,6 +2475,8 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes,
   const std::vector<expr2tc> &bytes)
 {
+  /* Every caller sources `bytes` from extract_bytes(), which refuses a
+   * zero-width read before we get here. */
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
@@ -2388,11 +2531,15 @@ expr2tc dereferencet::stitch_together_from_byte_array(
       return byte_array;
   }
 
+  BigInt num_bits = type_byte_size_bits(type);
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (num_bits == 0)
+    return gen_zero(type);
+
   expr2tc offset_bytes =
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
   simplify(offset_bytes);
 
-  BigInt num_bits = type_byte_size_bits(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
@@ -2417,7 +2564,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 // allocation "symex_dynamic::...". Heap allocations (malloc/calloc/realloc) use
 // that bare prefix; alloca, which lives on the stack, carries the extra
 // "alloca::" infix (see symex_mem() in
-// goto-symex/builtin_functions/memory_alloc.cpp).
+// goto-symex/engine/builtin_functions/memory_alloc.cpp).
 static bool is_symex_dynamic_object(const std::string &id)
 {
   return has_prefix(id, "symex_dynamic::");
@@ -2730,16 +2877,19 @@ void dereferencet::check_data_obj_access(
 
   BigInt data_sz = type_byte_size_bits(value->type);
   BigInt access_sz = type_byte_size_bits(type);
-  expr2tc data_sz_e = gen_long(offset->type, data_sz);
-  expr2tc access_sz_e = gen_long(offset->type, access_sz);
 
   // Only erroneous thing we check for right now is that the offset is out of
   // bounds, misaligned access happens elsewhere. The highest byte read is at
-  // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
-  // Lower bound not checked, instead we just treat everything as unsigned,
-  // which has the same effect.
-  expr2tc add = add2tc(access_sz_e->type, offset, access_sz_e);
-  expr2tc gt = greaterthan2tc(add, data_sz_e);
+  // offset+access_sz-1, so the access fails if offset+access_sz > data_sz.
+  // The lower bound is not checked separately: an offset below the object
+  // arrives here as a huge unsigned value. That relies on the sum not
+  // wrapping, so it is rearranged into offset > data_sz-access_sz, which is
+  // equivalent over the integers and cannot overflow. Adding instead let every
+  // offset in [-access_sz, 0) wrap back into range (R35).
+  expr2tc gt =
+    access_sz > data_sz
+      ? gen_true_expr()
+      : greaterthan2tc(offset, gen_long(offset->type, data_sz - access_sz));
 
   if (!options.get_bool_option("no-bounds-check"))
   {
@@ -2761,13 +2911,42 @@ void dereferencet::check_data_obj_access(
    * manner (e.g. for __attribute__((packed)) structures),
    * check that the access being made is aligned. */
   if (is_scalar_type(type) && !mode.unaligned)
-    check_alignment(access_sz, std::move(offset), guard);
+    check_alignment(access_sz, std::move(offset), guard, value);
+}
+
+BigInt dereferencet::object_base_alignment(const expr2tc &object) const
+{
+  /* The base carries the guarantee, so a member or element has to be resolved
+   * back to the object it lives in before its alignment means anything. */
+  const expr2tc &base = get_base_object(object);
+
+  /* The legacy typet, not migrate_type_back(): `max_field_alignment` is an
+   * irep attribute that does not survive migration, and without it a
+   * `#pragma pack(n)` record reads as naturally aligned. */
+  const symbolt *sym =
+    is_symbol2t(base) ? ns.lookup(to_symbol2t(base).thename) : nullptr;
+  const typet type = sym ? sym->get_type() : migrate_type_back(base->type);
+
+  expr2tc size;
+  try
+  {
+    size = type_byte_size_expr(base->type, &ns);
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    /* Same stand-in convert_identifier_pointer() uses for an unknown extent,
+     * so both models keep answering from one number. */
+    size = gen_ulong(0x10000);
+  }
+
+  return ::object_base_alignment(type, size, ns);
 }
 
 void dereferencet::check_alignment(
   BigInt minwidth,
   const expr2tc &offset_bits,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &object)
 {
   if (options.get_bool_option("no-align-check"))
     return;
@@ -2785,10 +2964,30 @@ void dereferencet::check_alignment(
 
   // Perform conversion to bytes here
   minwidth = minwidth / 8;
-  expr2tc offset = typecast2tc(
+  expr2tc addr = typecast2tc(
     size_type2(),
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8)));
-  simplify(offset);
+  simplify(addr);
+
+  /* The offset is only half the address. Reading it alone assumes the object's
+   * base already carries the access width, which the address-space model
+   * guarantees for every object but the ones that decline alignment -- `packed`
+   * and `#pragma pack(n)`, whose base it deliberately leaves free. For those,
+   * decide the claim on the whole address, so a program that constrains its own
+   * object still discharges it (#6951, #7707).
+   *
+   * A width that is not a power of two -- `long double` under --32 -- has no
+   * meaningful mask either way, so leave it on the offset path it was already
+   * on rather than report against a base no object could satisfy. */
+  if (
+    !is_nil_expr(object) && is_power_of_two(minwidth) &&
+    object_base_alignment(object) < minwidth)
+  {
+    expr2tc base = typecast2tc(
+      size_type2(), address_of2tc(pointer_type2tc(object->type), object));
+    addr = add2tc(size_type2(), base, addr);
+    simplify(addr);
+  }
 
   expr2tc mask_expr = gen_ulong(minwidth - 1);
   expr2tc neq;
@@ -2796,12 +2995,12 @@ void dereferencet::check_alignment(
   if (options.get_bool_option("int-encoding"))
   {
     expr2tc align = gen_ulong(minwidth);
-    expr2tc moded = modulus2tc(align->type, offset, align);
+    expr2tc moded = modulus2tc(align->type, addr, align);
     neq = notequal2tc(moded, gen_zero(moded->type));
   }
   else
   {
-    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, offset);
+    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, addr);
     neq = notequal2tc(anded, gen_zero(anded->type));
   }
 

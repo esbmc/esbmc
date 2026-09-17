@@ -26,6 +26,22 @@ if(ENABLE_Z3)
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 endif()
 
+if(ENABLE_BITWUZLA)
+  # Links `solverbitw` (the static lib carrying bitwuzla_conv.cpp) so the test
+  # can construct the backend directly: mk_*_sort is not reachable through
+  # smt_convt, and the sort cache it pins is a property of the backend, not of
+  # any query it answers. `solvers` supplies create_solver for the model half.
+  # Only the backend's own source dir is named here. Bitwuzla's include dirs
+  # arrive as a usage requirement of PkgConfig::Bitwuzla, which solverbitw
+  # links with the plain signature; naming that imported target here instead
+  # is a configure error, as pkg_check_modules created it in the solver's
+  # directory scope rather than GLOBAL.
+  new_unit_test(bitwuzla_sort_cache_test "bitwuzla_sort_cache.test.cpp"
+                "solvers;util_esbmc;filesystem;bigint")
+  target_include_directories(bitwuzla_sort_cache_test
+    PRIVATE ${CMAKE_SOURCE_DIR}/src/solvers/bitwuzla)
+endif()
+
 if(ENABLE_SMTLIB)
   # Verdict scanner shared by the one-shot subprocess backends (bitwuzllob,
   # neurosym); lives in the smtlib library. util_esbmc supplies the logging
@@ -42,4 +58,16 @@ endif()
 # present. Whichever is the default answers the queries.
 new_unit_test(simplification_equivalence_test
               "simplification_equivalence.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
+
+# The node tuple flattener's update(), driven directly: the field-preservation
+# contract it broke is unreachable from C input, so no regression test states
+# it. `solvers` rather than a named backend -- whichever is built in answers.
+new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
+
+# Bounds on a tuple field index, over both flatteners. The mismatch that made
+# them read and write out of bounds needs an expression whose struct type
+# disagrees with its AST's sort, which no C input produces.
+new_unit_test(tuple_field_bounds_test "tuple_field_bounds.test.cpp"
               "solvers;util_esbmc;filesystem;bigint")

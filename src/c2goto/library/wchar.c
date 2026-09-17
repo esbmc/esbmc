@@ -178,3 +178,28 @@ __ESBMC_HIDE:;
       return 0;
   return 1;
 }
+
+/* swprintf/vswprintf over-approximate: every wide character the destination can
+ * hold is havocked, and on success the result is terminated within len. See the
+ * note in headers/wchar.h for why the format is not interpreted. */
+int vswprintf(wchar_t *ws, size_t len, const wchar_t *format, va_list arg)
+{
+__ESBMC_HIDE:;
+  for (size_t i = 0; i < len; i++)
+    ws[i] = (wchar_t)nondet_int();
+  int r = nondet_int();
+  __ESBMC_assume(r < (int)len);
+  if (r >= 0)
+    ws[r] = 0;
+  return r;
+}
+
+int swprintf(wchar_t *ws, size_t len, const wchar_t *format, ...)
+{
+__ESBMC_HIDE:;
+  va_list arg;
+  va_start(arg, format);
+  int r = vswprintf(ws, len, format, arg);
+  va_end(arg);
+  return r;
+}

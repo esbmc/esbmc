@@ -21,6 +21,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -2242,6 +2243,26 @@ static std::string transform_one_pass(const std::string &src)
   return modified;
 }
 
+/// The source's basename, reduced to characters that read cleanly inside a
+/// symbol id. Two translation units with the same basename collide, exactly as
+/// two real file-static functions of the same name in same-named files do.
+static std::string usr_stem(const std::string &source_path)
+{
+  const std::size_t slash = source_path.find_last_of("/\\");
+  std::string stem =
+    slash == std::string::npos ? source_path : source_path.substr(slash + 1);
+
+  const std::size_t dot = stem.find_last_of('.');
+  if (dot != std::string::npos && dot != 0)
+    stem.erase(dot);
+
+  for (char &c : stem)
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
+      c = '_';
+
+  return stem.empty() ? std::string("src") : stem;
+}
+
 std::optional<file_operations::tmp_file>
 transform_nested_functions(const std::string &source_path)
 {
@@ -2272,12 +2293,25 @@ transform_nested_functions(const std::string &source_path)
   // Add #line directive at the top
   std::string output = "#line 1 \"" + source_path + "\"\n" + src;
 
-  auto tmp = file_operations::create_tmp_file("esbmc-nested.%%%%-%%%%.c");
-  if (!tmp.file())
+  /* The lifted helpers have internal linkage, so clang's USR for each one
+   * embeds the basename of the file it was parsed from -- a random name here
+   * put a fresh symbol id in the goto program on every run, for the same input
+   * and flags. Derive the basename from the source instead and take the
+   * uniqueness from a per-run directory, which the USR does not see. */
+  auto dir = file_operations::create_tmp_dir("esbmc-nested.%%%%-%%%%");
+  const std::string path =
+    dir.path() + "/esbmc-nested." + usr_stem(source_path) + ".c";
+
+  FILE *f = std::fopen(path.c_str(), "w+");
+  if (!f)
     return std::nullopt;
 
-  std::fputs(output.c_str(), tmp.file());
-  std::fflush(tmp.file());
+  // create_tmp_dir already registered the directory for end-of-run cleanup;
+  // keep it past this scope so the file inside outlives the handle.
+  std::move(dir).keep(true);
 
-  return tmp;
+  std::fputs(output.c_str(), f);
+  std::fflush(f);
+
+  return file_operations::tmp_file(f, file_operations::tmp_path(path));
 }

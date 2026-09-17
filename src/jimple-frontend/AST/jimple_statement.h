@@ -38,11 +38,6 @@ class jimple_invoke : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -71,11 +66,6 @@ public:
  */
 class jimple_return : public jimple_statement
 {
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -98,11 +88,6 @@ class jimple_label : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -123,11 +108,6 @@ class jimple_goto : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -145,11 +125,6 @@ public:
 class jimple_assignment : public jimple_statement
 {
 public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -187,10 +162,6 @@ public:
 class jimple_if : public jimple_statement
 {
 public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,

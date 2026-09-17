@@ -42,6 +42,7 @@ module_imports: dict[str, ModuleImportInfo] = {}
 module_exports: dict[str, tuple[set[str], dict[str, str], set[str] | None]] = {}
 _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
+_reported_unmodelled: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,9 @@ def reset_state() -> None:
     module_exports.clear()
     _reported_cycles.clear()
     _reported_resolution_failures.clear()
+    _reported_unmodelled.clear()
+    imported_signature_sources.clear()
+    default_helper_exports.clear()
 
 
 def _resolver_error(detail: str) -> None:
@@ -90,6 +94,32 @@ def _mark_import_resolution(
     node.module_resolution_reason = reason
 
 
+def _has_model_file(module_name: str, output_dir: str) -> bool:
+    """Whether a model stands in for this exact module.
+
+    The dotted name matters: `_emit_model_jsons` emits one JSON per
+    `models/*.py`, so a model for `string` says nothing about
+    `string.templatelib`, which the converter would then look for in vain.
+    """
+    base = os.path.join(output_dir, "models", *module_name.split("."))
+    return os.path.exists(base + ".py") or os.path.exists(os.path.join(base, "__init__.py"))
+
+
+def _warn_unmodelled_module(module_name: str) -> None:
+    if module_name in _reported_unmodelled:
+        return
+    _reported_unmodelled.add(module_name)
+    _resolver_warning(f"no operational model for module '{module_name}'; "
+                      "its names will be unresolved")
+
+
+def _warn_module_file_not_found(module_name: str) -> None:
+    """Warn unless `_warn_unmodelled_module` already named this module."""
+    if module_name in _reported_unmodelled:
+        return
+    _resolver_warning(f"{module_name} module-file-not-found")
+
+
 def _warn_resolution_failure(module_name: str, node: ast.AST, reason: str) -> None:
     location = _node_location(node)
     key = (module_name, reason, location)
@@ -116,6 +146,7 @@ def _is_imported_model(module_name: str) -> bool:
         "queue",
         "torch",
         "unittest",
+        "sys",
     }
     return module_name in models
 
@@ -226,6 +257,21 @@ def import_module_by_name(
         # Keep legacy error text: regression tests assert this exact line.
         _resolver_error(f"Module '{module_name}' not found.")
         return None
+    except SyntaxError as exc:
+        # Importing compiles the module, so a source ESBMC cannot parse
+        # escapes here and not as an ImportError. It reached the user as a raw
+        # CPython traceback naming files inside the extracted temp directory,
+        # gone by the time anyone reads them (#7678). Non-UTF-8 source arrives
+        # here too: CPython reports it as a SyntaxError carrying the decode
+        # error.
+        _resolver_warning(f"{module_name} module-parse-failed: {exc}")
+        return None
+    except Exception as exc:  # pylint: disable=broad-except
+        # Importing also *runs* the module body, so anything it raises escapes
+        # the same way. The module parsed; it failed executing, so the reason
+        # must not claim otherwise.
+        _resolver_warning(f"{module_name} module-import-failed: {exc}")
+        return None
 
 
 def _collect_import_targets(
@@ -255,6 +301,11 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
     if not module_names:
         return
 
+    # `import_module_name` in python_converter.cpp resolves an `import a, b`
+    # node to its first name alone, so only that name decides whether the node
+    # is convertible; flagging it for `b` would drop `a` too.
+    converter_target = module_names[0]
+
     for module_name in module_names:
         if module_name not in module_imports:
             module_imports[module_name] = {'import_all': False, 'specific_names': set()}
@@ -272,9 +323,13 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             continue
         filename = _module_filename(module)
         if filename is None:
-            # Keep historical behavior: modules without an emit-able file
-            # (e.g., standard library/builtins) are skipped, not treated as
-            # missing imports.
+            # Importable under CPython, no AST to emit, no model standing in
+            # for it: nothing to convert (#7674). Not `module_not_found` --
+            # that flag statically selects an `except ImportError` branch.
+            if not _has_model_file(module_name, output_dir):
+                _warn_unmodelled_module(module_name)
+                if module_name == converter_target:
+                    node.module_unmodelled = True
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
 
@@ -368,6 +423,41 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     return tree
 
 
+# Preprocessors of every imported module, published so the entry module can
+# adopt their signatures before its own body is finalized.
+imported_signature_sources: list = []
+
+# Per-module def-time default helpers that an importing module may reference.
+default_helper_exports: dict = {}
+
+
+def ensure_default_helper_imports(tree: ast.AST) -> None:
+    """Import the def-time default helpers a filled call site now references.
+
+    A container default is hoisted to a module-level variable where the
+    function is defined; a call in another module reaches it only if the name
+    is imported alongside the function itself.
+    """
+    referenced = {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id.startswith("ESBMC_default_")
+    }
+    if not referenced:
+        return
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        owned = default_helper_exports.get(node.module)
+        if not owned:
+            continue
+        already = {alias.name for alias in node.names}
+        for helper in sorted(referenced & owned - already):
+            node.names.append(ast.alias(name=helper, asname=None))
+        ast.fix_missing_locations(node)
+
+
 def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> None:
     """Emit collected imports after transitive discovery converges.
 
@@ -386,7 +476,7 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
             visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
-                _resolver_warning(f"{module_name} module-file-not-found")
+                _warn_module_file_not_found(module_name)
                 continue
             try:
                 tree, preprocessor = callbacks.parse_file_canonicalised(filename)
@@ -409,6 +499,24 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
     for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
         preprocessor.finalize_module(tree)
 
+    # Each module was preprocessed in isolation, so it only knows its own call
+    # signatures. Publish them, now that every body has been visited, for the
+    # entry module to adopt before its own body is finalized: a call into an
+    # imported module is otherwise converted without the arguments that
+    # module's defaults would supply.
+    imported_signature_sources.clear()
+    imported_signature_sources.extend(
+        (name, pp) for name, (_tree, _filename, pp) in parsed_trees.items())
+
+    # A call site filled from those defaults references the def-time helper
+    # holding the container default, so it has to be emitted alongside the
+    # functions imported from its module. Kept out of `specific_names`, which
+    # also drives submodule emission -- a helper is a plain module global.
+    default_helper_exports.clear()
+    for module_name, preprocessor in imported_signature_sources:
+        if preprocessor.hoisted_default_names:
+            default_helper_exports[module_name] = set(preprocessor.hoisted_default_names)
+
     _emit_collected_import_json(parsed_trees, output_dir, callbacks)
 
 
@@ -419,7 +527,8 @@ def _emit_collected_import_json(
 ) -> None:
     for module_name, import_info in module_imports.items():
         imported_elements = None if import_info['import_all'] else [
-            ast.alias(name, None) for name in import_info['specific_names']
+            ast.alias(name, None) for name in (import_info['specific_names']
+                                               | default_helper_exports.get(module_name, set()))
         ]
 
         for name in sorted(import_info['specific_names']):
@@ -532,7 +641,7 @@ def emit_module_json(
     """Parse and emit JSON for one module resolved by qualified name."""
     filename = resolve_module_file(module_qualname, output_dir)
     if not filename:
-        _resolver_warning(f"{module_qualname} module-file-not-found")
+        _warn_module_file_not_found(module_qualname)
         return
     try:
         tree, _preprocessor = parse_file_canonicalised_fn(filename)

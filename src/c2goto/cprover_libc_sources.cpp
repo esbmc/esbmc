@@ -61,23 +61,27 @@ void register_bundled_libc()
 #undef ESBMC_FLAIL
 
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  fs.add_bundled(vfs_musl + "/" #__VA_ARGS__, body, size);
+  file_operations::filesystemt::get().add_bundled(                             \
+    vfs_musl + "/" #__VA_ARGS__, body, size);
 #include <libmusl.h>
 #undef ESBMC_FLAIL
 
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  fs.add_bundled(vfs_musl + "/" #__VA_ARGS__, body, size);
+  file_operations::filesystemt::get().add_bundled(                             \
+    vfs_musl + "/" #__VA_ARGS__, body, size);
 #include <libmuslhdr.h>
 #undef ESBMC_FLAIL
 
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  fs.add_bundled(vfs_cpp + "/" #__VA_ARGS__, body, size);
+  file_operations::filesystemt::get().add_bundled(                             \
+    vfs_cpp + "/" #__VA_ARGS__, body, size);
 #include <libcpp.h>
 #undef ESBMC_FLAIL
 
 #ifdef ENABLE_PYTHON_FRONTEND
 #  define ESBMC_FLAIL(body, size, ...)                                         \
-    fs.add_bundled(vfs_python + "/" #__VA_ARGS__, body, size);
+    file_operations::filesystemt::get().add_bundled(                           \
+      vfs_python + "/" #__VA_ARGS__, body, size);
 #  include <libpython.h>
 #  include <libpythonhdr.h>
 #  undef ESBMC_FLAIL
@@ -85,7 +89,8 @@ void register_bundled_libc()
 
 #ifdef ENABLE_SOLIDITY_FRONTEND
 #  define ESBMC_FLAIL(body, size, ...)                                         \
-    fs.add_bundled(vfs_solidity + "/" #__VA_ARGS__, body, size);
+    file_operations::filesystemt::get().add_bundled(                           \
+      vfs_solidity + "/" #__VA_ARGS__, body, size);
 #  include <libsolidity.h>
 #  include <libsolidityhdr.h>
 #  undef ESBMC_FLAIL

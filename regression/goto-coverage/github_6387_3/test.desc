@@ -4,5 +4,5 @@ main.cpp
 ^Assertion Instances Coverage: 100%$
 assertion 1.*main\.cpp line 5.* : REACHED
 assertion 2.*main\.cpp line 6.* : REACHED
-\A(?![\s\S]*FAILED: ')[\s\S]*\Z
+\A(?![\s\S]*FAILED)[\s\S]*\Z
 \A(?![\s\S]*Violated property)[\s\S]*\Z

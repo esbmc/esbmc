@@ -1,5 +1,6 @@
 #include <ld-frontend/verify/ld_verify.h>
 #include <sstream>
+#include <string_view>
 #include <vector>
 #include <cstdlib>
 
@@ -162,6 +163,24 @@ parse_violated_property(const std::string &output, LdVerifyResult &r)
   }
 }
 
+// Describes a run that printed no verdict. A rejected input carries the reason
+// on an "ERROR:" line naming the construct; reporting that beats "no verdict",
+// which reads as a crash.
+static std::string no_verdict_description(const std::string &output)
+{
+  static constexpr std::string_view prefix = "ERROR: ";
+  std::istringstream ss(output);
+  std::string line;
+  while (std::getline(ss, line))
+  {
+    if (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (std::string_view(line).starts_with(prefix))
+      return line.substr(prefix.size());
+  }
+  return "esbmc produced no verdict";
+}
+
 // esbmc prints its verdict as a standalone, unindented line; match the whole
 // line so that descriptive text echoed into the counterexample cannot be
 // mistaken for a verdict.
@@ -310,7 +329,7 @@ LdVerifyResult LdVerifyRunner::run(const LdVerifyOptions &opts)
   {
     // No recognisable verdict: esbmc crashed, was killed, or rejected the input.
     r.verdict = LdVerifyResult::Verdict::Error;
-    r.description = "esbmc produced no verdict";
+    r.description = no_verdict_description(output);
     r.raw_output = output;
   }
 

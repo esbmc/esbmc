@@ -2,6 +2,12 @@
 #define __STL_VECTOR
 
 #include <stdlib.h>
+/* Not required by [vector.syn], but the toolchains this model stands in for
+ * make errno visible through <vector>, and code relies on it: nlohmann's
+ * lexer sets errno around strtod having included only <vector> and <cstdlib>.
+ * Checked against the host compiler, where <vector> provides it and <cstdlib>
+ * does not. */
+#include <errno.h>
 #include <assert.h>
 #include <cstddef> // for size_t, ptrdiff_t
 #include <memory>
@@ -9,6 +15,7 @@
 #include "OM_compiler_defs.h" // OM_NULLPTR
 
 #include <utility> /* std::move */
+#include "type_traits" /* enable_if, is_integral */
 #include <new>     /* placement-new */
 #if __cplusplus >= 201103L
 #  include <initializer_list>
@@ -303,7 +310,7 @@ public:
   // types:
   typedef T &reference;
   typedef const T &const_reference;
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
   typedef T value_type;
   typedef T *pointer;
@@ -380,8 +387,17 @@ public:
     _capacity = n;
   }
 
+  /* [sequence.reqmts]: this constructor must not participate in overload
+   * resolution unless InputIt qualifies as an input iterator. Unconstrained,
+   * vector<T> v(3, 0) deduced InputIt = int and instantiated *t++ on an int.
+   * Only vector<int> escaped, because size_type is int here and the
+   * (size_type, const T&) overload then tied and won as the non-template. */
   template <typename InputIt>
-  vector(InputIt t, InputIt addr, const Allocator &alloc = Allocator())
+  vector(
+    InputIt t,
+    InputIt addr,
+    const Allocator &alloc = Allocator(),
+    typename enable_if<!is_integral<InputIt>::value>::type * = OM_NULLPTR)
     : _size(0), _capacity(1)
   {
     int count = 0;
@@ -688,15 +704,16 @@ public:
   {
     if (n > _capacity)
     {
-      T *new_buf = static_cast<T *>(malloc(sizeof(T) * n));
-      __ESBMC_assume(new_buf);
-
-      // copy over existing values
-      for (int i = 0; i < _size; i++)
-        __construct_at(new_buf + i, buf[i]);
-
-      free(buf); // free old memory
-      buf = new_buf;
+      // realloc in place, as assign() already does: it preserves [0, _size),
+      // so no copy loop is needed, and it does not assign a fresh heap pointer
+      // into buf. That assignment is what cost us: a struct propagates as a
+      // constant only when every field does, and a malloc'd address never
+      // does, so storing one into buf dropped the constants of the sibling
+      // fields _size and _capacity. push_back could then not decide
+      // `_size == _capacity` and re-entered this loop on every call
+      // (docs/roadmap/symex-dead-work-cost-plan.md W5).
+      buf = static_cast<T *>(realloc(buf, sizeof(T) * n));
+      __ESBMC_assume(buf);
       _capacity = n;
     }
   }
@@ -751,7 +768,7 @@ public:
     return buf[0];
   }
 
-  value_type back()
+  reference back()
   {
     return buf[_size - 1];
   }
@@ -962,21 +979,17 @@ public:
   }
 
   // comparators:
-  bool operator==(const vector &rhv)
+  bool operator==(const vector &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
-    int i = 0;
-    while (i != this->size())
-    {
+    for (size_type i = 0; i < this->size(); i++)
       if (this->at(i) != rhv[i])
         return false;
-      i++;
-    }
     return true;
   }
 
-  bool operator!=(const vector &rhv)
+  bool operator!=(const vector &rhv) const
   {
     return (!(*this == rhv));
   }

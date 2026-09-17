@@ -3,6 +3,8 @@
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
+#include <cstddef>
+#include <vector>
 
 /// Phase 6 (C.3) IREP2-native adjuster for the C frontend.
 ///
@@ -11,17 +13,18 @@
 /// in-place recursive walk over `expr2tc` rather than the converter's
 /// out-parameter seam.
 ///
-/// At this stage the walk is deliberately **read-only**: it reads each code
-/// symbol's IREP2 value and recurses, and never writes one back. That keeps the
-/// pass inert by construction rather than by argument -- there is no write path
-/// to be wrong -- while still exercising `migrate_expr` over every construct
-/// the C corpus contains, since `symbolt::get_value2()` migrates the legacy
-/// value on demand. A construct that cannot migrate aborts here instead of much
-/// later.
+/// The walk reads each code symbol's IREP2 value, recurses, and writes the
+/// result back only when it changed something. That gate keeps an untouched
+/// body clear of the round-trip losses `python_adjust` documents (a bitfield's
+/// `#bitfield` flag, an explicit alignment attribute, the C qualifiers), which
+/// C headers are exactly the place to hit -- and it exercises `migrate_expr`
+/// over every construct the C corpus contains either way, since
+/// `symbolt::get_value2()` migrates on demand and a construct that cannot
+/// migrate aborts here rather than much later.
 ///
-/// Read-only also side-steps the round-trip losses `python_adjust` documents
-/// (a bitfield's `#bitfield` flag, an explicit alignment attribute): those only
-/// matter to a write-back, and C headers are exactly the place they occur.
+/// The gate has a cost worth knowing about when reading a symbol-table A/B: an
+/// unchanged body still prints its *converter* tree, which is not what this
+/// pass produced. See `writeback_all` below and §135.
 ///
 /// Known limitation: the walk aborts on a union constant whose type is still a
 /// by-name tag -- `migrate_expr` hands `migrate_type`'s `symbol_type2t` to
@@ -30,6 +33,40 @@
 /// it does for Python after `clang_cpp_adjust`; for C it does not. 12 of the
 /// 1686 tests in regression/esbmc reach it. Left unguarded on purpose: this is
 /// the defect the walk exists to surface, and the flag is opt-in.
+/// One arm of an IREP2 adjust pass's dispatch: its name, the guard that decides
+/// whether it claims a node, and the rewrite it then applies. A null `when` is
+/// offered every node and guards itself.
+///
+/// Templated on the pass so a second frontend can order the arms it inherits
+/// alongside its own in one table. `run` is a trampoline rather than a
+/// pointer-to-member deliberately: a base member pointer stored in a
+/// derived-typed table is legal, but GCC 13's array-bounds analysis mis-reads
+/// the call once the runner inlines and rejects it at -O2
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.1). A captureless lambda converts
+/// to a function pointer and is an address constant, so the table stays
+/// constant-initialised.
+template <class Pass>
+struct adjust_arm
+{
+  const char *name;
+  void (*run)(Pass &, expr2tc &);
+  bool (*when)(const expr2tc &);
+};
+
+/// Apply a pass's arms to one node in table order. Each guard is re-evaluated
+/// against the current node, so an arm that rewrites a node into another kind
+/// hands it to that kind's arm below.
+template <class Pass, std::size_t N>
+void run_adjust_arms(
+  Pass &self,
+  const adjust_arm<Pass> (&arms)[N],
+  expr2tc &expr)
+{
+  for (const adjust_arm<Pass> &a : arms)
+    if (!a.when || a.when(expr))
+      a.run(self, expr);
+}
+
 class clang_c_adjust_irep2
 {
 public:
@@ -38,10 +75,25 @@ public:
   /// -- declaring an implicitly-declared callee (§70) -- must run only then:
   /// in shadow mode the legacy pass has already done it, and doing it twice
   /// adds conflicting symbols for library functions.
-  explicit clang_c_adjust_irep2(contextt &_context, bool sole_adjuster = false)
-    : context(_context), sole_adjuster(sole_adjuster)
+  /// @param writeback_all diagnostic only
+  /// (--clang-c-irep2-adjust-writeback-all): refresh every symbol's legacy
+  /// value, not just the ones this pass changed. adjust() gates the write-back
+  /// on `value != before` so an untouched body never pays migrate_expr_back's
+  /// losses -- but that also means `--symbol-table-only` prints the
+  /// *converter's* tree for those bodies, not this pass's, and the two differ
+  /// wherever migrate_expr normalises (§135). Set this to see what the pass
+  /// actually produced.
+  explicit clang_c_adjust_irep2(
+    contextt &_context,
+    bool sole_adjuster = false,
+    bool writeback_all = false)
+    : context(_context),
+      sole_adjuster(sole_adjuster),
+      writeback_all(writeback_all)
   {
   }
+
+  virtual ~clang_c_adjust_irep2() = default;
 
   /// Walk every code symbol's IREP2 value. Returns false; there is no failure
   /// mode yet, and the signature matches `clang_c_adjust::adjust()` so the
@@ -50,7 +102,43 @@ public:
 
   void adjust_expr(expr2tc &expr);
 
-private:
+  /// One arm of the dispatch, as much of it as a caller may see: what it is
+  /// called, and the guard deciding whether it claims a node. The rewrite
+  /// itself stays private -- an arm run out of its place in the order produces
+  /// a wrongly-adjusted expression, so there is nothing to gain by exposing it,
+  /// and adjust_expr already reaches every arm's behaviour.
+  struct arm_info
+  {
+    const char *name;
+    /// Null for an arm that is offered every node and guards itself.
+    bool (*when)(const expr2tc &);
+  };
+
+  /// The arms in the order adjust_expr applies them. The order is load-bearing
+  /// -- the reasons are stated on the rows in clang_c_adjust_irep2.cpp -- and
+  /// was previously legible only as statement position, which no test could
+  /// read. unit/clang-c-frontend/adjust_arms.test.cpp reads this.
+  static std::vector<arm_info> arm_order();
+
+  // Everything below is reachable by a sibling frontend's pass, which orders
+  // these arms alongside its own in its own table
+  // (docs/roadmap/scope-clang-cpp-irep2.md §3.1). Not public: nothing outside
+  // an adjust pass has any business calling a single arm.
+protected:
+  /// Read a reference-typed operand through, where the operand is used as a
+  /// value: `r` becomes `*r`. Empty for C, which has no references, and
+  /// overridden by the C++ pass -- exactly as clang_c_adjust::adjust_reference
+  /// is (scope-clang-cpp-irep2.md §3.16).
+  virtual void adjust_reference(expr2tc &)
+  {
+  }
+
+  /// clang_c_adjust adjusts references on an increment or decrement, whose
+  /// operand it updates in place. Without it `f()++`, where `f` returns a
+  /// reference, does arithmetic on the reference instead of on the referent
+  /// (scope-clang-cpp-irep2.md §3.16).
+  void adjust_increment_reference(expr2tc &expr);
+
   /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
   /// the operand recursion and returns before this point when the flag is on
   /// (scope-clang-c-irep2.md §19.2).
@@ -80,6 +168,16 @@ private:
   /// first (§82).
   void adjust_call_callee(expr2tc &expr);
 
+  /// Rebuild a call's callee from the symbol table when the converter left its
+  /// type incomplete, then let the frontend align the call's own type.
+  void adjust_call_signature(expr2tc &expr);
+
+  /// The call's type follows its callee's return type in C++ but not in C,
+  /// where clang_c_adjust::align_se_function_call_return_type is empty.
+  virtual void align_call_return_type(expr2tc &, const symbolt &)
+  {
+  }
+
   /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's complex
   /// branch: decompose `a op b` over a complex operand into per-component
   /// arithmetic and rebuild a (real, imag) pair. Unported, a complex `/`
@@ -99,11 +197,125 @@ private:
   /// (§49.2), so the rebuild passes the original through (§84).
   void adjust_if_expr(expr2tc &expr);
 
-  /// Arms that run only when this pass is the sole adjuster.
-  void adjust_sole_arms(expr2tc &expr);
+  /// IREP2 form of the `__builtin_`-prefixed half of
+  /// clang_c_adjust::do_special_functions: fold a recognised builtin call to
+  /// the node it denotes. These spellings are reserved, so unlike the
+  /// name-matched family (is_name_matched_builtin) a program cannot supply its
+  /// own definition and no shadows_user_definition query is needed (§90).
+  void adjust_special_functions(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_derived_to_base: displace a
+  /// derived->base conversion onto the base subobject under the flattened
+  /// layout. The offset comes from base_displacement, ESBMC's own layout
+  /// oracle -- recomputing it from clang's record layout is the mistake #3894
+  /// records.
+  void adjust_derived_to_base(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_base_to_derived: re-base a downcast
+  /// off the base subobject onto the start of the derived object.
+  void adjust_base_to_derived(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
+  void adjust_address_of(expr2tc &expr);
+
+  /// The GCC `__sync_*` / C11 `__c11_atomic_*` half of
+  /// clang_c_adjust::adjust_side_effect_function_call: clang hands these
+  /// builtins over body-less, so the concrete instance has to be declared and
+  /// the callee repointed at it. A symbol-table side effect, so it ports
+  /// independently of the rest of that arm, exactly as declare_implicit_callee
+  /// does (§130).
+  void declare_polymorphic_builtin(expr2tc &expr);
+
+  void adjust_expression_statement(expr2tc &expr);
+  void promote_unary_bool_operand(expr2tc &expr);
+  void adjust_struct(expr2tc &expr);
+  void adjust_array_subtype(expr2tc &expr);
+  void adjust_decl_init(expr2tc &expr);
+  void adjust_dereference(expr2tc &expr);
+  void lower_complex_compound_assignment(expr2tc &expr);
+  void adjust_vector_float_arith(expr2tc &expr);
+  void hoist_for_init(expr2tc &expr);
+
+  /// Pad a complete struct or union type symbol to its ABI layout (§96).
+  void pad_type_symbol(symbolt &symbol);
+  /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's conversion
+  /// half: the usual arithmetic conversions over the operands, then the node's
+  /// own type. adjust_float_arith's ieee_* promotion is not part of this
+  /// (§104.2).
+  void adjust_binary_arith_operands(expr2tc &expr);
+  void adjust_shift_operands(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's plain
+  /// "assign" case: the node takes the target's type, and the source converts
+  /// to it.
+  void adjust_plain_assignment(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's tail: the
+  /// compound operators take the usual arithmetic conversions on *both*
+  /// operands (C11 6.5.16.2p3 -- `b += a` is `b = b + a`, so a narrow target
+  /// promotes), while the node keeps the target's type.
+  void adjust_compound_assignment(expr2tc &expr);
+  /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
+  /// and adjust_for apply to a statement's controlling expression (§95).
+  void adjust_statement_condition(expr2tc &expr);
+  /// The name-matched half of do_special_functions: `isnan`, `abs`, `sqrt`,
+  /// `inf` and friends. Split from adjust_special_functions because these
+  /// spellings are not reserved, so they run behind
+  /// builtin_shadows_user_definition (§94).
+  bool adjust_float_builtin(
+    expr2tc &expr,
+    const irep_idt &name,
+    const std::vector<expr2tc> &args);
+
+  /// IREP2 form of clang_c_adjust::adjust_expr_rel's operand half: the usual
+  /// arithmetic conversions over a comparison's operands, which is also what
+  /// decays an array operand compared against a pointer (§96).
+  void adjust_relational(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_function_call_arguments' conversion
+  /// half: convert each argument to its parameter type, which is what decays a
+  /// function designator to a pointer at a call (§108).
+  void adjust_call_arguments(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_symbol's function-designator sugar
+  /// (§100).
+  void adjust_function_designators(expr2tc &expr);
+
+  /// Per-symbol code the pass synthesises rather than rewrites, run before the
+  /// value walk so what it emits is adjusted like the rest. Distinct from an
+  /// arm: an arm rewrites one node, this takes the whole symbol. C generates
+  /// nothing (docs/roadmap/scope-clang-cpp-irep2.md §3.6).
+  virtual void gen_symbol_code(symbolt &)
+  {
+  }
+
+  /// Arms that run only when this pass is the sole adjuster, applied in the
+  /// order `arms` lists them. Virtual so a derived pass substitutes its own
+  /// table: one virtual for the whole dispatch, rather than the per-arm
+  /// virtuals §3 of the C++ scope rejected.
+  virtual void adjust_sole_arms(expr2tc &expr);
+
+  /// A comma expression takes its right operand's type (C11 6.5.17p2). Clang
+  /// hands it the *decayed* type when the right operand is an array, so leaving
+  /// it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
+  /// the named array-bounds check for the generic dereference one. Same rewrite
+  /// as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
+  void adjust_comma_type(expr2tc &expr);
+
+  using arm = adjust_arm<clang_c_adjust_irep2>;
+
+  /// The chain in application order. Defined in clang_c_adjust_irep2.cpp,
+  /// beside the predicates it names. An unknown-bound declaration completed
+  /// out of line: every initialiser is an address constant, so the table is
+  /// constant-initialised rather than built at start-up.
+  static const arm arms[];
 
   contextt &context;
   const bool sole_adjuster;
+  const bool writeback_all;
+  /// Location of the innermost enclosing statement, for the nodes that carry
+  /// none of their own.
+  locationt enclosing_location;
   namespacet ns{context};
 };
 

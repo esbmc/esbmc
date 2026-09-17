@@ -5,6 +5,7 @@
 #include <util/irep/expr.h>
 #include <util/irep/std_code.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 class python_converter;
 class type_handler;
@@ -44,7 +45,13 @@ private:
     const std::string &lambda_id,
     const std::string &param_scope_id,
     const locationt &location,
-    const nlohmann::json &body_node);
+    const nlohmann::json &body_node,
+    const std::vector<std::optional<typet>> &call_site_types);
+
+  // Per-parameter type taken from a call through the name this lambda is bound
+  // to; an entry is empty when no such call pins that argument down (#7328).
+  std::vector<std::optional<typet>>
+  call_site_argument_types(const nlohmann::json &element) const;
 
   exprt process_lambda_body(
     const nlohmann::json &body_node,

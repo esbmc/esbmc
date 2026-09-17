@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --unwind 10
+--incremental-bmc --unwind 10 --multi-property
 ^VERIFICATION SUCCESSFUL$

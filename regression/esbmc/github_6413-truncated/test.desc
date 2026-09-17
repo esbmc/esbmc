@@ -2,6 +2,6 @@ CORE
 main.c
 --multi-property --unwind 10 --multi-property-interleavings 1
 ^VERIFICATION FAILED$
-FAILED: 'prod: false at file .*main\.c line 21
+^ +FAILED .*line +21 +prod: false$
 ^This report is partial: the run stopped before every property reached
-\A(?![\s\S]*PASSED: 'prod: false)[\s\S]*\Z
+\A(?![\s\S]*PASSED .*prod: false)[\s\S]*\Z

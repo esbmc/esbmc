@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/irep/std_code.h>
@@ -32,6 +33,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
 #include <util/expr/string_constant.h>
+#include <util/expr/symbolic_types.h>
 #include <util/symtab/base_subobject.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
@@ -254,6 +256,18 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    /* A lambda's operator(), __invoke and conversion-operator USRs name the
+     * enclosing specialisation but not the closure, so siblings in one
+     * instantiation share an id and the last body converted wins (#7499); the
+     * closure's own id is already unique (#6976). Constructors take the case
+     * above and need none -- their USR spells the class "(lambda at f:l:c)". */
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd);
+        md && md->getParent()->isLambda())
+    {
+      std::string closure_name, closure_id;
+      get_decl_name(*md->getParent(), closure_name, closure_id);
+      id += "@" + closure_id;
+    }
     return;
   }
 
@@ -655,6 +669,39 @@ static bool zero_initialises(const clang::Expr &init)
     return ce->requiresZeroInitialization();
 
   return false;
+}
+
+/// The id a catch handler matches a throw on. The catch type rides on the
+/// handler block's own type and is read off it exactly once -- here.
+/// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
+/// code_block2t has no type to carry it across the seam
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
+static void set_handler_exception_id(const namespacet &ns, exprt &handler)
+{
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, handler.type(), "", ids);
+  if (!ids.empty())
+    handler.set("exception_id", ids.front());
+}
+
+/// A pseudo-destructor call does nothing but evaluate its base
+/// ([expr.pseudo]/1) -- there is nothing to call. Reduce it where it is built,
+/// so the node never reaches the goto program: IREP2 has no kind for it, and an
+/// adjust pass that migrates first therefore cannot see it at all
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.15). Applied at get_expr's exit so
+/// it covers every call spelling, as clang_cpp_adjust's arm did.
+static void reduce_pseudo_destructor_call(exprt &expr)
+{
+  // The legacy arm only ever saw a side_effect_expr_function_callt. Say so,
+  // rather than leaning on "two operands whose first carries this id" -- true
+  // of nothing else today, but it states no precondition.
+  if (
+    expr.id() != "sideeffect" || expr.operands().size() != 2 ||
+    expr.op0().id() != "cpp-pseudo-destructor")
+    return;
+
+  assert(expr.op0().operands().size() == 1);
+  expr = expr.op0().op0();
 }
 
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -1329,6 +1376,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*cxxtry.getHandler(i), handler))
         return true;
 
+      set_handler_exception_id(namespacet(context), handler);
       new_expr.move_to_operands(handler);
     }
 
@@ -1754,6 +1802,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  reduce_pseudo_destructor_call(new_expr);
+
   new_expr.location() = location;
   return false;
 }
@@ -1895,38 +1945,36 @@ void clang_cpp_convertert::build_member_from_component(
 // A non-primary base subobject sits away from the start of the derived object
 // (multiple inheritance); `this` must be adjusted to that subobject before the
 // base destructor runs, otherwise ~Base reads the derived's leading storage
-// (github #6021). Prefer the structural address `&this->@base@B`, which derives
-// the offset from ESBMC's own layout and so agrees with the base ctor `this`
-// and the derived->base cast (#1866, #3894); `offset` is the clang-ABI fallback
-// for hierarchies that kept the legacy flattened layout (virtual bases, P5).
+// (github #6021). Prefer the structural address `&this->@base@B`; a hierarchy
+// that kept the legacy flattened layout has no such component, so mark the
+// pointer for clang_c_adjust::adjust_derived_to_base instead. Both derive the
+// displacement from ESBMC's own layout, which is what the base ctor `this` and
+// the derived->base cast use -- clang's ABI offset disagrees with it once a
+// virtual base is involved, and mixing the two put ~Base and Base on different
+// bytes (#1866, #3894, #7025).
 exprt clang_cpp_convertert::base_dtor_this(
   const clang::CXXRecordDecl &base,
   const exprt &deref,
   const irep_idt &this_id,
-  const typet &this_ptr_type,
-  uint64_t offset)
+  const typet &this_ptr_type)
 {
   std::string base_name, base_id;
   get_decl_name(base, base_name, base_id);
   const irep_idt comp = base_subobject_name(base_id);
   const typet derived_struct = ns.follow(this_ptr_type.subtype());
   const symbolt *base_sym = context.find_symbol(base_id);
+  if (!base_sym)
+    return symbol_exprt(this_id, this_ptr_type);
 
   if (
-    base_sym && derived_struct.is_struct() &&
+    derived_struct.is_struct() &&
     to_struct_type(derived_struct).has_component(comp))
     return address_of_exprt(
       member_exprt(deref, comp, symbol_typet(base_sym->id)));
 
   exprt this_expr = symbol_exprt(this_id, this_ptr_type);
-  if (offset == 0)
-    return this_expr;
-
-  typet char_ptr = pointer_typet(char_type());
-  gen_typecast(ns, this_expr, char_ptr);
-  plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
-  adjusted.type() = char_ptr;
-  return adjusted;
+  this_expr.set("#derived_to_base", base_sym->id);
+  return this_expr;
 }
 
 bool clang_cpp_convertert::build_destructor_chain(
@@ -1969,9 +2017,8 @@ bool clang_cpp_convertert::build_destructor_chain(
 
   // Cast `this` to the base's expected pointer type and emit the call.
   auto emit_base_dtor =
-    [&](const symbolt &sym, const clang::CXXRecordDecl *rec, uint64_t offset) {
-      exprt this_expr =
-        base_dtor_this(*rec, deref, this_id, this_ptr_type, offset);
+    [&](const symbolt &sym, const clang::CXXRecordDecl *rec) {
+      exprt this_expr = base_dtor_this(*rec, deref, this_id, this_ptr_type);
       gen_typecast(
         ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
       emit_dtor_call(sym, std::move(this_expr));
@@ -2043,7 +2090,6 @@ bool clang_cpp_convertert::build_destructor_chain(
   }
 
   // 2. Direct non-virtual base subobjects, reverse declaration order.
-  const clang::ASTRecordLayout &layout = ASTContext->getASTRecordLayout(parent);
   for (const clang::CXXBaseSpecifier &base : llvm::reverse(parent->bases()))
   {
     if (base.isVirtual())
@@ -2054,7 +2100,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym, rec, layout.getBaseClassOffset(rec).getQuantity());
+    emit_base_dtor(*sym, rec);
   }
 
   // 3. Virtual base subobjects, reverse declaration order.
@@ -2070,10 +2116,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    // Virtual-base offsets are dynamic; ESBMC keeps virtual bases at the
-    // flattened offset 0, matching the method-receiver path which likewise
-    // skips static adjustment for virtual bases.
-    emit_base_dtor(*sym, rec, 0);
+    emit_base_dtor(*sym, rec);
   }
 
   return false;
@@ -2138,6 +2181,25 @@ bool clang_cpp_convertert::build_lambda_static_invoker(
 
   new_expr = body;
   return false;
+}
+
+bool clang_cpp_convertert::get_member_initializer(
+  const clang::Expr &init,
+  const typet &member_type,
+  exprt &rhs)
+{
+  const auto *ctor_expr = llvm::dyn_cast<clang::CXXConstructExpr>(&init);
+  if (
+    ctor_expr && zero_initialises(init) && ctor_expr->getConstructor() &&
+    ctor_expr->getConstructor()->isTrivial())
+  {
+    // member_type may be a symbolic tag; resolve it so gen_zero walks the
+    // real struct/array.
+    rhs = gen_zero(get_complete_type(member_type, ns));
+    return false;
+  }
+
+  return get_expr(init, rhs);
 }
 
 bool clang_cpp_convertert::get_function_body(
@@ -2305,10 +2367,14 @@ bool clang_cpp_convertert::get_function_body(
         initializers.push_back(initializer);
         init_sym_uptodate = false;
       }
-      else if (init->isMemberInitializer())
+      else if (
+        init->isMemberInitializer() || init->isIndirectMemberInitializer())
       {
-        // parsing non-static member initializer
-        const clang::FieldDecl *member_decl = init->getMember();
+        // parsing non-static member initializer. A member reached through an
+        // anonymous union or struct is an IndirectFieldDecl, for which clang
+        // sets isIndirectMemberInitializer instead; getAnyMember() yields the
+        // underlying FieldDecl for both (#7560).
+        const clang::FieldDecl *member_decl = init->getAnyMember();
 
         exprt member;
         member.set("#member_init", 1);
@@ -2323,13 +2389,50 @@ bool clang_cpp_convertert::get_function_body(
         if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
-        build_member_from_component(fd, member);
+        // A member of an anonymous union/struct is not a component of the
+        // enclosing class: the anonymous field is, and the member sits inside
+        // it. IndirectFieldDecl::chain() runs outermost-first and ends at the
+        // member itself, so walking it yields this-><anon>.m; building
+        // this->m directly reads at the wrong offset (#7560).
+        if (init->isIndirectMemberInitializer())
+        {
+          exprt path;
+          bool rooted = false;
+          for (const clang::NamedDecl *nd : init->getIndirectMember()->chain())
+          {
+            const auto *link = llvm::dyn_cast<clang::FieldDecl>(nd);
+            if (!link)
+              return true;
+            exprt hop;
+            if (get_decl_ref(*link, hop))
+              return true;
+            if (!rooted)
+            {
+              build_member_from_component(fd, hop);
+              path = hop;
+              rooted = true;
+            }
+            else
+              path = member_exprt(path, hop.name(), hop.type());
+          }
+          member = path;
+        }
+        else
+          build_member_from_component(fd, member);
+        size_flexible_array_member(*member_decl, member.type());
+
         // set #member_init flag again, as it has been cleared between the first call...
         member.set("#member_init", 1);
 
         exprt rhs;
         rhs.set("#member_init", 1);
-        if (get_expr(*init->getInit(), rhs))
+
+        /* `m()` in a mem-initializer value-initializes m. For a class type
+         * whose default ctor is trivial (thus not user-provided) this is
+         * exactly zero-initialization, [dcl.init.general]/8; and the implicit
+         * ctor has no GOTO body, so emitting the call would havoc m and leave
+         * it nondeterministic (#4243). */
+        if (get_member_initializer(*init->getInit(), member.type(), rhs))
           return true;
 
         /* We can't assign to arrays, dereference() will choke. */
@@ -2358,7 +2461,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.set_type(this_type);
+            new_symbol.set_type(migrate_type(this_type));
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
@@ -2958,14 +3061,12 @@ bool clang_cpp_convertert::annotate_class_field(
   const struct_union_typet &type,
   struct_typet::componentt &comp)
 {
-  // set parent in component's type
+  // A field of a tagless class type has no parent to attach it to.
   if (type.tag().empty())
   {
     log_error("Goto empty tag in parent class type in {}", __func__);
     return true;
   }
-  std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().member_name(parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -3029,12 +3130,11 @@ bool clang_cpp_convertert::annotate_class_method(
   /*
    * The order of annotations matters.
    */
-  // annotate parent — derive the id via get_decl_name so it matches the
-  // record's symbol id exactly (Clang 22+ prepends the kind name; older
-  // versions don't).
+  // The multi-TU vptr-init fallback below needs the class id; derive it via
+  // get_decl_name so it matches the record's symbol id exactly (Clang 22+
+  // prepends the kind name; older versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.member_name(parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
@@ -3047,9 +3147,8 @@ bool clang_cpp_convertert::annotate_class_method(
     /*
      * We also have a `component` in class type representing the ctor/dtor.
      * Need to sync the type of this function symbol and its corresponding type
-     * of the component inside the class' symbol
-     * We just need "#member_name" and "return_type" fields to be synced for later use
-     * in the adjuster.
+     * of the component inside the class' symbol: the adjuster reads the return
+     * type back to tell a ctor from a dtor.
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
@@ -3196,8 +3295,9 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
 
   // Route `this` through the nested base subobject: &this->@base@<id>, so the
   // base ctor operates on its own subobject (sound structural access, not a
-  // byte offset). Falls back to a plain cast for virtual bases. See #1866.
+  // byte offset). See #1866.
   const irep_idt &base_comp = initializer.get("#base_subobject");
+  bool routed = false;
   if (!base_comp.empty() && implicit_this_symb.type().is_pointer())
   {
     // Only when the derived actually carries the nested subobject; a
@@ -3207,12 +3307,23 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
       derived_struct.is_struct() &&
       to_struct_type(derived_struct).has_component(base_comp))
     {
-      dereference_exprt deref(
-        implicit_this_symb, implicit_this_symb.type().subtype());
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(implicit_this_symb, implicit_this_symb.type());
       member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
       implicit_this_symb = address_of_exprt(m);
+      routed = true;
     }
   }
+
+  // Flattened layout: the base still sits at a displacement inside the
+  // derived object, so a plain cast hands the base ctor the derived object's
+  // leading storage (#7025). Mark it for
+  // clang_c_adjust::adjust_derived_to_base, which resolves the displacement
+  // once the layout is padded.
+  if (!routed && base_ctor_this_type.subtype().id() == "symbol")
+    implicit_this_symb.set(
+      "#derived_to_base", base_ctor_this_type.subtype().identifier());
 
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
@@ -3329,6 +3440,12 @@ void clang_cpp_convertert::get_base_components_methods(
       for (auto component : base_type.components())
       {
         component.set("from_base", true);
+        // Which class actually declared this member. is_duplicate_component
+        // merges by name alone, so two bases with a same-named member share
+        // one slot; the owner is what lets a later base->derived displacement
+        // tell its own storage from the slot it was merged into (#7025).
+        if (component.get("#base_owner").empty())
+          component.set("#base_owner", class_id);
         if (!is_duplicate_component(component, type))
           to_struct_type(type).components().push_back(component);
       }

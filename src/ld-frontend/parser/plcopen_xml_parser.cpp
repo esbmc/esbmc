@@ -1019,6 +1019,60 @@ void PlcopenXmlParser::normalise(pugi_doc_wrapper &w)
 }
 
 // -----------------------------------------------------------------------
+// Untranslated POU bodies
+// -----------------------------------------------------------------------
+
+// A body the front end does not translate leaves the scan cycle empty, so every
+// property holds vacuously and the run reports a proof (#7354). Accept by
+// whitelist, so a notation added to the schema later fails closed.
+//
+// Both the location and the notation have to match what parse() collects
+// above: <addData> and <documentation> nest an unrelated <body> under the POU,
+// and a ladder body under <transitions> is collected by nobody.
+static void
+reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
+{
+  for (auto xpath_node :
+       root.select_nodes("//pou/body/* | //pou/actions/action/body/* | "
+                         "//pou/transitions/transition/body/*"))
+  {
+    const pugi::xml_node lang = xpath_node.node();
+    const std::string tag = lang.name();
+
+    const pugi::xml_node holder = lang.parent().parent();
+    const std::string where = holder.name();
+    const pugi::xml_node pou =
+      where == "pou" ? holder : holder.parent().parent();
+    const std::string pou_name = pou.attribute("name").as_string();
+
+    if (
+      (tag == "LD" || tag == "ladderDiagram") &&
+      (where == "pou" || where == "action"))
+      continue;
+
+    // st_fb_translator inlines a function block's Structured Text body into
+    // the scan cycle, but only once the definition has registered: an FB with
+    // no output pin or an empty body is dropped, and dropping it silently is
+    // the same defect as dropping the body outright.
+    const bool translated_fb_body =
+      tag == "ST" &&
+      std::string(pou.attribute("pouType").as_string()) == "functionBlock" &&
+      std::any_of(
+        ast.user_fb_defs.begin(),
+        ast.user_fb_defs.end(),
+        [&pou_name](const UserFBDef &d) { return d.type_name == pou_name; });
+    if (translated_fb_body)
+      continue;
+
+    const std::string site =
+      where == "pou" ? "POU '" + pou_name + "'"
+                     : where + " '" + holder.attribute("name").as_string() +
+                         "' of POU '" + pou_name + "'";
+    throw UnsupportedConstructError(tag + " body of " + site, 2);
+  }
+}
+
+// -----------------------------------------------------------------------
 // Top-level parse()
 // -----------------------------------------------------------------------
 
@@ -1261,6 +1315,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
           inst.out_wires.push_back({pv, pin});
     }
   }
+
+  // Last, so the function-block definitions above are already registered.
+  reject_untranslated_bodies(root, ast);
 
   return ast;
 }

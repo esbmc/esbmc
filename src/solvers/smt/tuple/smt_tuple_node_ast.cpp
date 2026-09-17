@@ -165,10 +165,20 @@ smt_astt tuple_node_smt_ast::update(
     "Can't apply non-constant index update to "
     "structure");
 
+  // Populate our own fields before copying them across: an unpopulated source
+  // copies an empty vector, and make_free() below then invents fresh
+  // unconstrained variables for the fields the update does not touch, so
+  // member(with(s, a, v), b) loses its link to s.b. Pinned by
+  // unit/solvers/tuple_node_update.test.cpp.
+  const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
+
+  // Same disagreement as in project(), but this one writes. Checked before the
+  // result is built so a rejected update allocates nothing.
+  check_tuple_field(idx, elements.size(), sort->get_tuple_type());
+
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
-  result->make_free(ctx);
   result->elements[idx] = value;
 
   return result;
@@ -195,10 +205,12 @@ tuple_node_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
   // actually allocate all our pieces of ASTs as variables.
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
-#ifndef NDEBUG
-  assert(
-    idx < struct_union_members(sort->get_tuple_type()).size() &&
-    "Out-of-bounds tuple element accessed");
-#endif
+  // Bounded by `elements` rather than by the sort's member list, because that
+  // is the vector indexed below. smt_solver_baset::convert_member takes this
+  // index from the *expression's* struct type while the AST carries the sort
+  // it was built from; where a frontend leaves the two disagreeing this read
+  // ran off the end and returned a garbage pointer.
+  check_tuple_field(idx, elements.size(), sort->get_tuple_type());
+
   return elements[idx];
 }

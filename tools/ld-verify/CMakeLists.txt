@@ -67,9 +67,17 @@ if(BUILD_TESTING)
     ${_ld_reg}/esd_manual_reset_fail/esd.ld
     --props ${_ld_reg}/esd_manual_reset_fail/props.yaml)
 
+  # Anchored on "description" so the assertion cannot be met by the raw_output
+  # echo, which master already emitted.
+  add_ld_verify_test(error-unsupported-body
+    "\"description\": \"UnsupportedConstruct\\(ST body of POU"
+    ${_ld_reg}/body_st_unsupported_fail/st.ld
+    --props ${_ld_reg}/body_st_unsupported_fail/props.yaml)
+
   # An input esbmc cannot parse yields no verdict line; that must surface as
   # ERROR rather than being folded into UNKNOWN.
   file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/malformed.ld "not a plcopen document")
-  add_ld_verify_test(error-no-verdict "\"result\": \"ERROR\""
+  add_ld_verify_test(error-no-verdict
+    "\"description\": \"[^\"]*No document element found"
     ${CMAKE_CURRENT_BINARY_DIR}/malformed.ld)
 endif()

@@ -2,4 +2,5 @@ CORE
 main.c
 --multi-property --loop-invariant-check --bitwuzla
 ^VERIFICATION SUCCESSFUL$
-^Properties: 4 verified ✓ 4 passed$
+^  PASSED +\[main\.assertion\.1\] +line 17 +loop invariant base case$
+^\*\* 0 of 4 properties failed, 4 passed$

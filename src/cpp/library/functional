@@ -2,6 +2,7 @@
 #define STL_FUNCTIONAL
 
 #include <cstddef>
+#include "utility" /* std::forward */
 #include "OM_compiler_defs.h" // OM_CONSTEXPR
 
 #if __cplusplus >= 201103L
@@ -19,36 +20,89 @@ namespace std
 
 #if __cplusplus >= 201103L
 
-// Base class for callable objects
+// [refwrap]: a CopyConstructible, CopyAssignable wrapper around a reference.
+// The rvalue overloads of ref/cref are deleted so that binding a temporary is a
+// diagnostic rather than a dangling wrapper.
+template <class T>
+class reference_wrapper
+{
+  T *ptr;
+
+public:
+  typedef T type;
+
+  reference_wrapper(T &t) noexcept : ptr(&t)
+  {
+  }
+
+  operator T &() const noexcept
+  {
+    return *ptr;
+  }
+
+  T &get() const noexcept
+  {
+    return *ptr;
+  }
+
+#if __cplusplus >= 201103L
+  /* [refwrap.invoke]: a reference_wrapper around a callable is itself
+   * callable. This forwards to the wrapped object rather than implementing
+   * the full INVOKE protocol, so pointers to members are not covered. */
+  template <class... ArgTypes>
+  auto operator()(ArgTypes &&...args) const
+    -> decltype(::std::declval<T &>()(::std::forward<ArgTypes>(args)...))
+  {
+    return (*ptr)(::std::forward<ArgTypes>(args)...);
+  }
+#endif
+};
+
+template <class T>
+reference_wrapper<T> ref(T &t) noexcept
+{
+  return reference_wrapper<T>(t);
+}
+
+template <class T>
+reference_wrapper<T> ref(reference_wrapper<T> t) noexcept
+{
+  return t;
+}
+
+template <class T>
+void ref(const T &&) = delete;
+
+template <class T>
+reference_wrapper<const T> cref(const T &t) noexcept
+{
+  return reference_wrapper<const T>(t);
+}
+
+template <class T>
+reference_wrapper<const T> cref(reference_wrapper<T> t) noexcept
+{
+  return reference_wrapper<const T>(t.get());
+}
+
+template <class T>
+void cref(const T &&) = delete;
+
+/* Type-erased call target for function<Ret(Args...)>. Templating on the
+ * signature is what lets a non-int signature work: the previous callable_base
+ * hard-coded `int invoke(int)` and `int invoke(int, int)`, so a
+ * function<double(double)> truncated its argument and its result on the way
+ * through and reported a spurious violation. */
+template <typename Ret, typename... Args>
 class callable_base
 {
 public:
   virtual ~callable_base() = default;
-  virtual int invoke(int, int) const
-  {
-    assert(false);
-    return 0;
-  }
-  virtual int invoke(int) const
-  {
-    assert(false);
-    return 0;
-  }
-  virtual bool invoke_bool(int, int) const
-  {
-    assert(false);
-    return false;
-  }
-  virtual bool invoke_bool(int) const
-  {
-    assert(false);
-    return false;
-  }
+  virtual Ret invoke(Args... args) const = 0;
 };
 
-// Wrapper for callable types (function pointers, lambdas, functors)
-template <typename Callable>
-class callable_wrapper : public callable_base
+template <typename Callable, typename Ret, typename... Args>
+class callable_wrapper : public callable_base<Ret, Args...>
 {
 private:
   Callable func;
@@ -58,60 +112,12 @@ public:
   {
   }
 
-  int invoke(int a, int b) const override
+  Ret invoke(Args... args) const override
   {
-    if constexpr (::std::is_invocable_v<Callable, int, int>)
-    {
-      return func(a, b);
-    }
-    else
-    {
-      assert(false);
-      return 0;
-    }
-  }
-
-  int invoke(int a) const override
-  {
-    if constexpr (::std::is_invocable_v<Callable, int>)
-    {
-      return func(a);
-    }
-    else
-    {
-      assert(false);
-      return 0;
-    }
-  }
-
-  bool invoke_bool(int a, int b) const override
-  {
-    if constexpr (::std::is_invocable_r_v<bool, Callable, int, int>)
-    {
-      return func(a, b);
-    }
-    else
-    {
-      assert(false);
-      return false;
-    }
-  }
-
-  bool invoke_bool(int a) const override
-  {
-    if constexpr (::std::is_invocable_r_v<bool, Callable, int>)
-    {
-      return func(a);
-    }
-    else
-    {
-      assert(false);
-      return false;
-    }
+    return func(::std::forward<Args>(args)...);
   }
 };
 
-// Standard-like std::function model
 template <typename Signature>
 class function;
 
@@ -119,7 +125,7 @@ template <typename Ret, typename... Args>
 class function<Ret(Args...)>
 {
 private:
-  callable_base *func = nullptr;
+  callable_base<Ret, Args...> *func = nullptr;
 
 public:
   function() = default;
@@ -128,14 +134,14 @@ public:
   {
     if (f)
     {
-      func = new callable_wrapper<Ret (*)(Args...)>(move(f));
+      func = new callable_wrapper<Ret (*)(Args...), Ret, Args...>(move(f));
     }
   }
 
   template <typename Callable>
   function(Callable f)
   {
-    func = new callable_wrapper<Callable>(move(f));
+    func = new callable_wrapper<Callable, Ret, Args...>(move(f));
   }
 
   function(const function &other) = delete;
@@ -923,6 +929,41 @@ auto invoke(Func &&f, Args &&...args)
 {
   return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }
+
+/* [func.bind.place]: _1..._N have distinct unspecified types and
+ * is_placeholder<decltype(_n)>::value == n. Distinct *types* is the load-bearing
+ * part -- boost/bind partially specialises its own is_placeholder on each of the
+ * first nine, which collapses to a redefinition if they share one. The objects
+ * are declared and not defined because nothing here consumes them: std::bind is
+ * not modelled, so a placeholder is never read. */
+namespace placeholders
+{
+template <int N>
+struct __ph
+{
+};
+
+extern __ph<1> _1;
+extern __ph<2> _2;
+extern __ph<3> _3;
+extern __ph<4> _4;
+extern __ph<5> _5;
+extern __ph<6> _6;
+extern __ph<7> _7;
+extern __ph<8> _8;
+extern __ph<9> _9;
+extern __ph<10> _10;
+} // namespace placeholders
+
+template <class T>
+struct is_placeholder : integral_constant<int, 0>
+{
+};
+
+template <int N>
+struct is_placeholder<placeholders::__ph<N> > : integral_constant<int, N>
+{
+};
 #endif
 
 } // namespace std

@@ -334,6 +334,26 @@ exprt function_call_expr::build_ord_constant(
   return expr;
 }
 
+std::optional<int>
+function_call_expr::folded_char_array_codepoint(const exprt &e) const
+{
+  // Reuse the walk the Name path uses. The char-subtype test keeps bytes out:
+  // those are long_long_int arrays, and admitting them would turn
+  // ord(b"\xc3") into an error rather than 195.
+  if (
+    !e.is_constant() || !e.type().is_array() ||
+    e.type().subtype() != char_type() || !e.has_operands())
+    return std::nullopt;
+
+  symbolt folded;
+  folded.set_value(e);
+  auto text = extract_string_from_symbol(&folded);
+  if (!text || text->empty())
+    return std::nullopt;
+
+  return decode_utf8_codepoint(*text);
+}
+
 exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 {
   // Fast path: constant string literal. Folding also handles multi-byte UTF-8
@@ -376,6 +396,12 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     migrate_expr(expr, expr2);
     return migrate_expr_back(typecast2tc(migrate_type(int_type()), expr2));
   }
+
+  // chr() folds a code point into a constant char array of its UTF-8 bytes.
+  // The runtime path below reads only the first, sign-extended, so
+  // ord(chr(200)) came back as -61 (#7552).
+  if (auto code_point = folded_char_array_codepoint(expr))
+    return build_ord_constant(arg, *code_point);
 
   // A runtime string: return the code point of its first character.
   if (type_utils::is_string_type(expr.type()))
@@ -448,6 +474,7 @@ exprt function_call_expr::handle_int_to_bytes() const
     // to big-endian would mis-fold a little-endian intent into a wrong byte
     // array. Reject the non-constant form with a clean error instead, matching
     // the constant-length guard above.
+    std::string folded_byteorder;
     if (
       byteorder_arg->contains("value") &&
       (*byteorder_arg)["value"].is_boolean())
@@ -455,6 +482,9 @@ exprt function_call_expr::handle_int_to_bytes() const
     else if (
       byteorder_arg->contains("value") && (*byteorder_arg)["value"].is_string())
       big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
+    else if (string_handler::extract_constant_string(
+               *byteorder_arg, converter_, folded_byteorder))
+      big_endian = folded_byteorder == "big";
     else
       throw std::runtime_error(
         "int.to_bytes() currently expects a constant byteorder");
@@ -1248,9 +1278,12 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
     return from_double(0.0, type_handler_.get_typet("float", 0));
 
   {
+    std::string digits;
+    const bool separators_ok =
+      type_utils::strip_pep515_underscores(*value_opt, digits);
     char *end = nullptr;
-    double dval = std::strtod(value_opt->c_str(), &end);
-    if (!end || end != value_opt->c_str() + value_opt->size())
+    double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+    if (!separators_ok || !end || end != digits.c_str() + digits.size())
     {
       log_error(
         "Failed float conversion from string \"{}\": invalid argument",
@@ -1268,7 +1301,10 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
     return from_integer(0, type_handler_.get_typet("int", 0));
 
   const std::string &value = *value_opt;
-  if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
+  std::string digits;
+  if (
+    !type_utils::strip_pep515_underscores(value, digits) || digits.empty() ||
+    !std::all_of(digits.begin(), digits.end(), ::isdigit))
   {
     log_error("Invalid string for integer conversion: \"{}\"", value);
     return from_integer(0, type_handler_.get_typet("int", 0));
@@ -1276,7 +1312,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
 
   try
   {
-    int int_val = std::stoi(value);
+    int int_val = std::stoi(digits);
     return from_integer(int_val, type_handler_.get_typet("int", 0));
   }
   catch (const std::exception &e)

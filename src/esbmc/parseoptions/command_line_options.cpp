@@ -18,9 +18,10 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <esbmc/globals.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -30,6 +31,7 @@ extern "C"
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config/config.h>
 #include <util/base/filesystem.h>
+#include <util/base/signal_catcher.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
@@ -93,29 +95,7 @@ extern "C"
 
 #define BT_BUF_SIZE 256
 
-extern "C" const char buildidstring_buf[];
-extern "C" const unsigned int buildidstring_buf_size;
-
-static std::string_view esbmc_version_string()
-{
-  return {buildidstring_buf, buildidstring_buf_size};
-}
-
 #ifndef _WIN32
-// Writes a preformatted constant, retrying short writes. write(2) is
-// async-signal-safe; the logging API is not — it formats and allocates.
-static void write_stderr(const char *msg, size_t len)
-{
-  while (len > 0)
-  {
-    ssize_t n = write(STDERR_FILENO, msg, len);
-    if (n <= 0)
-      break;
-    msg += n;
-    len -= static_cast<size_t>(n);
-  }
-}
-
 // Runs on SIGALRM, on whatever the main thread was doing — quite possibly
 // inside malloc holding the arena lock, which is why every call here is from
 // POSIX's async-signal-safe set (#6201). has_violation() is an atomic load.
@@ -124,13 +104,13 @@ void timeout_handler(int)
   static const char timed_out[] = "ERROR: Timed out\n";
   static const char failed[] = "VERIFICATION FAILED\n";
 
-  write_stderr(timed_out, sizeof(timed_out) - 1);
+  signal_safe_write(STDERR_FILENO, timed_out, sizeof(timed_out) - 1);
   // Under --multi-property the run keeps exploring interleavings after a
   // violation, to reach the properties only later schedules touch. A timeout
   // landing in that tail must not discard a counterexample already found and
   // printed: the verdict is settled once a property is violated.
   if (goto_functionst::property_verdicts.has_violation())
-    write_stderr(failed, sizeof(failed) - 1);
+    signal_safe_write(STDERR_FILENO, failed, sizeof(failed) - 1);
   // Kill any external solver process groups first: they are in their own
   // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
   file_operations::kill_registered_pgroups_from_signal();
@@ -189,6 +169,22 @@ static void segfault_handler(int sig)
     close(fd);
   }
   ::raise(sig);
+}
+
+/* Displaces the concise reporter installed before doit(): asking for the
+ * backtrace is explicit intent, so this one does not defer to a handler
+ * somebody else set. */
+static void install_verbose_crash_handler(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("segfault-handler"))
+    return;
+
+  for (int sig : {SIGSEGV, SIGBUS, SIGABRT})
+    install_altstack_handler(sig, segfault_handler, false);
+}
+#else
+static void install_verbose_crash_handler(const cmdlinet &)
+{
 }
 #endif
 
@@ -339,6 +335,50 @@ static std::string format_target()
   return oss.str();
 }
 
+/// Option defaults the loop-invariant modes imply.
+///
+/// --synthesise-loop-invariants: the schema emits establishment, preservation
+/// and the post-loop use as three independent obligations. Bundling them into
+/// one query makes the solver carry every multiplier term at once -- on
+/// regression/esbmc/synth_loop_invariant_sum each discharges in about a second
+/// alone while the bundle does not finish in 120s -- so solve them separately.
+/// base-case is set alongside multi-property because multi_property_check only
+/// runs when both are on.
+///
+/// Vacuity: default-enable the probe under --loop-invariant-check (the
+/// standalone Hoare-rewrite mode). A loop invariant that implies the guard
+/// makes the post-loop continuation unreachable; without this probe every
+/// downstream claim discharges as vacuously true. Deliberately NOT
+/// default-enabled for combined mode --loop-invariant: that runs k-induction
+/// phases whose UNSAT-on-internal-claims is the success signal, not vacuity.
+/// Users can opt in explicitly with --check-vacuity there.
+static void
+set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
+{
+  // Only when no phase has been selected explicitly. --base-case,
+  // --forward-condition and --inductive-step each drive one k-induction phase
+  // themselves, and process_goto_program treats --inductive-step as
+  // k-induction, so it stamps inductive_step_instruction on the havoc. Forcing
+  // base-case on top of that reaches the (base_case || forward_condition) &&
+  // inductive_step_instruction arm with k_induction false, which symex asserts
+  // against (execution_state.cpp) -- ESBMC aborts.
+  if (
+    cmdline.isset("synthesise-loop-invariants") && !options.is_kind() &&
+    !cmdline.isset("base-case") && !cmdline.isset("forward-condition") &&
+    !cmdline.isset("inductive-step"))
+  {
+    options.set_option("multi-property", true);
+    options.set_option("base-case", true);
+  }
+
+  if (cmdline.isset("no-vacuity-check"))
+    options.set_option("check-vacuity", false);
+  else if (
+    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check") ||
+    cmdline.isset("synthesise-loop-invariants"))
+    options.set_option("check-vacuity", true);
+}
+
 // This method creates a set of options based on the CMD arguments passed to
 // ESBMC. Also, it sets some options that are used across various
 // ESBMC stages but which are not available via CMD.
@@ -360,7 +400,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("git-hash"))
   {
-    log_result("{}", esbmc_version_string());
+    log_result("{}", esbmc_build_id());
     exit(0);
   }
 
@@ -583,20 +623,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("inductive-step"))
     options.set_option("add-symex-value-sets", true);
 
-  // Default-enable the vacuity probe under --loop-invariant-check (the
-  // standalone Hoare-rewrite mode). A loop invariant that implies the guard
-  // makes the post-loop continuation unreachable; without this probe every
-  // downstream claim discharges as vacuously true.
-  //
-  // We deliberately do NOT default-enable for combined mode --loop-invariant:
-  // that runs k-induction phases (base case, forward condition, inductive
-  // step) whose UNSAT-on-internal-claims is the success signal, not vacuity.
-  // Users can opt in explicitly with --check-vacuity in those modes.
-  if (cmdline.isset("no-vacuity-check"))
-    options.set_option("check-vacuity", false);
-  else if (
-    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check"))
-    options.set_option("check-vacuity", true);
+  set_loop_invariant_options(cmdline, options);
 
   // Conflicting strategies: --termination checks a different property and
   // takes priority over k-induction. Disable both k-induction variants so
@@ -691,13 +718,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-#ifndef _WIN32
-  if (cmdline.isset("segfault-handler"))
-  {
-    signal(SIGSEGV, segfault_handler);
-    signal(SIGABRT, segfault_handler);
-  }
-#endif
+  install_verbose_crash_handler(cmdline);
 
   // parallel solving activates "--multi-property"
   if (cmdline.isset("parallel-solving"))

@@ -13,10 +13,17 @@
  *  installed by default, so the hook is inert in a normal run even when the
  *  build enabled it.
  *
- *  Coverage is partial by construction, and a clean run should not be read as
- *  "every rewrite proved": about ten sites call expr2t::simplify() directly
- *  rather than through the free simplify() below, and simplify() itself
- *  recurses internally, so only the outermost rewrite of each call is seen. */
+ *  The hook is consulted per node, at the point each rewrite is made, rather
+ *  than once per outermost call (esbmc/esbmc#7260): a peephole is what changes
+ *  meaning, and checking whole expressions saw neither the peepholes nor the
+ *  direct expr2t::simplify() callers that never reach the free simplify()
+ *  below. Coverage is still not total, and three gaps are structural:
+ *  simplify() returns nil for address_of and overflow before any rewrite site;
+ *  the driver cannot install a checker until it holds a namespace, so frontend
+ *  parsing runs unchecked; and the rewrites the checker's own solver performs
+ *  are skipped by the reentrancy guard below, counted in neither total. A
+ *  fourth gap, check() declining a shape it cannot state as an equality, is
+ *  the one the declined counter makes visible. */
 namespace simplification_check
 {
 /** Called for every rewrite the simplifier performs. Reporting a mismatch --
@@ -44,6 +51,37 @@ inline void verify_rewrite(const expr2tc &before, const expr2tc &after)
   detail::run(before, after);
 #else
   (void)before;
+  (void)after;
+#endif
+}
+
+/** As above, where the rewritten node exists only as `this`. The clone is
+ *  inside the guard: it is the whole cost of the call, and a normal build must
+ *  not pay it. */
+inline void verify_node_rewrite(const expr2t &before, const expr2tc &after)
+{
+#ifdef ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK
+  detail::run(before.clone(), after);
+#else
+  (void)before;
+  (void)after;
+#endif
+}
+
+/** As above, for a caller that holds the rewritten node in a container only
+ *  sometimes -- a nil @p before means clone @p node instead. Choosing between
+ *  them here rather than at the call site keeps the branch out of simplify(),
+ *  which the complexity gate gives no room to grow. */
+inline void verify_rewrite_or_node(
+  const expr2tc &before,
+  const expr2t &node,
+  const expr2tc &after)
+{
+#ifdef ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK
+  detail::run(is_nil_expr(before) ? node.clone() : before, after);
+#else
+  (void)before;
+  (void)node;
   (void)after;
 #endif
 }

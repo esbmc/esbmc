@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 
+#include "memory" /* std::allocator, for the Allocator parameter */
 #include "utility"
 #include "vector"
 #include "functional"
@@ -14,7 +15,14 @@
 
 namespace std
 {
-template <class Key, class T, class Compare = less<Key> >
+// [associative.reqmts]: the Allocator parameter completes the signature. The
+// fixed arrays below do the allocating, so it is carried for the signature
+// and the allocator_type typedef only.
+template <
+  class Key,
+  class T,
+  class Compare = less<Key>,
+  class Allocator = allocator<pair<const Key, T> > >
 class map
 {
 public:
@@ -56,7 +64,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     iterator(const iterator &x)
@@ -79,12 +87,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -138,7 +146,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     const_iterator(const const_iterator &x)
@@ -169,12 +177,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -211,23 +219,14 @@ public:
 
     bool operator==(const const_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -236,7 +235,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     int *it_size;
 
@@ -262,12 +261,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -359,7 +358,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     const int *it_size;
 
@@ -394,12 +393,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -478,23 +477,14 @@ public:
 
     bool operator==(const const_reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -536,12 +526,11 @@ public:
     this->_size = 0;
   }
 
-  map(map &x)
+  map(const map &x)
   {
     this->__om_allocate();
     this->_size = x._size;
-    size_type s = x._size;
-    for (int i = 0; i < s; i++)
+    for (int i = 0; i < x._size; i++)
     {
       this->_key[i] = x._key[i];
       this->_value[i] = x._value[i];
@@ -1143,6 +1132,24 @@ public:
   }
 #endif
 
+  /* [associative.reqmts]: the ordered lookups have const overloads. The
+   * non-const bodies below only read, so the const ones delegate. */
+  const_iterator lower_bound(const key_type &x) const
+  {
+    return const_cast<map *>(this)->lower_bound(x);
+  }
+
+  const_iterator upper_bound(const key_type &x) const
+  {
+    return const_cast<map *>(this)->upper_bound(x);
+  }
+
+  pair<const_iterator, const_iterator> equal_range(const key_type &k) const
+  {
+    pair<iterator, iterator> r = const_cast<map *>(this)->equal_range(k);
+    return pair<const_iterator, const_iterator>(r.first, r.second);
+  }
+
   iterator lower_bound(const key_type &x)
   {
     unsigned int s = this->_size;
@@ -1231,9 +1238,69 @@ public:
       return _pair;
     }
   }
+
+  bool operator==(const map &y) const
+  {
+    if (this->_size != y._size)
+      return false;
+    for (int i = 0; i < this->_size; i++)
+    {
+      if (!(this->_key[i] == y._key[i]) || !(this->_value[i] == y._value[i]))
+        return false;
+    }
+    return true;
+  }
+
+  bool operator!=(const map &y) const
+  {
+    return !(*this == y);
+  }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison over value_type --
+   * pair, so the key decides first and the mapped value breaks a tie.
+   * _key[0.._size) is kept sorted by insert(). */
+  bool operator<(const map &y) const
+  {
+    int n = this->_size < y._size ? this->_size : y._size;
+    for (int i = 0; i < n; i++)
+    {
+      if (key_compare()(this->_key[i], y._key[i]))
+        return true;
+      if (key_compare()(y._key[i], this->_key[i]))
+        return false;
+      if (this->_value[i] < y._value[i])
+        return true;
+      if (y._value[i] < this->_value[i])
+        return false;
+    }
+    return this->_size < y._size;
+  }
+
+  bool operator>(const map &y) const
+  {
+    return y < *this;
+  }
+
+  bool operator<=(const map &y) const
+  {
+    return !(y < *this);
+  }
+
+  bool operator>=(const map &y) const
+  {
+    return !(*this < y);
+  }
 };
 
-template <class Key, class T, class Compare = less<Key> >
+// [associative.reqmts]: the Allocator parameter completes the signature. The
+// fixed arrays below do the allocating, so it is carried for the signature
+// and the allocator_type typedef only.
+template <
+  class Key,
+  class T,
+  class Compare = less<Key>,
+  class Allocator = allocator<pair<const Key, T> > >
 class multimap
 {
 public:
@@ -1270,7 +1337,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     iterator(const iterator &x)
@@ -1293,12 +1360,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1352,7 +1419,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     const_iterator(const const_iterator &x)
@@ -1383,12 +1450,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1425,23 +1492,14 @@ public:
 
     bool operator==(const const_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -1450,7 +1508,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     int *it_size;
 
@@ -1476,12 +1534,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1573,7 +1631,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     const int *it_size;
 
@@ -1608,12 +1666,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1692,23 +1750,14 @@ public:
 
     bool operator==(const const_reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -2260,7 +2309,7 @@ public:
   }
 #endif
 
-  bool operator==(multimap &y)
+  bool operator==(const multimap &y) const
   {
     if (this->_size != y._size)
       return false;
@@ -2272,7 +2321,7 @@ public:
     return true;
   }
 
-  bool operator!=(multimap &y)
+  bool operator!=(const multimap &y) const
   {
     if (this->_size != y._size)
       return true;
@@ -2282,6 +2331,42 @@ public:
         return true;
     }
     return false;
+  }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison over value_type --
+   * pair, so the key decides first and the mapped value breaks a tie.
+   * _key[0.._size) is kept sorted by insert(). */
+  bool operator<(const multimap &y) const
+  {
+    int n = this->_size < y._size ? this->_size : y._size;
+    for (int i = 0; i < n; i++)
+    {
+      if (key_compare()(this->_key[i], y._key[i]))
+        return true;
+      if (key_compare()(y._key[i], this->_key[i]))
+        return false;
+      if (this->_value[i] < y._value[i])
+        return true;
+      if (y._value[i] < this->_value[i])
+        return false;
+    }
+    return this->_size < y._size;
+  }
+
+  bool operator>(const multimap &y) const
+  {
+    return y < *this;
+  }
+
+  bool operator<=(const multimap &y) const
+  {
+    return !(y < *this);
+  }
+
+  bool operator>=(const multimap &y) const
+  {
+    return !(*this < y);
   }
 };
 } // namespace std

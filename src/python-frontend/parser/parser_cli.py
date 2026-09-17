@@ -102,15 +102,19 @@ def _read_ast_from_file(filename: str) -> ast.Module:
         return ast.parse(source.read())
 
 
+_FLAGS = ("--deadlock-check", "--typecheck")
+
+
 def check_usage() -> None:
     """Validate CLI args and fail with usage message when invalid."""
-    if len(sys.argv) < 3 or len(sys.argv) > 4:
+    if len(sys.argv) < 3:
         print("Usage: python parser/__main__.py <file path> <output directory> "
-              "[--deadlock-check]")
+              f"[{'] ['.join(_FLAGS)}]")
         sys.exit(2)
-    if len(sys.argv) == 4 and sys.argv[3] != "--deadlock-check":
-        print(f"Unknown flag: {sys.argv[3]}")
-        sys.exit(2)
+    for flag in sys.argv[3:]:
+        if flag not in _FLAGS:
+            print(f"Unknown flag: {flag}")
+            sys.exit(2)
 
 
 def check_dependencies() -> None:
@@ -157,19 +161,22 @@ def _emit_model_jsons(
 def main(*, deps: CliDeps) -> int | None:
     """Run parser CLI orchestration with explicit dependency injection."""
     check_usage()
-    check_dependencies()
 
     import_resolver = deps.import_resolver
     import_resolver.reset_state()
 
     filename = sys.argv[1]
     output_dir = sys.argv[2]
-    deadlock_check = len(sys.argv) == 4 and sys.argv[3] == "--deadlock-check"
+    deadlock_check = "--deadlock-check" in sys.argv[3:]
 
-    returncode, mypy_output = deps.run_mypy_strict(filename)
-    if returncode != 0:
-        print("\033[93m\nType checking warning:\033[0m")
-        print(mypy_output)
+    # Opt-in: the report is advisory -- it never reaches the AST or the
+    # verdict -- and a cold mypy cache costs about half the run.
+    if "--typecheck" in sys.argv[3:]:
+        check_dependencies()
+        returncode, mypy_output = deps.run_mypy_strict(filename)
+        if returncode != 0:
+            print("\033[93m\nType checking warning:\033[0m")
+            print(mypy_output)
 
     script_dir = os.path.dirname(os.path.abspath(filename))
     if script_dir and script_dir not in sys.path:
@@ -207,9 +214,19 @@ def main(*, deps: CliDeps) -> int | None:
         ),
     )
 
+    for module_name, imported_preprocessor in import_resolver.imported_signature_sources:
+        import_info = import_resolver.module_imports.get(module_name)
+        if import_info is None or import_info['import_all']:
+            continue
+        # A model's simplified constructor must not arity-check real calls.
+        include_methods = not import_resolver.is_imported_model(module_name)
+        preprocessor.adopt_module_signatures(imported_preprocessor, import_info['specific_names'],
+                                             include_methods)
+
     alias_seed, wrapper_seed = deps.compute_range_seed(tree, import_resolver)
     preprocessor.apply_range_rewrites(tree, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
     tree = preprocessor.finalize_module(tree)
+    import_resolver.ensure_default_helper_imports(tree)
 
     processed_submodules = set()
     for node in ast.walk(tree):

@@ -838,6 +838,12 @@ smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
   }
   else
   {
+    /* Under a native floating-point theory the operand is fp-sorted, and the
+     * sign bit is only reachable through its IEEE encoding. The sign of a NaN
+     * stays free across that round-trip (esbmc/esbmc#7021). */
+    if (value->sort->id == SMT_SORT_FPBV)
+      value = fp_api->mk_from_fp_to_bv(value);
+
     // In bitvector mode, extract the sign bit
     const auto width = value->sort->get_data_width();
     is_neg =

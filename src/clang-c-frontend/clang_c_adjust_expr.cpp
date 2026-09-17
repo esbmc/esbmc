@@ -1,5 +1,7 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_base_layout.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith/arith_tools.h>
@@ -15,7 +17,6 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
-#include <util/expr/type2name.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -24,6 +25,22 @@ clang_c_adjust::clang_c_adjust(contextt &_context)
 
 bool clang_c_adjust::adjust()
 {
+  // migrate_expr and migrate_type resolve a symbol through this thread-local
+  // namespace, and the one language_ui installed does not see the context this
+  // pass adjusts. A miss there is silent: sym_name_to_symbol parses the
+  // unresolvable name as an SSA-renamed one, and a clang USR contains `#` and
+  // `&`, so the id is truncated (docs/roadmap/frontends-to-irep2.md §52).
+  // clang_c_adjust_irep2::adjust() does the same for the same reason.
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+  struct ns_restoret
+  {
+    const namespacet *old;
+    ~ns_restoret()
+    {
+      migrate_namespace_lookup = old;
+    }
+  } ns_restore{old_ns};
+
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
@@ -67,7 +84,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if (
     symbol.get_type().is_code() &&
     has_prefix(symbol.id.as_string(), "c:@F@main"))
-    adjust_argc_argv(symbol);
+    declare_argc_argv(context, symbol);
 
   {
     typet t = symbol.get_type();
@@ -86,6 +103,18 @@ static bool is_shift_id(const irep_idt &id)
 
 void clang_c_adjust::adjust_expr(exprt &expr)
 {
+  // A derived->base conversion the frontend could not route through a
+  // "@base@" component; the displacement is only computable once the layout
+  // is padded, which is here. See clang_c_convertert::get_cast_expr (#7025).
+  const irep_idt dtb_base = expr.get("#derived_to_base");
+  if (!dtb_base.empty())
+  {
+    expr.remove("#derived_to_base");
+    adjust_expr(expr);
+    adjust_derived_to_base(expr, dtb_base);
+    return;
+  }
+
   adjust_type(expr.type());
 
   if (expr.id() == "sideeffect")
@@ -186,15 +215,11 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_ptr_mem(expr);
   }
-  else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
-  {
-    adjust_operands(expr);
-    adjust_base_to_derived(expr);
-  }
   else
   {
     // Just check operands of everything else
     adjust_operands(expr);
+    adjust_base_to_derived(expr);
   }
 }
 
@@ -250,43 +275,83 @@ void clang_c_adjust::adjust_ptr_mem(exprt &expr)
   }
 }
 
-// Sum the offsets of the "@base@" components leading from `derived` down to
-// the struct symbol `base_id`. Offsets come from ESBMC's own layout, so they
-// agree with the member path the derived->base cast builds. adjust() fixes up
-// every type symbol before any value, so padding is already in place here.
-static bool base_subobject_offset(
-  const namespacet &ns,
-  const typet &derived,
-  const irep_idt &base_id,
-  BigInt &offset)
+
+
+
+
+static bool has_side_effect(const exprt &expr)
 {
-  const typet &d = ns.follow(derived);
-  if (!d.is_struct())
-    return false;
-
-  const struct_typet &st = to_struct_type(d);
-  const irep_idt want = base_subobject_name(base_id.as_string());
-
-  for (const auto &c : st.components())
-  {
-    if (!has_prefix(c.get_name(), BASE_SUBOBJECT_PREFIX))
-      continue;
-
-    BigInt nested = 0;
-    if (
-      c.get_name() != want &&
-      !base_subobject_offset(ns, c.type(), base_id, nested))
-      continue;
-
-    offset += member_offset(migrate_type(st), c.get_name(), &ns) + nested;
+  if (expr.id() == "sideeffect")
     return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
+// Displace a derived->base pointer onto the base subobject under the legacy
+// flattened layout. See the marker set in clang_c_convertert::get_cast_expr
+// (#7025).
+void clang_c_adjust::adjust_derived_to_base(
+  exprt &expr,
+  const irep_idt &base_id)
+{
+  // Pointer form: (Base *)derived_ptr. Value form: the derived lvalue itself,
+  // which clang leaves in place for an implicit object argument.
+  const bool ptr_mode = expr.type().is_pointer();
+  const typet derived = ptr_mode ? expr.type().subtype() : expr.type();
+
+  BigInt offset = 0;
+  if (!base_displacement(ns, derived, base_id, offset) || offset == 0)
+    return;
+
+  // The null guard below names the operand twice, and side effects are not
+  // lifted out until remove_sideeffects; displacing `f()` would call f twice.
+  // Decline rather than duplicate.
+  if (has_side_effect(expr))
+  {
+    log_debug(
+      "c++",
+      "derived-to-base displacement onto {} skipped: side-effecting operand",
+      base_id);
+    return;
   }
 
-  return false;
+  const typet base_ptr = pointer_typet(symbol_typet(base_id));
+  exprt src = expr;
+  if (!ptr_mode)
+    src = address_of_exprt(expr);
+
+  typet char_ptr = pointer_typet(char_type());
+  exprt adjusted = src;
+  gen_typecast(ns, adjusted, char_ptr);
+  // plus_exprt leaves the node's type nil, so set it before casting back.
+  adjusted = plus_exprt(adjusted, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  gen_typecast(ns, adjusted, base_ptr);
+
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. A value-form operand is an lvalue
+  // and can never be null, so only the pointer form needs the guard.
+  if (ptr_mode)
+  {
+    exprt guarded = if_exprt(
+      equality_exprt(src, gen_zero(src.type())), gen_zero(base_ptr), adjusted);
+    guarded.location() = expr.location();
+    expr = guarded;
+    return;
+  }
+
+  // dereference_exprt takes the pointer type and uses its subtype.
+  dereference_exprt deref(adjusted, base_ptr);
+  deref.location() = expr.location();
+  expr = deref;
 }
 
 void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 {
+  if (!expr.get_bool("#base_to_derived"))
+    return;
   expr.remove("#base_to_derived");
 
   if (expr.operands().size() != 1)
@@ -300,14 +365,16 @@ void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 
   const irep_idt base_id = src.type().subtype().identifier();
   BigInt offset = 0;
-  if (!base_subobject_offset(ns, expr.type().subtype(), base_id, offset))
+  if (!base_displacement(ns, expr.type().subtype(), base_id, offset))
   {
-    // The hierarchy kept the legacy flattened layout, so there is no @base@
-    // component to undo. Left as a plain typecast the result keeps pointing
-    // at the base subobject, which is only exact when the two coincide.
+    // Neither layout places the base at a single fixed displacement -- a
+    // virtual base shared by two sibling bases has none. Left as a plain
+    // typecast the result keeps pointing at the base subobject, which is only
+    // exact when the two coincide.
     log_debug(
       "c++",
-      "base-to-derived cast to {}: no @base@ path to {}, left unadjusted",
+      "base-to-derived cast to {} left unadjusted: no fixed displacement for "
+      "{} in ESBMC's layout",
       expr.type().subtype().identifier(),
       base_id);
     return;
@@ -1114,69 +1181,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    if (exprt poly = is_gcc_polymorphic_builtin(identifier, expr.arguments());
+    if (exprt poly = declare_gcc_polymorphic_builtin(
+          to_symbol_expr(f_op), expr.arguments(), expr.location(), context);
         poly.is_not_nil())
     {
-      irep_idt identifier_with_type = poly.identifier();
-      auto &arguments = to_code_type(poly.type()).arguments();
-
-      // For all atomic/sync polymorphic built-ins (which are the ones handled
-      // by typecheck_gcc_polymorphic_builtin), looking at the first parameter
-      // suffices to distinguish different implementations.
-      if (arguments.front().type().is_pointer())
-      {
-        identifier_with_type =
-          id2string(identifier) + "_" +
-          type2name(to_pointer_type(arguments.front().type()).subtype());
-      }
-      else
-      {
-        identifier_with_type =
-          id2string(identifier) + "_" + type2name(arguments.front().type());
-      }
-
-      poly.identifier(identifier_with_type);
-      poly.name(f_op.name());
-      poly.location() = expr.location();
-
-      symbolt *function_symbol_with_type =
-        context.find_symbol(identifier_with_type);
-      if (!function_symbol_with_type)
-      {
-        for (std::size_t i = 0; i < arguments.size(); ++i)
-        {
-          const std::string base_name = "p_" + std::to_string(i);
-
-          // TODO: Just like the function parameter symbols in
-          // clang_c_convertert::get_function_param, adding this symbol to the
-          // context is only necessary for the migrate code.
-          symbolt param_symbol;
-          param_symbol.id = id2string(identifier_with_type) + "::" + base_name;
-          param_symbol.name = base_name;
-          param_symbol.location = f_op.location();
-          param_symbol.set_type(arguments[i].type());
-          param_symbol.lvalue = true;
-          param_symbol.is_parameter = true;
-          param_symbol.file_local = true;
-
-          arguments[i].cmt_identifier(param_symbol.id);
-          arguments[i].cmt_base_name(param_symbol.name);
-
-          context.add(param_symbol);
-        }
-
-        symbolt new_symbol;
-        new_symbol.id = identifier_with_type;
-        new_symbol.name = f_op.name();
-        new_symbol.location = expr.location();
-        new_symbol.set_type(poly.type());
-        code_blockt implementation =
-          instantiate_gcc_polymorphic_builtin(identifier, to_symbol_expr(poly));
-        new_symbol.set_value(implementation);
-
-        context.add(new_symbol);
-      }
-
       f_op = std::move(poly);
     }
     else
@@ -1199,7 +1207,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
       }
       else
       {
-        // clang will complain about this already, no need for us to do the same!
+        // clang will complain about this already, no need for us to do the
+        // same!
 
         // maybe this is an undeclared function
         // let's just add it
@@ -1324,40 +1333,6 @@ void clang_c_adjust::adjust_function_call_arguments(
   }
 }
 
-static inline bool
-compare_float_suffix(const irep_idt &identifier, const std::string &name)
-{
-  return (identifier == name) || ((identifier == (name + "f"))) ||
-         ((identifier == (name + "d"))) || ((identifier == (name + "l")));
-}
-
-static inline bool
-compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
-{
-  // compare a given identifier with a set of possible names, e.g,
-  //
-  // compare_unscore_builtin(identifier, "isnan")
-  //
-  // will compare identifier to:
-  // isnan
-  // __isnan
-  // __isnanf
-  // __isnanl
-  // __isnand
-  // __builtin_isnan
-  // __builtin_isnanf
-  // __builtin_isnanl
-  // __builtin_isnand
-  const std::string builtin_name = "__builtin_" + name;
-  const std::string underscore_name = "__" + name;
-
-  return (identifier == name) ||
-         compare_float_suffix(identifier, builtin_name) ||
-         (identifier == builtin_name) ||
-         compare_float_suffix(identifier, underscore_name) ||
-         (identifier == underscore_name);
-}
-
 /// The float functions that lower to a node taking the call's arguments
 /// unchanged, keyed by base name; null when `expr` is not such a call.
 ///
@@ -1370,11 +1345,6 @@ static const char *float_lowering_id(
   const irep_idt &identifier,
   const side_effect_expr_function_callt &expr)
 {
-  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
-  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
-  static const std::pair<const char *, const char *> lowerings[] = {
-    {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
-
   /* c2goto compiles the models with this same binary, and libm/remainder.c's
    * own call is what puts ieee_rem into the model. The shape test would strip
    * it there, so only a program's call is checked -- which is where a
@@ -1389,23 +1359,21 @@ static const char *float_lowering_id(
         return nullptr;
   }
 
-  for (const auto &[name, node_id] : lowerings)
-    if (compare_float_suffix(identifier, name))
-      return node_id;
+  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  switch (ieee_float_builtin_of(identifier))
+  {
+  case ieee_float_builtin::nearbyint:
+    return "nearbyint";
+  case ieee_float_builtin::remainder:
+    return "ieee_rem";
+  case ieee_float_builtin::fma:
+    return "ieee_fma";
+  case ieee_float_builtin::none:
+    return nullptr;
+  }
 
   return nullptr;
-}
-
-/// True for the abs builtins that may be lowered to an `abs` node. That node
-/// becomes `(x >= 0) ? x : -x`, ill-typed for anything but an arithmetic
-/// argument, so a program overloading the name for a class type --
-/// std::abs(complex) is why <complex> ships without it -- keeps its call.
-static inline bool is_abs_builtin_name(const irep_idt &identifier)
-{
-  return identifier == "abs" || identifier == "labs" ||
-         identifier == "imaxabs" || identifier == "llabs" ||
-         compare_float_suffix(identifier, "fabs") ||
-         compare_unscore_builtin(identifier, "fabs");
 }
 
 /// The `abs` node lowers to `(x >= 0) ? x : -x`, which is ill-typed for
@@ -1416,25 +1384,6 @@ bool clang_c_adjust::has_single_arithmetic_argument(
   return expr.arguments().size() == 1 && is_number(expr.arguments()[0].type());
 }
 
-/// The lowerings in do_special_functions match a callee's base name, so a
-/// program that defines one of these names itself would have its body discarded
-/// and the builtin verified in its place (#6904). These are all spellings a
-/// program is free to reuse -- `mylib::abs`, `mylib::isinf` -- unlike the
-/// `__builtin_`-prefixed and CPROVER-prefixed entries, which are reserved.
-static inline bool is_name_matched_builtin(const irep_idt &identifier)
-{
-  return is_abs_builtin_name(identifier) ||
-         compare_unscore_builtin(identifier, "isnan") ||
-         compare_unscore_builtin(identifier, "isinf") ||
-         compare_unscore_builtin(identifier, "isnormal") ||
-         compare_unscore_builtin(identifier, "signbit") ||
-         compare_unscore_builtin(identifier, "isfinite") ||
-         compare_float_suffix(identifier, "finite") ||
-         compare_unscore_builtin(identifier, "finite") ||
-         compare_unscore_builtin(identifier, "inf") ||
-         compare_unscore_builtin(identifier, "huge_val");
-}
-
 /// True when lowering this call would throw away a definition the program
 /// supplies. Libc's own declarations are bodiless and the <cmath> overloads
 /// forward to their `__builtin_` spelling, so both still lower.
@@ -1442,18 +1391,8 @@ bool clang_c_adjust::shadows_user_definition(
   const irep_idt &identifier,
   const exprt &f_op) const
 {
-  if (!is_name_matched_builtin(identifier))
-    return false;
-
-  /* c2goto compiles the operational models themselves, where libm/fabs.c and
-   * friends do define these names. Those definitions are the models, not a
-   * program's, so honouring them here would stop every call inside the models
-   * folding to its native node and blow the encoding up (#6904). */
-  if (config.options.get_bool_option("building-c-library"))
-    return false;
-
-  const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
-  return s != nullptr && !s->get_value().is_nil();
+  return builtin_shadows_user_definition(
+    context, identifier, to_symbol_expr(f_op).get_identifier());
 }
 
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
@@ -1872,7 +1811,7 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
   gen_typecast_bool(ns, expr.op1());
 }
 
-void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
+void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 {
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.get_type()).arguments();

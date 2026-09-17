@@ -1,4 +1,5 @@
 THOROUGH
 gh-1198.c
 --unwind 1 --32
+REQUIRES arch32
 ^VERIFICATION FAILED$

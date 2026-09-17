@@ -22,6 +22,19 @@ public:
 
   bool adjust();
 
+  /// Declare the concrete instance of the GCC `__sync_*` / C11 `__c11_atomic_*`
+  /// polymorphic builtin that @p callee and @p arguments select, adding its
+  /// parameter symbols and its synthesised body to @p context on first use.
+  /// Returns the symbol to call in place of @p callee, nil if @p callee names
+  /// no such builtin. Static because the IREP2 adjuster calls it too: clang
+  /// hands these builtins over body-less, so a pass that skips this leaves
+  /// every atomic load returning nondet (§130).
+  static exprt declare_gcc_polymorphic_builtin(
+    const symbol_exprt &callee,
+    const exprt::operandst &arguments,
+    const locationt &call_location,
+    contextt &context);
+
   /// Hand the index rewrite to the IREP2 adjuster. Set only by the C driver:
   /// clang_cpp_adjust derives from this class, and the IREP2 pass is wired into
   /// clang_c_languaget::typecheck alone, so a global option check here would
@@ -50,7 +63,6 @@ protected:
   shadows_user_definition(const irep_idt &identifier, const exprt &f_op) const;
 
   virtual void adjust_symbol(symbolt &symbol);
-  void adjust_argc_argv(const symbolt &main_symbol);
 
   /**
    * methods for type (typet) adjustment
@@ -63,6 +75,8 @@ protected:
    */
   void adjust_expr(exprt &expr);
   void adjust_base_to_derived(exprt &expr);
+  void adjust_derived_to_base(exprt &expr, const irep_idt &base_id);
+  void adjust_call_argument(exprt &arg);
   void adjust_struct(exprt &expr);
   void adjust_ptr_mem(exprt &expr);
   void adjust_side_effect_assignment(exprt &expr);
@@ -112,13 +126,14 @@ protected:
   // For class instantiation in C++, we need to adjust the side-effect of constructor
   virtual void adjust_decl_block(codet &code);
 
-  exprt is_gcc_polymorphic_builtin(
+  static exprt is_gcc_polymorphic_builtin(
     const irep_idt &identifier,
     const exprt::operandst &arguments);
 
-  code_blockt instantiate_gcc_polymorphic_builtin(
+  static code_blockt instantiate_gcc_polymorphic_builtin(
     const irep_idt &identifier,
-    const symbol_exprt &function_symbol);
+    const symbol_exprt &function_symbol,
+    contextt &context);
 
   /**
    * ancillary methods to support the expr/code adjustments above
@@ -129,5 +144,10 @@ protected:
 
   virtual void adjust_reference(exprt &expr);
 };
+
+/// The `argc'`/`argv'`/`envp'` symbols `clang_c_main` looks up unconditionally
+/// when main takes arguments. A symbol-table side effect rather than an
+/// expression rewrite, so whichever adjust pass is in charge has to make it.
+void declare_argc_argv(contextt &context, const symbolt &main_symbol);
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

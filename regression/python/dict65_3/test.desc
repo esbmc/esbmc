@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
 --unwind 5 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

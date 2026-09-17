@@ -1,0 +1,846 @@
+#ifndef EXECUTION_STATE_H_
+#define EXECUTION_STATE_H_
+
+#include <algorithm>
+#include <deque>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/state/goto_symex_state.h>
+#include <goto-symex/state/renaming.h>
+#include <goto-symex/equation/symex_target.h>
+
+#include <list>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
+#include <irep2/irep2.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
+
+class reachability_treet;
+
+/**
+ *  Thread-aware symex state explored by reachability_treet.
+ *
+ *  Holds the global SSA renaming state (level 2) and value set, plus a
+ *  vector of per-thread goto_symex_statet recording each thread's call
+ *  stack, program counter, and local guard. reachability_treet drives this
+ *  object one instruction at a time via symex_step; threading-specific
+ *  instructions (thread spawn, atomic begin/end, yield, monitor) are
+ *  handled here while the rest fall through to goto_symext::symex_step.
+ *
+ *  Context switches are not detected by ad-hoc hooks. Instead, every
+ *  symex_step records the executed transition into last_transition
+ *  (thread id, optional parent guard, optional parked_patht). When the
+ *  scheduler later decides to switch threads, preserve_last_paths reads
+ *  last_transition to know which deferred-merge snapshots to carry across
+ *  the switch — including a direct iterator to the path parked by
+ *  goto_symext::symex_goto or symex_return via the record_parked_path hook.
+ *
+ *  goto_symext occasionally needs data only execution_statet has (current
+ *  thread id, the ability to spawn a new thread); those flow back through
+ *  __ESBMC_* intrinsic calls dispatched in symex_step.
+ */
+
+class execution_statet : public goto_symext
+{
+public:
+  class ex_state_level2t; // Forward dec
+  // Convenience typedef
+  typedef goto_symex_statet::merge_statet merge_statet;
+
+  /** A path the transition parked for a deferred merge: the sibling arm of a
+   *  branch, or the continuation a return parked at end_of_function. In both
+   *  cases the thread's live continuation is the parked state, not its
+   *  present (falsified) guard. */
+  struct parked_patht
+  {
+    /** Instruction at which the parked path will be merged in. */
+    goto_programt::const_targett target;
+    /** Direct reference to the parked merge_statet in
+     *  cur_state->top().merge_state_map[target]. std::list iterators
+     *  don't invalidate on inserts/erases of other nodes.
+     *
+     *  WARNING: this iterator is bound to the merge_state_map of the
+     *  execution_statet that *recorded* it. When the reachability tree
+     *  clones an execution_statet via create_next_state(), the clone
+     *  rebuilds its own threads_state / merge_state_maps but the
+     *  defaulted operator= still copies this iterator unchanged. On
+     *  the clone, snapshot therefore points into the **parent**'s
+     *  merge_state_map.
+     *
+     *  This is currently sound because (a) the parent's exploration
+     *  frame stays alive in exploration_frames until backtrack and
+     *  (b) the only consumer (preserve_last_paths, called once from
+     *  update_after_switch_point) runs before anything mutates the
+     *  parent's merge_state_map. If you add code that mutates the
+     *  parent's merge_state_map between clone and preserve, or that
+     *  consumes this iterator later than the very next switch, the
+     *  iterator dereference will read corrupted data — fix by
+     *  snapshotting the {guard, num_instructions, value_set} at record
+     *  time instead of storing the iterator. */
+    goto_symex_statet::merge_state_listt::iterator snapshot;
+  };
+
+  struct transition_resultt
+  {
+    unsigned int thread_id = 0;
+    std::optional<guard2tc> parent_guard;
+    std::optional<parked_patht> parked;
+  };
+
+public:
+  /**
+   *  Default constructor.
+   *  Takes the environment we'll be working with, and sets up a single thread
+   *  with a function call to the "main" function just encoded. Two of these
+   *  arguments can have unknown subclasses: _target and l2init get clone'd
+   *  each time we need a new one (think the factory pattern).
+   *  @param goto_functions GOTO functions we'll operate over.
+   *  @param ns Namespace we're working with.
+   *  @param _target Symex target to receive assigns/asserts/etc in trace.
+   *  @param context Context we'll be working in.
+   *  @param l2init Initial level2t state (blank).
+   *  @param options Options we're going to operate with.s
+   */
+  execution_statet(
+    const goto_functionst &goto_functions,
+    const namespacet &ns,
+    reachability_treet *art,
+    std::shared_ptr<symex_targett> _target,
+    contextt &context,
+    std::shared_ptr<ex_state_level2t> l2init,
+    optionst &options);
+
+  /**
+   *  Default copy constructor.
+   *  Used each time we duplicate an execution_statet in reachability_treet.
+   *  Does what you might expect, but also updates any ex_state_level2t objects
+   *  in the new execution_statet to point at the right object. */
+  execution_statet(const execution_statet &ex);
+  /** Public assignment is deleted: a standalone `a = b` would not be
+   *  correct here (it would leave the base goto_symext slice, threads_state,
+   *  cur_state, and state_level2 as `a`'s old objects). Cloning happens
+   *  via the copy constructor, which uses copy_derived_from internally to
+   *  populate execution_statet's own fields without re-copying the base. */
+  execution_statet &operator=(const execution_statet &ex) = delete;
+
+  /**
+   *  Default destructor.
+   */
+  virtual ~execution_statet() = default;
+
+  // Types
+
+  /**
+   *  execution_statet specific level2t.
+   *  The feature of this class is that we maintain a pointer to the ex_state
+   *  that owns this level2t, which is updated whenever this class gets copied.
+   *  We also override some level2t methods, so that we can encode a node_id in
+   *  the names that are generated. (This is for --schedule).
+   */
+  class ex_state_level2t : public renaming::level2t
+  {
+  public:
+    ex_state_level2t(execution_statet &ref);
+    ~ex_state_level2t() override = default;
+    std::shared_ptr<renaming::level2t> clone() const override;
+    void rename(expr2tc &lhs_symbol, unsigned count) override;
+    void rename(expr2tc &identifier) override;
+
+    execution_statet *owner;
+  };
+
+  /**
+   *  State-hashing level2t.
+   *  When using this level2t, any assignment made is caught, and the symbolic
+   *  names are hashed. This is the primary handler for state hashing.
+   */
+  class state_hashing_level2t : public ex_state_level2t
+  {
+  public:
+    state_hashing_level2t(execution_statet &ref);
+    ~state_hashing_level2t() override = default;
+    std::shared_ptr<renaming::level2t> clone() const override;
+    void make_assignment(
+      expr2tc &lhs_symbol,
+      const expr2tc &const_value,
+      const expr2tc &assigned_value) override;
+    std::size_t generate_l2_state_hash() const;
+    typedef std::map<irep_idt, std::size_t> current_state_hashest;
+    current_state_hashest current_hashes;
+  };
+
+  // Macros
+
+  /** Increase number of context switches this ex_state has taken */
+  void increment_context_switch()
+  {
+    CS_number++;
+  }
+
+  /** Get the number of context switches performed by this ex_state */
+  int get_context_switch() const
+  {
+    return CS_number;
+  }
+
+  /** Fetch the thread ID of the current active thread */
+  unsigned int get_active_state_number() const
+  {
+    return active_thread;
+  }
+
+  /** Set internal thread startup data */
+  void set_thread_start_data(unsigned int tid, const expr2tc &argdata)
+  {
+    if (tid >= thread_start_data.size())
+    {
+      log_error("Setting thread data for nonexistant thread {}", tid);
+      abort();
+    }
+
+    thread_start_data[tid] = argdata;
+  }
+
+  /** Fetch internal thread startup data */
+  const expr2tc &get_thread_start_data(unsigned int tid) const
+  {
+    if (tid >= thread_start_data.size())
+    {
+      log_error("Setting thread data for nonexistant thread {}", tid);
+      abort();
+    }
+
+    return thread_start_data[tid];
+  }
+
+  // Methods
+
+  /**
+   *  Duplicate this execution state.
+   *  This is just a vehicle for subclasses to get their hooks in when this
+   *  class gets duplicated.
+   *  @see schedule_execution_statet
+   *  @see dfs_execution_statet
+   *  @return New, duplicated execution state
+   */
+  virtual std::shared_ptr<execution_statet> clone() const = 0;
+
+  /**
+   *  Make one symbolic execution step.
+   *  Take one instruction and interpret it. Can result in any action, such as
+   *  a thread ending, causing a context switch, a function call being taken,
+   *  a thread being created, and so forth.
+   *  @param art reachability_treet driving the exploration; forwarded to
+   *             goto_symext::symex_step so threading intrinsics can call
+   *             back into it.
+   */
+  void symex_step(reachability_treet &art) override;
+
+  /**
+   *  Symbolically assign a value.
+   *  Entirely handed off to goto_symext::symex_assign. However this method
+   *  also passes the assignment to a reachability_treet analysis function to
+   *  see whether the assignment should be generating a context switch.
+   *  @param code Code representing assignment we're making.
+   *  @param hidden Whether the assignment is hidden from the trace.
+   *  @param guard A guard for the assignment.
+   */
+  void symex_assign(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard) override;
+
+  /**
+   *  Symbolically assert something.
+   *  Implemented by calling goto_symext::claim. However, we also pass the
+   *  claimed expression onto the reachability_treet analysis functions, to
+   *  see whether or not we should generate a context switch because of a read
+   *  in this claim.
+   *  @param expr Expression that we're asserting is true.
+   *  @param msg Textual message explaining this assertion.
+   */
+  void claim(const expr2tc &expr, const std::string &msg) override;
+
+  /**
+   *  Perform a jump across GOTO code.
+   *  Implemented by goto_symext::symex_goto. This is a concrete action, not
+   *  symbolic. Although the guard is symbolic. The expression of the guard can
+   *  read global state, and can thus possibly result in a context switch being
+   *  generated; so we pass the guard to a reachability_treet analysis function
+   *  too.
+   *  @param old_guard Guard of the goto jump being performed.
+   */
+  void symex_goto(const expr2tc &old_guard) override;
+
+  /**
+   *  Assume some expression is true.
+   *  Implemented by goto_symext::assume. Potentially causes a context switch,
+   *  so we pass the assumption expression on to a reachability_treet analysis
+   *  function.
+   *  @param assumption Expression of the thing we're assuming to be true.
+   */
+  void assume(const expr2tc &assumption) override;
+
+  /**
+   *  Implemented by goto_symext::symex_printf. Overridden only to record the
+   *  globals the arguments read: the frontend lowers a printf call to an OTHER
+   *  instruction, so the function-call path never analyses them.
+   */
+  void symex_printf(const expr2tc &lhs, expr2tc &code) override;
+
+  /**
+   *  Under --no-unwinding-assertions a truncated loop is cut with an
+   *  assumption, which drives the state guard false and so is indistinguishable
+   *  at the scheduler from a genuinely infeasible path. The remaining
+   *  iterations are not infeasible, only unexplored, so the subtree is not
+   *  exhausted and no thread may be put to sleep against it (issue #6831).
+   */
+  void note_bounded_loop_truncation() override;
+
+  /**
+   *  Fetch reference to count of dynamic objects in this state.
+   *  The goto_symext class knows that such a count exists, just it doesn't
+   *  store it itself. So we instead provide a hook for it to fetch a reference
+   *  to the true counter.
+   *  @return Reference to the count of global dynamic objects.
+   */
+  unsigned int &get_dynamic_counter() override;
+
+  /** Like get_dynamic_counter, but with nondet symbols. */
+  unsigned int &get_nondet_counter() override;
+
+  /** Zero the dynamic-object counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore -- never from this class's
+   *  constructor, which the reachability tree runs per interleaving and where
+   *  a reset would mint colliding object names (R15). */
+  static void reset_dynamic_counter();
+
+  /**
+   *  Fetch name of current execution guard.
+   *  The execution guard being the guard of the interleavings up to this point
+   *  being true and feasable. This is a symbolic name for it.
+   *  @see execute_guard
+   *  @return Symbol of current execution state guard
+   */
+  expr2tc get_guard_identifier();
+
+  /**
+   *  Get reference to current thread state.
+   *  @return Reference to current thread state.
+   */
+  goto_symex_statet &get_active_state();
+  const goto_symex_statet &get_active_state() const;
+
+  /**
+   *  Get atomic number count for current thread state.
+   *  @see atomic_numbers
+   *  @return Atomic number count for current thread state.
+   */
+  unsigned int get_active_atomic_number() const;
+
+  /** Increase current threads atomic number count */
+  void increment_active_atomic_number();
+
+  /** Decrease current threads atomic number count */
+  void decrement_active_atomic_number();
+
+  /**
+   *  Perform a context switch to thread ID i.
+   *  Essentially this just updates the counter indicating which thread is
+   *  currently active. Callers taking a scheduling switch must follow this
+   *  with update_after_switch_point(), which re-executes the execution guard.
+   *  @see execute_guard.
+   *  @param i Thread ID to switch to.
+   */
+  void switch_to_thread(unsigned int i);
+
+  /**
+   *  Determines if current state guard is false.
+   *  Used to check whether the interleaving we're exploring has a false guard,
+   *  meaning that any further interleaving we take is unviable. If
+   *  --smt-thread-guard is enabled, we ask the solver.
+   *  @return True when state guard is false
+   */
+  bool is_cur_state_guard_false(const expr2tc &guard);
+
+  /**
+   *  Generates execution guard that's true if this interleaving can be reached.
+   *  We can context switch between many points in many threads; not all of
+   *  them are feasible though, and some of them place later constraints on the
+   *  contents of program state. This is because the instruction causing the
+   *  switch can be guarded in an if/else block. The test 01_pthread27 is an
+   *  excellent example of this.
+   *
+   *  To get around this, we have a state guard that is only true if the guards
+   *  at the context switch points up to here are all true. We copy the symbol
+   *  for this value into the guards of all currently executing threads. This
+   *  means that any assertion after a context switch is guarded by the
+   *  conditions on all the previous switches that have happened.
+   */
+  void execute_guard();
+
+  /**
+   *  Test to see if interleavings are blocked by the current state.
+   *  There can be a variety of reasons why interleavings are blocked; there
+   *  can be only one thread, we can be in an atomic block or insn, we can
+   *  have reached our context bound.
+   *  @return True if the current state prohibits context switches.
+   */
+  bool check_if_ileaves_blocked();
+
+  /**
+   *  True iff every thread in this schedule has reached a terminal state,
+   *  i.e. has either ended or has an empty call stack. This is the precondition
+   *  for treating the schedule's tail as program termination — only then is it
+   *  sound to fire end-of-program checks such as the memory-leak walker, since
+   *  a still-running thread may hold the only live reference to a dynamic
+   *  object via its stack frames.
+   */
+  bool all_threads_terminal() const;
+
+  /**
+   *  Create a new thread.
+   *  Creates and initializes a new thread, running at the start of the GOTO
+   *  program prog.
+   *  @param prog GOTO program to start new thread at.
+   *  @return Thread ID of newly created thread.
+   */
+  unsigned int add_thread(const goto_programt *prog);
+
+  /**
+   *  Record a thread as ended.
+   *  Updates internal records to say that the thread has ended. The thread
+   *  itself can continue executing until the next context switch point, when
+   *  the scheduler notices it's unschedulable. So, always ensure end_thread is
+   *  followed by forcing a context switch.
+   */
+  void end_thread();
+
+  /**
+   *  Perform any necessary steps after a context switch point. Whether or not
+   *  it was taken. Resets DFS record, POR records, executes thread guard.
+   */
+  void update_after_switch_point();
+
+  void preserve_last_paths(const transition_resultt &transition);
+  void cull_all_paths();
+  void restore_last_paths();
+
+  void record_parked_path(
+    goto_programt::const_targett target,
+    statet::merge_state_listt::iterator parked) override;
+
+  /**
+   *  Analyze the contents of an assignment for threading.
+   *  If the assignment touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param assign Container of code_assign2t object.
+   */
+  void analyze_assign(const expr2tc &assign);
+
+  /**
+   *  Analyze the contents of a read for threading.
+   *  If the read touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param expr Container of expression possibly touching global state.
+   */
+  void analyze_read(const expr2tc &expr);
+
+  /** Kind of memory access, used by get_expr_globals to decide whether a
+   *  read-only global can be filtered out of cswitch-triggering sets. */
+  enum class access_kindt
+  {
+    READ,
+    WRITE
+  };
+
+  /**
+   *  Get list of globals accessed by expr.
+   *  Reads of globals that are provably never written anywhere in the program
+   *  are filtered out — they cannot participate in data races and should not
+   *  force a context switch.
+   *  @param ns Namespace to work under.
+   *  @param expr Expression to count global refs in.
+   *  @param global_list Output set of global refs.
+   *  @param kind Whether this access is a READ or a WRITE.
+   */
+  void get_expr_globals(
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /**
+   *  Resolve one pointer level: the object `ptr`'s value set names, or nil.
+   *  @param to_global Set when the resolved object is shared.
+   */
+  expr2tc resolve_pointer_target(
+    const namespacet &ns,
+    const expr2tc &ptr,
+    bool &to_global);
+
+  /**
+   *  Record what a dereference reaches when the pointer it goes through is not
+   *  a bare symbol (R29). No-op on any other expression, and on a target that
+   *  is not shared.
+   */
+  void record_aggregate_held_target(
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /** Record `key` as an object accessed by this transition, for MPOR. */
+  void record_access_key(
+    const expr2tc &key,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /**
+   *  Check for scheduling dependencies. Whether it exists between the variables
+   *  accessed by the last transition of thread j and the last transition of
+   *  thread l.
+   *  @param j Most recently executed thread id
+   *  @param l Other thread id to check dependency with
+   *  @return True if scheduling dependency exists between threads j and l
+   */
+  bool check_mpor_dependency(unsigned int j, unsigned int l) const;
+
+  /** The objects one transition read and wrote, as MPOR records them. */
+  struct transition_footprintt
+  {
+    std::set<expr2tc> reads, writes;
+  };
+
+  /** Footprint of the transition thread `tid` most recently completed. */
+  transition_footprintt last_transition_footprint(unsigned int tid) const
+  {
+    return {thread_last_reads.at(tid), thread_last_writes.at(tid)};
+  }
+
+  /**
+   *  As check_mpor_dependency, but against a footprint captured earlier rather
+   *  than against a thread's current one. Sleep sets need this: the transition
+   *  a sleeping thread would take is the one it took when it was put to sleep,
+   *  which its `thread_last_*` entries no longer describe.
+   */
+  bool
+  check_mpor_dependency(unsigned int j, const transition_footprintt &fp) const;
+
+  /**
+   *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
+   *  right now without violating the "quasi-monotonic" property.
+   */
+  void calculate_mpor_constraints();
+
+  /** Read-only accessor for mpor_says_no. */
+  bool is_transition_blocked_by_mpor() const
+  {
+    return mpor_says_no;
+  }
+
+  /** Read-only accessor for the MPOR dependency chain, for the A6.4 harness. */
+  const std::vector<std::vector<int>> &get_dependency_chain() const
+  {
+    return dependency_chain;
+  }
+
+  /** Read-only accessor for the chain's run order, for the A6.4 harness. */
+  const std::vector<unsigned int> &get_thread_last_transition() const
+  {
+    return thread_last_transition;
+  }
+
+  /** Accessor method for cswitch_forced. Sets it to true. */
+  void force_cswitch()
+  {
+    cswitch_forced = true;
+  }
+
+  /**
+   *  Has a context switch point occurred.
+   *  Two things can justify this:
+   *   1. cswitch forced by atomic end or yield.
+   *   2. Global data read/written.
+   *  @return True if context switch is now triggered
+   */
+  bool has_cswitch_point_occured() const;
+
+  /**
+   *  Can execution continue in this thread?
+   *  Answer is no if the thread has ended or there's nothing on the call stack
+   *  @return False if there are no further instructions to execute.
+   */
+  bool can_execution_continue() const;
+
+  /**
+   *  Generate hash of entire execution state.
+   *  This takes all current symbolic assignments to variables contained in the
+   *  l2 renaming object, and their precomputed hashes, concatonates them with
+   *  the current program counter of each thread, and hashes that. This results
+   *  in a full hash of the current execution state.
+   *  @return Hash of entire current execution state.
+   */
+  std::size_t generate_hash() const;
+
+  /**
+   *  Generate hash of an expression.
+   *  @param rhs Expression to hash.
+   *  @return Hash of passed in expression.
+   */
+  std::size_t update_hash_for_assignment(const expr2tc &rhs);
+
+  /**
+   *  Print stack trace of each thread to stdout.
+   *  Uses the passed in namespace; also uses whatever level of indentation
+   *  the caller provides. Primarily a debug feature.
+   *  @param ns Namespace to work in.
+   *  @param indent Indentation to print each stack trace with
+   */
+  void print_stack_traces(unsigned int indent = 0) const;
+
+  /** Switch to registered monitor thread.
+   *  Switches the currently executing thread to the monitor thread that's been
+   *  previously registered. This does not result in the context switch counter
+   *  being incremented. Stores which thread ID we switched from for a future
+   *  switch back. */
+  void switch_to_monitor();
+
+  /** Switch away from registered monitor thread.
+   *  Switches away from the registered monitor thread, to whatever thread
+   *  caused switch_to_monitor to be called in the past
+   *  @see switch_to_monitor
+   */
+  void switch_away_from_monitor();
+
+  /** Makr registered monitor thread as ended. Designed to be used by ltl2ba
+   *  produced code when the monitor is to be ended. */
+  void kill_monitor_thread();
+
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
+  void analyze_args(const expr2tc &expr) override;
+
+public:
+  /** Stack of thread states. The index into this vector is the thread ID of
+   *  the goto_symex_statet at that location. The reachability_treet that
+   *  owns this state is reachable via the inherited goto_symext::art1. */
+  std::vector<goto_symex_statet> threads_state;
+  /** Preserved paths. After switching out of a thread, only the paths active
+   *  at the time the switch occurred are allowed to live, and are stored
+   *  here. Format is: for each thread, a list of paths made from the
+   *  instruction where the path merges and the merge_statet snapshot captured
+   *  when we switched away. Preserved paths can only be in the top() frame. */
+  std::vector<std::list<std::pair<goto_programt::const_targett, merge_statet>>>
+    preserved_paths;
+  /** Atomic section count. Every time an atomic begin is executed, the
+   *  atomic_number corresponding to the thread is incremented, allowing nested
+   *  atomic begins and ends. A nonzero atomic number for a thread means that
+   *  interleavings are disabled currently. */
+  std::vector<unsigned int> atomic_numbers;
+  /** Storage for threading libraries thread start data. See version history
+   *  of when this was introduced to fully understand why; essentially this
+   *  is a workaround to prevent too much nondeterminism entering into the
+   *  thread starting process. */
+  std::vector<expr2tc> thread_start_data;
+  /** Last active thread's ID. */
+  unsigned int last_active_thread;
+  /** Explicit result of the last symbolic transition taken. */
+  transition_resultt last_transition;
+  /** Global L2 state of this execution_statet. It's also copied as a reference
+   *  into each threads own state. */
+  std::shared_ptr<ex_state_level2t> state_level2;
+  /** Global pointer tracking state record. */
+  value_sett global_value_set;
+  /** Current active states thread ID. */
+  unsigned int active_thread;
+  /** Name prefix for execution guard. */
+  irep_idt guard_execution;
+  /** Number of nondeterministic symbols in this state. */
+  unsigned nondet_count;
+  /** Number of dynamic objects in this state. thread_local so parallel
+   *  symex doesn't race on the counter. */
+  static thread_local unsigned dynamic_counter;
+  /** Identifying number for this execution state. Used to distinguish runs
+   *  in --schedule mode. */
+  unsigned int node_id;
+  /** True if the guard on this interleaving becomes false.
+   *  Means that there is no path from here on where any assertion may
+   *  become satisfiable. */
+  bool interleaving_unviable;
+  /** TID of monitor thread, for monitor intrinsics. */
+  unsigned int monitor_tid;
+  /** Whether monitor_tid is set. */
+  bool tid_is_set;
+  /** TID of thread that switched to monitor */
+  unsigned int monitor_from_tid;
+  /** Whether monitor_from_tid is set */
+  bool mon_from_tid;
+  /** Minimum number of threads to exist to consider a context switch.
+   *  In certain special cases, such as LTL checking, various pieces of
+   *  code and information are bunged into separate threads which aren't
+   *  necessarily scheduled. In these cases we don't want to consider
+   *  cswitches, because even though they're not taken, they'll heavily
+   *  inflate memory size.
+   *  So, instead of considering context switches where more than one thread
+   *  exists, compare the number of threads against this threshold. */
+  unsigned int thread_cswitch_threshold;
+
+protected:
+  /** Number of context switches performed by this ex_state */
+  int CS_number;
+  /** For each thread, a set of symbols that were read by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc>> thread_last_reads;
+  /** For each thread, a set of symbols that were written by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc>> thread_last_writes;
+  /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
+   *  to dependency_chain[i][j] here. */
+  std::vector<std::vector<int>> dependency_chain;
+  /** Run-order ordinal of each thread's last completed transition; 0 for a
+   *  thread that has not run. Only advanced where the chain is maintained,
+   *  which is why it is the chain's own notion of time rather than CS_number.
+   *  DCij asserts a chain from Ti's last transition to Tj's, so every 1 must
+   *  point forward in this order (A6.4). */
+  std::vector<unsigned int> thread_last_transition;
+  /** Ordinal issued to the next completed transition. */
+  unsigned int transition_ordinal;
+  /** MPOR scheduling outcome. If we've just taken a transition that MPOR
+   *  rejects, this becomes true. For various reasons, we can't tell whether or
+   *  not MPOR rejects a transition in advance. */
+  bool mpor_says_no;
+  /** Indicates a mandatory context switch should occur. Can happen when an
+   *  atomic_end instruction has occurred, or when a __ESBMC_yield(); runs */
+  bool cswitch_forced;
+
+  /** Are we tracing / printing symex instructions? */
+  bool symex_trace;
+  /** Are we encoding SMT during exploration? */
+  bool smt_during_symex;
+  /** Are we evaluating the thread guard in the SMT solver during context
+   *  switching? */
+  bool smt_thread_guard;
+  /** Was constant propagation disabled with --no-propagation? Seeds every
+   *  thread's goto_symex_statet, so the option is looked up once per run
+   *  rather than once per thread creation. */
+  bool no_propagation;
+
+  /** Copy execution_statet's own scheduling fields from `ex`. The base
+   *  goto_symext slice is left untouched (the copy constructor's
+   *  initialiser list handles it once). state_level2 and threads_state
+   *  are also left untouched: state_level2 is cloned in the initialiser
+   *  list, and threads_state is rebuilt by the copy constructor body
+   *  against that clone. */
+  void copy_derived_from(const execution_statet &ex);
+
+  // Static stuff:
+
+public:
+  // thread_local so parallel symex threads (--k-induction-parallel)
+  // don't race on this counter. Each thread's interleaving exploration
+  // numbers its own nodes; cross-thread numbering isn't meaningful.
+  static thread_local unsigned int node_count;
+
+  friend void build_goto_symex_classes();
+};
+
+/**
+ *  Execution state for DFS thread exploration.
+ *  On the whole, just uses the same functionality provided by execution_statet;
+ *  clone() duplicates the target equation (or pushes a solver context under
+ *  --smt-during-symex), and the destructor pops that context again.
+ */
+
+class dfs_execution_statet : public execution_statet
+{
+public:
+  dfs_execution_statet(
+    const goto_functionst &goto_functions,
+    const namespacet &ns,
+    reachability_treet *art,
+    std::shared_ptr<symex_targett> _target,
+    contextt &context,
+    optionst &options)
+    : execution_statet(
+        goto_functions,
+        ns,
+        art,
+        std::move(_target),
+        context,
+        options.get_bool_option("state-hashing")
+          ? std::shared_ptr<state_hashing_level2t>(
+              new state_hashing_level2t(*this))
+          : std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
+        options){};
+
+  dfs_execution_statet(const dfs_execution_statet &ref) = default;
+  std::shared_ptr<execution_statet> clone() const override;
+  ~dfs_execution_statet() override;
+};
+
+/**
+ *  Execution state class for --schedule exploration.
+ *  Provides additional storage for tracking the number of claims that have
+ *  been made, doesn't delete the trace/equation on destruction.
+ */
+
+class schedule_execution_statet : public execution_statet
+{
+public:
+  schedule_execution_statet(
+    const goto_functionst &goto_functions,
+    const namespacet &ns,
+    reachability_treet *art,
+    std::shared_ptr<symex_targett> _target,
+    contextt &context,
+    optionst &options,
+    unsigned int *ptotal_claims,
+    unsigned int *premaining_claims,
+    unsigned int *psimplified_claims,
+    unsigned int *ptruncations)
+    : execution_statet(
+        goto_functions,
+        ns,
+        art,
+        std::move(_target),
+        context,
+        std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
+        options)
+  {
+    this->ptotal_claims = ptotal_claims;
+    this->premaining_claims = premaining_claims;
+    this->psimplified_claims = psimplified_claims;
+    this->ptruncations = ptruncations;
+    *ptotal_claims = 0;
+    *premaining_claims = 0;
+    *psimplified_claims = 0;
+    *ptruncations = 0;
+  };
+
+  schedule_execution_statet(const schedule_execution_statet &ref) = default;
+  std::shared_ptr<execution_statet> clone() const override;
+  ~schedule_execution_statet() override;
+  void claim(const expr2tc &expr, const std::string &msg) override;
+  void note_bounded_loop_truncation() override
+  {
+    goto_symext::note_bounded_loop_truncation();
+    ++*ptruncations;
+  }
+
+  unsigned int *ptotal_claims;
+  unsigned int *premaining_claims;
+  unsigned int *psimplified_claims;
+  // Each --schedule path runs in its own execution state, so the count has to
+  // accumulate outside them like the claim counts do.
+  unsigned int *ptruncations;
+};
+
+#endif /* EXECUTION_STATE_H_ */

@@ -1,11 +1,12 @@
 // Same as regression/esbmc-cpp/cpp/github_3897, but run WITHOUT
-// --mix-cpp-host-headers: <version> has no operational model, so the
-// default (opt-out) behaviour must still reject it with a parse error,
-// proving --mix-cpp-host-headers is genuinely opt-in.
-#include <version>
+// --mix-cpp-host-headers: -nostdinc++ keeps the host C++ library off the
+// search path, proving the flag is genuinely opt-in.
+#if !__has_include(<bits/c++config.h>) && !__has_include(<__config>)
+#  error "the host C++ library headers are not on the include path"
+#endif
 
 int main()
 {
-  __ESBMC_assert(1, "host-only header should not be reachable by default");
+  __ESBMC_assert(1, "host C++ library headers should not be reachable");
   return 0;
 }

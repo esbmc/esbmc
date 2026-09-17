@@ -283,6 +283,11 @@ class TypeInferenceMixin:
         if (isinstance(iterable, ast.Call) and isinstance(iterable.func, ast.Name)
                 and iterable.func.id == "str"):
             return "str"
+        # `for v in C()`: naming the class keeps the "list" fallback from
+        # applying the list OM to a class instance (#7083).
+        instance_class = self._element_instance_class(iterable)
+        if instance_class:
+            return instance_class
         return "list"
 
     @staticmethod

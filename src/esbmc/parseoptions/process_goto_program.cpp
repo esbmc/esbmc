@@ -2,9 +2,9 @@
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -32,6 +32,7 @@
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
+#include <goto-programs/goto_invariant_synthesis.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -58,7 +59,7 @@
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/andersen.h>
 #include <util/symtab/symbol.h>
 #include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
@@ -334,46 +335,16 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (cmdline.isset("gcse"))
     {
-      std::shared_ptr<value_set_analysist> vsa =
-        std::make_shared<value_set_analysist>(ns);
-      try
-      {
-        log_status("Computing Value-Set Analysis (VSA)");
-        (*vsa)(goto_functions);
-      }
-      catch (vsa_not_implemented_exception &)
-      {
-        log_warning(
-          "Unable to compute VSA due to incomplete implementation. Some GOTO "
-          "optimizations will be disabled");
-        vsa = nullptr;
-      }
-      catch (type2t::symbolic_type_excp &)
-      {
-        log_warning(
-          "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
-          "optimizations will be disabled");
-        vsa = nullptr;
-      }
-      catch (const std::string &e)
-      {
-        log_warning(
-          "[GOTO] Unable to compute VSA due to: {}. Some GOTO "
-          "optimizations will be disabled",
-          e);
-        vsa = nullptr;
-      }
+      auto andersen = std::make_shared<andersent>();
+      log_status("Computing points-to analysis (Andersen)");
+      (*andersen)(goto_functions);
+      std::shared_ptr<value_setst> points_to = andersen;
 
       if (cmdline.isset("no-library"))
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
 
-      if (!vsa)
-        log_warning("Could not apply GCSE optimization due to VSA limitation!");
-      else
-      {
-        goto_cse cse(context, vsa);
-        cse.run(goto_functions);
-      }
+      goto_cse cse(context, points_to);
+      cse.run(goto_functions);
     }
 
     // Under --termination, goto_termination does its own havoc, so
@@ -443,17 +414,14 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       // --k-induction and --loop-invariant-check are independent and may
       // both be specified.  remove_no_op only needs to run once.
-      if (is_k_induction || cmdline.isset("loop-invariant-check"))
+      if (is_k_induction || wants_loop_invariants())
         remove_no_op(goto_functions);
 
       if (is_k_induction)
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
-      if (cmdline.isset("loop-invariant-check"))
-      {
-        bool use_frame_rule = cmdline.isset("loop-frame-rule");
-        goto_loop_invariant(goto_functions, context, use_frame_rule);
-      }
+      if (wants_loop_invariants())
+        apply_loop_invariants(goto_functions, context, options, is_k_induction);
     }
 
     // --termination: reduce non-termination to a reachability safety
@@ -685,10 +653,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // --dead-code-check reuses the branch-coverage instrumentation: each
     // conditional branch gets `assert(guard)` and `assert(!guard)` reachability
-    // probes, and a probe proven UNSAT means that branch direction is
-    // unreachable under all inputs — i.e. dead code. report_dead_code() reports
-    // those as CWE-561 note-level advisories without flipping the verdict (see
-    // bmc.cpp).
+    // probes, and an unviolated probe means the *opposite* direction is dead.
+    // report_dead_code() reports those as CWE-561 note-level advisories without
+    // flipping the verdict (see bmc.cpp).
     if (
       cmdline.isset("branch-coverage") ||
       cmdline.isset("branch-coverage-claims") ||
@@ -866,4 +833,38 @@ bool esbmc_parseoptionst::process_goto_program(
   }
 
   return false;
+}
+
+/// Whether the run needs the loop-invariant machinery.
+/// --synthesise-loop-invariants supplies the invariants that
+/// --loop-invariant-check discharges, so it implies that mode.
+bool esbmc_parseoptionst::wants_loop_invariants() const
+{
+  return cmdline.isset("loop-invariant-check") ||
+         cmdline.isset("synthesise-loop-invariants");
+}
+
+/// Synthesise the invariants when asked, then run the schema that discharges
+/// them.
+void esbmc_parseoptionst::apply_loop_invariants(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const optionst &options,
+  bool k_induction_ran)
+{
+  if (cmdline.isset("synthesise-loop-invariants"))
+    // Read from `options`, the same object goto_check consults
+    // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
+    // instead happens to agree today only because nothing calls
+    // set_option on these two, which is a property of the current code
+    // rather than an enforced one.
+    goto_synthesise_loop_invariants(
+      goto_functions,
+      overflow_checkst{
+        options.get_bool_option("overflow-check"),
+        options.get_bool_option("unsigned-overflow-check")},
+      k_induction_ran);
+
+  bool use_frame_rule = cmdline.isset("loop-frame-rule");
+  goto_loop_invariant(goto_functions, context, use_frame_rule);
 }

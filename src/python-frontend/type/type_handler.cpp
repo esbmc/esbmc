@@ -1,9 +1,11 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/python_typechecking.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
@@ -126,7 +128,11 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   if (func_name == "__init__")
     return true;
 
-  if (type_utils::is_builtin_type(func_name))
+  // Consensus type names (Gwei, uint64, ...) are typed casts, not
+  // constructor calls, even when also declared as a plain user class.
+  if (
+    type_utils::is_builtin_type(func_name) ||
+    type_utils::is_consensus_type(func_name))
     return false;
 
   /* The statement is a constructor call if the function call on the
@@ -240,16 +246,24 @@ std::string type_handler::get_var_type(const std::string &var_name) const
 
   const auto &annotation = ref["annotation"];
 
+  // A simple `Alias = bytes`-style annotation names the alias, not the
+  // builtin; dispatch decisions elsewhere (e.g. len()'s strlen-vs-
+  // get_object_size choice, builder.cpp) key off the builtin name.
+  auto resolve = [this](const std::string &name) -> std::string {
+    const std::string resolved = resolve_builtin_alias(name);
+    return resolved.empty() ? name : resolved;
+  };
+
   // Handle simple type annotations: int, str, list, etc.
   if (annotation.is_object() && annotation.contains("id"))
-    return annotation["id"].get<std::string>();
+    return resolve(annotation["id"].get<std::string>());
 
   // Handle subscripted types: List[str], Optional[int], etc.
   if (
     annotation.is_object() && annotation.contains("_type") &&
     annotation["_type"] == "Subscript" && annotation.contains("value") &&
     annotation["value"].is_object() && annotation["value"].contains("id"))
-    return annotation["value"]["id"];
+    return resolve(annotation["value"]["id"]);
 
   // Handle Union types (e.g., list[str] | None, str | int)
   // Union is represented as BinOp with BitOr operator
@@ -270,13 +284,13 @@ std::string type_handler::get_var_type(const std::string &var_name) const
       {
         // Recursively extract type from left side
         if (left.contains("id"))
-          return left["id"].get<std::string>();
+          return resolve(left["id"].get<std::string>());
 
         // Handle subscripted types on left: list[str] | None
         if (
           left["_type"] == "Subscript" && left.contains("value") &&
           left["value"].contains("id"))
-          return left["value"]["id"].get<std::string>();
+          return resolve(left["value"]["id"].get<std::string>());
       }
     }
 
@@ -289,12 +303,12 @@ std::string type_handler::get_var_type(const std::string &var_name) const
             right.contains("value") && right["value"].is_null()))
       {
         if (right.contains("id"))
-          return right["id"].get<std::string>();
+          return resolve(right["id"].get<std::string>());
 
         if (
           right["_type"] == "Subscript" && right.contains("value") &&
           right["value"].contains("id"))
-          return right["value"]["id"].get<std::string>();
+          return resolve(right["value"]["id"].get<std::string>());
       }
     }
   }
@@ -420,6 +434,35 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
   return shape;
 }
 
+/// `ast_type` may be a call-result tag the intrinsic map invents for a builtin
+/// rather than a name from the source (`iter` -> "iterator", `map` -> "map",
+/// `filter` -> "filter"). No such type is modelled, so resolution lands here --
+/// but reporting a NameError blames a name the program never mentions. Name the
+/// builtin instead (esbmc/esbmc#7081). Returns if `ast_type` is not one.
+static void throw_if_unmodelled_builtin_result(const std::string &ast_type)
+{
+  std::vector<std::string> producers;
+  for (const auto &[builtin, result_type] :
+       python_annotation_intrinsics::builtin_functions())
+    if (result_type == ast_type && builtin != ast_type)
+      producers.push_back(builtin);
+
+  if (
+    producers.empty() &&
+    !python_annotation_intrinsics::builtin_functions().count(ast_type))
+    return;
+
+  std::string msg = "the result of ";
+  if (producers.empty())
+    msg += "the '" + ast_type + "' builtin";
+  else
+    for (size_t i = 0; i < producers.size(); ++i)
+      msg += (i ? ", " : "") + std::string("'") + producers[i] + "()'";
+
+  throw std::runtime_error(
+    msg + " is not modelled (no '" + ast_type + "' type)");
+}
+
 /// Convert a Python AST type to an ESBMC internal irep type.
 /// This function maps high-level Python types (from AST) to low-level internal
 /// ESBMC representations using `typet`. It supports core built-in types
@@ -514,7 +557,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Unsigned integers used in domains like Ethereum or system modeling
   if (
     ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
-    ast_type == "Slot")
+    ast_type == "Slot" || ast_type == "Gwei")
     return lower_to_seam(unsignedbv_type2tc(config.ansi_c.long_long_int_width));
 
   // bool — represents True/False
@@ -728,9 +771,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       return get_typet(ret, type_size);
   }
 
-  // If still not found, it's a NameError
   if (!is_defined)
   {
+    throw_if_unmodelled_builtin_result(ast_type);
     throw std::runtime_error(
       "NameError: name '" + ast_type + "' is not defined");
   }
@@ -739,6 +782,26 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   log_warning("Unknown or unsupported AST type: {}", ast_type);
 
   return empty_typet();
+}
+
+std::string type_handler::resolve_builtin_alias(const std::string &name) const
+{
+  const nlohmann::json &decl = json_utils::find_var_decl(
+    name, converter_.current_function_name(), converter_.ast());
+  if (decl.empty() || !decl.contains("value") || !decl["value"].is_object())
+    return "";
+
+  const nlohmann::json &value = decl["value"];
+  if (
+    !value.contains("_type") || value["_type"] != "Name" ||
+    !value.contains("id"))
+    return "";
+
+  const std::string &target = value["id"];
+  if (type_utils::is_builtin_type(target))
+    return target;
+
+  return "";
 }
 
 typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
@@ -1137,12 +1200,28 @@ bool type_handler::is_tagged_scalar_type(const typet &t) const
 
 exprt type_handler::tagged_scalar_type_id(const typet &type) const
 {
-  const std::string type_name =
-    type == bool_type() ? "int" : type_to_string(type);
   constant_exprt type_id(size_type());
   type_id.set_value(integer2binary(
-    std::hash<std::string>{}(type_name), config.ansi_c.address_width));
+    std::hash<std::string>{}(type_to_string(type)),
+    config.ansi_c.address_width));
   return type_id;
+}
+
+exprt type_handler::tagged_scalar_type_matches(
+  const exprt &tagged_type_id,
+  const typet &literal_type) const
+{
+  if (
+    !literal_type.is_bool() && !literal_type.is_signedbv() &&
+    !literal_type.is_unsignedbv())
+    return python_expr::build_equal(
+      tagged_type_id, tagged_scalar_type_id(literal_type));
+
+  exprt int_id = tagged_scalar_type_id(long_long_int_type());
+  exprt bool_id = tagged_scalar_type_id(bool_type());
+  return python_expr::build_or(
+    python_expr::build_equal(tagged_type_id, int_id),
+    python_expr::build_equal(tagged_type_id, bool_id));
 }
 
 exprt type_handler::tagged_scalar_byte_size(const exprt &value) const

@@ -265,12 +265,6 @@ void clang_c_languaget::build_compiler_args(
     // No longer show compiler warnings for SV-COMP
     compiler_args.push_back("-w");
     compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-    // clang 15+ promotes -Wint-conversion to a hard error by default, which
-    // rejects GCC-acceptable implicit int<->pointer conversions common in
-    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
-    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
-    // typecast logic, so downgrading the diagnostic does not affect semantics.
-    compiler_args.push_back("-Wno-int-conversion");
   }
 
   // Increase maximum bracket depth
@@ -283,6 +277,13 @@ void clang_c_languaget::build_compiler_args(
   // Suppress incompatible-pointer-types universally; became a hard error in
   // LLVM 22 and trips on system headers across all platforms.
   compiler_args.emplace_back("-Wno-incompatible-pointer-types");
+
+  // Likewise int-conversion, which clang 15+ promotes to a hard error while GCC
+  // still accepts it: preprocessed kernel/CIL sources write sentinel pointers
+  // as integer constants (0xffffffffffffffffUL), so erroring out rejects input
+  // a mainstream toolchain compiles. ESBMC models the conversion in its
+  // typecast logic, so downgrading the diagnostic does not affect semantics.
+  compiler_args.emplace_back("-Wno-int-conversion");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */
@@ -320,6 +321,13 @@ write_witness_tmp(const std::string &content)
   std::fwrite(content.c_str(), 1, content.size(), tmp.file());
   std::fflush(tmp.file());
   return tmp;
+}
+
+// Clang returns no unit, rather than one with errors, when it cannot set up the
+// compilation (e.g. an unknown target triple); its diagnostic is already out.
+static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
+{
+  return !unit || unit->getDiagnostics().hasErrorOccurred();
 }
 
 bool clang_c_languaget::parse(const std::string &path)
@@ -404,8 +412,7 @@ bool clang_c_languaget::parse(const std::string &path)
   // Generate ASTUnit and add to our vector
   auto newAST = buildASTs(intrinsics, new_compiler_args);
 
-  // Use diagnostics to find errors, rather than the return code.
-  if (newAST->getDiagnostics().hasErrorOccurred())
+  if (ast_failed(newAST))
     return true;
 
   if (!AST)
@@ -474,13 +481,20 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
       return true;
   }
 
-  // Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only,
-  // so flag-on and flag-off are byte-identical by construction; what the flag
-  // buys is migrating every value in the corpus through get_value2(), which
-  // aborts on a construct migrate_expr cannot represent.
+  // Phase 6 C.3. Two modes, and only the second is read-only:
+  // --clang-c-irep2-adjust-only skipped the legacy pass above, so this walk
+  // *is* the adjust pass and writes back every value it changes -- which is why
+  // the divergence count under that flag is the phase's metric, not a
+  // tautology.
+  // --clang-c-irep2-adjust runs both, with set_irep2_owns_arms() ceding the
+  // ported arms, and there the walk only migrates every value through
+  // get_value2(), which aborts on a construct migrate_expr cannot represent.
   if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
   {
-    clang_c_adjust_irep2 irep2_adjuster(new_context, irep2_only);
+    clang_c_adjust_irep2 irep2_adjuster(
+      new_context,
+      irep2_only,
+      config.options.get_bool_option("clang-c-irep2-adjust-writeback-all"));
     if (irep2_adjuster.adjust())
       return true;
   }
@@ -693,9 +707,17 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
 #define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
 #define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
 
+/* offsetof has to be an integer constant expression (C23 7.21p3,
+ * [support.types.layout]/1) and this expansion is not, so under it no constexpr
+ * or non-type template argument may be spelt with offsetof. clang's
+ * OffsetOfExpr is lowered in clang_c_convert.cpp and agrees with the expansion
+ * on every layout in regression/esbmc-cpp/cpp/offsetof_layout_parity. C keeps
+ * the expansion because dropping it there exposes #7127, a void*-arithmetic
+ * dereference defect that regression/esbmc/github_2512_* stands on. */
+#ifndef __cplusplus
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
-
+#endif
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)

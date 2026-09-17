@@ -45,41 +45,34 @@ Json python_annotation<Json>::create_subscript_annotation(
   int total_end_col = col_offset + base_type.size() + 1 + element_type.size() +
                       1; // type[element]
 
-  // Check if this is a dict type with comma-separated types: dict[K, V]
-  if (base_type == "dict" && element_type.find(',') != std::string::npos)
+  // dict[K, V] and tuple[T0, ..., Tn] carry their parameters in a Tuple
+  // slice. Split on top-level commas only, so a parameter that is itself a
+  // generic (dict[str, list[int]], tuple[int, dict[str, int]]) stays intact.
+  const std::vector<std::string> params =
+    json_utils::split_top_level_params(element_type);
+  if (params.size() > 1 && (base_type == "dict" || base_type == "tuple"))
   {
-    // Split element_type on comma
-    size_t comma_pos = element_type.find(',');
-    std::string key_type = element_type.substr(0, comma_pos);
-    std::string value_type = element_type.substr(comma_pos + 1);
-
-    // Trim whitespace
-    key_type.erase(0, key_type.find_first_not_of(" \t"));
-    key_type.erase(key_type.find_last_not_of(" \t") + 1);
-    value_type.erase(0, value_type.find_first_not_of(" \t"));
-    value_type.erase(value_type.find_last_not_of(" \t") + 1);
-
-    // Create Tuple slice with two elements. A key or value type that is
-    // itself a parameterized generic (e.g. dict[str, list[int]]) must be
-    // built recursively into a nested Subscript rather than a flat Name —
-    // see the list/set note below (#4830).
-    int key_col = slice_col;
-    int key_end_col = key_col + key_type.size();
-    int value_col = key_end_col + 2; // After ", "
-    int value_end_col = value_col + value_type.size();
-
+    // A parameter that is itself a parameterized generic must be built
+    // recursively into a nested Subscript rather than a flat Name — see the
+    // list/set note below (#4830).
     auto build_elem = [&](const std::string &t, int col, int end_col) -> Json {
       return t.find('[') != std::string::npos
                ? create_annotation_from_type(t, lineno, col, end_lineno)
                : create_name_annotation(t, lineno, col, end_lineno, end_col);
     };
 
+    Json elts = Json::array();
+    int cur = slice_col;
+    for (const std::string &t : params)
+    {
+      const int end_col = cur + static_cast<int>(t.size());
+      elts.push_back(build_elem(t, cur, end_col));
+      cur = end_col + 2; // ", "
+    }
+
     Json tuple_slice = {
       {"_type", "Tuple"},
-      {"elts",
-       Json::array(
-         {build_elem(key_type, key_col, key_end_col),
-          build_elem(value_type, value_col, value_end_col)})},
+      {"elts", std::move(elts)},
       {"ctx", {{"_type", "Load"}}},
       {"lineno", lineno},
       {"col_offset", slice_col},

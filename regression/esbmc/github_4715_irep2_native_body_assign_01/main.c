@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body IREP2-native assign dispatcher (W1-loc
+// Exercises the IREP2-native assign dispatcher (W1-loc
 // spike Phase C, esbmc/esbmc#4715): the decl-free bodies of set()/set2()/
 // store() are all side-effect-free, non-atomic assignments, so goto_convert
 // consumes each code_assign2t natively (stored directly, no legacy round-trip)

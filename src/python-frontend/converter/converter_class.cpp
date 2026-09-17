@@ -606,31 +606,6 @@ void python_converter::get_attributes_from_self(
            annotation["value"].value("id", "") == "Callable";
   };
 
-  // Carry the signature when it is spelled: `Callable[[A, B], R]` parses as
-  // Subscript(slice=Tuple([List([A, B]), R])). A member typed `R (*)(A, B)`
-  // lets a call through it recover the return type; the bare pointer would
-  // leave the result nondet. Anything else (bare `Callable`, or an unspelled
-  // signature) keeps the generic function pointer.
-  auto callable_member_type =
-    [&](const nlohmann::json &annotation, const nlohmann::json &stmt) -> typet {
-    code_typet fn_type;
-    fn_type.return_type() = empty_typet();
-    const auto &slice = annotation["slice"];
-    if (
-      slice.is_object() && slice.value("_type", "") == "Tuple" &&
-      slice.contains("elts") && slice["elts"].size() == 2 &&
-      slice["elts"][0].value("_type", "") == "List")
-    {
-      for (const auto &arg : slice["elts"][0]["elts"])
-        fn_type.arguments().push_back(
-          code_typet::argumentt(get_type_from_annotation(arg, stmt)));
-      fn_type.return_type() = get_type_from_annotation(slice["elts"][1], stmt);
-    }
-    return fn_type.return_type().is_nil()
-             ? type_handler_.get_typet(std::string("Callable"))
-             : gen_pointer_type(fn_type);
-  };
-
   for (const auto &stmt : method_body)
   {
     if (
@@ -679,7 +654,7 @@ void python_converter::get_attributes_from_self(
         // form breaks (regression/python/callable4), so the mapping stays
         // local to members.
         typet type = is_callable_annotation(stmt["annotation"])
-                       ? callable_member_type(stmt["annotation"], stmt)
+                       ? get_callable_type(stmt["annotation"], stmt)
                        : get_type_from_annotation(stmt["annotation"], stmt);
         if (type.is_nil() || type.is_empty())
         {
@@ -837,7 +812,7 @@ void python_converter::get_attributes_from_self(
           if (
             param != param_annotations.end() &&
             is_callable_annotation(param->second))
-            type = callable_member_type(param->second, stmt);
+            type = get_callable_type(param->second, stmt);
         }
       }
 
@@ -929,5 +904,21 @@ void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
 {
+  // A class symbol is keyed by name alone, with no enclosing-scope component,
+  // so two functions each defining a class of the same name share one symbol:
+  // the second registration is dropped and the second function silently runs
+  // the first one's constructor, proving the wrong value (#7541). #6765 already
+  // makes is_class decline such a name; declining does not prevent the
+  // collision, so refuse the program rather than answer it wrongly.
+  const std::string &class_name = class_node["name"].get<std::string>();
+  if (
+    ast_json && json_utils::count_function_scope_classes(
+                  (*ast_json)["body"], class_name) > 1)
+    throw std::runtime_error(
+      "class '" + class_name +
+      "' is defined in more than one function body; ESBMC keys a class symbol "
+      "by name alone, so the definitions would share one symbol. Rename one of "
+      "them.");
+
   python_class_builder(*this, class_node).build(target_block);
 }

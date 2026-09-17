@@ -294,6 +294,15 @@ esbmc main.c --witness-output main.graphml
     
 We recommend reading [Exchange Format for Violation Witnesses and Correctness Witnesses](https://github.com/sosy-lab/sv-witnesses) to obtain further information about violation and correctness witnesses in graphml format.
 
+A GraphML trace step that comes from a header or from one of ESBMC's operational
+models is emitted with an `originfile` naming the file it came from, and keeps
+that file's own line numbers instead of having them resolved against the
+verified file. `originfile` is not a key the exchange format defines, so a
+conforming validator ignores it; the edges it appears on were unmatchable to a
+validator before, either way. YAML witnesses have no equivalent, so there a
+waypoint is hoisted to its innermost call site inside an input file and one that
+cannot name an input file is dropped, as `README-YAML.md` requires.
+
 ## Unwinding Assertions
 
 In ESBMC, all loops are "unwound", i.e., replaced by several guarded copies of the loop body; the same happens for backward "gotos" and recursive functions. Soundness requires that ESBMC insert a so-called `unwinding assertion` at the end of the loop. As an example, consider the simple C code fragment illustrated below:
@@ -355,6 +364,19 @@ file file.c line 5 function main
 unwinding assertion loop
 ```
 
+`--no-unwinding-assertions` removes that assertion, so paths past the bound are
+assumed away rather than reported. A proof obtained that way holds only up to
+the bound, and a run whose loops were cut short says so above the verdict:
+
+```
+** 0 of 1 properties failed, 1 passed
+WARNING: the unwinding bound cut a loop short while unwinding checks were
+disabled, so paths past the bound were assumed away rather than verified; this
+result holds only up to that bound
+
+VERIFICATION SUCCESSFUL
+```
+
 ## Verification Strategies
 
 ESBMC offers several incremental strategies that control how loops are unwound
@@ -370,6 +392,17 @@ algorithm works, see
 
 `--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
 increment granularity.
+
+## Reusing common subexpressions
+
+`--gcse` precomputes a subexpression shared between assignments into an
+intermediate variable, so symbolic execution builds it once rather than at every
+use. Whether a rewrite is safe depends on what the program's pointers can
+address, which comes from an inclusion-based (Andersen) whole-program points-to
+analysis over the GOTO program. The analysis is deliberately imprecise —
+symbolic execution supplies the real precision — and abstains on any expression
+whose targets it cannot determine, in which case the rewrite is not made. The
+flag is off by default.
 
 ## Selecting the floating-point rounding mode
 
@@ -541,6 +574,66 @@ The assumption is scoped to the entry point only, and it does not imply the
 parameters are distinct pointers: `f(NULL, NULL)` is a conforming call
 (C11 6.7.3.1p4), so `a != b` still does not follow.
 
+## Per-property results
+
+Every verification run ends with a `** Results:` block naming each property,
+grouped by file and function in source order. It is printed whatever the
+strategy — plain BMC, `--incremental-bmc`, `--k-induction` — and `--result-only`
+keeps it while suppressing the rest of the output (a coverage run reports its
+own goals instead):
+
+```sh
+esbmc file.c --result-only
+```
+
+```
+** Results:
+file.c, function main
+  PASSED       [main.assertion.1]  line 5  A1
+  FAILED       [main.assertion.2]  line 6  A2
+
+** 1 of 2 properties failed, 1 passed
+
+VERIFICATION FAILED
+```
+
+A property is reported `NOT CHECKED` rather than `PASSED` when the run never
+separated it. A default run stops at the first violation, so the properties
+after it were never decided, and saying they passed would be wrong:
+
+```
+  PASSED       [main.assertion.1]  line 5  addition commutes
+  FAILED       [main.assertion.2]  line 8  a is not one
+  NOT CHECKED  [main.assertion.3]  line 9  a is not two
+
+** 1 of 3 properties failed, 1 passed, 1 not checked
+   (this mode stops at the first violation; use --multi-property for a verdict on every property)
+```
+
+Adding `--multi-property` decides all three, and appends the solver and its
+decision-procedure time to the summary.
+
+## Bounding the stack
+
+```sh
+esbmc file.c --stack-limit 8192
+esbmc file.c --total-stack-limit 65536
+```
+
+`--stack-limit` bounds a *single* stack frame, so a deep recursion whose
+individual frames each fit never trips it. `--total-stack-limit` bounds the
+combined size of all live frames instead, which is what a real stack budget
+constrains. ESBMC's own operational models are excluded from the total, so the
+bound stays calibratable against the program's own frames.
+
+Both bounds are given in **bits**, not bytes. The total is accounted per
+symbolic path at declaration points, and over-approximates for spawned threads.
+A violation names the declaration that crossed the bound:
+
+```
+Total stack limit property was violated when declaring buf
+```
+
 ## Multiple Property Verification
 
 ```sh
@@ -676,6 +769,25 @@ leaves the checks ESBMC *generates* inside model code (those are controlled by
 `--no-standard-checks`), renumbers `--claim` indices, and is unsupported for
 Python.
 
+## When ESBMC itself crashes
+
+A SIGSEGV or SIGBUS inside ESBMC is an internal error, not a verification
+result, and is reported as one rather than leaving the exit status as its only
+trace:
+
+```
+ESBMC caught SIGSEGV: this is an internal error, not a verification result.
+Re-run with --segfault-handler for a backtrace.
+Please report it at https://github.com/esbmc/esbmc/issues
+```
+
+The report needs no flag and runs on an alternate signal stack, so a crash from
+stack exhaustion is reported too. A handler installed by someone else is left
+alone, so an AddressSanitizer build keeps its own richer report.
+`--segfault-handler` *replaces* this reporter with one that prints a backtrace
+and the process memory map, and covers `SIGABRT` as well — asking for the
+backtrace is explicit intent, so that one does not defer to a foreign handler.
+
 ## Supported SMT backends {#smt-backends}
 
 ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
@@ -705,6 +817,15 @@ SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
 `--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
 implicitly, and NeuroSym rejects `--ir` and incremental strategies.
 
+Floating-point arithmetic is encoded with the SMT floating-point theory
+(`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
+CVC4/CVC5 — and lowered to bit-vectors elsewhere. `--fp2bv` forces the
+bit-vector lowering on any backend, which is the encoding to reach for when a
+property depends on the sign of a NaN: the theory cannot represent it
+([#7021](https://github.com/esbmc/esbmc/issues/7021)). `fmod`, `remainder` and
+`remquo` are always lowered through a bit-vector round-trip, since the theory's
+`fp.rem` is far slower to solve.
+
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
 environment variable. The `CMD` for the SMTLIB backend is interpreted by the
@@ -718,6 +839,14 @@ shell, so it can include options or chain commands (the tools must be on
 - `cvc5 -L smt2 -m`
 
 Remember to quote the `CMD` string when invoking ESBMC.
+
+A backend that cannot decide a goal says so rather than ending the run without a
+verdict. Under the integer/real encoding (`--ir`, `--ir-ieee`) Z3's `smt` tactic
+is incomplete for nonlinear real arithmetic, so the tactic chain falls back to
+`qfnra-nlsat` on exactly the goals `smt` abandoned, and declines anything
+outside QF_NRA. Bitwuzla returns a query term unchanged when evaluating it would
+need a quantifier it never registered; that is reported as an unknown value, as
+the Z3 backend already did.
 
 ### Symmetry breaking
 

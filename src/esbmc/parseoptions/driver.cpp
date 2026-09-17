@@ -18,9 +18,9 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -82,6 +82,7 @@ extern "C"
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
+#include <util/ssa/proof_cache.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -100,70 +101,11 @@ extern "C"
 #define CLR_BOLD "\033[1m"
 #define CLR_RESET "\033[0m"
 
-// This is the main entry point of ESBMC. Here ESBMC performs initialisation
-// of the algorithms that will be run over the GOTO program at later stages
-//
-//  1) Parse CMD                            (see "get_command_line_options")
-//  2) Create and preprocess a GOTO program (see "get_goto_functions")
-//  3) Set user-specified claims            (see "set_claims")
-//  4) Perform Bounded Model Checking
-//    - Run a particular verification strategy if specified
-//      in CMD (see "do_bmc_strategy"), or
-//    - Perform a single run of Bounded Model Checking and rely
-//      on the simplifier to determine the sufficient verification bound
-//      (see "do_bmc")
-int esbmc_parseoptionst::run_chosen_strategy(
-  optionst &options,
-  goto_functionst &goto_functions)
+/// The flag combinations that cannot produce a sound report, rejected
+/// before any work is done. Kept out of doit() so every combination check
+/// reads in one place.
+static bool incompatible_flags(const cmdlinet &cmdline)
 {
-  if (cmdline.isset("incremental-context-bound"))
-    return do_context_bound_deepening(options, goto_functions);
-
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
-    return do_bmc_strategy(options, goto_functions);
-
-  // No strategy chosen: rely on the simplifier and the flags set through CMD.
-  bmct bmc(goto_functions, options, context);
-  return do_bmc(bmc);
-}
-
-int esbmc_parseoptionst::doit()
-{
-  // Configure msg output
-  if (cmdline.isset("file-output"))
-  {
-    FILE *f = fopen(cmdline.getval("file-output"), "w+");
-    /* TODO: handle failure */
-    out = f;
-    messaget::state.out = f;
-  }
-
-  // Print a banner with version info to stdout
-  {
-    FILE *output_stream = messaget::state.out;
-    messaget::state.out = stdout;
-    log_status(
-      "ESBMC version {} {}-bit {} {}",
-      ESBMC_VERSION,
-      sizeof(void *) * 8,
-      config.this_architecture(),
-      config.this_operating_system());
-    messaget::state.out = output_stream;
-  }
-
-  if (cmdline.isset("version"))
-    return 0;
-
-  // Unwinding of transition systems
-  if (cmdline.isset("module") || cmdline.isset("gen-interface"))
-  {
-    log_error("This version has no support for hardware modules.");
-    return 1;
-  }
-
   // --dead-code-check is a standalone base-case advisory analysis: it reuses
   // the branch-coverage instrumentation and forces a SUCCESSFUL verdict. The
   // k-induction / incremental strategies and early-stopping fail-fast drive
@@ -229,8 +171,46 @@ int esbmc_parseoptionst::doit()
       {
         log_error(
           "--dead-code-check cannot be combined with --{}", incompatible);
-        return 1;
+        return true;
       }
+
+  // Combined mode owns the whole pipeline: process_goto_program routes
+  // --loop-invariant into goto_loop_invariant_combined, which never reaches
+  // the synthesis pass, so the flag would be a silent no-op. Combined mode
+  // also ASSUMEs the invariant at the end of the body, and assuming a guess
+  // is exactly what synthesis must never do (a wrong candidate has to fail a
+  // claim, not license one). Reject rather than wire the two together.
+  if (
+    cmdline.isset("synthesise-loop-invariants") &&
+    cmdline.isset("loop-invariant"))
+  {
+    log_error(
+      "--synthesise-loop-invariants cannot be combined with --loop-invariant; "
+      "use --loop-invariant-check, which it implies");
+    return true;
+  }
+
+  // --termination havocs every loop head k-induction-style (goto_termination),
+  // and the standalone schema has already rewritten those heads: goto_loop_
+  // invariant uses insert_swap, which leaves the establishment ASSERT in the
+  // head's slot, and havoc_slot then aborts on `loop_head->is_goto()`
+  // (goto_k_induction.cpp). Composing the two would be meaningless even if it
+  // did not abort -- a loop the schema has cut no longer has the iteration
+  // behaviour --termination asks about.
+  //
+  // Combined mode is exempt, and so is --validate-correctness-witness, which
+  // routes to it: goto_loop_invariant_combined splices its verification branch
+  // *before* the head with destructive_insert, so the head is still the guard
+  // GOTO when goto_termination reaches it. Measured on an unbounded loop with
+  // a witness-injected loop invariant, where the ranking check does not
+  // short-circuit: the run completes.
+  for (const char *mode :
+       {"synthesise-loop-invariants", "loop-invariant-check"})
+    if (cmdline.isset(mode) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", mode);
+      return true;
+    }
 
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
@@ -248,8 +228,119 @@ int esbmc_parseoptionst::doit()
         log_error(
           "--incremental-context-bound cannot be combined with --{}",
           incompatible);
-        return 1;
+        return true;
       }
+
+  return false;
+}
+
+/// The proof cache is wired into the per-claim solve alone, and both its flags
+/// are inert without it. Refused rather than accepted, because a run that
+/// reuses nothing is indistinguishable from one whose cache is working. The
+/// flags are judged on their own terms, so --skip-bmc and the print-and-stop
+/// modes are refused too rather than accepting a combination that could never
+/// have worked. Called after the GOTO program is built because only by then is
+/// the option set final: --multi-property is implied by several flags, the
+/// coverage ones not until process_goto_program.
+static bool proof_cache_flags_usable(const optionst &options)
+{
+  const std::string dir = options.get_option("proof-cache");
+
+  if (options.get_bool_option("proof-cache-verify") && dir.empty())
+  {
+    log_error(
+      "--proof-cache-verify has no cache to check without "
+      "--proof-cache <dir>");
+    return false;
+  }
+
+  if (dir.empty())
+    return true;
+
+  const std::string why = proof_cache_inactive_reason(options);
+  if (!why.empty())
+  {
+    report_proof_cache_inactive(why);
+    return true;
+  }
+
+  if (!options.get_bool_option("multi-property"))
+  {
+    log_error(
+      "--proof-cache reuses claims one at a time and needs "
+      "--multi-property");
+    return false;
+  }
+
+  return true;
+}
+
+// This is the main entry point of ESBMC. Here ESBMC performs initialisation
+// of the algorithms that will be run over the GOTO program at later stages
+//
+//  1) Parse CMD                            (see "get_command_line_options")
+//  2) Create and preprocess a GOTO program (see "get_goto_functions")
+//  3) Set user-specified claims            (see "set_claims")
+//  4) Perform Bounded Model Checking
+//    - Run a particular verification strategy if specified
+//      in CMD (see "do_bmc_strategy"), or
+//    - Perform a single run of Bounded Model Checking and rely
+//      on the simplifier to determine the sufficient verification bound
+//      (see "do_bmc")
+int esbmc_parseoptionst::run_chosen_strategy(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  if (cmdline.isset("incremental-context-bound"))
+    return do_context_bound_deepening(options, goto_functions);
+
+  if (
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant"))
+    return do_bmc_strategy(options, goto_functions);
+
+  // No strategy chosen: rely on the simplifier and the flags set through CMD.
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
+}
+
+int esbmc_parseoptionst::doit()
+{
+  // Configure msg output
+  if (cmdline.isset("file-output"))
+  {
+    FILE *f = fopen(cmdline.getval("file-output"), "w+");
+    /* TODO: handle failure */
+    out = f;
+    messaget::state.out = f;
+  }
+
+  // Print a banner with version info to stdout
+  {
+    FILE *output_stream = messaget::state.out;
+    messaget::state.out = stdout;
+    log_status(
+      "ESBMC version {} {}-bit {} {}",
+      ESBMC_VERSION,
+      sizeof(void *) * 8,
+      config.this_architecture(),
+      config.this_operating_system());
+    messaget::state.out = output_stream;
+  }
+
+  if (cmdline.isset("version"))
+    return 0;
+
+  // Unwinding of transition systems
+  if (cmdline.isset("module") || cmdline.isset("gen-interface"))
+  {
+    log_error("This version has no support for hardware modules.");
+    return 1;
+  }
+
+  if (incompatible_flags(cmdline))
+    return 1;
 
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
@@ -411,15 +502,15 @@ int esbmc_parseoptionst::doit()
   // simplification the frontend and the GOTO passes perform. Inert unless
   // the build enabled ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK.
   install_simplification_equivalence_check(namespacet(context), options);
+  // Reports and uninstalls on the way out, whichever of doit()'s exits is
+  // taken. Uninstalling here rather than at the end of GOTO construction left
+  // symex -- where the rewrites that decide a verdict actually happen --
+  // unchecked, and the count describing only the frontend (esbmc/esbmc#7260).
+  const simplification_check_scopet simplification_check_scope;
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
     return 6;
-
-  simplification_check_stats::report();
-  // The checker captured a namespace over `context`, a member of this object;
-  // dropping it here keeps it from outliving what it points at.
-  simplification_check::clear();
 
   // Output claims about this program
   // (Fedor: should be moved to the output method perhaps)
@@ -434,6 +525,9 @@ int esbmc_parseoptionst::doit()
   // (Fedor: should be moved to the preprocessing method perhaps)
   if (set_claims(goto_functions))
     return 7;
+
+  if (!proof_cache_flags_usable(options))
+    return 1;
 
   // Leave without doing any Bounded Model Checking
   if (options.get_bool_option("skip-bmc"))

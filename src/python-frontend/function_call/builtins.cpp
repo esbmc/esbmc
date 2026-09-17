@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <functional>
 #include <optional>
+#include <limits>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -59,6 +60,13 @@ int get_nondet_str_length()
     }
   }
   return DEFAULT_NONDET_STR_LENGTH;
+}
+
+// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
+int get_nondet_str_buffer_size()
+{
+  const int length = get_nondet_str_length();
+  return length < std::numeric_limits<int>::max() ? length + 1 : length;
 }
 
 // Banker's rounding (IEEE 754 round-half-to-even): rounds to the nearest
@@ -131,7 +139,7 @@ exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // Model as a bounded C-string without embedded nulls.
-  int max_str_length = get_nondet_str_length();
+  int max_str_length = get_nondet_str_buffer_size();
   typet string_type = type_handler_.get_typet("str", max_str_length);
 
   symbolt &input_sym =
@@ -192,7 +200,7 @@ exprt function_call_expr::build_nondet_call() const
 
   if (type == "str")
   {
-    int max_str_length = get_nondet_str_length();
+    int max_str_length = get_nondet_str_buffer_size();
 
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
@@ -257,13 +265,6 @@ exprt function_call_expr::handle_isinstance() const
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
-
-  // A tagged-scalar operand has no single static C type for isinstance()
-  // to check against -- its real type lives in the runtime `.type_id`
-  // field, which isinstance() does not consult yet.
-  if (converter_.get_type_handler().is_tagged_scalar_type(obj_expr.type()))
-    throw std::runtime_error(
-      "isinstance() on a dynamically-typed variable is not yet supported");
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
@@ -366,6 +367,13 @@ exprt function_call_expr::handle_isinstance() const
 
   // Build isinstance check for a given type name
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    // A tagged-scalar operand's real type lives in the runtime `.type_id`
+    // field rather than in a single static C type, so it needs its own
+    // check instead of the static-type comparisons below.
+    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+      return converter_.dynamic_type_handler_.build_isinstance_check(
+        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {
@@ -1768,11 +1776,23 @@ exprt function_call_expr::handle_any_all(ReduceOp op, const char *name)
 
 exprt function_call_expr::handle_any()
 {
+  if (std::optional<exprt> reduced = try_reduce_numpy_descriptor_method())
+    return *reduced;
+
+  if (call_["func"]["_type"] == "Attribute")
+    return handle_general_function_call();
+
   return handle_any_all(ReduceOp::Any, "any");
 }
 
 exprt function_call_expr::handle_all()
 {
+  if (std::optional<exprt> reduced = try_reduce_numpy_descriptor_method())
+    return *reduced;
+
+  if (call_["func"]["_type"] == "Attribute")
+    return handle_general_function_call();
+
   return handle_any_all(ReduceOp::All, "all");
 }
 

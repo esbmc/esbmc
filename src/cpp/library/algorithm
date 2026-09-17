@@ -4,6 +4,7 @@
 #include "initializer_list" /* [algorithm.syn] opens with this include */
 #include "iterator" /* std::iterator_traits, used by the heap helpers below */
 #include "definitions.h"
+#include "min_max.h"
 #include <utility>
 
 typedef bool(function)(int arg1, int arg2);
@@ -538,6 +539,17 @@ BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
     *(--dest) = *(--last);
   return dest;
 }
+
+#if __cplusplus >= 201103L
+// [alg.move]: the moving counterpart of copy_backward.
+template <class BidIt1, class BidIt2>
+BidIt2 move_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
+{
+  while (last != first)
+    *(--dest) = ::std::move(*(--last));
+  return dest;
+}
+#endif
 
 /* swap is provided by <utility> (included above) for both C++03 and C++11+;
    defining it here as well caused a redefinition error under -std=c++03. */
@@ -2275,15 +2287,6 @@ void sort_heap(RanIt first, RanIt last, Pr pred)
   sort(first, last, pred);
 }
 
-template <class T>
-const T &max(const T &left, const T &right)
-{
-  if (left > right)
-    return left;
-  else
-    return right;
-}
-
 const double max(const double left, const double right)
 {
   if (left > right)
@@ -2319,7 +2322,7 @@ const int min(const int left, const int right)
     return right;
 }
 
-const int min(const double left, const double right)
+const double min(const double left, const double right)
 {
   if (left < right)
     return left;
@@ -2328,15 +2331,6 @@ const int min(const double left, const double right)
 }
 
 const char min(const char left, const char right)
-{
-  if (left < right)
-    return left;
-  else
-    return right;
-}
-
-template <class T>
-const T &min(const T &left, const T &right)
 {
   if (left < right)
     return left;

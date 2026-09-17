@@ -32,6 +32,17 @@ set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
+# cov-regression: the minimal coverage suite. One test name per line;
+# together with the unit tests it covers exactly the lines the full
+# regression suite covers (100% parity, line-level verified).
+set(ESBMC_COV_TESTS "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS" cov_manifest)
+    list(FILTER cov_manifest EXCLUDE REGEX "^#")
+    list(FILTER cov_manifest EXCLUDE REGEX "^[ \t]*$")
+    set(ESBMC_COV_TESTS "${cov_manifest}")
+endif()
+
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
@@ -69,15 +80,49 @@ if(ESBMC_HAVE_UCHAR_H)
     list(APPEND ESBMC_TEST_CAPABILITIES uchar_h)
 endif()
 
-# --32 needs multi-arch headers whose type model agrees with the frontend's
-# under -m32. That holds on x86 hosts carrying the 32-bit headers; on aarch64
-# it does not, which is the case issue #1400 was filed about.
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+# --32 reads the bundled 32-bit libc that c2goto builds, not the host's own
+# headers, so the capability follows that build option rather than the host
+# CPU. Apple Silicon keeps it on and runs the --32 tests; the aarch64 Linux
+# build turns it off (scripts/build.sh), which is the case #1400 was filed
+# about.
+if(ESBMC_BUNDLE_LIBC AND ESBMC_BUNDLE_LIBC_32BIT)
     list(APPEND ESBMC_TEST_CAPABILITIES arch32)
+endif()
+
+# A test whose input is x86-only: clang's SSE/MMX intrinsic headers reject any
+# other target, and x86 asm register constraints do not compile there.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+    list(APPEND ESBMC_TEST_CAPABILITIES arch_x86)
 endif()
 
 if(ESBMC_BUNDLE_LIBC)
     list(APPEND ESBMC_TEST_CAPABILITIES bundled_libc)
+endif()
+
+# The bundled musl libm is only reached where the host's own <math.h> does not
+# shadow it. On Windows the UCRT headers declare cosf/pow themselves, so no
+# /esbmc-vfs libm source ever enters the goto program.
+if(NOT WIN32)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libm)
+endif()
+
+# value_sett::to_expr materialises a descriptor's offset through the host's
+# `unsigned long` (gen_ulong), so a negative offset wraps at 32 bits on LLP64
+# and at 64 bits elsewhere. The two constants get opposite out-of-bounds
+# verdicts, so a test pinning either one holds on LP64 hosts only.
+include(CheckTypeSize)
+check_type_size("long" ESBMC_SIZEOF_LONG)
+if(ESBMC_SIZEOF_LONG EQUAL 8)
+    list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
+endif()
+
+# The per-test budget is long enough for a test that takes minutes to solve.
+# ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
+# short leg allows has no way to ask for more; without this it is reported as
+# a hard timeout on every PR. The PR workflow sets 120 (build-unix.yml), the
+# default is 1200.
+if(ESBMC_REGRESS_TIMEOUT GREATER_EQUAL 600)
+    list(APPEND ESBMC_TEST_CAPABILITIES long_timeout)
 endif()
 
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
@@ -112,6 +157,9 @@ function(add_esbmc_regression_test folder modes test)
     endif()
     if("${folder}/${test}" IN_LIST ESBMC_PLATFORM_SENSITIVE_TESTS)
         string(APPEND extra_labels ";platform-sensitive")
+    endif()
+    if("${test_name}" IN_LIST ESBMC_COV_TESTS)
+        string(APPEND extra_labels ";cov-regression")
     endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
@@ -201,6 +249,7 @@ endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
     set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
+    set(REGRESSIONS_CONSENSUS consensus)
     set(REGRESSIONS_MOPSA mopsa)
     set(REGRESSIONS_NUMPY numpy)
     set(REGRESSIONS_HUMANEVAL humaneval)
@@ -315,6 +364,7 @@ if(APPLE)
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
+                    ${REGRESSIONS_CONSENSUS}
                     ${REGRESSIONS_MOPSA}
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
@@ -390,6 +440,7 @@ else()
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
+                    ${REGRESSIONS_CONSENSUS}
                     ${REGRESSIONS_MOPSA}
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
@@ -417,6 +468,30 @@ else()
   endif()
 endif()
 
+# CORE is a budget, not just a verdict: no CORE test may exceed 30 seconds.
+# CORE is what every platform and every reduced configuration runs -- the
+# Windows and macOS legs below, and the CORE_REGRESSION_ONLY builds (coverage,
+# sanitizers) -- so a slow CORE test is paid for on every one of them, and it is
+# the set a contributor waits on before a PR can merge. A test that needs longer
+# belongs in THOROUGH, which runs on Linux only.
+#
+# Measure in the DebugOpt PR build, not in a coverage or sanitizer build. Those
+# instrument every basic block and run at -j4: the same tests measure a median
+# 4.0x slower there (p90 5.5x), so a 30s rule applied to their numbers demotes
+# tests that take 5s in the build that actually gates PRs.
+#
+# To re-check, take a green `Build ESBMC (ubuntu-24.04)` job and read the
+# durations ctest prints:
+#     gh api repos/esbmc/esbmc/actions/jobs/<job-id>/logs \
+#       | grep -oP 'Test\s+#\d+:\s+\S+\s+\.*\s+\S+\s+[\d.]+\s+sec'
+# then cross-reference each name against its test.desc first line; only CORE
+# rows count. 410 tests were moved CORE -> THOROUGH on this basis on 2026-09-09
+# (runs 34333868660 DebugOpt and 34322944627 coverage); nothing then exceeded
+# 30s in either configuration.
+#
+# The slow/very-slow lists further down are a different thing: they widen the
+# per-test *timeout* for tests that legitimately sit near the cap, and say
+# nothing about which mode a test belongs in.
 foreach(regression IN LISTS REGRESSIONS)
     if(WIN32 OR APPLE) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE)
@@ -554,11 +629,6 @@ set(_slow_regression_tests
     # the run (see shortest_path_lengths note below; #4927).
     "regression/quixbugs/knapsack"
     "regression/quixbugs/knapsack_fail"
-    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
-    # defaultdict-free list). It does not converge under --unwind 9, so it is
-    # marked FUTURE (BMC scalability); the larger inner timeout lets
-    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
-    "regression/python-intensive/problem1_fail"
     # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
     # supports simple names, not Subscript". With subscript-target unpacking
     # support (#4792) the swap converts and ESBMC reaches the real nested-loop
@@ -581,10 +651,13 @@ set(_slow_regression_tests
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
     # support land, so ESBMC now reaches the real BFS symex (deque + set +
-    # 6-node graph), which does not converge under --incremental-bmc due to
-    # the __memcpy_impl loop in the list OM (string.c:278). These stay
-    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
-    # verdict instead of ctest hard-killing the run.
+    # 6-node graph). breadth_first_search still does not converge under
+    # --incremental-bmc, due to the __memcpy_impl loop in the list OM
+    # (string.c:278), and stays KNOWNBUG: the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
+    # the run. breadth_first_search_fail is CORE since #7235 and reaches its
+    # VERIFICATION FAILED at ~123s on the DebugOpt Linux runner, so the 2x
+    # budget is what keeps it off the 120s cap -- removing it flaps the test.
     "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
     # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a
@@ -655,6 +728,20 @@ set(_slow_regression_tests
     # touch its code path. Give it the 2x budget so transient CI slowness does
     # not flap it.
     "regression/python/set_variadic_methods"
+    # github_4634 verifies SUCCESSFUL but searches without a k bound
+    # (--incremental-bmc --unlimited-k-steps, with --data-races-check and
+    # --state-hashing), so its cost is set by how many steps it takes to
+    # converge rather than by a fixed unwind. It measures ~107s locally
+    # against the 120s cap and timed out on the DebugOpt Linux runner in
+    # #7073 CI -- a comment-only change that cannot reach its code path.
+    "regression/esbmc/github_4634"
+    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
+    # over the 120s cap on aarch64, where the whole floats-regression suite runs
+    # ~3x slower while the rest of the suite matches x86 to within 5%. The
+    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
+    # armv8 leg green meanwhile.
+    "regression/floats-regression/nn-tanh_5_unsafe"
+    "regression/consensus/get_subtree_index"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
@@ -692,6 +779,12 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # problem1_fail was FUTURE for scalability (#4932); it converges now, at
+    # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
+    # above is ~70s locally against ~248s with assertions on, and that ratio
+    # puts this past the 2x tier's 240s (#7679). Its VmPeak is ~4.7GiB against
+    # the global 8GiB RLIMIT_AS, which has no per-test override.
+    "regression/python-intensive/problem1_fail"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

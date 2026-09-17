@@ -4,7 +4,7 @@
 
 #include <util/message/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/value_sets.h>
 /**
  * @brief Abstract domain to obtain all available expressions (AE)
  *
@@ -53,13 +53,18 @@ public:
 
   virtual void make_bottom() override
   {
-    // A bottom for AE means that there are no expressions available
     available_expressions.clear();
+    bottom = true;
   }
 
+  /// Entry has nothing available yet, but is reachable — distinct from bottom.
+  /// Conflating the two would let a merge adopt the other side's expressions
+  /// wholesale, and would make ai_baset treat a function whose exit has no
+  /// available expression as an unreachable exit point.
   virtual void make_entry() override
   {
     available_expressions.clear();
+    bottom = false;
   };
   virtual void make_top() override
   {
@@ -71,7 +76,7 @@ public:
 
   virtual bool is_bottom() const override
   {
-    return available_expressions.size() == 0;
+    return bottom;
   }
   virtual bool is_top() const override
   {
@@ -91,6 +96,10 @@ public:
   /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
 
+  /// Unreachable-so-far marker. A default-constructed domain must be bottom:
+  /// ai_baset asserts as much for states it has not visited.
+  bool bottom = true;
+
 protected:
   /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.
   void make_expression_available(const expr2tc &e);
@@ -109,7 +118,7 @@ protected:
 public:
   // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
   // that contains a points-to analysis
-  static std::shared_ptr<value_set_analysist> vsa;
+  static std::shared_ptr<value_setst> vsa;
 };
 
 #include <util/ssa/algorithms.h>
@@ -137,7 +146,7 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa)
+  goto_cse(contextt &ns, std::shared_ptr<value_setst> &vsa)
     : goto_functions_algorithm(true), context(ns)
   {
     cse_domaint::vsa = vsa;

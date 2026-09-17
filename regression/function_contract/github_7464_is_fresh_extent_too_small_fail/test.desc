@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract callee
+^VERIFICATION FAILED$
+^ +FAILED.*contract requires$

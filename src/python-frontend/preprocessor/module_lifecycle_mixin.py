@@ -3,8 +3,50 @@ import ast
 
 class ModuleLifecycleMixin:
 
+    def adopt_module_signatures(self, other, imported_names, include_methods=False):
+        """Learn an imported module's call signatures and defaults.
+
+        Each module gets its own Preprocessor, so a call to an imported
+        function is otherwise converted without the arguments its signature
+        defaults would supply.
+
+        Only entries owned by a name in `imported_names` are taken; the tables
+        are keyed by bare name, so adopting wholesale would let another
+        module's `__init__` answer arity checks for a local class. Methods are
+        taken only when `include_methods` is set, which excludes the operational
+        models: those deliberately simplify a constructor, and checking calls
+        against one would reject calls the converter handles (#4665).
+        Own definitions win: a locally defined name keeps its own signature.
+        """
+        for table, source in (
+            (self.functionParams, other.functionParams),
+            (self.functionKwonlyParams, other.functionKwonlyParams),
+            (self.functionDefaults, other.functionDefaults),
+        ):
+            for key, value in source.items():
+                name = key[0] if isinstance(key, tuple) else key
+                owner, dot, _ = name.partition(".")
+                if owner not in imported_names or (dot and not include_methods):
+                    continue
+                table.setdefault(key, value)
+
+        # These are sets, not signature tables, so they need their own pass.
+        # Without it a function's parameters cross the module boundary while
+        # the flag describing them does not: the importing module strips a real
+        # parameter as self (#7546), or drops the *args arity exemption and
+        # rejects a valid variadic call (#7543).
+        for flags, source in (
+            (self.static_methods, other.static_methods),
+            (self.functionVarargs, other.functionVarargs),
+        ):
+            for name in source:
+                owner, dot, _ = name.partition(".")
+                if owner in imported_names and (include_methods or not dot):
+                    flags.add(name)
+
     def finalize_module(self, node):
         """Run generic_visit and inject helper nodes requested during traversal."""
+        self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         # Per-module scope for the eq-only set and call-origin map.
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = (self._scan_eq_only_items_view_targets(node.body))

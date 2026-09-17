@@ -1,0 +1,7 @@
+CORE
+main.py
+--sarif-output -
+^VERIFICATION FAILED$
+^  FAILED       \[global\.assertion\.[0-9]+\] +line +5 +uncaught exception: IndexError$
+"uri": ".*main\.py"
+"startLine": 5

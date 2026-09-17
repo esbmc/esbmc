@@ -51,10 +51,17 @@ unsigned cbmc_irep_readert::read_word()
     }
 
     if ((byte & 0x80) == 0)
-      break;
+      return static_cast<unsigned>(res);
   }
 
-  return static_cast<unsigned>(res);
+  // Falling out of the loop means the stream ended mid-varint: `in.get()` past
+  // EOF yields 0xff, whose continuation bit keeps the loop going until the
+  // stream goes bad. Returning the partial value silently produced ireps with
+  // no id, which migrate_expr then abort()ed on ("migrate expr failed") --
+  // reachable from any truncated goto-binary.
+  log_error("CBMC goto-binary: truncated varint (end of input)");
+  failed_ = true;
+  return 0;
 }
 
 std::string cbmc_irep_readert::read_string()

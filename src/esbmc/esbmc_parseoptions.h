@@ -29,6 +29,10 @@ class esbmc_parseoptionst : public parseoptions_baset, public language_uit
 public:
   int doit() override;
   void help() override;
+  const char *fatal_signal_advice() const override
+  {
+    return "Re-run with --segfault-handler for a backtrace.\n";
+  }
 
   esbmc_parseoptionst(int argc, const char **argv)
     : parseoptions_baset(all_cmd_options, argc, argv)
@@ -55,6 +59,16 @@ protected:
 
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
+
+  /// Whether the run needs the loop-invariant machinery.
+  bool wants_loop_invariants() const;
+
+  /// Synthesise the invariants when asked, then run the schema over them.
+  void apply_loop_invariants(
+    goto_functionst &goto_functions,
+    contextt &context,
+    const optionst &options,
+    bool k_induction_ran);
 
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);

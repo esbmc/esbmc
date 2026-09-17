@@ -3,15 +3,17 @@
 
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
-#include <goto-symex/slice.h>
-#include <goto-symex/reachability_tree.h>
-#include <goto-symex/symex_target_equation.h>
-#include <goto-symex/witnesses.h>
-#include <goto-symex/pytest.h>
-#include <goto-symex/ctest.h>
+#include <goto-programs/property_verdict.h>
+#include <goto-symex/equation/slice.h>
+#include <goto-symex/scheduler/reachability_tree.h>
+#include <goto-symex/equation/symex_target_equation.h>
+#include <goto-symex/witness/witnesses.h>
+#include <goto-symex/testgen/pytest.h>
+#include <goto-symex/testgen/ctest.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
+#include <set>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/config/options.h>
@@ -84,15 +86,35 @@ protected:
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
 
+  /// Whether the kept claim can hold at all on a feasible path.
+  smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
+
+  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
+
   // Set by the vacuity probe when at least one kept claim discharged
   // vacuously; consulted by report_result to map the final verdict from
   // SUCCESSFUL to UNKNOWN. Atomic because multi_property_check writes from
   // parallel job threads.
   std::atomic<bool> vacuity_detected{false};
 
+  // Set when a violated claim was only violated downstream of a
+  // --loop-invariant-check havoc; consulted by report_result to map a verdict
+  // with no concrete violation from FAILED to UNKNOWN (issue #7480). Atomic
+  // because multi_property_check writes from parallel job threads.
+  std::atomic<bool> weak_invariant_detected{false};
+
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
+  /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
+  /// violated claim was abstraction-derived (issue #7480).
+  void report_violation();
+
+  /// Set when the run printed UNKNOWN over a satisfiable result, so start_bmc
+  /// can return the exit code the verdict earns without misreporting what the
+  /// solver answered.
+  bool verdict_is_unknown = false;
   virtual void report_unknown();
   virtual void keep_alive_function() const;
 
@@ -185,10 +207,71 @@ protected:
     const std::unordered_multiset<std::string> &reached_mul_claims);
 
 private:
-  /// Report each property checked during the run once, with the verdict that
+  /// Report each of the program's properties once, with the verdict that
   /// dominates across every thread interleaving explored, followed by a
-  /// summary.
-  void report_property_verdicts() const;
+  /// summary. A phase that decided nothing and does not conclude the run stays
+  /// silent, leaving the report to the phase that does.
+  void report_property_verdicts(smt_resultt res) const;
+
+  /// Print the property table, grouped by file and function.
+  void print_property_rows(
+    const std::vector<struct property_rowt> &rows,
+    const struct property_countst &counts) const;
+
+  /// Print the "** N of M properties failed, ..." line.
+  void
+  print_property_summary(size_t total, const struct property_countst &) const;
+
+  /// Render the verdict table as coverage goals rather than properties.
+  void report_coverage_goal_verdicts(
+    const std::map<std::string, property_resultt> &verdicts) const;
+
+  /// Enter every assertion in \p eq into the verdict table as NotChecked, so
+  /// the report covers the whole program rather than only those properties
+  /// some phase happened to reach a verdict on (discussion #7023).
+  void seed_property_verdicts(const symex_target_equationt &eq) const;
+
+  /// Record the verdict a satisfiable answer earns for one claim: Failed, or
+  /// Unknown when the model witnesses only the invariant abstraction rather
+  /// than a reachable state (issue #7480).
+  void record_satisfiable_claim(
+    const claim_slicer &claim,
+    const property_locationt &loc,
+    bool inductive_step,
+    symex_target_equationt &local_eq);
+
+  /// Record a verdict for every assertion in \p eq that \p smt_conv's model
+  /// falsifies, so the report names them even when the counterexample itself
+  /// is suppressed. Failed, or Unknown for a claim the model reaches only past
+  /// a loop-invariant havoc, whose witness is the abstraction rather than a
+  /// reachable state (issue #7480). Call only where a SAT result can witness a
+  /// real violation at all: an inductive-step or forward-condition model
+  /// cannot.
+  void record_violated_properties(
+    smt_convt &smt_conv,
+    const symex_target_equationt &eq);
+
+  /// Source files whose assertions come from ESBMC's own operational models,
+  /// so the report can sort them after the user's code. Empty for Python,
+  /// where a hidden body does not imply a model (remove_library_assertions).
+  std::set<std::string> library_files;
+
+  /// Whether this phase concludes the run, i.e. report_result() will print a
+  /// VERIFICATION verdict for \p res rather than deepen the search. The
+  /// property report describes the whole run, so an iterative strategy must
+  /// not emit one table per k.
+  bool reports_final_verdict(smt_resultt res) const;
+
+  /// Set when exploration cut a loop short at the unwinding bound while
+  /// unwinding assertions were disabled, so the paths past the bound were
+  /// assumed away rather than checked. Read by report_success(), which is
+  /// otherwise the only place a user learns the run proved anything.
+  bool saw_bounded_loop_truncation = false;
+
+  /// Whether \p res establishes that *every* property holds, as opposed to a
+  /// merely bounded round such as a k-induction base case. Must agree with the
+  /// path through report_result() that reaches report_success().
+  bool all_properties_proved(smt_resultt res) const;
 
   static constexpr size_t default_barren_interleaving_budget = 100;
 

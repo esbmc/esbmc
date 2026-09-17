@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract bump --function bump
+^  contract ensures$
+^VERIFICATION FAILED$

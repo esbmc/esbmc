@@ -33,7 +33,6 @@ class LoopMixin:
     enumerate_loop_counter: int
     range_loop_counter: int
     iterable_loop_counter: int
-    nondet_expand_counter: int
     target_name: str
     module_name: str
     dataclasses_module_names: Set[str]
@@ -702,6 +701,11 @@ class LoopMixin:
         if target_info["type"] == "nested":
             return self._unroll_nested_enumerate_for(node, target_info)
 
+        if target_info["type"] == "unpacking":
+            literal, start = self._tuple_literal_enumerate_source(node)
+            if literal is not None:
+                return self._unroll_enumerate_over_tuples(node, target_info, literal, start)
+
         # Generate unique variable names for this enumerate loop level
         loop_id = self.enumerate_loop_counter
         self.enumerate_loop_counter += 1
@@ -812,6 +816,56 @@ class LoopMixin:
             self._reject_unsupported_loop(
                 node, f"enumerate() with a nested unpacking target is unsupported here: {blocker}")
         return literal, start
+
+    def _tuple_literal_enumerate_source(self, node):
+        """Return (list literal, start) when unrolling would preserve tuple shape.
+
+        `for i, v in enumerate(pairs)` is lowered to a while loop whose value
+        variable is a bare-`tuple`-annotated subscript read, which carries no
+        component types, so a later `a, b = v` is handed an untyped value and
+        refuses to unpack. Unrolling binds each tuple literal directly and
+        keeps its shape, exactly as the nested-target form already does.
+
+        Returns (None, None) when this does not apply, leaving the ordinary
+        lowering in place -- unlike the nested form, a plain value target is
+        fully supported there.
+        """
+        iterable, start_value = self._parse_enumerate_arguments(node.iter, node)
+        literal = self._resolve_list_literal_iterable(iterable)
+        start = self._static_int_value(start_value)
+        if (literal is None or start is None
+                or not self._can_safely_unroll_list_literal_for(node, literal)):
+            return None, None
+
+        # Only the tuple/list-element case loses type information; leave every
+        # other element kind to the ordinary lowering.
+        if not literal.elts or not all(
+                isinstance(elt, (ast.Tuple, ast.List)) for elt in literal.elts):
+            return None, None
+
+        return literal, start
+
+    def _unroll_enumerate_over_tuples(self, node, target_info, literal, start):
+        """Bind each tuple literal directly, keeping its shape."""
+        unrolled = []
+        for offset, elt in enumerate(literal.elts):
+            index_assign = ast.AnnAssign(
+                target=self.create_name_node(target_info["index_var"], ast.Store(), node),
+                annotation=self.create_name_node("int", ast.Load(), node),
+                value=self.create_constant_node(start + offset, node),
+                simple=1,
+            )
+            value_assign = ast.Assign(
+                targets=[self.create_name_node(target_info["value_var"], ast.Store(), node)],
+                value=copy.deepcopy(elt),
+            )
+            unrolled.extend([index_assign, value_assign])
+            unrolled.extend(copy.deepcopy(stmt) for stmt in node.body)
+
+        for stmt in unrolled:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return unrolled
 
     def _unroll_nested_enumerate_for(self, node, target_info):
         """Unroll `for i, (a, b) in enumerate(seq)` over a statically known list.
@@ -989,6 +1043,13 @@ class LoopMixin:
         self.ensure_all_locations(subscript, node)
 
         element_type = self._get_element_type_from_container(annotation_id, iterable_node)
+        # A container annotation yields only the element's head name, so
+        # `List[Tuple[int, int]]` gives a component-less `Tuple`. Annotating the
+        # loop value with that types it as an opaque pointer and a later
+        # `a, b = v` cannot unpack it -- strictly worse than `Any`, which the
+        # unannotated path uses and which recovers the real type.
+        if element_type in ("Tuple", "tuple"):
+            element_type = "Any"
         ann_node = self.create_name_node(element_type, ast.Load(), node)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info["value_var"], ast.Store(), node),
@@ -1212,6 +1273,25 @@ class LoopMixin:
 
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
+
+    @staticmethod
+    def _body_destructures_name(body, name):
+        """True if `body` assigns `name` to a tuple/list target (`u, v = name`).
+
+        Only a direct statement counts: a nested loop or branch may rebind the
+        name first, and this only decides whether to keep the key's concrete
+        type, so a missed case just falls back to the existing handling.
+        """
+        if not name:
+            return False
+        for stmt in body:
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if not (isinstance(stmt.value, ast.Name) and stmt.value.id == name):
+                continue
+            if any(isinstance(t, (ast.Tuple, ast.List)) for t in stmt.targets):
+                return True
+        return False
 
     def _transform_items_for(self, node):  # pylint: disable=too-many-locals,too-many-statements
         """
@@ -1484,6 +1564,37 @@ class LoopMixin:
         return (isinstance(ann_node, ast.Subscript)
                 and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
 
+    # Member types the C++ list subscript read can size. A str member reaches
+    # the solver as a mismatched bitvector width, a tuple member emits a bare
+    # inner `tuple` -- the very #5444 erosion this annotation avoids -- and a
+    # bool member mismatches the tuple AST, so anything outside this set leaves
+    # the literal unannotated and the unpack refused.
+    _SIZABLE_TUPLE_MEMBER_TYPES = frozenset({"int", "float"})
+
+    def _literal_tuple_annotation_node(self, iterable_node):
+        """tuple[A, B, ...] element annotation of a list literal whose elements
+        are all same-arity tuples of one sizable scalar type per position, else
+        None.
+
+        A key'd sorted() over a constant dict of tuple keys folds to such a
+        literal, which carries no annotation of its own to read (#5444).
+        """
+        if not (isinstance(iterable_node, ast.List) and iterable_node.elts
+                and all(isinstance(elt, ast.Tuple) for elt in iterable_node.elts)):
+            return None
+        arity = len(iterable_node.elts[0].elts)
+        if arity == 0 or any(len(elt.elts) != arity for elt in iterable_node.elts):
+            return None
+        members = []
+        for position in range(arity):
+            names = {self._infer_type_from_value(elt.elts[position]) for elt in iterable_node.elts}
+            if len(names) != 1 or not names <= self._SIZABLE_TUPLE_MEMBER_TYPES:
+                return None
+            members.append(ast.Name(id=names.pop(), ctx=ast.Load()))
+        return ast.Subscript(value=ast.Name(id="tuple", ctx=ast.Load()),
+                             slice=ast.Tuple(elts=members, ctx=ast.Load()),
+                             ctx=ast.Load())
+
     def _full_tuple_annotation_node(self, iterable_node):
         """Return the full tuple[A, B, ...] element annotation of a
         list[tuple[...]]-annotated Name iterable, or None if unavailable.
@@ -1497,6 +1608,9 @@ class LoopMixin:
         typed as tuple[str, str] instead of eroding to bare tuple, whose
         element_0/element_1 members the C++ converter cannot size (#5444).
         """
+        literal_ann = self._literal_tuple_annotation_node(iterable_node)
+        if literal_ann is not None:
+            return literal_ann
         if not (isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations")):
             return None
         annotation = self.variable_annotations.get(iterable_node.id)
@@ -1719,16 +1833,24 @@ class LoopMixin:
         expression is copied into a fresh annotated ESBMC_iter variable. Returns
         (iter_var_name, setup_statements, element_type).
         """
+        # A key'd sorted() has to be lowered here: this assignment is built
+        # after the pass that lowers one, so the call would otherwise reach the
+        # frontend with its key= dropped, and be refused.
+        setup = []
+        lowered = self._lower_sorted_key_iterable(seq)
+        if lowered is not None:
+            setup, seq = lowered
+
         annotation_id = self._get_iterable_type_annotation(seq)
         element_type = self._get_element_type_from_container(annotation_id, seq)
         if isinstance(seq, ast.Name):
-            return seq.id, [], element_type
+            return seq.id, setup, element_type
         iter_var_name = f"ESBMC_iter_{loop_id}{suffix}"
         saved = node.iter
         node.iter = seq
         iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
         node.iter = saved
-        return iter_var_name, [iter_assign], element_type
+        return iter_var_name, setup + [iter_assign], element_type
 
     def _make_target_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self, node, target, iter_var_name, index_var, element_type):
@@ -1960,20 +2082,22 @@ class LoopMixin:
         # Handle the target variable name
         target_var_name = self._name_id_or_none(node.target) or "ESBMC_loop_var"
 
+        # A key'd sorted() has to be lowered here: this loop's iterable
+        # assignment is built after the pass that lowers one, so the call would
+        # otherwise reach the frontend with its key= dropped, and be refused.
+        # Lowered before the annotation is read, so the annotation describes
+        # what the loop actually iterates -- a constant fold yields a list
+        # literal, whose element type the sorted() call does not carry.
+        scan_setup = []
+        lowered = self._lower_sorted_key_iterable(node.iter)
+        if lowered is not None:
+            scan_setup, node.iter = lowered
+
         # Determine annotation type based on the iterable value
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
         # Get element type for proper annotation
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
-
-        # A tuple-unpacking target over a list[tuple[...]] iterable (e.g. the
-        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
-        # variable) needs the full tuple[A, B, ...] annotation, not the bare
-        # "tuple" name element_type collapses to -- otherwise the per-index
-        # element assignment can't size element_0/element_1 (#5444).
-        full_element_ann = None
-        if isinstance(node.target, (ast.Tuple, ast.List)) and element_type in ("tuple", "Tuple"):
-            full_element_ann = self._full_tuple_annotation_node(node.iter)
 
         # Tuple-unpacking iteration over a dict's keys (for u, v in d): the keys
         # are tuples, so materialize d.keys() into an annotated
@@ -1983,7 +2107,24 @@ class LoopMixin:
         # crashing on the unpack (#5444). Scoped to dicts whose key annotation
         # is concrete; a bare/unknown key type falls through to the existing
         # scalar-key handling below.
-        if (annotation_id in ["dict", "Dict"] and isinstance(node.target, (ast.Tuple, ast.List))
+        # A single-name target whose body destructures it (`for edge in d:` then
+        # `u, v = edge`) needs the concrete key type just as much as unpacking
+        # at the target does: without it the key reads as Any and the later
+        # unpack is handed a generic pointer it cannot destructure.
+        target_destructured = (isinstance(node.target, (ast.Tuple, ast.List))
+                               or self._body_destructures_name(node.body,
+                                                               self._name_id_or_none(node.target)))
+
+        # A destructured target over a list[tuple[...]] iterable (e.g. the
+        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
+        # variable) needs the full tuple[A, B, ...] annotation, not the bare
+        # "tuple" name element_type collapses to -- otherwise the per-index
+        # element assignment can't size element_0/element_1 (#5444).
+        full_element_ann = None
+        if target_destructured and element_type in ("tuple", "Tuple"):
+            full_element_ann = self._full_tuple_annotation_node(node.iter)
+
+        if (annotation_id in ["dict", "Dict"] and target_destructured
                 and isinstance(node.iter, ast.Name)):
             key_ann, _ = self._get_dict_kv_types(node.iter.id)
             if self._get_base_type_name(key_ann) not in ("Any", None):
@@ -2028,13 +2169,13 @@ class LoopMixin:
             # For any Name reference (parameter or variable), use it directly
             # This preserves type information for the converter
             iter_var_name = node.iter.id
-            setup_statements = []
+            setup_statements = list(scan_setup)
         else:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f"{iter_var_base}_{loop_id}"
             iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name,
-                                                       element_type)
-            setup_statements = [iter_assign]
+                                                       element_type, full_element_ann)
+            setup_statements = scan_setup + [iter_assign]
 
         # Create common setup statements (index and length) with unique names
         index_assign = self._create_index_assignment(node, index_var)
@@ -2061,14 +2202,32 @@ class LoopMixin:
 
         return result
 
-    def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
-        """Create assignment for iterator variable with proper type annotation."""
+    def _create_iter_assignment(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self,
+            node,
+            annotation_id,
+            iter_var_name,
+            element_type,
+            full_element_ann=None):
+        """Create assignment for iterator variable with proper type annotation.
+
+        ``full_element_ann`` carries the concrete tuple[A, B, ...] element
+        annotation when one is known: the C++ list subscript read sizes the
+        tuple from this list annotation, and the bare "tuple" name erases it to
+        void* (#5444).
+        """
         # str iterables (`for c in str(x)`, `for c in some_str_var`) must be
         # annotated as str so the converter lowers loop bounds via strlen
         # rather than the list-style get_object_size, which overshoots and
         # trips IndexError.
         if annotation_id == "str":
             iter_annotation = ast.Name(id="str", ctx=ast.Load())
+        elif full_element_ann is not None:
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id="list", ctx=ast.Load()),
+                slice=copy.deepcopy(full_element_ann),
+                ctx=ast.Load(),
+            )
         # Create proper list[T] annotation instead of just 'list'
         elif element_type and element_type != "Any":
             # Create Subscript: list[element_type]
@@ -2089,6 +2248,10 @@ class LoopMixin:
                 slice=ast.Name(id="Any", ctx=ast.Load()),
                 ctx=ast.Load(),
             )
+        # Any other annotation binds the constructor's __ESBMC_new_object
+        # result to a non-pointer lvalue (#7083).
+        elif annotation_id in getattr(self, "module_class_names", set()):
+            iter_annotation = ast.Name(id=annotation_id, ctx=ast.Load())
         else:
             # Use 'Any' instead of bare 'list' to avoid misinterpreting the
             # container type as the element type in the C++ converter,
@@ -2339,6 +2502,11 @@ class LoopMixin:
             "nondet_dict": "dict",
         }
 
+        if func_name.startswith("_nondet_list_"):
+            return "list"
+        if func_name.startswith("_nondet_dict_"):
+            return "dict"
+
         return call_type_map.get(func_name, "Any")
 
     def _copy_location_info(self, source_node, target_node):
@@ -2458,316 +2626,190 @@ class LoopMixin:
             return self._create_annotation_from_call(value)
         return None
 
-    def _create_annotation_from_call(self, call_node):
-        """Create annotation from known function calls (nondet_dict/nondet_list)."""
-        if not isinstance(call_node.func, ast.Name):
-            return None
-        func_name = call_node.func.id
+    # Element/key/value types covered by the monomorphic builders in
+    # models/nondet.py.  A type outside these is rejected rather than silently
+    # degraded to int (esbmc/esbmc#7575).
+    _NONDET_LIST_ELEM_TYPES = ("int", "float", "bool", "str")
+    _NONDET_DICT_KEY_TYPES = ("int", "str", "bool")
+    _NONDET_DICT_VALUE_TYPES = ("int", "float", "bool", "str")
 
-        if func_name == "nondet_dict":
-            key_t = "int"
-            val_t = "int"
-            for kw in call_node.keywords:
-                if kw.arg == "key_type" and isinstance(kw.value, ast.Call):
-                    key_t = self._nondet_call_to_type(kw.value) or key_t
-                elif kw.arg == "value_type" and isinstance(kw.value, ast.Call):
-                    val_t = self._nondet_call_to_type(kw.value) or val_t
+    # Suffixes ESBMC synthesises a pointable stub for, so they can be passed as
+    # first-class generators (converter_funcdef.cpp, nondet_stub_suffix).
+    _NONDET_SCALAR_SUFFIXES = ("int", "float", "bool", "str", "char", "complex")
+
+    # Mirrors `_DEFAULT_NONDET_SIZE` in models/nondet.py; applied here because
+    # the rewrite always passes the bound explicitly.
+    _DEFAULT_NONDET_COLLECTION_SIZE = 8
+
+    @classmethod
+    def _nondet_generator_type(cls, node):
+        """Type name behind a scalar nondet generator, else None.
+
+        Accepts a call (``nondet_bool()``) and the bare function reference
+        SV-COMP passes (``nondet_int``).  Only the stubbed suffixes qualify, so
+        an ordinary variable that happens to be named ``nondet_size`` is not
+        mistaken for a generator and swallowed as the element type.
+        """
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            name = node.func.id
+        elif isinstance(node, ast.Name):
+            name = node.id
+        else:
+            return None
+        for prefix in ("__VERIFIER_nondet_", "nondet_"):
+            if name.startswith(prefix):
+                suffix = name[len(prefix):]
+                if suffix in cls._NONDET_SCALAR_SUFFIXES:
+                    return suffix
+        return None
+
+    @classmethod
+    def _resolve_nondet_type(cls, node, allowed, func_name, role):
+        expected = ", ".join(f"nondet_{t}()" for t in allowed)
+        type_name = cls._nondet_generator_type(node)
+        if type_name is None:
+            raise SyntaxError(f"{func_name}: {role} must be a nondet generator, got "
+                              f"{ast.unparse(node)!r}; expected one of {expected}")
+        if type_name not in allowed:
+            raise SyntaxError(f"{func_name}: unsupported {role} 'nondet_{type_name}()'; "
+                              f"expected one of {expected}")
+        return type_name
+
+    @staticmethod
+    def _nondet_collection_keywords(call, func_name):
+        """Keyword arguments of a nondet collection call, keyed by name.
+
+        A keyword this model does not know is rejected rather than dropped: a
+        dropped one silently reverts the element type to int, which is the
+        vacuous-proof failure mode of esbmc/esbmc#7575 arriving through a typo.
+        ``**kwargs`` (``kw.arg is None``) hides the bound the same way.
+        """
+        accepted = ("max_size", "elem_type") if func_name == "nondet_list" \
+            else ("max_size", "key_type", "value_type")
+        keywords = {}
+        for kw in call.keywords:
+            if kw.arg not in accepted:
+                given = repr(kw.arg) if kw.arg else "**kwargs"
+                raise SyntaxError(f"{func_name}: unexpected keyword argument {given}; "
+                                  f"accepts {', '.join(accepted)}")
+            keywords[kw.arg] = kw.value
+        return keywords
+
+    def _parse_nondet_collection_call(self, call):
+        """Resolve a ``nondet_list``/``nondet_dict`` call.
+
+        Returns ``(builder_name, max_size_node)`` naming the monomorphic builder
+        in models/nondet.py that produces the requested element types, or None
+        when `call` is not one of these generators.
+        """
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+            return None
+        func_name = call.func.id
+        if func_name not in ("nondet_list", "nondet_dict"):
+            return None
+        if func_name in self.shadowed_nondet_collections:
+            return None
+
+        positional = list(call.args)
+        # SV-COMP passes the generator first -- nondet_list(nondet_int),
+        # nondet_dict(nondet_key, nondet_value) -- so a leading generator is an
+        # element type, not a size, and the default bound stands.
+        leading_generator = bool(positional) and \
+            self._nondet_generator_type(positional[0]) is not None
+
+        max_size_node = None
+        if positional and not leading_generator:
+            max_size_node = positional.pop(0)
+
+        keywords = self._nondet_collection_keywords(call, func_name)
+        max_size_node = keywords.get("max_size", max_size_node)
+        if max_size_node is None:
+            max_size_node = ast.Constant(value=self._DEFAULT_NONDET_COLLECTION_SIZE)
+
+        def slot(index, kw_name):
+            fallback = positional[index] if len(positional) > index else None
+            return keywords.get(kw_name, fallback)
+
+        def resolve(node, allowed, role):
+            if node is None:
+                return "int"
+            return self._resolve_nondet_type(node, allowed, func_name, role)
+
+        # An unknown keyword already raises; a surplus positional must too,
+        # or `nondet_list(3, nondet_int(), nondet_float())` silently ignores
+        # its second generator and returns the wrong collection (#7575).
+        consumed = 1 if func_name == "nondet_list" else 2
+        if len(positional) > consumed:
+            raise SyntaxError(f"{func_name}: expected at most {consumed} type argument(s), got "
+                              f"{len(positional)}: {', '.join(ast.unparse(a) for a in positional)}")
+
+        if func_name == "nondet_list":
+            elem = resolve(slot(0, "elem_type"), self._NONDET_LIST_ELEM_TYPES, "elem_type")
+            return f"_nondet_list_{elem}", max_size_node
+
+        key = resolve(slot(0, "key_type"), self._NONDET_DICT_KEY_TYPES, "key_type")
+        val = resolve(slot(1, "value_type"), self._NONDET_DICT_VALUE_TYPES, "value_type")
+        return f"_nondet_dict_{key}_{val}", max_size_node
+
+    def _rewrite_nondet_collection_call(self, call):
+        """Rewrite a nondet collection call to its monomorphic builder.
+
+        The builder calls ``nondet_T()`` fresh per element, so indices hold
+        independent values.  Rewriting the callee rather than expanding the call
+        into statements keeps this valid in every expression position -- an
+        annotated assignment, a return, a call argument (esbmc/esbmc#7575).
+        """
+        parsed = self._parse_nondet_collection_call(call)
+        if parsed is None:
+            return None
+        builder, max_size_node = parsed
+        self.ensure_all_locations(max_size_node, call)
+        new_call = ast.Call(
+            func=ast.Name(id=builder, ctx=ast.Load()),
+            args=[max_size_node],
+            keywords=[],
+        )
+        self.ensure_all_locations(new_call, call)
+        ast.fix_missing_locations(new_call)
+        return new_call
+
+    @staticmethod
+    def _nondet_builder_annotation(func_name):
+        """``list[T]``/``dict[K, V]`` annotation for a rewritten builder name."""
+        if func_name.startswith("_nondet_list_"):
+            return ast.Subscript(
+                value=ast.Name(id="list", ctx=ast.Load()),
+                slice=ast.Name(id=func_name[len("_nondet_list_"):], ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        if func_name.startswith("_nondet_dict_"):
+            key, _, val = func_name[len("_nondet_dict_"):].partition("_")
             return ast.Subscript(
                 value=ast.Name(id="dict", ctx=ast.Load()),
                 slice=ast.Tuple(
-                    elts=[
-                        ast.Name(id=key_t, ctx=ast.Load()),
-                        ast.Name(id=val_t, ctx=ast.Load()),
-                    ],
+                    elts=[ast.Name(id=key, ctx=ast.Load()),
+                          ast.Name(id=val, ctx=ast.Load())],
                     ctx=ast.Load(),
                 ),
                 ctx=ast.Load(),
             )
-
-        if func_name == "nondet_list":
-            elem_t = "int"
-            if len(call_node.args) >= 2 and isinstance(call_node.args[1], ast.Call):
-                elem_t = self._nondet_call_to_type(call_node.args[1]) or elem_t
-            for kw in call_node.keywords:
-                if kw.arg == "elem_type" and isinstance(kw.value, ast.Call):
-                    elem_t = self._nondet_call_to_type(kw.value) or elem_t
-            return ast.Subscript(
-                value=ast.Name(id="list", ctx=ast.Load()),
-                slice=ast.Name(id=elem_t, ctx=ast.Load()),
-                ctx=ast.Load(),
-            )
-
         return None
 
-    @staticmethod
-    def _nondet_call_to_type(call_node):
-        """Extract the type name from `nondet_*()` calls."""
-        if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
-            name = call_node.func.id
-            if name.startswith("nondet_"):
-                return name[len("nondet_"):]
-        return None
+    def _create_annotation_from_call(self, call_node):
+        """Create annotation from a nondet collection call or its builder.
 
-    def _expand_nondet_call(self, target, call, source_node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-        """Expand nondet_list && nondet_dict call into an inline loop
-        to replace the effect in nondet.py
-        e.g.:
-            x = nondet_list(3, nondet_bool())  -->
-                x: list[bool] = []
-                __nd_size_0: int = nondet_int()
-                __ESBMC_assume(__nd_size_0 >= 0)
-                __ESBMC_assume(__nd_size_0 <= 3)
-                __nd_i_0: int = 0
-                while __nd_i_0 < __nd_size_0:
-                    x.append(nondet_bool())
-                    __nd_i_0 = __nd_i_0 + 1
-
-            x = nondet_dict(2, key_type=nondet_str(), value_type=nondet_float())  -->
-                x: dict[str, float] = {}
-                __nd_size_0: int = nondet_int()
-                __ESBMC_assume(__nd_size_0 >= 0)
-                __ESBMC_assume(__nd_size_0 <= 2)
-                if __nd_size_0 >= 1: x["0"] = nondet_float()
-                if __nd_size_0 >= 2: x["1"] = nondet_float()
+        Both spellings are handled because the module pre-pass runs before the
+        callee rewrite and the per-assignment pass runs after it.
         """
-        uid = self.nondet_expand_counter
-        self.nondet_expand_counter += 1
-        func_name = call.func.id
-        loc = source_node
-
-        # Determine nondet type functions
-        def _get_nondet_func(call_arg):
-            """Extract a nondet generator function name from either a Call node
-            (nondet_bool()) or a bare function reference (nondet_bool). A bare
-            Name only counts as a generator when it is nondet-prefixed, so a
-            plain variable/size argument is never mistaken for one."""
-            if isinstance(call_arg, ast.Call) and isinstance(call_arg.func, ast.Name):
-                return call_arg.func.id
-            if isinstance(call_arg, ast.Name) and (call_arg.id.startswith("nondet_")
-                                                   or call_arg.id.startswith("__VERIFIER_nondet_")):
-                return call_arg.id
+        if not isinstance(call_node.func, ast.Name):
             return None
-
-        def _get_type_name(call_arg):
-            """Extract type name 'bool' from a nondet_bool generator ref."""
-            fn = _get_nondet_func(call_arg)
-            if fn:
-                for prefix in ("__VERIFIER_nondet_", "nondet_"):
-                    if fn.startswith(prefix):
-                        return fn[len(prefix):]
-            return "int"
-
-        # Parse arguments. Two calling conventions are supported:
-        #   ESBMC-native:  nondet_list(max_size, nondet_bool()) + keywords
-        #   SV-COMP:       nondet_list(nondet_int) / nondet_dict(nondet_k,
-        #                  nondet_v) -- the element/key/value generator is
-        #                  passed as a leading positional function reference.
-        # A leading positional generator is not a size, so keep the default.
-        first_is_generator = bool(call.args) and _get_nondet_func(call.args[0]) is not None
-
-        max_size_node = ast.Constant(value=8)
-        if call.args and not first_is_generator:
-            max_size_node = call.args[0]
-
-        if func_name == "nondet_list":
-            elem_func = "nondet_int"
-            elem_type_name = "int"
-            if first_is_generator:
-                elem_func = _get_nondet_func(call.args[0])
-                elem_type_name = _get_type_name(call.args[0])
-            elif len(call.args) >= 2:
-                fn = _get_nondet_func(call.args[1])
-                if fn:
-                    elem_func = fn
-                    elem_type_name = _get_type_name(call.args[1])
-            for kw in call.keywords:
-                if kw.arg == "elem_type":
-                    fn = _get_nondet_func(kw.value)
-                    if fn:
-                        elem_func = fn
-                        elem_type_name = _get_type_name(kw.value)
-        elif func_name == "nondet_dict":
-            val_func = "nondet_int"
-            key_type_name = "int"
-            val_type_name = "int"
-            if first_is_generator:
-                key_type_name = _get_type_name(call.args[0])
-                if len(call.args) >= 2 and _get_nondet_func(call.args[1]):
-                    val_func = _get_nondet_func(call.args[1])
-                    val_type_name = _get_type_name(call.args[1])
-            for kw in call.keywords:
-                if kw.arg == "key_type":
-                    fn = _get_nondet_func(kw.value)
-                    if fn:
-                        key_type_name = _get_type_name(kw.value)
-                elif kw.arg == "value_type":
-                    fn = _get_nondet_func(kw.value)
-                    if fn:
-                        val_func = fn
-                        val_type_name = _get_type_name(kw.value)
-
-        # create AST nodes
-        def name(n, ctx=ast.Load()):
-            nd = ast.Name(id=n, ctx=ctx)
-            self.ensure_all_locations(nd, loc)
-            return nd
-
-        def const(v):
-            nd = ast.Constant(value=v)
-            self.ensure_all_locations(nd, loc)
-            return nd
-
-        def call_node(fn, args=None):
-            nd = ast.Call(func=name(fn), args=args or [], keywords=[])
-            self.ensure_all_locations(nd, loc)
-            return nd
-
-        size_var = f"__nd_size_{uid}"
-        idx_var = f"__nd_i_{uid}"
-        var_name = self._name_id_or_none(target)
-        if var_name is None:
+        annotation = self._nondet_builder_annotation(call_node.func.id)
+        if annotation is not None:
+            return annotation
+        parsed = self._parse_nondet_collection_call(call_node)
+        if parsed is None:
             return None
-        stmts = []
-
-        # x: list[T] = [] && x: dict[K,V] = {}
-        if func_name == "nondet_list":
-            init_val = ast.List(elts=[], ctx=ast.Load())
-            annotation = ast.Subscript(value=name("list"),
-                                       slice=name(elem_type_name),
-                                       ctx=ast.Load())
-        else:
-            init_val = ast.Dict(keys=[], values=[])
-            annotation = ast.Subscript(
-                value=name("dict"),
-                slice=ast.Tuple(elts=[name(key_type_name), name(val_type_name)], ctx=ast.Load()),
-                ctx=ast.Load(),
-            )
-        self.ensure_all_locations(init_val, loc)
-        self.ensure_all_locations(annotation, loc)
-
-        init_assign = ast.AnnAssign(
-            target=name(var_name, ast.Store()),
-            annotation=annotation,
-            value=init_val,
-            simple=1,
-        )
-        self.ensure_all_locations(init_assign, loc)
-        stmts.append(init_assign)
-
-        # Store annotation for dict iteration support
-        self.variable_annotations[var_name] = annotation
-        self.known_variable_types[var_name] = ("list" if func_name == "nondet_list" else "dict")
-
-        # size = nondet_int();
-        # assume(size >= 0);
-        # assume(size <= max_size);
-        size_assign = ast.AnnAssign(
-            target=name(size_var, ast.Store()),
-            annotation=name("int"),
-            value=call_node("nondet_int"),
-            simple=1,
-        )
-        self.ensure_all_locations(size_assign, loc)
-        stmts.append(size_assign)
-
-        for op_cls, bound in [(ast.GtE, const(0)), (ast.LtE, max_size_node)]:
-            assume_call = ast.Expr(value=ast.Call(
-                func=name("__ESBMC_assume"),
-                args=[ast.Compare(left=name(size_var), ops=[op_cls()], comparators=[bound])],
-                keywords=[],
-            ))
-            self.ensure_all_locations(assume_call, loc)
-            stmts.append(assume_call)
-
-        # i = 0
-        idx_assign = ast.AnnAssign(
-            target=name(idx_var, ast.Store()),
-            annotation=name("int"),
-            value=const(0),
-            simple=1,
-        )
-        self.ensure_all_locations(idx_assign, loc)
-        stmts.append(idx_assign)
-
-        # Build the collection
-        if func_name == "nondet_list":
-            append_call = ast.Expr(value=ast.Call(
-                func=ast.Attribute(value=name(var_name), attr="append", ctx=ast.Load()),
-                args=[call_node(elem_func)],
-                keywords=[],
-            ))
-            self.ensure_all_locations(append_call, loc)
-
-            inc = ast.Assign(
-                targets=[name(idx_var, ast.Store())],
-                value=ast.BinOp(left=name(idx_var), op=ast.Add(), right=const(1)),
-            )
-            self.ensure_all_locations(inc, loc)
-
-            while_stmt = ast.While(
-                test=ast.Compare(left=name(idx_var), ops=[ast.Lt()], comparators=[name(size_var)]),
-                body=[append_call, inc],
-                orelse=[],
-            )
-            self.ensure_all_locations(while_stmt, loc)
-            stmts.append(while_stmt)
-        else:
-            # To avoid solver explosion(timeout)
-            # when the dict grows large.
-            # Dict is using if-chain with
-            # concrete sequential keys (0,1,2,... / False,True /..)
-            # makes every contains check trivially decidable.
-            # values can remain fully nondeterministic.
-            # Future improvement:
-            # Once the ESBMC dict C model supports efficient
-            # symbolic key insertion(would not be such time-consuming),
-            # this can be replaced with a simple loop like nondet_list.
-            max_entries = 8
-            if isinstance(max_size_node, ast.Constant) and isinstance(max_size_node.value, int):
-                max_entries = max_size_node.value
-
-            for entry_idx in range(max_entries):
-                concrete_key = self._make_concrete_key(key_type_name, entry_idx, loc)
-                dict_assign = ast.Assign(
-                    targets=[
-                        ast.Subscript(value=name(var_name), slice=concrete_key, ctx=ast.Store())
-                    ],
-                    value=call_node(val_func),
-                )
-                self.ensure_all_locations(dict_assign, loc)
-
-                if_stmt = ast.If(
-                    test=ast.Compare(
-                        left=name(size_var),
-                        ops=[ast.GtE()],
-                        comparators=[const(entry_idx + 1)],
-                    ),
-                    body=[dict_assign],
-                    orelse=[],
-                )
-                self.ensure_all_locations(if_stmt, loc)
-                stmts.append(if_stmt)
-
-        for s in stmts:
-            ast.fix_missing_locations(s)
-
-        return stmts
-
-    def _make_concrete_key(self, key_type_name, index, loc):
-        """Generate a concrete key AST node for dict if-chain expansion.
-        int  → 0, 1, 2, ...
-        bool → False, True  (wraps at 2)
-        str  → "0", "1", "2", ...
-        """
-        if key_type_name == "bool":
-            val = bool(index % 2)
-        elif key_type_name == "str":
-            val = str(index)
-        else:
-            val = index
-        nd = ast.Constant(value=val)
-        self.ensure_all_locations(nd, loc)
-        return nd
+        return self._nondet_builder_annotation(parsed[0])
 
     def _create_list_annotation(self, list_node):
         """Create list[T] annotation from a list literal"""

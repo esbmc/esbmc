@@ -1,4 +1,4 @@
-# Exercises the --irep2-native-body IREP2-native code_while2t dispatcher
+# Exercises the IREP2-native code_while2t dispatcher
 # (W1-loc spike Phase C, esbmc/esbmc#4715): sum_to()'s loop condition and body
 # are both side-effect-free (Python assignment is a genuine statement, unlike
 # C's expression-statement-wrapped assign, so the body's code_assign2t nodes

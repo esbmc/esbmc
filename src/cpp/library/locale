@@ -2,6 +2,7 @@
 #define STL_LOCALE
 
 #include <ctime>
+#include "cctype" /* ::toupper, ::tolower */
 #include "string"
 #include "iterator"
 #include "iostream"
@@ -702,6 +703,22 @@ bool locale::operator()(const string &s1, const string &s2) const
     use_facet<collate<charT> >(*this).compare(
       s1.data(), s1.data() + s1.size(), s2.data(), s2.data() + s2.size()) <
     0);
+}
+
+/* [locale.convenience]: the character conversions. The standard defines them
+ * as use_facet<ctype<charT>>(loc).toupper(c); the ctype facet above is
+ * declared but has no definition, so these model the classic locale directly
+ * and ignore loc. boost's property_tree calls toupper(c, loc). */
+template <class charT>
+inline charT toupper(charT c, const locale &)
+{
+  return static_cast<charT>(::toupper(static_cast<int>(c)));
+}
+
+template <class charT>
+inline charT tolower(charT c, const locale &)
+{
+  return static_cast<charT>(::tolower(static_cast<int>(c)));
 }
 
 } // namespace std

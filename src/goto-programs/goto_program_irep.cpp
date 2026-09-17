@@ -1,3 +1,4 @@
+#include <util/message/message.h>
 #include <goto-programs/goto_program_irep.h>
 #include <util/base/i2string.h>
 
@@ -47,6 +48,17 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   instruction.location = static_cast<const locationt &>(irep.location());
   instruction.type =
     static_cast<goto_program_instruction_typet>(atoi(irep.type_id().c_str()));
+
+  // A truncated binary decodes an absent type field as atoi("") == 0, and
+  // NO_INSTRUCTION_TYPE has no symex handler, so the malformed program aborted
+  // in symex_step rather than being rejected on read. A real instruction is
+  // never serialised with it. Other unknown values are left alone: a
+  // pre-removal binary carrying 19/20 is meant to fail loudly at symex.
+  if (instruction.type == NO_INSTRUCTION_TYPE)
+  {
+    log_error("goto binary: instruction with no type; input is truncated");
+    throw std::string("goto binary: malformed instruction");
+  }
 
   // don't touch the targets, the goto_programt conversion does that
 

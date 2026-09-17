@@ -22,6 +22,41 @@ import subprocess
 # set_tests_properties(ENVIRONMENT).
 _TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
 _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
+# Narrows the budget for one run, so a slowdown fails instead of passing under
+# the 1200s default. CMake bakes _TIMEOUT_ENVVAR into each test's ctest
+# ENVIRONMENT property, which overrides the caller's value, and `ctest
+# --timeout` only supplies a default for tests carrying no TIMEOUT property --
+# so tightening the budget needs a name ctest does not set (#7628).
+_TIMEOUT_CAP_ENVVAR = "ESBMC_REGRESS_TIMEOUT_MAX"
+
+
+# CMake grants the long_timeout capability at configure time, from a budget the
+# cap has not been applied to yet (ESBMC_REGRESS_TIMEOUT GREATER_EQUAL 600 in
+# regression/CMakeLists.txt). A narrowed run still receives it on the command
+# line, and would fail the very tests it exists to skip.
+_LONG_TIMEOUT_SECONDS = 600
+
+
+def _timeout_cap():
+    raw = os.environ.get(_TIMEOUT_CAP_ENVVAR, "").strip()
+    if not raw:
+        return None
+    # Rejected rather than ignored: a run that silently kept the 1200s budget
+    # after a typo would report every test as comfortably within it.
+    if not raw.isdigit() or int(raw) == 0:
+        sys.exit(
+            "{}={!r}: expected a positive whole number of seconds".format(
+                _TIMEOUT_CAP_ENVVAR, raw))
+    return int(raw)
+
+
+def _capped_timeout(budget):
+    cap = _timeout_cap()
+    if cap is None:
+        return budget
+    return budget if budget is not None and budget <= cap else cap
+
+
 #####################
 # Testing Tool
 #####################
@@ -227,10 +262,25 @@ STATIC_CAPABILITIES = {
     # The 32-bit target (--32) is usable: multi-arch headers exist and the
     # frontend's type model matches them. See issue #1400.
     "arch32",
+    # The host is x86. For tests whose *input* is x86-only: clang's SSE/MMX
+    # intrinsic headers reject other targets outright, and inline asm naming
+    # x86 register constraints ('=a', '=q') does not compile elsewhere.
+    "arch_x86",
     # The operational-model library is bundled as a goto binary. With
     # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
     # measuring the blob has nothing to measure.
     "bundled_libc",
+    # The bundled musl libm is reached rather than shadowed by the host's own
+    # <math.h>. Not so on Windows, where the UCRT declares cosf/pow itself.
+    "bundled_libm",
+    # The host's `unsigned long` is 64 bits. Value-set descriptor offsets are
+    # materialised through it, so a negative offset is a different constant --
+    # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
+    "lp64_host",
+    # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
+    # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
+    # where such a test can only ever report a timeout.
+    "long_timeout",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:
@@ -238,10 +288,55 @@ STATIC_CAPABILITIES = {
 # match the one ESBMC's Clang is configured for -- a probe that disagreed would
 # silently skip tests on hosts that actually support them. Ask the tool under
 # test instead, by parsing a snippet that exercises the feature.
+# "source" is the probe; "suffix" (default .c) picks the frontend, and "args"
+# adds options the probe needs.
 DYNAMIC_CAPABILITY_PROBES = {
     # Clang caps _BitInt/_ExtInt width per target (128 bits on aarch64-darwin,
     # far higher on x86_64-linux), so this cannot be answered statically.
-    "bitint_wide": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    "bitint_wide": {
+        "source": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    },
+    # The `_BitInt(N)` spelling parses at all. Clang exposes bit-precise
+    # integers as `_ExtInt` before LLVM 14, so a source written with the
+    # standard C23 spelling is a parse error on the LLVM 11-13 builds the
+    # project still supports. Narrower than bitint_wide, which additionally
+    # requires a 1000-bit width the aarch64-darwin target caps out below.
+    "bitint": {
+        "source": "int main() { _BitInt(80) x = 0; return (int)x; }\n",
+    },
+    # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
+    # does not. Pins both tests spelling a char type in expected output
+    # ("signed char c") and tests whose verdict turns on the range: CHAR_MIN,
+    # and whether char arithmetic such as 100 + 100 overflows. It also pins the
+    # Python frontend, whose string model assumes a signed char throughout and
+    # aborts where the target disagrees (#7308).
+    "signed_char_host": {
+        "source": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # wchar_t is `int`, as it is on x86-64 Linux. The AAPCS makes it
+    # `unsigned int`, so a source redeclaring it as int is rejected there.
+    "signed_wchar_host": {
+        "source": '_Static_assert((__WCHAR_TYPE__)-1 < 0, "wchar_t is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # `long double` is the x87 80-bit format (64-bit significand) rather than
+    # IEEE binary128. Exact floating-point identities hold in one and not the
+    # other, so a test asserting one cannot hold on both.
+    "x87_long_double": {
+        "source": '_Static_assert(__LDBL_MANT_DIG__ == 64, "x87 long double");\n'
+        "int main() { return 0; }\n",
+    },
+    # The host's C++ standard library headers are reachable, which is what the
+    # tests passing --no-abstracted-cpp-includes, --no-library or
+    # --mix-cpp-host-headers read instead of the bundled OMs. Installing
+    # libstdc++-dev is not enough: on aarch64 ESBMC's Clang fails to find the
+    # GCC C++ include tree even when it is present (#7308).
+    "host_cxx_headers": {
+        "source": "#include <cassert>\nint main() { return 0; }\n",
+        "suffix": ".cpp",
+        "args": ["--no-abstracted-cpp-includes"],
+    },
 }
 
 KNOWN_CAPABILITIES = STATIC_CAPABILITIES | set(DYNAMIC_CAPABILITY_PROBES)
@@ -255,13 +350,17 @@ def _probe_capability(name, executor_path):
     snippet, a crash, or a hang all mean "not supported", so the test is
     skipped rather than failing for a reason that is not about the test.
     """
+    probe = DYNAMIC_CAPABILITY_PROBES[name]
     with tempfile.TemporaryDirectory() as tmp_dir:
-        source = os.path.join(tmp_dir, "probe.c")
+        source = os.path.join(tmp_dir, "probe" + probe.get("suffix", ".c"))
         with open(source, "w") as fp:
-            fp.write(DYNAMIC_CAPABILITY_PROBES[name])
+            fp.write(probe["source"])
         try:
             completed = subprocess.run(
-                shlex.split(executor_path) + ["--parse-tree-only", source],
+                shlex.split(executor_path)
+                + ["--parse-tree-only"]
+                + probe.get("args", [])
+                + [source],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 timeout=120,
@@ -428,9 +527,9 @@ class TestCase:
         assert os.path.exists(test_dir)
         assert os.path.exists(os.path.join(test_dir, "test.desc"))
         self.name = name
-        # A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
-        # temporary cwd, where a test_dir relative to the invoking cwd no longer
-        # resolves. Anchor it here so every derived path survives the chdir.
+        # Every test runs ESBMC in a private temporary cwd, where a test_dir
+        # relative to the invoking cwd no longer resolves. Anchor it here so
+        # every derived path survives the chdir.
         self.test_dir = os.path.abspath(test_dir)
         self.test_args = None
         self.test_file = None
@@ -483,6 +582,11 @@ _TERM_GRACE = 3
 class Executor:
     def __init__(self, tool="esbmc"):
         self.tool = shlex.split(tool)
+        # Each test runs in its own cwd, and Popen chdirs before exec, so an
+        # explicitly-pathed tool has to be anchored here. A bare name keeps
+        # going through PATH.
+        if os.sep in self.tool[0]:
+            self.tool[0] = os.path.abspath(self.tool[0])
         self.timeout = RegressionBase.TIMEOUT
 
     def run(self, test_case: TestCase, cwd=None):
@@ -555,8 +659,8 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    # The env var set by CMake.
-    TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
+    # The env var set by CMake, narrowed by _TIMEOUT_CAP_ENVVAR when set.
+    TIMEOUT = _capped_timeout(int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None)
     _mem_mb = int(os.environ.get(_MEMORY_LIMIT_ENVVAR, 0))
     MEMORY_LIMIT = _mem_mb * 1024 * 1024 if _mem_mb else None
 
@@ -575,13 +679,13 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        # Per-test cwd so parallel CHECK_JSON/CHECK_FILE tests don't race on
-        # output files.
-        tmp_dir = (
-            tempfile.mkdtemp(prefix="esbmc-regress-")
-            if test_case.check_json or test_case.check_file
-            or test_case.seed_file else None
-        )
+        # Every test gets a private cwd. Relative output paths in test.desc
+        # (--witness-output, --cex-output, --output) otherwise land in the
+        # runner's cwd -- build/regression under ctest, the invocation
+        # directory when testing_tool.py is run by hand, which is how the
+        # artefacts once tracked under regression/ came to be overwritten on
+        # every run. It also races parallel CHECK_JSON/CHECK_FILE tests.
+        tmp_dir = tempfile.mkdtemp(prefix="esbmc-regress-")
         try:
             for seed in test_case.seed_file:
                 _run_seed_file(seed, tmp_dir)
@@ -600,8 +704,12 @@ def _add_test(test_case, executor):
                         )
                     )
                     return
-                timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
-                    test_case.test_dir, executor.timeout or "none")
+                cap = _timeout_cap()
+                capped = (", capped by " + _TIMEOUT_CAP_ENVVAR
+                          if cap is not None and executor.timeout == cap
+                          else "")
+                timeout_message = "\nTIMEOUT TEST: {} (limit {}s{})".format(
+                    test_case.test_dir, executor.timeout or "none", capped)
                 if stderr:
                     timeout_message += "\n" + stderr.decode(errors="replace")
                 self.fail(timeout_message)
@@ -681,8 +789,7 @@ def _add_test(test_case, executor):
                         )
                 self.fail(error_message_prefix + error_message)
         finally:
-            if tmp_dir is not None:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return test
 
@@ -759,7 +866,7 @@ def _arg_parsing():
 
     main_args = parser.parse_args()
     if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
+        RegressionBase.TIMEOUT = _capped_timeout(int(main_args.timeout))
     if main_args.memory_limit:
         RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
@@ -790,6 +897,9 @@ def _arg_parsing():
             f"{', '.join(sorted(unknown))}; known names are "
             f"{', '.join(sorted(STATIC_CAPABILITIES))}"
         )
+        if (RegressionBase.TIMEOUT is not None
+                and RegressionBase.TIMEOUT < _LONG_TIMEOUT_SECONDS):
+            capabilities.discard("long_timeout")
 
     gen_one_test(
         regression_path,

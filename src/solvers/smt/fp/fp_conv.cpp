@@ -2334,35 +2334,34 @@ smt_astt fp_convt::mk_ninf(unsigned ew, unsigned sw)
     mk_fpbv_sort(ew, sw - 1));
 }
 
+/* These four go through the local virtuals, not ctx->fp_api: a backend whose
+ * fp_api is a native-theory converter may run this lowering on a temporary
+ * fp_convt over bit-vector operands, and ctx->fp_api would hand those to the
+ * native predicates. For a bit-vector-only backend ctx->fp_api is this, so
+ * the dispatch is unchanged. */
 smt_astt fp_convt::mk_is_pzero(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_zero(op), ctx->fp_api->mk_is_pos(op));
+  return ctx->mk_and(mk_smt_fpbv_is_zero(op), mk_is_pos(op));
 }
 
 smt_astt fp_convt::mk_is_nzero(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_zero(op), ctx->fp_api->mk_is_neg(op));
+  return ctx->mk_and(mk_smt_fpbv_is_zero(op), mk_is_neg(op));
 }
 
 smt_astt fp_convt::mk_is_pinf(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_inf(op), ctx->fp_api->mk_is_pos(op));
+  return ctx->mk_and(mk_smt_fpbv_is_inf(op), mk_is_pos(op));
 }
 
 smt_astt fp_convt::mk_is_ninf(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_inf(op), ctx->fp_api->mk_is_neg(op));
+  return ctx->mk_and(mk_smt_fpbv_is_inf(op), mk_is_neg(op));
 }
 
 smt_astt fp_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
-  // Tricky, we need to change the type
-  const_cast<smt_ast *>(op)->sort = to;
-  return op;
+  return op->with_sort(ctx, to);
 }
 
 smt_astt fp_convt::mk_from_fp_to_bv(smt_astt op)

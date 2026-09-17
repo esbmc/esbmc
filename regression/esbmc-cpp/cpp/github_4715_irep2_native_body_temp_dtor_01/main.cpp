@@ -1,6 +1,6 @@
 // __ESBMC_assert is a built-in intrinsic; no include needed.
 
-// W1-loc Phase C (esbmc/esbmc#4715): the --irep2-native-body code_expression2t
+// W1-loc Phase C (esbmc/esbmc#4715): the IREP2-native code_expression2t
 // handler now lowers a full-expression temporary_object natively (the guard
 // that previously fell back was over-conservative). A result-used temporary
 // whose ~M is deferred to the enclosing scope's exit leaves a destructor

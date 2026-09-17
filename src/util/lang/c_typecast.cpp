@@ -301,43 +301,50 @@ type2tc c_typecastt::follow_with_qualifiers(const type2tc &src_type)
   return dest_type;
 }
 
+c_typecastt::c_typet c_typecastt::rank_integer(unsigned width, bool is_signed)
+{
+  if (width <= config.ansi_c.char_width)
+    return is_signed ? CHAR : UCHAR;
+  if (width <= config.ansi_c.int_width)
+    return is_signed ? INT : UINT;
+  if (width <= config.ansi_c.long_int_width)
+    return is_signed ? LONG : ULONG;
+  if (width <= config.ansi_c.long_long_int_width)
+    return is_signed ? LONGLONG : ULONGLONG;
+  // Exactly 128, not <=: a _BitInt(65..127) is a signedbv of its own width,
+  // and ranking it INT128 makes implicit_typecast_arithmetic widen it to 128
+  // bits, moving the overflow boundary --overflow-check tests. The #extint
+  // marker cannot gate this instead: migrate_type rebuilds signedbv from width
+  // alone (migrate.cpp), so the expr2tc overload cannot see it and the two
+  // copies would diverge.
+  if (width == config.ansi_c.int_128_width)
+    return is_signed ? INT128 : UINT128;
+  return OTHER;
+}
+
+c_typecastt::c_typet c_typecastt::rank_floating(unsigned width)
+{
+  if (width <= config.ansi_c.single_width)
+    return SINGLE;
+  if (width <= config.ansi_c.double_width)
+    return DOUBLE;
+  if (width <= config.ansi_c.long_double_width)
+    return LONGDOUBLE;
+  return OTHER;
+}
+
 c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 {
   unsigned width = atoi(type.width().c_str());
 
   if (type.id() == "signedbv")
-  {
-    if (width <= config.ansi_c.char_width)
-      return CHAR;
-    else if (width <= config.ansi_c.int_width)
-      return INT;
-    else if (width <= config.ansi_c.long_int_width)
-      return LONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return LONGLONG;
-  }
+    return rank_integer(width, true);
   else if (type.id() == "unsignedbv")
-  {
-    if (width <= config.ansi_c.char_width)
-      return UCHAR;
-    else if (width <= config.ansi_c.int_width)
-      return UINT;
-    else if (width <= config.ansi_c.long_int_width)
-      return ULONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return ULONGLONG;
-  }
+    return rank_integer(width, false);
   else if (type.is_bool())
     return BOOL;
   else if (type.id() == "floatbv" || type.id() == "fixedbv")
-  {
-    if (width <= config.ansi_c.single_width)
-      return SINGLE;
-    else if (width <= config.ansi_c.double_width)
-      return DOUBLE;
-    else if (width <= config.ansi_c.long_double_width)
-      return LONGDOUBLE;
-  }
+    return rank_floating(width);
   else if (type.id() == "pointer")
   {
     if (type.subtype().id() == "empty")
@@ -362,35 +369,9 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
 {
   if (is_signedbv_type(type))
-  {
-    unsigned width = to_signedbv_type(type).width;
-
-    if (width <= config.ansi_c.char_width)
-      return CHAR;
-    else if (width <= config.ansi_c.int_width)
-      return INT;
-    else if (width <= config.ansi_c.long_int_width)
-      return LONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return LONGLONG;
-    if (width <= config.ansi_c.int_128_width)
-      return INT128;
-  }
+    return rank_integer(to_signedbv_type(type).width, true);
   else if (is_unsignedbv_type(type))
-  {
-    unsigned width = to_unsignedbv_type(type).width;
-
-    if (width <= config.ansi_c.char_width)
-      return UCHAR;
-    else if (width <= config.ansi_c.int_width)
-      return UINT;
-    else if (width <= config.ansi_c.long_int_width)
-      return ULONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return ULONGLONG;
-    if (width <= config.ansi_c.int_128_width)
-      return UINT128;
-  }
+    return rank_integer(to_unsignedbv_type(type).width, false);
   else if (is_bool_type(type))
     return BOOL;
   else if (is_fixedbv_type(type) || is_floatbv_type(type))
@@ -401,14 +382,9 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     // implicit_typecast_arithmetic promoted both operands to a type its switch
     // has no case for and silently converted neither -- making the whole
     // helper a no-op on any expr2tc pair with a floating-point operand.
-    unsigned width = is_fixedbv_type(type) ? to_fixedbv_type(type).width
-                                           : to_floatbv_type(type).get_width();
-    if (width <= config.ansi_c.single_width)
-      return SINGLE;
-    else if (width <= config.ansi_c.double_width)
-      return DOUBLE;
-    else if (width <= config.ansi_c.long_double_width)
-      return LONGDOUBLE;
+    return rank_floating(
+      is_fixedbv_type(type) ? to_fixedbv_type(type).width
+                            : to_floatbv_type(type).get_width());
   }
   else if (is_pointer_type(type))
   {
@@ -755,7 +731,8 @@ void c_typecastt::implicit_typecast_followed(
 
     if (src_type.is_struct() || src_type.is_union())
     {
-      // We got a case to convert derived class object to base base class pointer, e.g.:
+      // We got a case to convert derived class object to base base class
+      // pointer, e.g.:
       //  Convert from `derived_obj` to `(Base*)&derived_obj`
       // (probably) as part of function call argument adjustment flow
       // when calling a base method from a derived object
@@ -786,71 +763,196 @@ void c_typecastt::implicit_typecast_followed(
     do_typecast(expr, dest_type);
 }
 
+/// IREP2 form of is_lvalue_or_rvalue_reference (std_types.cpp), kept local
+/// until a second caller wants it.
+static bool is_reference_type(const type2tc &type)
+{
+  return is_pointer_type(type) &&
+         to_pointer_type(type).ref_kind != pointer_ref_kindt::NONE;
+}
+
+/// IREP2 form of take_reference_address; see the irept copy for why a
+/// conditional takes the address per arm ([expr.cond], #6291).
+///
+/// \p rk must be the destination's own kind. irept can hardcode `#reference`
+/// because its operator== skips comment attributes, so `T&` and `T&&` compare
+/// equal there; ref_kind is a real field, so a wrong kind leaves do_typecast's
+/// `dest_type != type` guard true and appends a cast irept never produces.
+static void take_reference_address(expr2tc &expr, pointer_ref_kindt rk)
+{
+  if (is_if2t(expr))
+  {
+    const if2t &i = to_if2t(expr);
+    if (i.true_value->type == i.false_value->type)
+    {
+      expr2tc cond = i.cond, t = i.true_value, f = i.false_value;
+      take_reference_address(t, rk);
+      take_reference_address(f, rk);
+      expr = if2tc(t->type, cond, t, f);
+      return;
+    }
+  }
+
+  expr = address_of2tc(expr->type, expr, false, rk);
+}
+
+/// The two reference arms, split out to keep implicit_typecast_followed under
+/// the complexity gate. Returns true when one applied; the caller still falls
+/// through to the tail, as the irept copy does.
+///
+/// The subtype guard is type_id, coarser than the irept copy's id():
+/// migrate_type maps c_enum and intcap onto signedbv, so an enum bound to a
+/// reference takes the address here where irept declines. A widening, never a
+/// narrowing -- it cannot lose an address-of irept produces.
+bool c_typecastt::convert_reference(
+  expr2tc &expr,
+  const type2tc &src_type,
+  const type2tc &dest_type)
+{
+  // C++ models `T&` as a pointer, so a reference destination takes the
+  // operand's address where a plain pointer would cast it: `T& f(T& a)
+  // { return a; }` returns `&a`.
+  if (is_reference_type(dest_type) && !is_reference_type(src_type))
+  {
+    if (
+      ns.follow(to_pointer_type(dest_type).subtype)->type_id ==
+        src_type->type_id &&
+      src_type != dest_type && !is_address_of2t(expr))
+      take_reference_address(expr, to_pointer_type(dest_type).ref_kind);
+    return true;
+  }
+
+  if (is_reference_type(src_type) && !is_reference_type(dest_type))
+  {
+    if (
+      ns.follow(to_pointer_type(src_type).subtype)->type_id ==
+      dest_type->type_id)
+      expr = dereference2tc(to_pointer_type(src_type).subtype, expr);
+    return true;
+  }
+
+  return false;
+}
+
+/// How generous C is between pointer subtypes: void either way, a common base
+/// type, two function pointers, or two scalars. Anything else warns.
+static bool pointer_subtypes_compatible(
+  const type2tc &src_subtype,
+  const type2tc &dest_subtype,
+  const namespacet &ns)
+{
+  const type2tc &src_sub = ns.follow(src_subtype);
+  const type2tc &dest_sub = ns.follow(dest_subtype);
+
+  return is_empty_type(src_sub) || is_empty_type(dest_sub) ||
+         base_type_eq(dest_subtype, src_subtype, ns) ||
+         (is_code_type(src_sub) && is_code_type(dest_sub)) ||
+         (is_bv_type(src_sub) && is_bv_type(dest_sub));
+}
+
+/// The pointer-destination arm. Returns true when the conversion is complete
+/// -- the irept copy's `return; // ok` -- and false to fall through to the
+/// tail.
+/// Whether two types are the same C type, treating a function's parameter
+/// *names* as not part of it -- C11 6.7.6.3p15 requires compatible return types
+/// and agreeing parameter type lists, and says nothing of their names.
+/// code_type2t reflects argument_names, so `int (*)(int x)` and `int (*)(int)`
+/// compare unequal as IREP2 nodes; inserting a cast between them is a
+/// divergence from the irept copy, which inserts none
+/// (docs/roadmap/scope-clang-c-irep2.md §143.1).
+static bool same_c_type(const type2tc &a, const type2tc &b)
+{
+  if (a == b)
+    return true;
+
+  if (!is_pointer_type(a) || !is_pointer_type(b))
+    return false;
+
+  const type2tc &sa = to_pointer_type(a).subtype;
+  const type2tc &sb = to_pointer_type(b).subtype;
+  if (!is_code_type(sa) || !is_code_type(sb))
+    return false;
+
+  const code_type2t &ca = to_code_type(sa);
+  const code_type2t &cb = to_code_type(sb);
+  return to_pointer_type(a).carry_provenance ==
+           to_pointer_type(b).carry_provenance &&
+         to_pointer_type(a).ref_kind == to_pointer_type(b).ref_kind &&
+         ca.ret_type == cb.ret_type && ca.arguments == cb.arguments &&
+         ca.ellipsis == cb.ellipsis;
+}
+
+bool c_typecastt::convert_to_pointer(
+  expr2tc &expr,
+  const type2tc &src_type,
+  const type2tc &dest_type)
+{
+  const pointer_type2t &dest_ptr_type = to_pointer_type(dest_type);
+
+  // special case: 0 == NULL
+  if (
+    is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
+    (is_unsignedbv_type(src_type) || is_signedbv_type(src_type)))
+  {
+    expr = symbol2tc(dest_type, "NULL");
+    return true;
+  }
+
+  if (is_pointer_type(src_type) || is_array_type(src_type))
+  {
+    // we are quite generous about pointers
+    const type2tc src_subtype = is_pointer_type(src_type)
+                                  ? to_pointer_type(src_type).subtype
+                                  : to_array_type(src_type).subtype;
+
+    if (!pointer_subtypes_compatible(src_subtype, dest_ptr_type.subtype, ns))
+      warnings.push_back("incompatible pointer types");
+
+    if (same_c_type(src_type, dest_type))
+      // Re-attach the source type so any qualifier differences are discarded
+      // (the types compare equal but may not be identical).
+      expr = expr->with_type(src_type);
+    else
+      do_typecast(expr, dest_type);
+
+    return true;
+  }
+
+  if (is_struct_type(src_type) || is_union_type(src_type))
+    // Derived object to base-class pointer: `derived_obj` becomes
+    // `&derived_obj` typed as the base pointer, reached when a base method is
+    // called on a derived object. address_of2t takes the *pointee*, so the
+    // destination's subtype is what reproduces dest_type.
+    expr = address_of2tc(dest_ptr_type.subtype, expr);
+
+  return false;
+}
+
 void c_typecastt::implicit_typecast_followed(
   expr2tc &expr,
   const type2tc &src_type,
   const type2tc &dest_type)
 {
-  if (is_pointer_type(dest_type))
+  if (!convert_reference(expr, src_type, dest_type))
   {
-    const pointer_type2t &dest_ptr_type = to_pointer_type(dest_type);
-    // special case: 0 == NULL
-
-    if (
-      is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
-      (is_unsignedbv_type(src_type) || is_signedbv_type(src_type)))
+    if (is_pointer_type(dest_type))
     {
-      expr = symbol2tc(dest_type, "NULL");
-      return; // ok
+      if (convert_to_pointer(expr, src_type, dest_type))
+        return;
     }
-
-    if (is_pointer_type(src_type) || is_array_type(src_type))
+    else if (is_array_type(dest_type) && is_constant_string2t(expr))
     {
-      // we are quite generous about pointers
-      type2tc src_subtype;
-      if (is_pointer_type(src_type))
-        src_subtype = to_pointer_type(src_type).subtype;
-      else
-        src_subtype = to_array_type(src_type).subtype;
-
-      const type2tc &src_sub = ns.follow(src_subtype);
-      const type2tc &dest_sub = ns.follow(dest_ptr_type.subtype);
-
-      if (is_empty_type(src_sub) || is_empty_type(dest_sub))
-      {
-        // from/to void is always good
-      }
-      else if (base_type_eq(dest_ptr_type.subtype, src_subtype, ns))
-      {
-      }
-      else if (is_code_type(src_sub) && is_code_type(dest_sub))
-      {
-        // very generous:
-        // between any two function pointers it's ok
-      }
-      else if (is_bv_type(src_sub) && is_bv_type(dest_sub))
-      {
-        // also generous: between any to scalar types it's ok
-      }
-      else
-        warnings.push_back("incompatible pointer types");
-
-      if (src_type == dest_type)
-      {
-        // Re-attach the source type so any qualifier differences are
-        // discarded (the types compare equal but may not be identical).
-        expr = expr->with_type(src_type);
-      }
-      else
-        do_typecast(expr, dest_type);
-
-      return; // ok
+      // string2array in the irept copy: the constant becomes the array of its
+      // characters, at the destination's type rather than its own.
+      const expr2tc retyped = expr->with_type(dest_type);
+      expr = to_constant_string2t(retyped).to_array();
+      return;
     }
   }
 
   if (check_c_implicit_typecast(src_type, dest_type))
     errors.push_back("implicit conversion not permitted");
-  else if (src_type != dest_type)
+  else if (!same_c_type(src_type, dest_type))
     do_typecast(expr, dest_type);
 }
 
@@ -912,7 +1014,8 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
     if (dest.id() == "if")
     {
       // Special case: if expression
-      // To typecast the if expression, we need to apply the operations: true and false
+      // To typecast the if expression, we need to apply the operations: true
+      // and false
       dest.type() = type;
 
       do_typecast(dest.op1(), type);

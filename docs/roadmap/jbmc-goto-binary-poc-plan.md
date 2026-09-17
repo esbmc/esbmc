@@ -113,6 +113,10 @@ registers `ansi_c`, `statement_list`, `cpp` and `json_symtab`, but not `java_byt
 (`src/cbmc/cbmc_languages.cpp:21-27`), so symbols carrying `mode == "java"` have no
 registered language handler (`src/langapi/mode.cpp:51`). **Format-compatible is not the
 same as interchangeable**, and ESBMC will need its own answer to the same `mode` question.
+ESBMC's answer, for the printing half of it, is to fall back to C syntax: an unknown mode
+used to build a null `languaget` and abort on any `from_expr`/`from_type`, which made
+`--goto-functions-only` unusable on exactly the binaries this PoC debugs
+(`regression/goto-transcoder/cbmc_java_mode_print/`).
 
 **Both `--no-lazy-methods` and an explicit models classpath are load-bearing**, and the
 classpath matters more. JBMC loads classes on demand — lazy is the default,
@@ -911,6 +915,10 @@ self-referential than C's. That is the first place to look.
 > `main` symbol — the entry is `__CPROVER__start` — and naming a function that
 > does not exist crashes rather than reporting it. That is an ESBMC robustness
 > bug independent of this PoC and reachable from any `--binary` input.
+> **Fixed:** the entry point is now checked before `__ESBMC_main` is retargeted,
+> so an unknown `--function` exits with `entry point '<name>' not found in the
+> goto binary` instead of aborting in the inliner
+> (`regression/goto-transcoder/cbmc_missing_entry_point/`).
 
 #### 4.1.7 First end-to-end Java verdicts (Run 9)
 
@@ -962,6 +970,32 @@ programs that *use* strings, not to every program that merely links
 `String[] args` reports a NULL-dereference, since ESBMC models malloc as able
 to fail and JBMC does not. That is a known pointer-model difference (§5), not a
 JVM-semantics gap.
+
+#### 4.1.8 The `<clinit>` recursion was a simplifier gap (Run 10)
+
+**Resolved: both fixtures now verify with no `--unwind` at all.** The
+recursion was never unbounded in the program. `clinit_wrapper` guards its
+body with `clinit_already_run == 0` and sets the flag to 1 before calling
+`<clinit>`, which calls the wrapper back, so one round trip ends it. Symex
+propagated the flag correctly -- `--symex-trace` shows the guard renaming to
+`1 != 0` -- but `do_simplify` left that constant comparison standing, so
+neither branch was decided and symex re-entered the body ~1000 times.
+
+The cause is in `simplify_relations` (`src/util/expr/expr_simplifier.cpp`):
+it dispatches the constant-vs-constant fold on the *operand* type and had
+cases for bv, fixedbv, floatbv and pointer, but none for `bool`. Two
+`constant_bool` operands therefore fell through unfolded. Java reaches this
+where C does not, because C's `_Bool b; b == 0` widens `b` to an integer
+first, making the comparison a bv one; CBMC's Java lowering compares two
+booleans directly.
+
+With the `bool` case added, `T4Virtual` verifies SUCCESSFUL in 0.7 s with no
+bound and unwinding assertions on, and `T4VirtualFail` still reports FAILED.
+The §4.1.7 caveat above is therefore discharged: the SUCCESSFUL verdict is no
+longer "ESBMC agrees with JBMC at this bound". Note the caveat was real --
+recursion truncation is silent, since ESBMC's unwinding assertions cover
+loops, not recursive calls, so the old `--unwind 6` verdict would not have
+announced a too-small bound.
 
 > **Fixture caveat found in passing.** A `symtab2gb` binary has no
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
@@ -1038,6 +1072,61 @@ whether the corpus can avoid strings, and if not, say so plainly.
 *Exit:* a scale number, a coverage statement, and a yes/no on strings. **Do not build a
 linking mechanism in this PoC.**
 
+#### 4.1.9 Phase 4 measured (Run 11)
+
+All three exit criteria are answered, on cbmc 6.8.0 / macOS / aarch64, ESBMC at
+the `--enable-unreachability-intrinsic`-era `master` plus the two robustness
+fixes this phase needed (unknown `--function`, and printing a `java`-mode
+symbol). Route A throughout: `jbmc … --show-symbol-table --json-ui` →
+`symtab2gb`, since `--write-goto-binary` is still an unmerged jbmc patch.
+
+**Scale: ingestion is memory-bound, and that is the gate.**
+
+| binary | size | symbols | wall | peak RSS | outcome |
+|---|---|---|---|---|---|
+| `T4Virtual` (self-contained) | 41 KiB | — | 0.21 s | 107 MiB | ingests, verifies |
+| `java.lang.Integer`, lazy | 740 KiB | 1355 | 1.7 s | 1.99 GiB | declines: `java_new_array` |
+| `java.lang.Integer`, `--no-lazy-methods` | 5.58 MiB | 13992 | 23.8 s | **12.1 GiB** | declines: `java_new_array` |
+| the same, string refinement left on | 6.34 MiB | 16463 | 17.7 s | 6.9 GiB | **aborts**: `cprover_associate_array_to_pointer_func` |
+
+Roughly 2 GiB of resident memory per MiB of Java goto binary, near-linear over
+the two library-scale points, against a ~100 MiB fixed cost for the ESBMC
+additions. A whole-`core-models.jar` model therefore needs ~12 GiB **before
+symex starts**, so "is symex tractable on 2500 functions" is not yet the
+binding question — ingestion is. Symex cost at that scale remains unmeasured,
+and honestly so: no library-scale binary ingests today.
+
+**The first blocker at library scale is `java_new_array`** — the plain array
+allocation side effect, not the `java_new_array_data` shape §4.1.6 handled.
+Static census of the string-free 5.58 MiB binary: `virtual_function` 759,
+`java_new` 531, `java_instanceof` 345, `java_new_array` 179,
+`java_new_array_data` 0, `CATCH` 24. The first three are already ingested
+(§4.1.6), so `java_new_array` is the one construct standing between this
+corpus and a scale measurement of symex itself.
+
+> **A Phase 1 gap, found here.** The `java_new_array` decline exits cleanly
+> (exit 6), but the string-refinement primitive **aborts** (exit 134) rather
+> than declining — the same defect §2.3 recorded for `java_new_array`, on a
+> path Phase 1 did not convert.
+
+**Coverage: 91 class entries, and §4's own breakdown was wrong.** Measured on
+the shipped jar (`unzip -l`), the split is `java/lang` 76, `java/lang/reflect`
+9, `java/util/regex` 2 (`Matcher`, `Pattern`), `sun/misc` 2 (`DoubleConsts`,
+`FloatConsts`), `java/util` **1** (`Random`), `org/sosy_lab/sv_benchmarks` 1
+(`Verifier`) — 91 in total, 6 of them inner classes. The paragraph above says
+77/10/3/3/3/2, which sums to 98 and claims two `java/util` entries; take the
+numbers here instead. The conclusion it drew is unaffected and confirmed: no
+`ArrayList`, `HashMap`, `LinkedList`, `List`, `Map`, `Set`, `Collection` or
+`Iterator` (the only `Iterator` matches are `CharSequence`'s two inner
+classes), so a corpus touching collections verifies against bodyless stubs.
+
+**Strings: yes, a string-free corpus is reachable — via the flag, not the
+classpath.** `--no-refine-strings` removes every string primitive from a
+*Route A* binary too, not just from the patched Route B build §4.1.7 measured:
+1876 `cprover_string` references with refinement on, **0** with it off, on the
+same whole-jar corpus. Linking `java.lang.String` is therefore not what
+disqualifies a program; *using* strings is, and that remains out of reach until
+ESBMC has a refinement backend (§5).
 ### Phase 5 — Report and regression fixtures (1 day)
 
 Land whatever works as `regression/goto-transcoder/`-style fixtures — checked-in `.goto`

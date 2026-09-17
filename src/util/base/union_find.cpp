@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <util/base/union_find.h>
 
 void unsigned_union_find::make_union(unsigned j, unsigned k)

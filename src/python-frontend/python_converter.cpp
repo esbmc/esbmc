@@ -1,3 +1,4 @@
+#include <set>
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
@@ -33,6 +34,7 @@
 #include <util/irep/std_code.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/symbolic_types.h>
+#include <util/expr/type_byte_size.h>
 
 #include <algorithm>
 #include <cctype>
@@ -361,7 +363,9 @@ void python_converter::pre_collect_module_asts(
   auto try_collect = [&](const nlohmann::json &node) {
     if (node["_type"] != "ImportFrom" && node["_type"] != "Import")
       return;
-    if (node.value("module_not_found", false))
+    if (
+      node.value("module_not_found", false) ||
+      node.value("module_unmodelled", false))
       return;
     const std::string module_name = import_module_name(node);
     if (module_ast_pool_.count(module_name))
@@ -417,32 +421,41 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
 
-  for (const auto &elem : (*ast_json)["body"])
-  {
-    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+  auto convert_import = [&](const nlohmann::json &node) {
+    const std::string module_name = import_module_name(node);
+
+    if (node.value("module_not_found", false))
     {
-      if (elem.value("module_not_found", false))
-      {
-        const std::string module_name = import_module_name(elem);
-        log_warning("skipping unresolvable import: {}", module_name);
-        continue;
-      }
-      is_importing_module = true;
-      if (!import_module_into_block(elem, locator, all_imports_block))
-      {
-        const std::string module_name = import_module_name(elem);
-        // Relative import with no module name (`from . import X`): there is no
-        // module file to open. Treat it as unresolved and continue (#6281).
-        if (module_name.empty())
-        {
-          log_warning("skipping relative import with no module name");
-          continue;
-        }
-        throw std::runtime_error(
-          "Cannot open file: " + locator.module_path(module_name));
-      }
+      log_warning("skipping unresolvable import: {}", module_name);
+      return;
     }
-  }
+
+    // No AST was emitted for this module; its names fail at their use sites
+    // instead, as an unresolvable import's do (#7674).
+    if (node.value("module_unmodelled", false))
+      return;
+
+    is_importing_module = true;
+    if (import_module_into_block(node, locator, all_imports_block))
+      return;
+
+    // Relative import with no module name (`from . import X`): there is no
+    // module file to open. Treat it as unresolved and continue (#6281).
+    if (module_name.empty())
+    {
+      log_warning("skipping relative import with no module name");
+      return;
+    }
+
+    throw std::runtime_error(
+      "Cannot open the AST of module '" + module_name + "' imported at line " +
+      std::to_string(node.value("lineno", 0)) + "; expected " +
+      locator.module_path(module_name));
+  };
+
+  for (const auto &elem : (*ast_json)["body"])
+    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+      convert_import(elem);
 
   // Do the same for imports that appear directly inside functions.
   for (const auto &elem : (*ast_json)["body"])
@@ -453,25 +466,8 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
       continue;
 
     for (const auto &stmt : elem["body"])
-    {
-      if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
-        continue;
-
-      is_importing_module = true;
-      if (!import_module_into_block(stmt, locator, all_imports_block))
-      {
-        const std::string module_name = import_module_name(stmt);
-        // Relative import with no module name (`from . import X`): nothing to
-        // open — treat as unresolved and continue (#6281).
-        if (module_name.empty())
-        {
-          log_warning("skipping relative import with no module name");
-          continue;
-        }
-        throw std::runtime_error(
-          "Cannot open file: " + locator.module_path(module_name));
-      }
-    }
+      if (stmt["_type"] == "ImportFrom" || stmt["_type"] == "Import")
+        convert_import(stmt);
   }
 
   is_importing_module = false;
@@ -507,96 +503,270 @@ void python_converter::convert_extra_translation_unit(
   combined_user_code.copy_to_operands(extra_code);
 }
 
+/// The function \p name defined directly in \p body, or an empty node.
+static nlohmann::json
+module_function(const nlohmann::json &body, const std::string &name)
+{
+  for (const auto &element : body)
+    if (element["_type"] == "FunctionDef" && element["name"] == name)
+      return element;
+  return nlohmann::json();
+}
+
+/// The classes in \p body defining a method \p name, restricted to \p only when
+/// that is non-empty. \p node receives the last match found.
+static std::vector<std::string> classes_defining(
+  const nlohmann::json &body,
+  const std::string &only,
+  const std::string &name,
+  nlohmann::json &node)
+{
+  std::vector<std::string> owners;
+  for (const auto &element : body)
+  {
+    if (element["_type"] != "ClassDef")
+      continue;
+    if (!only.empty() && element["name"] != only)
+      continue;
+
+    nlohmann::json method = module_function(element["body"], name);
+    if (method.empty())
+      continue;
+
+    node = method;
+    owners.push_back(element["name"].get<std::string>());
+  }
+  return owners;
+}
+
+/// The receiver name \p node declares as a parameter, or an empty string. The
+/// frontend binds `self` and `cls` to the enclosing class wherever they appear,
+/// so a static method spelling a parameter that way has no class to bind to.
+static std::string receiver_named_parameter(const nlohmann::json &node)
+{
+  if (!node.contains("args") || !node["args"].contains("args"))
+    return "";
+
+  for (const auto &arg : node["args"]["args"])
+    if (arg["arg"] == "self" || arg["arg"] == "cls")
+      return arg["arg"].get<std::string>();
+  return "";
+}
+
+/// Whether \p node carries the builtin @staticmethod decorator. A dotted
+/// spelling names some other object, so only a bare Name counts.
+static bool is_staticmethod(const nlohmann::json &node)
+{
+  if (!node.contains("decorator_list"))
+    return false;
+
+  for (const auto &decorator : node["decorator_list"])
+    if (decorator["_type"] == "Name" && decorator["id"] == "staticmethod")
+      return true;
+  return false;
+}
+
+void python_converter::find_entry_function(
+  const std::string &target,
+  nlohmann::json &node,
+  std::string &owning_class) const
+{
+  const std::string::size_type dot = target.rfind('.');
+  const bool qualified = dot != std::string::npos;
+  const std::string class_part = qualified ? target.substr(0, dot) : "";
+  const std::string func_part = qualified ? target.substr(dot + 1) : target;
+  const nlohmann::json &body = (*ast_json)["body"];
+
+  // A module-level function of that name wins, as it did when only the module
+  // body was searched.
+  if (!qualified)
+  {
+    node = module_function(body, func_part);
+    if (!node.empty())
+    {
+      owning_class.clear();
+      return;
+    }
+  }
+
+  std::vector<std::string> owners =
+    classes_defining(body, class_part, func_part, node);
+
+  if (owners.empty())
+    throw std::runtime_error("Function " + target + " not found");
+
+  // A bare name several classes define says nothing about which was meant, and
+  // guessing would harness a different function than the one asked for.
+  if (owners.size() > 1)
+    throw std::runtime_error(
+      "--function: '" + target + "' is defined by " +
+      std::to_string(owners.size()) + " classes; qualify it as Class.method");
+
+  // The entry harness gives every parameter an arbitrary value, and every
+  // method but a static one takes a receiver -- an instance or the class
+  // itself -- that the scalar scope cannot invent. Harnessing over an object
+  // no constructor built would verify against a nondet pointer rather than an
+  // instance, so refuse instead (#6938 P4.5). The decorator decides this, not
+  // the receiver's name, which Python does not fix.
+  if (!is_staticmethod(node))
+    throw std::runtime_error(
+      "--function: '" + target +
+      "' is not a @staticmethod, and its receiver is a class instance the "
+      "entry harness cannot build; verify it through its callers, or make "
+      "it a @staticmethod");
+
+  const std::string receiver = receiver_named_parameter(node);
+  if (!receiver.empty())
+    throw std::runtime_error(
+      "--function: '" + target +
+      "' is a @staticmethod taking a parameter "
+      "named '" +
+      receiver +
+      "', which the frontend binds to the enclosing "
+      "class; rename it to harness this function");
+
+  owning_class = owners.front();
+}
+
+/// The blob supplies the model definitions; this supplies their visibility.
+/// find_symbol resolves a model name by retrying under each namespace here, so
+/// without it `max(...)` is undefined even though the symbol was merged. The C
+/// frontend gets the same effect from declarations in its headers.
+void python_converter::collect_model_namespaces()
+{
+  const std::string prefix = "py:/esbmc-vfs/python/models/";
+  std::set<std::string> seen;
+  symbol_table_.foreach_operand([&](const symbolt &sym) {
+    const std::string id = sym.id.as_string();
+    if (id.compare(0, prefix.size(), prefix) != 0)
+      return;
+    const std::size_t at = id.find('@', prefix.size());
+    const std::string ns =
+      id.substr(3, (at == std::string::npos ? id.size() : at) - 3);
+    if (seen.insert(ns).second)
+      model_namespaces_.push_back(ns);
+  });
+}
+
+/// Convert the operational models this run needs into \p models_block.
+/// The always-loaded ones come from the precompiled blob when there is one;
+/// the folder models (os, numpy) are always converted here, because a user
+/// module of that name must be able to shadow them.
+void python_converter::build_models_block(
+  code_blockt &models_block,
+  bool models_precompiled)
+{
+  if (config.options.get_bool_option("no-library"))
+    return;
+
+  // Load operational models
+  const std::string &ast_output_dir =
+    (*ast_json)["ast_output_dir"].get<std::string>();
+
+  static const std::list<std::string> precompilable_models = {
+    "builtins",
+    "range",
+    "int",
+    "float",
+    "consensus",
+    "random",
+    "exceptions",
+    "datetime",
+    "nondet"};
+  std::list<std::string> model_files;
+  if (!models_precompiled)
+    model_files = precompilable_models;
+  std::list<std::string> model_folders = {"os", "numpy"};
+
+  for (const auto &folder : model_folders)
+  {
+    append_models_from_directory(model_files, ast_output_dir + "/" + folder);
+  }
+
+  is_loading_models = true;
+
+  for (const auto &file : model_files)
+  {
+    std::stringstream model_path;
+    model_path << ast_output_dir << "/" << file << ".json";
+
+    std::ifstream model_file(model_path.str());
+    nlohmann::json model_json;
+    if (!model_file.is_open())
+    {
+      log_error(
+        "Python frontend: missing operational-model AST '{}'. "
+        "This usually means parser.py exited before generating it; "
+        "check the parser output above for the underlying error.",
+        model_path.str());
+      exit(1);
+    }
+    try
+    {
+      model_file >> model_json;
+    }
+    catch (const nlohmann::json::exception &e)
+    {
+      log_error(
+        "Python frontend: failed to parse operational-model AST "
+        "'{}': {}.",
+        model_path.str(),
+        e.what());
+      exit(1);
+    }
+    model_file.close();
+
+    bool imported = false;
+    size_t pos = file.rfind("/");
+    if (pos != std::string::npos)
+    {
+      std::string filename = file.substr(pos + 1);
+      if (imported_modules.find(filename) != imported_modules.end())
+      {
+        current_python_file = imported_modules[filename];
+        imported = true;
+      }
+    }
+    // A model's symbols must not depend on the user's filename: they are
+    // identical on every run, which is what lets them be precompiled.
+    if (!imported)
+      current_python_file = "/esbmc-vfs/python/models/" + file + ".py";
+    model_namespaces_.push_back(current_python_file);
+
+    exprt model_code =
+      with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
+
+    convert_expression_to_code(model_code);
+
+    // Accumulate model code
+    models_block.copy_to_operands(model_code);
+    current_python_file = main_python_file;
+  }
+  is_loading_models = false;
+}
+
 void python_converter::convert()
 {
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
-  // Create built-in symbols for main module (__name__ = "__main__")
-  create_builtin_symbols();
+  const bool building_library =
+    config.options.get_bool_option("building-python-library");
+
+  if (!building_library)
+    create_builtin_symbols();
 
   // Block to accumulate model library code
   code_blockt models_block;
 
-  if (!config.options.get_bool_option("no-library"))
-  {
-    // Load operational models
-    const std::string &ast_output_dir =
-      (*ast_json)["ast_output_dir"].get<std::string>();
-    std::list<std::string> model_files = {
-      "builtins",
-      "range",
-      "int",
-      "float",
-      "consensus",
-      "random",
-      "exceptions",
-      "datetime",
-      "nondet"};
-    std::list<std::string> model_folders = {"os", "numpy"};
+  const bool models_precompiled =
+    !building_library &&
+    symbol_table_.find_symbol("python_models_init") != nullptr;
 
-    for (const auto &folder : model_folders)
-    {
-      append_models_from_directory(model_files, ast_output_dir + "/" + folder);
-    }
+  if (models_precompiled)
+    collect_model_namespaces();
 
-    is_loading_models = true;
-
-    for (const auto &file : model_files)
-    {
-      std::stringstream model_path;
-      model_path << ast_output_dir << "/" << file << ".json";
-
-      std::ifstream model_file(model_path.str());
-      nlohmann::json model_json;
-      if (!model_file.is_open())
-      {
-        // parser.py exited before producing this model — the user's
-        // program almost certainly hit an unresolvable import that
-        // aborted the AST generation pipeline (issue #2012). Surface
-        // a structured error instead of letting the downstream
-        // ``>> model_json`` throw an uncaught nlohmann parse_error.
-        log_error(
-          "Python frontend: missing operational-model AST '{}'. "
-          "This usually means parser.py exited before generating it; "
-          "check the parser output above for the underlying error.",
-          model_path.str());
-        exit(1);
-      }
-      try
-      {
-        model_file >> model_json;
-      }
-      catch (const nlohmann::json::exception &e)
-      {
-        log_error(
-          "Python frontend: failed to parse operational-model AST "
-          "'{}': {}.",
-          model_path.str(),
-          e.what());
-        exit(1);
-      }
-      model_file.close();
-
-      size_t pos = file.rfind("/");
-      if (pos != std::string::npos)
-      {
-        std::string filename = file.substr(pos + 1);
-        if (imported_modules.find(filename) != imported_modules.end())
-          current_python_file = imported_modules[filename];
-      }
-
-      exprt model_code =
-        with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
-
-      convert_expression_to_code(model_code);
-
-      // Accumulate model code
-      models_block.copy_to_operands(model_code);
-      current_python_file = main_python_file;
-    }
-    is_loading_models = false;
-  }
+  build_models_block(models_block, models_precompiled);
 
   // Create a block to hold intrinsic assignments and load C intrinsics
   code_blockt intrinsic_block;
@@ -630,18 +800,9 @@ void python_converter::convert()
      */
 
     nlohmann::json function_node;
-    // Find function node in AST
-    for (const auto &element : (*ast_json)["body"])
-    {
-      if (element["_type"] == "FunctionDef" && element["name"] == function)
-      {
-        function_node = element;
-        break;
-      }
-    }
-
-    if (function_node.empty())
-      throw std::runtime_error("Function " + function + " not found");
+    std::string owning_class;
+    find_entry_function(function, function_node, owning_class);
+    current_class_name_ = owning_class;
 
     code_blockt block;
 
@@ -688,9 +849,10 @@ void python_converter::convert()
     // Convert a single function
     get_function_definition(function_node);
 
-    // Get function symbol
+    // Get function symbol. Take the name from the node rather than the option,
+    // which carries the class for a `Class.method` target.
     symbol_id sid = create_symbol_id();
-    sid.set_function(function);
+    sid.set_function(function_node["name"].get<std::string>());
     symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)
@@ -704,12 +866,70 @@ void python_converter::convert()
     const code_typet::argumentst &arguments =
       to_code_type(symbol->get_type()).arguments();
 
-    // Function args are nondet values
+    // Function args are nondet values, except a bytes/list param: it decays
+    // to pointer-to-element, so a bare nondet pointer isn't backed by any
+    // object. Back it with a nondet-length static array instead, mirroring
+    // argv[i] in clang_c_main.cpp.
+    size_t harness_arg_index = 0;
     for (const code_typet::argumentt &arg : arguments)
     {
-      exprt arg_value = exprt("sideeffect", arg.type());
-      arg_value.statement("nondet");
-      call.arguments().push_back(arg_value);
+      const typet &arg_type = arg.type();
+      const bool is_scalar_pointee =
+        arg_type.is_pointer() &&
+        (arg_type.subtype().is_signedbv() ||
+         arg_type.subtype().is_unsignedbv() || arg_type.subtype().is_bool() ||
+         arg_type.subtype().is_floatbv());
+
+      if (is_scalar_pointee)
+      {
+        const std::string idx = std::to_string(harness_arg_index);
+
+        symbolt len_sym;
+        len_sym.id = "__ESBMC_harness_arg_len_" + idx;
+        len_sym.name = len_sym.id;
+        len_sym.set_type(size_type());
+        len_sym.static_lifetime = true;
+        len_sym.lvalue = true;
+        symbolt *len_ptr = symbol_table_.move_symbol_to_context(len_sym);
+        exprt len = symbol_expr(*len_ptr);
+
+        exprt le_max("<=", bool_type());
+        le_max.copy_to_operands(len, from_integer(4, size_type()));
+        block.copy_to_operands(code_assumet(le_max));
+
+        symbolt arr_sym;
+        arr_sym.id = "__ESBMC_harness_arg_data_" + idx;
+        arr_sym.name = arr_sym.id;
+        arr_sym.set_type(array_typet(arg_type.subtype(), len));
+        arr_sym.static_lifetime = true;
+        arr_sym.lvalue = true;
+        symbolt *arr_ptr = symbol_table_.move_symbol_to_context(arr_sym);
+
+        // DYNAMIC_SIZE is a byte count, not an element count -- argv's
+        // 1-byte char elements hid this; ours are wider.
+        type2tc elem_type2 = migrate_type(arg_type.subtype());
+        exprt elem_bytes =
+          from_integer(type_byte_size(elem_type2), size_type());
+        exprt len_bytes("*", size_type());
+        len_bytes.copy_to_operands(len, elem_bytes);
+
+        exprt dynamic_size("dynamic_size", size_type());
+        dynamic_size.copy_to_operands(gen_address_of(symbol_expr(*arr_ptr)));
+        block.copy_to_operands(code_assignt(dynamic_size, len_bytes));
+
+        // &arr[0], not &arr: address-of the whole array breaks
+        // __ESBMC_get_object_size's resolution back to this object.
+        index_exprt first_elem(
+          symbol_expr(*arr_ptr), gen_zero(index_type()), arg_type.subtype());
+        call.arguments().push_back(gen_address_of(first_elem));
+      }
+      else
+      {
+        exprt arg_value = exprt("sideeffect", arg_type);
+        arg_value.statement("nondet");
+        call.arguments().push_back(arg_value);
+      }
+      ++harness_arg_index;
     }
 
     convert_expression_to_code(call);
@@ -786,9 +1006,13 @@ void python_converter::convert()
     code_typet init_type;
     init_type.return_type() = empty_typet();
 
+    // The blob's initialisation and a program's own must coexist:
+    // __ESBMC_main calls python_models_init then python_init.
+    const char *const init_name =
+      building_library ? "python_models_init" : "python_init";
     symbolt init_symbol;
-    init_symbol.id = "python_init";
-    init_symbol.name = "python_init";
+    init_symbol.id = init_name;
+    init_symbol.name = init_name;
     init_symbol.set_type(init_type);
     init_symbol.lvalue = true;
     init_symbol.is_extern = false;
@@ -814,6 +1038,9 @@ void python_converter::convert()
       throw std::runtime_error("The python_init function is already defined");
     }
   }
+
+  if (building_library)
+    return;
 
   // Create python_user_main function containing only user code
   code_typet user_main_type;
@@ -861,6 +1088,15 @@ void python_converter::convert()
   });
 
   // 2. Call python_init for initialization
+  // The precompiled models, when add_cpython_library merged them.
+  if (
+    const symbolt *models_sym = symbol_table_.find_symbol("python_models_init"))
+  {
+    code_function_callt models_call;
+    models_call.function() = symbol_expr(*models_sym);
+    main_body.copy_to_operands(models_call);
+  }
+
   if (!init_code.operands().empty())
   {
     const symbolt *init_sym = symbol_table_.find_symbol("python_init");
@@ -927,6 +1163,15 @@ void python_converter::convert()
   main_body.copy_to_operands(user_main_call);
 
   main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_end_main_hook"));
+
+  // goto_convert takes END_FUNCTION's location from here, and the synthesized
+  // uncaught-exception properties are anchored on it; leaving it nil reports
+  // them with no file at all, which places nothing (issue #7433). This names
+  // the file but no line: a Module carries no line of its own, and its body is
+  // no substitute — the frontend rewrites statements (a `for` becomes a
+  // `While`) and the rewrites carry null or stale line fields, so the last
+  // top-level statement does not mark where the module ends.
+  main_body.end_location(get_location_from_decl(*ast_json));
 
   {
     exprt v = main_symbol.get_value();

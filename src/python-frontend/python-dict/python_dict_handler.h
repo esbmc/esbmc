@@ -475,6 +475,10 @@ public:
    */
   static bool is_value_returning_method(const std::string &method_name);
 
+  /// Gives a tuple key an identity so value-reading folds can resolve it.
+  std::string
+  materialize_tuple_key(exprt &key_expr, const nlohmann::json &element);
+
   /// Return the keys-list or values-list symbol id for dict_sym_id.
   /// Returns an empty string when the dict was not created via a literal
   /// (e.g. it is a function parameter).
@@ -485,26 +489,6 @@ public:
     auto &m = keys ? dict_keys_list_id_ : dict_vals_list_id_;
     auto it = m.find(dict_sym_id);
     return it != m.end() ? it->second : empty;
-  }
-
-  /// Key under which a literal dict's per-value element types are recorded in
-  /// the shared list_type_map, for detecting a heterogeneous int/float dict at
-  /// the subscript read site. Deliberately distinct from the values-list's own
-  /// symbol id: recording value types under that id would flip the
-  /// .values()/.items() list read onto the generic mixed-list path, which reads
-  /// dict value storage incorrectly (github_3719_4). The "$dict_value_types$"
-  /// prefix cannot collide with a real list symbol id.
-  static std::string dict_value_types_key(const std::string &vals_id)
-  {
-    return "$dict_value_types$" + vals_id;
-  }
-
-  /// Key under which the (uniform) element type of list-typed dict values is
-  /// recorded, so a d[k] list read can type the inner elements (e.g. a
-  /// list-of-tuples value). Same collision-free naming scheme as above.
-  static std::string dict_value_list_elems_key(const std::string &vals_id)
-  {
-    return "$dict_value_list_elems$" + vals_id;
   }
 
   /**
@@ -632,7 +616,7 @@ private:
 
   /// Maps dict struct symbol id to its internal keys-list symbol id.
   /// Populated in create_dict_from_literal; queried when lowering
-  /// ESBMC_keys_N = d.keys() to propagate list_type_map entries.
+  /// ESBMC_keys_N = d.keys() to propagate recorded element types.
   static std::unordered_map<std::string, std::string> dict_keys_list_id_;
 
   /// Maps dict struct symbol id to its internal values-list symbol id.

@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_ieee_sqrt.goto
+--binary
+^VERIFICATION SUCCESSFUL$

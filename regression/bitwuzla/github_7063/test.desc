@@ -3,6 +3,7 @@ main.c
 --multi-property --loop-invariant-check --bitwuzla
 ^VERIFICATION FAILED$
 ^Violated property:$
-^✗ FAILED: 'loop invariant base case at file .*main\.c line 15 column 3 function main'$
-^Properties: 4 verified ✓ 1 passed, ✗ 3 failed$
+^  FAILED +\[main\.assertion\.1\] +line 15 +loop invariant base case$
+^  UNKNOWN +\[main\.array-bounds-violated\.1\] +line 17 .*loop invariant too weak
+^\*\* 2 of 4 properties failed, 1 passed, 1 unknown$
 \A(?![\s\S]*Can't get boolean value)[\s\S]*\Z

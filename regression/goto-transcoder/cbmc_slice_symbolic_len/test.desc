@@ -1,0 +1,4 @@
+CORE
+cbmc_slice_symbolic_len.goto
+--binary --unwind 8
+^VERIFICATION SUCCESSFUL$

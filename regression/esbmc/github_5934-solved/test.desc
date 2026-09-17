@@ -1,5 +1,5 @@
 CORE
 main.c
 --multi-property --smt-formula-too --z3
-^✗ FAILED: 'b at file .*main\.c line 10 column 3 function main'$
+^ +FAILED +\[main\.assertion\.2\] +line 10 +b$
 ^VERIFICATION FAILED$

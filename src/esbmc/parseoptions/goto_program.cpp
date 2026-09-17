@@ -2,9 +2,9 @@
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -27,6 +27,7 @@
 #include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/lift_call_expressions.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -42,6 +43,20 @@
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
+#include <c2goto/cprover_library.h>
+#ifdef ENABLE_PYTHON_FRONTEND
+#  include <python-frontend/python_library.h>
+#endif
+
+namespace
+{
+void link_python_model_bodies([[maybe_unused]] goto_functionst &goto_functions)
+{
+#ifdef ENABLE_PYTHON_FRONTEND
+  link_cpython_library_bodies(goto_functions);
+#endif
+}
+} // namespace
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
@@ -180,12 +195,21 @@ bool esbmc_parseoptionst::get_goto_program(
 // __CPROVER__start, or a user-selected --function harness. Without this,
 // __ESBMC_main would run the empty boilerplate main and report a verdict over
 // essentially no program. No-op if __ESBMC_main was not synthesised.
-static void
+// Returns true when `target` names no function in the program, so the caller
+// reports it instead of the inliner aborting on the dangling call.
+static bool
 retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
 {
   auto entry = goto_functions.function_map.find("__ESBMC_main");
   if (entry == goto_functions.function_map.end())
-    return;
+    return false;
+
+  if (!goto_functions.function_map.count(target))
+  {
+    log_error(
+      "entry point `{}' not found in the goto binary", id2string(target));
+    return true;
+  }
 
   Forall_goto_program_instructions (it, entry->second.body)
   {
@@ -198,6 +222,33 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
       to_symbol2t(call.function).thename == "c:@F@main")
       call.function = symbol2tc(get_empty_type(), target);
   }
+
+  return false;
+}
+
+// Bridge the synthesised __ESBMC_main, which wraps the boilerplate c:@F@main,
+// onto the program's real entry. An explicit --function wins; otherwise a CBMC
+// binary dispatches into __CPROVER__start (it runs __CPROVER_initialize and
+// calls the program's main/harness). Without this, a CBMC binary verifies the
+// empty boilerplate main and may report a spurious SUCCESSFUL. Returns true if
+// the run cannot continue.
+static bool bridge_binary_entry_point(
+  const cmdlinet &cmdline,
+  goto_functionst &goto_functions,
+  bool cbmc_additions)
+{
+  if (cmdline.isset("function"))
+    return retarget_esbmc_main(goto_functions, cmdline.getval("function"));
+
+  if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
+    retarget_esbmc_main(goto_functions, "__CPROVER__start");
+  else if (cbmc_additions)
+    log_warning(
+      "CBMC goto-binary support is experimental: no entry point to bridge "
+      "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
+      "boilerplate main and the verdict may be unsound.");
+
+  return false;
 }
 
 // This method creates a GOTO program from the source specified by the
@@ -260,22 +311,13 @@ bool esbmc_parseoptionst::create_goto_program(
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
-      // Bridge the synthesised __ESBMC_main, which wraps the boilerplate
-      // c:@F@main, onto the program's real entry. An explicit --function wins;
-      // otherwise a CBMC binary dispatches into __CPROVER__start (it runs
-      // __CPROVER_initialize and calls the program's main/harness). Without
-      // this, a CBMC binary verifies the empty boilerplate main and may report
-      // a spurious SUCCESSFUL.
-      if (cmdline.isset("function"))
-        retarget_esbmc_main(goto_functions, cmdline.getval("function"));
-      else if (
-        cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
-        retarget_esbmc_main(goto_functions, "__CPROVER__start");
-      else if (cbmc_additions)
-        log_warning(
-          "CBMC goto-binary support is experimental: no entry point to bridge "
-          "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
-          "boilerplate main and the verdict may be unsound.");
+      // CBMC serialises some intrinsics (object_size) as expressions that
+      // migrate to calls; goto_convert never runs on a loaded binary, so
+      // nothing else lifts them out to statement level.
+      lift_call_expressions(context, goto_functions);
+
+      if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
+        return true;
 
       goto_functions.update();
     }
@@ -356,8 +398,8 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 // type onto the bodyless
 // declaration lets symex resolve the call: argument_assignments binds actual
 // args using the copied type's parameter names, which match the copied body
-// (goto-symex/symex_function.cpp). The string bodies are byte loops, so a call
-// with a symbolic length needs an `--unwind` bound like any other loop.
+// (goto-symex/engine/symex_function.cpp). The string bodies are byte loops, so
+// a call with a symbolic length needs an `--unwind` bound like any other loop.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
@@ -371,8 +413,9 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "strcat",        "strncat",       "strchr",    "strrchr",  "__fpclassifyf",
     "__fpclassifyd", "__fpclassifyl", "isalnum",   "isalpha",  "isblank",
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
-    "ispunct",       "isspace",       "isupper",   "isxdigit", "tolower",
-    "toupper",       "atoi",          "atol",      "strtol"};
+    "fesetround",    "fegetround",    "ispunct",   "isspace",  "isupper",
+    "isxdigit",      "tolower",       "toupper",   "atoi",     "atol",
+    "strtol"};
 
   for (const char *name : libc)
   {
@@ -432,11 +475,46 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "#include <string.h>\n"
     "#include <ctype.h>\n"
     "#include <stdlib.h>\n"
+    "#include <fenv.h>\n"
     // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
     // __fpclassifyd is new here -- glibc's <math.h> already declares
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
     // that is guaranteed across libcs/feature-test macros, so declare all three
     // explicitly to take their addresses (bodies live in libm/fpclassify.c).
+    // CBMC re-links __CPROVER_enforce_requires_is_fresh from its contracts
+    // library at analysis time and does not serialise a body, so the adapter
+    // retargets the call here. Deliberately not named __ESBMC_*: symex sends
+    // every c:@F@__ESBMC* callee to run_intrinsic, which abort()s on a name it
+    // does not know.
+    // The check-side counterpart. It must never allocate: these two variants
+    // ask whether the pointer *already* denotes an object that big, and
+    // satisfying them by allocating would mask the violation they exist to
+    // catch. Mirrors what CBMC's own check accepts -- a static object passes,
+    // a null one does not, and the extent is enforced.
+    // Takes the pointer *by value*: unlike the assume-side variants, which get
+    // &p so they can write a fresh object back through it, CBMC hands the
+    // check-side ones the pointer itself.
+    // Declared here rather than in the shared intrinsics preamble: a
+    // prototype visible to *every* translation unit makes each native
+    // __builtin_object_size call convert its argument to const void *, so the
+    // address-of a member arrives as a typecast and the object's own type is
+    // lost (regression/extensions/builtin_object_size8). Only this boilerplate
+    // calls it by name; the migrated CBMC irep gets its symbol from
+    // lift_call_expressions().
+    "__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);\n"
+    "_Bool __cbmc_is_fresh_check_impl(void *q, __SIZE_TYPE__ n)\n"
+    "{\n"
+    "  if (q == 0)\n"
+    "    return 0;\n"
+    "  return __ESBMC_builtin_object_size(q, 0) >= n;\n"
+    "}\n"
+    "_Bool __cbmc_is_fresh_impl(void **p, __SIZE_TYPE__ n)\n"
+    "{\n"
+    "  void *q = malloc(n);\n"
+    "  __ESBMC_assume(q != 0);\n"
+    "  *p = q;\n"
+    "  return 1;\n"
+    "}\n"
     "extern int __fpclassifyf(float);\n"
     "extern int __fpclassifyd(double);\n"
     "extern int __fpclassifyl(long double);\n"
@@ -463,6 +541,8 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
+    "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
@@ -583,6 +663,8 @@ bool esbmc_parseoptionst::parse_goto_program(
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
+    link_python_model_bodies(goto_functions);
+    assert_no_pruned_calls(goto_functions);
   }
 
   catch (const char *e)

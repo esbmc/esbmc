@@ -18,6 +18,12 @@ public:
   cmdlinet cmdline;
   virtual void help();
   virtual int doit() = 0;
+  /// One line naming what this driver offers for a fuller crash report, or
+  /// null. Only the driver knows which options it accepts.
+  virtual const char *fatal_signal_advice() const
+  {
+    return nullptr;
+  }
   virtual int main();
   virtual ~parseoptions_baset() = default;
 

@@ -1,0 +1,4 @@
+CORE
+cbmc_volatile_reads.goto
+--binary
+^VERIFICATION SUCCESSFUL$

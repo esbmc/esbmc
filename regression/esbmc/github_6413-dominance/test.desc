@@ -2,5 +2,5 @@ CORE
 main.c
 --multi-property
 ^VERIFICATION FAILED$
-FAILED: 'x is still zero at file .*main\.c line 17
-\A(?![\s\S]*PASSED: 'x is still zero)[\s\S]*\Z
+^ +FAILED .*line +17 +x is still zero$
+\A(?![\s\S]*PASSED .*x is still zero)[\s\S]*\Z

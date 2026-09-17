@@ -1,4 +1,5 @@
 CORE
 main.c
 --32 --stack-limit 128
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

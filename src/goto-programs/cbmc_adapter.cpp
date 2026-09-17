@@ -236,6 +236,16 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  // CBMC's programs set the rounding mode through __CPROVER_rounding_mode, but
+  // every float operation migrate builds reads ESBMC's own
+  // c:@__ESBMC_rounding_mode (irep2_expr.h). Two different symbols meant the
+  // write was inert: CBMC proves 1.0/3.0 differs between FE_DOWNWARD and
+  // FE_UPWARD, ESBMC did not. Point the writes at the symbol the reads use.
+  if (
+    irep.id() == "symbol" &&
+    irep.find("identifier").id() == "__CPROVER_rounding_mode")
+    irep.set("identifier", "c:@__ESBMC_rounding_mode");
+
   if (
     irep.id() == "address_of" && !irep.get_sub().empty() &&
     irep.get_sub()[0].id() == "label")
@@ -1578,6 +1588,31 @@ irept build_builtin_rhs(
 // ASSIGN shape the native pipeline would have produced. Returns true if
 // `code` was rewritten (the caller must then also override the
 // instruction's typeid to ASSIGN).
+/// The additions bridge a CBMC `is_fresh` helper retargets to, or null.
+///
+/// CBMC re-links its contracts library at analysis time and serialises no body,
+/// so ESBMC sees a bodyless external. The *assume*-side pair -- the enforce
+/// direction assuming its requires, the replace direction assuming the callee's
+/// ensures -- must allocate: the call is what writes a fresh object's address
+/// through &p, and losing it leaves p unconstrained, turning a proof CBMC
+/// completes into a false alarm on the first dereference (roadmap 4.6). The
+/// *check*-side pair must not: satisfying "did the body really return something
+/// fresh?" by allocating would mask the violation it exists to catch.
+const char *is_fresh_bridge(const std::string &callee)
+{
+  if (
+    callee == "__CPROVER_enforce_requires_is_fresh" ||
+    callee == "__CPROVER_replace_ensures_is_fresh")
+    return "c:@F@__cbmc_is_fresh_impl";
+
+  if (
+    callee == "__CPROVER_enforce_ensures_is_fresh" ||
+    callee == "__CPROVER_replace_requires_is_fresh")
+    return "c:@F@__cbmc_is_fresh_check_impl";
+
+  return nullptr;
+}
+
 bool fix_builtin_call(irept &code)
 {
   if (code.id() == "nil" || code.find("statement").id() != "function_call")
@@ -1612,6 +1647,17 @@ bool fix_builtin_call(irept &code)
   if (mem_it != mem_intrinsics.end())
   {
     code.get_sub()[1].set("identifier", mem_it->second);
+    return false;
+  }
+
+  // CBMC's third argument is the memory map it threads through to state
+  // separation between two is_fresh'd pointers; the bridge does not model that
+  // yet, so it is dropped.
+  if (const char *bridge = is_fresh_bridge(callee);
+      bridge && sub[2].get_sub().size() == 3)
+  {
+    code.get_sub()[1].set("identifier", bridge);
+    code.get_sub()[2].get_sub().resize(2);
     return false;
   }
 

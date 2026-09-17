@@ -1,4 +1,5 @@
 CORE
 struct_bytewise.c
 --32 -Wno-error=implicit-function-declaration
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

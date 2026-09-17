@@ -89,3 +89,22 @@ void convert_float_literal(const std::string &src, exprt &dest)
     dest.value(integer2binary(a.pack(), a.spec.width()));
   }
 }
+
+std::optional<ieee_floatt>
+nonfinite_float_from_spelling(const std::string &spelling)
+{
+  ieee_floatt f(ieee_float_spect::double_precision());
+
+  if (spelling == "nan")
+    f.make_NaN();
+  else if (
+    spelling == "inf" || spelling == "+inf" || spelling == "infinity" ||
+    spelling == "+infinity")
+    f.make_plus_infinity();
+  else if (spelling == "-inf" || spelling == "-infinity")
+    f.make_minus_infinity();
+  else
+    return std::nullopt;
+
+  return f;
+}

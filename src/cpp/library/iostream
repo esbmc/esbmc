@@ -5,6 +5,13 @@
 #include "definitions.h"
 #include "istream"
 #include "ostream"
+/* libstdc++ and libc++ both reach these from <iostream>; programs that compile
+   against either rely on it, so not providing them is a false PARSING ERROR on
+   valid input (#7536). */
+#include "cctype"
+#include "cstdlib"
+#include "exception"
+#include "new"
 
 namespace std
 {

@@ -212,6 +212,10 @@ public:
 
   exprt tagged_scalar_type_id(const typet &type) const;
 
+  exprt tagged_scalar_type_matches(
+    const exprt &tagged_type_id,
+    const typet &literal_type) const;
+
   exprt tagged_scalar_byte_size(const exprt &value) const;
 
   // A Python str is a char array or char*.
@@ -275,6 +279,10 @@ public:
   bool class_derives_from(
     const std::string &class_name,
     const std::string &expected_base) const;
+
+  /// Resolves `Alias = builtin` (e.g. `Bytes32 = bytes`) to the builtin's
+  /// name, or "" if `name` is not such an alias.
+  std::string resolve_builtin_alias(const std::string &name) const;
 
 private:
   /// Encapsulate the const_cast in one place with clear documentation

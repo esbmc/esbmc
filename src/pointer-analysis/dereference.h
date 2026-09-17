@@ -124,8 +124,17 @@ public:
   virtual bool
   has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) = 0;
 
-  /** Optionally rename the given expression. This exists to provide potential
-   *  optimization expansion in the future, it isn't currently used by anything.
+  /** Rename the given expression into the callback's current execution
+   *  context. The default implementation is a no-op; the symbolic-execution
+   *  override substitutes the SSA names and recorded constants symex
+   *  currently holds. Called on the index operands of dereference chains once
+   *  their inner dereferences are resolved, so an index whose value symex
+   *  knows folds to a constant and the access stays on the constant-offset
+   *  path (see dereference_expr_nonscalar, #7311). Indices mentioning a
+   *  symbol bound by an enclosing quantifier are excluded, as is the whole
+   *  body of a quantifier whose binder names no symbol: the callback has no
+   *  quantifier context and would substitute the like-named program
+   *  variable's value.
    *  @param expr An expression to be renamed
    */
   virtual void rename(expr2tc &expr [[maybe_unused]])
@@ -445,7 +454,8 @@ private:
   void deref_invalid_ptr(
     const expr2tc &deref_expr,
     const guard2tc &guard,
-    modet mode);
+    modet mode,
+    const expr2tc &resolved = expr2tc());
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
@@ -489,10 +499,18 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** \p object is the object being accessed, or nil where the caller does not
+   *  know it yet -- then the base is assumed to carry the access width, as it
+   *  does for everything but a type that declines alignment. */
   void check_alignment(
     BigInt minwidth,
     const expr2tc &offset,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &object);
+  /** The alignment the address-space model guarantees the base of \p object's
+   *  object, i.e. the assumption check_alignment() is entitled to make about
+   *  everything below the offset it checks. */
+  BigInt object_base_alignment(const expr2tc &object) const;
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);
@@ -567,6 +585,12 @@ private:
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_member_from_byte_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_from_array(
     expr2tc &value,
     const expr2tc &offset,
@@ -574,6 +598,20 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  class quantifier_scopet;
+
+  /** Variables bound by quantifiers enclosing the expression currently being
+   *  dereferenced, and how many of those quantifiers bind through a shape
+   *  that names no variable we can identify. */
+  std::multiset<irep_idt> quantifier_bound_vars;
+  unsigned opaque_binders = 0;
+
+  /** True when @p expr mentions a symbol bound by an enclosing quantifier. */
+  bool mentions_bound_var(const expr2tc &expr) const;
+
+  /** True when the index fold may substitute the value symex holds for
+   *  @p index. */
+  bool may_fold_index(const expr2tc &index) const;
 
 public:
   void set_block_assertions(void)

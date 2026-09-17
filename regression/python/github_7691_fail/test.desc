@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^Violated property:$
+^  file .*main\.py line 4 column \d+ function main$
+^VERIFICATION FAILED$

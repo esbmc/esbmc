@@ -1,7 +1,15 @@
 import ast
+import copy
 
 
 class AstUtilsMixin:
+
+    @staticmethod
+    def subscripts_name(node, name):
+        """True when ``node`` contains a subscript of the bare name ``name``."""
+        return any(
+            isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name) and n.value.id == name
+            for n in ast.walk(node))
 
     @staticmethod
     def _sanitize_identifier_fragment(fragment):
@@ -71,21 +79,28 @@ class AstUtilsMixin:
         ast.fix_missing_locations(assign)
         return assign
 
-    def generate_variable_copy(self, qualified_name, arg_node, default_name_node):
+    def generate_variable_copy(self, qualified_name, arg_node, default_node):
         """
-        Materialize a Name default value into a stable temporary variable.
+        Materialize a default value into a stable temporary variable, evaluated
+        once where the function is defined. Python evaluates defaults at
+        definition time and shares the resulting object across calls, so a
+        container default must be hoisted rather than rebuilt per call site.
         """
         func_part = self._sanitize_identifier_fragment(qualified_name)
         arg_part = self._sanitize_identifier_fragment(arg_node.arg)
         target_var = f"ESBMC_default_{func_part}_{arg_part}"
 
+        default_value = copy.deepcopy(default_node)
+        if isinstance(default_value, ast.Name):
+            default_value.ctx = ast.Load()
+
         assignment_node = ast.Assign(
-            targets=[self.create_name_node(target_var, ast.Store(), default_name_node)],
-            value=ast.Name(id=default_name_node.id, ctx=ast.Load()),
+            targets=[self.create_name_node(target_var, ast.Store(), default_node)],
+            value=default_value,
         )
-        self.ensure_all_locations(assignment_node, default_name_node)
+        self.ensure_all_locations(assignment_node, default_node)
         ast.fix_missing_locations(assignment_node)
-        target_ref = self.create_name_node(target_var, ast.Load(), default_name_node)
+        target_ref = self.create_name_node(target_var, ast.Load(), default_node)
         ast.fix_missing_locations(target_ref)
         return assignment_node, target_ref
 

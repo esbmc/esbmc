@@ -1,0 +1,26 @@
+/* A heap array whose size expression references a data member is given a
+ * symbolic array type; storing into it and casting the result reaches the
+ * array-to-array arm of convert_typecast. Without that arm ESBMC aborts with
+ * "Typecast for unexpected type" (esbmc/esbmc#7544, fixed by #7618 without a
+ * test). The shape is load-bearing -- the loop, the conditional write through
+ * an undefined extern, and the strcpy all contribute; simplifying any of them
+ * can stop reaching the arm while the test still passes. */
+#include <cstring>
+extern bool nondet_bool();
+class a {
+  int b;
+public:
+  char *g;
+  a() : b(2), g(new char[b]) {}
+  void operator()() {
+    if (nondet_bool())
+      g[0] = 'x';
+  }
+};
+int main() {
+  a f;
+  for (int i = 0; i < 2; i++) {
+    f();
+    strcpy(new char[1], f.g);
+  }
+}

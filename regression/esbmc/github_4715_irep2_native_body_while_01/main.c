@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body dispatcher's code_while2t handling on the
+// Exercises the IREP2-native dispatcher's code_while2t handling on the
 // C frontend (W1-loc spike Phase C, esbmc/esbmc#4715). A plain C assignment
 // *statement* (`s = s + i;`) is represented as a code_expression2t wrapping a
 // side-effecting assign expression, not a bare code_assign2t (unlike Python,

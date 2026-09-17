@@ -4,13 +4,24 @@ from __future__ import annotations
 
 import ast
 import base64
+import math
 
 __all__ = [
     "add_type_annotation",
     "annotate_constant_node",
     "encode_bytes",
     "tag_bignum_constants",
+    "tag_nonfinite_floats",
 ]
+
+# json.dump writes a non-finite float as the bare token Infinity/-Infinity/NaN,
+# which is not valid JSON, so the C++ reader rejects the file the parser just
+# wrote. Move the value to a string tag and null the number (#7545).
+#
+# Every non-finite float a Constant carries is tagged, whatever its key. An
+# allow-list of key names would miss `n`, the deprecated `Constant.value` alias
+# ast2json still emits on Python <= 3.13 -- one bare `Infinity` anywhere in the
+# file is enough to make the whole AST unreadable.
 
 # Python ints are arbitrary precision; the JSON wire format used by the C++
 # frontend stores them as numbers, which nlohmann::json silently truncates to
@@ -44,6 +55,34 @@ def _tag_bignum_constants(node: object, in_usub_operand: bool = False) -> None:
     elif isinstance(node, list):
         for v in node:
             _tag_bignum_constants(v)
+
+
+def _spell_nonfinite(v: float) -> str:
+    if math.isnan(v):
+        return "nan"
+    return "inf" if v > 0 else "-inf"
+
+
+def _tag_nonfinite_floats(node: object) -> None:
+    if isinstance(node, dict):
+        # Gated on Constant like _tag_bignum_constants: only a literal carries a
+        # raw non-finite float, and a value a later pass computes should not be
+        # rewritten silently.
+        if node.get("_type") == "Constant":
+            for key, v in list(node.items()):
+                if isinstance(v, float) and not math.isfinite(v):
+                    node[key] = None
+                    node[f"{key}_nonfinite"] = _spell_nonfinite(v)
+        for v in node.values():
+            _tag_nonfinite_floats(v)
+    elif isinstance(node, list):
+        for v in node:
+            _tag_nonfinite_floats(v)
+
+
+def tag_nonfinite_floats(node: object) -> None:
+    """Public façade for non-finite float tagging in AST-JSON dictionaries."""
+    _tag_nonfinite_floats(node)
 
 
 def encode_bytes(value: bytes) -> str:

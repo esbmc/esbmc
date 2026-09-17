@@ -1,0 +1,4 @@
+CORE
+main.c
+--function increment_array_by --enforce-contract increment_array_by --unwind 10
+^VERIFICATION SUCCESSFUL$

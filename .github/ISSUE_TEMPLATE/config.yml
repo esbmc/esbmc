@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: I have a fix
+    url: https://github.com/esbmc/esbmc/compare
+    about: Open a pull request instead of an issue. The reproducer goes in as its regression test.
+  - name: Question about using ESBMC
+    url: https://github.com/esbmc/esbmc/discussions/categories/q-a
+    about: How to model something, what an option does, how to read a counterexample.

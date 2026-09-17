@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ValueError: can only specify one unknown dimension$

@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto-functions-only
+^ *ASSIGN t=\{ 120, 121, 120, 121, 120, 121, 120, 121, 0 \};$

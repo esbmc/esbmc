@@ -1,7 +1,7 @@
 #include <goto-programs/goto_program.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/value_sets.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -10,7 +10,7 @@
 #include <util/base/prefix.h>
 #include <fmt/format.h>
 // TODO: Do an points-to abstract interpreter
-std::shared_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
+std::shared_ptr<value_setst> cse_domaint::vsa = nullptr;
 
 void cse_domaint::transform(
   goto_programt::const_targett from,
@@ -101,7 +101,18 @@ bool cse_domaint::merge(
    * simulate one by just passing through common instructions
    * and only doing intersections at target destinations */
 
-  if (!(to->is_target() || from->is_function_call()) || is_bottom())
+  // Nothing flows out of an unreachable predecessor.
+  if (b.is_bottom())
+    return false;
+
+  if (is_bottom())
+  {
+    available_expressions = b.available_expressions;
+    bottom = false;
+    return true;
+  }
+
+  if (!(to->is_target() || from->is_function_call()))
   {
     bool changed = available_expressions != b.available_expressions;
     available_expressions = b.available_expressions;
@@ -110,15 +121,12 @@ bool cse_domaint::merge(
 
   size_t size_before_intersection = available_expressions.size();
   for (auto it = available_expressions.begin();
-       it != available_expressions.end();
-       it++)
+       it != available_expressions.end();)
   {
-    if (!b.available_expressions.count(*it))
-    {
+    if (b.available_expressions.count(*it))
+      ++it;
+    else
       it = available_expressions.erase(it);
-      if (it == available_expressions.end())
-        break;
-    }
   }
 
   return size_before_intersection != available_expressions.size();
@@ -223,22 +231,51 @@ void cse_domaint::havoc_symbol(const irep_idt &sym)
     available_expressions.erase(x);
 }
 
+static void collect_dereferences(const expr2tc &e, std::vector<expr2tc> &dest)
+{
+  if (!e)
+    return;
+
+  if (is_dereference2t(e))
+  {
+    dest.push_back(e);
+    return;
+  }
+
+  e->foreach_operand(
+    [&dest](const expr2tc &op) { collect_dereferences(op, dest); });
+}
+
 void cse_domaint::havoc_expr(
   const expr2tc &target,
   const goto_programt::const_targett &i_it)
 {
-  if (is_dereference2t(target) && vsa != nullptr)
+  if (vsa != nullptr)
   {
-    auto state = (*vsa)[i_it];
-    value_setst::valuest dest;
-    state.value_set->get_reference_set(target, dest);
-    for (const auto &x : dest)
+    // A store through `p->f` or `(*p)[i]` writes whatever `p` points to, but
+    // the dereference is nested inside the lvalue rather than being it, so
+    // every dereference in the target has to be resolved -- not just a
+    // top-level one.
+    std::vector<expr2tc> dereferences;
+    collect_dereferences(target, dereferences);
+
+    for (const expr2tc &deref : dereferences)
     {
-      if (is_object_descriptor2t(x))
-        havoc_expr(to_object_descriptor2t(x).object, i_it);
-      else
+      value_setst::valuest dest;
+      vsa->get_reference_set(i_it, deref, dest);
+      for (const auto &x : dest)
       {
-        log_error("Unsupported descriptor: {}", *x);
+        // An unnameable target (the points-to analysis reports "may point
+        // anywhere") could be any object at all, so nothing stays available.
+        // Keeping the set here would let CSE reuse a value this store just
+        // invalidated.
+        if (!is_object_descriptor2t(x))
+        {
+          available_expressions.clear();
+          return;
+        }
+
+        havoc_expr(to_object_descriptor2t(x).object, i_it);
       }
     }
   }
@@ -404,6 +441,19 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
     switch (it->type)
     {
     case GOTO:
+      // A loop guard is left alone. goto_k_induction rewrites the loop head
+      // into `havoc the loop variables; assume(entry condition)', and it takes
+      // that entry condition from this guard -- so a symbol standing in for
+      // `i < len' lands in the assume while its defining assignment stays
+      // below, past the havoc. The assume then constrains the value the
+      // symbol held before the havoc and says nothing about the fresh `i',
+      // leaving the body free to run with the loop guard violated.
+      //
+      // Nothing is lost by skipping these: step 1 collects candidates from
+      // `code' only, so a guard is only ever a replacement site, never the
+      // reason an expression became a candidate.
+      break;
+
     case ASSUME:
     case ASSERT:
       replace_max_sub_expr(it->guard, expr2symbol, it, matched_pre_expressions);

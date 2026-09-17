@@ -1,0 +1,4 @@
+CORE
+cbmc_fesetround_fail.goto
+--binary
+^VERIFICATION FAILED$
