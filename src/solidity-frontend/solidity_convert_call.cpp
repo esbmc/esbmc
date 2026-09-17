@@ -3389,7 +3389,7 @@ bool solidity_convertert::get_staticcall_definition(
         std::to_string(aux_counter++),
       locationt());
     symbolt &added_snap = *move_symbol_to_context(snap_sym);
-    added_snap.set_value(static_ins);
+    added_snap.set_value(migrate_expr(static_ins));
     code_declt snap_decl(symbol_expr(added_snap));
     snap_decl.operands().push_back(static_ins);
     then.move_to_operands(snap_decl);

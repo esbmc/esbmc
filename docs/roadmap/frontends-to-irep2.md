@@ -3942,3 +3942,93 @@ family is convertible -- with the caveat in §14.4 that a static one emits its v
 `__ESBMC_main`, where what the migrate seam drops is rendered rather than ignored. That is better news for the remaining 160 than a deletion
 sweep, and it is the second time in three ticks that a residue classified by what a write
 *looked* like turned out to be classified wrongly.
+
+## 62. The static case measured, and a fourth reader (2026-09-15)
+
+§61 converted ten writes and flagged one thing it could not settle: a `static_lifetime`
+symbol has its value's *content* emitted into `__ESBMC_main` by `init_variable`, so there the
+display name the migrate seam drops is rendered rather than ignored. Settling it needed a
+site reached by both kinds of symbol, and the obvious candidate was not one -- the
+dynarray-state arm is reached by 6 of 515 programs and by no static symbol at all, so the
+clean comparison it produced measured the case that was never in doubt. Counting every write
+in `solidity_convert_decl.cpp` by flag found the site that does: `:718`, 845 runs, 12 static.
+
+The answer splits. At `:718` the `--goto-functions-only` dump is identical for all 515
+programs, so `init_variable` emits the same assignment. The `--symbol-table-only` dump is not:
+12 programs render a state variable's address literal as `0x1F98...` instead of
+`180374...` -- the same number, differently written, because `migrate_expr_back` rebuilds a
+constant through `integer2binary` (`migrate.cpp:4408-4416`) and `a_hex_or_oct` does not cross
+the seam. So `:718` is left for the change that carries the spelling, the §44
+`argument_base_names` pattern, and the other sixteen sites land here with both artefacts
+identical.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§61's three-reader table needs a fourth row, and it is the row that makes attribute loss
+observable: `solidity_convert_constructor.cpp:499` reads a state variable's value and
+branches on `#zero_initializer` and, through `convert_type_expr`, on `#sol_type`,
+`#sol_bytesn_size` and `#sol_array_size` -- none of which appears anywhere in `migrate.cpp`.
+No program in the corpus shows a difference from it, but it is why the rest of Solidity's
+writes cannot be swept: a value that reaches `:499` has to keep attributes `migrate_expr`
+drops.
+
+The habit worth keeping is the one that caught both of these. Three ticks running, the error
+has not been a wrong argument but a measurement over the wrong set or the wrong artefact:
+a glob that dropped nested suites, a capture piped to `/dev/null`, a site no static symbol
+reaches, and a GOTO comparison that could not see a symbol table change. Instrument the site
+and count before reading a green comparison as an answer, and compare more than one artefact.
+
+## 63. The seam drops two things, and one of them is not cosmetic (2026-09-16)
+
+§62 converted sixteen Solidity writes of the duplicated-initialiser shape and left the
+seventeenth because it re-rendered a hex literal -- a difference §15.2 called cosmetic and
+set aside. Taking the same shape to clang-c, where the corpus is 8 682 programs rather than
+515, shows that was the wrong call twice over: the rendering loss is general, and there is a
+second loss underneath it that changes the program.
+
+`clang_c_convert.cpp:632` and `:659` are the two sites, and they split perfectly -- `:632`
+runs 86 244 times and only ever on a `static_lifetime` symbol, `:659` 138 735 times and only
+ever on a local -- so one diff exercises both readers of a symbol's value. Converting both:
+
+- the normalised `--goto-functions-only` dump differs in **2 112 of 8 682** programs. In the
+  inspected case a zero-initialised operational-model global becomes a nondeterministic
+  temporary, because `std::cin`'s value is a C++ `sideeffect` with
+  `statement: temporary_object` and the round trip drops its **empty operands list**. That is
+  §46's empty-key defect from the other side: there, writing a key empty made two types
+  unequal; here, dropping an empty key changes goto conversion.
+- the `--symbol-table-only` dump differs in **3 892 of 8 682** with `:659` alone. `#cformat`
+  (`irep.h:478`) holds a literal's source spelling, `c_expr2string.cpp:1120-1125` prefers it
+  over deriving text from the type, and `grep -c cformat src/util/irep/migrate.cpp` is **0**.
+  Solidity's hex address and clang-c's `1.000000e-1f` are one mechanism.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So Phase 6 stays at 19 and nothing is converted here. What this tick produces instead is the
+prerequisite for most of the 144 that remain: carry `#cformat` across the seam, the §44
+`argument_base_names` pattern with two precedents already in this migration, and decide
+whether `sideeffect2t` distinguishes an empty operand list from an absent one. 139 of the
+144 are value writes or the types behind them, python and jimple write the same shapes, and
+no amount of per-site auditing gets past either loss.
+
+It is also the fourth tick in a row where the finding came from measuring more than I had
+been: a wider corpus (8 682 against 515) and a second artefact (the GOTO, which §15 never
+compared for the site it left behind). §15.2's "cosmetic" verdict survived exactly as long
+as the evidence behind it was one frontend and one dump.

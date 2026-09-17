@@ -8649,3 +8649,97 @@ comment six lines below the site said it can (`:405-411`, on the `sym` refresh).
 were refuted by a five-line probe. A per-edge argument about a call graph is worth what a
 measurement of the composition is worth, which is nothing until the measurement is run --
 and the measurement has to cover the suites, not a glob.
+
+## 149. Phase 6's last two value writes, and why they cannot be converted (2026-09-16)
+
+§147.2 filed `clang_c_convert.cpp:632` and `:659` under "the write hands on what a legacy
+builder produced", a classification by the write's *argument*. The Solidity work
+(`scope-solidity-irep2.md` §14-§15) established that this shape is live rather than dead --
+`mark_decl_as_non_det` reads a symbol's value to decide whether a `DECL` was initialised --
+and converted 26 of them there. These two do not convert, for two independent reasons, both
+measured over the 8 682 C and C++ programs under `regression/` whose `test.desc` names a
+`.c`/`.cpp`/`.i` source.
+
+### 149.1 The reach, measured first
+
+The two arms split perfectly, which is what makes them worth testing together:
+
+```
+:632   86 244 executions   all static_lifetime   2 960 programs
+:659  138 735 executions   all non-static        6 553 programs
+6 941 programs reach at least one
+```
+
+So one diff exercises both readers -- `init_variable` takes a static's value *content*
+(`clang_c_main.cpp:12-55`), `mark_decl_as_non_det` takes a local's *nil-ness*
+(`mark_decl_as_non_det.cpp:31`). Solidity could offer only 12 static executions at a single
+site; this is four orders of magnitude more.
+
+### 149.2 The GOTO changes, in 2 112 of 8 682 programs
+
+Converting both to `migrate_expr` and diffing the normalised `--goto-functions-only` dump:
+**2 112 differ**. The inspected case (`regression/esbmc-cpp11/array/array_01`) replaces a
+deterministically zero-initialised operational-model global with a nondeterministic
+temporary:
+
+```
+  ASSIGN cin={ .__width = 0 };            DECL std::istream tmp$1;
+  FUNCTION_CALL: istream(&cin, 1)   ->    ASSIGN tmp$1=NONDET( std::istream {...} );
+                                          FUNCTION_CALL: istream(&tmp$1, 1)
+                                          ASSIGN cin=tmp$1;
+```
+
+The cause is visible in the symbol table. `std::cin`'s value is a C++ `sideeffect` with
+`statement: temporary_object`, and the round trip drops one thing from it:
+
+```
+  base                      converted
+  sideeffect                sideeffect
+    * type: ...               * type: ...
+    * operands:               * statement: temporary_object
+    * statement: ...          * initializer: code
+```
+
+The **empty operands list** is present before and absent after. That is the same class of
+defect as §46's empty `base_name`, in the other direction: there, writing a key empty made
+two types unequal; here, dropping an empty key changes what goto conversion does with the
+value. A constructor side-effect is what `:632` writes for every C++ global with a
+constructor, so this is not an edge case -- it is the operational models.
+
+### 149.3 A second, independent loss: the literal's spelling
+
+Even setting the GOTO aside, the `--symbol-table-only` dump differs in **3 892 of 8 682**
+programs with `:659` alone converted, and 3 967 with both. The difference is the rendering
+of literals:
+
+```
+- Value.......: 1.000000e-1
++ Value.......: 1.000000e-1f
+```
+
+Same value. `#cformat` (`irep.h:478`, `a_cformat`) holds the literal's source spelling and
+`c_expr2string.cpp:1120-1125` prefers it over deriving text from the type; the derived path
+appends the `f`/`l` suffix (`:1191`, `:1203`). `grep -c cformat src/util/irep/migrate.cpp`
+returns **0**, so the attribute does not cross the seam and the printer falls back to
+deriving.
+
+This is the same mechanism as `scope-solidity-irep2.md` §15.2's hex address literal, where
+the fallback chose hex for a wide unsigned instead. One attribute, one printer branch, two
+frontends -- and at 3 892 of 8 682 rather than 12 of 515 it is no longer reasonable to call
+it cosmetic and move on, which is what §15.2 did.
+
+### 149.4 What this makes the next task
+
+Phase 6 stays at B-2\* 19. The two sites are not blocked by what §147.2 said blocked them,
+and they are not convertible by the method that worked in Solidity. What they need is for
+the seam to stop dropping things:
+
+- `#cformat` on `constant_int2t` and `constant_floatbv2t`, the `argument_base_names` pattern
+  of `frontends-to-irep2.md` §44 -- an unreflected field carried across and restored.
+- an empty operands list on a `sideeffect2t` distinguished from an absent one.
+
+The first is mechanical and has two precedents in this migration. The second is a question
+about what `sideeffect2t` models, and it is the one that actually gates the C++ operational
+models. Neither is Solidity-specific, python and jimple both write values of the same
+shapes, and 139 of the remaining 142 B-2 writes are value writes or types behind them --
+so this is the prerequisite for most of what is left, not a detour.
