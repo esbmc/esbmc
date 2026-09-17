@@ -840,20 +840,10 @@ void python_runtime_converter::statement(const json &node)
   }
   else if (type == "AnnAssign")
   {
-    /* A bare `x: int` binds nothing, as in CPython. */
+    /* A bare `x: int` binds nothing, as in CPython. The annotation is checked
+     * by store(), which holds it for the whole scope. */
     if (!node["value"].is_null())
-    {
-      const json &target = node["target"];
-      exprt value = expr(node["value"]);
-      store(target, value, loc);
-      check_annotation(
-        node["annotation"],
-        value,
-        is_type(target, "Name")
-          ? "'" + target["id"].get<std::string>() + "'"
-          : std::string("value"),
-        loc);
-    }
+      store(node["target"], expr(node["value"]), loc);
   }
   else if (type == "AugAssign")
     aug_assign(node);
@@ -902,6 +892,9 @@ void python_runtime_converter::store(
     code_assignt assign(symbol_expr(lookup(symbol)), value);
     assign.location() = loc;
     block_->copy_to_operands(assign);
+    auto annotation = annotated_.find(id);
+    if (annotation != annotated_.end())
+      check_annotation(*annotation->second, value, "'" + id + "'", loc);
   }
   else if (is_type(target, "Attribute"))
   {
@@ -1124,6 +1117,28 @@ void python_runtime_converter::class_statement(const json &node)
   block_->copy_to_operands(bind);
 }
 
+/// Records the annotated names of one scope. A declared type governs the
+/// whole scope rather than just the statement carrying it, so every later
+/// assignment to the name is checked as well: `x: int = 5` is usually right
+/// and the defect is the later `x = f()`. Nested functions and classes are
+/// scopes of their own and are left to their own conversion.
+void python_runtime_converter::collect_annotations(const json &body)
+{
+  for (const json &node : body)
+  {
+    if (
+      is_type(node, "AnnAssign") && is_type(node["target"], "Name") &&
+      !node["annotation"].is_null())
+      annotated_[node["target"]["id"].get<std::string>()] = &node["annotation"];
+    else if (
+      is_type(node, "If") || is_type(node, "While") || is_type(node, "For"))
+    {
+      collect_annotations(node["body"]);
+      collect_annotations(node["orelse"]);
+    }
+  }
+}
+
 void python_runtime_converter::collect_assigned(
   const json &body,
   std::set<std::string> &assigned,
@@ -1265,6 +1280,12 @@ void python_runtime_converter::define_function(
     body.copy_to_operands(code_assignt(variable, initial));
   }
 
+  /* define_function runs while the module is still being converted, so the
+   * module's annotations are put aside rather than discarded. */
+  auto outer_annotated = annotated_;
+  annotated_.clear();
+  collect_annotations(def["body"]);
+
   const json &returns = def["returns"];
   return_annotation_ = returns.is_null() ? nullptr : &returns;
   for (size_t i = 0; i < parameters.size(); ++i)
@@ -1288,6 +1309,7 @@ void python_runtime_converter::define_function(
   fall_off.return_value() = implicit;
   body.copy_to_operands(fall_off);
   return_annotation_ = nullptr;
+  annotated_ = outer_annotated;
 
   context_.find_symbol(code_id_)->set_value(body);
   code_id_.clear();
@@ -1409,6 +1431,7 @@ void python_runtime_converter::convert()
   const json &body = ast_["body"];
   std::set<std::string> declared_global;
   collect_assigned(body, globals_, declared_global);
+  collect_annotations(body);
   for (const json &node : body)
   {
     if (!is_type(node, "FunctionDef") && !is_type(node, "ClassDef"))

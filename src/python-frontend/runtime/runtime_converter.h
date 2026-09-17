@@ -36,6 +36,9 @@ private:
   /// Return annotation of the function being converted, or null.
   const nlohmann::json *return_annotation_ = nullptr;
 
+  /// Annotated names of the scope being converted, and their annotations.
+  std::map<std::string, const nlohmann::json *> annotated_;
+
   /// Symbol id of the function being converted; empty at module level.
   std::string code_id_;
   std::string function_name_;
@@ -101,6 +104,7 @@ private:
     const locationt &loc);
   exprt ifexp(const json &node);
   exprt annotation_type(const json &annotation) const;
+  void collect_annotations(const json &body);
   void check_annotation(
     const json &annotation,
     const exprt &value,
