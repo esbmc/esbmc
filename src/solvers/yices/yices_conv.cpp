@@ -107,6 +107,36 @@ smt_resultt yices_convt::dec_solve()
   return P_ERROR;
 }
 
+smt_resultt yices_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  std::vector<term_t> terms;
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<yices_smt_ast>(a)->a);
+
+  unsat_core_terms.clear();
+  smt_status_t result = yices_check_context_with_assumptions(
+    yices_ctx, nullptr, terms.size(), terms.data());
+  if (result == STATUS_SAT)
+    return P_SATISFIABLE;
+  if (result == STATUS_UNSAT)
+  {
+    term_vector_t core;
+    yices_init_term_vector(&core);
+    yices_get_unsat_core(yices_ctx, &core);
+    unsat_core_terms.insert(core.data, core.data + core.size);
+    yices_delete_term_vector(&core);
+    return P_UNSATISFIABLE;
+  }
+  return P_ERROR;
+}
+
+bool yices_convt::is_unsat_assumption(smt_astt a)
+{
+  return unsat_core_terms.count(to_solver_smt_ast<yices_smt_ast>(a)->a);
+}
+
 const std::string yices_convt::solver_text()
 {
   std::stringstream ss;
