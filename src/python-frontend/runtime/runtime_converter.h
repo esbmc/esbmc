@@ -112,6 +112,7 @@ private:
     const locationt &loc);
   exprt call_expr(const json &node);
   exprt list(const json &node);
+  exprt tuple(const json &node);
   exprt dict_literal(const json &node);
   exprt subscript(const json &node);
 

@@ -27,6 +27,20 @@ bool is_type(const nlohmann::json &node, const char *type)
   return node.is_object() && node.contains("_type") && node["_type"] == type;
 }
 
+/// Names a target binds. A tuple or list target binds each of its elements,
+/// as both `a, b = t` and `for a, b in pairs` do, so the names have to be
+/// collected recursively or they are never declared.
+void collect_target_names(
+  const nlohmann::json &target,
+  std::set<std::string> &assigned)
+{
+  if (is_type(target, "Name"))
+    assigned.insert(target["id"].get<std::string>());
+  else if (is_type(target, "Tuple") || is_type(target, "List"))
+    for (const nlohmann::json &element : target["elts"])
+      collect_target_names(element, assigned);
+}
+
 /// Py_LT..Py_GE in pyrt.h, or -1 for an operator richcompare does not take.
 int richcompare_op(const std::string &op)
 {
@@ -55,6 +69,7 @@ std::string builtin_type_symbol(const std::string &name)
     {"int", "c:@PyRtLong_Type"},
     {"bool", "c:@PyRtBool_Type"},
     {"list", "c:@PyRtList_Type"},
+    {"tuple", "c:@PyRtTuple_Type"},
     {"dict", "c:@PyRtDict_Type"},
     {"str", "c:@PyRtStr_Type"},
     {"float", "c:@PyRtFloat_Type"},
@@ -348,6 +363,8 @@ exprt python_runtime_converter::expr(const json &node)
     return call_expr(node);
   if (type == "List")
     return list(node);
+  if (type == "Tuple")
+    return tuple(node);
   if (type == "Dict")
     return dict_literal(node);
   if (type == "Subscript")
@@ -737,6 +754,15 @@ exprt python_runtime_converter::call_expr(const json &node)
     loc);
 }
 
+exprt python_runtime_converter::tuple(const json &node)
+{
+  const locationt loc = location(node);
+  exprt result = call("pyrt_tuple_new", {}, loc);
+  for (const json &element : node["elts"])
+    call("pyrt_tuple_append", {result, expr(element)}, loc);
+  return result;
+}
+
 exprt python_runtime_converter::list(const json &node)
 {
   const locationt loc = location(node);
@@ -896,6 +922,24 @@ void python_runtime_converter::store(
     if (annotation != annotated_.end())
       check_annotation(*annotation->second, value, "'" + id + "'", loc);
   }
+  else if (is_type(target, "Tuple") || is_type(target, "List"))
+  {
+    /* `a, b = t` checks the shape first, so a mismatch is a ValueError rather
+     * than an out-of-range read. Starred targets are not modelled. */
+    const json &elements = target["elts"];
+    for (const json &element : elements)
+      if (is_type(element, "Starred"))
+        unsupported(target);
+    call(
+      "pyrt_unpack_check",
+      {value, from_integer(elements.size(), long_long_int_type())},
+      loc);
+    for (size_t i = 0; i < elements.size(); ++i)
+      store(
+        elements[i],
+        call("pyrt_getitem", {value, int_constant(i, loc)}, loc),
+        loc);
+  }
   else if (is_type(target, "Attribute"))
   {
     exprt object = expr(target["value"]);
@@ -982,9 +1026,10 @@ void python_runtime_converter::for_statement(const json &node)
 {
   if (!node["orelse"].empty())
     unsupported(node);
+  /* The target is bound through store(), which unpacks a tuple or list target
+   * and refuses anything it cannot bind, so `for a, b in pairs` needs no check
+   * of its own here. */
   const json &target = node["target"];
-  if (!is_type(target, "Name"))
-    unsupported(node);
 
   const locationt loc = location(node);
   const json &iterable = node["iter"];
@@ -1149,8 +1194,7 @@ void python_runtime_converter::collect_assigned(
     if (is_type(node, "Assign"))
     {
       for (const json &target : node["targets"])
-        if (is_type(target, "Name"))
-          assigned.insert(target["id"].get<std::string>());
+        collect_target_names(target, assigned);
     }
     else if (
       (is_type(node, "AugAssign") || is_type(node, "AnnAssign")) &&
@@ -1168,8 +1212,7 @@ void python_runtime_converter::collect_assigned(
     }
     else if (is_type(node, "For"))
     {
-      if (is_type(node["target"], "Name"))
-        assigned.insert(node["target"]["id"].get<std::string>());
+      collect_target_names(node["target"], assigned);
       collect_assigned(node["body"], assigned, declared_global);
       collect_assigned(node["orelse"], assigned, declared_global);
     }

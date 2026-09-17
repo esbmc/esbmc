@@ -50,6 +50,17 @@ typedef struct __pyrt_list
   PyRtObject *items[PYRT_LIST_CAPACITY];
 } PyRtListObject;
 
+#define PYRT_TUPLE_CAPACITY 16
+
+/* Immutable: the entries are fixed once the literal is built, so there is no
+ * sq_ass_item and the array is a member as it is for a list. */
+typedef struct __pyrt_tuple
+{
+  PyRt_HEAD;
+  int64_t size;
+  PyRtObject *items[PYRT_TUPLE_CAPACITY];
+} PyRtTupleObject;
+
 #define PYRT_ATTRS_CAPACITY 16
 
 /* Attribute names are interned (pyrt_names.c and the frontend), so they
@@ -193,6 +204,7 @@ extern PyRtTypeObject PyRtNotImplemented_Type;
 extern PyRtTypeObject PyRtLong_Type;
 extern PyRtTypeObject PyRtBool_Type;
 extern PyRtTypeObject PyRtList_Type;
+extern PyRtTypeObject PyRtTuple_Type;
 extern PyRtTypeObject PyRtStr_Type;
 extern PyRtTypeObject PyRtFloat_Type;
 extern PyRtTypeObject PyRtDict_Type;
@@ -237,6 +249,9 @@ PyRtObject *pyrt_long_remainder(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_long_power(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_long_richcompare(PyRtObject *a, PyRtObject *b, int op);
 PyRtObject *pyrt_list_new(void);
+PyRtObject *pyrt_tuple_new(void);
+void pyrt_tuple_append(PyRtObject *o, PyRtObject *value);
+void pyrt_unpack_check(PyRtObject *o, int64_t expected);
 PyRtObject *pyrt_str_new(const char *data, int64_t length);
 bool pyrt_float_check(PyRtObject *o);
 PyRtObject *pyrt_float_from(double v);
