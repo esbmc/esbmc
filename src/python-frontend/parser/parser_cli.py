@@ -147,8 +147,11 @@ def _top_level_names(body: list) -> set[str]:
     return bound
 
 
-def _inline_runtime_imports(tree: ast.Module, filename: str, output_dir: str,
-                            deps: CliDeps, seen: dict | None = None) -> None:
+def _inline_runtime_imports(tree: ast.Module,
+                            filename: str,
+                            output_dir: str,
+                            deps: CliDeps,
+                            seen: dict | None = None) -> None:
     """Splice each imported module's body into the tree, in place.
 
     The runtime path resolves its own imports rather than going through the
