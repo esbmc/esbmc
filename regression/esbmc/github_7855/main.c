@@ -1,7 +1,6 @@
-// esbmc/esbmc#7855: an arbitrary pointer stored into a flexible array member
-// of a malloc'd object is not the one read back. The store is lowered to a
-// byte decomposition through the pointer's numeric address, and that address
-// does not reconstruct the same pointer.
+// esbmc/esbmc#7855: a pointer stored into a malloc'd object ESBMC models as
+// untyped bytes is not the one read back. A stack array of the same type
+// verifies; see github_7855-cast for what the store is lowered to.
 #include <stdlib.h>
 
 struct entry
@@ -10,24 +9,15 @@ struct entry
   unsigned long hash_code;
 };
 
-struct state
-{
-  unsigned long mask;
-  struct entry slots[];
-};
-
 int main(void)
 {
-  struct state *s = malloc(sizeof(struct state) + 4 * sizeof(struct entry));
-  if (!s)
+  struct entry *slots = malloc(4 * sizeof(struct entry));
+  if (!slots)
     return 0;
 
   const void *key;
-  struct entry e;
-  e.key = key;
-  e.hash_code = 7;
-  s->slots[1] = e;
+  slots[1].key = key;
 
-  __ESBMC_assert(s->slots[1].key == key, "the stored key is the one read back");
+  __ESBMC_assert(slots[1].key == key, "the stored key is the one read back");
   return 0;
 }
