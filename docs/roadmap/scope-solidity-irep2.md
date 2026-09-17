@@ -749,6 +749,11 @@ artefacts are identical across all 515 programs. Carrying the spelling across th
 the `argument_base_names` pattern of `frontends-to-irep2.md` §44 -- is what `:718` needs, and
 that is a change to `irep2`, not to Solidity.
 
+> **Superseded, 2026-09-17 (§20).** That carry landed, and the attribution above is slightly off:
+> `a_hex_or_oct` has no reader anywhere in the tree. What renders a constant's spelling is
+> `#cformat` (`c_expr2string.cpp:1124-1129`), carried by `frontends-to-irep2.md` §69, and with it
+> in place eleven of the twelve differences are gone. The site converts; see §20.
+
 ### 15.3 A fourth reader of a symbol's value
 
 `frontends-to-irep2.md` §61 recorded three readers. There is a fourth, and it is the one
@@ -1298,3 +1303,50 @@ round trip *retypes* that node rather than merely stripping annotations from it.
 `solidity_convert_call.cpp:787-789`, in `get_high_level_member_access`, sets `lvalue`/`file_local` on
 the local copy *after* `move_symbol_to_context`, so the context symbol never receives them. The two
 argument sites do it correctly, before the move.
+
+## 20. `:718` converts, because a later carry removed its blocker (2026-09-17)
+
+§15.2 ruled the file's busiest write unconvertible -- 845 runs, 12 of them with a static symbol --
+because converting it re-rendered a hex address literal as decimal in 12 of 515 symbol tables. Two
+things have changed since, one of them a correction and one of them work landed in the same stack.
+
+**The correction.** §15.2 attributed the loss to `a_hex_or_oct`. That key has **no reader anywhere in
+the tree**: outside `irep.h`'s accessors it does not appear. What renders a constant is `#cformat`:
+
+```cpp
+// c_expr2string.cpp:1124-1129
+const std::string &cformat = src.cformat().as_string();
+if (cformat != "")
+  dest = cformat;
+```
+
+**The work.** `frontends-to-irep2.md` §69 carried `#cformat` across the seam on the constant kinds, on
+2026-09-16 -- after §15 was written. So the blocker §15.2 measured was removed by an unrelated change
+three sections later in the same phase.
+
+Measured now, base against change over all 526 programs: `--goto-functions-only` identical, **0 of
+526**; `--symbol-table-only` **1 of 526**, down from twelve. The survivor is `library_4`, and it is not
+a literal:
+
+```
+-           * file: contract.sol
+-           * line: 12
+-           * function: magnitude
+```
+
+a `#location` on a sub-expression of the stored value. `expr2t` has no location field for most kinds
+(§11.3.1 of the python document found the same on a code argument), so the sub-expression's location is
+dropped. It is dump-only: the GOTO is byte-identical across all 526, and a counterexample's locations
+come from GOTO instructions rather than from a symbol's stored value.
+
+Converted on that basis, with the one difference recorded rather than rounded to zero. Solidity B-2*
+45 -> 44.
+
+### 20.1 The failure mode worth naming
+
+A recorded blocker can be stale not because it was wrong when written but because the tree moved under
+it. §15 was read first -- which is the discipline three earlier sections paid for -- and then checked
+against what had landed since, which is the part that was missing. Every verdict in these documents
+carries a date, and a phase that runs for weeks will keep invalidating its own earlier ones. The other
+sites §15 ruled out on attribute-loss grounds deserve the same re-test, since `#cformat` was not the
+only carry this stack added.

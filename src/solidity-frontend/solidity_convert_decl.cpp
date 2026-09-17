@@ -718,7 +718,7 @@ bool solidity_convertert::get_var_decl(
   {
     if (get_init_expr(init_value, literal_type, t, val))
       return true;
-    added_symbol.set_value(val);
+    added_symbol.set_value(migrate_expr(val));
     decl.operands().push_back(val);
   }
 
