@@ -1430,3 +1430,54 @@ of a ternary rather than a dereference of a reference.
    reaches the goto program on C++.
 8. ~~`regression/esbmc-cpp/cpp` has never been swept~~ -- swept, and it is the
    larger half: see §3.16. Take it before item 6.
+
+## 7. The three remaining B-2 writes, characterised (2026-09-17)
+
+Phase 7's B-2* residue is three, and they were the last undocumented ones in any frontend. None is a
+conversion waiting to be made.
+
+### 7.1 `clang_cpp_adjust_expr.cpp:85` -- meaningless while the adjuster is legacy
+
+This is `clang_cpp_adjust::adjust_symbol`'s own `symbol.set_type(std::move(t))`, i.e. the legacy
+read-modify-write that `scope-solidity-irep2.md` §19 identified as reverting *every* converter-side IREP2
+write in every frontend that runs this pass. Converting the adjuster's own write changes nothing while
+the pass around it is legacy: it would store IREP2 and then the next legacy arm would overwrite it. It
+converts when the pass does, not before.
+
+### 7.2 `clang_cpp_convert.cpp:3185` -- a chain of two losses, and the reader cannot derive its way out
+
+The write carries a marker the seam drops:
+
+```cpp
+exprt v = fd_symb->get_value();
+v.need_vptr_init(needs_vptr_init);   // a_need_vptr_init, a legacy comment flag
+fd_symb->set_value(std::move(v));    // <- the residue
+```
+
+`grep -c need_vptr_init src/util/irep/migrate.cpp` is **0**, and the reader is
+`clang_cpp_adjust_code_gen.cpp:43`, which decides whether to emit vptr initialisation at all. So
+converting this write would drop the flag and silently skip vtable setup -- the same shape as
+`scope-python-irep2.md` §12's `bases`, but on a soundness-relevant path rather than an exception-id one.
+
+§80's reader route looks available at first glance: there is exactly one reader, in the same frontend,
+and the flag is *derived* rather than primitive -- `:3170-3180` computes it by scanning the class's
+components for one with `is_vtptr`. A reader that scanned for itself would need no marker.
+
+It does not work, because the derivation depends on a second dropped attribute:
+`grep -c is_vtptr src/util/irep/migrate.cpp` is **0** too. `is_vtptr` is a component attribute, and §46
+established that an arbitrary component attribute does not cross -- only the base name has a field. So
+the reader cannot recompute what the writer computed, and the chain is two deep.
+
+That makes this the seventh marker found not to survive the seam, and the first where both the marker
+*and* the input to its derivation are lost. The routes are: carry `is_vtptr` per component (a second
+unreflected vector on `struct_type2t`, beside `member_base_names`), or model the vtable pointer
+structurally so that "has a vptr" is a question about the component list rather than about an attribute
+on it. The second is the same choice §12.3 poses for Python's `bases`, and for the same reason -- an
+attribute is being used where structure would answer the question.
+
+### 7.3 `clang_cpp_convert.cpp:3156`
+
+`fd_symb->set_type(component_type)` on a field-decl symbol, in the same block. Not characterised here:
+it is a type write rather than a marker carrier, so it is the one of the three that may simply convert.
+Left for a pass that can measure it against the C++ suite, which at 1065 tests with six known failures is
+the expensive corpus in this repo.
