@@ -969,6 +969,14 @@ private:
     const nlohmann::json &element,
     bool invert);
 
+  /// A PEP 604 union annotation, as the single type this
+  /// monomorphic frontend has to represent it with.
+  typet get_union_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
+  typet narrow_union_to_member(const std::string &member_name);
+
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 
   void
