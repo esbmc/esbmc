@@ -4391,10 +4391,47 @@ write makes the source type resolved, so the check applies and the method is not
 ```
 7  the tag symbol is not in the table yet   §53's precondition  → this site cannot convert
 4  no bit_field2t                                               → a new type2t kind
-4  a resolved struct has no methods                              → methods() must cross the seam
+4  a resolved struct has no methods                              → see §76: the access is transient
 ```
 
 Three causes, three kinds of answer, none an attribute carry. That is the point worth keeping: the
 arm was never 3 341 differences away from converting -- it was three structural questions away, and
 97% of the differences were a debug dump. §69 through §72 removed real losses and none of them was
 on this list.
+
+## 76. The third group was a wrong assertion, not a missing carry (2026-09-16)
+
+§75 listed group 3 as "methods() must cross the seam". Reading one more field of the failing node
+says otherwise. The member's own type is `code` and the source is a plain object symbol, so the
+shape is `OBJECT.f` with `f` a function designator -- and an in-tree arm exists to consume exactly
+that: `clang_cpp_adjust_irep2`'s `is_cpp_member_call` is `is_member2t && is_code_type &&
+!member.empty()`, and its `adjust_cpp_member` resolves the member through the namespace, aborting if
+it is absent and asserting the symbol is code. The legacy counterpart
+(`clang_cpp_adjust_expr.cpp:210-248`) does the same for the three frontends that run it -- clang-cpp,
+Solidity and Python. So the shape is transient, like the three source shapes the assertion already
+tolerates, and for the same reason: a declaration's value is migrated during conversion, before the
+adjuster runs.
+
+The assertion also never checked anything here. A code-typed member is always a method -- by C17
+6.7.2.1p3 for the clang frontends ("a structure or union shall not contain a member with incomplete
+or function type"), and by measurement for the three that build struct types programmatically: none
+of the 29 `components().push_back` sites pushes a code type. Methods are not components on either
+side -- legacy's own `get_component` searches `components()` only (`std_types.cpp:45-56`) -- so the
+lookup could only produce a spurious abort. The power is re-established upstream instead, by the
+namespace lookup above, which verifies the method exists *as a symbol*; and the diff asserts the
+converse, that a code-typed member must not resolve to a component, keeping a tripwire for the
+#4566 shape.
+
+The fix adds one disjunct to an `assert` under `#ifndef NDEBUG`. A disjunct can only make an
+assertion pass more often, so nothing else can move, and a release build is unaffected. Measured with
+the local-arm conversion applied: all four `valarray` programs go from `SIGABRT` to the verdict their
+descriptor asks for. Eleven of the fifteen remain -- 7 under §74's precondition, 4 needing a
+`bit_field2t`.
+
+`methods()` still does not cross the seam. That question survives, narrowed to class **type** writes:
+three consumers read the list back through `symbolt::get_type()` --
+`goto-programs/destructor.cpp:21-23`, `solidity-frontend/solidity_convert_builtin.cpp:266`, and
+`clang-cpp-frontend/clang_cpp_convert.cpp:3430`. The last is the base-class method-inheritance loop
+and is the worst of the three: it would not abort on an empty list, it would silently give the
+derived class no inherited methods. So the carry costs destructor lowering *and* C++ method
+inheritance -- not the value write this sequence was chasing.
