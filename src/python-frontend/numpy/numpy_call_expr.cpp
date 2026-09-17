@@ -6738,6 +6738,59 @@ static bool parse_searchsorted_side_keyword(const nlohmann::json &call)
   return right;
 }
 
+// True when `value_arg` (following it through a Name binding first, like
+// resolve_literal_numpy_array_input does for the array argument) is a
+// literal 1-D vector of values -- a List/Tuple literal, or a literal
+// np.array(...) -- rather than a single scalar value:
+// np.searchsorted(a, [2, 6])/np.searchsorted(a, (2, 6)). Declines (nullopt)
+// for anything that isn't one of those shapes, so the caller falls back to
+// the existing single-value path. Throws explicitly for a 2-D-shaped vector
+// (a nested List/Tuple element) rather than silently misreading it.
+static std::optional<nlohmann::json> resolve_searchsorted_value_vector(
+  nlohmann::json value_arg,
+  python_converter &converter)
+{
+  if (
+    value_arg.value("_type", std::string()) == "Name" &&
+    !json_utils::has_multiple_assignments_in_scope(
+      value_arg["id"], converter.current_function_name(), converter.ast()))
+  {
+    nlohmann::json resolved = json_utils::find_var_decl(
+      value_arg["id"], converter.current_function_name(), converter.ast());
+    if (resolved.contains("value") && resolved["value"].is_object())
+      value_arg = resolved["value"];
+  }
+
+  const std::string type = value_arg.value("_type", std::string());
+  nlohmann::json elts;
+  if (type == "List" || type == "Tuple")
+  {
+    if (!value_arg.contains("elts") || !value_arg["elts"].is_array())
+      return std::nullopt;
+    elts = value_arg["elts"];
+  }
+  else if (
+    std::optional<nlohmann::json> literal =
+      get_literal_numpy_array_arg(value_arg))
+    elts = (*literal)["elts"];
+  else
+    return std::nullopt;
+
+  for (const nlohmann::json &elt : elts)
+  {
+    const std::string elt_type = elt.value("_type", std::string());
+    if (elt_type == "List" || elt_type == "Tuple")
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() values must be a 1-D vector of "
+        "literals");
+  }
+
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = std::move(elts);
+  return result;
+}
+
 exprt numpy_call_expr::handle_searchsorted_call()
 {
   const std::string &function = function_id_.get_function();
@@ -6764,11 +6817,26 @@ exprt numpy_call_expr::handle_searchsorted_call()
       "ValueError: numpy.searchsorted() requires the input array to be "
       "sorted");
 
-  nlohmann::json position;
-  position["_type"] = "Constant";
-  nlohmann::json value_arg = call_["args"][1];
+  const nlohmann::json &value_arg = call_["args"][1];
+  if (
+    std::optional<nlohmann::json> values =
+      resolve_searchsorted_value_vector(value_arg, converter_))
+  {
+    std::vector<std::size_t> indices;
+    indices.reserve((*values)["elts"].size());
+    for (const nlohmann::json &value : (*values)["elts"])
+    {
+      numeric_to_key(
+        value, "TypeError: numpy.searchsorted() requires a literal value");
+      indices.push_back(searchsorted_position(arr_arg, value, right));
+    }
+    return converter_.get_expr(make_integer_list(indices));
+  }
+
   numeric_to_key(
     value_arg, "TypeError: numpy.searchsorted() requires a literal value");
+  nlohmann::json position;
+  position["_type"] = "Constant";
   position["value"] =
     static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
   return converter_.get_expr(position);
