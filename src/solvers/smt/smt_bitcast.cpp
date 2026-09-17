@@ -187,13 +187,12 @@ smt_astt smt_solver_baset::decode_pointer_repr(
   return pointer;
 }
 
-smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
+/** The pointer leg of convert_bitcast. Null when neither side is a pointer
+ *  whose representation this pair can carry. */
+smt_astt smt_solver_baset::convert_pointer_bitcast(
+  const expr2tc &from,
+  const type2tc &to_type)
 {
-  assert(is_bitcast2t(expr));
-
-  const expr2tc &from = to_bitcast2t(expr).from;
-  const type2tc &to_type = to_bitcast2t(expr).type;
-
   if (
     is_pointer_type(from->type) && is_bv_type(to_type) &&
     pointer_repr_applies(from->type, to_type))
@@ -203,6 +202,66 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
     is_pointer_type(to_type) && is_bv_type(from->type) &&
     pointer_repr_applies(to_type, from->type))
     return decode_pointer_repr(from, to_type);
+
+  return nullptr;
+}
+
+/** Rebuild a struct from the bits of @p from, member by member. Null when
+ *  those bits are not in a form this can take apart. */
+smt_astt smt_solver_baset::convert_bitcast_to_struct(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  expr2tc new_from = from;
+
+  // Converting from fp to struct, we simply convert the fp to bv and use
+  // the bv to struct method to do the job for us
+  if (is_floatbv_type(new_from))
+    new_from = bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
+
+  // Converting from array to struct, we convert it to bv and use the bv to
+  // struct method to do the job for us
+  if (is_array_type(new_from))
+    new_from = flatten_to_bitvector(new_from);
+
+  if (!is_bv_type(new_from) && !is_union_type(new_from))
+    return nullptr;
+
+  const struct_type2t &structtype = to_struct_type(to_type);
+
+  // We have to reconstruct the struct from the bitvector, so do it
+  // by extracting the offsets+size of each member from the bitvector.
+  // Zero-width members (e.g. empty C++ class fields) occupy no bits:
+  // emit a zero-valued constant of that type instead of a width-0 extract.
+  std::vector<expr2tc> fields;
+  for (unsigned int i = 0; i < structtype.members.size(); i++)
+  {
+    const type2tc &member_type = structtype.members[i];
+    unsigned int sz = type_byte_size_bits(member_type).to_uint64();
+    if (sz == 0)
+    {
+      fields.push_back(gen_zero(member_type));
+      continue;
+    }
+    unsigned int offset =
+      member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
+    expr2tc tmp =
+      extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
+    fields.push_back(bitcast2tc(member_type, tmp));
+  }
+
+  return convert_ast(constant_struct2tc(to_type, fields));
+}
+
+smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
+{
+  assert(is_bitcast2t(expr));
+
+  const expr2tc &from = to_bitcast2t(expr).from;
+  const type2tc &to_type = to_bitcast2t(expr).type;
+
+  if (smt_astt pointer = convert_pointer_bitcast(from, to_type))
+    return pointer;
 
   // Converts to floating-point
   if (is_floatbv_type(to_type))
@@ -265,46 +324,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   }
   else if (is_struct_type(to_type))
   {
-    expr2tc new_from = from;
-
-    // Converting from fp to struct, we simply convert the fp to bv and use
-    // the bv to struct method to do the job for us
-    if (is_floatbv_type(new_from))
-      new_from =
-        bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
-
-    // Converting from array to struct, we convert it to bv and use the bv to
-    // struct method to do the job for us
-    if (is_array_type(new_from))
-      new_from = flatten_to_bitvector(new_from);
-
-    if (is_bv_type(new_from) || is_union_type(new_from))
-    {
-      const struct_type2t &structtype = to_struct_type(to_type);
-
-      // We have to reconstruct the struct from the bitvector, so do it
-      // by extracting the offsets+size of each member from the bitvector.
-      // Zero-width members (e.g. empty C++ class fields) occupy no bits:
-      // emit a zero-valued constant of that type instead of a width-0 extract.
-      std::vector<expr2tc> fields;
-      for (unsigned int i = 0; i < structtype.members.size(); i++)
-      {
-        const type2tc &member_type = structtype.members[i];
-        unsigned int sz = type_byte_size_bits(member_type).to_uint64();
-        if (sz == 0)
-        {
-          fields.push_back(gen_zero(member_type));
-          continue;
-        }
-        unsigned int offset =
-          member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
-        expr2tc tmp =
-          extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
-        fields.push_back(bitcast2tc(member_type, tmp));
-      }
-
-      return convert_ast(constant_struct2tc(to_type, fields));
-    }
+    if (smt_astt structure = convert_bitcast_to_struct(from, to_type))
+      return structure;
   }
   else if (is_union_type(to_type))
   {
