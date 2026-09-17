@@ -7878,6 +7878,74 @@ this. The six rows among that family's 112 that are about C library headers --
 this change. The builtin gap was confirmed; its link to those failures was never
 measured, and for the cmath rows it is now refuted.
 
+## 145. B-2's type writes, bisected (2026-09-15)
+
+Applying to Phase 6 what Phases 8 and 9 established: convert every single-line type
+write, measure, bisect the failures, keep what stays green. `pad_type_symbol`
+(`clang_c_adjust_irep2.cpp:85`) was excluded from the start -- §139.3 and the
+`clang-c-irep2-hopoff-phase6` note both say it must not move.
+
+| state | `regression/esbmc` failures of 2 293 |
+|---|---|
+| all 21 converted | 620 |
+| `clang_c_convert.cpp` reverted | 19 |
+| `clang_c_adjust_expr.cpp` also reverted | 2 (the two THOROUGH tests that pass serially) |
+
+So the six conversions that land are `clang_c_main.cpp`'s three and
+`clang_c_adjust_polymorphic_functions.cpp`'s three. `esbmc-cpp/cpp` stays at 6 of
+1 065 and the unit suite at 876 of 876.
+
+### 145.1 What the two reverted files are carrying
+
+`clang_c_convert.cpp` accounts for 601 of the 620 -- it writes the type of every
+converted declaration, so it carries everything C's type system spells that IREP2
+normalises.
+
+`clang_c_adjust_expr.cpp`'s nine are narrower and the failing tests name the family
+rather than needing a guess: `restrict_alias_fail`, `restrict_assume`,
+`restrict_const_alias`, `restrict_struct_alias` (four), `volatile_01`, `volatile_02`,
+`github_7707-overaligned`, `github_7707-pack2`, `memset-const-2`, the five
+`github_1548*`, `github_6950`, `github_2512_8` and `cwe_dead_store_negative`. That is
+**qualifiers and layout** -- `restrict`, `volatile`, alignment and packing -- which are
+type properties in C and are not in `type2t`.
+
+This is the same wall as Solidity's eleven attributes and python's `#cpp_type`, in a
+third language: what a frontend needs to say about a type is wider than what the shared
+representation models. The three phases now agree on the finding, which is worth more
+than any one of them converting a few more sites.
+
+## 146. A value write blocked by cost, not by correctness (2026-09-15)
+
+Phase 6's value writes split differently from its type writes. Of the ten,
+`clang_c_adjust_irep2.cpp:65` already passes an `expr2tc` (a B-2 grep false positive),
+six in `clang_c_convert.cpp` and one in `clang_c_main.cpp` are converter-time, and two
+are in the adjust passes, which §53's precondition now covers.
+
+Of those two, one lands: `clang_c_adjust_polymorphic_functions.cpp:1141`, the
+instantiated builtin's body. `regression/esbmc` is 2 of 2 293 -- the two THOROUGH tests
+that pass when re-run serially -- `esbmc-cpp/cpp` 6 of 1 065, unit 876 of 876.
+
+The other does not, and the reason is new. `clang_c_adjust::adjust_symbol` writes back
+every symbol's value:
+
+```cpp
+exprt v = symbol.get_value();
+adjust_expr(v);
+symbol.set_value(std::move(v));      // migrate_expr(v) here fails
+```
+
+With `migrate_expr` there, `regression/esbmc/deep_expr_no_stack_crash` times out;
+reverting that one line and nothing else makes it pass again. The test's own expectation
+admits `ERROR: expression nesting is too deep to migrate`, so this is not the depth
+guard firing -- it is the price of migrating **every symbol's value** eagerly where the
+lazy path migrated only what someone asked for.
+
+So a fourth kind of blocker, alongside a dropped attribute (§145), a symbol that does
+not exist yet (`scope-python-irep2.md` §6.1) and a namespace that cannot see the context
+(`frontends-to-irep2.md` §52): **eagerness has a cost, and a write that runs once per
+symbol is where it shows.** `set_value(const exprt &)`'s laziness is load-bearing there
+for performance rather than for semantics, which is worth knowing before anyone counts
+that site as debt.
 ## 139. Phase 6's remaining surface, measured (2026-09-14)
 
 Phase 5 (jimple) finished its mechanical work -- `scope-jimple-irep2.md` §39 --
