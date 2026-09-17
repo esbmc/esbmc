@@ -1300,10 +1300,19 @@ void python_runtime_converter::define_function(
   }
 
   statements(def["body"], body);
+  /* A body of just `...` is a declaration stub rather than code that runs, so
+   * checking its implicit None against the annotation reports the stub and not
+   * a defect. ast2json spells Ellipsis as the string "...", and `pass`, which
+   * a type checker does flag, stays a Pass node and is unaffected. */
+  const json &declared = def["body"];
+  const bool stub = declared.size() == 1 && is_type(declared[0], "Expr") &&
+                    is_type(declared[0]["value"], "Constant") &&
+                    declared[0]["value"]["value"].is_string() &&
+                    declared[0]["value"]["value"].get<std::string>() == "...";
   /* Falling off the end returns None, which a return annotation usually
    * forbids. That is the defect this catches most often. */
   exprt implicit = address("c:@pyrt_None");
-  if (return_annotation_)
+  if (return_annotation_ && !stub)
     check_annotation(*return_annotation_, implicit, "the return value", loc);
   code_returnt fall_off;
   fall_off.return_value() = implicit;
