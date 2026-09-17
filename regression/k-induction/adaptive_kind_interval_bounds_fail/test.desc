@@ -1,0 +1,4 @@
+CORE
+main.c
+--adaptive-k-induction --interval-analysis
+^VERIFICATION FAILED$

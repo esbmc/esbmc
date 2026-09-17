@@ -742,3 +742,11 @@ unsigned stamped_loop(const goto_programt::instructiont &instruction)
     instruction.location.get(loop_stamp_field).as_string();
   return id.empty() ? 0 : std::stoul(id);
 }
+
+expr2tc loop_continuation(const goto_programt::instructiont &head)
+{
+  expr2tc continuation = head.guard;
+  make_not(continuation);
+  simplify(continuation);
+  return continuation;
+}

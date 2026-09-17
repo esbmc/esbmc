@@ -80,10 +80,8 @@ std::vector<expr2tc> measure_floors(const loopst &loop)
   if (!head->is_goto())
     return {};
 
-  const expr2tc continuation =
-    is_not2t(head->guard) ? to_not2t(head->guard).value : not2tc(head->guard);
   std::vector<std::pair<expr2tc, expr2tc>> measures;
-  measure_candidates_from_guard(continuation, measures);
+  measure_candidates_from_guard(loop_continuation(*head), measures);
 
   std::vector<expr2tc> floors;
   for (const auto &[m, L] : measures)
@@ -107,9 +105,7 @@ std::vector<expr2tc> lifted_exit_assertions(const loopst &loop)
   if (!exit->is_assert() || reads_through_pointer(exit->guard))
     return {};
 
-  const expr2tc continuation =
-    is_not2t(head->guard) ? to_not2t(head->guard).value : not2tc(head->guard);
-  return {or2tc(continuation, exit->guard)};
+  return {or2tc(loop_continuation(*head), exit->guard)};
 }
 
 std::vector<expr2tc>

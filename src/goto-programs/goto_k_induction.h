@@ -40,4 +40,9 @@ void stamp_loop(goto_programt::instructiont &instruction, unsigned loop);
 /// The loop id stamped on @p instruction, or 0.
 unsigned stamped_loop(const goto_programt::instructiont &instruction);
 
+/// The condition under which the loop headed by @p head, `IF g THEN GOTO
+/// exit`, runs its body again: !g, simplified over the program's own symbols,
+/// so a guard spelled either way ends up a plain comparison.
+expr2tc loop_continuation(const goto_programt::instructiont &head);
+
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

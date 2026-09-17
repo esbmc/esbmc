@@ -781,9 +781,10 @@ void goto_symext::record_unwinding_claim()
       !head.is_goto() || head.targets.size() != 1 ||
       head.targets.front()->location_number <= back_edge.location_number)
       return;
-    continuation =
-      is_not2t(head.guard) ? to_not2t(head.guard).value : not2tc(head.guard);
+    continuation = loop_continuation(head);
   }
+  else
+    simplify(continuation);
 
   // Symex dereferences a guard before renaming it; a raw guard that reads
   // through a pointer has no SSA form the solver can take.

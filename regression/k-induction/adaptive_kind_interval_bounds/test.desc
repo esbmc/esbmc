@@ -1,0 +1,5 @@
+CORE
+main.c
+--adaptive-k-induction --interval-analysis
+^Loop [0-9]+: forward condition bounds it at 100 iterations$
+^VERIFICATION SUCCESSFUL$
