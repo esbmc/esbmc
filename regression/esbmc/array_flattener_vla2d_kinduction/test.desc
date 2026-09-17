@@ -1,0 +1,4 @@
+CORE
+main.c
+--array-flattener --k-induction --max-inductive-step 3
+^VERIFICATION SUCCESSFUL$

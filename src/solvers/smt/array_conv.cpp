@@ -301,6 +301,7 @@ smt_astt array_convt::mk_unbounded_select(
   // fiddles with other arrays.
   ctx->convert_ast(real_idx);
 
+  join_array_indexes();
   add_new_indexes();
   apply_new_selects();
 
@@ -408,8 +409,10 @@ smt_astt array_convt::unbounded_array_ite(
   // Add storage for the eventual collation of all these values
   array_valuation[new_arr_id].emplace_back();
 
-  add_new_indexes();
+  // Join before replaying history: add_new_indexes re-executes past joining
+  // ite's, which require both arrays to already hold the new indexes.
   join_array_indexes();
+  add_new_indexes();
   execute_new_updates();
   add_array_equalities();
 
