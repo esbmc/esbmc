@@ -40,6 +40,10 @@ private:
   /// Annotated names of the scope being converted, and their annotations.
   std::map<std::string, const nlohmann::json *> annotated_;
 
+  /// Non-zero while converting a try body, where an error a model records can
+  /// become a Python exception instead of an abort.
+  unsigned in_try_ = 0;
+
   /// Symbol id of the function being converted; empty at module level.
   std::string code_id_;
   std::string function_name_;
@@ -139,6 +143,7 @@ private:
   void raise_statement(const json &node);
   void try_statement(const json &node);
   void emit_guarded(const json &node, const locationt &loc);
+  void throw_pending(const locationt &loc);
   void class_statement(const json &node);
 
   void collect_assigned(

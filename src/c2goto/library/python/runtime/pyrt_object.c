@@ -237,6 +237,26 @@ PyRtObject *pyrt_getitem(PyRtObject *o, PyRtObject *key)
   return sq->sq_item(o, pyrt_sequence_index(o, key));
 }
 
+/* Used where the caller can turn an error into a Python exception -- inside a
+ * try. A missing key is recorded rather than asserted, so the caller throws a
+ * KeyError the program can catch. Everything else keeps the ordinary path,
+ * whose asserts carry the message a failure is reported with. */
+PyRtObject *pyrt_getitem_checked(PyRtObject *o, PyRtObject *key)
+{
+  if (o->ob_type == &PyRtDict_Type)
+  {
+    PyRtDictObject *d = (PyRtDictObject *)o;
+    int64_t at = pyrt_dict_find(d, key);
+    if (at < 0)
+    {
+      pyrt_set_pending(&PyRtKeyError_Type);
+      return 0;
+    }
+    return d->values[at];
+  }
+  return pyrt_getitem(o, key);
+}
+
 void pyrt_setitem(PyRtObject *o, PyRtObject *key, PyRtObject *value)
 {
   PyRtMappingMethods *mp = o->ob_type->tp_as_mapping;

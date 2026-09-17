@@ -98,7 +98,17 @@ std::string builtin_type_symbol(const std::string &name)
     {"object", "c:@PyRtObject_Type"},
     {"type", "c:@PyRtType_Type"},
     {"BaseException", "c:@PyRtBaseException_Type"},
-    {"Exception", "c:@PyRtException_Type"}};
+    {"Exception", "c:@PyRtException_Type"},
+    {"LookupError", "c:@PyRtLookupError_Type"},
+    {"KeyError", "c:@PyRtKeyError_Type"},
+    {"IndexError", "c:@PyRtIndexError_Type"},
+    {"ArithmeticError", "c:@PyRtArithmeticError_Type"},
+    {"ZeroDivisionError", "c:@PyRtZeroDivisionError_Type"},
+    {"TypeError", "c:@PyRtTypeError_Type"},
+    {"ValueError", "c:@PyRtValueError_Type"},
+    {"AttributeError", "c:@PyRtAttributeError_Type"},
+    {"NameError", "c:@PyRtNameError_Type"},
+    {"StopIteration", "c:@PyRtStopIteration_Type"}};
   auto it = types.find(name);
   return it == types.end() ? std::string() : it->second;
 }
@@ -958,9 +968,35 @@ exprt python_runtime_converter::subscript(const json &node)
 {
   if (is_type(node["slice"], "Slice"))
     unsupported(node);
+  const locationt loc = location(node);
   exprt container = expr(node["value"]);
   exprt key = expr(node["slice"]);
-  return call("pyrt_getitem", {container, key}, location(node));
+  /* Outside a try nothing could catch it, so the ordinary path is used and a
+   * bad subscript aborts with the message it reports today. */
+  if (!in_try_)
+    return call("pyrt_getitem", {container, key}, loc);
+  exprt value = call("pyrt_getitem_checked", {container, key}, loc);
+  throw_pending(loc);
+  return value;
+}
+
+/// Turns an error a model recorded into a Python exception, where something
+/// could catch it. This is the caller half of CPython's convention: the model
+/// returns after recording, and the call site raises.
+void python_runtime_converter::throw_pending(const locationt &loc)
+{
+  exprt raised = call("pyrt_take_pending", {}, loc);
+
+  side_effect_exprt thrown("cpp-throw", empty_typet());
+  thrown.copy_to_operands(raised);
+  thrown.location() = loc;
+  codet statement("expression");
+  statement.copy_to_operands(thrown);
+  statement.location() = loc;
+
+  exprt in_flight("notequal", bool_typet());
+  in_flight.copy_to_operands(raised, gen_zero(object_type_));
+  emit_if(in_flight, statement, loc);
 }
 
 /// The type object an annotation names, or nil when the runtime cannot
@@ -1402,9 +1438,13 @@ void python_runtime_converter::emit_guarded(
   const json &handlers = node["handlers"];
 
   code_blockt body;
+  ++in_try_;
   statements(node["body"], body);
+  --in_try_;
   /* `else` runs only when the body completed: appending it to the body is
-   * enough, since an exception leaves the body and skips whatever follows. */
+   * enough, since an exception leaves the body and skips whatever follows.
+   * It is outside the guarded region, as in Python -- these handlers do not
+   * catch what it raises. */
   statements(node["orelse"], body);
 
   if (handlers.empty())
