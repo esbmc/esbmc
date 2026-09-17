@@ -1,4 +1,5 @@
 CORE
 main.c
 --unsigned-overflow-check --function q
+^Generated 3 VCC\(s\), 2 remaining after simplification
 ^VERIFICATION SUCCESSFUL$
