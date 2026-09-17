@@ -416,8 +416,10 @@ private:
 
   static const std::map<std::string, std::string> &consensus_func_to_type()
   {
+    // hash() -> bytes (Bytes32), matching models/consensus.py's real
+    // signature -- not the real Python builtin's int.
     static const std::map<std::string, std::string> func_to_type = {
-      {"hash", "uint256"}};
+      {"hash", "bytes"}};
     return func_to_type;
   }
 };
