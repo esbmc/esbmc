@@ -1048,8 +1048,13 @@ void python_adjust::derive_exception_ids_rec(
   // "void_ptr". The trailing never-empty fallback mirrors legacy's — callers
   // (remove_exceptions) dereference front(), so an unknown shape must yield
   // a synthetic id that simply never matches a real throw, not an empty
-  // list. (Legacy also appends a `#cpp_type` id when present; that attribute
-  // does not survive migration and Python types never carry it.)
+  // list. (Legacy also appends a `#cpp_type` id when present. That attribute
+  // does now survive migration on the bitvector and floatbv kinds, and Python
+  // types do carry it -- a string subscript is tagged "char" -- so this list
+  // can omit an id clang_cpp_exception_id includes. Deliberate: a python
+  // exception is matched by its class, not by a scalar's spelling, and nothing
+  // raises a bare char. Revisit if that changes. See
+  // docs/roadmap/scope-python-irep2.md §10.)
   if (is_pointer_type(type))
   {
     const type2tc &sub = to_pointer_type(type).subtype;

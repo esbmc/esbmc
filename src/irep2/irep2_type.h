@@ -200,8 +200,14 @@ class unsignedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  unsignedbv_type2t(unsigned int w, bool qualified = false)
-    : type2t(unsignedbv_id), width(w), constant_qualified(qualified)
+  unsignedbv_type2t(
+    unsigned int w,
+    bool qualified = false,
+    const irep_idt &cpp = irep_idt())
+    : type2t(unsignedbv_id),
+      width(w),
+      cpp_type(cpp),
+      constant_qualified(qualified)
   {
     // assert(w != 0 && "Must have nonzero width for integer type");
     // XXX -- zero sized bitfields are permissible. Oh my.
@@ -210,6 +216,13 @@ public:
   unsigned int get_width() const;
 
   unsigned int width;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected: a spelling is no part of the type's identity, so two
+  /// bitvectors of the same width are the same type however they were spelled.
+  /// Carried because a consumer reads it back -- `python_converter::
+  /// get_python_type_category` distinguishes a 1-char string element from an
+  /// 8-bit int by it (docs/roadmap/scope-python-irep2.md §9).
+  irep_idt cpp_type;
   /// Whether the source qualified this `const`, as `#constant` records it.
   /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
   /// integers of the same width are the same type whether or not one was
@@ -217,7 +230,17 @@ public:
   bool constant_qualified;
 
   static constexpr auto fields = std::make_tuple(&unsignedbv_type2t::width);
-  static constexpr std::size_t excluded_field_bytes = sizeof(bool);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(irep_idt) + sizeof(bool);
+  /// `cpp_type` pushes `constant_qualified` into a fresh slot, so this class
+  /// now carries four bytes of trailing padding and `fields_cover_class` has no
+  /// margin left: a further unreflected field would fit in the hole unnoticed.
+  /// Pin the size so the next one has to come here first.
+  static_assert(
+    sizeof(unsigned int) + sizeof(irep_idt) + sizeof(bool) <=
+      2 * sizeof(void *),
+    "unsignedbv_type2t's reflected + excluded fields no longer fit the pinned "
+    "layout; re-check fields_cover_class's margin before adding a field");
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -229,14 +252,23 @@ class signedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  signedbv_type2t(signed int w, bool qualified = false)
-    : type2t(signedbv_id), width(w), constant_qualified(qualified)
+  signedbv_type2t(
+    signed int w,
+    bool qualified = false,
+    const irep_idt &cpp = irep_idt())
+    : type2t(signedbv_id),
+      width(w),
+      cpp_type(cpp),
+      constant_qualified(qualified)
   {
   }
   signedbv_type2t(const signedbv_type2t &ref) = default;
   unsigned int get_width() const;
 
   unsigned int width;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected, for the reason given on unsignedbv_type2t.
+  irep_idt cpp_type;
   /// Whether the source qualified this `const`, as `#constant` records it.
   /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
   /// integers of the same width are the same type whether or not one was
@@ -244,7 +276,17 @@ public:
   bool constant_qualified;
 
   static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
-  static constexpr std::size_t excluded_field_bytes = sizeof(bool);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(irep_idt) + sizeof(bool);
+  /// `cpp_type` pushes `constant_qualified` into a fresh slot, so this class
+  /// now carries four bytes of trailing padding and `fields_cover_class` has no
+  /// margin left: a further unreflected field would fit in the hole unnoticed.
+  /// Pin the size so the next one has to come here first.
+  static_assert(
+    sizeof(unsigned int) + sizeof(irep_idt) + sizeof(bool) <=
+      2 * sizeof(void *),
+    "signedbv_type2t's reflected + excluded fields no longer fit the pinned "
+    "layout; re-check fields_cover_class's margin before adding a field");
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -507,8 +549,11 @@ public:
    *  @param fraction Number of fraction bits in this type of floatbv
    *  @param exponent Number of exponent bits in this type of floatbv
    */
-  floatbv_type2t(unsigned int f, unsigned int e)
-    : type2t(floatbv_id), fraction(f), exponent(e)
+  floatbv_type2t(
+    unsigned int f,
+    unsigned int e,
+    const irep_idt &cpp = irep_idt())
+    : type2t(floatbv_id), fraction(f), exponent(e), cpp_type(cpp)
   {
   }
   floatbv_type2t(const floatbv_type2t &ref) = default;
@@ -516,9 +561,13 @@ public:
 
   unsigned int fraction;
   unsigned int exponent;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected, for the reason given on unsignedbv_type2t.
+  irep_idt cpp_type;
 
   static constexpr auto fields =
     std::make_tuple(&floatbv_type2t::fraction, &floatbv_type2t::exponent);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
