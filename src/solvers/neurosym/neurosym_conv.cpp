@@ -975,5 +975,9 @@ BigInt neurosym_convt::get_bv(smt_astt a, bool is_signed)
 
 const std::string neurosym_convt::solver_text()
 {
-  return "NeuroSym '" + prog_command(options) + "'";
+  // Just the friendly name -- the full invocation (path + every flag +
+  // the temp formula path) is verbose noise at normal verbosity; it is
+  // still available via log_debug("solver", ...) in oneshot_process.cpp
+  // for anyone who needs the exact command.
+  return "NeuroSym";
 }

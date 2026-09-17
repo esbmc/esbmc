@@ -903,7 +903,21 @@ tvt smtlib_convt::get_bool(smt_astt a)
 const std::string smtlib_convt::solver_text()
 {
   if (emit_proc)
-    return "'" + options.get_option("smtlib-solver-prog") + "'";
+  {
+    // Show a short, friendly label instead of the full command line (path
+    // + all flags + %f placeholder) -- this backend is shared by several
+    // process-based solvers (bitwuzla-via-pipe, NeuroSym, ...), and the
+    // full invocation is verbose noise at normal verbosity here; the
+    // exact command actually run is still available via log_debug in
+    // oneshot_process.cpp for anyone who needs it.
+    std::string prog = options.get_option("smtlib-solver-prog");
+    size_t sp = prog.find(' ');
+    std::string first_tok = (sp == std::string::npos) ? prog : prog.substr(0, sp);
+    size_t slash = first_tok.find_last_of('/');
+    std::string base =
+      (slash == std::string::npos) ? first_tok : first_tok.substr(slash + 1);
+    return base.empty() ? prog : base;
+  }
 
   if (emit_opt_output)
     return "Text output";

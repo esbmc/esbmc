@@ -126,7 +126,12 @@ smt_resultt run_solver(
       pos += quoted_path.size();
     }
 
-  log_status("Running {}: {}", name, cmd);
+  // Demoted from log_status to log_debug: the exact subprocess command
+  // (full path + every flag + the temp formula path) is useful when
+  // debugging the solver integration, but is noise at normal verbosity
+  // -- solver_text() above already prints a short, friendly name for
+  // the routine "which solver is running" case.
+  log_debug("solver", "Running {}: {}", name, cmd);
 
 #ifdef _WIN32
   FILE *out = popen(cmd.c_str(), "r");
