@@ -3115,6 +3115,20 @@ typet migrate_type_back(const type2tc &ref)
   return result;
 }
 
+/// `#constant` and `#cpp_type` are comment fields: writing them when unset
+/// still inserts the key, which the printer then reads back as a qualifier or a
+/// spelling (§158).
+static void restore_type_comments(
+  typet &t,
+  bool constant_qualified,
+  const irep_idt &cpp_type)
+{
+  if (constant_qualified)
+    t.cmt_constant(true);
+  if (!cpp_type.empty())
+    t.cpp_type(cpp_type);
+}
+
 static typet migrate_type_back_uncached(const type2tc &ref)
 {
   switch (ref->type_id)
@@ -3229,13 +3243,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     const unsignedbv_type2t &ref2 = to_unsignedbv_type(ref);
 
     unsignedbv_typet t(ref2.width);
-    // Only when set: `#constant` is a comment field, and writing it false still
-    // inserts the key, which the printer then reads as a qualifier (§158). The
-    // same holds for `#cpp_type`.
-    if (ref2.constant_qualified)
-      t.cmt_constant(true);
-    if (!ref2.cpp_type.empty())
-      t.cpp_type(ref2.cpp_type);
+    restore_type_comments(t, ref2.constant_qualified, ref2.cpp_type);
     return t;
   }
   case type2t::signedbv_id:
@@ -3243,10 +3251,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     const signedbv_type2t &ref2 = to_signedbv_type(ref);
 
     signedbv_typet t(ref2.width);
-    if (ref2.constant_qualified)
-      t.cmt_constant(true);
-    if (!ref2.cpp_type.empty())
-      t.cpp_type(ref2.cpp_type);
+    restore_type_comments(t, ref2.constant_qualified, ref2.cpp_type);
     return t;
   }
   case type2t::fixedbv_id:
@@ -3265,8 +3270,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     floatbv_typet thetype;
     thetype.set_f(ref2.fraction);
     thetype.set_width(ref2.get_width());
-    if (!ref2.cpp_type.empty())
-      thetype.cpp_type(ref2.cpp_type);
+    restore_type_comments(thetype, false, ref2.cpp_type);
     return thetype;
   }
   case type2t::complex_id:
