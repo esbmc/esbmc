@@ -9,11 +9,32 @@ PyRtSequenceMethods pyrt_list_as_sequence = {
   .sq_item = pyrt_list_item,
   .sq_ass_item = pyrt_list_ass_item};
 
+PyRtObject *pyrt_list_richcompare(PyRtObject *a, PyRtObject *b, int op);
+
 PyRtTypeObject PyRtList_Type = {
   .ob_type = &PyRtType_Type,
   .tp_name = "list",
   .tp_base = &PyRtObject_Type,
-  .tp_as_sequence = &pyrt_list_as_sequence};
+  .tp_as_sequence = &pyrt_list_as_sequence,
+  .tp_richcompare = pyrt_list_richcompare};
+
+/* Element-wise, as in CPython: two lists holding equal items are equal
+ * whether or not they are the same object. Ordering is left to the caller's
+ * NotImplemented handling rather than modelled. */
+PyRtObject *pyrt_list_richcompare(PyRtObject *a, PyRtObject *b, int op)
+{
+  if (a->ob_type != &PyRtList_Type || b->ob_type != &PyRtList_Type)
+    return &pyrt_NotImplemented;
+  if (op != Py_EQ && op != Py_NE)
+    return &pyrt_NotImplemented;
+  PyRtListObject *x = (PyRtListObject *)a;
+  PyRtListObject *y = (PyRtListObject *)b;
+  bool equal = x->size == y->size;
+  for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < x->size && equal; ++i)
+    if (!pyrt_key_equal(x->items[i], y->items[i]))
+      equal = false;
+  return pyrt_bool_from(op == Py_EQ ? equal : !equal);
+}
 
 PyRtObject *pyrt_list_new(void)
 {

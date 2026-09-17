@@ -999,9 +999,22 @@ exprt python_runtime_converter::dict_literal(const json &node)
 
 exprt python_runtime_converter::subscript(const json &node)
 {
-  if (is_type(node["slice"], "Slice"))
-    unsupported(node);
   const locationt loc = location(node);
+  if (is_type(node["slice"], "Slice"))
+  {
+    const json &bounds = node["slice"];
+    exprt sliced = expr(node["value"]);
+    /* A bound left out is None, which the model reads as "from the start" or
+     * "to the end", depending on which way the step runs. */
+    auto given = [&](const char *which) {
+      return bounds[which].is_null() ? address("c:@pyrt_None")
+                                     : expr(bounds[which]);
+    };
+    return call(
+      "pyrt_getslice",
+      {sliced, given("lower"), given("upper"), given("step")},
+      loc);
+  }
   exprt container = expr(node["value"]);
   exprt key = expr(node["slice"]);
   /* Outside a try nothing could catch it, so the ordinary path is used and a

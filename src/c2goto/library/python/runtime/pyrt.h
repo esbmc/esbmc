@@ -224,6 +224,11 @@ extern PyRtObject *pyrt_pending;
 void pyrt_set_pending(PyRtTypeObject *cls);
 PyRtObject *pyrt_take_pending(void);
 PyRtObject *pyrt_getitem_checked(PyRtObject *o, PyRtObject *key);
+PyRtObject *pyrt_getslice(
+  PyRtObject *o,
+  PyRtObject *start,
+  PyRtObject *stop,
+  PyRtObject *step);
 PyRtObject *pyrt_to_int(PyRtObject *o);
 PyRtObject *pyrt_to_float(PyRtObject *o);
 PyRtObject *pyrt_to_str(PyRtObject *o);

@@ -237,6 +237,74 @@ PyRtObject *pyrt_getitem(PyRtObject *o, PyRtObject *key)
   return sq->sq_item(o, pyrt_sequence_index(o, key));
 }
 
+/* CPython's slice normalisation: a negative bound counts from the end, one
+ * out of range clamps rather than raising, and what a missing bound means
+ * depends on the step's sign -- `a[::-1]` starts at the last element. */
+static int64_t
+pyrt_slice_bound(int64_t given, int64_t length, int64_t by)
+{
+  if (given < 0)
+    given += length;
+  if (by > 0)
+    return given < 0 ? 0 : (given > length ? length : given);
+  return given < -1 ? -1 : (given > length - 1 ? length - 1 : given);
+}
+
+PyRtObject *pyrt_getslice(
+  PyRtObject *o,
+  PyRtObject *start,
+  PyRtObject *stop,
+  PyRtObject *step)
+{
+  const int64_t length = pyrt_iter_length(o);
+
+  int64_t by = 1;
+  if (step != &pyrt_None)
+  {
+    by = pyrt_as_index(step);
+    if (by == 0)
+      PYRT_RAISE("ValueError: slice step cannot be zero");
+  }
+
+  int64_t from = by > 0 ? 0 : length - 1;
+  if (start != &pyrt_None)
+    from = pyrt_slice_bound(pyrt_as_index(start), length, by);
+
+  int64_t to = by > 0 ? length : -1;
+  if (stop != &pyrt_None)
+    to = pyrt_slice_bound(pyrt_as_index(stop), length, by);
+
+  if (o->ob_type == &PyRtStr_Type)
+  {
+    char *buffer = __ESBMC_alloca(PYRT_STR_CAPACITY);
+    int64_t taken = 0;
+    int64_t at = from;
+    for (int64_t k = 0; k < PYRT_STR_CAPACITY; ++k, at += by)
+    {
+      if (by > 0 ? at >= to : at <= to)
+        break;
+      __ESBMC_assert(
+        taken < PYRT_STR_CAPACITY, "pyrt: slice exceeds the model capacity");
+      buffer[taken++] = ((PyRtStrObject *)o)->data[at];
+    }
+    return pyrt_str_new(buffer, taken);
+  }
+
+  const bool as_tuple = o->ob_type == &PyRtTuple_Type;
+  PyRtObject *result = as_tuple ? pyrt_tuple_new() : pyrt_list_new();
+  int64_t at = from;
+  for (int64_t k = 0; k < PYRT_LIST_CAPACITY; ++k, at += by)
+  {
+    if (by > 0 ? at >= to : at <= to)
+      break;
+    if (as_tuple)
+      pyrt_tuple_append(result, pyrt_iter_item(o, at));
+    else
+      pyrt_list_append(result, pyrt_iter_item(o, at));
+  }
+  return result;
+}
+
 /* int(x). A float truncates toward zero, as CPython does; bool is an int
  * already. Parsing a string is a decimal scan this does not model. */
 PyRtObject *pyrt_to_int(PyRtObject *o)
