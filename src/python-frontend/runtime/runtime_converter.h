@@ -17,7 +17,10 @@
 class python_runtime_converter
 {
 public:
-  python_runtime_converter(contextt &context, const nlohmann::json &ast);
+  python_runtime_converter(
+    contextt &context,
+    const nlohmann::json &ast,
+    bool check_annotations = false);
 
   void convert();
 
@@ -28,6 +31,10 @@ private:
   const json &ast_;
   const std::string file_;
   const typet object_type_;
+  const bool check_annotations_;
+
+  /// Return annotation of the function being converted, or null.
+  const nlohmann::json *return_annotation_ = nullptr;
 
   /// Symbol id of the function being converted; empty at module level.
   std::string code_id_;
@@ -93,6 +100,12 @@ private:
     bool is_and,
     const locationt &loc);
   exprt ifexp(const json &node);
+  exprt annotation_type(const json &annotation) const;
+  void check_annotation(
+    const json &annotation,
+    const exprt &value,
+    const std::string &what,
+    const locationt &loc);
   exprt call_expr(const json &node);
   exprt list(const json &node);
   exprt dict_literal(const json &node);

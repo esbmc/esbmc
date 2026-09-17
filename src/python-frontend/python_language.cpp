@@ -282,7 +282,11 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
         throw std::runtime_error("--python-runtime does not support --ir yet");
       if (!extra_asts.empty())
         throw std::runtime_error("--python-runtime takes a single Python file");
-      python_runtime_converter(context, ast).convert();
+      python_runtime_converter(
+        context,
+        ast,
+        config.options.get_bool_option("python-check-annotations"))
+        .convert();
     }
     else
     {

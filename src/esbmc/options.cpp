@@ -247,6 +247,11 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Model every Python value as a runtime object whose type is resolved "
       "during symbolic execution, ignoring type annotations (experimental)"},
+     {"python-check-annotations",
+      NULL,
+      "With --python-runtime, check type annotations as properties: a value "
+      "bound where its annotation does not hold is reported. Annotations the "
+      "runtime cannot express produce no claim (experimental)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND

@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-runtime --python-check-annotations
+^VERIFICATION SUCCESSFUL$

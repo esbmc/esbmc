@@ -48,6 +48,22 @@ std::optional<int64_t> literal_int(const nlohmann::json &node)
   return std::nullopt;
 }
 
+/// Type object for a builtin name, or "" when the name does not name one.
+std::string builtin_type_symbol(const std::string &name)
+{
+  static const std::map<std::string, std::string> types = {
+    {"int", "c:@PyRtLong_Type"},
+    {"bool", "c:@PyRtBool_Type"},
+    {"list", "c:@PyRtList_Type"},
+    {"dict", "c:@PyRtDict_Type"},
+    {"str", "c:@PyRtStr_Type"},
+    {"float", "c:@PyRtFloat_Type"},
+    {"object", "c:@PyRtObject_Type"},
+    {"type", "c:@PyRtType_Type"}};
+  auto it = types.find(name);
+  return it == types.end() ? std::string() : it->second;
+}
+
 std::string binop_function(const std::string &op)
 {
   static const std::map<std::string, std::string> ops = {
@@ -65,11 +81,13 @@ std::string binop_function(const std::string &op)
 
 python_runtime_converter::python_runtime_converter(
   contextt &context,
-  const nlohmann::json &ast)
+  const nlohmann::json &ast,
+  bool check_annotations)
   : context_(context),
     ast_(ast),
     file_(ast["filename"].get<std::string>()),
-    object_type_(pointer_typet(symbol_typet(object_tag)))
+    object_type_(pointer_typet(symbol_typet(object_tag))),
+    check_annotations_(check_annotations)
 {
 }
 
@@ -461,18 +479,9 @@ exprt python_runtime_converter::name(const json &node)
     return symbol_expr(lookup(global_id(id)));
   if (functions_.count(id))
     return address(function_object_id("", id));
-  static const std::map<std::string, std::string> builtin_types = {
-    {"int", "c:@PyRtLong_Type"},
-    {"bool", "c:@PyRtBool_Type"},
-    {"list", "c:@PyRtList_Type"},
-    {"dict", "c:@PyRtDict_Type"},
-    {"str", "c:@PyRtStr_Type"},
-    {"float", "c:@PyRtFloat_Type"},
-    {"object", "c:@PyRtObject_Type"},
-    {"type", "c:@PyRtType_Type"}};
-  auto builtin = builtin_types.find(id);
-  if (builtin != builtin_types.end())
-    return address(builtin->second);
+  const std::string builtin = builtin_type_symbol(id);
+  if (!builtin.empty())
+    return address(builtin);
   raise("NameError: name '" + id + "' is not defined", location(node));
   return gen_zero(object_type_);
 }
@@ -762,6 +771,47 @@ exprt python_runtime_converter::subscript(const json &node)
   return call("pyrt_getitem", {container, key}, location(node));
 }
 
+/// The type object an annotation names, or nil when the runtime cannot
+/// express it. Any, TypeVar, Callable, a generic, a forward reference and
+/// anything unresolved all yield nil and so produce no claim at all: refusing
+/// them would reject most annotated programs.
+exprt python_runtime_converter::annotation_type(const json &annotation) const
+{
+  if (is_type(annotation, "Constant") && annotation["value"].is_null())
+    return address("c:@PyRtNone_Type");
+  if (!is_type(annotation, "Name"))
+    return nil_exprt();
+  const std::string id = annotation["id"];
+  const std::string builtin = builtin_type_symbol(id);
+  if (!builtin.empty())
+    return address(builtin);
+  if (classes_.count(id))
+    return address(type_object_id(id));
+  return nil_exprt();
+}
+
+/// CPython does not enforce an annotation, so a wrong one is a defect the
+/// static path silently trusts. Under --python-check-annotations the object
+/// carries its type, so the annotation becomes a claim instead.
+void python_runtime_converter::check_annotation(
+  const json &annotation,
+  const exprt &value,
+  const std::string &what,
+  const locationt &loc)
+{
+  if (!check_annotations_ || annotation.is_null())
+    return;
+  exprt cls = annotation_type(annotation);
+  if (cls.is_nil())
+    return;
+  code_assertt assertion;
+  assertion.assertion() = call("pyrt_isinstance", {value, cls}, loc);
+  assertion.location() = loc;
+  assertion.location().comment(
+    "TypeError: " + what + " does not match its annotation");
+  block_->copy_to_operands(assertion);
+}
+
 void python_runtime_converter::statements(const json &body, code_blockt &block)
 {
   code_blockt *outer = block_;
@@ -790,10 +840,20 @@ void python_runtime_converter::statement(const json &node)
   }
   else if (type == "AnnAssign")
   {
-    /* The annotation is not read: the runtime carries types on the objects. A
-     * bare `x: int` binds nothing, as in CPython. */
+    /* A bare `x: int` binds nothing, as in CPython. */
     if (!node["value"].is_null())
-      store(node["target"], expr(node["value"]), loc);
+    {
+      const json &target = node["target"];
+      exprt value = expr(node["value"]);
+      store(target, value, loc);
+      check_annotation(
+        node["annotation"],
+        value,
+        is_type(target, "Name")
+          ? "'" + target["id"].get<std::string>() + "'"
+          : std::string("value"),
+        loc);
+    }
   }
   else if (type == "AugAssign")
     aug_assign(node);
@@ -809,9 +869,12 @@ void python_runtime_converter::statement(const json &node)
   {
     if (module_level)
       unsupported(node);
+    exprt value = node["value"].is_null() ? address("c:@pyrt_None")
+                                          : expr(node["value"]);
+    if (return_annotation_)
+      check_annotation(*return_annotation_, value, "the return value", loc);
     code_returnt ret;
-    ret.return_value() = node["value"].is_null() ? address("c:@pyrt_None")
-                                                 : expr(node["value"]);
+    ret.return_value() = value;
     ret.location() = loc;
     block_->copy_to_operands(ret);
   }
@@ -1202,10 +1265,29 @@ void python_runtime_converter::define_function(
     body.copy_to_operands(code_assignt(variable, initial));
   }
 
+  const json &returns = def["returns"];
+  return_annotation_ = returns.is_null() ? nullptr : &returns;
+  for (size_t i = 0; i < parameters.size(); ++i)
+  {
+    const json &argument = def["args"]["args"][i];
+    if (!argument["annotation"].is_null())
+      check_annotation(
+        argument["annotation"],
+        symbol_expr(lookup(local_id(parameters[i]))),
+        "parameter '" + parameters[i] + "'",
+        loc);
+  }
+
   statements(def["body"], body);
+  /* Falling off the end returns None, which a return annotation usually
+   * forbids. That is the defect this catches most often. */
+  exprt implicit = address("c:@pyrt_None");
+  if (return_annotation_)
+    check_annotation(*return_annotation_, implicit, "the return value", loc);
   code_returnt fall_off;
-  fall_off.return_value() = address("c:@pyrt_None");
+  fall_off.return_value() = implicit;
   body.copy_to_operands(fall_off);
+  return_annotation_ = nullptr;
 
   context_.find_symbol(code_id_)->set_value(body);
   code_id_.clear();
