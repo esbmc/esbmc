@@ -140,6 +140,7 @@ private:
   void while_statement(const json &node);
   void for_statement(const json &node);
   void assert_statement(const json &node);
+  void import_statement(const json &node);
   void raise_statement(const json &node);
   void try_statement(const json &node);
   void emit_guarded(const json &node, const locationt &loc);

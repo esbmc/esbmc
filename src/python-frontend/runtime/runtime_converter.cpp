@@ -63,6 +63,24 @@ void collect_comprehension_targets(
     collect_comprehension_targets(entry.value(), assigned);
 }
 
+/// The name an import binds: `import a.b` binds `a`, `import a.b as c` binds
+/// `c`, and `from m import x as y` binds `y`.
+std::string imported_name(const nlohmann::json &alias, bool from_module)
+{
+  if (!alias["asname"].is_null())
+    return alias["asname"].get<std::string>();
+  const std::string name = alias["name"];
+  return from_module ? name : name.substr(0, name.find('.'));
+}
+
+/// Modules this lowering needs nothing from. Annotations are discarded, so
+/// `from typing import List` has no contents to bring in.
+bool ignorable_module(const std::string &name)
+{
+  const std::string top = name.substr(0, name.find('.'));
+  return top == "typing" || top == "__future__";
+}
+
 /// Py_LT..Py_GE in pyrt.h, or -1 for an operator richcompare does not take.
 int richcompare_op(const std::string &op)
 {
@@ -1104,6 +1122,8 @@ void python_runtime_converter::statement(const json &node)
     class_statement(node);
   else if (type == "FunctionDef" && module_level)
     return;
+  else if (type == "Import" || type == "ImportFrom")
+    import_statement(node);
   else if (type == "Raise")
     raise_statement(node);
   else if (type == "Try")
@@ -1330,6 +1350,40 @@ void python_runtime_converter::emit_loop(
 /// making them catchable needs a pending-exception flag the caller tests after
 /// every call. That is a separate step; only a Python-level raise participates
 /// here.
+/// An import of a module this lowering needs nothing from binds its names to
+/// None. An annotation mentioning one then produces no claim, which is what it
+/// did before the name existed; using one as a *value* calls None and fails
+/// loudly, rather than quietly standing in for something it is not.
+void python_runtime_converter::import_statement(const json &node)
+{
+  const bool from_module = is_type(node, "ImportFrom");
+  if (from_module)
+  {
+    /* A relative import has no module name to judge. */
+    if (node["module"].is_null() || node.value("level", 0) != 0)
+      unsupported(node);
+    if (!ignorable_module(node["module"].get<std::string>()))
+      unsupported(node);
+  }
+
+  const locationt loc = location(node);
+  for (const json &alias : node["names"])
+  {
+    if (alias["name"] == "*")
+      unsupported(node);
+    if (!from_module && !ignorable_module(alias["name"].get<std::string>()))
+      unsupported(node);
+
+    const std::string bound = imported_name(alias, from_module);
+    code_assignt binding(
+      symbol_expr(lookup(
+        locals_.count(bound) ? local_id(bound) : global_id(bound))),
+      address("c:@pyrt_None"));
+    binding.location() = loc;
+    block_->copy_to_operands(binding);
+  }
+}
+
 void python_runtime_converter::raise_statement(const json &node)
 {
   /* `raise X from Y` records a cause, which nothing here reads. */
@@ -1671,6 +1725,13 @@ void python_runtime_converter::collect_assigned(
       collect_target_names(node["target"], assigned);
       collect_assigned(node["body"], assigned, declared_global);
       collect_assigned(node["orelse"], assigned, declared_global);
+    }
+    else if (is_type(node, "Import") || is_type(node, "ImportFrom"))
+    {
+      const bool from_module = is_type(node, "ImportFrom");
+      for (const json &alias : node["names"])
+        if (alias["name"] != "*")
+          assigned.insert(imported_name(alias, from_module));
     }
     else if (is_type(node, "Try"))
     {
