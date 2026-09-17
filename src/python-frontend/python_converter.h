@@ -786,6 +786,17 @@ private:
     const nlohmann::json &arg,
     const nlohmann::json &module_body) const;
 
+  /**
+   * @brief True if some call site of @c func_name (positional at
+   * @c param_index, or keyword matching @c param_name) passes a bare `Name`
+   * that its enclosing scope assigns genuinely incompatible literal kinds
+   * across an if/else
+   */
+  bool try_infer_dynamic_param_type(
+    const std::string &func_name,
+    const std::string &param_name,
+    size_t param_index) const;
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
@@ -957,6 +968,14 @@ private:
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+
+  /// A PEP 604 union annotation, as the single type this
+  /// monomorphic frontend has to represent it with.
+  typet get_union_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
+  typet narrow_union_to_member(const std::string &member_name);
 
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 

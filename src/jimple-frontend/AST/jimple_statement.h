@@ -125,11 +125,6 @@ public:
 class jimple_assignment : public jimple_statement
 {
 public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,

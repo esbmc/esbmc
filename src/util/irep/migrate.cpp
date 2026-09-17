@@ -8,8 +8,10 @@
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
+#include <util/arith/arith_tools.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
+#include <set>
 #include <util/base/prefix.h>
 #include <util/irep/pad_names.h>
 #include <util/expr/string_constant.h>
@@ -167,6 +169,38 @@ static pointer_ref_kindt pointer_ref_kind(const typet &type)
   return pointer_ref_kindt::NONE;
 }
 
+/// An explicit `alignas` in bytes, or zero when the record has none. It travels
+/// as an `alignment` sub-irep and add_padding reads it back to size a record's
+/// trailing pad (docs/roadmap/scope-clang-cpp-irep2.md §7.4).
+static BigInt explicit_alignment(const typet &type)
+{
+  const irept &a = type.find("alignment");
+  if (a.is_nil())
+    return 0;
+
+  BigInt v;
+  if (to_integer(static_cast<const exprt &>(a), v))
+    return 0;
+
+  return v;
+}
+
+/// Type ids that carry no storage and so migrate to the empty type: an unset
+/// or nil id; an ellipsis, which is not a type at all; clang's BoundMember,
+/// the type of `obj.*pmf` before it is called, which is a placeholder rather
+/// than storage -- clang_c_adjust::adjust_ptr_mem replaces the whole node with
+/// the member function, and a ptr_mem2t typed empty is exactly that
+/// placeholder, a pointer-to-*data*-member selection carrying the member's own
+/// type (docs/roadmap/scope-clang-cpp-irep2.md §7.5); and the return types of a
+/// destructor and of a constructor, which is a void method on an existing
+/// object rather than something that returns a value.
+static bool migrates_to_empty(const typet &type)
+{
+  return type.id().as_string().empty() || type.id() == "nil" ||
+         type.id() == "ellipsis" || type.id() == typet::t_ptrmem ||
+         type.id() == "destructor" || type.id() == "constructor";
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -285,7 +319,13 @@ static type2tc migrate_type0(const typet &type)
     bool packed = type.get_bool("packed");
 
     return struct_type2tc(
-      members, names, pretty_names, name, packed, base_names);
+      members,
+      names,
+      pretty_names,
+      name,
+      packed,
+      base_names,
+      explicit_alignment(type));
   }
 
   if (type.id() == typet::t_union)
@@ -393,29 +433,8 @@ static type2tc migrate_type0(const typet &type)
     return cpp_name_type2tc(name, template_args);
   }
 
-  if (type.id().as_string().size() == 0 || type.id() == "nil")
-  {
+  if (migrates_to_empty(type))
     return get_empty_type();
-  }
-
-  if (type.id() == "ellipsis")
-  {
-    // Eh? Ellipsis isn't a type. It's a special case.
-    return get_empty_type();
-  }
-
-  if (type.id() == "destructor")
-  {
-    // This is a destructor return type. Which is nil.
-    return get_empty_type();
-  }
-
-  if (type.id() == "constructor")
-  {
-    // New operator returns something; constructor is a void method on an
-    // existing object.
-    return get_empty_type();
-  }
 
   if (type.id() == "incomplete_array")
   {
@@ -775,6 +794,16 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
 
     if (at_pos == std::string::npos)
     {
+      // A renamed name spells the node counter between '&' and '#', so '&'
+      // comes first. A C++ symbol id has them the other way round or not at
+      // all: a clang USR is full of '#', and a reference parameter's mangling
+      // contains '&'. Claiming one as renamed either truncates it at the '&' --
+      // collapsing two ids that share a prefix onto one symbol -- or appends
+      // `&0#0` to it on the way back (frontends-to-irep2.md §55). It is not
+      // renamed; it is a name this namespace has not been shown.
+      if (and_pos == std::string::npos || hash_pos < and_pos)
+        return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
+
       // However, it's L2 global.
       target_level = symbol_renaming_level::level2_global;
       end_of_name_pos = and_pos;
@@ -1107,6 +1136,50 @@ static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
   expr2tc inner;
   migrate_expr(unmarked, inner);
   new_expr_ref = typecast2tc(inner->type, inner, base);
+  return true;
+}
+
+/// The right-shift family. `lshr` and `ashr` name their kind; the Solidity
+/// converter also emits a kind-less `shr` for `>>`, and IREP2 has no node for
+/// it. clang_c_adjust resolves that one by the left operand's signedness before
+/// anything migrates, but --clang-cpp-irep2-adjust-only replaces that pass, so
+/// the resolution belongs here (docs/roadmap/scope-solidity-irep2.md §7.21).
+/// The three are extracted together because migrate_expr is over the complexity
+/// gate: an arm added inline fails it.
+static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  bool logical;
+  if (id == exprt::i_lshr)
+    logical = true;
+  else if (id == exprt::i_ashr)
+    logical = false;
+  else if (id == "shr" && expr.operands().size() == 2)
+  {
+    // clang_c_adjust_expr resolves a kind-less shift only for a bit-vector
+    // left operand and leaves any other kind-less, so do not guess one here.
+    const irep_idt &op0_type = expr.op0().type().id();
+    if (op0_type != typet::t_unsignedbv && op0_type != typet::t_signedbv)
+      return false;
+    logical = op0_type == typet::t_unsignedbv;
+  }
+  else
+    return false;
+
+  // n-ary lshr was spliced and ashr asserted binary before these arms merged.
+  if (id == exprt::i_lshr && expr.operands().size() > 2)
+  {
+    splice_expr(expr, new_expr_ref);
+    return true;
+  }
+  assert(expr.operands().size() == 2);
+
+  const type2tc type = migrate_type(expr.type());
+  expr2tc side1, side2;
+  convert_operand_pair(expr, side1, side2);
+
+  new_expr_ref = logical ? expr2tc(lshr2tc(type, side1, side2))
+                         : expr2tc(ashr2tc(type, side1, side2));
   return true;
 }
 
@@ -1579,23 +1652,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == exprt::i_lshr)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = lshr2tc(type, side1, side2);
-    return;
-  }
-
   if (expr.id() == "unary-")
   {
     type = migrate_type(expr.type());
@@ -1730,6 +1786,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (migrate_right_shift(expr, new_expr_ref))
+    return;
+
   if (expr.id() == exprt::i_shl)
   {
     type = migrate_type(expr.type());
@@ -1740,19 +1799,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, side1, side2);
 
     new_expr_ref = shl2tc(type, side1, side2);
-    return;
-  }
-
-  if (expr.id() == exprt::i_ashr)
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = ashr2tc(type, side1, side2);
     return;
   }
 
@@ -2416,7 +2462,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = sideeffect2tc(
-      plaintype, operand, thesize, args, cmt_type, t, expr.location());
+      plaintype,
+      operand,
+      thesize,
+      args,
+      cmt_type,
+      t,
+      expr.location(),
+      expr.get_bool("constructor"));
     return;
   }
 
@@ -3129,6 +3182,8 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     thetype.set("tag", ref2.name);
     if (ref2.packed)
       thetype.set("packed", true);
+    if (ref2.alignment != 0)
+      thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
     return thetype;
   }
   case type2t::union_id:
@@ -3487,6 +3542,10 @@ static exprt back_sideeffect(const expr2tc &ref)
     size.is_not_nil())
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
+
+  // Read after the frontend by clang_cpp_maint::adjust_init; see sideeffect2t.
+  if (ref2.constructor)
+    theexpr.set("constructor", true);
 
   // ref2.location is deliberately *not* restored onto the legacy node.
   // goto_convert falls back to the enclosing statement's location for a side
@@ -4917,4 +4976,36 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   default:
     return migrate_expr_back_rest2(ref);
   }
+}
+
+void migrate_census(const contextt &context)
+{
+  unsigned long symbols = 0, values = 0, failures = 0;
+  // The kind tally is what stops the census being vacuous: a count of symbols
+  // or values is identical on either representation, so swapping get_type2()
+  // for get_type() would migrate nothing and print the same line. A type_id
+  // exists only on the IREP2 side.
+  std::set<unsigned> kinds;
+  context.foreach_operand_in_order(
+    [&symbols, &values, &failures, &kinds](const symbolt &s) {
+      ++symbols;
+      try
+      {
+        kinds.insert(static_cast<unsigned>(s.get_type2()->type_id));
+        if (!is_nil_expr(s.get_value2()))
+          ++values;
+      }
+      catch (const std::string &e)
+      {
+        ++failures;
+        log_error("IREP2 migrate census: {} on symbol {}", e, s.id);
+      }
+    });
+  log_status(
+    "IREP2 migrate census: {} symbols, {} values migrated, {} type kinds, {} "
+    "failures",
+    symbols,
+    values,
+    kinds.size(),
+    failures);
 }
