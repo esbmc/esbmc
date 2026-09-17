@@ -1578,6 +1578,37 @@ static expr2tc fold_union_member_read(
   return val;
 }
 
+/// The selected member of a struct literal, or nil when the fold does not
+/// apply.
+///
+/// member2t's constructor asserts that the member resolves exactly once in the
+/// source's type, but only in debug builds; a release build reached the
+/// `.value()` this replaces and threw bad_optional_access, and an operand count
+/// short of the type's components read past the end of the vector. Both are the
+/// shape of the tuple-projection bound (#7758): decline, which is always sound,
+/// rather than trust the invariant (docs/roadmap/scope-clang-cpp-irep2.md
+/// §7.4).
+static expr2tc fold_struct_member_read(
+  const constant_struct2t &lit,
+  const irep_idt &member,
+  const type2tc &type)
+{
+  const std::optional<unsigned int> no =
+    struct_union_get_component_number(lit.type, member);
+  if (!no.has_value() || *no >= lit.datatype_members.size())
+    return expr2tc();
+
+  const expr2tc &s = lit.datatype_members[*no];
+  // Be defensive: if member extraction type doesn't match, skip
+  // simplification instead of aborting in the simplifier.
+  if (
+    !is_pointer_type(type) &&
+    !base_type_eq(type, s->type, *migrate_namespace_lookup))
+    return expr2tc();
+
+  return s;
+}
+
 expr2tc member2t::do_simplify() const
 {
   if (is_constant_union2t(source_value))
@@ -1586,18 +1617,8 @@ expr2tc member2t::do_simplify() const
 
   if (is_constant_struct2t(source_value))
   {
-    unsigned no =
-      struct_union_get_component_number(source_value->type, member).value();
-
-    expr2tc s = to_constant_struct2t(source_value).datatype_members[no];
-    // Be defensive: if member extraction type doesn't match, skip
-    // simplification instead of aborting in the simplifier.
-    if (
-      !is_pointer_type(type) &&
-      !base_type_eq(type, s->type, *migrate_namespace_lookup))
-      return expr2tc();
-
-    return s;
+    return fold_struct_member_read(
+      to_constant_struct2t(source_value), member, type);
   }
   else if (is_with2t(source_value))
   {
