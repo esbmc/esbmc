@@ -498,6 +498,15 @@ exprt python_runtime_converter::expr(const json &node)
     return tuple(node);
   if (type == "Set")
     return set_literal(node);
+  if (type == "Lambda")
+  {
+    auto named = lambda_names_.find(
+      std::to_string(node.value("lineno", 0)) + ":" +
+      std::to_string(node.value("col_offset", 0)));
+    if (named == lambda_names_.end())
+      unsupported(node);
+    return address(function_object_id("", named->second));
+  }
   if (type == "Dict")
     return dict_literal(node);
   if (type == "ListComp")
@@ -1707,6 +1716,89 @@ void python_runtime_converter::class_statement(const json &node)
   block_->copy_to_operands(bind);
 }
 
+/// Turns every lambda into a function definition of its own, named after
+/// where it was written so the expression can find it again.
+///
+/// A lambda that reads a name belonging to the function around it is refused:
+/// a function here is a plain C function over a fixed argument struct, with
+/// nowhere to keep a captured environment, and binding such a name to a
+/// same-named global instead would answer wrongly rather than decline.
+void python_runtime_converter::collect_lambdas(
+  const json &node,
+  const std::set<std::string> &enclosing)
+{
+  if (node.is_array())
+  {
+    for (const json &element : node)
+      collect_lambdas(element, enclosing);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  if (is_type(node, "FunctionDef"))
+  {
+    std::set<std::string> inner, declared_global;
+    for (const json &argument : node["args"]["args"])
+      inner.insert(argument["arg"].get<std::string>());
+    collect_assigned(node["body"], inner, declared_global);
+    collect_lambdas(node["body"], inner);
+    return;
+  }
+
+  if (is_type(node, "Lambda"))
+  {
+    std::set<std::string> bound;
+    for (const json &argument : node["args"]["args"])
+      bound.insert(argument["arg"].get<std::string>());
+    std::function<void(const json &)> free_names = [&](const json &inner) {
+      if (inner.is_array())
+      {
+        for (const json &element : inner)
+          free_names(element);
+        return;
+      }
+      if (!inner.is_object())
+        return;
+      if (is_type(inner, "Name"))
+      {
+        const std::string id = inner["id"];
+        if (enclosing.count(id) && !bound.count(id))
+          unsupported(node);
+      }
+      for (const auto &entry : inner.items())
+        free_names(entry.value());
+    };
+    free_names(node["body"]);
+
+    const std::string name =
+      "$lambda$" + std::to_string(lambda_defs_.size());
+    json synthesised;
+    synthesised["_type"] = "FunctionDef";
+    synthesised["name"] = name;
+    synthesised["args"] = node["args"];
+    synthesised["decorator_list"] = json::array();
+    synthesised["returns"] = nullptr;
+    synthesised["lineno"] = node.value("lineno", 0);
+    synthesised["col_offset"] = node.value("col_offset", 0);
+
+    json returned;
+    returned["_type"] = "Return";
+    returned["value"] = node["body"];
+    returned["lineno"] = node.value("lineno", 0);
+    returned["col_offset"] = node.value("col_offset", 0);
+    synthesised["body"] = json::array({returned});
+
+    lambda_defs_.push_back(std::move(synthesised));
+    lambda_names_[std::to_string(node.value("lineno", 0)) + ":" +
+                  std::to_string(node.value("col_offset", 0))] = name;
+    return;
+  }
+
+  for (const auto &entry : node.items())
+    collect_lambdas(entry.value(), enclosing);
+}
+
 /// Records the annotated names of one scope. A declared type governs the
 /// whole scope rather than just the statement carrying it, so every later
 /// assignment to the name is checked as well: `x: int = 5` is usually right
@@ -2087,6 +2179,15 @@ void python_runtime_converter::convert()
     }
     else if (is_type(node, "ClassDef"))
       declare_class(node);
+
+  /* Each lambda is an ordinary function under a name of its own, declared
+   * with the rest so a call reaches it the same way. */
+  collect_lambdas(ast_, {});
+  for (const json &synthesised : lambda_defs_)
+  {
+    functions_[synthesised["name"].get<std::string>()] = &synthesised;
+    declare_function(synthesised, "");
+  }
 
   // Type objects are filled in once every class exists, since each points at
   // its base and its first direct subclass and next sibling.

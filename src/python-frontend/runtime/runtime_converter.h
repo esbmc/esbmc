@@ -6,6 +6,7 @@
 #include <util/symtab/context.h>
 
 #include <functional>
+#include <list>
 #include <map>
 #include <set>
 #include <string>
@@ -43,6 +44,12 @@ private:
   /// Non-zero while converting a try body, where an error a model records can
   /// become a Python exception instead of an abort.
   unsigned in_try_ = 0;
+
+  /// A lambda becomes an ordinary function, synthesised before conversion so
+  /// it can be declared with the rest. The list owns them: functions_ holds
+  /// pointers, which a vector would invalidate as it grew.
+  std::list<nlohmann::json> lambda_defs_;
+  std::map<std::string, std::string> lambda_names_;
 
   /// Symbol id of the function being converted; empty at module level.
   std::string code_id_;
@@ -124,6 +131,7 @@ private:
   exprt list(const json &node);
   exprt tuple(const json &node);
   exprt set_literal(const json &node);
+  void collect_lambdas(const json &node, const std::set<std::string> &enclosing);
   exprt comprehension(const json &node, bool is_dict);
   void emit_loop(
     const json &target,
