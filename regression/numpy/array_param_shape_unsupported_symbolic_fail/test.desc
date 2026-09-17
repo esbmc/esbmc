@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^VERIFICATION FAILED$
+ERROR: TypeError: numpy array parameter shape must be concrete for .shape/.ndim/.size/len\(\)/transpose\(\)/sort\(\)/argsort\(\)

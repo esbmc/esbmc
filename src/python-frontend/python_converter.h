@@ -1244,6 +1244,22 @@ private:
   void reject_incompatible_numpy_local_return_branches(
     const nlohmann::json &func_def) const;
 
+  // True when `func_name`'s own body reads `param_name`'s `.shape`/`.ndim`/
+  // `.size`/`.T`, or passes it to `numpy.transpose`/`numpy.sort`/
+  // `numpy.argsort`, *and* some call site feeds the `param_index`-th
+  // argument from a module-level numpy array constructor call whose shape
+  // argument is not a literal (e.g. `np.ones(n)` for a variable `n`).
+  // register_function_argument uses this to reject such a parameter with an
+  // explicit diagnostic instead of leaving it untyped, which previously
+  // surfaced as a generic runtime AttributeError the first time the callee
+  // touched one of those. Deliberately excludes `len()`, which already
+  // resolves soundly for a symbolic-shape parameter through a different
+  // path.
+  bool numpy_param_call_site_has_symbolic_shape(
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &param_name) const;
+
   // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
   // itself returns a numpy array is never an is_numpy_array_constructor_expr
   // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type

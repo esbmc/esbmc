@@ -1046,6 +1046,32 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
 }
 
+// True when `ctor_call`'s shape argument (args[0], a scalar for 1-D or a
+// Tuple for 2-D+) is not made entirely of literal Constants -- e.g.
+// `np.ones(n)` for a variable `n`, as opposed to `np.ones(3)`. The converter
+// has no static value for such a shape, so a parameter fed this call cannot
+// be typed as a concrete array.
+static bool numpy_ctor_shape_arg_is_symbolic(const nlohmann::json &ctor_call)
+{
+  if (
+    !ctor_call.contains("args") || !ctor_call["args"].is_array() ||
+    ctor_call["args"].empty())
+    return false;
+
+  const nlohmann::json &shape_arg = ctor_call["args"][0];
+  const std::string type = shape_arg.value("_type", "");
+  if (type == "Constant")
+    return false;
+  if (type == "Tuple" && shape_arg.contains("elts"))
+  {
+    for (const auto &elt : shape_arg["elts"])
+      if (elt.value("_type", "") != "Constant")
+        return true;
+    return false;
+  }
+  return true;
+}
+
 // Recursively collects every `Return` statement reachable in `body` without
 // crossing into a nested function scope (FunctionDef/AsyncFunctionDef/
 // Lambda) -- a return inside an if/try/for still belongs to the enclosing
@@ -1408,6 +1434,131 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   return type_handler_.get_typet(literal_call["args"][0]);
 }
 
+// True when `node` (or, recursively, any of its descendants) reads one of
+// the numpy metadata/methods that need a statically known shape --
+// `.shape`/`.ndim`/`.size`/`.T` on `param_name`, or `numpy.transpose`/
+// `numpy.sort`/`numpy.argsort` (module or method form) applied to it.
+// Deliberately excludes `len()`: unlike the others, len(a) on a symbolic-
+// shape parameter is already handled soundly elsewhere (it resolves to the
+// dynamic list-size runtime call, not a static shape read), so rejecting it
+// here would be a regression, not a fix -- see array_param_shape_symbolic_
+// len_success.
+static bool uses_numpy_static_shape_op(
+  const nlohmann::json &node,
+  const std::string &param_name)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (uses_numpy_static_shape_op(elem, param_name))
+        return true;
+    return false;
+  }
+  if (!node.is_object())
+    return false;
+
+  const std::string type = node.value("_type", "");
+  auto is_param_name = [&](const nlohmann::json &n) {
+    return n.is_object() && n.value("_type", "") == "Name" &&
+           n.value("id", "") == param_name;
+  };
+
+  if (
+    type == "Attribute" && node.contains("value") &&
+    is_param_name(node["value"]))
+  {
+    static const std::set<std::string> shape_attrs = {
+      "shape", "ndim", "size", "T"};
+    if (shape_attrs.count(node.value("attr", "")) != 0)
+      return true;
+  }
+  else if (type == "Call" && node.contains("func"))
+  {
+    const nlohmann::json &func = node["func"];
+    static const std::set<std::string> shape_ops = {
+      "transpose", "sort", "argsort"};
+    // np.transpose(a)/np.sort(a)/np.argsort(a): module-form call whose
+    // first positional argument is the parameter.
+    if (
+      func.value("_type", "") == "Attribute" &&
+      shape_ops.count(func.value("attr", "")) != 0 && node.contains("args") &&
+      !node["args"].empty() && is_param_name(node["args"][0]))
+      return true;
+    // a.transpose()/a.sort()/a.argsort(): method form on the parameter.
+    if (
+      func.value("_type", "") == "Attribute" && func.contains("value") &&
+      is_param_name(func["value"]) &&
+      shape_ops.count(func.value("attr", "")) != 0)
+      return true;
+  }
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (uses_numpy_static_shape_op(it.value(), param_name))
+      return true;
+  return false;
+}
+
+// True when some call site of `func_name` passes, as its `param_index`-th
+// argument, a module-level name last bound to a numpy array constructor call
+// (np.zeros/ones/full/array/...) whose shape isn't a literal -- the shape
+// try_infer_numpy_param_type needs and cannot get -- *and* `func_name`'s own
+// body reads that parameter's `.shape`/`.ndim`/`.size`/`.T` or passes it to
+// `numpy.transpose`/`numpy.sort`/`numpy.argsort`. Declining to type such a
+// parameter at all (register_function_argument's caller) previously left it
+// as a plain `any_type()`, so those reads fell through to a generic runtime
+// AttributeError with no indication the actual problem is a symbolic shape.
+bool python_converter::numpy_param_call_site_has_symbolic_shape(
+  const std::string &func_name,
+  size_t param_index,
+  const std::string &param_name) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+
+  const nlohmann::json *func_def = find_function_def(module_body, func_name);
+  if (
+    func_def == nullptr ||
+    !uses_numpy_static_shape_op((*func_def)["body"], param_name))
+    return false;
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("_type", "") !=
+        "Name" ||
+      call["func"].value("id", "") != func_name || !call.contains("args") ||
+      call["args"].size() <= param_index)
+      continue;
+
+    const nlohmann::json &arg = call["args"][param_index];
+    if (arg.value("_type", "") != "Name")
+      continue;
+
+    const std::string arg_name = arg.value("id", "");
+    for (const auto &stmt : module_body)
+    {
+      const std::string stmt_type = stmt.value("_type", "");
+      std::string target_name;
+      if (
+        stmt_type == "Assign" && stmt.contains("targets") &&
+        !stmt["targets"].empty())
+        target_name = stmt["targets"][0].value("id", "");
+      else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+        target_name = stmt["target"].value("id", "");
+
+      if (
+        target_name == arg_name && stmt.contains("value") &&
+        is_numpy_array_constructor_expr(stmt["value"]) &&
+        numpy_ctor_shape_arg_is_symbolic(stmt["value"]))
+        return true;
+    }
+  }
+  return false;
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -1739,6 +1890,11 @@ size_t python_converter::register_function_argument(
       arg_type = inferred_array_type;
       numpy_array_param = true;
     }
+    else if (numpy_param_call_site_has_symbolic_shape(
+               id.get_function(), type.arguments().size(), arg_name))
+      throw std::runtime_error(
+        "TypeError: numpy array parameter shape must be concrete for "
+        ".shape/.ndim/.size/len()/transpose()/sort()/argsort()");
   }
 
   // Same idea, but for a parameter fed a dynamically-typed local variable.
