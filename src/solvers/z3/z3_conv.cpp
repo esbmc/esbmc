@@ -62,6 +62,8 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
             (z3::tactic(z3_ctx, "smt") | z3::tactic(z3_ctx, "qfnra-nlsat")))
              .mk_solver())
 {
+  if (_options.get_bool_option("smt-unsat-assumptions"))
+    solver = z3::solver(z3_ctx);
   z3::params p(z3_ctx);
   p.set("relevancy", 0U);
   p.set("model", true);
@@ -102,6 +104,32 @@ smt_resultt z3_convt::dec_solve()
     return P_UNSATISFIABLE;
 
   return P_ERROR;
+}
+
+smt_resultt z3_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  z3::expr_vector terms(z3_ctx);
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<z3_smt_ast>(a)->a);
+
+  unsat_core_ids.clear();
+  z3::check_result result = solver.check(terms);
+  if (result == z3::sat)
+    return P_SATISFIABLE;
+  if (result == z3::unsat)
+  {
+    for (const z3::expr &e : solver.unsat_core())
+      unsat_core_ids.insert(e.id());
+    return P_UNSATISFIABLE;
+  }
+  return P_ERROR;
+}
+
+bool z3_convt::is_unsat_assumption(smt_astt a)
+{
+  return unsat_core_ids.count(to_solver_smt_ast<z3_smt_ast>(a)->a.id());
 }
 
 void z3_convt::assert_ast(smt_astt a)

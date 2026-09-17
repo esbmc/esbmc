@@ -35,7 +35,9 @@ boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
   boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
-  if (options.get_bool_option("smt-during-symex"))
+  if (
+    options.get_bool_option("smt-during-symex") ||
+    options.get_bool_option("smt-unsat-assumptions"))
     boolector_set_opt(btor, BTOR_OPT_INCREMENTAL, 1);
   boolector_set_abort(error_handler);
 }
@@ -74,6 +76,26 @@ smt_resultt boolector_convt::dec_solve()
     return P_UNSATISFIABLE;
 
   return P_ERROR;
+}
+
+smt_resultt boolector_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  for (smt_astt a : assumptions)
+    boolector_assume(btor, to_solver_smt_ast<btor_smt_ast>(a)->a);
+
+  int result = boolector_sat(btor);
+  if (result == BOOLECTOR_SAT)
+    return P_SATISFIABLE;
+  if (result == BOOLECTOR_UNSAT)
+    return P_UNSATISFIABLE;
+  return P_ERROR;
+}
+
+bool boolector_convt::is_unsat_assumption(smt_astt a)
+{
+  return boolector_failed(btor, to_solver_smt_ast<btor_smt_ast>(a)->a);
 }
 
 const std::string boolector_convt::solver_text()

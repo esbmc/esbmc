@@ -28,6 +28,11 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   // Already initialized stuff in the constructor list,
   slv.setOption("produce-models", "true");
   slv.setOption("produce-assertions", "true");
+  if (options.get_bool_option("smt-unsat-assumptions"))
+  {
+    slv.setOption("incremental", "true");
+    slv.setOption("produce-unsat-assumptions", "true");
+  }
 }
 
 smt_resultt cvc5_convt::dec_solve()
@@ -42,6 +47,30 @@ smt_resultt cvc5_convt::dec_solve()
     return P_ERROR;
 
   return P_UNSATISFIABLE;
+}
+
+smt_resultt cvc5_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  std::vector<cvc5::Term> terms;
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<cvc5_smt_ast>(a)->a);
+
+  unsat_assumption_ids.clear();
+  cvc5::Result r = slv.checkSatAssuming(terms);
+  if (r.isSat())
+    return P_SATISFIABLE;
+  if (r.isUnknown())
+    return P_ERROR;
+  for (const cvc5::Term &t : slv.getUnsatAssumptions())
+    unsat_assumption_ids.insert(t.getId());
+  return P_UNSATISFIABLE;
+}
+
+bool cvc5_convt::is_unsat_assumption(smt_astt a)
+{
+  return unsat_assumption_ids.count(to_solver_smt_ast<cvc5_smt_ast>(a)->a.getId());
 }
 
 tvt cvc5_convt::get_bool(smt_astt a)
