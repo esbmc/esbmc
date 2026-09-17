@@ -4,6 +4,7 @@
 #include <util/config/config.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>
+#include <cstdint>
 
 /** @p arrt with its innermost element type replaced by @p newelem, keeping
  *  every dimension. Used to turn "array of struct" into "array of member". */
@@ -14,6 +15,65 @@ static type2tc rebuild_array(const type2tc &arrt, const type2tc &newelem)
     return array_type2tc(
       rebuild_array(a.subtype, newelem), a.array_size, a.size_is_infinite);
   return array_type2tc(newelem, a.array_size, a.size_is_infinite);
+}
+
+/** The struct a struct, pointer or node @p t is split into. */
+static type2tc shape(const smt_tuple_soa_flattener &flat, const type2tc &t)
+{
+  type2tc s = is_array_type(t) ? flat.ctx->get_flattened_array_subtype(t) : t;
+  return is_pointer_type(s) || is_code_type(s) ? flat.ctx->pointer_struct : s;
+}
+
+/** Type of member @p i of @p t; a node's member carries the node's
+ *  dimensions. */
+static type2tc
+member_type(const smt_tuple_soa_flattener &flat, const type2tc &t, size_t i)
+{
+  type2tc m = struct_union_members(shape(flat, t))[i];
+  return is_array_type(t) ? rebuild_array(t, m) : m;
+}
+
+/** Members (i, j) of two structs naming the same field. Two versions of one
+ *  struct meet in practice -- a program's glibc `struct tm` against the C
+ *  library model's shorter one -- so when the member lists differ, pair by
+ *  name and type; a field only one side has is left unconstrained. */
+static std::vector<std::pair<size_t, size_t>> member_pairs(
+  const smt_tuple_soa_flattener &flat,
+  const type2tc &a,
+  const type2tc &b)
+{
+  type2tc sa = shape(flat, a), sb = shape(flat, b);
+  std::vector<type2tc> ma = struct_union_members(sa);
+  std::vector<type2tc> mb = struct_union_members(sb);
+  std::vector<irep_idt> na = struct_union_member_names(sa);
+  std::vector<irep_idt> nb = struct_union_member_names(sb);
+  std::vector<std::pair<size_t, size_t>> out;
+  if (na == nb)
+  {
+    for (size_t i = 0; i < na.size(); i++)
+      out.emplace_back(i, i);
+    return out;
+  }
+  for (size_t i = 0; i < na.size(); i++)
+    for (size_t j = 0; j < nb.size(); j++)
+      if (
+        na[i] == nb[j] && (ma[i] == mb[j] || (is_tuple_ast_type(ma[i]) &&
+                                              is_tuple_ast_type(mb[j]))))
+      {
+        out.emplace_back(i, j);
+        break;
+      }
+  return out;
+}
+
+/** The partner of member @p i in @p pairs, or SIZE_MAX if it has none. */
+static size_t
+partner(const std::vector<std::pair<size_t, size_t>> &pairs, size_t i)
+{
+  for (auto [a, b] : pairs)
+    if (a == i)
+      return b;
+  return SIZE_MAX;
 }
 
 /* convert_sort and tuple_array_create_despatch hand array-of-struct types over
@@ -200,7 +260,9 @@ smt_tuple_soa_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 smt_astt smt_tuple_soa_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
-  return build(sym.get_symbol_name() + "[]", sym.type, false);
+  /* Values reach here flattened, as they do for the other flatteners. */
+  return build(
+    sym.get_symbol_name() + "[]", ctx->flatten_array_type(sym.type), false);
 }
 
 void smt_tuple_soa_flattener::fill_const(
@@ -214,9 +276,8 @@ void smt_tuple_soa_flattener::fill_const(
   {
     soa_astt n = to_soa_ast(node);
     soa_astt v = to_soa_ast(value);
-    std::vector<type2tc> ms = members_of(elem);
-    for (size_t i = 0; i < ms.size(); i++)
-      fill_const(n->members[i], v->members[i], rebuild_array(type, ms[i]));
+    for (auto [i, j] : member_pairs(*this, type, v->thetype))
+      fill_const(n->members[i], v->members[j], member_type(*this, type, i));
     return;
   }
 
@@ -294,12 +355,11 @@ smt_tuple_soa_flattener::tuple_get(const type2tc &type, smt_astt a)
   std::vector<type2tc> ms = members_of(type);
   soa_astt s = to_soa_ast(a);
 
-  std::vector<expr2tc> fields;
-  fields.reserve(ms.size());
-  for (size_t i = 0; i < ms.size(); i++)
-    fields.push_back(
-      is_tuple_ast_type(ms[i]) ? tuple_get(ms[i], s->members[i])
-                               : ctx->get_by_ast(ms[i], s->members[i]));
+  std::vector<expr2tc> fields(ms.size());
+  for (auto [i, j] : member_pairs(*this, type, s->thetype))
+    fields[i] = is_tuple_ast_type(ms[i])
+                  ? tuple_get(ms[i], s->members[j])
+                  : ctx->get_by_ast(ms[i], s->members[j]);
 
   if (is_pointer_type(type) || is_code_type(type))
   {
@@ -325,10 +385,15 @@ expr2tc smt_tuple_soa_flattener::tuple_get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
+  /* The index is into the flattened array, whose element is the innermost
+   * type of @p subtype. */
+  type2tc elem = subtype;
+  while (is_array_type(elem))
+    elem = to_array_type(elem).subtype;
   soa_astt a = to_soa_ast(array);
   expr2tc idx = constant_int2tc(
     make_array_domain_type(to_array_type(a->thetype)), BigInt(index));
-  return tuple_get(subtype, a->select(ctx, idx));
+  return tuple_get(elem, a->select(ctx, idx));
 }
 
 smt_astt soa_ast::project(smt_solver_baset *, unsigned int elem) const
@@ -383,8 +448,18 @@ smt_astt soa_ast::update(
   if (!leaf())
   {
     soa_astt v = to_soa_ast(value);
+    auto pairs = member_pairs(flat, thetype, v->thetype);
     for (size_t i = 0; i < members.size(); i++)
-      r->members.push_back(members[i]->update(ctx, v->members[i], idx, index));
+    {
+      size_t j = partner(pairs, i);
+      smt_astt e = j != SIZE_MAX ? v->members[j]
+                                 : flat.build(
+                                     ctx->mk_fresh_name("soa_free_field::"),
+                                     to_array_type(member_type(flat, thetype, i))
+                                       .subtype,
+                                     false);
+      r->members.push_back(members[i]->update(ctx, e, idx, index));
+    }
     return r;
   }
 
@@ -415,9 +490,8 @@ smt_astt soa_ast::eq(smt_solver_baset *ctx, smt_astt other) const
     return ctx->mk_eq(arr, o->arr);
 
   smt_solver_baset::ast_vec eqs;
-  eqs.reserve(members.size());
-  for (size_t i = 0; i < members.size(); i++)
-    eqs.push_back(members[i]->eq(ctx, o->members[i]));
+  for (auto [i, j] : member_pairs(flat, thetype, o->thetype))
+    eqs.push_back(members[i]->eq(ctx, o->members[j]));
   return ctx->make_n_ary_and(eqs);
 }
 
@@ -433,8 +507,17 @@ soa_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
     return r;
   }
 
+  auto pairs = member_pairs(flat, thetype, f->thetype);
   for (size_t i = 0; i < members.size(); i++)
-    r->members.push_back(members[i]->ite(ctx, cond, f->members[i]));
+  {
+    size_t j = partner(pairs, i);
+    smt_astt e = j != SIZE_MAX ? f->members[j]
+                               : flat.build(
+                                   ctx->mk_fresh_name("soa_free_field::"),
+                                   member_type(flat, thetype, i),
+                                   is_array_type(thetype));
+    r->members.push_back(members[i]->ite(ctx, cond, e));
+  }
   return r;
 }
 
