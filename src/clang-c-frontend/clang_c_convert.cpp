@@ -1835,19 +1835,19 @@ bool clang_c_convertert::get_builtin_type(
     break;
 
   case clang::BuiltinType::SveBFloat16:
-    new_type = SVE_VEC(half_float_type(), 8);
+    new_type = SVE_VEC(bfloat16_type(), 8);
     c_type = "__SVBfloat16_t";
     break;
   case clang::BuiltinType::SveBFloat16x2:
-    new_type = SVE_VEC(half_float_type(), 16);
+    new_type = SVE_VEC(bfloat16_type(), 16);
     c_type = "__clang_svbfloat16x2_t";
     break;
   case clang::BuiltinType::SveBFloat16x3:
-    new_type = SVE_VEC(half_float_type(), 24);
+    new_type = SVE_VEC(bfloat16_type(), 24);
     c_type = "__clang_svbfloat16x3_t";
     break;
   case clang::BuiltinType::SveBFloat16x4:
-    new_type = SVE_VEC(half_float_type(), 32);
+    new_type = SVE_VEC(bfloat16_type(), 32);
     c_type = "__clang_svbfloat16x4_t";
     break;
 

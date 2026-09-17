@@ -3,10 +3,12 @@
 
 int main(void)
 {
-  __bf16 big = (__bf16)1.0e38f; // +inf in IEEE binary16
+  // 8 exponent bits: the range is float's, not a narrower 16-bit format's.
+  __bf16 big = (__bf16)1.0e38f;
   assert(!__builtin_isinf((float)big));
 
-  __bf16 r = (__bf16)257.0f; // exact in binary16 and float
+  // 8 significand bits: 257 needs 9, and ties to even.
+  __bf16 r = (__bf16)257.0f;
   assert((float)r == 256.0f);
   return 0;
 }

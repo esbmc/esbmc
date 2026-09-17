@@ -1,4 +1,6 @@
 // #7891: under --fixedbv, __bf16 is 16-bit fixed point with 8 integer bits.
+// Every 16-bit float shares that lowering, so this pins the width and the
+// fixedbv branch of bfloat16_type(), not the bfloat16 format.
 #include <assert.h>
 
 int main(void)
