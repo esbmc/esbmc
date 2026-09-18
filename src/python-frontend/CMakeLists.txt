@@ -80,7 +80,8 @@ add_library(pythonfrontend STATIC
             math/parse_float.cpp
             tuple/tuple_handler.cpp
             math/convert_float_literal.cpp
-            dynamic_type/dynamic_type_handler.cpp)
+            dynamic_type/dynamic_type_handler.cpp
+            runtime/runtime_converter.cpp)
 
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

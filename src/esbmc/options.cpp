@@ -244,6 +244,15 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Use the IREP2-native Python adjuster instead of the legacy clang_cpp "
       "adjust pass (V.4 migration hop-off; experimental, default off)"},
+     {"python-runtime",
+      NULL,
+      "Model every Python value as a runtime object whose type is resolved "
+      "during symbolic execution, ignoring type annotations (experimental)"},
+     {"python-check-annotations",
+      NULL,
+      "With --python-runtime, check type annotations as properties: a value "
+      "bound where its annotation does not hold is reported. Annotations the "
+      "runtime cannot express produce no claim (experimental)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND
@@ -509,6 +518,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Treat a function-pointer call with no compatible target as unreachable "
      "rather than assuming an external definition may supply one"},
+    {"check-fnptr-targets",
+     NULL,
+     "Report a function-pointer call with no compatible target as a violated "
+     "property, instead of skipping the call (default) or assuming the path "
+     "unreachable (--closed-world-fnptr)"},
     {"no-slice", NULL, "Do not remove unused equations"},
     {"multi-fail-fast",
      boost::program_options::value<int>()->value_name("n"),

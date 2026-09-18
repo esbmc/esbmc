@@ -1109,8 +1109,7 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 
 smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
-  return new_ast(
-    z3_ctx.constant(name.c_str(), to_solver_smt_sort<z3::sort>(s)->s), s);
+  return mk_smt_symbol(name.empty() ? mk_fresh_name("tuple_fresh::") : name, s);
 }
 
 smt_astt

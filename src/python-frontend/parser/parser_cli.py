@@ -102,7 +102,120 @@ def _read_ast_from_file(filename: str) -> ast.Module:
         return ast.parse(source.read())
 
 
-_FLAGS = ("--deadlock-check", "--typecheck")
+_RUNTIME_IGNORED_MODULES = ("typing", "__future__")
+
+
+def _find_runtime_module(name: str, importer: str, output_dir: str) -> str | None:
+    """Source of an imported module, beside the importer or in the models.
+
+    The runtime path resolves its own imports rather than going through the
+    preprocessor, whose rewrites target the statically typed converter.
+    """
+    beside = os.path.join(os.path.dirname(os.path.abspath(importer)), name + ".py")
+    modelled = os.path.join(output_dir, "models", name + ".py")
+    for candidate in (beside, modelled):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+class _QualifiedName(ast.NodeTransformer):
+    """Rewrites `m.f` to `f` for a module spliced into this namespace."""
+
+    def __init__(self, modules: set[str]):
+        self.modules = modules
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        self.generic_visit(node)
+        if isinstance(node.value, ast.Name) and node.value.id in self.modules:
+            return ast.copy_location(ast.Name(id=node.attr, ctx=node.ctx), node)
+        return node
+
+
+def _top_level_names(body: list) -> set[str]:
+    """Names a module body binds, for the clash check."""
+    bound = set()
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    bound.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            bound.add(node.target.id)
+    return bound
+
+
+def _inline_runtime_imports(tree: ast.Module,
+                            filename: str,
+                            output_dir: str,
+                            deps: CliDeps,
+                            seen: dict | None = None) -> None:
+    """Splice each imported module's body into the tree, in place.
+
+    The runtime path resolves its own imports rather than going through the
+    preprocessor, whose rewrites target the statically typed converter. Every
+    module lands in one namespace, so a name two of them both bind is refused
+    rather than silently merged -- the import is left in place and the
+    converter reports it.
+    """
+    if seen is None:
+        seen = {}
+
+    taken = _top_level_names(tree.body)
+    spliced: list = []
+    resolved: set[str] = set()
+    keep: list = []
+
+    for node in tree.body:
+        wanted = None
+        if isinstance(node, ast.Import):
+            wanted = [(alias.name.split(".")[0], alias) for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            wanted = [(node.module.split(".")[0], None)]
+        if wanted is None:
+            keep.append(node)
+            continue
+
+        usable = True
+        for name, alias in wanted:
+            if name in _RUNTIME_IGNORED_MODULES:
+                usable = False  # handled by the converter, which binds None
+                break
+            if alias is not None and alias.asname:
+                usable = False  # `import m as n` would need the alias bound
+                break
+            if name in seen:
+                resolved.add(name)
+                continue
+            source = _find_runtime_module(name, filename, output_dir)
+            if source is None:
+                usable = False
+                break
+            module = _read_ast_from_file(source)
+            for child in ast.walk(module):
+                deps.annotate_constant_node(child)
+            _inline_runtime_imports(module, source, output_dir, deps, seen)
+            provided = _top_level_names(module.body)
+            if provided & taken:
+                usable = False  # a clash: refuse rather than merge
+                break
+            taken |= provided
+            seen[name] = provided
+            spliced.extend(module.body)
+            resolved.add(name)
+        if not usable:
+            keep.append(node)
+
+    if not spliced and not resolved:
+        return
+    tree.body = spliced + keep
+    _QualifiedName(resolved).visit(tree)
+    ast.fix_missing_locations(tree)
+
+
+_FLAGS = ("--deadlock-check", "--typecheck", "--runtime")
 
 
 def check_usage() -> None:
@@ -186,6 +299,18 @@ def main(*, deps: CliDeps) -> int | None:
     select_threading_model(output_dir, deadlock_check)
 
     tree = _read_ast_from_file(filename)
+
+    # --python-runtime lowers the source as written; the preprocessor's
+    # rewrites target the statically typed converter.
+    if "--runtime" in sys.argv[3:]:
+        # JSON has no bytes or complex, so both reach the converter as plain
+        # strings indistinguishable from str. Tag the literals -- the one
+        # preprocessor step the runtime path does need.
+        for node in ast.walk(tree):
+            deps.annotate_constant_node(node)
+        _inline_runtime_imports(tree, filename, output_dir, deps)
+        deps.generate_ast_json_fn(tree, filename, None, output_dir)
+        return None
 
     preprocessor = deps.preprocessor_cls(filename)
     preprocessor.prepare_module(tree)
