@@ -1912,6 +1912,23 @@ public:
   std::vector<expr2tc> arguments;
   type2tc alloctype;
   sideeffect_allockind kind;
+
+  /// This call constructs an object. The converter's `#constructor` marker,
+  /// which has nowhere else to live in IREP2 -- the callee's `constructor`
+  /// return type migrates to empty (migrate.cpp) and cannot be restored from
+  /// it. clang_cpp_maint::adjust_init reads the marker *after* this pass, so a
+  /// body written back without it loses a global's construction
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.17).
+  ///
+  /// Declared next to `kind`, where it packs into existing padding, and *not*
+  /// reflected: listing it in `fields` makes the primary constructor's
+  /// parameter order stop matching the field order (`location` sits between),
+  /// which is what supports_with_type_v tests -- with_type then rejects every
+  /// side effect at run time. Like `location`, it is therefore carried but not
+  /// compared, and dropped by a with_type rebuild, which reconstructs from
+  /// `fields` alone.
+  bool constructor;
+
   locationt location; // not reflected: source loc travels with the stmt
   static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
@@ -1932,13 +1949,15 @@ public:
     const std::vector<expr2tc> &a,
     const type2tc &alloct,
     sideeffect_allockind k,
-    const locationt &loc = locationt())
+    const locationt &loc = locationt(),
+    bool ctor = false)
     : expr2t(t, sideeffect_id),
       operand(oper),
       size(sz),
       arguments(a),
       alloctype(alloct),
       kind(k),
+      constructor(ctor),
       location(loc)
   {
     if (k == sideeffect_allockind::alloca)
@@ -2507,6 +2526,12 @@ public:
   /// the class does not grow and fields_cover_class's slack is unaffected.
   /// Placed after `location` the compiler packs it into the location's padding
   /// and the invariant underflows instead.
+  ///
+  /// Not reflected, for the reason `sideeffect2t::constructor` is not: listing
+  /// it makes the field order stop matching the primary constructor's parameter
+  /// order (`location` sits between), which is what supports_with_type_v tests,
+  /// and every with_type on an assignment then aborts (§7.2). A with_type
+  /// rebuild carries it through the specialization in irep2_expr.cpp.
   bool member_init;
 
   expr2tc lhs;
@@ -2535,8 +2560,7 @@ public:
     &expr2t::type,
     &sideeffect_assign2t::op,
     &sideeffect_assign2t::lhs,
-    &sideeffect_assign2t::rhs,
-    &sideeffect_assign2t::member_init);
+    &sideeffect_assign2t::rhs);
   static std::string field_names[esbmct::num_type_fields];
 };
 
