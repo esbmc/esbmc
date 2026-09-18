@@ -148,5 +148,38 @@ pyrt_call_method(PyRtObject *o, const char *name, PyRtArgs args, int64_t nargs)
       return &pyrt_None;
     }
   }
+  if (o->ob_type == &PyRtStr_Type)
+  {
+    if (name == pyrt_str_split)
+    {
+      if (nargs > 1)
+        PYRT_RAISE("TypeError: split() takes at most one argument");
+      return pyrt_strmeth_split(o, nargs == 1 ? args.a0 : 0);
+    }
+    if (name == pyrt_str_join)
+    {
+      if (nargs != 1)
+        PYRT_RAISE("TypeError: join() takes exactly one argument");
+      return pyrt_strmeth_join(o, args.a0);
+    }
+    if (name == pyrt_str_replace)
+    {
+      if (nargs != 2)
+        PYRT_RAISE("TypeError: replace() takes exactly two arguments");
+      return pyrt_strmeth_replace(o, args.a0, args.a1);
+    }
+    if (
+      name == pyrt_str_strip || name == pyrt_str_lstrip ||
+      name == pyrt_str_rstrip)
+    {
+      if (nargs > 1)
+        PYRT_RAISE("TypeError: this strip method takes at most one argument");
+      return pyrt_strmeth_strip(
+        o,
+        nargs == 1 ? args.a0 : 0,
+        name != pyrt_str_rstrip,
+        name != pyrt_str_lstrip);
+    }
+  }
   return pyrt_call(pyrt_getattr(o, name), args, nargs);
 }

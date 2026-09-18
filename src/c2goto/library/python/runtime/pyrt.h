@@ -276,6 +276,12 @@ extern const char pyrt_str_add[];
 extern const char pyrt_str_discard[];
 extern const char pyrt_str_remove[];
 extern const char pyrt_str___class__[];
+extern const char pyrt_str_split[];
+extern const char pyrt_str_join[];
+extern const char pyrt_str_replace[];
+extern const char pyrt_str_strip[];
+extern const char pyrt_str_lstrip[];
+extern const char pyrt_str_rstrip[];
 
 PyRtObject *pyrt_bool_from(bool b);
 bool pyrt_long_check(PyRtObject *o);
@@ -298,6 +304,13 @@ PyRtObject *pyrt_tuple_new(void);
 void pyrt_tuple_append(PyRtObject *o, PyRtObject *value);
 void pyrt_unpack_check(PyRtObject *o, int64_t expected);
 PyRtObject *pyrt_str_new(const char *data, int64_t length);
+bool pyrt_str_check(PyRtObject *o);
+PyRtObject *pyrt_strmeth_split(PyRtObject *o, PyRtObject *sep);
+PyRtObject *pyrt_strmeth_join(PyRtObject *sep, PyRtObject *iterable);
+PyRtObject *
+pyrt_strmeth_replace(PyRtObject *o, PyRtObject *old, PyRtObject *rep);
+PyRtObject *
+pyrt_strmeth_strip(PyRtObject *o, PyRtObject *chars, bool left, bool right);
 bool pyrt_float_check(PyRtObject *o);
 PyRtObject *pyrt_float_from(double v);
 double pyrt_number_as_double(PyRtObject *o);
