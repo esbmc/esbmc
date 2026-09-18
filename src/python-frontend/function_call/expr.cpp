@@ -6619,15 +6619,9 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       // Update list element type mapping for function parameters
       const code_typet &type =
         static_cast<const code_typet &>(func_symbol->get_type());
-      // Frontends disagree on which key holds a parameter's id: python and
-      // clang-c set `#identifier` (converter_funcdef.cpp:1675,
-      // clang_c_convert.cpp:910), clang-cpp sets only the plain one
-      // (clang_cpp_convert.cpp:2880). Only `#identifier` survives the IREP2
-      // seam, so prefer it and fall back rather than depend on the choice.
-      const code_typet::argumentt &arg0 = type.arguments().at(0);
-      const std::string arg_id = arg0.get_identifier().empty()
-                                   ? arg0.identifier().as_string()
-                                   : arg0.get_identifier().as_string();
+      // `#identifier`, not the plain key: only it crosses the seam.
+      const std::string arg_id =
+        type_utils::argument_identifier(type.arguments().at(0)).as_string();
 
       converter_.get_element_type_registry().assign_from(
         arg.identifier().as_string(), arg_id);
