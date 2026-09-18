@@ -541,6 +541,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"ts-dump",
      NULL,
      "Extract the main loop as a transition system and print it"},
+    {"ts-check",
+     NULL,
+     "Classify the program: extract the transition system, print one "
+     "TS-CHECK line and stop"},
     {"ts-btor2",
      boost::program_options::value<std::string>()->value_name("file"),
      "Write the transition system to file as BTOR2 and stop"},

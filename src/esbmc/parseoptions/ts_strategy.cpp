@@ -30,9 +30,11 @@ int esbmc_parseoptionst::do_ts_strategy(
   if (!extracted)
   {
     log_status("Not a transition system: {}", reason);
+    if (cmdline.isset("ts-check"))
+      log_result("TS-CHECK rejected: {}", reason);
     if (
       cmdline.isset("ts-no-fallback") || cmdline.isset("ts-dump") ||
-      cmdline.isset("ts-btor2"))
+      cmdline.isset("ts-btor2") || cmdline.isset("ts-check"))
     {
       log_result("VERIFICATION UNKNOWN");
       return 0;
@@ -42,9 +44,8 @@ int esbmc_parseoptionst::do_ts_strategy(
     return do_bmc_strategy(options, goto_functions);
   }
 
-  log_status(
-    "Transition system extracted in {}s",
-    time2string(current_time() - start));
+  const std::string extract_s = time2string(current_time() - start);
+  log_status("Transition system extracted in {}s", extract_s);
 
   if (cmdline.isset("ts-dump"))
   {
@@ -64,10 +65,35 @@ int esbmc_parseoptionst::do_ts_strategy(
     catch (const std::runtime_error &e)
     {
       log_error("BTOR2 export: {}", e.what());
+      if (cmdline.isset("ts-check"))
+      {
+        log_result("TS-CHECK rejected: BTOR2 export: {}", e.what());
+        log_result("VERIFICATION UNKNOWN");
+        return 0;
+      }
       return 6;
     }
     std::ofstream(cmdline.getval("ts-btor2")) << btor2.str();
     log_status("BTOR2 written to {}", cmdline.getval("ts-btor2"));
+  }
+
+  if (cmdline.isset("ts-check"))
+  {
+    log_result(
+      "TS-CHECK accepted states={} inputs={} defs={} bad={} prefix_bad={} "
+      "extract_s={}",
+      ts.state_pre.size(),
+      ts.inputs.size(),
+      ts.body_defs.size(),
+      ts.bad.size(),
+      ts.prefix_bad.size(),
+      extract_s);
+    log_result("VERIFICATION UNKNOWN");
+    return 0;
+  }
+
+  if (cmdline.isset("ts-btor2"))
+  {
     log_result("VERIFICATION UNKNOWN");
     return 0;
   }

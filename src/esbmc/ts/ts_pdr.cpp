@@ -18,6 +18,12 @@ namespace
 /// the largest cube worth trying them on.
 const unsigned drop_budget = 16;
 const size_t drop_max_cube = 128;
+
+/// Bit b of v in two's complement: to_uint64 would drop a negative sign.
+bool value_bit(const BigInt &v, unsigned width, unsigned b)
+{
+  return integer2binary(v, width)[width - 1 - b] == '1';
+}
 } // namespace
 
 ts_pdrt::ts_pdrt(
@@ -120,7 +126,8 @@ bool ts_pdrt::build_bits()
       if (!is_nil_expr(init) && is_constant_bool2t(init))
         return to_constant_bool2t(init).value ? 1 : 0;
       if (!is_nil_expr(init) && is_constant_int2t(init))
-        return (to_constant_int2t(init).value.to_uint64() >> b) & 1 ? 1 : 0;
+        return value_bit(to_constant_int2t(init).value, t->get_width(), b) ? 1
+                                                                           : 0;
       return -1;
     };
     const bool shared = cur == next;
@@ -206,7 +213,8 @@ ts_pdrt::cubet ts_pdrt::model_cube()
   for (unsigned i = 0; i < bit_of.size(); i++)
   {
     const auto [k, b] = bit_of[i];
-    c.push_back({i, ((values[k].to_uint64() >> b) & 1) != 0});
+    const type2tc &t = component_cur[k]->type;
+    c.push_back({i, value_bit(values[k], is_bool_type(t) ? 1 : t->get_width(), b)});
   }
   return c;
 }
@@ -415,7 +423,7 @@ bool ts_pdrt::check_invariant(unsigned from_level)
 
   // A second solver, so the check does not rely on how frames were encoded.
   ts_pdrt fresh(ts, ns, *options_);
-  if (!fresh.build_bits())
+  if (!fresh.build_bits() || !fresh.check_prefix())
     return false;
   std::vector<expr2tc> cur, next;
   for (const cubet &c : cubes)

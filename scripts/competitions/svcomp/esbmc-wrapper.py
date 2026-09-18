@@ -3,6 +3,7 @@
 import os
 import argparse
 import shlex
+import tempfile
 import re
 import subprocess
 import time
@@ -365,6 +366,57 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 
   return command_line
 
+# Transition-system strategies, for evaluation runs. They never unwind loops,
+# so the reach flags above that do are left out, and a program that is not a
+# transition system reports Unknown instead of falling back.
+TS_FLAGS = {
+  "ts-check": "--ts-check",
+  "ts-kind": "--ts-k-induction --ts-no-fallback",
+  "ts-pdr": "--ts-pdr --ts-no-fallback",
+  "ts-ric3": "--ts-check",
+}
+
+def ts_command_line(strat, arch, benchmark, model):
+  flags = TS_FLAGS[strat]
+  if "--ts-check" in flags:
+    flags += " --ts-btor2 " + model
+  return (esbmc_path + "--sv-comp --no-div-by-zero-check --force-malloc-success "
+          "--force-realloc-success --no-align-check --no-vla-size-check "
+          "--unlimited-k-steps " + benchmark + (" --32 " if arch == 32 else " --64 ") +
+          "--enable-unreachability-intrinsic --no-pointer-check --no-bounds-check "
+          "--error-label ERROR " + flags)
+
+def ric3_command_line(model):
+  here = os.path.dirname(os.path.abspath(__file__))
+  return os.environ.get("RIC3", os.path.join(here, "rIC3")) + " -e ic3 " + model
+
+def parse_ric3(stdout):
+  """rIC3 prints SAT (unsafe), UNSAT (safe) or UNKNOWN as its last line."""
+  lines = stdout.strip().splitlines()
+  last = lines[-1].strip() if lines else ""
+  return {"SAT": Result.fail_reach, "UNSAT": Result.success}.get(last, Result.unknown)
+
+def verify_ts(strat, arch, benchmark):
+  # Parallel runs share the working directory, so the model goes elsewhere.
+  with tempfile.TemporaryDirectory() as tmp:
+    return verify_ts_model(strat, arch, benchmark, os.path.join(tmp, "ts-model.btor2"))
+
+def verify_ts_model(strat, arch, benchmark, model):
+  output = run(ts_command_line(strat, arch, benchmark, model)).decode()
+  if strat != "ts-ric3":
+    return parse_result(output, Property.reach)
+  if "TS-CHECK accepted" not in output:
+    return Result.unknown
+  cmd = ric3_command_line(model)
+  print("Command: " + cmd)
+  # rIC3's log goes to stderr; only its verdict line is kept, so nothing it
+  # prints can be mistaken for this wrapper's result.
+  ric3 = subprocess.run(shlex.split(cmd), stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL, text=True)
+  res = parse_ric3(ric3.stdout)
+  print("rIC3 answered: " + (ric3.stdout.strip().splitlines() or ["nothing"])[-1])
+  return res
+
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
@@ -383,7 +435,9 @@ if __name__ == "__main__":
   parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
   parser.add_argument("-p", "--propertyfile", help="Path to the property file")
   parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
-  parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
+  parser.add_argument("-s", "--strategy", help="ESBMC's strategy",
+                      choices=["kinduction", "falsi", "incr", "fixed"] + list(TS_FLAGS),
+                      default="fixed")
   parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
   parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
   parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
@@ -442,6 +496,10 @@ if __name__ == "__main__":
     print("Unsupported Property")
     exit(1)
 
-  result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
+  if strategy in TS_FLAGS:
+    result = (verify_ts(strategy, arch, benchmark)
+              if category_property == Property.reach else Result.unknown)
+  else:
+    result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 
   print(get_result_string(result))

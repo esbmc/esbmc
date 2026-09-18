@@ -296,6 +296,7 @@ int esbmc_parseoptionst::run_chosen_strategy(
 
   if (
     cmdline.isset("ts-dump") || cmdline.isset("ts-btor2") ||
+    cmdline.isset("ts-check") ||
     cmdline.isset("ts-bmc") ||
     cmdline.isset("ts-k-induction") || cmdline.isset("ts-pdr"))
     return do_ts_strategy(options, goto_functions);

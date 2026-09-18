@@ -36,6 +36,32 @@ bool is_input_symbol(const expr2tc &e)
          starts_with(to_symbol2t(e).thename.as_string(), "nondet$symex::");
 }
 
+/// Pointers in the state would need their points-to sets preserved across
+/// steps; empty aggregates are never assigned, so their markers never fire.
+bool unsupported_state_type(const type2tc &t)
+{
+  if (is_pointer_type(t))
+    return true;
+  if (is_array_type(t))
+    return unsupported_state_type(to_array_type(t).subtype);
+  if (!is_struct_type(t) && !is_union_type(t))
+    return false;
+  const std::vector<type2tc> &members = is_struct_type(t)
+                                          ? to_struct_type(t).members
+                                          : to_union_type(t).members;
+  return members.empty() ||
+         std::any_of(members.begin(), members.end(), unsupported_state_type);
+}
+
+/// Level-1 identity of an SSA symbol: the variable instance, ignoring its
+/// level-2 version.
+std::string l1_name(const expr2tc &e)
+{
+  const symbol2t &s = to_symbol2t(e);
+  return s.thename.as_string() + "!" + std::to_string(s.level1_num) + "@" +
+         std::to_string(s.thread_num);
+}
+
 /// No recursion, and no function pointers outside the library models. Loops in
 /// callees are checked during capture: one that would run more than once
 /// leaves an unwinding assertion in the step.
@@ -138,9 +164,9 @@ bool recognise(
     if (prev->is_assign())
     {
       const expr2tc &lhs = to_code_assign2t(prev->code).target;
-      if (!is_symbol2t(lhs) || is_pointer_type(lhs->type))
+      if (!is_symbol2t(lhs) || unsupported_state_type(lhs->type))
       {
-        reason = "havocked state is not a scalar variable";
+        reason = "havocked state holds a pointer or an empty aggregate";
         return false;
       }
       shape.havoc_vars.insert(shape.havoc_vars.begin(), lhs);
@@ -369,6 +395,13 @@ bool extract_transition_system(
   transition_systemt &ts,
   std::string &reason)
 {
+  // Set before extraction when the k-induction havoc could not cover a write
+  // (e.g. through an unresolved pointer): the step would miss that state.
+  if (options.get_bool_option("disable-inductive-step"))
+  {
+    reason = "the loop's havoc is incomplete (inductive step disabled)";
+    return false;
+  }
   loop_shapet shape;
   if (!recognise(goto_functions, shape, reason))
     return false;
@@ -410,8 +443,17 @@ bool extract_transition_system(
   reachability_treet art(
     program, ns, opts, std::make_shared<symex_target_equationt>(ns), context);
   art.setup_for_new_explore();
-  auto result = art.get_next_formula();
-  auto eq = std::dynamic_pointer_cast<symex_target_equationt>(result.target);
+  std::shared_ptr<symex_targett> target;
+  try
+  {
+    target = art.get_next_formula().target;
+  }
+  catch (const inductive_step_disabled_exceptiont &e)
+  {
+    reason = "symbolic execution cannot run the step: " + e.reason;
+    return false;
+  }
+  auto eq = std::dynamic_pointer_cast<symex_target_equationt>(target);
 
   if (opts.get_bool_option("disable-inductive-step") != was_disabled)
   {
@@ -596,6 +638,25 @@ bool extract_transition_system(
     {
       reason = "step variable " + from_expr(ns, "", e) +
                " is also defined before the loop";
+      return false;
+    }
+
+  // A variable that exists before the loop and that the body writes must be
+  // state. The havoc misses writes through pointers and ESBMC's allocation
+  // bookkeeping; each step would then start from the value before the loop,
+  // which symex may even constant-fold, discarding the properties it feeds.
+  std::unordered_set<std::string> before_loop, state;
+  for (const auto &d : ts.prefix_defs)
+    before_loop.insert(l1_name(to_equality2t(d).side_1));
+  for (const auto &e : pre)
+    state.insert(l1_name(e));
+  for (const auto &e : body_lhs)
+    if (
+      before_loop.count(l1_name(e)) && !state.count(l1_name(e)) &&
+      !starts_with(to_symbol2t(e).thename.as_string(), "goto_symex::"))
+    {
+      reason = "the loop writes " + from_expr(ns, "", e) +
+               " outside its havocked state";
       return false;
     }
 

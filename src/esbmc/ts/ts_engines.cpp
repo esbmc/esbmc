@@ -4,11 +4,25 @@
 #include <langapi/language_util.h>
 #include <solvers/solve.h>
 #include <util/base/time_stopping.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 
 #include <algorithm>
 #include <map>
 #include <sstream>
+
+namespace
+{
+/// Equality of two state values. IEEE equality would make a NaN initial
+/// value unmatchable and equate +0 with -0, so floats compare bitwise.
+expr2tc state_equal(const expr2tc &a, const expr2tc &b)
+{
+  if (!is_floatbv_type(a->type))
+    return equality2tc(a, b);
+  const type2tc bits = get_uint_type(a->type->get_width());
+  return equality2tc(bitcast2tc(bits, a), bitcast2tc(bits, b));
+}
+} // namespace
 
 ts_enginet::ts_enginet(
   const transition_systemt &ts,
@@ -44,13 +58,11 @@ ts_enginet::ts_enginet(
 
   for (const expr2tc &d : ts.prefix_defs)
     solver->define(d);
-  for (const expr2tc &a : ts.prefix_assumes)
-    solver->assert_expr(a);
 
   std::vector<expr2tc> init;
   for (size_t i = 0; i < ts.state_pre.size(); i++)
   {
-    expr2tc eq = equality2tc(ts.at_step(ts.state_pre[i], 0), ts.state_init[i]);
+    expr2tc eq = state_equal(ts.at_step(ts.state_pre[i], 0), ts.state_init[i]);
     if (bind_init)
       solver->define(eq);
     init.push_back(eq);
@@ -63,10 +75,19 @@ expr2tc ts_enginet::bad_literal(unsigned step) const
   return symbol2tc(get_bool_type(), "ts$bad$" + std::to_string(step));
 }
 
+void ts_enginet::assume_prefix()
+{
+  for (const expr2tc &a : ts.prefix_assumes)
+    solver->assert_expr(a);
+}
+
 bool ts_enginet::check_prefix()
 {
   if (ts.prefix_bad.empty())
+  {
+    assume_prefix();
     return true;
+  }
   std::vector<expr2tc> violated;
   for (const auto &p : ts.prefix_bad)
     violated.push_back(p.violated);
@@ -86,6 +107,7 @@ bool ts_enginet::check_prefix()
     return false;
   }
   solver->assert_expr(not2tc(disjunction(violated)));
+  assume_prefix();
   return true;
 }
 
@@ -100,6 +122,7 @@ smt_resultt ts_enginet::solve_prefix()
 
 smt_resultt ts_enginet::solve_bound(unsigned k)
 {
+  assume_prefix();
   for (unsigned j = 0; j < k; j++)
   {
     add_step(j);
@@ -257,7 +280,7 @@ unsigned ts_enginet::add_simple_path_lemmas(unsigned step)
   {
     std::vector<expr2tc> differ;
     for (const expr2tc &pre : ts.state_pre)
-      differ.push_back(notequal2tc(ts.at_step(pre, i), ts.at_step(pre, j)));
+      differ.push_back(not2tc(state_equal(ts.at_step(pre, i), ts.at_step(pre, j))));
     solver->assert_expr(disjunction(differ));
   }
   return repeats.size();

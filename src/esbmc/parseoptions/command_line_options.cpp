@@ -841,6 +841,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // inductive-step-only marking of interval bounds.
   if (
     cmdline.isset("ts-dump") || cmdline.isset("ts-btor2") ||
+    cmdline.isset("ts-check") ||
     cmdline.isset("ts-bmc") ||
     cmdline.isset("ts-k-induction") || cmdline.isset("ts-pdr"))
     options.set_option("k-induction", true);

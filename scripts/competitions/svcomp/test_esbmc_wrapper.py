@@ -114,5 +114,38 @@ class ParseResultTest(unittest.TestCase):
             "TRUE")
 
 
+class TransitionSystemStrategyTest(unittest.TestCase):
+    def test_ric3_verdicts(self):
+        self.assertEqual(wrapper.parse_ric3("UNSAT\n"), wrapper.Result.success)
+        self.assertEqual(wrapper.parse_ric3("SAT\n"), wrapper.Result.fail_reach)
+        self.assertEqual(wrapper.parse_ric3("UNKNOWN\n"), wrapper.Result.unknown)
+        self.assertEqual(wrapper.parse_ric3(""), wrapper.Result.unknown)
+
+    def test_ts_runs_never_unwind_loops(self):
+        for strat in wrapper.TS_FLAGS:
+            cmd = wrapper.ts_command_line(strat, 64, "task.c", "m.btor2")
+            self.assertNotIn("--goto-unwind", cmd)
+            self.assertIn("--64", cmd)
+            self.assertIn(wrapper.TS_FLAGS[strat], cmd)
+
+    def test_ts_engines_do_not_fall_back(self):
+        for strat in ("ts-kind", "ts-pdr"):
+            self.assertIn("--ts-no-fallback", wrapper.ts_command_line(strat, 32, "t.c", "m.btor2"))
+
+    def test_hardware_strategies_export_to_the_given_model(self):
+        for strat in ("ts-check", "ts-ric3"):
+            self.assertIn("--ts-btor2 /tmp/x/m.btor2",
+                          wrapper.ts_command_line(strat, 64, "t.c", "/tmp/x/m.btor2"))
+        self.assertIn("/tmp/x/m.btor2", wrapper.ric3_command_line("/tmp/x/m.btor2"))
+
+    def test_rejected_program_is_unknown(self):
+        self.assertEqual(
+            self.verdict("TS-CHECK rejected: main has no loop\nVERIFICATION UNKNOWN\n"),
+            "Unknown")
+
+    def verdict(self, output):
+        return wrapper.get_result_string(wrapper.parse_result(output, wrapper.Property.reach))
+
+
 if __name__ == "__main__":
     unittest.main()
