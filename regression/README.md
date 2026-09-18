@@ -36,7 +36,9 @@ A `test.desc` file may also contain `CHECK_FILE` lines for non-JSON output files
 - `<op>`. Either `contains` (the regex must match somewhere in the file) or `absent` (the regex must not match).
 - `<regex>`. A Python regex matched with `re.MULTILINE`; the rest of the line, so it may contain spaces.
 
-The runner executes every test in a fresh temporary directory, so parallel tests cannot clobber each other's output files and a relative output path in the flags line (`--witness-output`, `--cex-output`, `--output`) never lands in the source tree. Paths in `CHECK_JSON`/`CHECK_FILE`/`SEED_FILE` resolve there. The directory is removed when the test ends; a run hard-killed by ctest's `TIMEOUT` leaks one, named `esbmc-regress-*` under `TMPDIR`. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE` passes.
+A `test.desc` file may also contain a `CHECK_EXIT` line, of the form `CHECK_EXIT <status>`, asserting the exit status of the run. The regexes only see stdout and stderr, so a diagnostic printed just before a crash is indistinguishable from one printed before a clean exit (esbmc/esbmc#7901). A run killed by a signal never satisfies a `CHECK_EXIT`, whatever the status: the failure names the signal.
+
+The runner executes every test in a fresh temporary directory, so parallel tests cannot clobber each other's output files and a relative output path in the flags line (`--witness-output`, `--cex-output`, `--output`) never lands in the source tree. Paths in `CHECK_JSON`/`CHECK_FILE`/`SEED_FILE` resolve there. The directory is removed when the test ends; a run hard-killed by ctest's `TIMEOUT` leaks one, named `esbmc-regress-*` under `TMPDIR`. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE`/`CHECK_EXIT` passes.
 
 For example, `regression/smtlib/github_6059/test.desc` asserts the `--output` dump holds the real formula and not the status string that used to overwrite it:
 

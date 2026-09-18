@@ -244,6 +244,49 @@ def _run_check_file(check, base_dir):
     return True, None
 
 
+# CHECK_EXIT directive: assert the run's exit status. The stdout/stderr regexes
+# cannot see it, so a diagnostic printed just before abort() reads exactly like
+# one printed before a clean exit (esbmc/esbmc#7901).
+CHECK_EXIT_KEYWORD = "CHECK_EXIT"
+
+
+def _is_check_exit_line(stripped):
+    """True iff the first whitespace-delimited token is CHECK_EXIT."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == CHECK_EXIT_KEYWORD
+
+
+def _parse_check_exit(line):
+    """Parse one CHECK_EXIT directive into the expected exit status."""
+    parts = line.split()
+    if len(parts) != 2 or parts[0] != CHECK_EXIT_KEYWORD:
+        raise ValueError(f"CHECK_EXIT expects: CHECK_EXIT <status>; got: {line!r}")
+    try:
+        status = int(parts[1])
+    except ValueError:
+        raise ValueError(
+            f"CHECK_EXIT status must be an integer; got {parts[1]!r}"
+        ) from None
+    if not 0 <= status <= 255:
+        raise ValueError(f"CHECK_EXIT status must be in 0..255; got {status}")
+    return status
+
+
+def _run_check_exit(expected, rc):
+    """Return (passed, message). message is None on pass, diagnostic on fail."""
+    if rc == expected:
+        return True, None
+    # Popen reports a signal death as -N, which no CHECK_EXIT can match. Naming
+    # the signal keeps it apart from the shell's 128+N, which looks like an
+    # ordinary status.
+    if rc is not None and rc < 0:
+        return False, (
+            f"CHECK_EXIT: expected exit {expected}, but the process was killed "
+            f"by signal {-rc} ({signal.strsignal(-rc)})"
+        )
+    return False, f"CHECK_EXIT: expected exit {expected}, got {rc}"
+
+
 # SEED_FILE directive: create a file in ESBMC's working directory before the
 # run, so a test can establish a precondition CHECK_FILE then asserts on --
 # e.g. that ESBMC refuses to overwrite a file it did not generate.
@@ -461,10 +504,11 @@ class TestCase:
             self.test_args = fp.readline().strip()
 
             # Line 4+: stdout/stderr regexes and optional CHECK_JSON /
-            # CHECK_FILE lines.
+            # CHECK_FILE / CHECK_EXIT lines.
             self.test_regex = []
             self.check_json = []
             self.check_file = []
+            self.check_exit = []
             self.seed_file = []
             self.requires = []
             for line in fp:
@@ -491,6 +535,18 @@ class TestCase:
                 elif _is_check_file_line(stripped):
                     try:
                         self.check_file.append(_parse_check_file(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                elif _is_check_exit_line(stripped):
+                    try:
+                        if self.check_exit:
+                            raise ValueError(
+                                "only one CHECK_EXIT line is allowed; a second "
+                                "one can never pass"
+                            )
+                        self.check_exit.append(_parse_check_exit(stripped))
                     except ValueError as exc:
                         raise ValueError(
                             f"{self.test_dir}/test.desc: {exc}"
@@ -540,6 +596,7 @@ class TestCase:
         self.test_mode = "CORE"
         self.check_json = []
         self.check_file = []
+        self.check_exit = []
         self.seed_file = []
         self._initialize_test_case()
 
@@ -560,6 +617,8 @@ class TestCase:
                 )
             for file, op, pattern in self.check_file:
                 f.write(f"{CHECK_FILE_KEYWORD} {file} {op} {pattern}\n")
+            for status in self.check_exit:
+                f.write(f"{CHECK_EXIT_KEYWORD} {status}\n")
 
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
@@ -771,6 +830,10 @@ def _add_test(test_case, executor):
                     check_failures.append(msg)
             for check in test_case.check_file:
                 passed, msg = _run_check_file(check, tmp_dir)
+                if not passed:
+                    check_failures.append(msg)
+            for expected in test_case.check_exit:
+                passed, msg = _run_check_exit(expected, rc)
                 if not passed:
                     check_failures.append(msg)
             all_checks_pass = matches_regex and not check_failures
