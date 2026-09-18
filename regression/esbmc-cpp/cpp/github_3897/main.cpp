@@ -1,12 +1,12 @@
-// <cfenv> is not covered by ESBMC's bundled OMs, so it is only reachable
-// when the host system headers are made visible alongside them. It is a thin
-// wrapper over <fenv.h>, which ESBMC's own libc does model, so mixing the two
-// trees is enough to compile it.
-#include <cfenv>
+// --mix-cpp-host-headers puts the host C++ library's include tree on the search
+// path next to the bundled OMs. Probe for its configuration header (libstdc++,
+// libc++) rather than include a standard header that may later be modelled.
+#if !__has_include(<bits/c++config.h>) && !__has_include(<__config>)
+#  error "the host C++ library headers are not on the include path"
+#endif
 
 int main()
 {
-  __ESBMC_assert(
-    FE_TONEAREST == FE_TONEAREST, "host-only header compiled alongside ESBMC's OMs");
+  __ESBMC_assert(1, "host C++ library headers are reachable");
   return 0;
 }
