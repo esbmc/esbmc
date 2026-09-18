@@ -178,8 +178,6 @@ public:
     return sol_state_vars.count(symbol_id) != 0;
   }
 
-
-
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
