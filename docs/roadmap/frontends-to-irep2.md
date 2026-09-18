@@ -4554,8 +4554,9 @@ distinguishes a 1-char string element from an 8-bit int by the spelling, so drop
 `regression/python/github_4715_cpp_type_char{,_fail}` plus a unit test that asserts the spelling is no
 part of the type's identity.
 
-It unblocks the eleven writes in `handle_assignment_type_adjustments` (Python B-2* 54 -> 43, repo
-125 -> 114) and, by §3's table, the ten in `converter_funcdef.cpp` -- which is the next cluster.
+It unblocks eight of the eleven writes in `handle_assignment_type_adjustments`; the other three
+lose markers the carry does not cover (`scope-python-irep2.md` §10.4). By §3's table it also unblocks
+the ten in `converter_funcdef.cpp` -- which is the next cluster.
 
 The pattern across the five is now clear enough to state as a rule. When a marker does not survive the
 seam, there are three answers and the choice is empirical: carry it as an unreflected field (four of

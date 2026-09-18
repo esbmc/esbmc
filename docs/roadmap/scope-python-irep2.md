@@ -589,7 +589,7 @@ one test over budget, `mul_cnt_ver_2`; standalone it takes **39.90 s with the ca
 without**, so it is the known `-j4` contention artefact rather than a regression, and it passes
 uncapped.
 
-Python B-2* 54 -> 43; repo total 125 -> 114.
+Python B-2* 54 -> 43; repo total 125 -> 114. (Three of the eleven went back to legacy; see §10.4.)
 
 ### 10.3 What this does not settle
 
@@ -603,6 +603,37 @@ decided the question.
 Two of `python_expr_builder.cpp`'s six hand-restorations (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`,
 each commented "migrate_type does not round-trip `#cpp_type`") are now redundant for these kinds and
 could be removed; that is a separate change with its own measurement, not a rider.
+
+### 10.4 Three of the eleven stay legacy (2026-09-18)
+
+§10.2's breadth check ran no Python suite -- neither `-L python` nor `-L numpy` / `-L humaneval`, which
+hold three of the failures below -- and CI did: sixteen Python tests regressed, most to
+a wrong verdict. Converting the eleven sites one at a time puts every failure on three of them, and none
+of the three is about `#cpp_type`:
+
+```
+tuple arm, set_type     migrate_type drops #python_aggregate, which `in` dispatches on
+                        tuple9{,_fail}, tuple17-nondet, tuple_str_membership,
+                        github_5936_type_is, humaneval_146, humaneval_78
+str/list arm, set_type  a dynamically-sized array cannot cross the seam
+                        numpy/view_descriptor_1d_symbolic_bound_edge
+trailing set_value      a class used as a value is a char-array constant_exprt with the name
+                        in `value` and no operands (converter_expr.cpp:1287 for a builtin
+                        type, :1727 for a class); migrate_expr makes it `{ }`, and
+                        isinstance folds on that
+                        github_3520_{3_fail,4,5,7_fail,8,9}, github_7549{,_fail}
+```
+
+The tuple arm and the trailing value write go back to legacy. The str/list arm keeps the IREP2 write and
+falls back only for a dynamically-sized array, through `python_expr::contains_dyn_array`, the guard the
+expression builders already use for this hazard. It has to stay converted because it is the arm
+`val = "hello"[0]` takes: with the carry mutated out of `migrate_type`, `github_4715_cpp_type_char{,_fail}`
+and the seven §9 tests fail, but with this arm legacy they pass either way and the pair gates nothing.
+
+`bars.py` counts each of the three as a legacy write, so Python B-2* is three higher than the eleven
+conversions alone would leave it: 51 against 48, measured on the current base rather than the one §10.2's
+43 came from. The two losses behind them, `#python_aggregate` on a struct type and
+a class object with no IREP2 shape, are separate questions from this carry.
 
 ## 11. The funcdef cluster: two blockers, neither of them `#cpp_type` (2026-09-17)
 
@@ -657,7 +688,7 @@ shape -- unlike §9, no corpus is needed, because the test that discriminates is
 
 ### 11.4 Standing
 
-Python B-2* stays 43; repo total 114. The funcdef cluster is not ten writes blocked on one attribute,
+Python B-2* stays where §10.4 leaves it. The funcdef cluster is not ten writes blocked on one attribute,
 as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
 loss, and the next step is the three experiments above rather than another conversion attempt.
 So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
