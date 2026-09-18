@@ -59,6 +59,10 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   }
 
   bitw_options.set(bitwuzla::Option::PRODUCE_MODELS, 1);
+  auto user = options.option_values.find("bitwuzla-opt");
+  if (user != options.option_values.end())
+    for (const std::string &kv : user->second)
+      guarded([&] { bitw_options.set(std::vector<std::string>{"--" + kv}); });
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 
