@@ -62,7 +62,9 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
             (z3::tactic(z3_ctx, "smt") | z3::tactic(z3_ctx, "qfnra-nlsat")))
              .mk_solver())
 {
-  if (_options.get_bool_option("smt-unsat-assumptions"))
+  if (
+    _options.get_bool_option("smt-assumptions") ||
+    _options.get_bool_option("smt-unsat-assumptions"))
     solver = z3::solver(z3_ctx);
   z3::params p(z3_ctx);
   p.set("relevancy", 0U);

@@ -24,7 +24,7 @@ ts_pdrt::ts_pdrt(
   const transition_systemt &ts,
   const namespacet &ns,
   optionst &options)
-  : ts_enginet(ts, ns, options), options_(&options)
+  : ts_enginet(ts, ns, options, false, true, true), options_(&options)
 {
   add_step(0);
   act_trans = symbol2tc(get_bool_type(), "ts$act$trans");
@@ -94,6 +94,22 @@ bool ts_pdrt::build_bits()
 
   const type2tc bit_type = get_uint_type(1);
   const expr2tc one = from_integer(1, bit_type);
+  // Cube literals are assumed on every query. Bitwuzla preprocesses any
+  // assumption that is not a plain Boolean symbol, so name each bit once.
+  auto as_symbol = [&](const expr2tc &e, const char *side) {
+    if (is_symbol2t(e))
+      return e;
+    expr2tc s = symbol2tc(
+      get_bool_type(),
+      "ts$pdr$bit$" + std::to_string(cur_bit.size()) + "$" + side);
+    solver->assert_expr(equality2tc(s, e));
+    return s;
+  };
+  auto add_bit = [&](const expr2tc &c, const expr2tc &n, bool shared) {
+    expr2tc cs = as_symbol(c, "cur");
+    next_bit.push_back(shared ? cs : as_symbol(n, "next"));
+    cur_bit.push_back(cs);
+  };
   for (unsigned k = 0; k < components.size(); k++)
   {
     const auto &[cur, next] = components[k];
@@ -107,20 +123,21 @@ bool ts_pdrt::build_bits()
         return (to_constant_int2t(init).value.to_uint64() >> b) & 1 ? 1 : 0;
       return -1;
     };
+    const bool shared = cur == next;
     if (is_bool_type(t))
     {
       bit_of.emplace_back(k, 0);
-      cur_bit.push_back(cur);
-      next_bit.push_back(next);
+      add_bit(cur, next, shared);
       init_bit.push_back(init_value(0));
     }
     else if (is_bv_type(t) && t->get_width() <= 64)
       for (unsigned b = 0; b < t->get_width(); b++)
       {
         bit_of.emplace_back(k, b);
-        cur_bit.push_back(equality2tc(extract2tc(bit_type, cur, b, b), one));
-        next_bit.push_back(
-          equality2tc(extract2tc(bit_type, next, b, b), one));
+        add_bit(
+          equality2tc(extract2tc(bit_type, cur, b, b), one),
+          equality2tc(extract2tc(bit_type, next, b, b), one),
+          shared);
         init_bit.push_back(init_value(b));
       }
     else

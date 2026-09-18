@@ -14,13 +14,15 @@ public:
   /// With `bind_init`, the first state is the initial state outright, which
   /// lets the solver fold constant initial values; only BMC can use it.
   /// Without `incremental`, the solver is never asked to track assumptions;
-  /// only solve_prefix and solve_bound may be used.
+  /// only solve_prefix and solve_bound may be used. `cores` requests unsat
+  /// assumptions, which only PDR reads.
   ts_enginet(
     const transition_systemt &ts,
     const namespacet &ns,
     optionst &options,
     bool bind_init = false,
-    bool incremental = true);
+    bool incremental = true,
+    bool cores = false);
 
   /// Exit codes follow do_bmc_strategy: 0 SUCCESSFUL or UNKNOWN, 1 FAILED,
   /// 6 solver error.

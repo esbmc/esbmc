@@ -28,11 +28,12 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   // Already initialized stuff in the constructor list,
   slv.setOption("produce-models", "true");
   slv.setOption("produce-assertions", "true");
-  if (options.get_bool_option("smt-unsat-assumptions"))
-  {
+  if (
+    options.get_bool_option("smt-assumptions") ||
+    options.get_bool_option("smt-unsat-assumptions"))
     slv.setOption("incremental", "true");
+  if (options.get_bool_option("smt-unsat-assumptions"))
     slv.setOption("produce-unsat-assumptions", "true");
-  }
 }
 
 smt_resultt cvc5_convt::dec_solve()
@@ -63,8 +64,9 @@ smt_resultt cvc5_convt::dec_solve_assuming(const ast_vec &assumptions)
     return P_SATISFIABLE;
   if (r.isUnknown())
     return P_ERROR;
-  for (const cvc5::Term &t : slv.getUnsatAssumptions())
-    unsat_assumption_ids.insert(t.getId());
+  if (slv.getOption("produce-unsat-assumptions") == "true")
+    for (const cvc5::Term &t : slv.getUnsatAssumptions())
+      unsat_assumption_ids.insert(t.getId());
   return P_UNSATISFIABLE;
 }
 
