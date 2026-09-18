@@ -37,6 +37,19 @@ Bisecting names one site for all three: `python_converter::create_symbol`
 left alone and the other 23 converted, the suite is **400 of 400 and 500 of 500** over
 the two slices the ten-minute cap allows, and the unit suite is 876 of 876.
 
+### 2.0 A second blocked site, and what the slices could not see
+
+The full suite then failed `lambda_default_arg` on the llvm-22 job. The cause is the
+same attribute at a second site: `python_lambda::create_symbol`
+(`lambda/python_lambda.cpp:238`) shares only a name with the factory above, and was
+converted because the two slices never reached it -- the test is #12255, and the slices
+stop at 500. Without `#cpp_type`, a `bool` default lowers as `double`, so
+`lambda x, flag=True: flag` yields `return_value$ == (double)1`.
+
+So the batch is **22**, not 23, and the sampling is the lesson: a slice bounded by the
+ten-minute cap is a smoke test, not a bisect. A site the slices do not reach cannot be
+called clean on their evidence.
+
 ### 2.1 Why that one site is blocked
 
 `#cpp_type` is the source-level spelling of a type, and `migrate_type` drops it. The
@@ -52,7 +65,7 @@ consumers plus the type checker rather than the whole frontend
 derived, side-tabled or read from the AST is the question Phase 9 has to answer, and
 it is a much smaller question than Phase 8's.
 
-## 3. The arrow-form writes: 9 of 33 (2026-09-15)
+## 3. The arrow-form writes: 6 of 33 (2026-09-15)
 
 The 33 writes §2 left were not multi-line -- they spell `sym->set_type(...)`, which the
 first pass's pattern did not match. Converting them measures as follows.
@@ -62,17 +75,23 @@ and `:97` pass a `type2tc`, so they already wrote IREP2 and only matched because
 grep counts the argument's spelling. That is the bar's known property (§39 of the parent
 doc) showing up in the tooling used to survey it.
 
-Of the remaining 31, **9 land clean** -- 400 of 400 and 500 of 500 over the two slices,
-unit 876 of 876. Three sets do not:
+Of the remaining 31, **6 land clean** -- unit 876 of 876. Five sets do not:
 
 | site | symptom | cause |
 |---|---|---|
 | `converter/converter_stmt.cpp` (11 writes) | `casting14` fails | most write `rhs.type()`, which carries `#cpp_type` |
 | `converter/converter_funcdef.cpp` (10 writes) | `class_var_param_augassign{,_fail}` fail | same shape, parameter and return types |
 | `python_adjust.cpp:70` | the unit case `python_adjust pre-pass write-back preserves bases for the throw chain` fails | the write exists to re-attach the legacy-only `bases` sub-irep, and storing IREP2 drops it again |
+| `class/python_class_builder.cpp` (the two `set_type(st)` writes) | 13 exception tests, `is-instance`, `shedskin` and `mopsa/try_super_raise` fail | `get_bases(st)` has just attached `bases` to the struct type; this is `python_adjust.cpp:70`'s cause at the site that produces it rather than the one that repairs it |
+| `lambda/python_lambda.cpp:54` | `lambda_default_arg` fails | `#cpp_type` again, on the function-pointer type a lambda binding takes |
 
-The last is worth its own line: that write's own comment says what it is for, and the
-repo already had a unit test pinning it. A scripted conversion walked into it and the
+The two added rows are the reason the slice numbers are gone from this section. The
+first pass reported "400 of 400 and 500 of 500", and every one of these 15 tests sits
+past 500 -- §2.0's lesson, arrived at twice. What the section can claim is the unit
+suite and the named tests, so that is what it claims.
+
+The `python_adjust.cpp:70` row is worth its own line: that write's own comment says what
+it is for, and the repo already had a unit test pinning it. A scripted conversion walked into it and the
 test caught it immediately -- which is the argument for the test, not against the
 script.
 
@@ -134,9 +153,10 @@ task rather than a guess to record.
 §4.2 left the hard failure unexplained. Narrowing it one site at a time gives the
 answer, and it is not the 34 sites the earlier batch implicated.
 
-Eight more value writes convert cleanly -- all three in
+Seven more value writes convert cleanly -- two of the three in
 `converter/converter_symbols.cpp`, both in `python2goto.cpp`, and three of
-`python_converter.cpp`'s five. The two that do not are the **program-entry bodies**:
+`python_converter.cpp`'s five. The third `converter_symbols.cpp` write has its own
+cause, recorded in §6.2. The two that do not are the **program-entry bodies**:
 
 ```cpp
 user_main_symbol.set_value(user_code);   // python_converter.cpp:1057
@@ -145,6 +165,41 @@ main_symbol.set_value(std::move(v));     // :1179
 
 Converting `user_main` alone takes the first slice to **53 failures of 400**, and the
 failure is a SIGSEGV during GOTO creation rather than a wrong verdict.
+
+### 6.2 A retyped value cannot be migrated either (2026-09-16)
+
+`update_symbol`'s first write is the third site that has to stay legacy, and the reason
+is not §6.1's:
+
+```cpp
+const typet &expr_type = expr.type();
+sym->set_type(migrate_type(expr_type));
+exprt v = sym->get_value();
+v.type() = expr_type;          // retypes the root only
+sym->set_value(v);             // must stay legacy
+```
+
+The assignment retypes the value's **root node** and leaves its operands alone. A legacy
+`exprt` tolerates that; IREP2 does not. Migrating eagerly builds an arithmetic node whose
+result type is `expr_type` while operand 1 keeps the type it had, and
+`assert_arith_2ops_consistency` (`irep2_expr.cpp:698`) rejects it:
+
+```
+Assertion `p2 || (is_bv_type(t) == is_bv_type(v1->type)
+                  && t->get_width() == v1->type->get_width())' failed.
+```
+
+`regression/numpy/div1` reaches it: `np.divide(1, 2)` has no inferable return type, the
+frontend defaults it to `double` (`converter_funcdef.cpp:1933`), and the retyped root
+then sits over integer operands. Six numpy division tests abort this way, and because it
+is an assertion it is invisible in any build with `NDEBUG` -- it surfaced on the llvm-22
+DebugOpt job, not in the 400/500 slices.
+
+The rule this adds to §6.1's: a value write can be converted only if the expression is
+*already* consistent. Retyping the root is a legacy idiom that the storage flip turns
+into a hard error, so a site that does it needs the retype pushed through the operands
+before the write can move -- which is a change to what the frontend builds, not to where
+it stores it.
 
 ### 6.1 Why, and the rule it gives
 
@@ -686,3 +741,9 @@ a reflected field on `struct_type2t`, or should Python record bases structurally
 list becomes derivable?** The second is the smaller change to the IR and the larger one to the frontend,
 and it would retire this residue and the exception-id divergence §11.3.1 notes together. Neither should
 be picked without the maintainers, and neither is blocked on measurement -- the routes above are priced.
+Python B-2* stays 43; repo total 114. The funcdef cluster is not ten writes blocked on one attribute,
+as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
+loss, and the next step is the three experiments above rather than another conversion attempt.
+So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
