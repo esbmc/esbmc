@@ -715,14 +715,10 @@ symbol_id function_call_builder::build_function_id() const
       obj_name = "str";
     }
     else if (func_json["value"]["_type"] == "BinOp")
-    {
-      std::string lhs_type = th.get_operand_type(func_json["value"]["left"]);
-      std::string rhs_type = th.get_operand_type(func_json["value"]["right"]);
-
-      assert(lhs_type == rhs_type);
-
-      obj_name = lhs_type;
-    }
+      // Mixed-type operands (e.g. a tagged int subclass mixed with a plain
+      // int literal) are valid Python. get_operand_type already resolves a
+      // BinOp node gracefully, falling back to whichever side is non-empty.
+      obj_name = th.get_operand_type(func_json["value"]);
     else if (func_json["value"]["_type"] == "Call")
     {
       const auto &inner_call = func_json["value"];
