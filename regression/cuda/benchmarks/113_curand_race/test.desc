@@ -1,0 +1,5 @@
+THOROUGH
+main.cu
+--unwind 10 --force-malloc-success --context-bound 2 --data-races-check
+
+^VERIFICATION SUCCESSFUL$

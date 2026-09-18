@@ -1,9 +1,9 @@
-/* KNOWNBUG (#5393). Assigning a struct whose type has a flexible array member
- * must copy only the header: C17 6.7.2.1p18 says the size of the structure is
- * as if the flexible array member were omitted. ESBMC copies the flexible tail
- * as well, so the assignment overwrites the calloc'd zeroes that follow the
- * header with the source local's indeterminate bytes, and a read of the tail
- * reports a spurious violation.
+/* #5393. Assigning a struct whose type has a flexible array member must copy
+ * only the header: C17 6.7.2.1p18 says the size of the structure is as if the
+ * flexible array member were omitted. ESBMC sized the member as a one-element
+ * array and copied that element too, so the assignment overwrote the calloc'd
+ * zeroes that follow the header with the source local's indeterminate bytes,
+ * and a read of the tail reported a spurious violation.
  *
  * This is the SV-COMP aws_hash_table_init_bounded_harness false alarm reduced:
  * there the tail is the hash table's slot array, zeroed by aws_mem_calloc and
@@ -31,6 +31,7 @@ int main(void)
   if (!p)
     return 0;
   *p = tmpl;
+  assert(p->a == (void *)0x1234);
   assert(((unsigned char *)&p->slots[0])[1] == 0);
   return 0;
 }

@@ -36,6 +36,8 @@ ignored_dirs=(
   "uint64_pow_fold_recovers_fail"
   "bytes_param_harness_backing"
   "bytes_param_harness_backing_fail"
+  # --function harness: CPython never calls f, so the _fail half exits 0.
+  "harness_bytes_param_len_bound_fail"
   "len_bytes_alias_dispatch"
   "len_bytes_alias_dispatch_fail"
   "decimal"
