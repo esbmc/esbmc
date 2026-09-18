@@ -228,6 +228,11 @@ pass, which runs after the link, not in the converter.
 
 - The 22 type writes §3 identifies as blocked, once `#cpp_type` has a route.
 - The two entry-body writes, in the adjust pass rather than the converter (§6.1).
+## 4. Next
+
+- The 22 type writes §3 identifies as blocked, once `#cpp_type` has a route.
+- The 48 value writes, which need §52's namespace precondition and nothing else so
+  far as this census can tell.
 - `#cpp_type`: census its readers the way `scope-solidity-irep2.md` §9 censused
   Solidity's, and pick a route from the four in that document's §11.1.
 

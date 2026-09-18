@@ -679,12 +679,16 @@ expr2tc dereferencet::dereference(
   if (!known_exhaustive)
     value = make_failed_symbol(type);
 
+  // Where p can land: every target build_reference_to() produced a guard for.
+  expr2tc resolved = gen_false_expr();
+
   for (const expr2tc &target : points_to_set)
   {
     expr2tc new_value, pointer_guard;
 
     new_value = build_reference_to(
       target, mode, src, type, guard, lexical_offset, pointer_guard);
+    resolved = or2tc(resolved, pointer_guard);
 
     if (is_nil_expr(new_value))
       continue;
@@ -706,6 +710,9 @@ expr2tc dereferencet::dereference(
     else
       value = if2tc(type, pointer_guard, new_value, value);
   }
+
+  if (!known_exhaustive && (is_write(mode) || is_free(mode)))
+    deref_invalid_ptr(src, guard, mode, resolved);
 
   if (is_internal(mode))
   {
@@ -902,7 +909,7 @@ expr2tc dereferencet::build_reference_to(
     type2tc nullptrtype = pointer_type2tc(type);
     expr2tc null_ptr = symbol2tc(nullptrtype, "NULL");
 
-    expr2tc pointer_guard = same_object2tc(deref_expr, null_ptr);
+    pointer_guard = same_object2tc(deref_expr, null_ptr);
 
     guard2tc tmp_guard(guard);
     tmp_guard.add(pointer_guard);
@@ -1030,15 +1037,39 @@ expr2tc dereferencet::build_reference_to(
 void dereferencet::deref_invalid_ptr(
   const expr2tc &deref_expr,
   const guard2tc &guard,
-  modet mode)
+  modet mode,
+  const expr2tc &resolved)
 {
   if (is_internal(mode))
     // The caller just wants a list of references -- ensuring that the correct
     // assertions fire is a problem for something or someone else
     return;
 
+  // Per-target call: dereference() checks WRITE and FREE once, after the loop.
+  if (is_nil_expr(resolved) && (is_write(mode) || is_free(mode)))
+    return;
+
   // constraint that it actually is an invalid pointer
   expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
+
+  /* obj(p) can be a real object outside the value set: invalid_pointer passes
+   * it, and symex models no write or free there. */
+  if (!is_nil_expr(resolved))
+  {
+    expr2tc unmodelled = not2tc(resolved);
+    if (is_free(mode))
+    {
+      // valid_object is the alloc bit, so this also passes an alloca block.
+      type2tc offs_type = get_int_type(config.ansi_c.address_width);
+      unmodelled = and2tc(
+        unmodelled,
+        or2tc(
+          not2tc(valid_object2tc(deref_expr)),
+          notequal2tc(
+            pointer_offset2tc(offs_type, deref_expr), gen_zero(offs_type))));
+    }
+    invalid_pointer_expr = or2tc(invalid_pointer_expr, unmodelled);
+  }
 
   expr2tc validity_test;
   std::string foo;
@@ -1597,14 +1628,17 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (m_size == 0)
     {
-      // This field has no size: it's most likely a struct that has no members.
-      // Just skip over it: we can never correctly build a reference to a field
-      // in that struct, because there are no fields. The next field in the
+      // This field has no size: either a struct with no members, or an array
+      // with no elements -- a flexible array member (C17 6.7.2.1p18) or a GNU
+      // `[0]` member (#5393). Just skip over it: we can never correctly build a
+      // reference to a field in it, because it has none. The next field in the
       // current struct lies at the same offset and is probably what the pointer
-      // is supposed to point at.
+      // is supposed to point at; a flexible array member is the struct's last,
+      // so the loop then falls out and the access is reported out of bounds,
+      // which is what it is.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
+      assert(is_struct_type(it) || is_union_type(it) || is_array_type(it));
       assert(!is_struct_type(type));
       i++;
       continue;
@@ -2278,10 +2312,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         expr2tc target = value; // The byte array;
 
         simplify(array_offset);
-        if (is_array_type(target_type))
-          construct_from_array(target, array_offset, target_type, tmp, mode);
-        else
-          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        construct_struct_member_from_byte_array(
+          target, array_offset, target_type, tmp, mode);
         fields.push_back(target);
 
         // Update dynamic offset into array
@@ -2313,6 +2345,22 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     return;
   }
+}
+
+void dereferencet::construct_struct_member_from_byte_array(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (is_array_type(type) && type_byte_size_bits(type) == 0)
+    value = gen_zero(type);
+  else if (is_array_type(type))
+    construct_from_array(value, offset, type, guard, mode);
+  else
+    build_reference_rec(value, offset, type, guard, mode);
 }
 
 /**************************** Dereference utilities ***************************/
@@ -2359,7 +2407,7 @@ std::vector<expr2tc> dereferencet::extract_bytes(
 {
   /* A zero-width object has no bytes to extract, and the stitching below reads
    * bytes[num_bytes - 1] -- an out-of-bounds access in ESBMC itself rather than
-   * a verdict. A struct with a zero-length array member reaches here. */
+   * a verdict. Callers must build zero-width values without stitching. */
   if (num_bytes == 0)
   {
     log_error("dereference: cannot read a zero-width object");
@@ -2483,11 +2531,15 @@ expr2tc dereferencet::stitch_together_from_byte_array(
       return byte_array;
   }
 
+  BigInt num_bits = type_byte_size_bits(type);
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (num_bits == 0)
+    return gen_zero(type);
+
   expr2tc offset_bytes =
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
   simplify(offset_bytes);
 
-  BigInt num_bits = type_byte_size_bits(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);

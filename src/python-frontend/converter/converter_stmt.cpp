@@ -7805,8 +7805,8 @@ void python_converter::get_return_statements(
     if (
       type_handler_.is_numeric_scalar_type(val.type()) ||
       type_handler_.is_string_type(val.type()))
-      val = dynamic_type_handler_.build_tagged_return_value(
-        val, location, target_block);
+      val =
+        dynamic_type_handler_.build_tagged_value(val, location, target_block);
     else
       throw std::runtime_error(
         "returning a value of this type from a dynamically-typed function "
