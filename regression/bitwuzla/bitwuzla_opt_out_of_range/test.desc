@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --bitwuzla-opt rewrite-level=9
+^ERROR: Bitwuzla error encountered$
+invalid value '9' for numeric option '--rewrite-level', maximum is 2

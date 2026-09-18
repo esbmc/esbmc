@@ -682,6 +682,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzla-opt",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "name=value"),
+     "Set a Bitwuzla option, e.g. rewrite-level=1 (repeatable)"},
     {"bitwuzllob",
      NULL,
      "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
