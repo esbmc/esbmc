@@ -6,6 +6,7 @@
 #include <util/base/time_stopping.h>
 #include <util/message/message.h>
 
+#include <algorithm>
 #include <map>
 #include <sstream>
 
@@ -14,11 +15,25 @@ ts_enginet::ts_enginet(
   const namespacet &ns,
   optionst &options,
   bool bind_init,
-  bool incremental)
+  bool incremental,
+  bool cores)
   : ts(ts), ns(ns)
 {
-  options.set_option("smt-unsat-assumptions", incremental);
+  options.set_option("smt-assumptions", incremental);
+  options.set_option("smt-unsat-assumptions", incremental && cores);
+  // Without cores, an incremental Bitwuzla re-runs its preprocessing on every
+  // new step with its caches cleared, which costs more than it saves.
+  std::vector<std::string> &bitwuzla = options.option_values["bitwuzla-opt"];
+  const bool no_preprocess =
+    incremental && !cores &&
+    std::none_of(bitwuzla.begin(), bitwuzla.end(), [](const std::string &o) {
+      return o.rfind("preprocess=", 0) == 0;
+    });
+  if (no_preprocess)
+    bitwuzla.push_back("preprocess=0");
   solver.reset(create_solver("", ns, options));
+  if (no_preprocess)
+    bitwuzla.pop_back();
   if (incremental && !solver->supports_assumptions())
   {
     log_error("The transition-system engines need a solver with assumptions");
