@@ -1,0 +1,5 @@
+CORE
+main.c
+--data-races-check-only --no-assertions --context-bound 2
+^VERIFICATION FAILED$
+^.*W/W data race on c:@shared$

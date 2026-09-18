@@ -6,6 +6,7 @@ add_subdirectory(goto-programs)
 add_subdirectory(goto-symex)
 add_subdirectory(big-int)
 add_subdirectory(clang-c-frontend)
+add_subdirectory(esbmc)
 
 if(ENABLE_JIMPLE_FRONTEND)
  add_subdirectory(jimple-frontend)
