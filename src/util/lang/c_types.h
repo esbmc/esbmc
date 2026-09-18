@@ -58,6 +58,7 @@ typet char16_type();
 typet char32_type();
 typet unsigned_wchar_type();
 typet half_float_type();
+typet bfloat16_type();
 typet size_type();
 typet signed_size_type();
 typet bool_type();

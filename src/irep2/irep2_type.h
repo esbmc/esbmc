@@ -109,14 +109,16 @@ public:
     const std::vector<irep_idt> &memb_pretty_names,
     const irep_idt &_name,
     bool _packed = false,
-    const std::vector<irep_idt> &memb_base_names = {})
+    const std::vector<irep_idt> &memb_base_names = {},
+    const BigInt &_alignment = 0)
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
       member_pretty_names(memb_pretty_names),
       member_base_names(memb_base_names),
       name(_name),
-      packed(_packed)
+      packed(_packed),
+      alignment(_alignment)
   {
     assert(
       memb_base_names.empty() || memb_base_names.size() == _members.size());
@@ -136,14 +138,26 @@ public:
   irep_idt name;
   bool packed;
 
+  /// An explicit `alignas`, in bytes; zero when the record has none. IREP2 does
+  /// not otherwise represent it, and add_padding reads it to decide a record's
+  /// trailing padding -- an over-aligned empty struct occupies its alignment,
+  /// so without it the back-migrated type gets no pad member and a literal of
+  /// it stays shorter than its own type (§7.4). Not reflected: two records that
+  /// differ only here would otherwise stop comparing equal, which is a wider
+  /// change than this repair.
+  BigInt alignment;
+
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,
     &struct_type2t::member_names,
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
+  /// Covers the two deliberately unreflected members: `member_base_names` (a
+  /// member's spelling is no part of the struct's identity) and `alignment`
+  /// (two records differing only in `alignas` must still compare equal).
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>);
+    sizeof(std::vector<irep_idt>) + sizeof(BigInt);
   static std::string field_names[esbmct::num_type_fields];
 };
 

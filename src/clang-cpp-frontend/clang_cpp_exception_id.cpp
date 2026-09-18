@@ -1,4 +1,5 @@
 #include <clang-cpp-frontend/clang_cpp_exception_id.h>
+#include <util/lang/exception_specification.h>
 
 /// A class type's own id followed by its bases', most derived first, so a
 /// handler for a base catches a derived throw. Only a throw expands the bases:
@@ -109,4 +110,31 @@ void convert_exception_id(
   }
 
   append_cpp_spelling_and_fallback(type, suffix, ids);
+}
+
+void finalize_exception_specification(const namespacet &ns, typet &type)
+{
+  if (
+    type.get(exception_specificationt::kind_attribute()) != "dynamic" ||
+    type.find("exception_spec_decl").is_nil())
+    return;
+
+  // Only the leading id per declared type: base classes are expanded at the
+  // throw site, as they are for a handler.
+  irept &decl = type.add("exception_spec_decl");
+  irept resolved;
+  for (const auto &op : decl.get_sub())
+  {
+    std::vector<irep_idt> ids;
+    convert_exception_id(ns, static_cast<const typet &>(op), "", ids);
+    if (!ids.empty())
+    {
+      irept entry;
+      entry.id(ids.front());
+      resolved.get_sub().push_back(entry);
+    }
+  }
+
+  type.set(exception_specificationt::types_attribute(), resolved);
+  type.remove("exception_spec_decl");
 }

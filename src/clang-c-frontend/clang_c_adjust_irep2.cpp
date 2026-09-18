@@ -48,6 +48,9 @@ bool clang_c_adjust_irep2::adjust()
       has_prefix(s->id.as_string(), "c:@F@main"))
       declare_argc_argv(context, *s);
 
+    if (sole_adjuster)
+      adjust_symbol_type(*s);
+
     if (!s->is_type && s->get_value().is_not_nil())
     {
       gen_symbol_code(*s);
@@ -215,6 +218,9 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (const locationt l = statement_location(expr); !l.get_line().empty())
     enclosing_location = l;
 
+  if (sole_adjuster)
+    adjust_before_operands(expr);
+
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
 
   if (is_index2t(expr))
@@ -281,6 +287,7 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   {ARM(adjust_struct), is_constant_struct2t},
   {ARM(adjust_array_subtype), is_constant_array2t},
   {ARM(adjust_decl_init), is_code_decl2t},
+  {ARM(adjust_ptr_mem), is_ptr_mem2t},
   {ARM(adjust_dereference), is_dereference2t},
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},
@@ -779,6 +786,14 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   if (!is_array_type(a.ptr_obj->type))
     return;
 
+  // `&row`, where `row` is a row of a 2-D array, has type `S (*)[2]`: an
+  // explicit address-of an array-typed *element* is not a decay, and decaying
+  // it walks the pointer arithmetic by an element instead of a row
+  // (docs/roadmap/scope-clang-cpp-irep2.md §8.4). The legacy arm never fires
+  // here because its converter leaves such an index typed as the element.
+  if (is_index2t(a.ptr_obj))
+    return;
+
   const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
@@ -802,17 +817,30 @@ void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
   if (!is_struct_type(t))
     return;
 
-  // Compute the padded layout from the type itself rather than resolving a tag
-  // symbol by name. `to_struct_type(t).name` is unqualified ("struct Book"),
-  // while a struct declared inside a contract has the qualified tag
-  // "tag-struct Base.Book", so the lookup missed and the literal kept operands
-  // its own type could not describe
-  // (docs/roadmap/scope-solidity-irep2.md §7.37). add_padding is the same
-  // function that gave the tag its layout, and is idempotent, so a type that
+  // The tag symbol's own layout first: it is already padded, and reaching it
+  // needs no round trip through the seam -- which matters, because migrate_type
+  // carries neither a member's `#bitfield` flag nor its underlying type, so
+  // add_padding applied to a back-migrated type sees plain narrow integers and
+  // inserts no bit-field pad (scope-clang-cpp-irep2.md §8.3).
+  type2tc padded;
+  const std::string tag = "tag-" + to_struct_type(t).name.as_string();
+  if (const symbolt *s = ns.lookup(irep_idt(tag));
+      s != nullptr && s->get_type().is_struct())
+    padded = s->get_type2();
+
+  // No tag symbol under that name: a struct declared inside a Solidity contract
+  // has the qualified tag "tag-struct Base.Book" while the literal's type names
+  // it "struct Book", so the lookup misses and the layout is computed from the
+  // type itself (scope-solidity-irep2.md §7.37). add_padding is the same
+  // function that gave the tag its layout and is idempotent, so a type that
   // already carries its pads is unchanged.
-  typet legacy = migrate_type_back(t);
-  add_padding(legacy, ns);
-  const type2tc padded = migrate_type(legacy);
+  if (is_nil_type(padded))
+  {
+    typet legacy = migrate_type_back(t);
+    add_padding(legacy, ns);
+    padded = migrate_type(legacy);
+  }
+
   if (!is_struct_type(padded))
     return;
 
@@ -1201,13 +1229,17 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
 /// `__builtin_va_list` is a pointer or a struct, and an already-decayed
 /// pointer where it is an array (x86-64 Linux). Reading the bit follows the
 /// target; a name test would take the address on both.
+/// \p rk receives the reference kind the legacy declaration spells, which the
+/// IREP2 parameter type need not carry -- that asymmetry is why the check below
+/// reads the declaration at all.
 static bool binds_by_reference(
   const expr2tc &callee,
   const expr2tc &arg,
   const type2tc &param,
   std::size_t i,
   const contextt &context,
-  const namespacet &ns)
+  const namespacet &ns,
+  pointer_ref_kindt &rk)
 {
   // address_of2t asserts its operand is not another address_of, so a caller
   // that already took the address is left alone.
@@ -1230,7 +1262,12 @@ static bool binds_by_reference(
     return false;
 
   const code_typet::argumentst &decl = to_code_type(s->get_type()).arguments();
-  return i < decl.size() && is_lvalue_or_rvalue_reference(decl[i].type());
+  if (i >= decl.size() || !is_lvalue_or_rvalue_reference(decl[i].type()))
+    return false;
+
+  rk = is_rvalue_reference(decl[i].type()) ? pointer_ref_kindt::RVALUE
+                                           : pointer_ref_kindt::LVALUE;
+  return true;
 }
 
 /// IREP2 form of the callee refresh in
@@ -1310,9 +1347,14 @@ void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
 
       // Converted instead of bound, `va_start` gets the va_list's own value
       // and the callee initialises whatever that value happens to point at.
-      if (binds_by_reference(callee, arg, params[i], i, context, ns))
+      // Not a plain address_of: the binding has to distribute over a
+      // conditional and keep the reference kind, or the legacy pipeline reading
+      // the written-back tree no longer sees a reference and takes the pointer
+      // conversion instead (docs/roadmap/scope-clang-cpp-irep2.md §3.20).
+      pointer_ref_kindt rk = pointer_ref_kindt::LVALUE;
+      if (binds_by_reference(callee, arg, params[i], i, context, ns, rk))
       {
-        arg = address_of2tc(arg->type, arg);
+        take_reference_address(arg, rk);
         continue;
       }
 
@@ -1392,6 +1434,45 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
 ///
 /// Legacy's remaining arm retypes the node to the pointer's subtype; the
 /// migration already builds that type, so no corpus input distinguishes it.
+void clang_c_adjust_irep2::adjust_ptr_mem(expr2tc &expr)
+{
+  const ptr_mem2t &pm = to_ptr_mem2t(expr);
+  if (is_nil_expr(pm.source_value) || is_nil_expr(pm.member_pointer))
+    return;
+
+  expr2tc base = pm.source_value;
+  if (is_pointer_type(base->type))
+    base = dereference2tc(to_pointer_type(base->type).subtype, base);
+
+  // A pointer to *data* member carries the member's own type; only the bound
+  // member function is the placeholder legacy replaces.
+  if (!is_empty_type(expr->type))
+  {
+    if (base != pm.source_value)
+      expr = ptr_mem2tc(expr->type, base, pm.member_pointer);
+    return;
+  }
+
+  const expr2tc &func = pm.member_pointer;
+  if (!is_pointer_type(func->type))
+    return;
+
+  const type2tc &pointee = to_pointer_type(func->type).subtype;
+  if (!is_code_type(pointee))
+    return;
+
+  // Legacy prepends the *type* of `&base` and leaves the argument itself to the
+  // call site; kept identical so both paths hand goto_convert the same callee.
+  const code_type2t &ct = to_code_type(pointee);
+  std::vector<type2tc> args{pointer_type2tc(base->type)};
+  args.insert(args.end(), ct.arguments.begin(), ct.arguments.end());
+  std::vector<irep_idt> names{irep_idt()};
+  names.insert(names.end(), ct.argument_names.begin(), ct.argument_names.end());
+
+  expr = func->with_type(
+    pointer_type2tc(code_type2tc(args, ct.ret_type, names, ct.ellipsis)));
+}
+
 void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
 {
   const expr2tc pointer = to_dereference2t(expr).value;
