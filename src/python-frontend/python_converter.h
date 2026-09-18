@@ -1822,6 +1822,11 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// Builds a `bytes` concatenation (`lhs + rhs`) as a fresh array literal of
+  /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
+  /// nil_exprt if either side's length is not a compile-time constant.
+  exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
+
   /**
    * @brief Handles list-related binary operations.
    *

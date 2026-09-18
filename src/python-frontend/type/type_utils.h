@@ -212,6 +212,15 @@ public:
     return (t.is_signedbv() || t.is_unsignedbv()) && get_cpp_type(t) == "char";
   }
 
+  // Distinguishes a `bytes` value from a numpy-style numeric array, so `+`
+  // routes to concatenation only for the former. Both share the same legacy
+  // `array of long_long_int_type` representation here
+  // (type_handler::get_typet's "bytes" branch).
+  static bool is_bytes_array(const typet &t)
+  {
+    return t.is_array() && get_cpp_type(t) == "bytes";
+  }
+
   static bool is_float_vs_char(const exprt &a, const exprt &b)
   {
     const auto &type_a = a.type();
