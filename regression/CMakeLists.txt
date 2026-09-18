@@ -753,6 +753,7 @@ set(_slow_regression_tests
     # armv8 leg green meanwhile.
     "regression/floats-regression/nn-tanh_5_unsafe"
     "regression/consensus/get_subtree_index"
+    "regression/consensus/compute_shuffled_index"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
