@@ -159,6 +159,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     typet t;
     if (get_type(fd.getType(), t))
       return true;
+    size_flexible_array_member(fd, t);
 
     std::string id, name;
     get_decl_name(fd, name, id);
@@ -1936,6 +1937,14 @@ bool clang_c_convertert::wrap_bitfield_type_if_needed(
     return true;
   t.swap(bitfield_type);
   return false;
+}
+
+void clang_c_convertert::size_flexible_array_member(
+  const clang::ValueDecl &vd,
+  typet &t)
+{
+  if (llvm::isa<clang::FieldDecl>(vd) && vd.getType()->isIncompleteArrayType())
+    to_array_type(t).size() = gen_zero(size_type());
 }
 
 bool clang_c_convertert::get_bitfield_type(
@@ -4846,6 +4855,7 @@ bool clang_c_convertert::get_member_expr(
   typet comp_type;
   if (get_type(*memb.getMemberDecl()->getType(), comp_type))
     return true;
+  size_flexible_array_member(*memb.getMemberDecl(), comp_type);
 
   if (const auto *bitfield = memb.getSourceBitField())
   {
