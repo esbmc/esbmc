@@ -2089,6 +2089,100 @@ That is a materially different plan from §3's step S.3, and the parent's §6
 ordering put Solidity before Python precisely so a phase like this could be
 sized honestly before it starts. Recording the measurement rather than a
 porting order, because the measurement says the order does not matter.
+## 4. The corpus swept under asserts, and two ways to measure it wrong
+
+The flag this frontend honours is Phase 7's, so this is the first divergence count
+for it. Run under `DebugOpt`, so with asserts, over every test in
+`regression/esbmc-solidity`.
+
+**Result: 513 agree, 1 diverges, 1 aborts, 10 have no source to run.**
+
+Both non-agreeing rows are characterised below, but the number took three attempts
+to produce, and the two wrong ones are worth recording because each looked
+authoritative.
+
+### 4.1 First wrong answer: 514 divergences
+
+The Solidity frontend extracts to `/tmp` with a random suffix per run, so the
+source paths in a GOTO dump differ between *any* two runs -- flag or no flag. The
+first sweep therefore reported almost every row as diverging. Normalising
+`/tmp/esbmc_solidity_temp-[0-9a-f-]+` to a fixed token is required before any
+A/B of this frontend, and the same applies to python.
+
+### 4.2 Second wrong answer: 9 divergences
+
+Eight of those nine were `irep2_only_*` tests, whose descriptors *already* pass
+`--clang-cpp-irep2-adjust-only`. The sweep appended it a second time, and ESBMC
+does not tolerate that: the run collapses from 7 057 lines of output to one. So
+the A/B is meaningless for any test that already enables the flag -- there is
+nothing to compare, and passing it twice does not produce the same run.
+
+Skip those rows rather than comparing them.
+
+### 4.3 The one genuine divergence
+
+`nested_array_mixed_1`, eight lines, one shape -- the target type of a cast
+applied to `__ESBMC_array_push`'s result:
+
+```
+- ASSIGN this->mixed[0]=(unsigned _ExtInt(256) [4] *)return_value$...
++ ASSIGN this->mixed[0]=(unsigned _ExtInt(256) * *)return_value$...
+```
+
+Legacy casts to pointer-to-array-of-4; the IREP2 pass casts to
+pointer-to-pointer. The two are not interchangeable -- the pointee size differs,
+which is what pointer arithmetic and the next dereference read -- so this looked
+like the one row worth closing.
+
+**It is the legacy side that is wrong.** Three things in the same symbol-table dump
+settle it, all identical on both paths:
+
+```
+this->mixed = (unsigned _ExtInt(256) * * *)(calloc(2, sizeof(... * *)));
+... sizeof(unsigned _ExtInt(256) [4]) ...
+```
+
+`this->mixed` is `T***` on both paths, so `this->mixed[0]` is `T**`. The IREP2
+pass casts the pushed result to `T**`, which is the type of the lvalue it is
+assigned to; the legacy pass casts it to `T[4]*`, which is not. The `sizeof` the
+call is given is the same either way, so the allocation is unaffected.
+
+That is the same shape as the python row in `frontends-to-irep2.md` §40.4, and the
+same conclusion: the flag-on side agrees with the type system and the default path
+is the outlier. So Phase 8's corpus has **no row where the IREP2 pass is wrong** --
+513 agree, and the one that differs differs in the IREP2 pass's favour.
+
+### 4.3a Where the fix is not
+
+The obvious one-line fix is wrong, and measuring it costs less than arguing about
+it. The converter builds the assignment from the Solidity-declared type:
+
+```cpp
+exprt tmp = side_effect_exprt("assign", base_t);
+convert_type_expr(ns, new_expr, base_t, expr);
+```
+
+Substituting `base.type()` -- convert to the lvalue rather than to the declaration
+-- changes nothing, because `base.type()` *is* `T[4]*` at that point. The converter
+emits the declared shape for both the member and the cast.
+
+What separates the paths is later: **both** adjust passes lower the member to
+`T***`, and only the IREP2 one also lowers the cast the converter left at `T[4]*`.
+So the legacy pass is internally inconsistent -- it lowers the lvalue's type and
+not the cast feeding it -- and closing the row means changing how the legacy adjust
+lowers an array-typed pointee, which reaches every such cast on the default path.
+That is wider than a converter tweak and wants its own measurement.
+
+Changing the default path is a behaviour change for every nested-array push, so it
+stays its own PR. What is settled is which side would be changed, and now also
+that the change is not where it first appeared to be.
+
+### 4.4 The abort is not ours
+
+`delegate_shadow_3` trips `member2t`'s component assertion at
+`irep2_expr.h:1641`. It does so **identically on both paths**, and its descriptor's
+first line is already `KNOWNBUG`. Recorded so the next sweep does not read it as a
+hop-off failure.
 
 ## 14. Ten of Phase 8's writes, and the reader nobody had found (2026-09-15)
 
