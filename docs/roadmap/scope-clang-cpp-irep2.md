@@ -1475,9 +1475,41 @@ structurally so that "has a vptr" is a question about the component list rather 
 on it. The second is the same choice §12.3 poses for Python's `bases`, and for the same reason -- an
 attribute is being used where structure would answer the question.
 
-### 7.3 `clang_cpp_convert.cpp:3156`
+### 7.3 `clang_cpp_convert.cpp:3156` -- blocked, and the cheap probe said otherwise
 
-`fd_symb->set_type(component_type)` on a field-decl symbol, in the same block. Not characterised here:
-it is a type write rather than a marker carrier, so it is the one of the three that may simply convert.
-Left for a pass that can measure it against the C++ suite, which at 1065 tests with six known failures is
-the expensive corpus in this repo.
+`fd_symb->set_type(component_type)` syncs a ctor/dtor's function symbol to its component in the class
+type. Converting it fails **27 of the 142** C++ tests that use a destructor or `virtual`; the same 142
+are 142/142 on base, so the attribution is exact.
+
+The static reason was visible before the measurement and is worth stating, because the first probe
+contradicted it. `migrate_type` collapses both marker return types to nothing:
+
+```cpp
+// migrate.cpp:407-418
+if (type.id() == "destructor")  return get_empty_type();   // "Which is nil."
+if (type.id() == "constructor") return get_empty_type();
+```
+
+and three readers test that id to tell one from the other -- `clang_cpp_adjust_code_gen.cpp:61`,
+`clang_cpp_convert_vft.cpp:547`, and an `assert` at `clang_cpp_adjust_expr.cpp:271`. The site's own
+comment says as much: *"the adjuster reads the return type back to tell a ctor from a dtor"*.
+
+**The probe that nearly closed this wrongly.** A hand-written `struct S { S(); ~S(); }` verifies
+successfully with the conversion applied. On that evidence the write looked convertible, and §7.3's first
+draft said so. It is a false negative: the sync leaves the *component's* type legacy, so a program simple
+enough to read only that never notices, and it takes an inheritance or virtual-dispatch shape to reach a
+reader that consults the function symbol. A narrow probe passing is not evidence of safety -- the
+corpus-by-property subset is, and choosing the subset by "uses a destructor or `virtual`" is what found
+it in 142 tests rather than 1065.
+
+So this is the eighth marker not to survive the seam, and unusually it is a *type id* rather than an
+attribute: `constructor` and `destructor` are legacy type kinds with no IREP2 counterpart. The routes are
+the same three, and the structural one is again the interesting answer -- a ctor/dtor is not a function
+whose return type is a special id, it is a function with a role, and the role could be a field on
+`code_type2t` rather than a spelling of its return type.
+
+### 7.4 So all three stay legacy
+
+`:85` converts when the adjuster does. `:3185` is blocked two deep. `:3156` is blocked on the ctor/dtor
+return-type ids. Phase 7's B-2* residue of three is complete and none of it is a conversion waiting to be
+made, which is what "characterised" means here.
