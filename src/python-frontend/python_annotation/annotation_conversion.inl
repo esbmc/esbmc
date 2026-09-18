@@ -3985,8 +3985,32 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
       std::string inferred_type;
 
+      // Leave the parameter unannotated if a call site feeds it a variable
+      // that's genuinely dynamically-typed (e.g. `x = 1`/`x = "a"` across an
+      // if/else), so it falls through to register_function_argument's own
+      // tagged-scalar detection instead of locking in a wrong concrete type.
+      bool arg_is_dynamically_typed = false;
+      if (needs_inference)
+      {
+        for (const Json &call : function_calls)
+        {
+          if (!call.contains("args") || i >= call["args"].size())
+            continue;
+          const Json &arg_node = call["args"][i];
+          if (
+            arg_node.contains("_type") && arg_node["_type"] == "Name" &&
+            arg_node.contains("id") &&
+            dynamic_type_detail::scope_assigns_divergent_literal_types(
+              arg_node["id"].template get<std::string>(), search_context))
+          {
+            arg_is_dynamically_typed = true;
+            break;
+          }
+        }
+      }
+
       // Try to infer type from function calls if available
-      if (needs_inference && !function_calls.empty())
+      if (needs_inference && !arg_is_dynamically_typed && !function_calls.empty())
       {
         std::vector<std::string> call_types =
           collect_parameter_types_from_calls(i, function_calls);
@@ -4246,7 +4270,9 @@ bool python_annotation<Json>::preprocess_function_calls(Json &root)
   }
 
   std::map<std::pair<std::string, size_t>, std::set<std::string>> param_types;
-  collect_function_call_arg_types(root, param_types, top_level_funcs);
+  std::set<std::pair<std::string, size_t>> dynamically_typed_params;
+  collect_function_call_arg_types(
+    root, param_types, top_level_funcs, dynamically_typed_params);
 
   // Second pass: for each top-level FunctionDef, if all observed call
   // sites agreed on a single type for a parameter, write the annotation.
@@ -4265,6 +4291,10 @@ bool python_annotation<Json>::preprocess_function_calls(Json &root)
       Json &param = params[i];
       if (param.contains("annotation") && !param["annotation"].is_null())
         continue;
+      // Leave it unannotated even if another call site agrees on one
+      // concrete type -- see the dynamically-typed check above.
+      if (dynamically_typed_params.count({fname, i}) != 0)
+        continue;
       auto it = param_types.find({fname, i});
       if (
         it == param_types.end() || it->second.size() != 1 ||
@@ -4281,7 +4311,8 @@ template <class Json>
 void python_annotation<Json>::collect_function_call_arg_types(
   Json &node,
   std::map<std::pair<std::string, size_t>, std::set<std::string>> &param_types,
-  const std::set<std::string> &top_level_funcs)
+  const std::set<std::string> &top_level_funcs,
+  std::set<std::pair<std::string, size_t>> &dynamically_typed_params)
 {
   if (node.is_object())
   {
@@ -4304,9 +4335,25 @@ void python_annotation<Json>::collect_function_call_arg_types(
       {
         const Json &call_args =
           node.contains("args") ? node["args"] : Json::array();
+        const Json &enclosing_scope_body =
+          current_func != nullptr ? (*current_func)["body"] : ast_["body"];
         for (size_t i = 0; i < call_args.size(); ++i)
         {
-          std::string arg_type = get_argument_type(call_args[i]);
+          const Json &arg_node = call_args[i];
+          // Same dynamically-typed check as above, applied to this pass's
+          // own call-site scan.
+          if (
+            arg_node.contains("_type") && arg_node["_type"] == "Name" &&
+            arg_node.contains("id") &&
+            dynamic_type_detail::scope_assigns_divergent_literal_types(
+              arg_node["id"].template get<std::string>(),
+              enclosing_scope_body))
+          {
+            dynamically_typed_params.insert({func_name, i});
+            continue;
+          }
+
+          std::string arg_type = get_argument_type(arg_node);
           // Ambiguous / under-specified types: NoneType is `bool*` in the
           // operational model (issue #3796) and Any leaves the type
           // uninformative; both would lock in a misleading annotation for
@@ -4338,7 +4385,8 @@ void python_annotation<Json>::collect_function_call_arg_types(
     }
 
     for (auto &kv : node.items())
-      collect_function_call_arg_types(kv.value(), param_types, top_level_funcs);
+      collect_function_call_arg_types(
+        kv.value(), param_types, top_level_funcs, dynamically_typed_params);
 
     if (is_function_def)
     {
@@ -4350,7 +4398,8 @@ void python_annotation<Json>::collect_function_call_arg_types(
   else if (node.is_array())
   {
     for (auto &element : node)
-      collect_function_call_arg_types(element, param_types, top_level_funcs);
+      collect_function_call_arg_types(
+        element, param_types, top_level_funcs, dynamically_typed_params);
   }
 }
 
