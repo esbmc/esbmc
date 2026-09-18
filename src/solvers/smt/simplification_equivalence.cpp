@@ -114,6 +114,14 @@ bool is_unstatable_shape(const expr2tc &expr)
   if (is_unknown2t(expr) || is_invalid2t(expr))
     return true;
 
+  // overflow2t::do_simplify()'s widened-operand-multiply shortcut (#7840)
+  // exists to keep the original double-width multiply away from the solver.
+  // Stating "the shortcut preserves the value" as an equality hands the
+  // checker's solver that exact multiply back -- the query the shortcut
+  // was written to avoid, with no budget above screening it out.
+  if (is_overflow2t(expr))
+    return true;
+
   if (!convertible_rounding_mode(expr))
     return true;
 

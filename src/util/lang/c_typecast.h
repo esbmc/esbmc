@@ -9,6 +9,10 @@
 // false: typecast successfull, expr modified
 // true:  typecast failed
 
+/// Take the address of an object bound to a reference; see c_typecast.cpp for
+/// why a conditional takes it per arm and why `rk` matters.
+void take_reference_address(expr2tc &expr, pointer_ref_kindt rk);
+
 bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type);
 
 bool check_c_implicit_typecast(
