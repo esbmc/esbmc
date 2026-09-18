@@ -129,7 +129,6 @@ public:
 class jimple_assignment : public jimple_statement
 {
 public:
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,

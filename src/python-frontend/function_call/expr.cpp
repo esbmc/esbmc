@@ -5510,6 +5510,8 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
       for (const auto &arg_node : call_["args"])
       {
         exprt arg = converter_.get_expr(arg_node);
+        if (type_handler_.is_tagged_scalar_type(arg.type()))
+          converter_.dynamic_type_handler_.refuse_tagged_argument();
         if (arg.type().is_code() && arg.is_symbol())
           arg = build_address_of(arg);
         call.arguments().push_back(arg);
@@ -5621,6 +5623,8 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
+    if (type_handler_.is_tagged_scalar_type(arg.type()))
+      converter_.dynamic_type_handler_.refuse_tagged_argument();
     call.arguments().push_back(
       arg.type().is_array() ? build_address_of(arg) : arg);
   }
@@ -5810,6 +5814,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         for (const auto &arg_node : call_["args"])
         {
           exprt arg = converter_.get_expr(arg_node);
+          if (type_handler_.is_tagged_scalar_type(arg.type()))
+            converter_.dynamic_type_handler_.refuse_tagged_argument();
           if (arg.type().is_array())
           {
             if (
@@ -5909,6 +5915,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         for (const auto &arg_node : call_["args"])
         {
           exprt arg = converter_.get_expr(arg_node);
+          if (type_handler_.is_tagged_scalar_type(arg.type()))
+            converter_.dynamic_type_handler_.refuse_tagged_argument();
           if (arg.type().is_array())
           {
             if (
@@ -6259,6 +6267,36 @@ size_t function_call_expr::bind_call_receiver(
   return param_offset;
 }
 
+exprt function_call_expr::coerce_tagged_argument(
+  exprt arg,
+  const typet &param_type,
+  const locationt &location) const
+{
+  const bool param_is_tagged = type_handler_.is_tagged_scalar_type(param_type);
+
+  if (type_handler_.is_tagged_scalar_type(arg.type()))
+  {
+    if (!param_is_tagged)
+      converter_.dynamic_type_handler_.refuse_tagged_argument();
+    return arg;
+  }
+
+  if (!param_is_tagged)
+    return arg;
+
+  // Excludes floatbv: tagged comparisons mishandle float vs int type_id.
+  if (
+    (type_handler_.is_numeric_scalar_type(arg.type()) &&
+     !arg.type().is_floatbv()) ||
+    type_handler_.is_string_type(arg.type()))
+    return converter_.dynamic_type_handler_.build_tagged_value(
+      arg, location, *converter_.current_block);
+
+  throw std::runtime_error(
+    "passing a value of this type to a dynamically-typed parameter is not "
+    "yet supported");
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -6279,11 +6317,13 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
-    // Tagged arguments aren't supported yet; refuse before goto-symex.
-    if (type_handler_.is_tagged_scalar_type(arg.type()))
-      throw std::runtime_error(
-        "passing a dynamically-typed variable to a function is not yet "
-        "supported");
+    // Check if the corresponding parameter is Optional / tagged.
+    size_t param_idx = arg_index + param_offset;
+
+    if (param_idx < params.size())
+      arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
+    else if (type_handler_.is_tagged_scalar_type(arg.type()))
+      converter_.dynamic_type_handler_.refuse_tagged_argument();
 
     // A list passed to a callee may be mutated there (e.g. appended to), which
     // the caller's static length tracking does not observe. Mark the symbol so
@@ -6298,9 +6338,6 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // mirroring C's implicit function-to-pointer conversion.
     if (arg.type().is_code() && arg.is_symbol())
       arg = build_address_of(arg);
-
-    // Check if the corresponding parameter is Optional
-    size_t param_idx = arg_index + param_offset;
 
     if (param_idx < params.size())
     {
@@ -6437,9 +6474,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // violated" on valid Python (#7550).
     const bool arg_is_bytes_literal =
       arg_node["_type"] == "Constant" && converter_.is_bytes_literal(arg_node);
+    // Same issue as the complex-literal guard above: coerce_tagged_argument
+    // already boxed this literal, so don't rebuild and discard the wrapper.
+    const bool arg_is_tagged_param =
+      param_idx < params.size() &&
+      type_handler_.is_tagged_scalar_type(params[param_idx].type());
     if (
       !arg_is_complex_literal && !arg_is_bytes_literal &&
-      arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+      !arg_is_tagged_param && arg_node["_type"] == "Constant" &&
+      arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
@@ -6671,6 +6714,7 @@ exprt function_call_expr::finalize_call(
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
+          kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)
             call.arguments().resize(i + 1);
           call.arguments()[i] = kw_val;
@@ -7254,6 +7298,45 @@ exprt function_call_expr::generate_attribute_error(
   return nondet_fallback;
 }
 
+/// A parameter accepts an argument of its declared type. A union parameter
+/// with no representative type is opaque, and accepts any type its annotation
+/// names -- the list --is-instance-check asserts over (#7876).
+bool function_call_expr::argument_matches_parameter(
+  const code_typet::argumentt &param,
+  const typet &actual) const
+{
+  auto matches = [&](const typet &expected) {
+    // A tagged parameter also accepts a concrete scalar that gets auto-boxed
+    // later; base_type_eq alone wouldn't recognise either as a match.
+    if (type_handler_.is_tagged_scalar_type(expected))
+      return type_handler_.is_tagged_scalar_type(actual) ||
+             type_handler_.is_numeric_scalar_type(actual) ||
+             type_handler_.is_string_type(actual);
+
+    return base_type_eq(expected, actual, converter_.ns) ||
+           (type_utils::is_string_type(expected) &&
+            type_utils::is_string_type(actual));
+  };
+
+  if (matches(param.type()))
+    return true;
+
+  // Only an opaque parameter can hold every member of its annotation; a typed
+  // one would reinterpret a member it cannot represent.
+  if (param.type() != any_type())
+    return false;
+
+  // Python parameters are registered as symbols alongside their identifier.
+  const symbolt *param_symbol = converter_.ns.lookup(param.get_identifier());
+  assert(param_symbol != nullptr);
+
+  for (const typet &alternative : param_symbol->python_annotation_types)
+    if (matches(alternative))
+      return true;
+
+  return false;
+}
+
 exprt function_call_expr::check_argument_types(
   const symbolt *func_symbol,
   const nlohmann::json &args,
@@ -7287,12 +7370,6 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
-  auto types_match = [&](const typet &expected, const typet &actual) {
-    return base_type_eq(expected, actual, converter_.ns) ||
-           (type_utils::is_string_type(expected) &&
-            type_utils::is_string_type(actual));
-  };
-
   for (size_t i = 0; i < args.size(); ++i)
   {
     size_t param_idx = i + param_offset;
@@ -7304,7 +7381,7 @@ exprt function_call_expr::check_argument_types(
     const typet &actual_type = arg.type();
 
     // Check for type mismatch
-    if (!types_match(expected_type, actual_type))
+    if (!argument_matches_parameter(params[param_idx], actual_type))
     {
       std::string expected_str = type_handler_.type_to_string(expected_type);
       std::string actual_str = type_handler_.type_to_string(actual_type);
@@ -7351,7 +7428,7 @@ exprt function_call_expr::check_argument_types(
       const typet &expected_type = params[param_idx].type();
       const typet &actual_type = arg.type();
 
-      if (!types_match(expected_type, actual_type))
+      if (!argument_matches_parameter(params[param_idx], actual_type))
       {
         std::string expected_str = type_handler_.type_to_string(expected_type);
         std::string actual_str = type_handler_.type_to_string(actual_type);
