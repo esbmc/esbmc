@@ -45,7 +45,13 @@ smt_solver_baset *create_new_yices_solver(
 yices_convt::yices_convt(const namespacet &ns, const optionst &options)
   : smt_solver_baset(ns, options), array_iface(false, false), fp_convt(this)
 {
-  yices_init();
+  // yices_init rebuilds the global term table, invalidating the terms of any
+  // context still alive, so it runs once per process.
+  static const bool initialised = [] {
+    yices_init();
+    return true;
+  }();
+  (void)initialised;
 
   yices_clear_error();
 
