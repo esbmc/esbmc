@@ -1545,16 +1545,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             arg_sym = &arg_sym->op0();
           if (arg_sym->is_symbol())
           {
-            // `#identifier`, not the plain key: register_function_argument sets
-            // both from one string, but only `#identifier` survives the IREP2
-            // seam, so a function type stored IREP2-side keeps this lookup
-            // working. Falls back for a frontend that sets only the plain one
-            // (clang_cpp_convert.cpp:2880).
-            const code_typet::argumentt &param = params[i];
+            // `#identifier`, not the plain key: only it crosses the seam.
             copy_instance_attributes(
-              param.get_identifier().empty()
-                ? param.identifier().as_string()
-                : param.get_identifier().as_string(),
+              type_utils::argument_identifier(params[i]).as_string(),
               arg_sym->identifier().as_string());
           }
         }
