@@ -1242,6 +1242,16 @@ bool solidity_convertert::get_tuple_expr(
   return false;
 }
 
+// Which Solidity spelling produced a call. `require` and `revert` both lower to
+// __ESBMC_assume, so the symbol does not distinguish them; the name is read off
+// the callee's AST node rather than from an attribute on the type, which IREP2
+// cannot carry (docs/roadmap/scope-solidity-irep2.md §11).
+static std::string sol_builtin_spelling(const nlohmann::json &callee)
+{
+  return callee.contains("name") ? callee["name"].get<std::string>()
+                                 : std::string();
+}
+
 bool solidity_convertert::get_call_expr(
   const nlohmann::json &expr,
   const nlohmann::json &literal_type,
@@ -1354,7 +1364,7 @@ bool solidity_convertert::get_call_expr(
     if (new_expr.is_member() && new_expr.component_name() == "length")
       return false;
 
-    std::string sol_name = get_sol_name(new_expr.type());
+    const std::string sol_name = sol_builtin_spelling(callee_expr_json);
     if (sol_name == "revert")
     {
       // Special case: revert

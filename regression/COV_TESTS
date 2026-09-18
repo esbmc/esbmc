@@ -660,6 +660,8 @@ regression/python/github_6743_state
 regression/python/github_7074
 regression/python/github_7081_iter
 regression/python/global
+regression/python/harness_bytes_param_len_bound
+regression/python/harness_bytes_param_len_bound_fail
 regression/python/harness_queue_lifo
 regression/python/html_report_python_fail
 regression/python/import-class-inheritance

@@ -3439,6 +3439,118 @@ about which object `this` denotes changes, which is what the unchanged verdicts 
 `vptr_cdtor_dispatch` were already saying. Recorded here because §54.1 promised an
 answer, and because the same shape -- output that improves and therefore differs --
 is what a `test.desc` regex would trip over.
+
+## 56. The vtable builder is out of non-IREP2 symbol writes (2026-09-15)
+
+The two thunk bodies were the last ones left in `clang_cpp_convert_vft.cpp`, and with
+§53's precondition available they need nothing else: the exchange goes around the
+dispatch in `add_thunk_method_body`, and both arms store `migrate_expr`'s result.
+
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 876 of 876.
+
+The marker that had to survive is `#base_to_derived`, set on the `this` typecast and
+read by `adjust_base_to_derived` after the converter. `typecast2t` reflects it
+(`irep2_expr.h:726`), and the GOTO dump confirms the adjustment is still applied
+rather than merely that the suite is green:
+
+```
+tag-B::thunk::to::c:@S@C@F@b#:
+  FUNCTION_CALL: return_value$_b$1 = b(this == 0 ? 0 : (C *)((signed char *)this - 8))
+```
+
+The `- 8` is the second base's displacement; without the marker the thunk would call
+`C::b` on an unadjusted `this`.
+
+### 56.1 What B-2 leaves in the C++ frontend, and why each is stuck
+
+The grep reports 12 sites in `src/clang-cpp-frontend`; seven are false positives that
+already write IREP2 (`migrate_type(...)`, a migrated `expr2tc`, a `type2tc` taken
+straight off a `code_type2t`), which is the same spelling-not-type property the bar
+has had since §39. Three real ones remain, each waiting on a decision rather than on
+work:
+
+| site | blocked on |
+|---|---|
+| `clang_cpp_convert.cpp:3156` | the `constructor`/`destructor` pseudo return type (§50.2, §51.3) |
+| `clang_cpp_convert.cpp:3185` | `need_vptr_init`, *set* here and consumed in the adjuster, carried by nothing |
+| `clang_cpp_adjust_expr.cpp:85` | `exception_specificationt::types_attribute()` on a code type (§49) |
+
+Two of the three are markers on a code type, which is the same shape §44 and §46
+solved by adding an unreflected field. Whether that is right here is exactly the
+question §51.3 poses for the ctor/dtor encoding: a constructor-ness and a
+vptr-init-needed flag are properties of the *function*, not of its type, so the field
+would be carrying a thing that does not belong to the type it rides on.
+
+### 56.2 A dead condition left in place, deliberately
+
+`add_thunk_method_body` still tests `return_type().id() != "destructor"`. Since §44
+made the thunk's type IREP2, `get_type()` derives it through `migrate_type_back`, and
+`migrate_type` maps the `destructor` pseudo-type to `empty` (`migrate.cpp:406`), so
+the second test can never add anything to the first. Removing it is a branch removal
+and owes a C-Dead proof; it is recorded here rather than done in passing, and it
+disappears on its own if §51.3 retires the encoding.
+
+## 57. Four phases, four walls, one question (2026-09-15)
+
+Phases 6, 7, 8 and 9 have each been driven until they stopped, by the same method:
+convert every symbol-table write of one kind, measure the whole suite, bisect the
+failures, keep what stays green, and record what the residue is made of. The four
+residues turn out to be the same thing seen four ways, which is worth stating in one
+place rather than leaving in four scope documents.
+
+### 57.1 What each phase's residue is
+
+| phase | what blocks its remaining writes | evidence |
+|---|---|---|
+| 6 (clang-c) | `restrict`, `volatile`, alignment, packing -- C type qualifiers and layout | `scope-clang-c-irep2.md` §145: all 21 type writes fail 620 of 2 293; the failing tests are the `restrict_*`, `volatile_*` and `github_7707-*` families |
+| 7 (clang-cpp) | the `constructor`/`destructor` pseudo return type, `need_vptr_init`, a code type's exception specification | §50.2, §51.3, §56.1 |
+| 8 (solidity) | eleven `#sol_*` attributes, of which `#sol_type` has 60 writes and 51 reads | `scope-solidity-irep2.md` §7.1, §13.1: all 23 type writes fail 151 of 525, and over 6 000 reads are in a class the IREP2 shape cannot separate |
+| 9 (python) | `#cpp_type`, via a predicate asking whether an 8-bit bitvector is a character | `scope-python-irep2.md` §8: seven conversion sites branch on it |
+
+Every row is the same sentence: **what the frontend needs to say about a type is wider
+than what `type2t` models**, and today the difference is parked in attributes on the
+legacy `typet` that `migrate_type` drops.
+
+### 57.2 What is not a wall, and was mistaken for one three times
+
+Three other causes were found and closed, and none of them is about the type system:
+
+- the namespace the migrating pass was not pointed at (§52, §53) -- fixed, and it
+  unblocked §49.1's blocker after all (§54);
+- a symbol that does not exist yet, which freezes a wrong type into a migrated body
+  (`scope-python-irep2.md` §6.1);
+- the cost of eagerness: migrating every symbol's value where the lazy path migrated
+  only what was asked for (`scope-clang-c-irep2.md` §146).
+
+The second and third mean two classes of write **must stay legacy** and counting them as
+debt is a mistake B-2's spelling-based count invites: a converter-time body, and a
+write that runs once per symbol.
+
+### 57.3 The question, and why it is not a measurement
+
+100% IREP2 in the frontends requires deciding what happens to the type information
+`type2t` does not model. The options, in the order they cost:
+
+1. **Accept it.** Frontend symbol types stay legacy where they carry language-level
+   meaning; B-2 is redefined to exclude them and the bar records why. Cheapest, and
+   leaves the seam permanently.
+2. **Widen `type2t`.** A qualifier set, a Solidity kind, a character flag. This is what
+   the closed type system exists to prevent, and four languages asking for four
+   extensions is the argument against it.
+3. **Move the meaning out of the type.** Each frontend keeps its language-level facts in
+   its own structures, keyed by something that survives migration -- a symbol id where
+   the reader has one (`scope-solidity-irep2.md` §10), the AST where it is still in scope
+   (§11 there), or derived from what IREP2 already holds (§8 there, §47 and §50 here).
+   Honest, and the largest refactor of the three.
+
+Options 1 and 3 are not exclusive: the derivations already landed took `#sol_contract`,
+`#member_name`, `#sol_state_var`, `#sol_name` and the vtable readers' three attributes
+off the table, and three write-only attributes were deleted outright. What is left after
+that is the genuinely irreducible part, and it is small enough to enumerate -- which is
+what §57.1 does.
+
+This is a design decision, not a measurement, and the measuring is done.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured

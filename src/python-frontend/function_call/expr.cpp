@@ -6091,7 +6091,7 @@ size_t function_call_expr::bind_call_receiver(
           if (
             symbolt *s = converter_.symbol_table().find_symbol(
               converter_.current_lhs->identifier()))
-            s->set_type(class_ptr);
+            s->set_type(migrate_type(class_ptr));
       }
       if (converter_.current_lhs->type().is_pointer())
       {

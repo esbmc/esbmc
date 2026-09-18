@@ -2104,7 +2104,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
           // Persist the mutation back to the symbol (read-modify-set).
-          class_symbol->set_type(class_symbol_type);
+          class_symbol->set_type(migrate_type(class_symbol_type));
         }
 
         // Register instance attribute for both regular and normalized keys

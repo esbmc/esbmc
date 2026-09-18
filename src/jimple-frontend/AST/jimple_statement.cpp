@@ -6,13 +6,11 @@
 #include <util/arith/arith_tools.h>
 #include "util/lang/c_typecast.h"
 
-void jimple_identity::from_json(const json &j)
-{
-  j.at("identifier").get_to(at_identifier);
-  j.at("name").get_to(local_name);
-  j.at("type").get_to(type);
-}
-
+// Restored: PR #7841 measured this arm unreached over the jimple tests and
+// deleted it, but nothing gives the class a native to_code2t, so the default
+// reaches it and the base's code_skipt was returned instead. No test builds
+// this statement, which is why the deletion was invisible
+// (docs/roadmap/scope-jimple-irep2.md §44).
 exprt jimple_identity::to_exprt(
   contextt &ctx,
   const std::string &,
@@ -27,6 +25,14 @@ exprt jimple_identity::to_exprt(
   code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
   return assign;
 }
+
+void jimple_identity::from_json(const json &j)
+{
+  j.at("identifier").get_to(at_identifier);
+  j.at("name").get_to(local_name);
+  j.at("type").get_to(type);
+}
+
 std::string jimple_identity::to_string() const
 {
   std::ostringstream oss;
@@ -212,12 +218,11 @@ std::string jimple_assertion::to_string() const
   return oss.str();
 }
 
-void jimple_assertion::from_json(const json &j)
-{
-  j.at("equals").at("symbol").get_to(variable);
-  j.at("equals").at("value").get_to(value);
-}
-
+// Restored: PR #7841 measured this arm unreached over the jimple tests and
+// deleted it, but nothing gives the class a native to_code2t, so the default
+// reaches it and the base's code_skipt was returned instead. No test builds
+// this statement, which is why the deletion was invisible
+// (docs/roadmap/scope-jimple-irep2.md §44).
 exprt jimple_assertion::to_exprt(
   contextt &ctx,
   const std::string &class_name,
@@ -259,6 +264,12 @@ exprt jimple_assertion::to_exprt(
   array_of_exprt arr;
   // TODO: Create binop operation between symbol and value
   return call;
+}
+
+void jimple_assertion::from_json(const json &j)
+{
+  j.at("equals").at("symbol").get_to(variable);
+  j.at("equals").at("value").get_to(value);
 }
 
 std::string jimple_invoke::to_string() const
@@ -353,17 +364,15 @@ void jimple_throw::from_json(const json &j)
   expr = jimple_expr::get_expression(j.at("expr"));
 }
 
-exprt jimple_throw::to_exprt(
+expr2tc jimple_throw::to_code2t(
   contextt &,
   const std::string &,
-  const std::string &) const
+  const std::string &,
+  const locationt &loc) const
 {
-  codet p = codet("cpp-throw");
   // TODO: throw
-  // Since the implementation of Throw isn't complete,
-  // the expression shouldn't be used.
-
-  // auto to_add = expr->to_exprt(ctx, class_name, function_name);
-  // p.move_to_operands(to_add);
-  return p;
+  // Since the implementation of Throw isn't complete, neither the thrown
+  // operand nor the exception list is populated -- the legacy arm this replaces
+  // built a bare codet("cpp-throw") for the same reason.
+  return code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>(), loc);
 }

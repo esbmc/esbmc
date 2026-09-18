@@ -302,11 +302,7 @@ void solidity_convertert::get_builtin_symbol(
 
   symbolt sym;
   get_default_symbol(sym, "C++", t, name, id, l);
-  {
-    typet st = sym.get_type();
-    set_sol_state_var(st, true);
-    sym.set_type(std::move(st));
-  }
+  set_sol_state_var(id, true);
   sym.file_local = true;
   sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(sym);
