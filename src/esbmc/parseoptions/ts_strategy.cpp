@@ -69,12 +69,16 @@ int esbmc_parseoptionst::do_ts_strategy(
     catch (const std::runtime_error &e)
     {
       log_error("BTOR2 export: {}", e.what());
+      if (cmdline.isset("ts-check"))
+      {
+        log_result("TS-CHECK rejected: BTOR2 export: {}", e.what());
+        log_result("VERIFICATION UNKNOWN");
+        return 0;
+      }
       return 6;
     }
     std::ofstream(cmdline.getval("ts-btor2")) << btor2.str();
     log_status("BTOR2 written to {}", cmdline.getval("ts-btor2"));
-    log_result("VERIFICATION UNKNOWN");
-    return 0;
   }
 
   if (cmdline.isset("ts-check"))
@@ -88,6 +92,12 @@ int esbmc_parseoptionst::do_ts_strategy(
       ts.bad.size(),
       ts.prefix_bad.size(),
       extract_s);
+    log_result("VERIFICATION UNKNOWN");
+    return 0;
+  }
+
+  if (cmdline.isset("ts-btor2"))
+  {
     log_result("VERIFICATION UNKNOWN");
     return 0;
   }

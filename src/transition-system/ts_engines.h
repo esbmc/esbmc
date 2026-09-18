@@ -41,8 +41,11 @@ protected:
   expr2tc act_init, act_inv;
 
   expr2tc bad_literal(unsigned step) const;
-  /// Returns false if the prefix itself violates a property.
+  /// Returns false if the prefix itself violates a property. Assumptions
+  /// before the loop only hold from here on: each prefix property already
+  /// carries the ones that precede it.
   bool check_prefix();
+  void assume_prefix();
   void add_step(unsigned step);
   void close_step(unsigned step);
   smt_resultt solve_bad(unsigned step, bool from_init, bool push_pop);

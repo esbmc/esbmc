@@ -415,8 +415,8 @@ void btor2_writert::write()
   for (const auto &p : ts.prefix_bad)
     prefix_violated.push_back(convert(p.violated));
   unsigned in_loop = conjunction({valid, started, disjunction(violated)});
-  unsigned before_loop =
-    conjunction({first, started, disjunction(prefix_violated)});
+  // Each prefix property already carries the assumptions that precede it.
+  unsigned before_loop = conjunction({first, disjunction(prefix_violated)});
   emit("bad " + std::to_string(op("or", 1, {in_loop, before_loop})));
 }
 } // namespace
