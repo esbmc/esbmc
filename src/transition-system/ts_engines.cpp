@@ -39,8 +39,6 @@ ts_enginet::ts_enginet(
 
   for (const expr2tc &d : ts.prefix_defs)
     solver->define(d);
-  for (const expr2tc &a : ts.prefix_assumes)
-    solver->assert_expr(a);
 
   // The first state is the initial state outright, which lets the solver
   // fold constant initial values.
@@ -53,10 +51,19 @@ expr2tc ts_enginet::bad_literal(unsigned step) const
   return symbol2tc(get_bool_type(), "ts$bad$" + std::to_string(step));
 }
 
+void ts_enginet::assume_prefix()
+{
+  for (const expr2tc &a : ts.prefix_assumes)
+    solver->assert_expr(a);
+}
+
 bool ts_enginet::check_prefix()
 {
   if (ts.prefix_bad.empty())
+  {
+    assume_prefix();
     return true;
+  }
   std::vector<expr2tc> violated;
   for (const auto &p : ts.prefix_bad)
     violated.push_back(p.violated);
@@ -76,6 +83,7 @@ bool ts_enginet::check_prefix()
     return false;
   }
   solver->assert_expr(not2tc(disjunction(violated)));
+  assume_prefix();
   return true;
 }
 
@@ -90,6 +98,7 @@ smt_resultt ts_enginet::solve_prefix()
 
 smt_resultt ts_enginet::solve_bound(unsigned k)
 {
+  assume_prefix();
   for (unsigned j = 0; j < k; j++)
   {
     add_step(j);
