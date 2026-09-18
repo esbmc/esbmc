@@ -37,15 +37,6 @@ public:
   void adjust_decl_block(codet &code) override;
   void adjust_catch(codet &code);
 
-  /**
-   * Finalise a function type's exception specification. The converter stashes
-   * the raw declared exception types of a dynamic throw(...) specification
-   * under "exception_spec_decl"; here we resolve them to the exception ids
-   * (using convert_exception_id, which needs the namespace for base-class
-   * lookup) and store the final list under exception_specificationt's
-   * types_attribute(). No-op for non-dynamic specifications.
-   */
-  void finalize_exception_specification(typet &type);
   void adjust_switch_case_ops(exprt &stmt, const typet &switch_type);
 
   /**

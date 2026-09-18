@@ -235,6 +235,20 @@ typet half_float_type()
   return build_float_type(config.ansi_c.short_int_width);
 }
 
+/* bfloat16 is 16 bits wide like binary16, but truncates float's significand
+ * instead of narrowing its exponent, so build_float_type(16) has the wrong
+ * floatbv layout for it. */
+typet bfloat16_type()
+{
+  if (config.ansi_c.use_fixed_for_float)
+    return build_float_type(16);
+
+  floatbv_typet result;
+  result.set_width(16);
+  result.set_f(7);
+  return result;
+}
+
 typet float_type()
 {
   return build_float_type(config.ansi_c.single_width);

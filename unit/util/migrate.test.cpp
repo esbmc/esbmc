@@ -1200,6 +1200,36 @@ TEST_CASE("migrate_type_back leaves a look-alike member unflagged", "[migrate]")
   REQUIRE_FALSE(comps[1].get_is_padding());
 }
 
+// clang_cpp_maint::adjust_init reads `#constructor` in final(), after the IREP2
+// adjust pass writes bodies back, so the marker has to survive the round trip.
+// `sideeffect2t::constructor` is unreflected, so operator== ignores it and
+// require_expr_roundtrip above cannot see it: assert on it in both directions.
+TEST_CASE("migrate preserves the constructor marker", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const typet legacy_int = migrate_type_back(get_int_type(32));
+
+  side_effect_expr_function_callt call;
+  call.type() = empty_typet();
+  call.function() = symbol_exprt("C::C", migrate_type_back(make_func_type()));
+  call.arguments().push_back(symbol_exprt("obj", legacy_int));
+  call.set("constructor", true);
+
+  expr2tc m;
+  migrate_expr(call, m);
+  REQUIRE(is_sideeffect2t(m));
+  REQUIRE(to_sideeffect2t(m).constructor);
+  REQUIRE(migrate_expr_back(m).get_bool("constructor"));
+
+  side_effect_expr_function_callt plain = call;
+  plain.remove("constructor");
+  expr2tc mp;
+  migrate_expr(plain, mp);
+  REQUIRE(is_sideeffect2t(mp));
+  REQUIRE_FALSE(to_sideeffect2t(mp).constructor);
+  REQUIRE_FALSE(migrate_expr_back(mp).get_bool("constructor"));
+}
+
 // What migrate_expr makes of a C++ symbol id, which contains characters
 // sym_name_to_symbol's renaming parser also uses. A clang USR is full of '#',
 // and '&' appears in the mangling of a reference parameter, so a name that was
