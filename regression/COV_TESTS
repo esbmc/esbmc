@@ -1745,3 +1745,4 @@ regression/numpy/numpy_var_1d_edge_singleton
 regression/numpy/github_4668_np_subtract_array_array_2d_supported
 regression/numpy/int8_mod_floordiv
 regression/esbmc/github_7891_bf16_fixedbv
+regression/esbmc/github_7901_esbmc_prefix
