@@ -5,6 +5,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/message/message.h>
 
+#include <algorithm>
 #include <regex>
 #include <utility>
 
@@ -234,6 +235,152 @@ symbolt *python_converter::find_method_in_imported_base(
   class symbol_id base_id(
     module_path, defined_name, is_ctor ? defined_name : method_name);
   return symbol_table_.find_symbol(base_id.to_string());
+}
+
+/// Whether import alias @p alias binds @p name: `import a.b` binds `a`, and
+/// `from m import *` may bind any name.
+static bool
+alias_binds_name(const nlohmann::json &alias, const std::string &name)
+{
+  const std::string imported = alias.value("name", "");
+  const nlohmann::json asname = alias.value("asname", nlohmann::json());
+  return imported == "*" ||
+         (asname.is_string() ? asname.get<std::string>()
+                             : imported.substr(0, imported.find('.'))) == name;
+}
+
+/// Whether @p node, a statement or part of one, may bind @p name in the scope
+/// the statement runs in. Function and class bodies bind in scopes of their
+/// own and are not searched; a star import may bind any name.
+static bool may_bind_name(const nlohmann::json &node, const std::string &name)
+{
+  const auto binds = [&](const nlohmann::json &child) {
+    return may_bind_name(child, name);
+  };
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), binds);
+  if (!node.is_object())
+    return false;
+
+  const std::string type = node.value("_type", "");
+  const nlohmann::json bound = node.value("name", nlohmann::json());
+  if (type == "alias")
+    return alias_binds_name(node, name);
+  if (bound.is_string() && bound.get<std::string>() == name)
+    return true;
+  if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef")
+    return false;
+  if (type == "Name")
+    return node.value("id", "") == name &&
+           node.value("ctx", nlohmann::json::object()).value("_type", "") !=
+             "Load";
+  // A bare annotation (`m: int`) records a type and binds nothing.
+  if (type == "AnnAssign" && node.value("value", nlohmann::json()).is_null())
+    return false;
+
+  return std::any_of(node.begin(), node.end(), binds);
+}
+
+bool python_converter::class_binds_name(
+  const std::string &class_name,
+  const std::string &name) const
+{
+  const nlohmann::json *node = sole_class_binding(class_name);
+  return node && may_bind_name(node->value("body", nlohmann::json()), name);
+}
+
+const nlohmann::json *
+python_converter::sole_class_binding(const std::string &name) const
+{
+  const nlohmann::json *found = nullptr;
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    if (!may_bind_name(stmt, name))
+      continue;
+    if (found || stmt.value("_type", "") != "ClassDef")
+      return nullptr;
+    found = &stmt;
+  }
+  return found;
+}
+
+std::optional<std::vector<std::string>>
+python_converter::c3_merge(std::vector<std::vector<std::string>> seqs)
+{
+  const auto in_a_tail = [&](const std::string &cls) {
+    return std::any_of(seqs.begin(), seqs.end(), [&](const auto &seq) {
+      return std::find(seq.begin() + 1, seq.end(), cls) != seq.end();
+    });
+  };
+
+  std::vector<std::string> merged;
+  for (;;)
+  {
+    seqs.erase(
+      std::remove_if(
+        seqs.begin(), seqs.end(), [](const auto &seq) { return seq.empty(); }),
+      seqs.end());
+    if (seqs.empty())
+      return merged;
+
+    const auto good =
+      std::find_if(seqs.begin(), seqs.end(), [&](const auto &seq) {
+        return !in_a_tail(seq.front());
+      });
+    if (good == seqs.end())
+      return std::nullopt;
+
+    const std::string head = good->front();
+    for (auto &seq : seqs)
+      if (seq.front() == head)
+        seq.erase(seq.begin());
+    merged.push_back(head);
+  }
+}
+
+std::optional<std::vector<std::string>>
+python_converter::class_mro(const std::string &class_name, mro_memo &memo) const
+{
+  // An entry stays empty while its class is being linearised, so reaching it
+  // again (a cycle) yields no order; a finished entry is reused.
+  const auto [entry, inserted] = memo.try_emplace(class_name);
+  if (!inserted)
+    return entry->second;
+
+  const nlohmann::json *node = sole_class_binding(class_name);
+  if (!node)
+    return std::nullopt;
+
+  std::vector<std::vector<std::string>> seqs;
+  std::vector<std::string> bases;
+  for (const auto &base : node->value("bases", nlohmann::json::array()))
+  {
+    const std::string base_name =
+      base.value("_type", "") == "Name" ? base.value("id", "") : std::string();
+    // object ends every MRO and declares no user method.
+    if (base_name == "object")
+      continue;
+    std::optional<std::vector<std::string>> mro =
+      base_name.empty() ? std::nullopt : class_mro(base_name, memo);
+    if (!mro)
+      return std::nullopt;
+    seqs.push_back(std::move(*mro));
+    bases.push_back(base_name);
+  }
+
+  seqs.push_back(std::move(bases));
+  std::optional<std::vector<std::string>> mro = c3_merge(std::move(seqs));
+  if (mro)
+    mro->insert(mro->begin(), class_name);
+  entry->second = mro;
+  return mro;
+}
+
+std::optional<std::vector<std::string>>
+python_converter::class_mro(const std::string &class_name) const
+{
+  mro_memo memo;
+  return class_mro(class_name, memo);
 }
 
 symbolt *python_converter::find_function_in_base_classes(
