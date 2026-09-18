@@ -1527,3 +1527,1000 @@ against the same base before and after.
 What is established: the call carries a non-void type under the flag, and
 something other than the alignment hook gives it one. That is the next
 diagnosis, and the two array rows are the cheapest instance of it.
+### 3.15 The constructor-call fold: two rows of the seven, and a split cause
+
+§3.14 established that under the flag a constructor call carries a non-void
+type and `remove_sideeffects` gives it a temporary. The unported branch that
+explains the shape is the first row of §3.16's table:
+`clang_cpp_adjust::adjust_side_effect_assign` folds `x = T(args)` into
+`T(&x, args)`, so on the legacy path there is no value-returning call to give a
+temporary to.
+
+Reading the callee's `return_type().id() == "constructor"` from the symbol table
+is what identifies a constructor: IREP2 has no id for one, which is the same
+detour `align_call_return_type` takes.
+
+**It cannot be an arm, and finding out why is the useful part of this row.**
+Registered in the table ahead of `adjust_plain_assignment` it produces a
+*silently wrong* argument list. The arms run after the operand walk, so by the
+time the fold sees the assignment, the walker has already visited the rhs call
+as a node in its own right — and `is_call_site` matches any `sideeffect2t`, so
+`adjust_call_arguments` has already converted each argument against the
+*matching parameter*, with the object argument still absent. Every actual is
+therefore converted against its predecessor's formal. Folding then inserts
+`&lhs` and converts again against the correct slots, and the two compose:
+
+```cpp
+struct T { int a; double b; T(int x, double y) : a(x), b(y) {} };
+struct L { T m;   L(int x, double y) : m(x, y) {} };
+```
+
+| | the call in `L` |
+|---|---|
+| legacy | `T(&this->m, x::0, y::1)` |
+| fold as an arm | `T(&this->m, (signed int)((T *)x::0), (double)((signed int)y::1))` |
+
+The double is round-tripped through `int`, so `assert(l.m.b == 2.5)` fails on a
+correct program. Note the single-`int`-parameter case survives by accident
+(`int -> T* -> int` round-trips), which is why none of the 34 pre-existing flag
+rows catches it. A by-value **struct** parameter is worse than a wrong value:
+paired against `this`, `binds_by_reference` matches on the type id alone
+(`struct_id == struct_id`), takes the argument's address, and the call is built
+with a pointer where a struct is expected —
+
+```
+ERROR: function call: argument "…@S@T@F@T#$@S@A#@a::0" type mismatch:
+       got pointer, expected struct
+```
+
+— a hard abort on a program legacy verifies. All three shapes are pinned by
+pairs in this change.
+
+The legacy passes never meet this because they dispatch **top-down**:
+`adjust_side_effect_assign` folds before anything descends into the rhs. The
+IREP2 walk is bottom-up, so the fold runs from a new pre-recursion hook,
+`adjust_before_operands` (empty for C), called before
+`expr->Foreach_operand(...)`. The walker then descends into the *folded* call
+and the call-site arms see the complete argument list, which reproduces legacy's
+output byte for byte — and no re-entry into those arms is needed.
+
+**It closes three of the seven, and not the two it was diagnosed from:**
+
+| row | as an arm | pre-recursion |
+|---|---|---|
+| `ch21_4` | **AGREE** | **AGREE** |
+| `github_3978` | **AGREE** | **AGREE** |
+| `tuple_tie` | DIVERGE | **AGREE** |
+| `array_element_destructors_leak` | DIVERGE | DIVERGE |
+| `member_array_ctor_dtor_symmetry` | DIVERGE | DIVERGE |
+| `github_6291_conditional_ref_shapes` | DIVERGE | DIVERGE |
+| `github_6717_throw_conditional_ok` | DIVERGE | DIVERGE |
+
+`tuple_tie` moved only once the argument list was right, which is the ordering
+defect above showing up as a verdict. Phase 7 is therefore 80 of 84 agreeing,
+from 77.
+
+The two array rows are §3.14's own reproducers, and they still fail. So the
+temporary-creating shape is *not* one cause across the seven: the fold covers
+the scalar-member spelling and something else produces a value-returning
+constructor call for an array element. Stating that rather than stretching one
+fix over seven rows is the point of the table.
+
+**What the pair pins.** The two rows that moved are both `std::list` programs,
+and the biting construct reduces to a member whose type has a *user-declared*
+default constructor:
+
+```cpp
+struct Pool { int buf[4]; Pool() { buf[0] = 1; } };
+struct L    { Pool p; L() { p.buf[1] = 7; } };
+```
+
+Unfolded, `Pool()` runs with no object argument and symex reports an alignment
+failure inside `Pool`. Two more pairs cover the argument list: it pins
+`l.m.b == 2.5` through a two-parameter constructor with a mixed-width parameter
+list, and its failing half asserts `l.m.b != 2.5`, which **proves** under the
+as-an-arm placement — a false proof, which is the outcome worth pinning; and a
+by-value struct parameter, which aborts under that placement.
+
+**A stride sample is not a fixed set of rows.** The C++ hard-failure sample went
+0 -> 1 across this change, naming `ptr_to_member_2` ("tuple field out of range",
+the release-active bound from #7758). It is *not* a regression: with the fold
+disabled behind an env switch the same row still aborts, so it fails at the
+branch's own HEAD. The six new test directories shifted the stride-12 window,
+and `ptr_to_member_2` was never in the earlier sample — `ptr_to_member_*` is one
+of §3.17's known families. Adding tests to a suite invalidates comparison with
+an earlier stride sample of it; compare named rows, or re-run the old sample on
+the old tree. An implicitly-declared or `= default` constructor does
+**not** reach the fold (probed: `Pool {}`, `Pool() = default`, and a template
+specialisation of the `__om_list_pool` shape all agree with or without it), so a
+pair built on one of those pins nothing — the same vacuity trap §3.16 hit three
+times on local references. The failing half pins the violated property's own
+line, not just the verdict: unfolded, the run still reports FAILED, but inside
+`Pool` rather than at main's assertion.
+
+**And the array rows have a name now.** Dumped again with the fold in place,
+`array_element_destructors_leak`'s `main` still reads
+
+```
+DECL struct [2] return_value$_R$1;
+FUNCTION_CALL: return_value$_R$1=R(&a[0])
+OTHER &return_value$_R$1[0];
+```
+
+so the node is not a `sideeffect_assign` at all — the declaration's initialiser
+is a single constructor call whose *type is the whole array*, and only element 0
+is constructed. That is `clang_cpp_adjust::adjust_decl_block`
+(`clang_cpp_adjust_code.cpp:222`), a C++-only arm over the `decl-block` node
+which fans one whole-array constructor call out into one call per element,
+recursing into nested arrays, and which deliberately excludes static-storage
+locals and aggregate initialisation. The IREP2 table has `adjust_decl_init` and
+no decl-block arm, so the fan-out never happens. That is the next arm, and it
+covers both array rows.
+
+One qualification before relying on it for both: the *member*-array spelling
+reaches the same residual through the converter's own per-element fan-out
+(`clang_cpp_convert.cpp:2514`), not through `adjust_decl_block`, so
+`member_array_ctor_dtor_symmetry` may also need the `&ctor(...)[0]` unwrap
+(`clang_cpp_adjust_code.cpp:196`). Measure each row rather than assuming one arm
+covers both -- the mistake §3.14 made and this section nearly repeated.
+
+### 3.16 The array shapes, and two things §3.15's fold had wrong (2026-09-13)
+
+§3.15 named `clang_cpp_adjust::adjust_decl_block`'s per-element fan-out as the
+next arm and the two array rows as its coverage. Ported, it closes one of them,
+and the second exposed two defects in the fold itself. Phase 7 now reads **82 of
+84**; only `github_6291_conditional_ref_shapes` and
+`github_6717_throw_conditional_ok` remain.
+
+**The fan-out is an arm on the block, not on the declaration.** One declaration
+becomes a bare declaration plus one call per element, and a node cannot expand
+into several statements in place. Rewriting the declaration into a block of its
+own would work syntactically and end the object's scope at that block's brace,
+which is the defect #4715 records and which `hoist_for_init` already documents
+for the same reason. So the guard is `is_code_block2t` and the arm splices,
+exactly as legacy does over `decl-block` — a distinction that does not survive
+the seam anyway (`migrate.cpp` maps `code("decl-block")` to `code_block2t`).
+The `temporary_object` wrapper needs no special case: its initialiser travels as
+`arguments[0]`, so the recursive search for the constructor call reaches it
+through `foreach_operand`.
+
+`array_element_destructors_leak` then produces a GOTO program byte-identical to
+the legacy one.
+
+**A guard that was not a defect, and the cost of guessing.** The first
+hypothesis for the member-array row was that §3.15's fold over-fires: legacy
+keys it on `rhs.get_bool("constructor")`, a converter marker, while the port
+promoted legacy's *assert* on the `constructor` return type to the guard, and the
+two need not be the same set. Narrowing it to calls still missing their object
+argument (`arguments.size() + 1 == parameters.size()`) was written, measured
+against the row, and **refuted**:
+
+- Legacy does not leave those calls alone. `clang_cpp_convert.cpp:2544` emits
+  `assign(array_init$.buf[i], rhs)` with the shared whole-array call as `rhs`,
+  and `copy_to_operands` carries the marker onto every element, so legacy's fold
+  fires on each. The two GOTO programs are byte-identical there.
+- Those calls have zero arguments against one parameter, so the arity guard
+  passes them anyway. It was inert on the shape it was written for, which is why
+  no test in the branch changed verdict when it was removed.
+- Its only measured effect was a regression: a **variadic** constructor supplies
+  more arguments than its parameter list declares, so the guard declined the
+  fold and the first argument was then converted against the `this` parameter —
+  `this->m=T((T *)4, 5, 6)`, a false alarm on a correct program.
+
+Dropped, and `irep2_constructor_assign_variadic{,_fail}` pins it so it cannot
+come back. Default arguments and virtual bases were checked and do not have the
+shape: clang materialises a `CXXDefaultArgExpr` at the call site, and the hidden
+`__is_complete` flag is appended to both lists. Carrying the marker as a field on
+`sideeffect2t`, the `#member_init` precedent, remains the faithful fix if a shape
+ever does need the distinction.
+
+**Defect 2, the real one: the folded call took the initialiser's type.** Legacy's
+`expr.swap(rhs)` keeps the right-hand side's type, which for a member array's
+per-element call is *the whole array's*. Under the flag that made the statement
+array-valued, so `adjust_expression_statement` wrapped it in `&stmt[0]` (C11
+6.5.3.2p4's decay arm), the call acquired a temporary of array type, and the
+temporary's elements were destroyed without ever having been constructed — a
+destructor assertion firing on a correct program. The call's value is the object
+constructed, so it now takes **the object's** type, `a.lhs->type`. That is also
+what legacy has, the two spellings coinciding for every scalar shape.
+
+That defect is pinned by `irep2_member_array_construction{,_fail}`, a
+three-element class-typed member array with a destructor assertion. Its passing
+half turns SUCCESSFUL -> FAILED under the initialiser-type mutation and its
+failing half stops matching its own violated-property line, since the first
+property to fail becomes the destructor's. A pair without the destructor pins
+neither: the elements *are* constructed in place either way, and only the
+spurious temporaries differ.
+
+**What the fan-out declines, and why the declines are staged.** A dimension
+whose size is not a constant — a class-typed VLA, which is a GNU extension, not
+C++ — makes legacy `abort()` with "cannot determine array size for local ctor
+init". The arm declines instead, and the decline is *staged*: the per-element
+calls are built into a local vector and the declaration is replaced only if all
+of them were built, so a size the arm cannot read never costs the object its
+initialiser. Aggregate initialisation (`B a[2] = {B(1), B(2)}`) arrives as a
+`constant_array` and is declined by the single-constructor-call gate; fanning it
+out would construct every element with element 0's arguments. Both declines now
+have pairs, `irep2_array_aggregate_init{,_fail}` and the nested `R a[2][3]` in
+`irep2_array_element_construction{,_fail}`.
+
+**Open row: a static or global class-typed array is unconstructed under the
+flag.** The arm excludes static-storage locals because
+`clang_cpp_maint::adjust_init` (`clang_cpp_main.cpp:59`) constructs them — but
+that keys on the `#constructor` marker, and this pass's write-back destroys it.
+So `static R a[2];` and a file-scope `R g[2];` both reach `__ESBMC_main` with
+element 0 constructed on a temporary, the rest nondeterministic, and destructors
+on never-constructed memory. It is **pre-existing**: a file-scope global has no
+block and no assignment, so nothing in this arm can reach it. It is also
+invisible to the 84-row census, which sweeps `regression/esbmc-cpp/cpp` only:
+`regression/esbmc-cpp11/constructors/local_array_of_class_ctor` and
+`Constructor9-1` — the two tests legacy's own `adjust_decl_block` comment names —
+diverge under the flag, and in the first the whole remaining divergence is its
+`static B s[2];`.
+
+**Scope of "82 of 84".** The census adds `--clang-cpp-irep2-adjust-only` to each
+row by hand; only 42 `test.desc` rows in the tree pass it themselves, and
+`member_array_ctor_dtor_symmetry` is not one of them, so CI runs that row under
+the legacy adjuster. A census row is evidence about the pass, not a gate on it —
+the gate is the flag-pinned pair.
+
+**And a VLA row, undocumented until now.** With the decline staged, a class-typed
+variable-length array keeps its initialiser and element 0 is constructed —
+elements 1..n-1 are not, silently, the same false-alarm family as the static row
+above. `irep2_array_vla_construction{,_fail}` pins element 0 only: a test over
+the rest would cement the false alarm, and pinning element 0 stays correct when
+the VLA path is completed. The pair is flag-only by necessity — legacy aborts on
+this input.
+
+### 3.17 Next: the conditional distribution, this time with a row that shows it
+
+Of the two rows left, `github_6717_throw_conditional_ok` differs from legacy in
+exactly one instruction:
+
+```
+legacy  FUNCTION_CALL: S(&tmp$1, c::0 ? &a : &b)
+flag    FUNCTION_CALL: S(&tmp$1, &(c::0 ? a : b))
+```
+
+That is `clang_c_adjust::adjust_address_of`'s distribution of `&(c ? a : b)` into
+`c ? &a : &b` ([expr.cond] makes a conditional over same-typed lvalues an
+lvalue), which the IREP2 arm does not do — it handles only the array decay.
+
+§3.13 ported that distribution and reverted it, because
+`github_6291_conditional_ref_shapes` diverged identically with it. The revert was
+right on the evidence then: the arm was exercised by nothing measurable. It is
+not evidence now — this row's IR differs at precisely that rewrite, so the port
+has a reproducer whose GOTO is expected to change. Re-port it, diff this row's
+GOTO, and expect `github_6291` to need something else: a reference *parameter*
+bound to a conditional lvalue is a different shape from taking a conditional's
+address.
+
+**§3.17's inference was wrong, and the measurement says where the node comes
+from.** Ported again, the distribution fires on **nothing**: instrumented, the
+arm sees five `address_of(new_object)` and two `address_of(sideeffect)` on
+`github_6717_throw_conditional_ok` and no `address_of(if)` at all, and the row's
+GOTO is unchanged. So the `&(c ? a : b)` in the GOTO is not built by the pass.
+Two further sites are ruled out by the same method: `c_typecastt`'s IREP2
+`take_reference_address` (`c_typecast.cpp:781`) already distributes per arm, and
+neither it nor `convert_reference` is called with a conditional on this input.
+The node is therefore created downstream of the adjuster, and the reverted
+distribution is reverted again — with the reason measured this time rather than
+inferred from a row that names the issue.
+
+**What the write-back does lose, and what actually consumes it.** Diffing the
+back-migrated body of `pick` against the legacy one (`--symbol-table-only`, the
+pass's own tree under `--clang-cpp-irep2-adjust-writeback-all`) shows 274 lines
+against 170. Most is known round-trip loss — `#location`, `#base_name`,
+`#cpp_type`, `#cformat` — but two entries are not cosmetic: the callee's
+`return_type: constructor` becomes `empty` (`migrate.cpp:387` maps
+`typet("constructor")` to the empty type, and nothing can restore it), and the
+side effect's `constructor: 1` marker is dropped. Legacy's tree has five
+`return_type: constructor` spellings in that function; the pass's has none.
+
+Carrying the return-type spelling as a field on `code_type2t` was written and
+**reverted**: it closes neither row, and instrumented, neither `migrate_type`'s
+nor `migrate_type_back`'s code arm is reached on this input — symbol types are
+read from `symbolt::get_type2()` (`migrate.cpp:434`), not migrated on read. An
+unexercised field on a core IREP2 type is not shippable evidence of anything.
+
+**So the next task is the marker, not the spelling, and it has a named
+consumer.** `#constructor` on the *side effect* is read after the frontend by
+`clang_cpp_maint::adjust_init` (`clang_cpp_main.cpp:23`, `:61`), which is the
+static-initialisation half — §3.16's open row. Carry it on `sideeffect2t`, the
+`#member_init` precedent, and measure that row: it has two reproducers (a
+file-scope `R g[2]` and a function-local `static R s[2]`) and two regression rows
+that diverge for it, `esbmc-cpp11/constructors/Constructor9-1` and
+`local_array_of_class_ctor`. `goto-programs/builtin_functions.cpp:679` reads the
+same marker but only on the `cpp_new` path, so it is not what these two
+conditional rows turn on; those stay open, and the next measurement on them
+should be a whole-body diff of the pass's output for `pick`, not another arm
+guessed from an instruction.
+
+### 3.18 The marker that does have a consumer: measured, and blocked on with_type
+
+§3.17 named `#constructor` on the side effect as the loss worth carrying, because
+`clang_cpp_maint::adjust_init` (`clang_cpp_main.cpp:23`, `:61`) reads it in
+`final()`, *after* the pass and its write-back. Carried as a field on
+`sideeffect2t` — set from `expr.get_bool("constructor")` in `migrate_expr`,
+restored in `back_sideeffect` — it **closes the static/global row §3.16 opened**:
+
+| row | before | after |
+|---|---|---|
+| a file-scope `R g[2]` | SUCCESSFUL -> FAILED | **AGREE** |
+| a function-local `static R s[2]` | SUCCESSFUL -> FAILED | **AGREE** |
+| `esbmc-cpp11/constructors/Constructor9-1` | SUCCESSFUL -> FAILED | **AGREE** |
+| `esbmc-cpp11/constructors/local_array_of_class_ctor` | SUCCESSFUL -> FAILED | **AGREE** |
+
+`irep2_global_array_construction{,_fail}` is written and mutation-checked against
+the carry: both halves change outcome with the restore suppressed, and both agree
+with the legacy path.
+
+**It is not shippable in that shape.** Listing the field in `sideeffect2t::fields`
+makes the field order stop matching the primary constructor's parameter order —
+`location` sits between `kind` and the new field — and that is exactly what
+`supports_with_type_v` tests (`irep2_expr.cpp:500`). The trait goes false, so
+every `with_type` on a side effect takes the "no substitutable type" error path
+and aborts: 14 of 374 `irep2` rows and 12 of 1062 `esbmc-cpp/cpp` rows, including
+four that this branch had just brought to parity. §3.16's `#member_init` on
+`sideeffect_assign2t` has the same shape and is already with_type-unsupported;
+nothing calls with_type on that kind, which is why it went unnoticed there.
+
+Two ways out: leave the field **unreflected** (like `location`, carried but not
+compared — cheap, but a `with_type` rebuild between the fold and the write-back
+would drop it), or move the parameter ahead of `loc` in the constructor so field
+and parameter order agree, which means touching every positional
+`sideeffect2tc(..., location)` call site.
+
+**Shipped unreflected.** `ctest -R irep2` 374 of 374, unit 871 of 871, the
+Solidity corpus still 507 of 507 agreeing with zero crashes (it shares
+`migrate_expr_back`, so it had to be re-swept), the four rows above agreeing, and both halves of the pair still changing outcome with the
+restore suppressed. The reflected version's 14 failures are gone. `esbmc-cpp/cpp`
+reports 6 failures — `ch8_5` and the five `github_7433*` rows — but they fail
+identically with this change stashed and reverted, so they are not its doing:
+they expect an *elaborated* type name (`uncaught exception: struct my_error`,
+`class std::out_of_range`) and this build's bundled clang 21 prints the
+unelaborated one. Those descriptors have a blank flags line, so they pin whatever
+LLVM the build used, which is the trap CLAUDE.md's *Pin the mode in every test*
+note describes.
+
+Note also what this says about the *other* seam loss, the callee's `constructor`
+return type (§3.17): it is real, but symbol types are read from
+`symbolt::get_type2()` rather than migrated, so a `code_type2t` field is not
+where it would have to be carried.
+
+### 3.19 Next on the last two rows: a present-empty `#type`, not another arm
+
+The whole-body diff §3.17 called for is in hand, and after the marker is carried
+the behavioural residue in `pick` is one entry: the write-back gives the side
+effect `#type: empty` and `#size: nil` where legacy has neither. `back_sideeffect`
+writes `theexpr.cmt_type(cmttype)` unconditionally, and `cmttype` is a
+default-constructed `typet` when the alloctype is nil — an *empty* irep, not a
+nil one. That is the irept tri-state trap the same function already documents one
+line above for `#size`: "an empty irep is a third state that `is_not_nil()`
+reports as present", which is why `size` is initialised to `nil_exprt()` there
+and not left default-constructed.
+
+So the next measurement is a one-line change — set `cmt_type` only when the
+alloctype is not nil — followed by the two rows and a full sweep, rather than
+another arm chosen from an instruction. If it moves neither row, the next thing
+to diff is what `remove_sideeffects` does with a class-typed conditional whose
+arms are lvalues, since that is where `&(c ? a : b)` is actually built.
+
+**The `#type` hypothesis is refuted.** Setting `cmt_type` only when the alloctype
+is not nil changes neither row, so the present-empty `#type` is not what they turn
+on either. Reverted, unshipped: a fidelity change that moves nothing measurable
+does not belong in the tree.
+
+What is left to try is not a guess about which rewrite is missing but a direct
+answer to "who builds this node". The `address_of` over the conditional exists in
+the final GOTO and does not exist in the pass's tree, and the three sites that
+could have built it are eliminated by instrumentation (`adjust_address_of`,
+`take_reference_address`, `convert_reference`). The next step is therefore to
+instrument the *construction*: a temporary `fprintf` plus `::backtrace_symbols`
+in `address_of2t`'s constructor, firing when the operand is an `if2t`, on
+`github_6717_throw_conditional_ok` under the flag. There is no backtrace helper
+in `src/util`, so that probe brings its own. Note gdb is the wrong tool here:
+these constructors are inlined statics and breakpoints slide.
+
+### 3.20 The last two rows: the write-back drops `#reference` inside the body
+
+Counting the reference spelling in the two symbol tables answers it. On
+`github_6717_throw_conditional_ok`, legacy's tree carries **four** `#reference`
+markers and the pass's written-back tree carries **one**:
+
+| where | legacy | flag |
+|---|---:|---:|
+| the copy constructor's parameter type | 1 | 1 |
+| `pointer` types inside the function body | 3 | **0** |
+
+The parameter survives because §2.5's `pointer_type2t::ref_kind` carries it on
+the symbol's type, and `migrate_type_back` restores it (`migrate.cpp:3215`). The
+three inside the body do not, and they are what the legacy pipeline reads *after*
+the write-back: `c_typecastt::implicit_typecast_followed` tests
+`is_lvalue_or_rvalue_reference(dest_type)` before calling
+`take_reference_address`, the irept helper that distributes the address-of over a
+conditional's arms (`c_typecast.cpp:584`). With the spelling gone the argument
+takes the plain pointer conversion instead, which is exactly the
+`&(c ? a : b)` the GOTO shows.
+
+So the missing rewrite was never missing: it is legacy's own, and it declines
+because the tree it is handed no longer says "reference".
+
+**Why the body loses it.** Every `address_of2tc(subtype, obj)` in the pass
+defaults `ref_kind` to `none` — `irep2_expr.cpp:553` documents that default for
+`carry_provenance` in the same breath — so any reference binding the pass rebuilds
+comes back as a plain pointer. That is the fix's shape: an address-of the pass
+builds over a reference-typed object has to carry
+`pointer_ref_kindt::LVALUE`, the way #7703 carries it on types. Note this also
+touches the fold in this PR, whose `address_of2tc(a.lhs->type, a.lhs)` defaults
+the same way; no census row moves on it today, so it is fidelity rather than a
+defect, and the two should be fixed together.
+
+### 3.21 Phase 7 closes: 84 of 84
+
+§3.20 named the site. `adjust_call_arguments` took the address of an argument
+bound to a reference itself —
+
+```cpp
+if (binds_by_reference(callee, arg, params[i], i, context, ns))
+  arg = address_of2tc(arg->type, arg);
+```
+
+— where the legacy path routes the same binding through
+`c_typecastt::implicit_typecast_followed` to `take_reference_address`, which does
+two things this did not: it distributes over a conditional's arms, and it records
+the reference kind on the pointer it builds. Both matter, and the second is why
+the first could not be recovered later: `ref_kind` back-migrates to
+`#reference`, and that is the bit the legacy pipeline tests *after* the
+write-back before it would have distributed for itself.
+
+So the arm was never missing, twice over: the IREP2 helper already existed in
+`c_typecast.cpp` and already did both jobs. It was `static`, and this call site
+had grown its own one-line substitute. Exported and called here, with
+`binds_by_reference` now reporting the kind the legacy declaration spells (the
+IREP2 parameter type need not carry it, which is why that predicate reads the
+declaration at all).
+
+Both remaining rows close, so the `regression/esbmc-cpp/cpp` census under
+`--clang-cpp-irep2-adjust-only` reads **84 of 84**, from 82 — and from 31 of 80 at
+#7718's census. The change is in the *C* pass, shared by every frontend that runs
+it, so the nets are wider than usual: `ctest -R irep2` 374 of 374, unit 872 of
+872, the Solidity corpus 507 of 507 agreeing with zero crashes, and the C suite's
+2292 rows with two THOROUGH k-induction rows timing out under parallel load
+(`github_302` passes standalone). `irep2_conditional_reference_bind{,_fail}` pins it: the passing
+half turns SUCCESSFUL -> FAILED with the plain address-of restored. The failing
+half is a conventional twin — it asserts that neither object moved, which is
+false whichever arm is selected, and stays FAILED under the mutation, so the
+passing half is the gate.
+
+**What the whole series says about method.** Three ports were written and reverted
+before this one: the `address_of` distribution as an arm (twice, §3.13 and
+§3.17), and the `constructor` return type as a `code_type2t` field (§3.18). Each
+was a guess at *which rewrite is missing*, and each was refuted by instrumenting
+the thing it claimed to fix. What worked was counting a marker in the two symbol
+tables — four against one — and reading the consumer that tests it. A divergence
+census says which rows disagree; only the tree says why.
+
+## 7. The whole C++ corpus, swept once (2026-09-13)
+
+"84 of 84" was a stride-12 sample of **one** subdirectory. The corpus is
+`regression/esbmc-cpp` (2891 rows) plus `esbmc-cpp11` (166) and
+`esbmc-cpp14/17/20/23` (125): **3182 rows**. Swept end to end under
+`--clang-cpp-irep2-adjust-only` against the default path, skipping
+`KNOWNBUG`/`FUTURE`, rows that pin an irep2 flag, and rows whose source is
+absent (87 in total), the measurable set is **3095**:
+
+| | rows |
+|---|---:|
+| verdicts agree | **3033** |
+| diverge | 55 |
+| hard failure under the flag | 7 classified as crashes, plus 18 rows that produce no verdict |
+
+So 98.0% of the corpus agrees, and the residue is 62 rows rather than the two the
+sample suggested. Reproduce with `scripts/irep2-migration/cpp_full_census.sh <out.tsv> [jobs]`
+(resumable, one TSV row per test: status, directory, both verdicts).
+
+### 7.1 The residue by cause, not by directory
+
+Every hard failure names itself, and they group into five causes:
+
+| cause | rows |
+|---|---|
+| `Unexpected type: ptrmem` | `ch22_11`, `github_2672{,_fail}`, `ptrmem18`, `ptr_to_member_3{,_fail}`, `github_6293_member_fn_ptr{,_fail}` |
+| `uncaught exception [bad_optional_access]` | `alignas_empty_struct{,_fail}`, `stack_class{,_bug}`, `github_3522_2` |
+| `with_type called on kind sideeffect_assign` | `ch17_3` — **fixed**, §7.3 |
+| `ERROR: compute_pointer_offset` | `ostringstream_str`, `sstream_str_bool` |
+| `caught SIGSEGV` | `ptr_to_member_2{,_fail}` |
+
+plus `github_2040` and `github_6368_insert`, which produce no output at all
+within 45s — **not defects**: both agree given 90s, so the census's per-run cap
+is what they hit. A cap is part of the measurement, and two of the 62 residual
+rows were the cap rather than the pass.
+
+The 55 verdict divergences are 36 `SUCCESSFUL -> FAILED`, 14
+`SUCCESSFUL -> none`, 4 `FAILED -> none`, and one row where the **flag is
+better**: `ch9_7` answers where the default path does not. By family: 27 are
+`try_catch` (the `exception_spec_*` cluster §3.14 named, which is
+`finalize_exception_specification`'s territory), 17 in `esbmc-cpp/cpp`, 6 in
+`bug_fixes` (two POD-initialisation rows, two member-function-pointer rows), 2
+union constructors in `esbmc-cpp11/constructors`, and three singletons.
+
+### 7.2 Next, in order of what the causes cost
+
+1. **`with_type` on `sideeffect_assign2t`** — one row today, and §3.18 predicted
+   it: that kind carries `#member_init` outside `fields` exactly as
+   `sideeffect2t` carried `constructor`, so its field order does not match its
+   constructor's parameter order and the generic rebuild refuses it. The fix is
+   the specialization already written for the sibling kind.
+2. **`bad_optional_access`** (5 rows) — one unchecked `std::optional` somewhere in
+   the flag path; the exception name is the whole lead.
+3. **`ptrmem`** (8 rows) — the seam has no IREP2 type for a pointer to member.
+   The largest family and the only one that needs a new type kind rather than a
+   repair.
+4. **`try_catch`** (27 rows) — the known exception-specification cluster.
+
+### 7.3 `with_type` on an assignment, and the fix that was already written
+
+`ch17_3` aborted under the flag with `with_type called on kind sideeffect_assign
+which has no substitutable type`. §3.18 predicted it and mis-scoped it: it said
+nothing calls `with_type` on that kind, which is why carrying `#member_init`
+outside `fields` had gone unnoticed. Over the whole corpus something does.
+
+The cause is the one §3.18 measured for the sibling kind. `supports_with_type_v`
+requires the `fields` order to match the primary constructor's parameter order;
+`sideeffect_assign2t` listed `member_init` after `rhs` while its constructor
+takes `location` there, so the trait was false and every `with_type` on an
+assignment took the abort. Unreflecting the field makes the trait true, and a
+`rebuild_with_type` specialization carries the flag through — the same pair of
+moves the `constructor` marker needed, and the specialization for it was already
+in the tree to copy.
+
+`ch17_3` now agrees. The gate is a unit test rather than a regression row:
+`unit/irep2/with_type.test.cpp` asserts that a `with_type` on an assignment
+carrying `member_init` neither aborts nor loses the flag, and the same for a
+constructor-marked side effect. That test bites on both halves of the change —
+re-reflecting the field aborts it, dropping the specialization fails the flag
+assertion — where a regression row could only show the abort. The construct in
+`ch17_3` that reaches the rebuild is not reduced: it fires four times there with
+`op=assign`, and none of nine hand-written compound- and plain-assignment probes
+reaches it, so the reproducer is the corpus row until someone bisects it.
+
+### 7.4 `bad_optional_access`: one cause, three crash faces
+
+The five rows resolve to a single defect, and the exception name was a symptom of
+it rather than the fault. `catch throw bad_optional_access` in gdb put the first
+one at `member2t::do_simplify` (`expr_simplifier.cpp`), reading
+`struct_union_get_component_number(...).value()` on a component the source's type
+does not describe. Guarding that moved the crash to
+`tuple_node_smt_ast::project` reading past its element vector — #7758's bug,
+whose guard this branch reverted — and the third face was the same `.value()` in
+`value_sett::make_member`.
+
+Behind all three: a **struct literal shorter than its own type**. Diffing
+`alignas_empty_struct`'s GOTO shows it exactly:
+
+```
+legacy  ASSIGN test={ .anon_pad#0=0 };
+flag    ASSIGN test={  };
+```
+
+`adjust_struct` runs and declines. Instrumented, it reports
+`ops=0 unpadded=0 padded=0 align=` — the literal has no operands, its type has no
+members, `add_padding` adds no pad, and the **alignment is empty**: an explicit
+`alignas` travels on the legacy type as an `alignment` sub-irep, `struct_type2t`
+has no field for it, so the back-migrated type add_padding sees is not
+over-aligned. An over-aligned empty struct occupies its alignment, so its padded
+layout has a trailing pad; without the alignment there is nothing to pad to.
+
+Carried as an unreflected `BigInt alignment` on `struct_type2t` — the
+`constructor`/`member_init` pattern, and unreflected for the same reason plus one
+more: two records differing only in alignment would otherwise stop comparing
+equal, which is a wider change than this repair. `fields_cover_class` needs the
+matching `excluded_field_bytes` declaration, as it did for the other two.
+
+Both optional guards stay. They are not redundant once the literal is padded:
+each was a release-build crash on an invariant only a debug build checks
+(`member2t`'s constructor asserts it), and the `make_member` one widens the
+may-points-to set to `unknown` where it previously threw — the conservative
+direction. The same call also read `datatype_members[no]` unguarded, which is an
+out-of-bounds vector read whenever a literal is short, so the guards are a
+memory-safety repair independent of the alignment.
+
+All five rows now agree, and `irep2_overaligned_empty_struct{,_fail}` pins the
+carry: both halves SIGSEGV with the restore suppressed.
+
+### 7.5 The `ptrmem` family: a type with no IREP2 form, and the arm behind it
+
+Eleven rows — the eight `Unexpected type: ptrmem` ones, the two
+`ptr_to_member_2` SIGSEGVs and `github_6717_inline_ptr_to_member`'s verdict
+divergence — are one construct: `obj.*pmf` and `obj->*pmf`, a *bound member*
+selection. The expression kind was never the problem; `ptr_mem2t` exists and
+`migrate.cpp` carries it both ways. Its **type** was: clang types the selection
+`BuiltinType::BoundMember`, the converter records `ptrmem_typet`, and
+`migrate_type` had no arm for it, so the body failed to migrate at all.
+
+The type is a placeholder rather than storage — `clang_c_adjust::adjust_ptr_mem`
+replaces the whole node with the member function before anything computes a
+width — so it maps to the empty type, the round-trip-stable form a constructor's
+return type already uses. That alone moved the failure to
+`ERROR: do_function_call: unexpected callee`, which is the elimination itself
+missing: the node survived to goto_convert.
+
+Ported as an arm in both tables (the C++ table substitutes its own list, so a row
+added to the C one never dispatches for C++ or Solidity). It dereferences a
+pointer base, and for the placeholder type rebuilds the *function* with `this`
+prepended to the pointed-to code type's parameters. Two details are legacy's and
+kept deliberately: only the parameter **type** is prepended, the argument being
+the call site's business; and a pointer-to-*data*-member selection is left alone,
+since it carries the member's own type rather than the placeholder.
+
+All eleven rows now agree. `irep2_bound_member_call{,_fail}` pins it over both
+spellings; both halves fail with `do_function_call: unexpected callee` when the
+arm is gated off.
+
+### 7.6 The 27 `try_catch` rows: `#cpp_type` does not cross the seam
+
+They are one cause, and it is not `finalize_exception_specification` as §3.14
+guessed. `try-catch_simple_01` is the whole family in five lines: `throw 1`
+caught by `catch (int)`, and under the flag the GOTO reads
+
+```
+ASSERT !(exc_thrown && exc_typeid == 92)   // uncaught exception: signedbv
+```
+
+where the legacy path reads `uncaught exception: signed_int`. An exception id for
+a primitive is its `#cpp_type` **spelling** (`clang_cpp_exception_id.cpp`'s
+`append_cpp_spelling_and_fallback`, falling back to `type.id()`), the adjust pass
+computes the throw's ids from `migrate_type_back(operand->type)`, and the seam
+carries no `#cpp_type` — so the throw reads `signedbv` while the handler, whose
+ids never cross the seam, still reads `signed_int`. Nothing matches, and every
+throw of a primitive escapes as uncaught: 36 of the census's 55 divergences are
+`SUCCESSFUL -> FAILED`, and this is most of them.
+
+**Conversion time is where it belongs, and a bad probe nearly hid that.** §3.15's
+precedent is to move a computation to where the legacy spelling still exists.
+Instrumented at the converter's `CXXThrowExpr` arm the operand's type id printed
+**empty**, which read as "the type is not settled yet" — and was wrong: the probe
+read `tmp` *after* `move_to_operands` had moved it. Reading `new_expr.op0()`
+instead prints `id=signedbv cpp_type=signed_int`. The spelling is in hand at
+conversion time; the reading of the first probe was the defect.
+
+So the throw's ids are recorded there, for any type whose ids follow from the
+type alone — pointer and array layers stripped, since `convert_exception_id`
+recurses through them. A class type is left to the adjust pass: its id is the
+type symbol's name, which crosses the seam intact, and expanding its bases needs
+a symbol-table lookup this early in conversion cannot rely on. The legacy pass
+recomputes the same strings from a type that still carries the spelling, so the
+default path is unchanged.
+
+**16 of the 27 rows now agree**, and `ctest -R try_catch` is 174 of 174. The
+remaining 11 all fail with `exception specification violated`, which *is*
+`finalize_exception_specification`'s territory as §3.14 said — a legacy-only
+step, and the next task.
+
+An array operand is excluded from the recording: it decays between conversion and
+the legacy pass, so an id taken from the pre-decay type is not the one the handler
+is matched against. Measured, not assumed — and the measurement was worth having
+for a second reason. The first version of this change also replaced
+`new_expr.type() = tmp.type()` with the operand's type, on the reading that the
+original assigned from a moved-from `tmp` and was therefore a bug. It is not: a
+cpp-throw's own type is set by the adjust pass, and giving it the operand's type
+at conversion made three `try_catch` rows stop failing as they should **on the
+default path**. Bisected by stashing the change, and the line is now commented so
+the next reader does not repeat the correction. The
+alternative fix, carrying `#cpp_type` on the primitive type kinds, is no longer
+needed for this family; reconstruction from the width would not have worked
+anyway, since on this target a 32-bit signed type is `signed_int` or `wchar_t`, a
+64-bit one `signed_long` or `signed_long_long`, and picking wrong turns a valid
+`catch` into a false "uncaught exception" with the same symptom.
+
+### 7.7 The other 11: a dynamic exception specification is never resolved
+
+`exception specification violated` on 11 rows, and §3.14 named the right function
+for them: `clang_cpp_adjust::finalize_exception_specification`. The converter
+stashes a `throw(T...)` specification's declared types under
+`exception_spec_decl`; the legacy pass resolves them to exception ids in
+`adjust_symbol`, once the namespace is populated. The IREP2 pass *replaces*
+`adjust_symbol`, and had no counterpart — so the specification reached symex with
+its declared list unresolved, which permits nothing, and every throw through such
+a function was a violation.
+
+Two moves, both small. The finaliser leaves `clang_cpp_adjust` for
+`clang_cpp_exception_id.{h,cpp}`, next to `convert_exception_id` and shared for
+the same stated reason: it reads nothing but the namespace. And the C pass gains
+a per-symbol *type* hook, `adjust_symbol_type`, called for **every** symbol rather
+than only those with a value — `gen_symbol_code` is gated on a non-nil value, and
+a declaration with a specification and no body still needs resolving. C overrides
+nothing; C++ resolves the specification there.
+
+**All 27 `try_catch` rows now agree**, from 0 at the start of §7.6, and
+`ctest -R try_catch` is 174 of 174. `irep2_dynamic_exception_spec{,_fail}` pins
+it — both halves change outcome with the hook gated off, and the mode is pinned
+`c++11` because a dynamic specification is ill-formed in C++17.
+
+### 7.8 The two stream rows: a conditional over arrays decays per arm
+
+`ostringstream_str` and `sstream_str_bool` aborted with `ERROR:
+compute_pointer_offset, unexpected irep: if`. The dump names the node, and the
+GOTO diff names the difference, inside the bool stream operator:
+
+```
+legacy  _put_field(&(*o::0), val::1 ? &"1"[0] : &"0"[0], 1)
+flag    _put_field(&(*o::0), &(val::1 ? "1" : "0")[0], 1)
+```
+
+`c_typecastt::do_typecast`'s irept copy has an explicit arm for this
+(`c_typecast.cpp:985`): an array-typed destination that *is* an `if` typecasts
+each arm instead of indexing the conditional. The IREP2 copy did not, so the
+decay produced `&(if)[0]` and the pointer machinery met an `if` where it expects
+an object. Ported, both rows agree.
+
+**The pair that pins it needed a second measurement to be worth anything.** Arms
+of *different* lengths each decay on their own — no array-typed conditional is
+ever formed — so the first version of the test passed with the arm gated off.
+Same-length arms (`"ab"` / `"xy"`) are what form the node, and then both halves
+abort with the arm off. The condition is recorded in the test source, since it is
+invisible from the construct.
+
+## 8. The corpus re-swept: 3086 of 3095, and no crashes anywhere
+
+Re-run end to end on the tree at this point, the same 3192 rows and the same
+harness as §7:
+
+| | §7 (before) | now |
+|---|---:|---:|
+| verdicts agree | 3033 | **3086** |
+| diverge | 55 | **9** |
+| hard failure under the flag | 25 | **0** |
+
+The measurable set is 3095 either way (97 rows are `KNOWNBUG`/`FUTURE`, pin an
+irep2 flag, or have no source), so agreement is **99.7%**, and not one row
+crashes, aborts or fails to migrate. Five causes closed it: the `with_type` trait
+on an assignment, the record alignment behind three `bad_optional_access` faces,
+the bound-member type and its elimination, a primitive throw's exception ids, and
+a dynamic exception specification — plus the conditional array decay of §7.8.
+
+The nine that remain, by cause rather than by count:
+
+| rows | what |
+|---|---|
+| `switch_declaration{,_1,_2}` | no verdict: `Couldn't convert expression in unrecognised format`, a migrate gap on a declaration inside a `switch` |
+| `1032_POD_init`, `1043_POD_init` | POD aggregate initialisation |
+| `CpyConstructorUnion`, `MoveConstructorUnion` | implicit union copy/move constructors — `gen_implicit_union_copy_move_constructor` is legacy-only, the same shape as §7.7's finaliser |
+| `github_4317` | singleton |
+| `vector_reserve_realloc_nested_fail` | the **flag** answers and the default path does not; the second such row, after `ch9_7` |
+
+`switch_declaration` is the next task: three rows, one error message, and the only
+group left that produces no verdict at all.
+
+### 8.1 A switch condition that is a declaration
+
+The three `switch_declaration` rows produced no verdict: the solver was handed a
+`code_decl`.
+
+```
+ERROR: Couldn't convert expression in unrecognised format
+code_decl
+* value : c:main.cpp@42@F@main#@x
+* init : constant_int …
+```
+
+C++ lets a switch condition be a declaration — `switch (int x = 0)` — and
+`clang_cpp_adjust::adjust_switch` hoists it: the declaration goes ahead of the
+switch, which then switches on the declared symbol. Without that the declaration
+*is* the switched value, so it flows into the guard and reaches the SMT layer as a
+statement.
+
+Ported as an arm on `code_switch2t`. Two details: the seam flattens a
+single-declaration `decl-block`, so the condition arrives either as the
+declaration or as a block holding just it, and the rewrite **splices** rather than
+nests — the declaration's scope is the switch statement, which is exactly what the
+enclosing block gives it, and it is the shape legacy builds. `hoist_for_init`
+documents the same choice for the other reason: a nested block would end the
+scope too early (#4715).
+
+All three rows agree. `irep2_switch_declaration{,_fail}` pins it; both halves fall
+back to `unrecognised format` with the arm gated off.
+
+### 8.2 The union copy/move constructor is generated, not converted
+
+`CpyConstructorUnion` and `MoveConstructorUnion` diverged because a union's
+implicitly-defined copy and move constructors have **no converted body at all**:
+clang declares them, and `clang_cpp_adjust::gen_implicit_union_copy_move_constructor`
+generates the one assignment that copies the object representation
+([class.copy.ctor]/14). The IREP2 pass replaces that pass and generated only the
+vptr initialisations, so both constructors ran with an empty body and the copy
+never happened.
+
+Generated in `gen_symbol_code`, before the value walk, so the assignment goes
+through the arms like any other statement. Three things the port had to get
+right, each found by measuring rather than reading:
+
+1. A `sideeffect_assign2t` is an expression; a block's operands must be
+   statements. `goto_convert: non-code operand` until it became a
+   `code_assign2t`.
+2. The marker is the converter's `#implicit_union_copy_move_constructor` on the
+   constructor's return type, read from the symbol's legacy type — it is there,
+   unlike the `constructor` spelling inside a *body*, which the write-back loses
+   (§3.17).
+3. Legacy's body is `*this = *ref`, **both** sides dereferenced: the second
+   parameter is a reference, modelled as a pointer, and legacy reaches that shape
+   through `adjust_assign`, which this pass's reference handling does not cover
+   for a statement assignment. Assigning `*this = ref` instead handed the encoder
+   a mismatch it has no handler for — a null function pointer in
+   `convert_ast_node`, i.e. a SIGSEGV rather than a diagnosis.
+
+Both rows agree, `ctest -R esbmc-cpp11` is 161 of 161, and
+`irep2_union_copy_ctor{,_fail}` pins it over both the copy and the move
+spelling — the passing half flips with the generator gated off.
+
+### 8.3 The POD rows: a bitfield's flag does not cross the seam
+
+`1032_POD_init` and `1043_POD_init` failed inside `memset`: *"memset of memory
+segment of size 6 with 8 bytes"*. The type symbol is identical on both paths; the
+global's initialiser is not:
+
+```
+legacy  { .a=0, .b=0, .c=0, .d=0, .anon_bit_field_pad#4=0, .anon_pad#5=0 }
+flag    { .a=0, .b=0, .c=0, .d=0, .anon_pad#4=0 }
+```
+
+One pad short, so the object is 6 bytes where `sizeof` says 8. A bitfield
+member's legacy type carries `#bitfield` **and** a subtype naming the underlying
+type; `migrate_type` keeps the width and drops both. `adjust_struct` computed its
+padded layout by back-migrating the literal's type and re-running `add_padding`,
+which then saw three plain 2-bit integers rather than bitfields and inserted no
+bit-field pad.
+
+The fix is to stop round-tripping when there is no need to: the **tag symbol
+already carries the padded layout**, so resolve it by name first and compute from
+the type only when that lookup misses. §7.37 had replaced the lookup with the
+computation because a struct declared inside a Solidity contract has a qualified
+tag the literal's type does not name — so both paths stay, lookup first,
+computation as the fallback. The Solidity corpus is still 507 of 507, which is
+what keeps the fallback honest.
+
+Both rows agree. `irep2_bitfield_global_init{,_fail}` pins it: with the lookup
+forced to miss, the passing half fails on the same `memset` and the failing half's
+violated property moves off its pinned line. Carrying `#bitfield` and its subtype
+across the seam remains the more faithful fix, and is now the only known reason a
+*computed* layout can differ from the tag's.
+
+### 8.4 The last singleton: an array-typed element is not a decay
+
+`github_4317` — a range-for over `S cases[][2]` — differed in one instruction:
+
+```
+legacy  ASSIGN __end1=&(*__range1)[0] + 1;
+flag    ASSIGN __end1=&(*__range1)[0][0] + 1;
+```
+
+One index too many, so the end pointer is one *element* past the start rather than
+one row, and the second row read is out of bounds. Instrumented, the decay fires
+four times on an operand that is already an `index`, and twice on the symbol
+itself, which is the correct one.
+
+`&row` where `row` is a row of a 2-D array has type `S (*)[2]`: taking the address
+of an array-typed *element* is not the array-to-pointer decay (C11 6.3.2.1p3),
+and the arm now declines it. The legacy arm decays unconditionally too and gets
+away with it because its converter leaves such an index typed as the element —
+this pass types it as the row, correctly, and the decay was the only thing
+relying on the old typing.
+
+`irep2_nested_array_row_address{,_fail}` pins it; the passing half fails with an
+array-bounds violation when the decay is forced on every array operand.
+
+**Phase 7's census is now one row from exhausted**, and that row is not a defect:
+`vector_reserve_realloc_nested_fail` is the second where the flag answers and the
+default path does not.
+
+### 8.5 Phase 7's census is exhausted
+
+The last row was the harness, not the pass.
+`vector_reserve_realloc_nested_fail` showed `none` for the *legacy* side, which
+read as "the flag answers where the default path does not". Re-run with a real
+budget both paths report `VERIFICATION FAILED`: the census caps each run at 45s
+and that row needs more. `ch9_7`, the other row of that shape, is the same
+artefact.
+
+So over `regression/esbmc-cpp`, `esbmc-cpp11` and the standard-mode suites —
+3192 rows, 3095 of them measurable — **every row agrees under
+`--clang-cpp-irep2-adjust-only`**, and none crashes, aborts or fails to migrate.
+The nine causes this took are §7.3 through §8.4, plus §7.6's throw ids and §7.7's
+exception specifications.
+
+Two things that number does *not* say, and both belong next to it:
+
+- The cap is part of the measurement. Two rows were mis-read because of it, and a
+  third pair (`github_2040`, `github_6368_insert`) was mis-read the same way in
+  §7.1. A census row that reports no verdict is a row to re-run, not a defect.
+- Agreement is not sufficiency. The flag replaces the legacy adjuster; it does
+  not yet build IREP2 natively end to end, which is what §1's bar asks for. What
+  agreement buys is the right to consider making the flag the default — and that
+  needs an SV-COMP run, since it moves every C++ verdict path.
+
+## 9. Twelve probes, written without reference to this branch
+
+§7 and §8 swept the whole corpus, which is the broad measurement. This is the
+narrow one, and it is worth having because the corpus was also what the branch was
+developed against: a probe set written fresh, from the C++ feature list rather
+than from the diff, and run on master first.
+
+Twelve constructs: a virtual call through a base pointer, an lvalue and a const
+reference, a function template at two instantiations, an overloaded `operator+`,
+`throw`/`catch` of an `int`, a scoped constructor and destructor, `new`/`delete`,
+a capturing lambda, multiple inheritance with a cast to the second base, a static
+data member, a default argument, and `std::vector::push_back`.
+
+| | master | this branch |
+|---|---|---|
+| agree | 10 | **12** |
+| diverge | 2 | 0 |
+| abort under asserts | 0 | 0 |
+
+### 9.1 Which two, and why it matters that they were not chosen
+
+On master the two that diverge are `v05_exception` and `v12_vector`, and their
+shapes are exactly the families this branch addresses:
+
+- the uncaught-exception assertion names the type `signed_int` on the default path
+  and `signedbv` under the flag, and `__ESBMC_exc_site` differs -- the
+  exception-id-at-conversion-time work;
+- the vector model shows `val ? &"1"[0] : &"0"[0]` against
+  `&(val ? "1" : "0")[0]`, the per-arm conditional decay, and
+  `__refcnted_cstr(&this->msg)` against `this->msg=__refcnted_cstr()`, the
+  constructor fold.
+
+Nothing in the probe set was selected for those; the list is a textbook C++
+feature enumeration. That the two failures land on the two families this branch
+fixes, and that all twelve agree once it is applied, is the strongest evidence
+available that its scope was the right one rather than a scope fitted to whatever
+the corpus happened to contain.
+
+### 9.2 What it says about the rest of C++
+
+Ten agree on master already, including the constructs a reader would most expect
+to be hard: virtual dispatch, multiple inheritance with a displaced second base,
+templates, operator overloading, destructor scoping, `new`/`delete` and a
+capturing lambda. So the C++ hop-off's remaining divergence is not spread thinly
+across the language; before this branch it was two families, and after it, over
+this probe set, none.
+
+Run under `DebugOpt`, so with asserts: no probe aborts on either tree, which the
+byte-identical comparison alone would not have shown
+(`scope-jimple-irep2.md` §38.4a).
+
+## 10. Fourteen harder probes, and what 26 agreeing rules out
+
+§9's twelve were a textbook feature list. These fourteen are the constructs a
+reader would reach for to break a C++ adjust pass, run on this branch under
+`DebugOpt`:
+
+virtual inheritance through a diamond with a cast to the shared base; an abstract
+class called through its interface; a copy constructor with a side effect; an
+overloaded assignment operator; a nested class; a friend function; `catch (...)`
+selected over a non-matching `catch (int)`; a bare `throw;` rethrow from inside a
+handler; `dynamic_cast` to a derived pointer; a template class with a member
+function; a `const` member function beside a mutating one; `operator()` and
+`operator[]`; `const_cast` followed by `static_cast`; and an array of objects with
+a default constructor.
+
+**All fourteen agree, and none aborts.** With §9 that is 26 independent probes
+agreeing on this branch, against a corpus of 3 095 rows (§8) that also agrees.
+
+### 10.1 What that does and does not establish
+
+It rules out the failure mode §9 was written to test for: that the corpus
+agreement reflects the corpus rather than the pass, since the pass was developed
+against that corpus. Twenty-six constructs chosen from the language instead, two
+of which fail on master and both of which this branch fixes (§9.1), is evidence
+the agreement is a property of the pass.
+
+It does not establish completeness. Every probe here is a *whole-program* check
+of the emitted GOTO; a construct whose adjust arm is wrong in a way that cancels
+out by the time goto_convert has run would pass. And the probes are small: none
+mixes the features, where the corpus's 3 095 rows do.
+
+What remains for this frontend is therefore not more probing of the adjust pass.
+It is `clang_cpp_convert.cpp` and the 639 legacy type mentions
+(`frontends-to-irep2.md` §43), which the phase list puts last for every frontend.
