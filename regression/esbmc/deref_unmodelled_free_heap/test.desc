@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+^.*FAILED.*valid free is reachable$
+^.*PASSED.*dereference failure: invalid pointer freed$

@@ -163,15 +163,22 @@ int main(void)
 // Every entry in `p`'s pre-havoc set is a sink, so filtering would empty it.
 // The counterpart of `all_incompatible_targets` below: the same asymmetry, in
 // the same direction.
+//
+// The dereference is a read. A write through a set that resolves to nothing is
+// reported unmodelled (dereference.cpp, the WRITE/FREE check after the target
+// loop), and in the inductive step that claim is assumed as well as asserted,
+// so the first iteration cuts the path and the counts below stop measuring the
+// filter at all.
 const char *all_sink = R"(
 int *ext(void);
+int total;
 int main(void)
 {
   int *p = ext();
   int i;
   for (i = 0; i < 4; i++)
   {
-    *p = i;
+    total += *p;
     p = ext();
   }
   return 0;
