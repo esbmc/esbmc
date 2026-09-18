@@ -71,3 +71,9 @@ new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
 # disagrees with its AST's sort, which no C input produces.
 new_unit_test(tuple_field_bounds_test "tuple_field_bounds.test.cpp"
               "solvers;util_esbmc;filesystem;bigint")
+
+# Rejection of an unusable solver choice. Both cases are build-independent: no
+# build carries a solver named "nosuchsolver", and two flags at once is refused
+# before availability is consulted. `solvers` supplies solve.cpp.
+new_unit_test(solver_availability_test "solver_availability.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")

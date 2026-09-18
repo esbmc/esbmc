@@ -484,8 +484,8 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     // CBMC re-links __CPROVER_enforce_requires_is_fresh from its contracts
     // library at analysis time and does not serialise a body, so the adapter
     // retargets the call here. Deliberately not named __ESBMC_*: symex sends
-    // every c:@F@__ESBMC* callee to run_intrinsic, which abort()s on a name it
-    // does not know.
+    // every c:@F@__ESBMC* callee to run_intrinsic, which rejects a name it does
+    // not know.
     // The check-side counterpart. It must never allocate: these two variants
     // ask whether the pointer *already* denotes an object that big, and
     // satisfying them by allocating would mask the violation they exist to

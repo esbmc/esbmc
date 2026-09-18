@@ -7,6 +7,7 @@
 #include <typeinfo>
 
 #include <irep2/irep2.h>
+#include <util/base/user_input_error.h>
 #include <util/config/config.h>
 #include <util/message/message.h>
 
@@ -64,6 +65,12 @@ static int run_esbmc(int argc, const char **argv)
   {
     esbmc_parseoptionst parseoptions(argc, argv);
     return parseoptions.main();
+  }
+  // The thrower has already said what was wrong with the input, so this arm is
+  // only here for the exit status (esbmc/esbmc#7901).
+  catch (const user_input_errort &)
+  {
+    return user_input_errort::exit_code;
   }
   // Without this, an escaping exception reaches std::terminate, which aborts
   // with no ESBMC context -- on a CI runner that abort is the only evidence

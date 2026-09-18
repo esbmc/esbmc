@@ -17,6 +17,7 @@
 #include <irep2/irep2.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
+#include <util/base/user_input_error.h>
 #include <util/symtab/pretty.h>
 #include <util/irep/std_expr.h>
 #include <util/base/time_stopping.h>
@@ -1227,7 +1228,7 @@ void goto_symext::run_intrinsic(
     "(NB: the C spec reserves the __ prefix for the compiler and "
     "environment)",
     symname);
-  abort();
+  throw user_input_errort();
 }
 
 namespace

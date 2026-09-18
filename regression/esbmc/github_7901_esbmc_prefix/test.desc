@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^ERROR: Function call to non-intrinsic prefixed with __ESBMC \(fatal\)$
+^The name in question: c:@F@__ESBMC_nondet_int$
+CHECK_EXIT 6

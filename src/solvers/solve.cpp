@@ -7,6 +7,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
+#include <util/base/user_input_error.h>
 
 #include <unordered_map>
 
@@ -90,11 +91,18 @@ static std::string pick_default_solver()
   log_error(
     "No solver backends built into ESBMC; please either build "
     "some in, or explicitly configure the smtlib backend");
-  abort();
+  throw user_input_errort();
+}
+
+[[noreturn]] static void reject_unavailable_solver(const std::string &name)
+{
+  log_error(
+    "The {} solver has not been built into this version of ESBMC, sorry", name);
+  throw user_input_errort();
 }
 
 // Determine the solver the user explicitly asked for, returning "" if none.
-// Aborts if the user requested more than one solver flag simultaneously.
+// Throws if the user requested more than one solver flag simultaneously.
 static std::string resolve_user_solver_choice(const optionst &options)
 {
   std::string solver_name;
@@ -104,7 +112,7 @@ static std::string resolve_user_solver_choice(const optionst &options)
       if (!solver_name.empty())
       {
         log_error("Please only specify one solver");
-        abort();
+        throw user_input_errort();
       }
       solver_name = name;
     }
@@ -124,10 +132,7 @@ void check_solver_availability(const optionst &options)
     return;
   if (esbmc_solvers.count(solver_name))
     return;
-  log_error(
-    "The {} solver has not been built into this version of ESBMC, sorry",
-    solver_name);
-  abort();
+  reject_unavailable_solver(solver_name);
 }
 
 static solver_creator &
@@ -186,10 +191,7 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (it != esbmc_solvers.end())
     return *it->second;
 
-  log_error(
-    "The {} solver has not been built into this version of ESBMC, sorry",
-    solver_name);
-  abort();
+  reject_unavailable_solver(solver_name);
 }
 
 smt_convt *create_solver(

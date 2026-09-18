@@ -1,0 +1,5 @@
+CORE
+main.c
+--default-solver nosuchsolver
+^ERROR: The nosuchsolver solver has not been built into this version of ESBMC, sorry$
+CHECK_EXIT 6
