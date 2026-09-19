@@ -1403,12 +1403,13 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
   if (is_nil_expr(op) || is_sideeffect_assign2t(op) || is_code_assign2t(op))
     return;
 
+  /* Only an array decays (C11 6.3.2.1p3); a vector is a value, and the last
+   * statement of a statement expression is used (#7906). */
   const type2tc t = ns.follow(op->type);
-  if (!is_array_type(t) && !is_vector_type(t))
+  if (!is_array_type(t))
     return;
 
-  const type2tc &elem =
-    is_array_type(t) ? to_array_type(t).subtype : to_vector_type(t).subtype;
+  const type2tc &elem = to_array_type(t).subtype;
   expr = code_expression2tc(
     address_of2tc(
       elem, index2tc(elem, op, gen_zero(migrate_type(index_type())))),
