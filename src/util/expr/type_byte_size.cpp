@@ -481,16 +481,15 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     const index2t &index = to_index2t(expr);
 
     expr2tc sub_size;
-    if (is_array_type(index.source_value))
-    {
-      const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = size_bits_expr(arr_type.subtype);
-    }
+    /* A vector indexes like an array and its lanes sit at the same offsets,
+     * so the element size is read the same way (#7907). */
+    if (
+      is_array_type(index.source_value) || is_vector_type(index.source_value))
+      sub_size =
+        size_bits_expr(array_or_vector_subtype(index.source_value->type));
     else
-    {
       throw std::runtime_error(
         "Unexpected index type in computer_pointer_offset");
-    }
 
     /* Expression needs to be of the bitwidth capable of addressing bits in the
      * standard address space. */

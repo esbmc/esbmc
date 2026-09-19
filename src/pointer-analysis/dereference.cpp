@@ -1211,6 +1211,34 @@ void dereferencet::build_reference_rec(
     return;
   }
 
+  /* A vector destination is read lane by lane: each lane is an ordinary
+   * scalar access at its own offset, so every source shape the table below
+   * already handles serves a vector too, with no row of its own (#7907). */
+  if (is_vector_type(type))
+  {
+    const BigInt lane_bits = type_byte_size_bits(array_or_vector_subtype(type));
+    const BigInt lanes =
+      to_constant_int2t(array_or_vector_size(type)).value;
+    std::vector<expr2tc> elems;
+    for (BigInt i = 0; i < lanes; i = i + 1)
+    {
+      expr2tc lane = value;
+      expr2tc lane_offset =
+        add2tc(offset->type, offset, constant_int2tc(offset->type, i * lane_bits));
+      simplify(lane_offset);
+      build_reference_rec(
+        lane,
+        lane_offset,
+        array_or_vector_subtype(type),
+        guard,
+        mode,
+        alignment);
+      elems.push_back(lane);
+    }
+    value = constant_vector2tc(type, std::move(elems));
+    return;
+  }
+
   if (is_struct_type(type))
     flags |= flag_dst_struct;
   else if (is_union_type(type))
@@ -1236,7 +1264,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_union;
   else if (is_scalar_type(value))
     flags |= flag_src_scalar;
-  else if (is_array_type(value))
+  else if (is_array_type(value) || is_vector_type(value))
     flags |= flag_src_array;
   else
   {
@@ -1411,10 +1439,9 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
-  assert(is_array_type(value));
+  assert(is_array_type(value) || is_vector_type(value));
 
-  const array_type2t arr_type = to_array_type(value->type);
-  type2tc arr_subtype = arr_type.subtype;
+  type2tc arr_subtype = array_or_vector_subtype(value->type);
 
   if (is_array_type(arr_subtype))
   {
@@ -1506,8 +1533,9 @@ void dereferencet::construct_from_array(
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
-    if (arr_type.array_size && arr_type.array_size->type != div->type)
-      div = typecast2tc(arr_type.array_size->type, div);
+    const expr2tc &arr_size = array_or_vector_size(value->type);
+    if (arr_size && arr_size->type != div->type)
+      div = typecast2tc(arr_size->type, div);
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
   }
