@@ -1,0 +1,5 @@
+CORE
+main.c
+--big-endian
+^VERIFICATION FAILED$
+^.*assertion h\[0\] == 1$
