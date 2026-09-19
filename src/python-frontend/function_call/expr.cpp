@@ -4581,14 +4581,19 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
 
   reject_numpy_sort_write_through_view(receiver_node);
 
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw.value("arg", std::string()) == "kind")
+        validate_numpy_sort_kind_keyword_value(kw["value"], "ndarray.sort");
+
   // One positional argument (the axis) is accepted; extra positional args
-  // and keywords besides axis= are rejected ahead of the shape check so a
-  // 2-D receiver called with an unsupported argument reports the argument
-  // error, matching argsort()/searchsorted()'s own validation order in this
-  // file.
+  // and keywords besides axis=/kind= are rejected ahead of the shape check
+  // so a 2-D receiver called with an unsupported argument reports the
+  // argument error, matching argsort()/searchsorted()'s own validation
+  // order in this file.
   if (
     call_["args"].size() > 1 ||
-    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
+    numpy_reducer_has_unsupported_keywords_besides(call_, {"axis", "kind"}))
     throw std::runtime_error(
       "TypeError: numpy.ndarray.sort() does not support kind or order "
       "arguments yet");

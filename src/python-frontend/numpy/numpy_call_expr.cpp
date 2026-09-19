@@ -6635,7 +6635,13 @@ exprt numpy_call_expr::handle_argsort_call()
   parse_argsort_axis_keyword(
     resolve_argsort_axis_node(), argsort_flatten, argsort_axis);
 
-  if (numpy_reducer_has_unsupported_keywords_besides_axis(call_))
+  if (const nlohmann::json *kind_kw = find_keyword_arg("kind"))
+    validate_numpy_sort_kind_keyword_value(*kind_kw, "argsort");
+  if (const nlohmann::json *stable_kw = find_keyword_arg("stable"))
+    validate_numpy_stable_bool_keyword_value(*stable_kw, "argsort");
+
+  if (numpy_reducer_has_unsupported_keywords_besides(
+        call_, {"axis", "kind", "stable"}))
     throw std::runtime_error(
       "TypeError: numpy.argsort() does not support kind or order "
       "arguments yet");
@@ -7023,6 +7029,11 @@ void numpy_call_expr::parse_sort_axis_and_keywords(
       continue;
 
     const std::string arg = kw["arg"].get<std::string>();
+    if (arg == "kind")
+    {
+      validate_numpy_sort_kind_keyword_value(kw["value"], "sort");
+      continue;
+    }
     if (arg != "axis")
       throw std::runtime_error(
         "TypeError: numpy.sort() keyword '" + arg + "' is not supported");

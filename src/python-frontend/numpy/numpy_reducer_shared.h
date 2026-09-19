@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -148,6 +149,60 @@ numpy_reducer_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
     if (kw.value("arg", "") != "axis")
       return true;
   return false;
+}
+
+// Generalizes numpy_reducer_has_unsupported_keywords_besides_axis to any set
+// of already-accepted keyword names -- e.g. sort/argsort's kind= (and
+// ndarray.argsort()'s stable=) keyword, once those are validated separately
+// by the caller.
+inline bool numpy_reducer_has_unsupported_keywords_besides(
+  const nlohmann::json &call,
+  const std::set<std::string> &allowed)
+{
+  if (!call.contains("keywords"))
+    return false;
+  for (const auto &kw : call["keywords"])
+    if (allowed.count(kw.value("arg", "")) == 0)
+      return true;
+  return false;
+}
+
+// numpy.sort()/argsort()'s kind= value: None/"stable"/"mergesort" are
+// accepted no-ops, since the shared conversion-time bubble sort
+// (bubble_sort_numpy_paired) is already stable -- any other kind is
+// rejected explicitly rather than silently applying a different, unstable
+// ordering (ADR-NP principle 3).
+inline void validate_numpy_sort_kind_keyword_value(
+  const nlohmann::json &value,
+  const std::string &function_name)
+{
+  if (is_json_none_literal(value))
+    return;
+  if (
+    value.is_object() && value.value("_type", std::string()) == "Constant" &&
+    value.contains("value") && value["value"].is_string())
+  {
+    const std::string kind = value["value"].get<std::string>();
+    if (kind == "stable" || kind == "mergesort")
+      return;
+  }
+  throw std::runtime_error(
+    "TypeError: numpy." + function_name +
+    "() currently supports kind='stable'/'mergesort'/None only");
+}
+
+// ndarray.argsort()'s stable= keyword (numpy 2.0): a literal bool, accepted
+// as a no-op for the same reason kind='stable' is -- the shared sort is
+// already stable regardless of this flag.
+inline void validate_numpy_stable_bool_keyword_value(
+  const nlohmann::json &value,
+  const std::string &function_name)
+{
+  if (
+    !value.is_object() || value.value("_type", std::string()) != "Constant" ||
+    !value.contains("value") || !value["value"].is_boolean())
+    throw std::runtime_error(
+      "TypeError: numpy." + function_name + "() stable must be a literal bool");
 }
 
 // Builds a 1-D array_typet value from already-converted elements.
