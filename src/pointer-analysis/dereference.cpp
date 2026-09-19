@@ -1176,6 +1176,41 @@ enum target_flags
  *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  */
 
+/// Which row of build_reference_rec's table the destination type selects.
+static int dst_flag_of(const type2tc &type)
+{
+  if (is_struct_type(type))
+    return flag_dst_struct;
+  if (is_union_type(type))
+    return flag_dst_union;
+  if (is_scalar_type(type))
+    return flag_dst_scalar;
+  if (is_array_type(type))
+  {
+    log_error(
+      "Can't construct rvalue reference to array type during dereference\n"
+      "(It isn't allowed by C anyway)\n");
+    abort();
+  }
+  log_error("Unrecognized dest type during dereference\n{}", *type);
+  abort();
+}
+
+/// Which column the source value selects.
+static int src_flag_of(const expr2tc &value)
+{
+  if (is_struct_type(value))
+    return flag_src_struct;
+  if (is_union_type(value))
+    return flag_src_union;
+  if (is_scalar_type(value))
+    return flag_src_scalar;
+  if (is_array_or_vector_type(value))
+    return flag_src_array;
+  log_error("Unrecognized src type during dereference\n{}", *value->type);
+  abort();
+}
+
 void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
@@ -1211,38 +1246,17 @@ void dereferencet::build_reference_rec(
     return;
   }
 
-  if (is_struct_type(type))
-    flags |= flag_dst_struct;
-  else if (is_union_type(type))
-    flags |= flag_dst_union;
-  else if (is_scalar_type(type))
-    flags |= flag_dst_scalar;
-  else if (is_array_type(type))
+  /* A vector destination is read lane by lane: each lane is an ordinary
+   * scalar access at its own offset, so every source shape the table below
+   * already handles serves a vector too, with no row of its own (#7907). */
+  if (is_vector_type(type))
   {
-    log_error(
-      "Can't construct rvalue reference to array type during dereference\n"
-      "(It isn't allowed by C anyway)\n");
-    abort();
-  }
-  else
-  {
-    log_error("Unrecognized dest type during dereference\n{}", *type);
-    abort();
+    construct_vector_ref(value, offset, type, guard, mode, alignment);
+    return;
   }
 
-  if (is_struct_type(value))
-    flags |= flag_src_struct;
-  else if (is_union_type(value))
-    flags |= flag_src_union;
-  else if (is_scalar_type(value))
-    flags |= flag_src_scalar;
-  else if (is_array_type(value))
-    flags |= flag_src_array;
-  else
-  {
-    log_error("Unrecognized src type during dereference\n{}", *value->type);
-    abort();
-  }
+  flags |= dst_flag_of(type);
+  flags |= src_flag_of(value);
 
   // Consider the myriad of reference construction cases here
   switch (flags)
@@ -1403,6 +1417,31 @@ void dereferencet::build_reference_rec(
   }
 }
 
+void dereferencet::construct_vector_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  const type2tc &lane_type = array_or_vector_subtype(type);
+  const BigInt lane_bits = type_byte_size_bits(lane_type);
+  const BigInt lanes = to_constant_int2t(array_or_vector_size(type)).value;
+
+  std::vector<expr2tc> elems;
+  for (BigInt i = 0; i < lanes; i = i + 1)
+  {
+    expr2tc lane = value;
+    expr2tc lane_offset = add2tc(
+      offset->type, offset, constant_int2tc(offset->type, i * lane_bits));
+    simplify(lane_offset);
+    build_reference_rec(lane, lane_offset, lane_type, guard, mode, alignment);
+    elems.push_back(lane);
+  }
+  value = constant_vector2tc(type, std::move(elems));
+}
+
 void dereferencet::construct_from_array(
   expr2tc &value,
   const expr2tc &offset,
@@ -1411,10 +1450,9 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
-  assert(is_array_type(value));
+  assert(is_array_or_vector_type(value));
 
-  const array_type2t arr_type = to_array_type(value->type);
-  type2tc arr_subtype = arr_type.subtype;
+  type2tc arr_subtype = array_or_vector_subtype(value->type);
 
   if (is_array_type(arr_subtype))
   {
@@ -1506,8 +1544,9 @@ void dereferencet::construct_from_array(
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
-    if (arr_type.array_size && arr_type.array_size->type != div->type)
-      div = typecast2tc(arr_type.array_size->type, div);
+    const expr2tc &arr_size = array_or_vector_size(value->type);
+    if (arr_size && arr_size->type != div->type)
+      div = typecast2tc(arr_size->type, div);
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
   }
