@@ -1480,3 +1480,52 @@ TEST_CASE(
     agree(pointer_typet(signed_char_type()));
   }
 }
+
+// `#cpp_type` is the source language's own spelling of a type. Unreflected --
+// two bitvectors of a width are the same type however spelled -- but a
+// consumer reads it back: python_converter::get_python_type_category tells a
+// 1-char string element from an 8-bit int by it, so dropping it at the seam
+// folds a char comparison to false (docs/roadmap/scope-python-irep2.md §9).
+TEST_CASE("a type keeps its source spelling", "[migrate]")
+{
+  SECTION("the spelling round-trips on the three kinds that carry one")
+  {
+    signedbv_typet c(8);
+    c.cpp_type("char");
+    REQUIRE(to_signedbv_type(migrate_type(c)).cpp_type == irep_idt("char"));
+    REQUIRE(migrate_type_back(migrate_type(c)).cpp_type() == irep_idt("char"));
+
+    unsignedbv_typet u(64);
+    u.cpp_type("unsigned_long");
+    REQUIRE(
+      migrate_type_back(migrate_type(u)).cpp_type() ==
+      irep_idt("unsigned_long"));
+
+    floatbv_typet d;
+    d.set_f(52);
+    d.set_width(64);
+    d.cpp_type("double");
+    REQUIRE(
+      migrate_type_back(migrate_type(d)).cpp_type() == irep_idt("double"));
+  }
+
+  SECTION("an unspelled type gains no key")
+  {
+    // `#cpp_type` is a comment field, so writing it empty inserts a key the
+    // printer then reads -- the §158 hazard, three times over by now.
+    const typet back = migrate_type_back(migrate_type(signedbv_typet(8)));
+    REQUIRE(back.find(irept::a_cpp_type).is_nil());
+    // full_eq, not ==: `operator==` skips comments, so it cannot see a leaked
+    // `#cpp_type` and asserting on it would be a tautology (§78's lesson).
+    REQUIRE(full_eq(back, signedbv_typet(8)));
+  }
+
+  SECTION("the spelling is no part of the type's identity")
+  {
+    signedbv_typet spelled(8);
+    spelled.cpp_type("char");
+    REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
+    REQUIRE(
+      migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
+  }
+}

@@ -1237,7 +1237,7 @@ void python_converter::handle_assignment_type_adjustments(
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     return;
   }
 
@@ -1251,7 +1251,7 @@ void python_converter::handle_assignment_type_adjustments(
     rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
     lhs.type() = rhs.type();
   }
 
@@ -1271,10 +1271,12 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type
+      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
+      // drops #python_aggregate, which `in` dispatches on
+      // (docs/roadmap/scope-python-irep2.md §10.4).
       lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     }
   }
   else if (lhs_symbol)
@@ -1309,7 +1311,7 @@ void python_converter::handle_assignment_type_adjustments(
         // misread. Any is not a constraint, so adopt the rhs type. Only on
         // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
         // (1, 2)`) must not retype uses already emitted at the old type.
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
@@ -1325,7 +1327,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = typecast_exprt(rhs, lhs.type());
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->set_value(rhs);
+        lhs_symbol->set_value(migrate_expr(rhs));
       return;
     }
     // Handle string-to-string variable assignments
@@ -1337,7 +1339,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs_symbol->get_value().type().is_array())
       {
         rhs = rhs_symbol->get_value();
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1399,7 +1401,12 @@ void python_converter::handle_assignment_type_adjustments(
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
           {
-            lhs_symbol->set_type(rhs.type());
+            // A dynamically-sized array cannot cross the seam
+            // (docs/roadmap/scope-python-irep2.md §10.4).
+            if (python_expr::contains_dyn_array(rhs.type()))
+              lhs_symbol->set_type(rhs.type());
+            else
+              lhs_symbol->set_type(migrate_type(rhs.type()));
             lhs.type() = rhs.type();
           }
         }
@@ -1417,7 +1424,7 @@ void python_converter::handle_assignment_type_adjustments(
       else
       {
         // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1445,10 +1452,13 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
-      lhs_symbol->set_type(rhs.type());
+      lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
     }
 
+    // Legacy: migrate_expr turns a class-object value (`x = int`) into an empty
+    // array constant, and isinstance folds on it
+    // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
       lhs_symbol->set_value(rhs);
   }

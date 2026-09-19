@@ -4529,3 +4529,37 @@ i.e. adding a derivation to the most-constructed node's back-migration to satisf
 wrong. The consumer's test turned out to be a tautology, and fixing it cost one line and repaired a
 live defect in all three printers. The general form: when a marker appears not to survive the seam,
 price fixing the reader before paying to carry the marker.
+
+## 80. `#cpp_type` crosses the seam (2026-09-17)
+
+The fifth attribute to be carried, after `argument_base_names` (§44), `member_base_names` (§46),
+`cformat` (§69) and a symbol's `name` -- which was *not* carried, because §78 found its reader was
+wrong. This one's reader is right, so it is carried.
+
+`irep_idt cpp_type`, unreflected, on `unsignedbv_type2t`, `signedbv_type2t` and `floatbv_type2t`, both
+directions in `migrate_type`, back-write guarded on non-empty. The kinds come from enumerating the
+attribute's **writers**, not from sampling a corpus -- `scope-python-irep2.md` §9.3 records what
+sampling cost. Only the signedbv arm is carried because a *Python* consumer reads it; unsignedbv is
+platform symmetry under `char_is_unsigned` plus `goto2c`, and floatbv has no Python reader at all and is
+carried for `cpp_expr2string` and the exception-id path (§10.1).
+
+It also costs something worth stating: `sizeof` goes 48 -> 56 on the two bitvector kinds -- the most
+constructed nodes in the tool -- and leaves `fields_cover_class` with zero margin, so each kind now pins
+its own layout with a `static_assert`. A carry is not free even when it is unreflected.
+
+Why it had to be carried: `python_converter::get_python_type_category` (`converter_binop.cpp:619`)
+distinguishes a 1-char string element from an 8-bit int by the spelling, so dropping it turns
+`val = "hello"[0]; assert val == "h"` into a false alarm. That defect was *predicted* in
+`scope-python-irep2.md` §3, re-derived wrongly in §9's first attempt, and is now pinned by
+`regression/python/github_4715_cpp_type_char{,_fail}` plus a unit test that asserts the spelling is no
+part of the type's identity.
+
+It unblocks eight of the eleven writes in `handle_assignment_type_adjustments`; the other three
+lose markers the carry does not cover (`scope-python-irep2.md` §10.4). By §3's table it also unblocks
+the ten in `converter_funcdef.cpp` -- which is the next cluster.
+
+The pattern across the five is now clear enough to state as a rule. When a marker does not survive the
+seam, there are three answers and the choice is empirical: carry it as an unreflected field (four of
+five), fix the reader if the reader is wrong (§78), or change the type model if the marker is really a
+distinct type (`scope-python-irep2.md` §8.1, still open). What settles it is who reads the marker and
+whether their use of it is defensible -- not how easy the carry is.
