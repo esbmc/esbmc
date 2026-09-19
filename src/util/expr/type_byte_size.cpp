@@ -483,8 +483,7 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     expr2tc sub_size;
     /* A vector indexes like an array and its lanes sit at the same offsets,
      * so the element size is read the same way (#7907). */
-    if (
-      is_array_type(index.source_value) || is_vector_type(index.source_value))
+    if (is_array_or_vector_type(index.source_value))
       sub_size =
         size_bits_expr(array_or_vector_subtype(index.source_value->type));
     else
