@@ -161,10 +161,11 @@ public:
   /// @}
 
   /// \name Query / transparency layer
-  /// Lets whole-program consumers (GCSE, the k-induction pointer-array-write
+  /// Lets whole-program consumers (GCSE, the k-induction pointer-write
   /// resolver) use Andersen wherever they used the value-set analysis.
   /// Because the analysis is flow-insensitive, the location argument \p l is
-  /// accepted for API compatibility and ignored.
+  /// accepted for API compatibility and ignored. Queries are
+  /// offset-insensitive: `p + i` reaches what `p` does.
   /// @{
 
   /// Runs the whole analysis: \ref collect_constraints, then \ref solve and

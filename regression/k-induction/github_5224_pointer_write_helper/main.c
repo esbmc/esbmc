@@ -1,8 +1,7 @@
 // Issue #5224: the array-element write through a pointer happens inside a
-// helper called from the loop, so the un-havocable write is discovered via
-// the function-summary path (collect_lhs_symbols), not the direct
-// assignment path. The inductive step must still be disabled. This program
-// is safe and is proven by the forward condition once the IS is off.
+// helper called from the loop, so it is discovered via the function-summary
+// path, not the direct assignment path. The helper's pointer resolves to a,
+// which the inductive step havocs. This program is safe.
 extern unsigned char nondet_uchar(void);
 
 static void setelem(unsigned char (*dest)[8], int i)
