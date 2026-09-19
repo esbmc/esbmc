@@ -85,6 +85,23 @@ same_position_and_text(const property_rowt &a, const property_rowt &b)
          std::tie(b.file, b.function, b.line, b.column, b.description);
 }
 
+// Assertions that share a description and a position would otherwise print as
+// identical rows; their conditions tell them apart, unless those match too.
+static void label_by_condition(
+  std::vector<property_rowt>::iterator first,
+  std::vector<property_rowt>::iterator last,
+  const std::function<std::string(const expr2tc &)> &render)
+{
+  std::vector<std::string> text;
+  for (auto it = first; it != last; ++it)
+    text.push_back(is_nil_expr(it->condition) ? "" : render(it->condition));
+  if (std::equal(text.begin() + 1, text.end(), text.begin()))
+    return;
+  for (size_t k = 0; first + k != last; ++k)
+    if (!text[k].empty())
+      first[k].description += " [" + text[k] + "]";
+}
+
 std::vector<property_rowt> build_property_rows(
   const std::map<std::string, property_resultt> &verdicts,
   const std::set<std::string> &library_files,
@@ -153,18 +170,13 @@ std::vector<property_rowt> build_property_rows(
     row.id = stem + "." + std::to_string(++counters[stem]);
   }
 
-  // Assertions that share a description and a position would otherwise print
-  // as identical rows; their conditions tell them apart.
   for (size_t i = 0; i < rows.size();)
   {
     size_t j = i + 1;
     while (j < rows.size() && same_position_and_text(rows[i], rows[j]))
       ++j;
     if (j - i > 1 && render_condition)
-      for (size_t k = i; k < j; ++k)
-        if (!is_nil_expr(rows[k].condition))
-          rows[k].description +=
-            " [" + render_condition(rows[k].condition) + "]";
+      label_by_condition(rows.begin() + i, rows.begin() + j, render_condition);
     i = j;
   }
 

@@ -36,14 +36,11 @@ struct property_locationt
   unsigned line = 0;
   unsigned column = 0;
   /// The asserting instruction's location_number and condition, when the
-  /// property is that instruction's own assertion; they tell apart assertions
-  /// that share a description and a position.
+  /// property is that instruction's own assertion: they order and label rows
+  /// of assertions that share a description and a position.
   unsigned instruction = 0;
   expr2tc condition;
 };
-
-property_locationt
-property_location(const locationt &, const std::string &description);
 
 /// Where the claim \p description raised at \p pc lives, with the assertion's
 /// instruction and condition when the claim is \p pc's own assertion.
@@ -58,8 +55,8 @@ property_locationt property_location(
 /// other. Any other claim symex raises there, such as a dereference check in
 /// the asserted expression, keeps description and position only.
 std::string property_key(
-  const std::string &description,
-  const goto_programt::instructiont &pc);
+  const goto_programt::instructiont &pc,
+  const std::string &description);
 
 /// A verdict together with where it applies and a note explaining how it was
 /// reached -- that a discharge came from interval analysis rather than the

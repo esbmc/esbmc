@@ -315,7 +315,7 @@ void bmct::record_violated_properties(
     if (weak_invariant)
       weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
-      property_key(description, *step.source.pc),
+      property_key(*step.source.pc, description),
       weak_invariant ? property_verdictt::Unknown : property_verdictt::Failed,
       property_location(*step.source.pc, description),
       weak_invariant ? weak_invariant_note : "");
@@ -3529,7 +3529,7 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
 
     const std::string description = id2string(step.comment);
     goto_functionst::property_verdicts.record(
-      property_key(description, *step.source.pc),
+      property_key(*step.source.pc, description),
       property_verdictt::NotChecked,
       property_location(*step.source.pc, description));
   }

@@ -393,18 +393,24 @@ Post §1's table as the answer, and link this plan. No code change.
 
 - `property_key` is the one key the verdict store and the skip set use. When a
   claim is its instruction's own assertion (the description is the
-  instruction's comment), the key also names that instruction's
-  `location_number`, so the two bound checks of `a[i] + a[j]` are two rows and
+  instruction's comment), the key also names that instruction, so the two
+  bound checks of `a[i] + a[j]` are two rows and
   one's violation no longer skips the other. Rows that still read the same
   print their condition: `[(signed long int)i < 4]`.
-- The key reads neither the instruction's type nor its guard.
-  `clear_verified_claims_in_goto` turns a violated claim's `ASSERT` into a
-  `SKIP` in place, clearing the guard and keeping the location and number, and
-  a later instance of that claim -- another unrolled copy, or another
-  interleaving under `--smt-during-symex` -- must key the same way. The
+- The key does not change when the `ASSERT` becomes a `SKIP`.
+  `clear_verified_claims_in_goto` does that in place once a claim is violated,
+  clearing the guard, and a later instance of the claim -- another unrolled
+  copy, or another interleaving under `--smt-during-symex` -- must key the same
+  way. The instruction is named by its node, not its `location_number`:
+  `--bidirectional` inserts an `ASSERT` mid-run and renumbers the program. The
   condition shown in a row is captured while the `ASSERT` is intact and
-  rendered only for rows that collide, so the default mode pays no `from_expr`
-  per assertion.
+  rendered only for rows that collide and differ, so the default mode pays no
+  `from_expr` per assertion.
+- Residuals: `__ESBMC_assert(c, "")` gets the description `assertion <c>`,
+  which is not its instruction's (empty) comment, so two such assertions at
+  one position still share a row. Under `--parallel-solving`, reading a
+  claim's guard races with another thread's `make_skip`; `claim_slicer`
+  already did so before W3a.
 - A dereference check raised while evaluating an assertion keeps description
   and position: the instruction is not that claim's assertion.
 - Coverage goals keep the old key, which their reports print verbatim.
@@ -412,7 +418,9 @@ Post §1's table as the answer, and link this plan. No code change.
   gives `i < 4` PASSED (or NOT CHECKED) and `j < 4` FAILED, pinned with the
   summary line so a duplicate row fails the test; its twin with both indices
   bounded is SUCCESSFUL with two PASSED rows. `condition_coverage_goal_key`
-  pins a coverage goal line. The three `synth_loop_invariant_calleeinv*` tests
+  pins a coverage goal line; `multi_property_same_position_asserts_loop` keys
+  instances off a `SKIP`, and `same_position_assert_bidirectional` survives a
+  renumbering. The three `synth_loop_invariant_calleeinv*` tests
   now show each synthesised clause as its own row.
 
 ### D9 — two claims symex raises at one instruction share a row

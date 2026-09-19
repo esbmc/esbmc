@@ -396,7 +396,7 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
         claim_location = it->source.pc->location;
         claim_cstr = claim_comment + " at " + claim_loc;
         claim_key = is_goto_cov ? claim_cstr
-                                : property_key(claim_comment, *it->source.pc);
+                                : property_key(*it->source.pc, claim_comment);
         claim_ploc = property_location(*it->source.pc, claim_comment);
         claim_after_invariant_havoc = seen_invariant_havoc;
         continue;

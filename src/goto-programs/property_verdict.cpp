@@ -1,11 +1,12 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/property_verdict.h>
 
+#include <cstdint>
 #include <cstdlib>
 
 property_verdict_tablet goto_functionst::property_verdicts;
 
-property_locationt
+static property_locationt
 property_location(const locationt &location, const std::string &description)
 {
   property_locationt loc;
@@ -42,12 +43,14 @@ property_locationt property_location(
 }
 
 std::string property_key(
-  const std::string &description,
-  const goto_programt::instructiont &pc)
+  const goto_programt::instructiont &pc,
+  const std::string &description)
 {
   const std::string key = description + " at " + pc.location.as_string();
+  // The node's address, not its location_number: --bidirectional inserts an
+  // ASSERT mid-run and renumbers the program, but no instruction moves.
   return is_own_assertion(pc, description)
-           ? key + "\t#" + std::to_string(pc.location_number)
+           ? key + "\t@" + std::to_string(reinterpret_cast<std::uintptr_t>(&pc))
            : key;
 }
 
