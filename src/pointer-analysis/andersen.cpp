@@ -24,7 +24,13 @@ expr2tc base_object(const expr2tc &e)
     if (is_member2t(cur))
       cur = to_member2t(cur).source_value;
     else if (is_index2t(cur))
-      cur = to_index2t(cur).source_value;
+    {
+      const expr2tc &source = to_index2t(cur).source_value;
+      // `p[i]` selects from the object p points to, not from p.
+      if (is_pointer_type(source->type))
+        return dereference2tc(to_pointer_type(source->type).subtype, source);
+      cur = source;
+    }
     else if (is_byte_extract2t(cur))
       cur = to_byte_extract2t(cur).source_value;
     else if (is_typecast2t(cur))
@@ -34,6 +40,23 @@ expr2tc base_object(const expr2tc &e)
     else
       return cur;
   }
+}
+
+bool may_carry_pointer(const type2tc &t);
+
+/// Whether \p e or any operand of it can hold an address: an integer computed
+/// from a pointer can be cast back into one.
+bool mentions_pointer(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (may_carry_pointer(e->type))
+    return true;
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &op) {
+    found = found || mentions_pointer(op);
+  });
+  return found;
 }
 
 /// Whether a value of this type can hold an address.  Field insensitivity
@@ -373,6 +396,18 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     is_symbol2t(base) || is_dynamic_object2t(base))
     return get_node(base);
 
+  if (
+    is_constant_struct2t(r) || is_constant_union2t(r) ||
+    is_constant_array2t(r) || is_constant_array_of2t(r))
+  {
+    const node_id t = fresh_node();
+    r->foreach_operand([this, &t, loc](const expr2tc &op) {
+      if (!is_nil_expr(op) && may_carry_pointer(op->type))
+        add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+    });
+    return t;
+  }
+
   // Anything else is a value this frontend does not model.  Leaving the set
   // empty would be an unsound under-approximation; TOP is the safe answer.
   const node_id t = fresh_node();
@@ -429,7 +464,7 @@ void andersent::handle_assign(
   // leave x empty, and `q = (void *)x` would then copy that empty set.
   if (!may_carry_pointer(lhs->type))
   {
-    if (may_carry_pointer(r->type))
+    if (mentions_pointer(r))
       assign_top(lhs, loc);
     return;
   }
@@ -684,9 +719,34 @@ void andersent::to_object_descriptors(node_id n, valuest &dest) const
   }
 }
 
-void andersent::get_values(locationt, const expr2tc &expr, valuest &dest)
+void andersent::get_values(locationt l, const expr2tc &expr, valuest &dest)
 {
-  const node_id *n = find_node(base_object(expr));
+  // Offset-insensitive: `p + i` holds whatever `p` does.
+  expr2tc e = strip_casts(expr);
+  while (is_add2t(e) || is_sub2t(e))
+  {
+    const expr2tc &lhs = *e->get_sub_expr(0);
+    const expr2tc &rhs = *e->get_sub_expr(1);
+    if (is_pointer_type(lhs->type))
+      e = strip_casts(lhs);
+    else if (is_add2t(e) && is_pointer_type(rhs->type))
+      e = strip_casts(rhs);
+    else
+      break;
+  }
+
+  if (is_address_of2t(e))
+  {
+    const expr2tc obj = base_object(to_address_of2t(e).ptr_obj);
+    if (is_dereference2t(obj))
+      get_values(l, to_dereference2t(obj).value, dest);
+    else
+      dest.push_back(
+        object_descriptor2tc(obj->type, obj, gen_zero(index_type2()), 0));
+    return;
+  }
+
+  const node_id *n = find_node(base_object(e));
   if (n == nullptr)
   {
     dest.push_back(unknown2tc(pointer_type2()));
