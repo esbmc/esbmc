@@ -4032,3 +4032,338 @@ It is also the fourth tick in a row where the finding came from measuring more t
 been: a wider corpus (8 682 against 515) and a second artefact (the GOTO, which §15 never
 compared for the site it left behind). §15.2's "cosmetic" verdict survived exactly as long
 as the evidence behind it was one frontend and one dump.
+
+## 64. One prerequisite done, and the big one finally has a number (2026-09-16)
+
+§63 named two things the value seam drops and called them the prerequisite for most of the
+remaining 144 writes. The first is now carried: `constant_int2t` and `constant_floatbv2t`
+hold an unreflected `cformat`, `migrate_expr` reads `#cformat` and `migrate_expr_back`
+restores it when non-empty, and `unit/util/migrate.test.cpp` pins the round trip in both
+directions, the absent-key case, and that spelling is no part of a constant's identity.
+
+The acceptance measurement is the useful part. Re-running §63's comparison with the carry in
+place, the symbol-table difference over the 8 682 C and C++ programs goes from 3 967 to
+**3 428** -- so `#cformat` was worth 539 programs and §63 was wrong to imply it accounted for
+3 892 of them. What the remaining 3 428 show is this:
+
+```
+- Value.......: (const unsigned char *)p1
++ Value.......: (unsigned char *)p1
+```
+
+`a_cmt_constant` is declared in `irep.h` and `grep -cE 'cmt_constant|#constant'
+src/util/irep/migrate.cpp` returns 0. C qualifiers do not cross the seam, and that is
+§57.1's type-system question -- the one §57.3 said the four phases had converged on without
+ever putting a number to it. The number is **3 428 of 8 682 C and C++ programs**, for value
+writes alone, which makes it larger than everything else outstanding in Phase 6 combined.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So the ordering for what is left is no longer a matter of taste. Of the three losses, only
+the `sideeffect` empty-operands one changes the GOTO program (2 112 programs, and §63's
+zero-initialised operational-model global becoming a nondeterministic temporary), so it goes
+next despite being the smaller of the two remaining. The qualifier decision is bigger but it
+is rendering, and it wants an answer about what `type2t` models rather than another
+measurement -- it now has all the measurement it needs.
+
+## 65. The blocker is one assertion, not three losses (2026-09-16)
+
+§64 ordered the three things the value seam drops and said the `sideeffect` empty-operands
+list should go next because it was the only one that changed the GOTO program. Measured, that
+was wrong twice: the fix for it changes nothing, and what does change the GOTO is the
+qualifier loss §64 had filed as rendering.
+
+Adding the missing `exprt::operands()` call to `back_sideeffect_operands` and converting the
+two clang-c sites still leaves **2 109 of 8 682** GOTO dumps differing, against 2 112 for the
+conversions alone. So the empty list was the most visible difference in a printed value, not
+the cause -- and it is not shipped, because a change whose effect cannot be stated should not
+land. `scope-clang-c-irep2.md` §151.1 also records how the first attempt at that measurement
+produced a meaningless 3 387 by moving three variables at once against a base that predated
+all of them.
+
+What actually happens is an abort:
+
+```
+esbmc: clang_c_adjust_expr.cpp:1081: clang_c_adjust::adjust_type(typet&):
+  Assertion `sz % a == 0' failed.
+```
+
+`adjust_type`'s post-`add_padding` check is the one place in the frontend that compares an
+IREP2-computed `type_byte_size` against a legacy-computed `alignment`. Converting a value
+write makes the symbol's legacy type derived on demand, the derivation drops the C qualifiers
+§64 measured at 3 428 programs, and a struct then reaches the check with a size and alignment
+that disagree. `regression/csmith/csmith01` aborts with the conversions and passes without
+them; 1 of 30 sampled differing programs aborts, the rest differ only in dump text.
+
+So Phase 6's value writes have exactly one blocker and it is §57.1's type-system question --
+no longer the largest of several measurements, but the only one, and with an abort behind it
+instead of a rendering diff. Three ways out, and only the last is cheap to try: `type2t`
+carries C qualifiers; or the frontends stop routing qualifier-bearing values through the seam;
+or that assertion is wrong to compare an IREP2 size against a legacy alignment. The first is
+the §44 unreflected-field pattern applied to types rather than constants, and it is the one
+the other four phases have been waiting on since §57.
+
+## 66. One question, two instances, and the cheap half is the one that aborts (2026-09-16)
+
+§65 said Phase 6's value writes had a single blocker. Splitting the two sites shows it is one
+question with two instances that want different answers, and that only one of them aborts.
+
+Converting the local arm alone (`clang_c_convert.cpp:659`, 138 735 executions) does not abort
+-- `regression/csmith/csmith01` exits 0 -- but still re-renders **3 378 of 8 682** symbol
+tables, because a local's value prints its type and the `const` is gone. Converting the static
+arm (`:632`, 86 244 executions) aborts `adjust_type`'s padding assertion, and the instrumented
+failure names what is missing:
+
+```
+[PADQ] sz=11 a=4 align_attr=set packed=0 tag=struct S0 ncomp=4
+```
+
+An explicit `__attribute__((aligned(N)))`. `struct_type2t` carries `packed` but no alignment
+field, and `grep -c '"alignment"' src/util/irep/migrate.cpp` is 0.
+
+So §57.1 is two questions wearing one coat, and they do not have the same answer. An explicit
+alignment is part of a type's identity -- two structs differing only in it are different types
+-- so carrying it means a **reflected** field and a changed hash for every struct type. A
+qualifier on a pointee changes how a value prints, not what it is, so it is the unreflected
+shape §64 already used for `#cformat`. The half that aborts is the cheaper half to reason
+about and the more expensive to implement; the half that only renders is the reverse.
+
+`scope-clang-c-irep2.md` §152 has the table. Phase 6 stays at B-2\* 19, and what it is waiting
+for is now specific enough to build rather than to flag.
+
+## 67. IREP2 has no bitfield, and that is what aborts (2026-09-16)
+
+§66 said the static arm wanted a reflected `alignment` field on `struct_type2t`. Carried it --
+forward from `type.find("alignment")`, back through `thetype.add("alignment")` -- and the abort
+is unchanged at exit 134. The fourth hypothesis on this question, refuted the same way as the
+first three, by one build.
+
+The cause is visible once the failing struct's components are dumped rather than reasoned
+about, and it reduces to nine lines:
+
+```c
+struct S0 { signed int f0 : 26; unsigned int f1 : 9; unsigned int f2; };
+struct S0 g = {1, 2, 3};
+int main(void) { return g.f2 == 3 ? 0 : 1; }
+```
+
+`VERIFICATION SUCCESSFUL` on master, exit 134 with `clang_c_convert.cpp:632` converted. The
+components come back as plain `signedbv` width 26 and `unsignedbv` width 9 -- the `c_bit_field`
+wrapper that made them bitfields is gone, `add_padding` cannot pack them, and 83 bits becomes a
+byte size of 11 against an alignment of 4.
+
+`grep -n c_bit_field src/util/irep/migrate.cpp` returns a single comment line;
+`grep -rn bit_field src/irep2/*.h` returns nothing. **IREP2 has no bitfield type.** So the
+static arm is not blocked on an attribute at all -- it wants a new `type2t` kind, with a width,
+a migration in both directions, and every switch over `type2t::type_ids` to answer for. That is
+§57's widen-the-type-system option in its strongest form, and it is now the one thing standing
+between Phase 6 and its last two value writes.
+
+`scope-clang-c-irep2.md` §153 has the dump and the corrections it forces to §152. The pattern
+across §63, §151, §152 and this section is one worth naming: each blamed the most visible
+difference -- an empty operands list, an assertion mixing two representations, a missing
+alignment attribute -- and each was refuted by the next measurement. What settled it was
+dumping the object under test instead of diffing artefacts around it.
+
+## 68. The local arm's cost, measured against the right base (2026-09-16)
+
+§66 and §67 put clang-c's local value-write arm at 3 378 differing symbol tables and attributed
+them to C qualifiers. Both were measured against a base predating the `#cformat` carry that is
+now merged in this stack. Measured correctly -- HEAD against HEAD plus the one line -- the cost
+is **3 341 of 8 682**, and the attribution was wrong: 2 571 of them are C++ programs whose
+difference is the side-effect round trip, not a qualifier.
+
+A C++ case differs in four ways, all from `back_sideeffect` (`migrate.cpp:3468`): it writes
+`cmt_type` and `cmt_size` unconditionally, so a node that had neither gains `#type: empty` and
+`#size: nil`; it drops the empty `operands` list §65 investigated; and it does not restore
+`#location`, which the code explains is deliberate -- restoring it moves instruction columns on
+126 of 131 sampled goto programs and so needs its own PR and an SV-COMP run
+(`scope-clang-c-irep2.md` §136.3). Only the C remainder is the qualifier, as
+`(const signed char *)src` losing its `const`.
+
+So the arm is not blocked on widening `type2t` after all. Two of its three causes are ordinary
+bugs in the back-migration -- stop writing empty comment keys, restore the empty operands list
+-- and the third is already scheduled. That is a better position than §67 left it in, and it was
+only visible once the comparison used a base from the same commit.
+
+`scope-clang-c-irep2.md` §154.3 records the method rule this keeps violating: the base arm must
+be built from the commit the change is applied to, and a residual must be characterised from a
+sample drawn out of the differing set rather than picked. Five figures in this stack were wrong
+for one of those two reasons.
+
+## 69. Two fewer keys the seam invents, and the arm is waiting on §136.3 (2026-09-16)
+
+§68 identified four shapes in a converted C++ value write's symbol-table difference, two of them
+`back_sideeffect` writing `#type: empty` and `#size: nil` onto nodes that had neither. Those are
+now written only when there is something to write, keyed off `ref2.alloctype` and `ref2.size`
+rather than off the locals -- a first attempt guarded on `cmttype.is_not_nil()` and failed,
+because a default-constructed `typet` has an empty id and `is_not_nil()` calls that present. A
+unit case pins it and fails on the unguarded version.
+
+The fix changes the printed symbol table of **2 059 of 8 682** programs on the default path, all
+of them losing `* #size: nil`. Disclosed because that is a quarter of the corpus; safe because
+comments are not compared by `irept::operator==`, both getters return nil either way, and no
+`test.desc` mentions either key.
+
+It does **not** help the value write it came from. Converting `clang_c_convert.cpp:659` costs
+3 341 differing symbol tables without this fix and 3 343 with it -- unchanged. §68's sample
+showed the empty keys because they were in the diff, not because they were the diff; the same
+program also loses an empty `operands` list and a `#location`, and either alone keeps it
+differing.
+
+So the local arm is blocked behind `scope-clang-c-irep2.md` §136.3 -- the deliberate decision not
+to restore a side effect's location, held for its own PR and an SV-COMP run because it moves
+instruction columns on 126 of 131 sampled goto programs. Not behind the type system, which is
+where §67 and §68 put it. The static arm remains blocked on IREP2 having no bitfield type.
+
+```
+:632 static   no bitfield type          needs a new type2t kind
+:659 local    #location (§136.3)        scheduled, SV-COMP run attached
+```
+
+Phase 6 stays at B-2\* 19. Three ticks of measurement have moved the blocker from "the type
+system" to two specific, named, already-documented items -- which is the useful outcome even
+though the count did not move.
+
+## 70. The location decision, taken (2026-09-16)
+
+§136.3 of `scope-clang-c-irep2.md` measured what restoring a side effect's location costs and
+deferred it; §69 established it is the one thing clang-c's local value write is waiting on. It is
+done here, with the number the deferral asked for.
+
+`back_sideeffect` restores the location when it is not nil, so a call's instruction carries the
+call's column instead of the enclosing statement's. Measured over the 8 682 C and C++ programs
+under `regression/`, both arms built from this branch: **8 283 change** -- 95% of the corpus,
+where §136.3's stride-16 sample of one suite had suggested 96%.
+
+Two tests pinned a column incidentally and both moved to the more precise one: `M_z = Foo(...)`
+from column 3 to the call at 9, and `while (t--)` from the `while` at 3 to the decrement at 10.
+Expectations updated; everything else at baseline.
+
+This is the first change in this stack that alters what a user sees. Counterexamples and
+witnesses now name the call's column, so it carries `needs-svcomp-run`: `parse_result()` in
+`esbmc-wrapper.py` classifies tasks by matching ESBMC's output, and #7250 is the precedent for
+changing output without checking it there. The wrapper reads verdict lines, not columns, so the
+expectation is no effect -- an expectation, not a measurement, which is exactly why the roadmap
+held this for a competition run rather than letting it ride along.
+
+What it unblocks is measurable only once it lands: the local arm's 3 341 differing symbol tables,
+whose C++ bulk §69 traced to this location and to the empty `operands` list.
+
+## 71. The arm has four causes, not one (2026-09-16)
+
+§70 restored the side-effect location, the last of the two shapes §68 blamed for clang-c's local
+value write differing in 3 341 symbol tables. Measured on top of it: **3 348**. Three fixes across
+four ticks and the figure has moved by seven programs.
+
+A five-program sample drawn from the differing list -- rather than the single program §68
+generalised from -- shows four independent causes:
+
+```
+> * #type: empty                       still added
+< * operands:                          still dropped
+< * constructor: N                     not previously identified
+< (const unsigned char *) → (unsigned char *)
+```
+
+The first is a bug in §69's own guard, fixed here. `side_effect_function_call2tc` stores
+`get_empty_type()` as its alloctype because empty, not nil, is what round-trips
+(`migrate.cpp:533`), so guarding the `#type` write on `!is_nil_type` alone let it through for
+every call -- which is exactly why §69 changed 2 059 programs and nothing about the arm. Guarding
+on both removes it: 2 061 more symbol tables on the default path, suites at baseline, and a unit
+case that fails on the nil-only guard.
+
+The dropped `constructor` key is recorded and not explained. Four sections in a row have
+explained a symptom and been refuted by the next measurement; this one stops at the observation.
+
+What the pattern says is that the arm is not one loss with a tail but several strata at one seam,
+and peeling them one per tick is the wrong shape of work. The two questions that would settle more
+at once are both open since §57: a `bit_field2t` for the static arm (§67), and whether `type2t`
+carries C qualifiers -- the fourth cause above, measured at 3 428 on its own in §64. The second is
+the better next move: bigger share, known shape, three precedents, and no new type kind.
+
+## 72. Four carries, 345 of 3 348, and a question about the criterion (2026-09-16)
+
+§71 recommended carrying C qualifiers next, because §64 had measured them at 3 428 programs on
+their own. Carried -- an unreflected `bool constant_qualified` on `unsignedbv_type2t` and
+`signedbv_type2t`, restored only when set, with a unit section pinning that it is no part of the
+type's identity -- and it removes **345** of the local arm's 3 348.
+
+```
+3 341  before any of it
+3 343  empty comment keys guarded (§69)
+3 348  side-effect location restored (§70)
+3 003  const carried (§72)
+```
+
+Four correct, verified fixes; 10% of the difference; no floor in sight. The rest includes §71's
+dropped empty `operands` list and its undiagnosed `constructor` key.
+
+The useful thing this tick produced is not the 345 but a doubt about what has been measured all
+along. Every one of those figures is a **symbol-table** difference, and the symbol table is a debug
+dump -- the GOTO program is what gets verified. If the local arm's GOTO is identical with these
+fixes in place and the suites stay green, then the conversion is safe and nine sections of
+symbol-table accounting have been holding it back for a cosmetic reason.
+
+So the next measurement is the local arm's GOTO cost, with all four fixes, against a base from the
+same commit. §63's 2 112 does not answer it -- that was both arms converted and none of the fixes.
+If the GOTO is clean the arm converts and Phase 6 moves; if not, §71's recommendation stands and
+the choice is a `type2t` base-class qualifier field against accepting the rendering difference.
+
+## 73. 106, not 3 003 -- and fifteen of them abort (2026-09-16)
+
+§72 doubted the criterion: every figure from §68 onward was a symbol-table difference, and the
+symbol table is a debug dump rather than the program that gets verified. Measured, the doubt was
+right and the hope behind it was wrong.
+
+Converting `clang_c_convert.cpp:659` with all four seam fixes in place, both arms from the same
+commit: **106 of 8 682** goto programs differ, against 3 003 symbol tables. So 97% of what five
+sections measured was rendering. The carries were correct -- the seam invents less now -- but the
+number they chased was the wrong one, and the "nine more sections" projection rested on it.
+
+Of the 106, **91 differ benignly and 15 abort**, across three distinct assertions: seven a null
+`symbol`, four the `sz % a == 0` padding assertion that §67 traced to IREP2 having no bitfield
+type, and four a failed struct member lookup. `regression/esbmc/github_571_3` is one of the
+padding four and has `unsigned b : 12` in its source, so that cause is shared with the static arm.
+The other two are recorded and not diagnosed.
+
+So neither arm converts, but the obstacle has changed shape: not thousands of differences needing
+more carries, but **fifteen programs failing hard for three reasons**, one known and two not. For
+the first time in this investigation the remaining work is a list rather than a slope.
+
+`scope-clang-c-irep2.md` §159 has the breakdown. Phase 6 stays at B-2\* 19.
+
+## 74. Seven of the fifteen are a precondition, not a defect (2026-09-16)
+
+§73 left three abort causes on clang-c's local value-write arm, two of them undiagnosed. The
+largest is now diagnosed, by instrumenting the failure rather than reasoning about it.
+
+Six of the seven `symbol' aborts are variadic programs, and the missing identifier is
+`tag-struct __va_list_tag`. That symbol **is** in the table -- `--symbol-table-only` without the
+conversion shows it with its four members -- so the name is right and the timing is wrong: it is
+not there yet when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`. `namespacet::follow`
+then asserts.
+
+That is the blocker §146 listed third and `scope-python-irep2.md` §6.1 named first: a symbol that
+does not exist yet. It is a constraint on *where* a value may be converted, not a defect to repair
+-- at converter time the clang AST is the only complete source, and a migration that resolves a
+type through the namespace is asking the symbol table a question it cannot answer.
+
+```
+7  `symbol' failed        §53's precondition -- tag not in the table yet
+4  `sz % a == 0'          no bit_field2t (§67)
+4  component lookup       undiagnosed
+```
+
+Two causes known, of two different kinds: one wants a type kind built, the other says this site
+cannot be converted at all. Neither is a rendering difference and neither yields to another
+attribute carry -- which retires the §69-§72 approach on evidence.

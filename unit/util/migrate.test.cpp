@@ -1260,3 +1260,148 @@ TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
     REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
   }
 }
+
+// A literal's `#cformat` is how the source wrote it, and c_expr2string prefers
+// it over deriving the text from the type -- so losing it re-renders every
+// printed constant (docs/roadmap/frontends-to-irep2.md §63). The field is
+// unreflected, so this also pins that two constants differing only in spelling
+// stay equal.
+TEST_CASE("a constant keeps its source spelling across the seam", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("an integer's spelling survives the round trip")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+    c.cformat("0xFF");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_int2t(e));
+    REQUIRE(to_constant_int2t(e).cformat == irep_idt("0xFF"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0xFF"));
+  }
+
+  SECTION("a float's spelling survives the round trip")
+  {
+    ieee_floatt f;
+    f.spec = ieee_float_spect::single_precision();
+    f.from_double(0.1);
+    exprt c = f.to_expr();
+    c.cformat("0.1f");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_floatbv2t(e));
+    REQUIRE(to_constant_floatbv2t(e).cformat == irep_idt("0.1f"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0.1f"));
+  }
+
+  SECTION("no spelling means no key, not an empty one")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(to_constant_int2t(e).cformat.empty());
+    // An empty `#cformat` would make c_expr2string print nothing at all rather
+    // than derive the text, so the key must be absent (§46's lesson).
+    REQUIRE(migrate_expr_back(e).find(irept::a_cformat).is_nil());
+  }
+
+  SECTION("the spelling is no part of a constant's identity")
+  {
+    constant_exprt hex(unsignedbv_typet(32));
+    hex.set_value(integer2binary(BigInt(255), 32));
+    hex.cformat("0xFF");
+    constant_exprt dec(unsignedbv_typet(32));
+    dec.set_value(integer2binary(BigInt(255), 32));
+    dec.cformat("255");
+
+    expr2tc a, b;
+    migrate_expr(hex, a);
+    migrate_expr(dec, b);
+    REQUIRE(a == b);
+    REQUIRE(a->crc() == b->crc());
+  }
+}
+
+// back_sideeffect used to write `#type` and `#size` unconditionally, so a side
+// effect that had neither came back carrying `#type: empty` and `#size: nil`.
+// Comments are invisible to irept::operator==, so nothing compared unequal --
+// but every printed symbol table and goto program showed them
+// (docs/roadmap/scope-clang-c-irep2.md §155).
+TEST_CASE("a nondet side effect gains no empty comment keys", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_size).is_nil());
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// side_effect_function_call2tc stores get_empty_type() as its alloctype because
+// that is what round-trips, so guarding the `#type` write on nil alone still
+// invents the key for every call -- which is why §155's guard moved nothing
+// (docs/roadmap/scope-clang-c-irep2.md §157.1).
+TEST_CASE("a call side effect gains no #type key", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    symbol2tc(get_uint32_type(), "c:@F@f"),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// `const` on a pointee is `#constant` on the pointed-to type, and c_expr2string
+// prints it -- so losing it across the seam re-renders every cast through a
+// const pointer (docs/roadmap/scope-clang-c-irep2.md §158).
+TEST_CASE("a const-qualified integer keeps its qualifier", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("the qualifier survives the round trip")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+
+    type2tc t = migrate_type(q);
+    REQUIRE(is_unsignedbv_type(t));
+    REQUIRE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).cmt_constant());
+  }
+
+  SECTION("an unqualified integer gains no key")
+  {
+    type2tc t = migrate_type(unsignedbv_typet(8));
+    REQUIRE_FALSE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).find(irept::a_cmt_constant).is_nil());
+  }
+
+  SECTION("the qualifier is no part of the type's identity")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+    REQUIRE(migrate_type(q) == migrate_type(unsignedbv_typet(8)));
+    REQUIRE(migrate_type(q)->crc() == migrate_type(unsignedbv_typet(8))->crc());
+  }
+}

@@ -283,13 +283,23 @@ class constant_int2t : public expr2t
 {
 public:
   BigInt value;
+  /// How the literal was written in the source, as `#cformat` records it.
+  /// Unreflected: two constants of the same value and type are the same
+  /// constant however they were spelled, so this must not reach hashing or
+  /// equality. Kept because `c_expr2string` prefers it over deriving the text
+  /// from the type, and dropping it re-renders every printed literal
+  /// (docs/roadmap/frontends-to-irep2.md §63).
+  irep_idt cformat;
 
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
    */
-  constant_int2t(const type2tc &type, const BigInt &input)
-    : expr2t(type, constant_int_id), value(input)
+  constant_int2t(
+    const type2tc &type,
+    const BigInt &input,
+    const irep_idt &fmt = irep_idt())
+    : expr2t(type, constant_int_id), value(input), cformat(fmt)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -301,6 +311,7 @@ public:
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_int2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -334,18 +345,25 @@ class constant_floatbv2t : public expr2t
 {
 public:
   ieee_floatt value;
+  /// The literal's source spelling; see constant_int2t::cformat. Unreflected
+  /// for the same reason, and load-bearing for the same printer, which derives
+  /// an `f`/`l` suffix when it is absent.
+  irep_idt cformat;
 
   /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
-  constant_floatbv2t(const ieee_floatt &value)
-    : expr2t(value.spec.get_type(), constant_floatbv_id), value(value)
+  constant_floatbv2t(const ieee_floatt &value, const irep_idt &fmt = irep_idt())
+    : expr2t(value.spec.get_type(), constant_floatbv_id),
+      value(value),
+      cformat(fmt)
   {
   }
   constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_floatbv2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
