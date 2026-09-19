@@ -1271,8 +1271,10 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type
-      lhs_symbol->set_type(migrate_type(rhs.type()));
+      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
+      // drops #python_aggregate, which `in` dispatches on
+      // (docs/roadmap/scope-python-irep2.md §10.4).
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
       lhs_symbol->set_value(migrate_expr(rhs));
     }
@@ -1399,7 +1401,12 @@ void python_converter::handle_assignment_type_adjustments(
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
           {
-            lhs_symbol->set_type(migrate_type(rhs.type()));
+            // A dynamically-sized array cannot cross the seam
+            // (docs/roadmap/scope-python-irep2.md §10.4).
+            if (python_expr::contains_dyn_array(rhs.type()))
+              lhs_symbol->set_type(rhs.type());
+            else
+              lhs_symbol->set_type(migrate_type(rhs.type()));
             lhs.type() = rhs.type();
           }
         }
@@ -1449,8 +1456,11 @@ void python_converter::handle_assignment_type_adjustments(
       lhs.type() = rhs.type();
     }
 
+    // Legacy: migrate_expr turns a class-object value (`x = int`) into an empty
+    // array constant, and isinstance folds on it
+    // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
-      lhs_symbol->set_value(migrate_expr(rhs));
+      lhs_symbol->set_value(rhs);
   }
 }
 

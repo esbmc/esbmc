@@ -1486,8 +1486,12 @@ std::size_t execution_statet::generate_hash() const
   for (const auto &it : threads_state)
   {
     esbmct::hash_combine(h, it.source.pc->location_number);
-    for (const auto &frame : it.call_stack)
-      esbmct::hash_combine(h, frame.calling_location.pc->location_number);
+    // Frame 0 is the thread's entry, whose calling_location is its own
+    // end_of_function (goto_symex_statet::initialize): past-the-end, so its
+    // location_number is whatever memory follows the list.
+    for (std::size_t i = 1; i < it.call_stack.size(); ++i)
+      esbmct::hash_combine(
+        h, it.call_stack[i].calling_location.pc->location_number);
   }
 
   return h;
