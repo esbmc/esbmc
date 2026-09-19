@@ -369,19 +369,19 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (!rd.isCompleteDefinition())
     return false;
 
-  /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
-   * infinite recursion if the type we're defining refers to itself
-   * (via pointers): it either is already being defined (up the stack somewhere)
-   * or it's already a complete struct or union in the context. */
+  /* Convert only while the symbol still holds the incomplete type put there
+   * above. A record whose conversion is in progress can be re-entered -- a
+   * field of X reaches Y and Y's base is X (#2323,
+   * regression/esbmc-cpp/bug_fixes/github_2323_2) -- because get_base_map
+   * (clang_cpp_convert.cpp:3390) is not gated on find_symbol the way
+   * get_type's Record arm is. That arrival must fall through rather than bail,
+   * which is why the id is tested as well as the flag (de9158daeb); it
+   * terminates because every non-re-entrant arrival inserts its symbol
+   * first. */
   if (
     !sym->get_type().incomplete() &&
     sym->get_type().id() != "incomplete_struct")
     return false;
-  {
-    typet t = sym->get_type();
-    t.remove(irept::a_incomplete);
-    sym->set_type(std::move(t));
-  }
 
   clang::RecordDecl *rd_def = rd.getDefinition();
   assert(rd_def);

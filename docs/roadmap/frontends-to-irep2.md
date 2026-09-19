@@ -3749,3 +3749,286 @@ partial head start".
 not: jimple reached B-2 without one, and solidity cannot reach B-3 or B-4 without
 Phase 7 (§42.1). A phase list written per frontend hides that dependency; the
 column makes it explicit.
+
+## 58. The bars measured properly, and what that changes (2026-09-15)
+
+Both bars are defined in §23 as greps, and across Phases 5-9 both were repeatedly found to
+over-count. `scripts/irep2/bars.py` reports them with the false positives removed, so future
+figures are comparable with each other rather than with whichever grep was typed that day.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1147     1234     1200       34     27
+clang-cpp-frontend          631      683      669       15      9
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     57
+jimple-frontend              97      118       96       10      8
+total                      9817    10817    10517      265    192
+```
+
+### 58.1 Three ways the quoted numbers differ from the bars' wording
+
+**B-1 counts lines, not mentions.** Every figure this document has quoted comes from
+`git grep -c`, which reports *matching lines*; the bar's wording is about legacy type
+mentions. The two differ by 10% overall and by 28% in jimple, whose remaining mentions cluster
+several to a line. Both columns are printed so a historical figure can still be reproduced --
+the `B-1 ln` column matches every number this document has used.
+
+**B-1 counts comments.** 300 of the 10 817 mentions are inside `//` and `/* */` blocks, much
+of it this migration's own documentation: explaining why a `typet` is still there adds to the
+count of `typet`s still there.
+
+**B-2 counts the argument's spelling.** This is the one that mattered most in practice. Of 265
+reported symbol-table writes, **73 already write IREP2** -- `set_type(migrate_type(t))`, a
+`*2tc` constructor, a `type2tc` variable. Per frontend the error is not uniform: python is
+108 reported against 57 real (47% false), clang-cpp 15 against 9, solidity 98 against 91.
+Every phase in this document hit that and each re-derived it by hand.
+
+### 58.2 What the refined figures say about the plan
+
+B-2's real total is 192, not 265. That is the number §57 should be read against: of it, the
+type-system question (§57.1) accounts for the great majority, two classes of write must stay
+legacy by design (§57.2), and what is left after those is small.
+
+The refinement is syntactic and the script says so: it does not resolve types, so a write
+passing an IREP2 value under an ordinary name still counts. `B-2*` is therefore an upper
+bound -- a tighter one than the grep, and honest about which.
+
+### 58.3 Sharpened, and validated against two hand audits
+
+The first version counted a *bare name* as debt, which meant **every site this plan
+converted stayed counted**: a conversion names its result `value2`, `body`, `values2`, and
+the grep keeps matching. Three more shapes are now recognised -- a call to a method whose
+name ends in `2t`/`2tc`, a name declared `expr2tc`/`type2tc` in the same file, and a field
+of a name declared as a reference to a `*2t` node, since every field of one is IREP2 by
+construction.
+
+| frontend | B-2 | B-2* first cut | B-2* now |
+|---|---|---|---|
+| clang-c | 34 | 27 | 26 |
+| clang-cpp | 15 | 9 | **3** |
+| solidity | 98 | 91 | 91 |
+| python | 108 | 57 | 54 |
+| jimple | 10 | 8 | **3** |
+| total | 265 | 192 | **177** |
+
+The two frontends with a small enough residue to audit by hand both now agree with the
+script exactly: clang-cpp's three are §56.1's three (the ctor/dtor pseudo return type,
+`need_vptr_init`, the exception specification) and jimple's three are §48's three (the
+`width` attribute and two body writes). That agreement is the reason to trust the other
+three rows.
+
+`--list` prints the sites it counted, so a disagreement is checkable rather than arguable.
+
+## 59. Phase 6's residue audited, and the third frontend to agree (2026-09-15)
+
+§58.3 trusted the three unaudited rows because the two audited ones agreed with the script.
+clang-c is now the third audited row: `scope-clang-c-irep2.md` §147 classifies each of its
+26 sites, six of which converted.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1139     1226     1191       33     20
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9809    10809    10508      264    171
+```
+
+The audit also found four measurement defects in the script. Three had the same effect
+§58.3 describes -- a converted site going on counting, four rows between them -- and the
+fourth made `--list` name a line that does not hold the write, in 10 of the 171 rows.
+`scope-clang-c-irep2.md` §147.3 has them individually. Running the corrected script over
+the pre-audit source reproduces §58.3's 26 and 177 exactly, so none of the four moves a
+baseline, and `scripts/irep2/test_bars.py` now pins all four: the bar is quoted in this
+document, so a script that over-counts silently is the one failure mode reading the table
+cannot catch.
+
+The audit's most consequential finding was not in the script or in the residue. Converting
+`declare_argc_argv` made it abort on `int main_loop(int, int)`, because both its call sites
+gate on a *prefix* of `main` and the IREP2 constructors validate where the legacy builders
+returned a nil type -- §147.5. The conversion's output was byte-identical on every `main`
+shape and still wrong, because the inputs the function receives are wider than its contract
+claimed. For the remaining 171 that is a second question to ask of each site, alongside
+§57's: not only whether it produces the same thing, but on what it runs at all.
+
+The residue itself splits the way §57 predicts and then some. Twelve of clang-c's twenty
+are converter-time writes handing on what a legacy builder produced, six are
+read-modify-write inside the legacy adjuster and go when it does, and two are §57.1's
+question in Phase 6's dialect: an incompleteness flag and a padding algorithm, neither of
+which `type2t` has a place for. So in the row audited here, the part that needs a
+decision rather than a conversion is 2 of 20 -- smaller again than §58.2 suggested, though
+the proportion does not carry over: clang-cpp's three are all §56.1's design questions.
+
+## 60. A write classified by what it looked like (2026-09-15)
+
+§59 counted 20 for clang-c and named two of them design questions. One was not a question.
+`clang_c_convert.cpp` cleared `#incomplete` on a record's type part-way through converting
+it, which §147.2 filed under "what `type2t` does not model" because the thing being written
+was an irep attribute. It was a recursion sentinel; it had been disabled in March 2025 by
+the fix for #2323, which added a second conjunct to the guard so the re-entrant arrival it
+was blocking would fall through. Nobody removed what the sentinel had been guarding with.
+
+Deleted, with the exhaustive state argument in `scope-clang-c-irep2.md` §148.3.1: for a
+struct or a class the guard falls through either way, and the one state where the two differ
+needs a union, which cannot be a base class or a lambda closure type -- the only two
+unguarded edges into an open window. The completeness check it preceded is load-bearing and
+stays; removing that one takes `esbmc-cpp/cpp` from 225 s to over 560 s.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9807    10807    10506      263    170
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§148.1 also closes the audit §59 opened. The migration has added nine validating IREP2
+casts across all five frontends; seven were `declare_argc_argv`, and the two in the vtable
+builder hold because each reads a symbol its own caller created three lines earlier.
+
+Two lessons, and the second is the one worth carrying. B-2 counts writes by their
+*argument*, so a write is classified by what it hands over, and this one was classified by
+that and by the type system it appeared to need; neither told anyone what it was for. Of
+the 170 left, the ones blocked on a legacy builder are genuinely blocked, and the ones that
+exist to mark state during construction are not -- nothing in the census distinguishes
+them. And twice now a claim in these documents has been refuted by widening the measured
+set rather than by a better argument: §147.3's 26 sites needed the script's own false
+positives removed, and §148.3's first draft claimed 0 re-entries from a corpus glob that
+had quietly dropped every suite nested one level deeper. The real figure is 7 of 8 682.
+
+## 61. Phase 8's first ten, and a third reader of a symbol's value (2026-09-15)
+
+§60 said a site that exists to mark state during construction is not blocked on anything,
+and that nothing in the census distinguishes it from one that is. Phase 8's first ten are
+that shape -- a local symbol's value written and then pushed onto the `code_declt` beside
+it -- and they are **not** dead. `mark_decl_as_non_det` (`mark_decl_as_non_det.cpp:31`)
+reads the symbol's value as its oracle for "was this declaration initialised", so removing
+the write inserts `ASSIGN sym = NONDET(...)` ahead of the real initialiser. The store is
+immediately overwritten, which is why deleting all ten still passes 525 of 525 -- the suite
+cannot see it and `--goto-functions-only` can.
+
+So they are converted rather than deleted, and the conversion is GOTO-identical across all
+515 measurable programs in `regression/esbmc-solidity` (501 distinct hashes, so the
+comparison has content). `scope-solidity-irep2.md` §14.4 has the three-reader table this
+turns on: `convert_decl` takes a local's initialiser from the decl operand,
+`static_lifetime_init` reads a static's symbol value, and `mark_decl_as_non_det` reads a
+local's value for its nil-ness. A frontend must satisfy all three, which is why
+`clang_c_convert.cpp:655-660` writes both channels for every initialised C local.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     81
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    160
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+This retracts, rather than refines, the discriminator §60 was reaching for. "Delete a
+candidate group and run the suite" cannot sort live writes from dead ones when deleting a
+live one leaves a dead store, and that is the normal case here. The replacement is not a
+sweep but a rule: a duplicated initialiser is read for its content when the symbol is
+`static_lifetime` and for its nil-ness when it is not, so the whole family is live and the
+family is convertible -- with the caveat in §14.4 that a static one emits its value into
+`__ESBMC_main`, where what the migrate seam drops is rendered rather than ignored. That is better news for the remaining 160 than a deletion
+sweep, and it is the second time in three ticks that a residue classified by what a write
+*looked* like turned out to be classified wrongly.
+
+## 62. The static case measured, and a fourth reader (2026-09-15)
+
+§61 converted ten writes and flagged one thing it could not settle: a `static_lifetime`
+symbol has its value's *content* emitted into `__ESBMC_main` by `init_variable`, so there the
+display name the migrate seam drops is rendered rather than ignored. Settling it needed a
+site reached by both kinds of symbol, and the obvious candidate was not one -- the
+dynarray-state arm is reached by 6 of 515 programs and by no static symbol at all, so the
+clean comparison it produced measured the case that was never in doubt. Counting every write
+in `solidity_convert_decl.cpp` by flag found the site that does: `:718`, 845 runs, 12 static.
+
+The answer splits. At `:718` the `--goto-functions-only` dump is identical for all 515
+programs, so `init_variable` emits the same assignment. The `--symbol-table-only` dump is not:
+12 programs render a state variable's address literal as `0x1F98...` instead of
+`180374...` -- the same number, differently written, because `migrate_expr_back` rebuilds a
+constant through `integer2binary` (`migrate.cpp:4408-4416`) and `a_hex_or_oct` does not cross
+the seam. So `:718` is left for the change that carries the spelling, the §44
+`argument_base_names` pattern, and the other sixteen sites land here with both artefacts
+identical.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§61's three-reader table needs a fourth row, and it is the row that makes attribute loss
+observable: `solidity_convert_constructor.cpp:499` reads a state variable's value and
+branches on `#zero_initializer` and, through `convert_type_expr`, on `#sol_type`,
+`#sol_bytesn_size` and `#sol_array_size` -- none of which appears anywhere in `migrate.cpp`.
+No program in the corpus shows a difference from it, but it is why the rest of Solidity's
+writes cannot be swept: a value that reaches `:499` has to keep attributes `migrate_expr`
+drops.
+
+The habit worth keeping is the one that caught both of these. Three ticks running, the error
+has not been a wrong argument but a measurement over the wrong set or the wrong artefact:
+a glob that dropped nested suites, a capture piped to `/dev/null`, a site no static symbol
+reaches, and a GOTO comparison that could not see a symbol table change. Instrument the site
+and count before reading a green comparison as an answer, and compare more than one artefact.
+
+## 63. The seam drops two things, and one of them is not cosmetic (2026-09-16)
+
+§62 converted sixteen Solidity writes of the duplicated-initialiser shape and left the
+seventeenth because it re-rendered a hex literal -- a difference §15.2 called cosmetic and
+set aside. Taking the same shape to clang-c, where the corpus is 8 682 programs rather than
+515, shows that was the wrong call twice over: the rendering loss is general, and there is a
+second loss underneath it that changes the program.
+
+`clang_c_convert.cpp:632` and `:659` are the two sites, and they split perfectly -- `:632`
+runs 86 244 times and only ever on a `static_lifetime` symbol, `:659` 138 735 times and only
+ever on a local -- so one diff exercises both readers of a symbol's value. Converting both:
+
+- the normalised `--goto-functions-only` dump differs in **2 112 of 8 682** programs. In the
+  inspected case a zero-initialised operational-model global becomes a nondeterministic
+  temporary, because `std::cin`'s value is a C++ `sideeffect` with
+  `statement: temporary_object` and the round trip drops its **empty operands list**. That is
+  §46's empty-key defect from the other side: there, writing a key empty made two types
+  unequal; here, dropping an empty key changes goto conversion.
+- the `--symbol-table-only` dump differs in **3 892 of 8 682** with `:659` alone. `#cformat`
+  (`irep.h:478`) holds a literal's source spelling, `c_expr2string.cpp:1120-1125` prefers it
+  over deriving text from the type, and `grep -c cformat src/util/irep/migrate.cpp` is **0**.
+  Solidity's hex address and clang-c's `1.000000e-1f` are one mechanism.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So Phase 6 stays at 19 and nothing is converted here. What this tick produces instead is the
+prerequisite for most of the 144 that remain: carry `#cformat` across the seam, the §44
+`argument_base_names` pattern with two precedents already in this migration, and decide
+whether `sideeffect2t` distinguishes an empty operand list from an absent one. 139 of the
+144 are value writes or the types behind them, python and jimple write the same shapes, and
+no amount of per-site auditing gets past either loss.
+
+It is also the fourth tick in a row where the finding came from measuring more than I had
+been: a wider corpus (8 682 against 515) and a second artefact (the GOTO, which §15 never
+compared for the site it left behind). §15.2's "cosmetic" verdict survived exactly as long
+as the evidence behind it was one frontend and one dump.
