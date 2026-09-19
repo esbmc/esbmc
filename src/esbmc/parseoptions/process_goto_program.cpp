@@ -412,7 +412,8 @@ bool esbmc_parseoptionst::process_goto_program(
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      disable_is_if_unsound(goto_k_induction(goto_functions, ns));
+      disable_is_if_unsound(
+        goto_k_induction(goto_functions, ns, checks_past_violation));
     }
     else
     {
@@ -422,7 +423,8 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        disable_is_if_unsound(goto_k_induction(goto_functions, ns));
+        disable_is_if_unsound(
+          goto_k_induction(goto_functions, ns, checks_past_violation));
 
       if (wants_loop_invariants())
         apply_loop_invariants(goto_functions, context, options, is_k_induction);
