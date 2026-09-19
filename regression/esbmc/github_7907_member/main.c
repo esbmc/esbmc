@@ -1,6 +1,5 @@
 // #7907: a vector member of a struct, read and written through a pointer to
-// it. KNOWNBUG: alignment() gives a vector no alignment of its own, so ESBMC
-// lays `v` out at offset 4 rather than 16 and reports the access misaligned.
+// it, sits at its own alignment.
 #include <assert.h>
 
 typedef int v4i __attribute__((__vector_size__(16)));
