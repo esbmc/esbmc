@@ -679,15 +679,206 @@ the function's `code_typet` stored IREP2-side that assertion fails. So a `code_t
 something this path needs, and it is not `#cpp_type` -- that is carried now, and the failure is
 unchanged.
 
-What it is remains open. Candidates, in the order worth testing: an argument's `#default_value`, which
-`code_type2t` has no field for and which `python_adjust.cpp:86-90` already documents as lost; the
-parameter's `symbol_typet` subtype resolution, since the failing shape is specifically a pointer to a
-class; and `#identifier`/`#base_name` on the arguments, which §44's carry covers but only for types
-built by `migrate_type`. Each is a one-build experiment against a named oracle, which is the cheap
-shape -- unlike §9, no corpus is needed, because the test that discriminates is already in the tree.
+### 11.3.1 Measured: it is the argument's *plain* `identifier`
+
+None of the three candidates this section first listed. Probing all seven sites with
+`full_eq(migrate_type_back(migrate_type(type)), type)` reports one difference at site 7, on `advance` --
+the function the failing test exercises. **That "one" is an artefact of the probe's input, not a property
+of the seam**: `advance(c: Counter)` has no default argument, so the probe could not see a third key that
+is also dropped. §11.3.3 has it. The measured diff on `advance` is:
+
+```
+ORIG argument 0                               BACK argument 0
+  * type: pointer -> symbol tag-Counter         * type: pointer -> symbol tag-Counter
+  * identifier: py:main.py@F@advance@c          (dropped)
+  * #location: {file, line, function, column}   (dropped)
+  * #base_name: c                               * #base_name: c
+  * #identifier: py:main.py@F@advance@c         * #identifier: py:main.py@F@advance@c
+```
+
+So `#identifier` and `#base_name` both survive -- §44's carry works -- and what does not is the
+**plain `identifier`**, plus the argument's `#location`. The `#location` loss is inert: a sweep of `src/`
+finds no reader of an argument's `location()` at all, only the writer at `converter_funcdef.cpp:1678`. That is the same plain-versus-comment trap as
+the struct component base name: `code_typet::argumentt::get_identifier()` returns `cmt_identifier()`
+(`std_types.h:332-335`), so the seam reads and writes `#identifier` at both ends
+(`migrate.cpp:352`, `:3167`) and never touches the plain key at all.
+
+It also rules out the obvious reader. Symex takes parameter names from
+`function_type.argument_names` on the **IREP2** side (`symex_function.cpp:185`), which is populated from
+`#identifier` and therefore intact -- so this is not the `symex_function.cpp:219` unnamed-parameter skip.
+
+### 11.3.2 The reader, and the fix that follows from it
+
+Not identity after all -- a reader, found by searching for the key rather than guessing.
+`converter_funcall.cpp:1537`:
+
+```cpp
+copy_instance_attributes(
+  params[i].identifier().as_string(),     // the plain key the seam drops
+  arg_sym->identifier().as_string());
+```
+
+Its own comment describes the failing test: *"if `o.x = 5` is set inside `f(a)` via parameter `o`, then
+`a.x` should reflect the instance attribute rather than the class attribute."* That is
+`c.count += c.step` inside `advance(c)`. With the plain key gone the first argument is `""`,
+`copy_instance_attributes` propagates nothing, and `count == 5` fails. The chain end to end:
+
+```
+seam drops the plain identifier -> copy_instance_attributes("") is a no-op
+  -> the instance attribute never reaches the caller's argument
+  -> c.count += c.step is lost -> "assertion count == 5" fails
+```
+
+And the fix is the reader, not a carry. A python parameter sets both keys from one string
+(`register_function_argument`, `converter_funcdef.cpp:1676-1677`):
+
+```cpp
+arg.cmt_identifier(arg_id);   // #identifier -- carried by the seam
+arg.identifier(arg_id);       // plain       -- dropped
+```
+
+"Its only writer" would be the wrong justification, and was the first draft's: there are at least six
+writers of an argument identifier across the frontends. The claim that holds is stronger and checkable
+-- **no writer anywhere sets the plain key to a string different from `#identifier`, and none sets the
+plain key without `#identifier` also being set to the same string**. `clang_c_convert.cpp:910` sets only
+the `#` one; `clang_cpp_convert.cpp:2880` sets the plain one and reaches `:910` for the other with the
+same value; `migrate_type_back` and the polymorphic-builtin path set only the `#` one. So `#identifier`
+is a superset: equal where both exist, non-empty where the plain key is empty, never less informative.
+That makes the change safe for any frontend's argument reaching either reader, including the
+`func_symbol->get_type()` case where the callee could be a C operational-model function -- there the old
+code read `""` and the new code reads the real id, so those callers are fixed rather than risked. Two readers now take
+it -- `converter_funcall.cpp:1537` and `function_call/expr.cpp:6565` -- and the seven `code_typet` writes
+land with `class_var_param_augassign{,_fail}` passing.
+
+The two readers failed differently, which the chain above describes for only one of them.
+`copy_instance_attributes` keys on a `find` and returns, so an empty key is a no-op. But
+`element_type_registry::assign_from(from, to)` writes `map_for(slot)[to]` unconditionally once `from`
+resolves, and the lost key is the **destination** -- so pre-fix that reader wrote the caller's element
+types under the empty key, polluting the registry rather than doing nothing. The fix repairs a bad write,
+not just a missing one.
+
+### 11.3.3 A third key, found by probing an input the first probe did not have
+
+The seam drops **three** keys per argument, not two. Re-probing on a function that has a default --
+`def f(a, b=5)` -- adds:
+
+```
+  * #default_value: constant 5      (dropped)
+```
+
+Structural, not an oversight in the carry: `code_type2t`'s fields are `arguments`, `ret_type`,
+`argument_names`, `ellipsis` and the unreflected `argument_base_names` (`irep2_type.h:326-334`). There is
+no slot for a default, and neither direction of `migrate_type` touches one.
+
+Three readers consume it, and two take it off the **function symbol's** type:
+
+```
+function_call/expr.cpp:6767    finalize_call, off func_symbol->get_type()
+converter_funcall.cpp:1025     off resolved_func_type = &to_code_type(target_func->get_type())
+converter_funcall.cpp:1379     decides whether to raise TypeError: missing required positional argument
+```
+
+That matters because `python_adjust.cpp:86-89` already states the invariant:
+
+> a resolved-alias code type written back here carries no argument `default_value` (the attribute does
+> not survive the IREP2 round-trip) -- default arguments must be sourced from the function symbol, not
+> from a variable's type.
+
+On the seven converted paths the function symbol stops being that safe source.
+
+**Latent, not live, and unpinned.** Thirteen probes failed to make the two conditions coincide: the
+Python preprocessor normalises defaults into the AST before the converter sees a call
+(`preprocessor/core_visitors_mixin.py:1413-1452`), so shapes that reach a reader fire no write and shapes
+that fire a write never reach a reader. So no verdict moves today, and
+`class_var_param_augassign{,_fail}` structurally cannot observe it. That is a reason to record it, not a
+reason to call it safe -- a change to the preprocessor's normalisation would expose it with nothing in
+the suite watching. Carrying `#default_value` is its own change with its own oracle: a default-argument
+test, which the suite does not currently have in a shape that reaches these writes.
+
+This is the first of the six seam losses where §80's fix-the-reader route applied, and it is worth
+contrasting with §10 on cost. The carry there bought one attribute for eight bytes on the three
+most-constructed type kinds and all of `fields_cover_class`'s remaining margin. This bought one for a
+changed accessor at two call sites. Nothing about the plain key made `copy_instance_attributes` prefer
+it; it was simply the one reached for first.
 
 ### 11.4 Standing
 
+Python B-2* 43 -> 37; repo total 114 -> 108, measured with `python3 scripts/irep2/bars.py`, and
+`ctest -R regression/python/class_var_param_augassign` 2/2.
+
+The pair pins the **reader fix**, not the conversion: both halves fail without it. Nothing fails if the
+six writes are reverted, so the bar move is the only evidence for that half -- inherent to a migration
+whose contract is "behaviour unchanged", but worth saying rather than leaving a reviewer to infer. The six
+sites are each reached by pre-existing CORE tests: `github_4373_nested_def` (2328), `return5` (2339),
+`github_4514`/`github_4352`/`github_7085` (2361), `sv_verifier_nondet_list`/`github_4744_fail` (2411),
+`optional7`/`tuple18`/`github_3846_3` (2495), and `class_var_param_augassign` (2518). The funcdef cluster is not ten
+writes blocked on one attribute, as §3 had it. It is **six converted** and two that stay legacy: the body write at `:2539`
+by §8.2's rule -- a body cannot be migrated before its symbols exist -- and the arm at `:2439`, which no
+test in the suite reaches and whose guard re-runs the same
+`infer_return_type_from_body` the arm ninety lines above already ran, so it is a C-Dead candidate rather
+than a conversion. Converting an unexercised line is how `:2539`'s SIGSEGV was found.
+
+On the body write, "B-2 should stop counting it" is an ask on `scripts/irep2/bars.py`, which still counts
+it -- the 36/107 figures above include it. Recorded as a proposal, not as an applied exclusion; until the
+script implements §8.2's category the next survey re-adds the write as debt.
+
+That makes it the sixth marker found not to survive the seam, and the second where the plain key and the
+`#` key were confused for one another. Worth stating as a check rather than a story: when a legacy node
+carries both `x` and `#x`, establish which one each accessor reads before concluding a carry covers it.
+`argumentt::get_identifier()` reads `#identifier` while the node also holds a plain `identifier`, so
+§44's carry looked complete and was not.
+
+## 12. `bases`: the write is the repair, so it stays (2026-09-17)
+
+§3's table listed `python_adjust.cpp:70` as failing a unit case, with the cause "the write exists to
+re-attach the legacy-only `bases` sub-irep, and storing IREP2 drops it again". That is right, and the
+conclusion it implies is worth making explicit: this write must stay legacy, and the question it raises
+is structural rather than a conversion.
+
+### 12.1 What the site does
+
+```cpp
+const irept bases = symbol->get_type().find("bases");
+symbol->set_type(t);                     // IREP2 -- drops `bases`
+if (bases.is_not_nil())
+{
+  typet patched = symbol->get_type();    // back-migrated view
+  patched.set("bases", bases);           // re-attach
+  symbol->set_type(std::move(patched));  // <- the residue B-2 counts
+}
+```
+
+The legacy write *is* the compensation for the loss two lines above it. Converting it would drop `bases`
+a second time and undo the repair, which is why the repo's own unit case
+(`python_adjust pre-pass write-back preserves bases for the throw chain`) catches it -- and why §3 notes
+that a scripted conversion walking into it is the argument for the test rather than against the script.
+
+### 12.2 All three routes, and why none is cheap
+
+§80 gives three answers when a marker does not survive the seam. For `bases` each is priced:
+
+- **Derivation** is unavailable. clang-cpp records inheritance structurally as `@base@<class_id>`
+  components, so a base list is recoverable there -- but the Python frontend stores it *only* in the
+  sub-irep (`python_class_builder.cpp:83`, `st.add("bases").get_sub()`), and emits no `@base@`
+  component. There is no second source to derive from.
+- **Fixing the readers** is not one frontend's work. `find("bases")` has four readers in four layers:
+  `util/expr/base_type.cpp:421`, `clang-cpp-frontend/clang_cpp_exception_id.cpp:27`,
+  `python-frontend/python_adjust.cpp:1088` and `goto-programs/remove_exceptions.cpp:718`. They would all
+  need another source, and by the point above there is none.
+- **Carrying it** cannot use the unreflected pattern the other five carries used. `bases` has no `#`, so
+  it lives in `named_sub` and takes part in `typet` equality (§3.1) -- a faithful IREP2 field would have
+  to be *reflected*, changing `struct_type2t`'s identity and therefore every hash and cache keyed on a
+  struct type. That is a different order of change from §10's eight bytes.
+
+### 12.3 So it is a decision, not a task
+
+`python_adjust.cpp:70` joins `:2539` and `converter_stmt.cpp:1351` as a write that stays legacy for a
+stated reason, and B-2 counts all three only because it counts the argument's spelling. What is left is a
+structural question of the same kind as §8.1 and the Phase 6 trio: **should inheritance cross the seam as
+a reflected field on `struct_type2t`, or should Python record bases structurally as clang-cpp does, so the
+list becomes derivable?** The second is the smaller change to the IR and the larger one to the frontend,
+and it would retire this residue and the exception-id divergence §11.3.1 notes together. Neither should
+be picked without the maintainers, and neither is blocked on measurement -- the routes above are priced.
 Python B-2* stays where §10.4 leaves it. The funcdef cluster is not ten writes blocked on one attribute,
 as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
 loss, and the next step is the three experiments above rather than another conversion attempt.

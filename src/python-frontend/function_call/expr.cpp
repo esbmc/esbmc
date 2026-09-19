@@ -6619,8 +6619,9 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       // Update list element type mapping for function parameters
       const code_typet &type =
         static_cast<const code_typet &>(func_symbol->get_type());
-      const std::string &arg_id =
-        type.arguments().at(0).identifier().as_string();
+      // `#identifier`, not the plain key: only it crosses the seam.
+      const std::string arg_id =
+        type_utils::argument_identifier(type.arguments().at(0)).as_string();
 
       converter_.get_element_type_registry().assign_from(
         arg.identifier().as_string(), arg_id);

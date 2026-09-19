@@ -1544,9 +1544,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (arg_sym->is_address_of())
             arg_sym = &arg_sym->op0();
           if (arg_sym->is_symbol())
+          {
+            // `#identifier`, not the plain key: only it crosses the seam.
             copy_instance_attributes(
-              params[i].identifier().as_string(),
+              type_utils::argument_identifier(params[i]).as_string(),
               arg_sym->identifier().as_string());
+          }
         }
       }
     }
