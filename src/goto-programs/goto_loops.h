@@ -12,13 +12,6 @@
 /// reuse it when filtering value-set objects (issue #5230).
 bool check_var_name(const expr2tc &expr);
 
-/// True iff `expr` denotes storage reached through a pointer (a dereference,
-/// or an index/member off pointer-reached storage, or a pointer-typed symbol
-/// being indexed) — i.e. an array-element write the inductive step cannot
-/// havoc as a named symbol. Defined in goto_loops.cpp; declared here so the
-/// k-induction pass can pre-scan for such writes (issue #5230).
-bool indexes_through_pointer(const expr2tc &expr);
-
 class goto_loopst
 {
 protected:
@@ -43,13 +36,20 @@ protected:
   {
     loopst::loop_varst modified;
     loopst::loop_varst unmodified;
-    /// True iff the callee writes an array element through a pointer.
-    /// Propagated to the calling loop so the inductive step is disabled
-    /// (see loopst::set_modifies_pointer_array and issue #5224).
+    /// True iff the callee writes an array element through a pointer, which
+    /// havocking through the call's arguments cannot cover (#5224).
     bool modifies_pointer_array = false;
-    /// True iff the callee writes through a dereference.
-    /// See loopst::set_writes_through_pointer and issue #7478.
-    bool writes_through_pointer = false;
+    /// The pointers the callee writes through, in its own scope, and whether
+    /// it writes through one it cannot name. See loopst::add_written_pointer.
+    loopst::loop_varst written_pointers;
+    bool unnamed_write = false;
+
+    bool writes_through_pointer() const
+    {
+      return unnamed_write || !written_pointers.empty();
+    }
+    void record_write(const expr2tc &lhs);
+    void merge(const function_summaryt &other);
   };
   std::unordered_map<irep_idt, function_summaryt, irep_id_hash>
     function_summary_cache;

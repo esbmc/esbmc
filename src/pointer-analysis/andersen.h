@@ -161,10 +161,11 @@ public:
   /// @}
 
   /// \name Query / transparency layer
-  /// Lets whole-program consumers (GCSE, the k-induction pointer-array-write
+  /// Lets whole-program consumers (GCSE, the k-induction pointer-write
   /// resolver) use Andersen wherever they used the value-set analysis.
   /// Because the analysis is flow-insensitive, the location argument \p l is
-  /// accepted for API compatibility and ignored.
+  /// accepted for API compatibility and ignored. Queries are
+  /// offset-insensitive: `p + i` reaches what `p` does.
   /// @{
 
   /// Runs the whole analysis: \ref collect_constraints, then \ref solve and
@@ -257,7 +258,10 @@ protected:
   /// Records that the object \p lhs designates may hold any address, storing
   /// through the pointer when \p lhs is a dereference.  The escape hatch for
   /// an assignment whose source this frontend cannot model.
-  void assign_top(const expr2tc &lhs);
+  void assign_top(const expr2tc &lhs, unsigned location_number);
+
+  /// The node holding the address the dereference \p deref goes through.
+  node_id pointer_of(const expr2tc &deref, unsigned location_number);
 
   /// Lowers an OTHER instruction: the ones that only read are dropped, the
   /// rest may write through any pointer operand.

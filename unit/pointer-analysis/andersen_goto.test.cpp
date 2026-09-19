@@ -411,3 +411,68 @@ TEST_CASE(
   // p's pointee must be assumed clobbered by the unknown callee.
   REQUIRE(targets_of(andersen, functions, "", "a").count("*") == 1);
 }
+
+TEST_CASE(
+  "andersen frontend dereferences indexed and member accesses",
+  "[andersen][goto]")
+{
+  // Each of these reaches the object a pointer points to, not the pointer:
+  // dropping one would leave a points-to set too small, which is unsound.
+  std::string src = R"(
+    int a, b, c;
+    struct s
+    {
+      int *f;
+    } g;
+    int main(void)
+    {
+      int *p0 = &a;
+      int **pp = &p0;
+      pp[0] = &b;
+      *(pp + 0) = &c;
+      struct s *sp = &g;
+      g.f = &a;
+      int *x = sp->f;
+      int **y = &sp->f;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p0") ==
+    std::set<std::string>{"a", "b", "c"});
+  REQUIRE(
+    targets_of(andersen, functions, "", "g") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "x") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "y") == std::set<std::string>{"g"});
+}
+
+TEST_CASE(
+  "andersen frontend widens an integer computed from a pointer",
+  "[andersen][goto]")
+{
+  // The integer arithmetic is not modelled, so what it casts back to a
+  // pointer may point anywhere; an empty set would be unsound.
+  std::string src = R"(
+    int b[2];
+    int main(void)
+    {
+      long zero = 0;
+      long addr = (long)&b[0] + zero;
+      int *q = (int *)addr;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(targets_of(andersen, functions, "main", "q").count("*") == 1);
+}
