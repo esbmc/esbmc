@@ -674,7 +674,7 @@ void value_sett::get_value_set_rec(
 
 #ifndef NDEBUG
     const type2tc &source_type = idx.source_value->type;
-    assert(is_array_type(source_type));
+    assert(is_array_or_vector_type(source_type));
 #endif
 
     // Attach '[]' to the suffix, identifying the variable tracking all the
