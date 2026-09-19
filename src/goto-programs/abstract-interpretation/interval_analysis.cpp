@@ -249,7 +249,8 @@ struct scoped_skip_inductive
 void instrument_loop_bounds_after_kind(
   goto_functionst &goto_functions,
   const namespacet &ns,
-  const optionst &options)
+  const optionst &options,
+  bool continue_past_failed_assertions)
 {
   // Recompute the interval fixpoint on the post-k-induction goto-graph.
   // The transparency flag makes the havoc'd assignments and entry-condition
@@ -259,6 +260,8 @@ void instrument_loop_bounds_after_kind(
   scoped_skip_inductive _skip_guard;
 
   ait<interval_domaint> interval_analysis;
+  interval_analysis.continue_past_failed_assertions =
+    continue_past_failed_assertions;
   interval_analysis(goto_functions, ns);
 
   Forall_goto_functions (f_it, goto_functions)
@@ -453,11 +456,14 @@ void interval_analysis(
   goto_functionst &goto_functions,
   const namespacet &ns,
   const optionst &options,
+  bool continue_past_failed_assertions,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
 {
   fine_timet algorithm_start = current_time();
   // TODO: add options for instrumentation mode
   ait<interval_domaint> interval_analysis;
+  interval_analysis.continue_past_failed_assertions =
+    continue_past_failed_assertions;
   interval_domaint::set_options(options);
   interval_analysis(goto_functions, ns);
 

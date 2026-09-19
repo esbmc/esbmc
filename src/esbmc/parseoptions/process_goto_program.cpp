@@ -200,8 +200,6 @@ bool esbmc_parseoptionst::process_goto_program(
       apply_taylor_terms(goto_functions, cmdline))
       return true;
 
-    bool is_mul =
-      cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
                   cmdline.isset("condition-coverage") ||
@@ -222,6 +220,11 @@ bool esbmc_parseoptionst::process_goto_program(
     // the coverage reporting rules must not apply to it (issue #6387).
     options.set_option(
       "coverage-measurement", is_coverage && !cmdline.isset("dead-code-check"));
+
+    // Claims after a violation are still checked, so no pass may treat a
+    // failed assertion as the end of its path (#7900).
+    const bool checks_past_violation =
+      options.get_bool_option("multi-property") || is_coverage;
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -293,7 +296,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimization below will remove codes during the Goto stage
     if (
-      !(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage) ||
+      !(cmdline.isset("no-remove-unreachable") || checks_past_violation) ||
       cmdline.isset("condition-coverage-rm") ||
       cmdline.isset("condition-coverage-claims-rm"))
       remove_unreachable(goto_functions);
@@ -378,7 +381,8 @@ bool esbmc_parseoptionst::process_goto_program(
         wants_kind_pipeline
           ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
           : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
-      interval_analysis(goto_functions, ns, options, mode);
+      interval_analysis(
+        goto_functions, ns, options, checks_past_violation, mode);
     }
 
     if (cmdline.isset("validate-correctness-witness"))
@@ -480,7 +484,8 @@ bool esbmc_parseoptionst::process_goto_program(
        cmdline.isset("goto-contractor")) &&
       wants_kind_pipeline)
     {
-      instrument_loop_bounds_after_kind(goto_functions, ns, options);
+      instrument_loop_bounds_after_kind(
+        goto_functions, ns, options, checks_past_violation);
     }
 
     if (
@@ -547,7 +552,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage ||
+    if (!(cmdline.isset("no-remove-unreachable") || checks_past_violation ||
           skip_cleanup_for_termination))
       remove_unreachable(goto_functions);
 
