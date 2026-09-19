@@ -1401,12 +1401,7 @@ void python_converter::handle_assignment_type_adjustments(
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
           {
-            // A dynamically-sized array cannot cross the seam
-            // (docs/roadmap/scope-python-irep2.md §10.4).
-            if (python_expr::contains_dyn_array(rhs.type()))
-              lhs_symbol->set_type(rhs.type());
-            else
-              lhs_symbol->set_type(migrate_type(rhs.type()));
+            python_expr::set_symbol_type(*lhs_symbol, rhs.type());
             lhs.type() = rhs.type();
           }
         }
