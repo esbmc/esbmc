@@ -3446,6 +3446,12 @@ expr2tc bitcast2t::do_simplify() const
   // and offset components (without it, every pointer-as-pointer use stays
   // an array index, which generates a much larger case-split tree).
 
+  /* A pointer bitcast must stay a bitcast: it reinterprets the bits ESBMC
+   * stored, which convert_bitcast() models as an injection, while a typecast
+   * means the numeric address, which does not identify a pointer (#7855). */
+  if (is_pointer_type(type) || is_pointer_type(from->type))
+    return expr2tc();
+
   // This should be fine, just use typecast
   if (
     !is_floatbv_type(type) && !is_floatbv_type(from->type) &&
