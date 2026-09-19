@@ -164,7 +164,11 @@ bool recognise(
     if (prev->is_assign())
     {
       const expr2tc &lhs = to_code_assign2t(prev->code).target;
-      if (!is_symbol2t(lhs) || unsupported_state_type(lhs->type))
+      // Capture resolves a havocked `*p` to the one object p reaches, or
+      // rejects it.
+      if (
+        !(is_symbol2t(lhs) || is_dereference2t(lhs)) ||
+        unsupported_state_type(lhs->type))
       {
         reason = "havocked state holds a pointer or an empty aggregate";
         return false;
@@ -533,13 +537,22 @@ bool extract_transition_system(
       return false;
     }
   }
+  std::unordered_set<expr2tc, irep2_hash> distinct;
   for (unsigned k = 0; k < n; k++)
+  {
     if (!is_symbol2t(pre[k]))
     {
       reason = "state variable " + from_expr(ns, "", shape.havoc_vars[k]) +
                " is a constant at the loop head";
       return false;
     }
+    if (!distinct.insert(pre[k]).second)
+    {
+      reason = "state variable " + from_expr(ns, "", shape.havoc_vars[k]) +
+               " shares storage with another";
+      return false;
+    }
+  }
 
   // Prefix [0, init_first), havoc region (init, pre_first), body
   // (pre_last, post_first).

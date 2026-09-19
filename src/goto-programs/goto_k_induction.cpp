@@ -1,5 +1,6 @@
 #include <goto-programs/goto_k_induction.h>
 #include <algorithm>
+#include <functional>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <goto-programs/remove_no_op.h>
@@ -241,8 +242,8 @@ void make_nondet_assign(
 
 bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
-  // Check this node first: if it's a tracked symbol, we're done.
-  if (is_symbol2t(expr) && vars.find(expr) != vars.end())
+  // Check this node first: if it's a tracked symbol or pointee, we're done.
+  if (vars.find(expr) != vars.end())
     return true;
 
   // Otherwise recurse into operands and stop at the first match.
@@ -533,98 +534,171 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
   havoc_entry_jumps(goto_function.body, vars, entry_jumps);
 }
 
-/// Phase 2 (#5230): for a loop that writes array elements through a pointer,
-/// resolve every directly-written pointer against the value-set fixpoint @p
-/// vsa and inject the referenced named objects into the loop's modified-
-/// variable set, so make_nondet_assign havocs them as whole symbols. The
-/// fixpoint is a sound over-approximation of the objects each pointer may
-/// reference at the loop head, so havocing all of them generalises the loop
-/// at least as much as its real effect — the inductive hypothesis is no
-/// longer too strong.
-///
-/// Returns true iff every write resolved to concrete named objects (the
-/// inductive step can stay enabled); returns false to abstain, in which case
-/// the caller disables the inductive step (the conservative Phase 1
-/// behaviour). We abstain whenever the points-to set is empty, unknown,
-/// invalid, or contains a heap (dynamic) object — none of which has a
-/// nameable symbol to havoc.
-bool resolve_pointer_array_writes(loopst &loop, value_setst &vsa)
+/// What a pointer may point to: the named objects, and whether it may also
+/// reach the heap or anything at all.
+struct targetst
 {
-  // A write reaching the loop through a callee (pointer is a callee
-  // parameter, not in scope here) or with no extractable pointer cannot be
-  // resolved at the loop head.
-  if (loop.pointer_array_write_unresolvable())
-    return false;
+  loopst::loop_varst named;
+  bool none = false;
+  bool heap = false;
+  bool anything = false;
+};
 
-  const auto &ptrs = loop.get_pointer_array_write_ptrs();
-  if (ptrs.empty())
-    return false;
-
-  goto_programt::const_targett loc = loop.get_original_loop_head();
-  if (!vsa.has_location(loc))
-    return false;
-
-  loopst::loop_varst objects;
-  for (const expr2tc &ptr : ptrs)
+targetst
+targets_of(andersent &points_to, const loopst &loop, const expr2tc &ptr)
+{
+  value_setst::valuest values;
+  points_to.get_values(loop.get_original_loop_head(), ptr, values);
+  targetst t;
+  t.none = values.empty();
+  for (const expr2tc &v : values)
   {
-    value_setst::valuest values;
-    vsa.get_values(loc, ptr, values);
-
-    // No points-to information means the pointer could reference anything.
-    if (values.empty())
-      return false;
-
-    for (const expr2tc &v : values)
-    {
-      // Only a concrete, named object can be havoc'd as a whole symbol.
-      // unknown / invalid / heap (dynamic) objects have no nameable symbol,
-      // so abstain and let Phase 1 disable the inductive step.
-      if (!is_object_descriptor2t(v))
-        return false;
-      const expr2tc &object = to_object_descriptor2t(v).object;
-      if (!is_symbol2t(object) || !check_var_name(object))
-        return false;
-      objects.insert(object);
-    }
+    const expr2tc object =
+      is_object_descriptor2t(v) ? to_object_descriptor2t(v).object : expr2tc();
+    if (!is_nil_expr(object) && is_symbol2t(object) && check_var_name(object))
+      t.named.insert(object);
+    else if (!is_nil_expr(object) && is_dynamic_object2t(object))
+      t.heap = true;
+    else
+      t.anything = true;
   }
+  return t;
+}
 
-  // Every write resolved: havoc each referenced object as a whole symbol.
-  for (const expr2tc &obj : objects)
-    loop.add_modified_var_to_loop(obj);
+/// Adds the objects \p ptr may point to to \p objects, or returns false when
+/// one of them has no name to havoc.
+bool named_targets(
+  andersent &points_to,
+  const loopst &loop,
+  const expr2tc &ptr,
+  loopst::loop_varst &objects)
+{
+  const targetst t = targets_of(points_to, loop, ptr);
+  if (t.none || t.heap || t.anything)
+    return false;
+  objects.insert(t.named.begin(), t.named.end());
   return true;
 }
 
-/// True iff any user function directly writes an array element through a
-/// pointer (`is_assign` whose LHS `indexes_through_pointer`). Used to decide
-/// whether to build the value-set fixpoint at all. Non-mutating, so it is
-/// safe to run before goto_loopst construction (which can rewrite self-loops)
-/// and before any transform_loop. Over-approximates: a write outside any loop
-/// also counts, which only ever builds the fixpoint unnecessarily (never
-/// wrong). The via-callee write path always abstains without the fixpoint, so
-/// it need not be detected here. See #5230.
-bool has_direct_pointer_array_write(const goto_functionst &goto_functions)
+bool names(const loopst::loop_varst &vars, const irep_idt &name)
 {
-  forall_goto_functions (it, goto_functions)
+  return std::any_of(vars.begin(), vars.end(), [&name](const expr2tc &v) {
+    return is_symbol2t(v) && to_symbol2t(v).thename == name;
+  });
+}
+
+/// The inductive step havocs only its loop's modified variables, so storage
+/// the loop writes through a pointer would keep its pre-loop value and the
+/// step would prove too much (#5224). Add that storage to the modified
+/// variables: `*p` itself for a write inside `*p` while the loop leaves `p`
+/// alone, otherwise the named objects the whole-program points-to sets
+/// resolve the written pointer to. Returns false, and the caller disables the
+/// inductive step, when neither covers a write.
+bool havoc_written_objects(
+  loopst &loop,
+  andersent &points_to,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken)
+{
+  if (loop.unnamed_pointer_write())
+    return false;
+
+  loopst::loop_varst objects;
+  for (const expr2tc &ptr : loop.get_written_pointers())
+    if (!named_targets(points_to, loop, ptr, objects))
+      return false;
+
+  // A write through one pointee may move another's pointer (`*pp = r` moves
+  // p). A pointer reaching anything can only move a pointer whose address
+  // is taken somewhere.
+  loopst::loop_varst clobbered;
+  bool clobbers_anything = false;
+  for (const expr2tc &pointee : loop.get_written_pointees())
   {
-    if (!it->second.body_available || it->second.body.hide)
+    const targetst t =
+      targets_of(points_to, loop, to_dereference2t(pointee).value);
+    clobbered.insert(t.named.begin(), t.named.end());
+    clobbers_anything |= t.anything;
+  }
+
+  // check_var_name also filters the modified set, so a pointer it rejects may
+  // be reassigned unseen.
+  std::vector<expr2tc> pointees(
+    loop.get_written_pointees().begin(), loop.get_written_pointees().end());
+  const auto moves = [&](const expr2tc &pointee) {
+    const expr2tc &ptr = to_dereference2t(pointee).value;
+    const irep_idt &name = to_symbol2t(ptr).thename;
+    return !check_var_name(ptr) || names(loop.get_modified_loop_vars(), name) ||
+           names(objects, name) || names(clobbered, name) ||
+           (clobbers_anything && address_taken.count(name));
+  };
+  for (auto it = std::find_if(pointees.begin(), pointees.end(), moves);
+       it != pointees.end();
+       it = std::find_if(pointees.begin(), pointees.end(), moves))
+  {
+    if (!named_targets(points_to, loop, to_dereference2t(*it).value, objects))
+      return false;
+    pointees.erase(it);
+  }
+
+  for (const expr2tc &obj : objects)
+    loop.add_modified_var_to_loop(obj);
+  for (const expr2tc &pointee : pointees)
+    loop.add_modified_var_to_loop(pointee);
+  return true;
+}
+
+void for_each_subexpr(
+  const expr2tc &e,
+  const std::function<void(const expr2tc &)> &f)
+{
+  if (is_nil_expr(e))
+    return;
+  f(e);
+  e->foreach_operand([&f](const expr2tc &op) { for_each_subexpr(op, f); });
+}
+
+/// The functions the entry point may reach, calls through function pointers
+/// included: every function named in a reachable body.
+std::unordered_set<irep_idt, irep_id_hash>
+reachable_functions(const goto_functionst &goto_functions)
+{
+  std::unordered_set<irep_idt, irep_id_hash> seen{goto_functions.main_id()};
+  std::vector<irep_idt> work{goto_functions.main_id()};
+  while (!work.empty())
+  {
+    auto it = goto_functions.function_map.find(work.back());
+    work.pop_back();
+    if (it == goto_functions.function_map.end() || !it->second.body_available)
       continue;
     for (const auto &instr : it->second.body.instructions)
-    {
-      if (!instr.is_assign())
-        continue;
-      const expr2tc &target = to_code_assign2t(instr.code).target;
-      // Only array-element writes through a pointer are unsound for the
-      // inductive step (the pointee array has no nameable symbol). Struct
-      // member writes through a pointer are fine — the struct symbol can be
-      // havoc'd as a whole. Mirror the is_index2t guard in
-      // collect_lhs_symbols/modifies_pointer_array. See #5230.
-      if (
-        is_index2t(target) &&
-        indexes_through_pointer(to_index2t(target).source_value))
-        return true;
-    }
+      for (const expr2tc &e : {instr.code, instr.guard})
+        for_each_subexpr(e, [&](const expr2tc &sub) {
+          if (
+            is_symbol2t(sub) && is_code_type(sub->type) &&
+            seen.insert(to_symbol2t(sub).thename).second)
+            work.push_back(to_symbol2t(sub).thename);
+        });
   }
-  return false;
+  return seen;
+}
+
+/// The variables whose address the program takes anywhere.
+std::unordered_set<irep_idt, irep_id_hash>
+address_taken_symbols(const goto_functionst &goto_functions)
+{
+  std::unordered_set<irep_idt, irep_id_hash> taken;
+  forall_goto_functions (it, goto_functions)
+    for (const auto &instr : it->second.body.instructions)
+      for (const expr2tc &e : {instr.code, instr.guard})
+        for_each_subexpr(e, [&taken](const expr2tc &sub) {
+          if (!is_address_of2t(sub))
+            return;
+          for_each_subexpr(to_address_of2t(sub).ptr_obj, [&](const expr2tc &o) {
+            if (is_symbol2t(o))
+              taken.insert(to_symbol2t(o).thename);
+          });
+        });
+  return taken;
 }
 
 /// True iff the program contains a reachable call to __VERIFIER_nondet_memory
@@ -660,17 +734,12 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 
 bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
 {
-  // Build the points-to fixpoint once, up front, on the pristine program, not
-  // lazily from inside the loop (an earlier plain loop would already have been
-  // transformed). Built only when a pointer-array write is present, to avoid
-  // paying the cost.
-  std::shared_ptr<value_setst> vsa;
-  if (has_direct_pointer_array_write(goto_functions))
-  {
-    auto points_to = std::make_shared<andersent>();
-    vsa = points_to;
-    (*points_to)(goto_functions);
-  }
+  // Build the points-to sets once, up front, on the pristine program: the
+  // havoc a transformed loop gains would widen every later query to TOP.
+  andersent points_to;
+  points_to(goto_functions);
+  const auto reachable = reachable_functions(goto_functions);
+  const auto address_taken = address_taken_symbols(goto_functions);
 
   // A reachable __VERIFIER_nondet_memory call havocs a caller object the
   // inductive step cannot generalise, so its unsoundness is independent of any
@@ -684,21 +753,18 @@ bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
     // model (memcpy, string ops, ...). Letting them set the gate would
     // disable the inductive step for essentially every program. Their loops
     // are never the user property's witness, so exclude them from the
-    // decision — mirrors the body.hide guard in goto_termination.
-    const bool user_function = !it->second.body.hide;
+    // decision — mirrors the body.hide guard in goto_termination. So is a
+    // function nothing calls.
+    const bool decides =
+      !it->second.body.hide && reachable.count(it->first) != 0;
     goto_loopst loops(it->first, goto_functions, it->second);
     for (auto &loop : loops.get_loops())
     {
-      // A loop that writes an array element through a pointer cannot be
-      // havoc'd as a named symbol by the inductive step. Phase 2 tries to
-      // resolve the written pointer to concrete named objects and havoc
-      // those instead, keeping the inductive step sound and enabled. If the
-      // pointee cannot be resolved, fall back to Phase 1: disable the
-      // inductive step. Checked before the empty-modified-set skip below,
-      // since such a loop may have no named modified vars yet. See #5230.
+      // Before the empty-modified-set skip: a loop that only writes through
+      // pointers has no named modified variables until they are resolved.
       if (
-        user_function && loop.modifies_pointer_array() &&
-        !(vsa && resolve_pointer_array_writes(loop, *vsa)))
+        loop.writes_through_pointer() &&
+        !havoc_written_objects(loop, points_to, address_taken) && decides)
         disable_inductive_step = true;
 
       if (loop.get_modified_loop_vars().empty())

@@ -72,7 +72,7 @@ void loopst::output_loop_vars_to(std::ostream &oss) const
   oss << "Loop variables:\n";
   unsigned int i = 0;
   for (auto var : modified_loop_vars)
-    oss << ++i << ". \t" << to_symbol2t(var).thename << '\n';
+    oss << ++i << ". \t" << var->pretty(0) << '\n';
   oss << '\n';
 }
 

@@ -391,16 +391,16 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
-    // goto_k_induction returns true when a loop writes an array element
-    // through a pointer, which the inductive-step havoc cannot soundly
-    // generalise. Disable the inductive step in that case so its UNSAT is
-    // not reported as proof (#5224); base case and forward condition run.
+    // goto_k_induction returns true when a loop writes through a pointer to
+    // storage its havoc cannot name. Disable the inductive step then so its
+    // UNSAT is not reported as proof (#5224); base case and forward
+    // condition run.
     auto disable_is_if_unsound = [&](bool unsound) {
       if (unsound)
       {
         log_warning(
-          "k-induction does not support loops that write array elements "
-          "through a pointer yet. Disabling inductive step");
+          "k-induction cannot havoc what a loop writes through a pointer. "
+          "Disabling inductive step");
         options.set_option("disable-inductive-step", true);
       }
     };

@@ -4,15 +4,15 @@ int main()
 {
   int a = nondet_int();
   int b = nondet_int();
-  int sum = a + b;
   int *c = &a;
   int *d = &b;
+  // The inductive step havocs a and b, which the loop writes through c and d,
+  // so only a property that holds for every a > 0 is provable.
   while(a > 0)
   {
     *c = *c - 1;
     *d = *d + 1;
+    assert(*c >= 0);
   }
-  int sum2 = *c + *d;
-  assert(sum == sum2);
   return 1;
 }

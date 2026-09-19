@@ -45,32 +45,9 @@ public:
   void add_modified_var_to_loop(const expr2tc &expr);
   void add_unmodified_var_to_loop(const expr2tc &expr);
 
-  /// Record that the loop writes an array element through a pointer
-  /// (e.g. `p[i] = ...`, `(*p)[i] = ...`, `p->arr[i] = ...`). The
-  /// k-induction inductive step havocs only named symbols (see
-  /// make_nondet_assign); it cannot havoc such pointer-reached array
-  /// storage, so the inductive hypothesis is under-generalised and the
-  /// inductive step becomes unsound. The strategy layer disables the
-  /// inductive step when any loop reports this. Stack arrays (havoc'd as
-  /// whole symbols) and single pointer/field writes (constrained by the
-  /// value-set assume) are sound and therefore excluded. See issue #5224.
-  void set_modifies_pointer_array()
-  {
-    modifies_pointer_array_ = true;
-  }
-
-  /// True iff the loop writes an array element through a pointer.
-  bool modifies_pointer_array() const
-  {
-    return modifies_pointer_array_;
-  }
-
-  /// Record a pointer whose pointee array is written *directly* in this
-  /// loop's body (e.g. `(*dest)[i] = ...` records `dest`, `p[i] = ...`
-  /// records `p`). Phase 2 (issue #5230) resolves these pointers against
-  /// the value-set fixpoint and havocs the referenced named objects, so
-  /// the inductive step can stay enabled and sound instead of being
-  /// disabled outright as in Phase 1 (#5224).
+  /// Record a pointer the loop writes through, or a pointer argument of a
+  /// callee that does (`(*dest)[i] = ...` records `dest`, `p[i] = ...`
+  /// records `p`). The loop-invariant schema havocs through these (#7478).
   void add_pointer_array_write_ptr(const expr2tc &ptr)
   {
     pointer_array_write_ptrs_.insert(ptr);
@@ -81,12 +58,9 @@ public:
     return pointer_array_write_ptrs_;
   }
 
-  /// Record that the loop contains a pointer-array write that cannot be
-  /// resolved at the loop head — the write happens inside a callee (the
-  /// pointer is a callee parameter, not in scope at the caller's loop
-  /// head) or the written pointer could not be extracted from the LHS.
-  /// Phase 2 must then fall back to the Phase 1 behaviour and disable the
-  /// inductive step. See issue #5230.
+  /// Record a write that havocking through the recorded pointers cannot
+  /// cover: an element a callee writes past its argument, or a write whose
+  /// pointer could not be extracted. The loop-invariant schema declines.
   void set_pointer_array_write_unresolvable()
   {
     pointer_array_write_unresolvable_ = true;
@@ -99,10 +73,10 @@ public:
 
   /// Record that the loop, or a function it calls, writes through a
   /// dereference (`*p = ...`, `p->f = ...`, `p->e[i] = ...`). The pointee is
-  /// not a named symbol, so a schema that havocs named symbols cannot cover it.
-  /// k-induction keeps the original loop in its base case and stays sound; the
-  /// loop-invariant schema replaces the loop outright, so it declines a loop
-  /// whose guard the havoc cannot reach (issue #7478).
+  /// not a named symbol, so a schema that havocs named symbols cannot cover it:
+  /// k-induction havocs the objects the written pointers resolve to, and the
+  /// loop-invariant schema declines a loop whose guard the havoc cannot reach
+  /// (issue #7478).
   void set_writes_through_pointer()
   {
     writes_through_pointer_ = true;
@@ -111,6 +85,45 @@ public:
   bool writes_through_pointer() const
   {
     return writes_through_pointer_;
+  }
+
+  /// Record a pointer the loop, or a function it calls, writes through, in the
+  /// scope of the function holding the dereference. A whole-program points-to
+  /// analysis resolves these to the objects the inductive step must havoc.
+  void add_written_pointer(const expr2tc &ptr)
+  {
+    written_pointers_.insert(ptr);
+  }
+
+  const loop_varst &get_written_pointers() const
+  {
+    return written_pointers_;
+  }
+
+  /// Record `*p` for a write that stays inside it (`*p = ...`, `p->f = ...`).
+  /// While the loop leaves `p` alone, havocking `*p` covers the write even
+  /// when `p` reaches memory with no name, such as the heap.
+  void add_written_pointee(const expr2tc &pointee)
+  {
+    written_pointees_.insert(pointee);
+  }
+
+  const loop_varst &get_written_pointees() const
+  {
+    return written_pointees_;
+  }
+
+  /// Record a write through a pointer that neither add_written_pointer nor
+  /// add_written_pointee can name: a conditional l-value, or a call through
+  /// a function pointer.
+  void set_unnamed_pointer_write()
+  {
+    unnamed_pointer_write_ = true;
+  }
+
+  bool unnamed_pointer_write() const
+  {
+    return unnamed_pointer_write_;
   }
 
   void dump() const;
@@ -131,10 +144,12 @@ protected:
   goto_programt::targett original_loop_exit;
 
   std::size_t size;
-  bool modifies_pointer_array_ = false;
   bool pointer_array_write_unresolvable_ = false;
   bool writes_through_pointer_ = false;
   loop_varst pointer_array_write_ptrs_;
+  loop_varst written_pointers_;
+  loop_varst written_pointees_;
+  bool unnamed_pointer_write_ = false;
 };
 
 #endif /* GOTO_PROGRAMS_LOOPST_H_ */

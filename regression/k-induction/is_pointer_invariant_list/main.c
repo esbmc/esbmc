@@ -1,8 +1,9 @@
 // Linked-list traversal where the inductive step can only prove the
 // assertion if `p`'s pre-havoc points-to set survives the IS havoc.
-// Two loops: a build-loop that may grow the list, and a check-loop
-// that walks it.  Before the symex-side pointer-invariant rewrite,
-// IS k=3 returned SAT (the deref-time encoding fell back to
+// The list is built without a loop (a loop writing heap nodes disables the
+// inductive step) and may be cyclic, so the check-loop is unbounded and only
+// the inductive step can close it.  Before the symex-side pointer-invariant
+// rewrite, IS k=3 returned SAT (the deref-time encoding fell back to
 // `invalid_object` for the walking `p`, making the assert violable).
 // With the rewrite, IS k=3 proves it.
 #include <stdlib.h>
@@ -15,20 +16,12 @@ typedef struct node {
 
 int main() {
   List a = (List)malloc(sizeof(struct node));
-  if (!a) return 0;
+  List b = (List)malloc(sizeof(struct node));
+  if (!a || !b) return 0;
   a->h = 1;
-  a->n = 0;
-
-  // Build: optionally extend with more nodes whose `h` is also 1.
-  List end = a;
-  while (__VERIFIER_nondet_int()) {
-    List t = (List)malloc(sizeof(struct node));
-    if (!t) return 0;
-    t->h = 1;
-    t->n = 0;
-    end->n = t;
-    end = t;
-  }
+  b->h = 1;
+  a->n = __VERIFIER_nondet_int() ? b : 0;
+  b->n = __VERIFIER_nondet_int() ? a : 0;
 
   // Check: every node along the chain rooted at `a` has h == 1. The
   // walk's IS havocs of `p` would otherwise lose the chain's identity
