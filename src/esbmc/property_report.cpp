@@ -78,9 +78,17 @@ collect_library_assertion_files(const goto_functionst &goto_functions)
   return files;
 }
 
+static bool
+same_position_and_text(const property_rowt &a, const property_rowt &b)
+{
+  return std::tie(a.file, a.function, a.line, a.column, a.description) ==
+         std::tie(b.file, b.function, b.line, b.column, b.description);
+}
+
 std::vector<property_rowt> build_property_rows(
   const std::map<std::string, property_resultt> &verdicts,
-  const std::set<std::string> &library_files)
+  const std::set<std::string> &library_files,
+  const std::function<std::string(const expr2tc &)> &render_condition)
 {
   std::vector<property_rowt> rows;
   rows.reserve(verdicts.size());
@@ -95,6 +103,8 @@ std::vector<property_rowt> build_property_rows(
     row.column = result.loc.column;
     row.note = result.note;
     row.verdict = result.verdict;
+    row.instruction = result.loc.instruction;
+    row.condition = result.loc.condition;
     // A property recorded before this ran carries no structured location; the
     // key still describes it, so fall back to that rather than dropping a row.
     row.description =
@@ -115,9 +125,21 @@ std::vector<property_rowt> build_property_rows(
     rows.end(),
     [](const property_rowt &a, const property_rowt &b) {
       return std::tie(
-               a.library, a.file, a.function, a.line, a.column, a.description) <
+               a.library,
+               a.file,
+               a.function,
+               a.line,
+               a.column,
+               a.description,
+               a.instruction) <
              std::tie(
-               b.library, b.file, b.function, b.line, b.column, b.description);
+               b.library,
+               b.file,
+               b.function,
+               b.line,
+               b.column,
+               b.description,
+               b.instruction);
     });
 
   std::unordered_map<std::string, unsigned> counters;
@@ -129,6 +151,21 @@ std::vector<property_rowt> build_property_rows(
       (row.function.empty() ? std::string("global") : row.function) + "." +
       property_class(row.description);
     row.id = stem + "." + std::to_string(++counters[stem]);
+  }
+
+  // Assertions that share a description and a position would otherwise print
+  // as identical rows; their conditions tell them apart.
+  for (size_t i = 0; i < rows.size();)
+  {
+    size_t j = i + 1;
+    while (j < rows.size() && same_position_and_text(rows[i], rows[j]))
+      ++j;
+    if (j - i > 1 && render_condition)
+      for (size_t k = i; k < j; ++k)
+        if (!is_nil_expr(rows[k].condition))
+          rows[k].description +=
+            " [" + render_condition(rows[k].condition) + "]";
+    i = j;
   }
 
   return rows;

@@ -17,6 +17,40 @@ property_location(const locationt &location, const std::string &description)
   return loc;
 }
 
+// clear_verified_claims_in_goto turns a checked ASSERT into a SKIP in place,
+// keeping its location and number, so a later instance of the claim must key
+// the same way off the SKIP.
+static bool
+is_own_assertion(const goto_programt::instructiont &pc, const std::string &desc)
+{
+  return (pc.is_assert() || pc.is_skip()) &&
+         desc == id2string(pc.location.comment());
+}
+
+property_locationt property_location(
+  const goto_programt::instructiont &pc,
+  const std::string &description)
+{
+  property_locationt loc = property_location(pc.location, description);
+  if (is_own_assertion(pc, description))
+  {
+    loc.instruction = pc.location_number;
+    if (pc.is_assert())
+      loc.condition = pc.guard;
+  }
+  return loc;
+}
+
+std::string property_key(
+  const std::string &description,
+  const goto_programt::instructiont &pc)
+{
+  const std::string key = description + " at " + pc.location.as_string();
+  return is_own_assertion(pc, description)
+           ? key + "\t#" + std::to_string(pc.location_number)
+           : key;
+}
+
 void property_verdict_tablet::record(
   const std::string &property,
   property_verdictt verdict,
@@ -29,8 +63,15 @@ void property_verdict_tablet::record(
   std::lock_guard lock(mutex);
   auto [it, inserted] =
     results.emplace(property, property_resultt{verdict, note, loc});
-  if (!inserted && verdict > it->second.verdict)
+  if (inserted)
+    return;
+  // An instance recorded off a SKIP carries no condition; keep the one taken
+  // while the ASSERT was intact.
+  expr2tc condition =
+    is_nil_expr(loc.condition) ? it->second.loc.condition : loc.condition;
+  if (verdict > it->second.verdict)
     it->second = property_resultt{verdict, note, loc};
+  it->second.loc.condition = condition;
 }
 
 void property_verdict_tablet::promote_unchecked_to_passed()
