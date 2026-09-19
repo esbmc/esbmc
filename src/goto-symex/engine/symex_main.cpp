@@ -267,6 +267,22 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
     bounded_loop_truncations);
 }
 
+void goto_symext::key_intrinsic_pointer_reads(
+  const code_function_call2t &call,
+  const irep_idt &id)
+{
+  // These four read through a pointer argument inside symex, so no dereference
+  // reaches the MPOR access analysis and the reads go unkeyed (#7826).
+  if (
+    id != "c:@F@__ESBMC_memcpy" && id != "c:@F@__ESBMC_memmove" &&
+    id != "c:@F@__ESBMC_memcmp" && id != "c:@F@__ESBMC_memchr")
+    return;
+
+  for (const expr2tc &operand : call.operands)
+    if (is_pointer_type(operand))
+      analyze_args(dereference2tc(get_uint_type(8), operand));
+}
+
 void goto_symext::symex_step(reachability_treet &art)
 {
   assert(!cur_state->call_stack.empty());
@@ -389,6 +405,7 @@ void goto_symext::symex_step(reachability_treet &art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
+        key_intrinsic_pointer_reads(call, id);
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
         return;

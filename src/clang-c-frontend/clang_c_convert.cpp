@@ -4495,8 +4495,88 @@ bool clang_c_convertert::get_binary_operator_expr(
   }
   }
 
+  if (binop.getType()->isVectorType() && binop.isComparisonOp())
+  {
+    get_vector_comparison(binop, new_expr.id(), lhs, rhs, t, new_expr);
+    return false;
+  }
+
   new_expr.copy_to_operands(lhs, rhs);
   return false;
+}
+
+// Clang types a vector comparison as a vector of lane masks: all ones where the
+// relation holds, zero elsewhere (#7897). Relations are boolean, so compare
+// lane by lane. A lane reads its operand again, so anything but a symbol or a
+// constant is first assigned to a temporary, declared in the enclosing block
+// like a compound literal: replicating a call would evaluate it once per lane
+// (also for a `pure` callee, which clang reports as side-effect free), and
+// replicating a dereference puts an index over it that the dereference
+// machinery rejects.
+void clang_c_convertert::get_vector_comparison(
+  const clang::BinaryOperator &binop,
+  irep_idt relation,
+  exprt lhs,
+  exprt rhs,
+  const typet &type,
+  exprt &new_expr)
+{
+  locationt location;
+  get_start_location_from_stmt(binop, location);
+
+  std::vector<exprt> bindings;
+  auto bind = [&](exprt &op) {
+    if (op.is_symbol() || op.is_constant())
+      return;
+    const std::string path = location.file().as_string();
+    symbolt &tmp = anon_symbol.new_symbol(
+      context,
+      op.type(),
+      path + ":" + location.get_line().as_string() + "$vector-cmp$");
+    get_default_symbol(
+      tmp,
+      get_modulename_from_path(path),
+      op.type(),
+      tmp.name,
+      tmp.id,
+      location);
+    tmp.static_lifetime = !current_block;
+    tmp.file_local = true;
+    if (current_block)
+      current_block->copy_to_operands(code_declt(symbol_expr(tmp)));
+
+    side_effect_exprt assign("assign", op.type());
+    assign.copy_to_operands(symbol_expr(tmp), op);
+    bindings.push_back(assign);
+    op = symbol_expr(tmp);
+  };
+  bind(lhs);
+  bind(rhs);
+
+  auto lane = [](const exprt &op, const exprt &i) {
+    return op.type().is_vector() ? index_exprt(op, i, op.type().subtype()) : op;
+  };
+
+  const typet &mask_type = type.subtype();
+  // A true lane is all ones, which for a _Bool lane is 1: from_integer(-1) has
+  // no bool representation and yields nil.
+  const exprt set = mask_type.is_bool() ? static_cast<exprt>(true_exprt())
+                                        : from_integer(-1, mask_type);
+  new_expr = gen_zero(type);
+  for (size_t i = 0; i < new_expr.operands().size(); i++)
+  {
+    const exprt index = from_integer(i, index_type());
+    exprt holds(relation, bool_type());
+    holds.copy_to_operands(lane(lhs, index), lane(rhs, index));
+    new_expr.operands()[i] = if_exprt(holds, set, gen_zero(mask_type));
+  }
+
+  for (auto it = bindings.rbegin(); it != bindings.rend(); ++it)
+  {
+    exprt comma("comma", type);
+    comma.copy_to_operands(*it, new_expr);
+    new_expr.swap(comma);
+  }
 }
 
 bool clang_c_convertert::get_compound_assign_expr(
