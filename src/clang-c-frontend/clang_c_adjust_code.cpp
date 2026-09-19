@@ -77,7 +77,11 @@ void clang_c_adjust::adjust_code(codet &code)
     adjust_decl_block(code);
   else
   {
-    if (statement == "expression" && is_array_like(code.op0().type()))
+    /* Only an array decays (C11 6.3.2.1p3): a vector is a value, and the last
+     * statement of a statement expression is the one whose value is used, so
+     * decaying one there loses it (#7906). Keep the statement test first --
+     * other kinds reach here with no operand. */
+    if (statement == "expression" && is_decaying_array(code.op0().type()))
     {
       /* An array-type'd statement like "y->ss;" where y is a pointer to
        *
