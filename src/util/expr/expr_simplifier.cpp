@@ -1340,6 +1340,10 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+
+    // The functor edits a copy of the operand, so the folded value would keep
+    // the operand's source spelling, which c_expr2string prints in its place.
+    to_constant_floatbv2t(simpl_res).cformat = irep_idt();
   }
   else
     return expr2tc();
@@ -3441,6 +3445,12 @@ expr2tc bitcast2t::do_simplify() const
   // boundary is what tells smt_memspace.cpp to materialize pointer object
   // and offset components (without it, every pointer-as-pointer use stays
   // an array index, which generates a much larger case-split tree).
+
+  /* A pointer bitcast must stay a bitcast: it reinterprets the bits ESBMC
+   * stored, which convert_bitcast() models as an injection, while a typecast
+   * means the numeric address, which does not identify a pointer (#7855). */
+  if (is_pointer_type(type) || is_pointer_type(from->type))
+    return expr2tc();
 
   // This should be fine, just use typecast
   if (

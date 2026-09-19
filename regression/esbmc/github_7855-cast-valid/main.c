@@ -1,5 +1,6 @@
-// esbmc/esbmc#7855: the github_7855-cast round trip already holds once the
-// pointer is pinned to an object ESBMC knows about.
+// esbmc/esbmc#7855 left the C-level integer round trip alone: a typecast means
+// the numeric address, which identifies a pointer only for an object ESBMC
+// knows about. This pins that case, which the bitcast change must not disturb.
 #include <stdint.h>
 
 int g;
