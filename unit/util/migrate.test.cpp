@@ -1350,3 +1350,58 @@ TEST_CASE("a nondet side effect gains no empty comment keys", "[migrate]")
   REQUIRE(back.find(irept::a_cmt_size).is_nil());
   REQUIRE(back.find(irept::a_cmt_type).is_nil());
 }
+
+// side_effect_function_call2tc stores get_empty_type() as its alloctype because
+// that is what round-trips, so guarding the `#type` write on nil alone still
+// invents the key for every call -- which is why §155's guard moved nothing
+// (docs/roadmap/scope-clang-c-irep2.md §157.1).
+TEST_CASE("a call side effect gains no #type key", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    symbol2tc(get_uint32_type(), "c:@F@f"),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// `const` on a pointee is `#constant` on the pointed-to type, and c_expr2string
+// prints it -- so losing it across the seam re-renders every cast through a
+// const pointer (docs/roadmap/scope-clang-c-irep2.md §158).
+TEST_CASE("a const-qualified integer keeps its qualifier", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("the qualifier survives the round trip")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+
+    type2tc t = migrate_type(q);
+    REQUIRE(is_unsignedbv_type(t));
+    REQUIRE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).cmt_constant());
+  }
+
+  SECTION("an unqualified integer gains no key")
+  {
+    type2tc t = migrate_type(unsignedbv_typet(8));
+    REQUIRE_FALSE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).find(irept::a_cmt_constant).is_nil());
+  }
+
+  SECTION("the qualifier is no part of the type's identity")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+    REQUIRE(migrate_type(q) == migrate_type(unsignedbv_typet(8)));
+    REQUIRE(migrate_type(q)->crc() == migrate_type(unsignedbv_typet(8))->crc());
+  }
+}

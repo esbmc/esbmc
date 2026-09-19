@@ -9191,3 +9191,226 @@ Hence `needs-svcomp-run`, and hence this section rather than a sentence in a con
 programs -- differed in 3 341 symbol tables with the location withheld, of which §154.1 traced
 the C++ bulk to this and to the empty `operands` list. Whether that residue collapses is the
 next thing to measure, and it is measurable only once this lands.
+
+## 157. Four causes, one fixed, and the arm still does not move (2026-09-16)
+
+§155.2 measured the local arm at 3 343 with the empty comment keys guarded. §156 restored the
+side-effect location, which §154.1 had named as the other half of the C++ bulk. Re-measured on
+top of it, both arms from the same commit:
+
+```
+3 341  before either fix
+3 343  with the comment-key guard (§155)
+3 348  with the location restored as well (§156)
+```
+
+No movement. §154.1's attribution was wrong on both counts, and it was wrong for a reason worth
+naming: it generalised from **one** program's diff.
+
+### 157.1 What a five-program sample says
+
+Sampled from the current differing list rather than picked, and aggregated:
+
+```
+16 ×   > * #type: empty                         still added
+16 ×   < * operands:                            the empty list, still dropped
+16 ×   < * constructor: N                       a key not previously identified
+10 ×   < (const unsigned char *) → (unsigned char *)   the qualifier
+```
+
+Four independent causes, two of them new to this section. The first is a bug in §155's own
+guard: `side_effect_function_call2tc` stores `get_empty_type()` as its alloctype -- `migrate.cpp`
+`:533` explains that empty, not nil, is the round-trip-stable form -- so guarding the `#type`
+write on `!is_nil_type` alone lets it through for every call, which is precisely why §155 moved
+2 059 programs and still changed nothing about the arm. Guarding on nil **and** empty removes it.
+
+That fix is here, with a unit case (`a call side effect gains no #type key`) that fails on the
+nil-only guard. On the default path it changes **2 061 of 8 682** symbol tables, all of them
+losing `#type: empty`; suites hold at baseline (`regression/esbmc` 2 of 2 303, `esbmc-cpp/cpp` 6
+of 1 065, unit 880 of 880).
+
+The dropped `constructor` key is not diagnosed here. It is recorded, not explained, because the
+last four sections each explained a symptom and each was refuted by the next measurement.
+
+### 157.2 The shape of the remaining work
+
+Four ticks have produced four correct small fixes -- `#cformat` carried, empty comment keys
+guarded twice, the location restored -- and the arm's cost has not moved by more than seven
+programs. The reason is structural rather than accidental: the local arm's 3 341 is not one cause
+with a tail but several independent losses at the same seam, and each fix removes one stratum
+without exposing the floor.
+
+Two questions would settle more at once than the remaining strata will, and both have been open
+since §57 without a decision:
+
+- **a `bit_field2t`**, which is what the *static* arm needs (§153) and which no amount of
+  attribute-carrying reaches;
+- **whether `type2t` carries C qualifiers**, which is the last of the four causes above and the
+  one §150.3 measured at 3 428 on its own.
+
+Recommending the second first: it is the larger share of what is left, the shape is known (§44's
+unreflected-field pattern, three precedents in this migration), and unlike the bitfield it does
+not require a new kind with a width and a migration and every `type_ids` switch answered for.
+
+## 158. The qualifier carried: 345 of 3 348 (2026-09-16)
+
+§157.2 recommended carrying C qualifiers next, on the grounds that §150.3 had measured them at
+3 428 programs on their own -- the largest single share of what the local arm's difference is made
+of. Carried, and measured: it removes **345**.
+
+### 158.1 The carry
+
+`unsignedbv_type2t` and `signedbv_type2t` each gain an unreflected `bool constant_qualified`.
+The qualifier belongs to the *pointee*, not the pointer -- `(const unsigned char *)` is a pointer
+to a qualified `unsigned char` -- so the flag sits on the bitvector kinds where the `const`
+actually is, not on `pointer_type2t`. `migrate_type` reads `type.cmt_constant()` on both arms and
+`migrate_type_back` restores it **only when set**: `#constant` is a comment field, and writing it
+false still inserts the key, which the printer reads as a qualifier. That is the same empty-key
+trap as `#cformat` (§150.1) and `#size` (§155.1), third instance.
+
+Unreflected because nothing but `c_expr2string` reads it: two integers of the same width are the
+same type whether or not one was qualified, and a unit section pins that (`migrate_type(q) ==
+migrate_type(unqualified)`, equal `crc()`). `fields_cover_class` accepted the `bool` without
+repositioning.
+
+Deliberately **not** on the `type2t` base. Two type kinds in the tree declare
+`excluded_field_bytes`; a base member would need it added to some thirty-eight, each with its own
+padding arithmetic. Starting at the two kinds the corpus shows qualified answers whether the
+narrow version suffices -- and the answer below is that it does not.
+
+### 158.2 The running total, and what it says
+
+```
+3 341   the local arm, before any of this
+3 343   §155, empty comment keys guarded on nil
+3 348   §156, side-effect location restored
+3 003   §158, const carried on the bitvector kinds      -345
+```
+
+Four fixes across five sections have removed **345 of 3 348**, about 10%. Each was correct, each
+was verified, and none exposed the floor. The remaining 3 003 includes §157.1's dropped empty
+`operands` list and its undiagnosed `constructor` key, and whatever else a larger sample would
+show.
+
+At this rate the arm is nine more sections away, with no guarantee the strata are finite.
+
+### 158.3 The question this raises about the acceptance criterion
+
+Every figure in §154-§158 is a **symbol-table** difference. The symbol table is a debug dump;
+the GOTO program is what gets verified. If converting the local arm leaves the GOTO identical and
+the suites green, the conversion is safe and the printed-table differences are cosmetic -- in
+which case the arm has been held back for nine sections by the wrong measurement.
+
+That is the next thing to measure and it is cheap: the local arm's GOTO cost, with all four fixes
+in place, against a base from the same commit. §149.2's 2 112 was measured with **both** arms
+converted and none of the fixes, so it does not answer this. If the local arm's GOTO is clean, it
+converts; if it is not, the strata matter and §157.2's structural recommendation stands.
+
+## 159. The criterion was wrong, and the arm has three hard failures (2026-09-16)
+
+§158.3 asked whether nine sections of symbol-table accounting had been measuring the wrong
+artefact. They had. It also hoped the answer would unblock the local arm. It does not.
+
+### 159.1 The GOTO cost is 106, not 3 003
+
+Converting `clang_c_convert.cpp:659` with all four of this stack's seam fixes in place, both arms
+built from the same commit:
+
+```
+symbol tables differing   3 003 of 8 682   (§158.2)
+goto programs differing     106 of 8 682   1.2%
+```
+
+So 97% of what §154-§158 measured was a debug dump diverging, not the program under verification.
+The four carries were correct and are worth having -- the seam invents less now -- but the figure
+they were chasing was the wrong one, and §157.2's "nine more sections" projection was built on it.
+
+### 159.2 Of those 106, fifteen abort -- for three different reasons
+
+```
+91  differ benignly
+15  abort (exit 134), across three distinct assertions:
+     7  `symbol' failed
+     4  `sz % a == 0' failed                         the bitfield padding assertion, §153
+     4  `... struct_union_get_component_number(source->type, memb).has_value()' failed
+```
+
+`regression/esbmc/github_571_3`, one of the four padding aborts, has `unsigned b : 12` in its
+source -- the same bitfield cause §153 isolated for the static arm, so that one is shared.
+
+The other two are new and undiagnosed here. A null symbol in seven programs and a failed struct
+member lookup in four are not rendering differences; they are the conversion producing a value
+that a later pass cannot use. Neither is diagnosed in this section, for the reason §157.1 gave:
+five sections in this stack have explained a symptom and been refuted by the next measurement.
+
+### 159.3 Where this leaves Phase 6
+
+| arm | GOTO cost | hard failures |
+|---|---|---|
+| `:632` static | not separately measured | the bitfield assertion, corpus-wide (§153) |
+| `:659` local | 106 of 8 682 | 15, across three assertions, one shared with the static arm |
+
+Neither arm converts. What has changed is the size and shape of the obstacle: not 3 003
+differences needing nine more carries, but **15 programs failing hard for three reasons**, of
+which one is known and two are not. That is a tractable list, and it is the first time in this
+investigation that the remaining work has been a list rather than a slope.
+
+The bitfield is still the one with a name and no cheap answer -- `bit_field2t` needs a width, a
+migration in both directions, and every `type_ids` switch answered for. The other two need
+diagnosing before anyone can say what they need.
+
+## 160. The seven null-symbol aborts are §53's precondition (2026-09-16)
+
+§159.2 left three abort causes on the local arm, two undiagnosed. This diagnoses the largest.
+
+### 160.1 Which programs, and what is missing
+
+Six of the seven are variadic, which is the whole clue:
+
+```
+regression/esbmc/va_binds_by_reference
+regression/esbmc/irep2_only_va_binds_by_reference
+regression/esbmc/irep2_only_va_binds_by_reference_c23
+regression/esbmc/irep2_only_va_copy_binds_by_reference
+regression/esbmc/vasprintf_valist_consumed_no_recovery_fail
+regression/nonz3/variadic_function
+regression/esbmc-cpp/cpp/github_2254_fail
+```
+
+The assertion is `namespacet::follow`'s `assert(symbol)` (`util/symtab/namespace.cpp:60`) -- a
+`symbol_typet` naming something the namespace cannot find. Instrumented to print the identifier
+rather than guessed at:
+
+```
+[FOLLOW] missing identifier=tag-struct __va_list_tag
+```
+
+### 160.2 The identifier is right; the timing is not
+
+`tag-struct __va_list_tag` **is** in the symbol table -- `--symbol-table-only` on the same program
+without the conversion shows it, with its four members. So this is not a naming mismatch of the
+kind §44 and §46 were: the name is correct and the symbol exists by the end of conversion. It does
+not exist *yet* when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`.
+
+That is the blocker §146 listed third -- "a symbol that does not exist yet"
+(`scope-python-irep2.md` §6.1) -- and §53's precondition in its original form: at converter time
+the clang AST is the only complete source, and a migration that has to resolve a type through the
+namespace is asking the symbol table a question it cannot answer yet.
+
+So seven of the fifteen hard failures are one known class, and the class already has a stated
+answer: do not migrate eagerly at converter time. That is a constraint on *where* a value write
+can be converted, not a defect to fix.
+
+### 160.3 What the fifteen look like now
+
+| assertion | count | cause |
+|---|---|---|
+| `symbol' failed | 7 | §53's precondition -- the type's tag symbol is not in the table yet |
+| `sz % a == 0' | 4 | no `bit_field2t` in IREP2 (§153) |
+| `...get_component_number(...).has_value()` | 4 | undiagnosed |
+
+Two of the three groups now have causes, and they are different kinds of thing: one is a missing
+type kind that needs building, the other a precondition that says this particular site cannot be
+converted at all. Neither is a rendering difference, and neither is helped by another attribute
+carry -- which retires the approach §155 through §158 took, on evidence rather than on my
+impatience with it.

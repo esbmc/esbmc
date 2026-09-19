@@ -4258,3 +4258,112 @@ held this for a competition run rather than letting it ride along.
 
 What it unblocks is measurable only once it lands: the local arm's 3 341 differing symbol tables,
 whose C++ bulk §69 traced to this location and to the empty `operands` list.
+
+## 71. The arm has four causes, not one (2026-09-16)
+
+§70 restored the side-effect location, the last of the two shapes §68 blamed for clang-c's local
+value write differing in 3 341 symbol tables. Measured on top of it: **3 348**. Three fixes across
+four ticks and the figure has moved by seven programs.
+
+A five-program sample drawn from the differing list -- rather than the single program §68
+generalised from -- shows four independent causes:
+
+```
+> * #type: empty                       still added
+< * operands:                          still dropped
+< * constructor: N                     not previously identified
+< (const unsigned char *) → (unsigned char *)
+```
+
+The first is a bug in §69's own guard, fixed here. `side_effect_function_call2tc` stores
+`get_empty_type()` as its alloctype because empty, not nil, is what round-trips
+(`migrate.cpp:533`), so guarding the `#type` write on `!is_nil_type` alone let it through for
+every call -- which is exactly why §69 changed 2 059 programs and nothing about the arm. Guarding
+on both removes it: 2 061 more symbol tables on the default path, suites at baseline, and a unit
+case that fails on the nil-only guard.
+
+The dropped `constructor` key is recorded and not explained. Four sections in a row have
+explained a symptom and been refuted by the next measurement; this one stops at the observation.
+
+What the pattern says is that the arm is not one loss with a tail but several strata at one seam,
+and peeling them one per tick is the wrong shape of work. The two questions that would settle more
+at once are both open since §57: a `bit_field2t` for the static arm (§67), and whether `type2t`
+carries C qualifiers -- the fourth cause above, measured at 3 428 on its own in §64. The second is
+the better next move: bigger share, known shape, three precedents, and no new type kind.
+
+## 72. Four carries, 345 of 3 348, and a question about the criterion (2026-09-16)
+
+§71 recommended carrying C qualifiers next, because §64 had measured them at 3 428 programs on
+their own. Carried -- an unreflected `bool constant_qualified` on `unsignedbv_type2t` and
+`signedbv_type2t`, restored only when set, with a unit section pinning that it is no part of the
+type's identity -- and it removes **345** of the local arm's 3 348.
+
+```
+3 341  before any of it
+3 343  empty comment keys guarded (§69)
+3 348  side-effect location restored (§70)
+3 003  const carried (§72)
+```
+
+Four correct, verified fixes; 10% of the difference; no floor in sight. The rest includes §71's
+dropped empty `operands` list and its undiagnosed `constructor` key.
+
+The useful thing this tick produced is not the 345 but a doubt about what has been measured all
+along. Every one of those figures is a **symbol-table** difference, and the symbol table is a debug
+dump -- the GOTO program is what gets verified. If the local arm's GOTO is identical with these
+fixes in place and the suites stay green, then the conversion is safe and nine sections of
+symbol-table accounting have been holding it back for a cosmetic reason.
+
+So the next measurement is the local arm's GOTO cost, with all four fixes, against a base from the
+same commit. §63's 2 112 does not answer it -- that was both arms converted and none of the fixes.
+If the GOTO is clean the arm converts and Phase 6 moves; if not, §71's recommendation stands and
+the choice is a `type2t` base-class qualifier field against accepting the rendering difference.
+
+## 73. 106, not 3 003 -- and fifteen of them abort (2026-09-16)
+
+§72 doubted the criterion: every figure from §68 onward was a symbol-table difference, and the
+symbol table is a debug dump rather than the program that gets verified. Measured, the doubt was
+right and the hope behind it was wrong.
+
+Converting `clang_c_convert.cpp:659` with all four seam fixes in place, both arms from the same
+commit: **106 of 8 682** goto programs differ, against 3 003 symbol tables. So 97% of what five
+sections measured was rendering. The carries were correct -- the seam invents less now -- but the
+number they chased was the wrong one, and the "nine more sections" projection rested on it.
+
+Of the 106, **91 differ benignly and 15 abort**, across three distinct assertions: seven a null
+`symbol`, four the `sz % a == 0` padding assertion that §67 traced to IREP2 having no bitfield
+type, and four a failed struct member lookup. `regression/esbmc/github_571_3` is one of the
+padding four and has `unsigned b : 12` in its source, so that cause is shared with the static arm.
+The other two are recorded and not diagnosed.
+
+So neither arm converts, but the obstacle has changed shape: not thousands of differences needing
+more carries, but **fifteen programs failing hard for three reasons**, one known and two not. For
+the first time in this investigation the remaining work is a list rather than a slope.
+
+`scope-clang-c-irep2.md` §159 has the breakdown. Phase 6 stays at B-2\* 19.
+
+## 74. Seven of the fifteen are a precondition, not a defect (2026-09-16)
+
+§73 left three abort causes on clang-c's local value-write arm, two of them undiagnosed. The
+largest is now diagnosed, by instrumenting the failure rather than reasoning about it.
+
+Six of the seven `symbol' aborts are variadic programs, and the missing identifier is
+`tag-struct __va_list_tag`. That symbol **is** in the table -- `--symbol-table-only` without the
+conversion shows it with its four members -- so the name is right and the timing is wrong: it is
+not there yet when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`. `namespacet::follow`
+then asserts.
+
+That is the blocker §146 listed third and `scope-python-irep2.md` §6.1 named first: a symbol that
+does not exist yet. It is a constraint on *where* a value may be converted, not a defect to repair
+-- at converter time the clang AST is the only complete source, and a migration that resolves a
+type through the namespace is asking the symbol table a question it cannot answer.
+
+```
+7  `symbol' failed        §53's precondition -- tag not in the table yet
+4  `sz % a == 0'          no bit_field2t (§67)
+4  component lookup       undiagnosed
+```
+
+Two causes known, of two different kinds: one wants a type kind built, the other says this site
+cannot be converted at all. Neither is a rendering difference and neither yields to another
+attribute carry -- which retires the §69-§72 approach on evidence.
