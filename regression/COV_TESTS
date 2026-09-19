@@ -1755,3 +1755,4 @@ regression/esbmc/multi_property_same_position_asserts_kinduction
 regression/goto-coverage/condition_coverage_goal_key
 regression/esbmc/multi_property_same_position_asserts_loop
 regression/esbmc/same_position_assert_bidirectional
+regression/esbmc/proof_cache_reuse
