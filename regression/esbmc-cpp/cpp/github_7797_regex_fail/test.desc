@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++11 --unwind 16
+^VERIFICATION FAILED$
+^.*assertion re.mark_count\(\) == 3$
