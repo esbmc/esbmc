@@ -2708,3 +2708,236 @@ it. The test cannot pass with the fix absent or over-applied.
 
 With this in, the ten writes §16.2 deferred lose their only objection, and re-attempting them is the
 next step.
+
+## 18. The ten, landed (2026-09-16)
+
+§17's fix removed the only objection to the ten writes §16.2 deferred, and they now behave the way
+§16.2 predicted they would once the printer stopped inventing collisions.
+
+### 18.1 The prediction, checked
+
+Base against change on this branch -- printer fix in both arms, conversions the only difference --
+over all 526 Solidity tests:
+
+```
+                        §16.2 (printer unfixed)     §18 (printer fixed)
+--goto-functions-only         0 of 525                  0 of 526
+--symbol-table-only         523 of 525                  0 of 526
+```
+
+513 of the 526 digests are distinct, so this is not the all-equal vacuity of §158. That is the whole
+argument of §17 discharged by measurement: the 523 were a reader treating two spellings of one symbol
+as two symbols, not a loss at the seam, and nothing had to be carried to fix them.
+
+### 18.1.1 "Output-neutral" is the conclusion, not the mechanism
+
+The round trip is lossy at **all ten** sites, and it drops three things rather than the one §17
+discussed:
+
+```
+ORIG                             BACK
+  * type: unsignedbv               * type: unsignedbv
+      * #sol_type: UINT256             (dropped -- migrate_type returns a bare type)
+  * name: $dl_arg0$26              (dropped -- symbol2t carries only `thename`)
+  * identifier: sol:@C@...#0       * identifier: sol:@C@...#0
+  * #location: contract.sol:23     (dropped -- base expr2t has no location field;
+                                    only selected kinds carry one, unreflected)
+```
+
+So the change is output-neutral as a *result*, and the reason is a consumer argument, not preservation.
+`#sol_type` has around twenty readers via `get_sol_type` (`solidity_convert.h:74`) and `#location`
+feeds counterexample and witness rendering -- but none of them re-reads *these* bodies: the frontend
+synthesises each one, writes it, and never looks at it again, and everything downstream consumes the
+GOTO, which is byte-identical over all 526 programs. That is the third time in this phase that a
+byte-identical dump has turned out to be blind to an attribute loss (§16.1.1, §17.1), so it is worth
+stating as the standing rule: identical output establishes that no *reader* noticed, never that
+nothing was dropped.
+
+`solidity_convert_call.cpp` is now at zero B-2* residue, 19 of 19. Solidity 56 -> 46; the repo total
+135 -> 125.
+
+### 18.2 What gates a body write, which is not what gates a type write
+
+§16.1.1 found the type writes gated by `migrate_symbol_type`'s round-trip assertion
+(`migrate.cpp:477`). The eight body writes have no such gate, and deliberately so:
+
+```cpp
+// migrate.cpp:490-503 -- migrate_symbol_value
+// ... we still skip function bodies (no caller goes through this path on
+// them today, and the assertion would force a potentially-large body
+// round-trip for no signal) ...
+if (!sym.get_type().is_code() && !sym.get_value().is_nil())
+```
+
+So the eight are gated by the byte-identical GOTO instead -- but not for the reason it is tempting to
+give, and the real reason is worth spelling out because it is fragile.
+
+"The GOTO is the thing written" does not by itself make the comparison bite. `goto_convert_functions`
+already round-trips every body before goto-convert sees it:
+
+```cpp
+// goto_convert_functions.cpp:1839
+exprt roundtrip_body_storage = migrate_expr_back(symbol.get_value2());
+```
+
+Pre-change the legacy side is authoritative and `get_value2()` lazily computes `migrate_expr(B)`;
+post-change `value_` *is* `migrate_expr(B)`. Both arms then hand the same `expr2tc` to
+`migrate_expr_back`. With nothing in between the GOTO could not differ, and the measurement would be a
+control rather than a discriminator.
+
+What makes it discriminate is the pass between them. Solidity Phase 4 runs `clang_cpp_adjust`
+(`solidity_language.cpp:370`), whose `adjust_symbol` does a **legacy** read-modify-write on every
+symbol's value and type (`clang_c_adjust_expr.cpp:75-93`). So the real comparison is
+`migrate_expr(A(B))` against `migrate_expr(A(R(B)))` with `R = migrate_expr_back . migrate_expr`, which
+is discriminating. It is also brittle: `clang_c_adjust_irep2` exists, and on the day Phase 4 adopts it
+this gate becomes vacuous silently.
+
+### 18.2.1 The property that actually makes it safe
+
+The round trip is *not* lossless -- 4793 of 4808 body round-trips differ, dropping `name` (70),
+`#sol_type` (37), `#extint` (20), a `code` type on a `code_block` (14), `pretty_name` (10) and
+`#cpp_type` (6) in one test's six bodies alone. `__ESBMC_HIDE` does survive: `code_label2t` carries the
+label and `migrate_expr_back` restores it (`migrate.cpp:3862`).
+
+What holds is a weaker and sufficient property -- the IREP2 image is a **fixpoint**:
+
+```
+migrate_expr(migrate_expr_back(migrate_expr(e))) == migrate_expr(e)     4808 of 4808 stable
+```
+
+Whatever the legacy form loses, the IREP2 form had already discarded, so re-migrating after the
+adjuster lands in the same place. That, not dump identity, is why the extra round trip cannot reach the
+GOTO, and unlike byte-identity it generalises beyond the corpus measured.
+
+The execution figures for the ten differ from §16.1's, because the markers differ. The two
+`arg_exprs[i]` writes sit *inside* the per-argument loop, so `$dl_arg<i>$<slot>` is their marker and it
+appears in **12** tests (`delegate_shadow_1..12`); `$dl_harg<i>$<slot>` covers the helper variant in
+three. §16.1's `$dl_ret$` count of 3 is the return slot, created outside that loop -- the right marker
+for the `gen_zero` site it was quoted for, and an undercount for these two. Line 931's body write is
+reached by `function_overload_1_fail`, and `$typed_call$` by `typed_call_1..4`. Every site has CORE
+tests pinning both verdict directions.
+
+It is also not vacuous in the empty-equals-empty sense. The synthesised bodies carry real content --
+`sol:@C@CallWrapper@F@$call#0` lowers to `DECL`, `ASSIGN`, an `IF`/`GOTO` pair and a `FUNCTION_CALL`
+under `__ESBMC_HIDE` -- so the comparison has something to compare.
+
+The two `arg_exprs[i]` writes are on non-code locals, so the assertion above *would* apply to them --
+and it still does not cover them, for two independent reasons. It never runs: `migrate_symbol_value`
+has exactly one caller in the tree, `contracts.cpp:901`, on a C contract symbol, where
+`migrate_symbol_type` has 35 including `namespace.h:35`. That asymmetry is precisely why §16.1.1's
+type-write premise was sound and why transposing it to a value write is not. And if it did run it could
+not tell the arms apart: `dest = get_value2()` yields the same expression before and after the change,
+and the assertion tests IREP2-side stability, whereas the risk is a forward loss inside `migrate_expr`
+-- a dropped field leaves `dest` perfectly stable and the assertion green. Wrong direction entirely.
+
+What actually makes those two the lowest-risk of the ten is that their stored value is effectively
+write-only: the GOTO initialiser comes from the separate, unmigrated
+`decl.operands().push_back(arg_exprs[i])` on the following line, and `get_default_symbol` does not set
+`static_lifetime`, so none of the four readers of §53 reaches it.
+
+### 18.3 The shape of the sequence
+
+Four steps, and only one of them was a conversion:
+
+```
+#7882   9 writes    type writes + native gen_zero, reader argument for the attributes
+#7883   1 line      the printer bug that made the other ten look expensive
+#18    10 writes    the same ten, now inert
+```
+
+The middle step is the one worth remembering. §16.2 costed the ten at "reconstruct `name` in
+`migrate_expr_back`", which would have added a derivation to the hottest path in the tool to satisfy a
+consumer that was wrong. Measuring the consumer instead cost one line and fixed a live defect in three
+printers. Before paying to carry a marker across the seam, price the alternative of fixing the reader.
+
+## 19. What B-2 measures, and what it does not (2026-09-16)
+
+Reviewing §18 turned up something larger than §18. It bears on every B-2 conversion this phase has
+made in a frontend that runs the legacy adjuster, PR #7882 included, so it is recorded on its own
+rather than as a footnote.
+
+### 19.1 The adjuster reverts every converter-side write
+
+`clang_c_adjust::adjust()` sweeps the whole context (`clang_c_adjust_expr.cpp:26-62`): types first via
+the `symbol.is_type` branch, then `adjust_symbol` for the rest. Both arms are legacy
+read-modify-writes:
+
+```cpp
+// clang_c_adjust_expr.cpp:75-93  (adjust_symbol)
+if (!symbol.get_value().is_nil())
+{ exprt v = symbol.get_value(); adjust_expr(v); symbol.set_value(std::move(v)); }
+...
+{ typet t = symbol.get_type(); adjust_type(t); symbol.set_type(std::move(t)); }   // unconditional
+```
+
+`set_value(exprt &&)` and `set_type(typet &&)` mark the *legacy* side authoritative and invalidate the
+IREP2 one (`symbol.cpp:66-71`). So for every frontend that runs this pass -- Solidity
+(`solidity_language.cpp:370`), Python, clang-c and clang-cpp -- a converter-side `set_type(migrate_type
+(...))` or `set_value(migrate_expr(...))` is **undone a few hundred microseconds later**, and
+`get_value2()`/`get_type2()` re-derive from legacy at the next read exactly as before.
+
+That covers §18's ten value writes and, equally, §16's seven type writes in PR #7882: the type arm is
+unconditional, so it reverts those too.
+
+### 19.2 So the bar counts call-site form, not durable storage
+
+`scripts/irep2/bars.py` measures the *shape of the write* -- whether the argument handed to
+`set_type`/`set_value` is IREP2. It cannot see what the adjuster does next. Read that way the figures
+are still true and still useful: Solidity 65 -> 46 across #7882 and §18, repo total 144 -> 125, and
+`solidity_convert_call.cpp` at 19 of 19. Read as "the symbol table now holds IREP2 for these symbols",
+they are wrong.
+
+The conversions are not thereby pointless -- they are the prerequisite half. A frontend cannot stop
+round-tripping through legacy while its converter still writes legacy, so these writes are what makes
+flipping the adjuster possible. But 100% IREP2 in the frontends needs both halves, and only one of them
+is what B-2 counts.
+
+### 19.3 The named blocker
+
+Durable IREP2 storage for these frontends requires Phase 4 to adopt the IREP2-native adjuster
+(`clang_c_adjust_irep2`, already in tree and reachable under `--clang-cpp-irep2-adjust-only` and
+`--python-irep2-adjust-only`, exercised by 24 `esbmc-cpp` descriptors). Until then every converter-side
+write is provisional.
+
+Two consequences worth carrying:
+
+- A bar reading of "Phase N complete" should say *complete at the converter*, and the roadmap's
+  end-state claim needs an adjuster row beside the B-2 row.
+- §18.2's gate is an accident of this arrangement. When the adjuster stops round-tripping, the
+  byte-identity that gates a body conversion stops discriminating -- silently. The fixpoint property of
+  §18.2.1 is the one that survives the flip, which is another reason to prefer it.
+
+### 19.3.1 A pin that looked durable and is not
+
+One suggestion for giving these ten an in-repo gate was a `--symbol-table-only` test over
+`delegate_shadow_8` pinning the rendered helper argument, on the grounds that it would have failed
+before §17's printer fix and passes now. It does render short:
+
+```
+unsigned _ExtInt(256) $dl_harg0$27=$dl_arg0$26;
+```
+
+But it does not discriminate *this* change. Before the conversion the body is stored legacy and keeps
+its `name`; after it, the round trip drops `name`, which would have produced two spellings and a
+spurious collision -- except that §17 removed the collision. So with the printer fix in place the line
+is byte-identical either way, and the test would pin §17, which
+`regression/esbmc-solidity/shorthand_spurious` already pins. Adding it would be a second pin on an
+already-pinned property wearing the label of a pin on this one. Recorded rather than written.
+
+### 19.4 Two defects found in passing, not fixed here
+
+Both are pre-existing and out of this change's scope; recorded so they are not lost.
+
+`solidity_convert_call.cpp:3209` builds a relational with its operand's type rather than `bool`:
+
+```cpp
+exprt less_than = exprt("<", val_expr.type());   // unsignedbv 256, not bool
+```
+
+Two lines above, the `=` is built correctly with `bool_t` (`:3192`), so the file is internally
+inconsistent. `migrate_expr` masks it, because `lessthan2t` is bool by construction -- which is why the
+round trip *retypes* that node rather than merely stripping annotations from it.
+
+`solidity_convert_call.cpp:787-789`, in `get_high_level_member_access`, sets `lvalue`/`file_local` on
+the local copy *after* `move_symbol_to_context`, so the context symbol never receives them. The two
+argument sites do it correctly, before the move.
