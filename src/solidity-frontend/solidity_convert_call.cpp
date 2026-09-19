@@ -16,6 +16,7 @@
 #include <util/arith/mp_arith.h>
 #include <util/irep/std_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/irep/migrate.h>
 #include <util/message/message.h>
 #include <fstream>
 #include <limits>
@@ -1552,7 +1553,7 @@ bool solidity_convertert::get_typed_call_definition(
 
     arg_param_ids.push_back(pid);
   }
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // Body construction.
   code_blockt func_body;
@@ -1888,7 +1889,11 @@ bool solidity_convertert::try_inline_delegate_shadow_helper_call(
       get_default_symbol(rs, debug_modulename, rt, rname, rid, loc);
       rs.lvalue = true;
       rs.file_local = true;
-      rs.set_value(gen_zero(get_complete_type(rt, ns), true));
+      // expr2tc return type, so this cannot silently fall back to the legacy
+      // gen_zero the decl operand below still wants.
+      const expr2tc rzero =
+        gen_zero(migrate_type(get_complete_type(rt, ns)), true);
+      rs.set_value(rzero);
       auto &added_ret = *move_symbol_to_context(rs);
       code_declt rdecl(symbol_expr(added_ret));
       rdecl.operands().push_back(gen_zero(get_complete_type(rt, ns), true));
@@ -2139,7 +2144,10 @@ bool solidity_convertert::try_get_delegate_shadow_call(
         get_default_symbol(rs, debug_modulename, rt, rname, rid, loc);
         rs.lvalue = true;
         rs.file_local = true;
-        rs.set_value(gen_zero(get_complete_type(rt, ns), true));
+        // expr2tc return type; see the sibling site.
+        const expr2tc rzero =
+          gen_zero(migrate_type(get_complete_type(rt, ns)), true);
+        rs.set_value(rzero);
         auto &added_ret = *move_symbol_to_context(rs);
         code_declt rdecl(symbol_expr(added_ret));
         rdecl.operands().push_back(gen_zero(get_complete_type(rt, ns), true));
@@ -2327,7 +2335,7 @@ bool solidity_convertert::get_call_definition(
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body:
   /*
@@ -2604,7 +2612,7 @@ bool solidity_convertert::get_call_value_definition(
   param.cmt_identifier(val_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body:
   /*
@@ -2857,7 +2865,7 @@ bool solidity_convertert::get_transfer_definition(
   param.cmt_identifier(val_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   code_blockt func_body;
   exprt addr_expr = symbol_expr(addr_added_symbol);
@@ -3105,7 +3113,7 @@ bool solidity_convertert::get_send_definition(
   param.cmt_identifier(val_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   code_blockt func_body;
   exprt addr_expr = symbol_expr(addr_added_symbol);
@@ -3325,7 +3333,7 @@ bool solidity_convertert::get_staticcall_definition(
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body: same as call#0
   code_blockt func_body;
@@ -3488,7 +3496,7 @@ bool solidity_convertert::get_delegatecall_definition(
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body:
   // Unlike call, delegatecall does NOT change msg.sender or msg.value.

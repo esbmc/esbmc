@@ -2432,3 +2432,279 @@ which no test in the corpus reaches at all. The last of those is the cheapest th
 could fix next and the only one that is a test gap rather than a design question:
 `mapping.cpp:478` needs `S s = m[k];` -- reading a struct by value out of a mapping -- which
 no Solidity test in the tree does.
+
+## 16. The synthesised low-level-call builtins, and a fourth name loss (2026-09-16)
+
+`solidity_convert_call.cpp` held 19 of the 144 remaining B-2* writes -- the densest convertible
+cluster left in any frontend -- in one repeated idiom. Each synthesised builtin builds a legacy
+`code_typet t`, then a legacy `code_blockt func_body`, and writes both.
+
+### 16.1 What converted, and the evidence it is inert
+
+Nine of the 19 landed: the seven `set_type(t)` writes, and the two `set_value(gen_zero(...))` writes,
+the latter hoisted into a typed local so the IREP2 `gen_zero(const type2tc &, bool)` overload
+(`irep2_utils.h:335`) is selected rather than the legacy one, as a compile-time guarantee rather than
+a comment. The `code_declt` operand on the following line deliberately keeps the legacy overload.
+
+Over all 525 Solidity tests, base against change, `--goto-functions-only` **and**
+`--symbol-table-only` are byte-identical -- **0 of 525 differ on either**, measured on a `DebugOpt`
+build so `migrate_symbol_value`'s round-trip assertion (`migrate.cpp:490-504`) was live rather than
+compiled out. 512 of the 525 digests are distinct, so the comparison is not the all-equal vacuity of
+§158. Both flags write to **stderr**, so the capture is `2>&1`; a `2>/dev/null` capture hashes one
+version banner and reports a false zero.
+
+### 16.1.1 What that measurement cannot see, and why the writes are still safe
+
+`migrate_type` here is **not** lossless, and the digests are blind to the loss by construction. The
+seven code types are assembled from `solidity_convert.cpp:107-118`, where the members carry comment
+keys the seam does not:
+
+```cpp
+addr_t = unsignedbv_typet(160);  set_sol_type(addr_t, ADDRESS);
+bool_t = bool_type();            set_sol_type(bool_t, BOOL);  bool_t.cpp_type("bool");
+```
+
+`migrate_type` returns a bare `bool_type2tc()` / `unsignedbv_type2tc(w, cmt_constant())`, so
+`#sol_type` goes from the return type and every argument type, and `#cpp_type` from the return type.
+The dumps cannot register it: `show_symbol_table_plain` prints through `p->from_type` / `p->from_expr`
+(`show_symbol_table.cpp:21-29`), the language pretty-printer. Only `irept::pretty` prints named_sub
+and comments, and neither `-only` flag takes that path. So a byte-identical dump is *not* evidence of
+attribute preservation -- it is evidence about what the printer chose to print. §15.3 said this of a
+value write; it is equally true of a type write.
+
+The blindness is not limited to comment keys. Clearing the argument identifiers on `$call#0` before
+the store leaves 525/525 green **and** both dumps byte-identical, because `from_type` renders
+`_Bool (Base *, unsigned _ExtInt(160))` -- argument types, no `#identifier`, no `#base_name`. Two
+reasons it still cannot slip through: `migrate_type_back` does carry both (`migrate.cpp:3162-3173`),
+and the carry has an in-tree gate. `migrate_symbol_type` asserts
+`migrate_type(migrate_type_back(result)) == result` (`migrate.cpp:477`) on every symbol type the
+pipeline reads, reached from `goto_convert_functions.cpp:1819`, so `ctest -L esbmc-solidity` on an
+asserts build is what actually pins the seven type writes. Deleting the `argument_names` carry does
+not merely fail a test -- `python2goto` aborts and the build stops.
+
+That gate, not the dumps, is the losslessness evidence to cite. What the dumps establish is the
+weaker and still useful claim that nothing a language printer reports has moved.
+
+The remaining risk is the attributes no gate covers, and there a **reader** argument closes it. Of the 49
+`get_sol_type` sites, only two read a code type's return type
+(`solidity_convert_modifier.cpp:85`, `:191`), and both read a local `code_typet`, never
+`symbol.get_type()`. The six unconditional builtins' call expressions take the member `bool_t`
+directly (`solidity_convert_mapping.cpp:617-643`), not the symbol's type. The single read-back is
+
+```cpp
+// solidity_convert_call.cpp:2266
+call.type() = to_code_type(helper_sym->get_type()).return_type();
+```
+
+and that type is never queried for `#sol_type` again -- it goes straight into
+`convert_expression_to_code`. `#cpp_type` has four readers, none on a Solidity path. Argument
+`#identifier` and `#base_name` *are* carried (`migrate.cpp:349-356`, `:3162-3173`), as is `ellipsis`.
+
+One asymmetry this leaves, recorded rather than fixed: at the two `gen_zero` sites
+`get_default_symbol` stores `rt` through the legacy setter, so `rs.get_type()` keeps `#sol_type` while
+`rs.get_value()->type` does not. Nothing compares the two for these locals -- they are
+`lvalue`/`file_local` and the initialiser rides the `code_declt`, not the symbol value.
+
+### 16.1.2 The two value writes are verification-inert, and what pins them instead
+
+Replacing the stored zero at `$dl_hret$` with a free symbol leaves all twelve `delegate_shadow` tests
+passing; only the dump moves, `Value.......: 0` to the mutant. The GOTO takes the value from the
+`code_declt` operand on the following line, so **no regression test can bite these two**, and asking
+for a `SUCCESSFUL`/`FAILED` pair over them is asking for something that does not exist.
+
+What pins them is a unit test, because the obligation is a pure-function property: the conversion
+swapped `gen_zero(const typet &, bool)` for `gen_zero(const type2tc &, bool)`, and those are not the
+same function. `unit/util/migrate.test.cpp` asserts they agree for every type reachable here --
+`uint256`, `address` (`unsignedbv(160)` with `#sol_type`), `bool`, a signed integer, and Solidity's
+`string`, which is a `pointer`. Mutation-checked: returning one instead of zero from the IREP2
+bitvector arm fails it.
+
+They diverge outside that set, which is why the test enumerates rather than generalises. On an
+unhandled kind legacy returns a nil `exprt` (`expr_util.cpp:90-91`) where IREP2 logs and `abort()`s
+(`irep2_utils.cpp:149-153`); and IREP2's array-of branch recurses with the default `false`
+(`irep2_utils.cpp:97-98`) where legacy propagates the flag, so a nested array would trip
+`assert(is_constant_int2t(arr_type.array_size))`. `get_complete_type` resolves symbol types before the
+call, which closes the common route into the first, and no reachable Solidity return type takes the
+second -- but the failure mode changed from a silent nil to an abort, so the boundary is worth naming.
+
+Every converted line is exercised, proven by sweeping the corpus for the uniquely-named symbol each
+builtin synthesises rather than by reading the code:
+
+```
+$call#0  $call#1  $transfer#0  $send#0  $staticcall#0  $delegatecall#0   523 of 525 tests each
+$typed_call$                                                              4
+$dl_ret$                                                                  3
+$dl_hret$                                                                 1   (delegate_shadow_8)
+```
+
+The six unconditional builtins are synthesised for essentially every contract, which is why the
+figure is 523 and not a feature-gated handful.
+
+### 16.2 Why the other ten did not land
+
+The eight `set_value(func_body)` and two `set_value(arg_exprs[i])` writes are also GOTO-neutral --
+0 of 525 -- but they change **523 of 525 symbol-table dumps**, and the cause is a name the seam does
+not carry. This is the fourth instance of that class, after `argument_base_names` (#7798),
+`member_base_names` (§46) and `#cformat`:
+
+```cpp
+// util/expr/expr_util.cpp:239-245
+exprt symbol_expr(const symbolt &symbol)
+{
+  exprt tmp("symbol", symbol.get_type());
+  tmp.identifier(symbol.id);
+  tmp.name(symbol.name);      // <-- symbol2t has only `thename`
+  return tmp;
+}
+```
+
+`migrate_expr_back` rebuilds the identifier and not the `name`, so one symbol acquires two
+inequivalent spellings: the legacy one inside an unconverted decl, and the `name`-less one inside a
+converted body. `c_expr2stringt::get_shorthands` (`util/lang/c_expr2string.cpp:40-58`) collects
+symbols into a `std::set<exprt>` and compares whole `exprt`s, so the two spellings do not dedupe,
+their shared shorthand registers as a namespace collision, and the printer falls back to the full
+mangled id:
+
+```
+base:   unsigned _ExtInt(160) old_sender=msg_sender;
+after:  unsigned _ExtInt(160) sol:@C@AddmodOverflow@F@old_sender#1=msg_sender;
+```
+
+On this corpus it is cosmetic: the GOTO does not move, 0 of 525. The *field*, however, is not
+cosmetic, and the clang-c side already knows it. `clang_c_adjust::do_special_functions`
+(`clang_c_adjust_expr.cpp:1406`) dispatches every builtin lowering on
+`to_symbol_expr(f_op).name()` -- the `name`, not the identifier -- so a callee that lost it stops
+matching, and §90.2 records what that cost: an `assert` left as a plain `FUNCTION_CALL`. Two sites
+already reconstruct the name by hand rather than live with that
+(`clang_c_adjust_irep2.cpp:1597` and `:1647`).
+
+### 16.3 What that leaves
+
+Solidity's B-2* is 65 -> 56, the repo total 144 -> 135. The ten deferred writes are blocked on one
+question, and it is not a per-site question: whether `migrate_expr_back`'s symbol arm should set
+`name(get_pretty_name(id2string(thename)))`.
+
+That is cheaper than it first looked. `get_pretty_name` (`util/symtab/pretty.h:9`) is a pure string
+function -- no symbol-table lookup, and no new field, which matters because `symbol2t` is the
+most-constructed node in the tool and must not grow. And the derivation is not speculative: it is
+exactly what `clang_c_adjust_irep2` already does at the two sites above, by hand, because the name
+was missing. Doing it once at the seam would retire those workarounds, the §90.2 class of defect, and
+these ten writes together.
+
+What it still needs is its own measurement, because setting `name` changes `irept::operator==` for
+every back-migrated symbol expression -- which is the point (it is what removes the spurious
+collision) and also the risk. That is a corpus-wide A/B across every frontend, not a rider on a
+nine-site Solidity change.
+
+## 17. The blocker was the printer, not the seam (2026-09-16)
+
+§16.3 left the ten deferred writes behind one question -- whether `migrate_expr_back` should
+reconstruct a level0 symbol's `name` -- and noted a narrower candidate. The narrower one is the right
+one, and it is a defect in its own right rather than a migration concession.
+
+### 17.1 The wrong question, asked for years
+
+`c_expr2stringt::get_shorthands` decides whether a shorthand is ambiguous by comparing whole
+expressions:
+
+```cpp
+// c_expr2string.cpp:52 (before)
+if (result.first->second != symbol)
+{
+  ns_collision.insert(symbol.identifier());
+  ns_collision.insert(result.first->second.identifier());
+}
+```
+
+It is worse than an imprecise test: it is a **tautology**. `symbols` is a `std::set<exprt>`, ordered
+by `compare()`, and `compare()` and `operator==` ignore exactly the same thing -- comments
+(`irep.cpp:186-205`, "comments are NOT checked", and `:322-375`). So the set deduplicates precisely
+the pairs for which `operator==` holds, every pair of *distinct* elements is unequal, and the guard
+was true wherever it was evaluated. The pre-fix code marked a collision on every shorthand clash and
+decided nothing.
+
+That also settles the question the change invites -- whether it can lose real disambiguation. There
+was no decision being made to lose. And in the one case the fix alters, the old output carried no
+information either: when two spellings share an identifier, `ns_collision` holds that single
+identifier, so `convert_symbol` prints the mangled form for *both* occurrences. `x … x` became
+`c:@F@f@x … c:@F@f@x` -- the same string twice, only longer.
+
+Comparing identifiers is the first version of this code that can express the intended distinction.
+Differing identifiers mean two distinct symbols competing for one shorthand, a real collision;
+equal ones mean **one** symbol wearing two spellings, which is not.
+
+Comparing identifiers instead is sound because the identifier is the unique key for storage:
+`symbol2t::get_symbol_name` is "a pure function of the symbol's (thename, rlevel, l1, thread, node,
+l2) identity fields" (`irep2_expr.cpp:130-145`), so SSA renaming is *inside* the name and two
+instances never share one. `get_symbols` collects only `id() == "symbol"`
+(`c_expr2string.cpp:31-38`), so `next_symbol` and `nondet_symbol` -- which could share an identifier
+while denoting different values -- never enter the map.
+
+### 17.2 It is live, not latent
+
+The old code flagged all 5864 clashes. Instrumenting it with the identifier comparison the fix
+introduces splits them: **5852 where the identifiers differ and 12 where they do not**, the latter in
+twelve named tests
+(`address_bind_3/4/5/7`, `array_1/2`, `import_10`, `modifier_8`, `reentrance_12`, `tuple_6`,
+`unbound_5/7`). So this was never only a migration blocker. In `array_1`:
+
+```
+before:   sol:@x#4=1;   y=sol:@x#4;
+after:    x=1;          y=x;
+```
+
+### 17.3 Why it needed more care than a one-line diff suggests
+
+Two invariants sit on this function, and neither is obvious from the call site.
+
+`from_expr` is a documented interface surface: `goto_coverage.cpp:818-828` states that any change
+altering its formatting "must preserve this 1:1 mapping or the percentage will silently deflate",
+because a k-path claim's idf string is built from printed text and `ns_collision` is per-printer-
+instance. Printing more short names is exactly the direction that could collapse two claims. And
+`witnesses.cpp:949-980` builds witness assignments through `from_expr`, which SV-COMP validates --
+hence `needs-svcomp-run` on the change. `parse_result` in `esbmc-wrapper.py` matches verdict lines and
+violated-property text only, never variable names, so classification cannot move.
+
+That suite is genuinely sensitive rather than incidentally green: 67 of its 144 descriptors pin a
+coverage percentage, 19 exercise k-path and 8 pin a `Spanning Set` line. All 144 pass.
+
+The third consumer matters most and is the least obvious. `goto2c::expr2ct` inherits this same
+`get_shorthands` and overrides `convert_symbol` to sanitise a mangled id into `c__F__f__x`
+(`goto2c/expr2c.cpp:484-505`), and goto2c emits C that has to compile -- with declarations printed per
+symbol in separate calls, so a declaration always took the short name while a use containing a double
+spelling took the mangled one, naming an identifier the generated program never declared. The fix
+removes that mismatch: `goto-transcoder` 268/268.
+
+Measured: `goto-transcoder` 268/268, `goto-coverage` 144/144, `witnesses` 163/163, unit 883/883,
+`esbmc-solidity` 526/526, `esbmc-cpp/cpp` 1065 with only its six known pre-existing failures.
+
+One thing the witness figure does *not* establish: those descriptors pin verdicts, and the 124 under
+`witnesses_validate/` consume a witness rather than produce one, so 163/163 says no verdict moved --
+not that produced witness text is unchanged. What argues the direction is safe is that
+`get_formated_assignment` (`witnesses.cpp:939-959`) calls `from_expr` once for the lhs and once for a
+`is_constant_expr`-guarded value, and a single-symbol call cannot clash; and that when the old code did
+fire it emitted `c:@F@main@x`, which is not a valid C identifier for a validator to parse at all.
+
+The whole C suite exceeds the ten-minute cap, so rather than sample it the at-risk set was selected by
+what a change to name printing can actually break -- a `test.desc` whose *expected* output embeds a
+mangled or qualified name:
+
+```sh
+awk 'FNR>3 && /@|::/ {print FILENAME}' $(find regression -name test.desc -not -path "*/disabled/*")
+```
+
+That is 188 tests, 129 of them `ir-ra`, spread over ten suites. All 188 pass apart from `ch8_5` and
+`github_7433_library_fail`, both in the six pre-existing failures above. A suite-level cap forces a
+choice of subset; choosing it by the property under test beats choosing it by index.
+
+### 17.4 The pin is two directions, not two verdicts
+
+No verdict moves, so a `SUCCESSFUL`/`FAILED` pair would pin nothing. What can go wrong here is
+one-sided in each direction, so `regression/esbmc-solidity/shorthand_spurious` asserts both in a
+single dump: `^x=1;$` and `^y=x;$` (the spurious collision must not fire) alongside
+`^sol:@Base=&"Base"\[0\];$` (a genuine one must still fire). Mutation-checked twice -- reverting the
+condition fails it, and replacing it with `if (false)`, which suppresses every collision, also fails
+it. The test cannot pass with the fix absent or over-applied.
+
+With this in, the ten writes §16.2 deferred lose their only objection, and re-attempting them is the
+next step.
