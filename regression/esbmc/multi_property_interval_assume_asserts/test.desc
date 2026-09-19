@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis --interval-analysis-assume-asserts --multi-property
+^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line\s+9\s+assertion x > 5$
+^VERIFICATION FAILED$
