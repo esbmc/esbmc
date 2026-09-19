@@ -835,10 +835,13 @@ void dereferencet::check_pointer_alignment(
   if (mode.unaligned)
     return;
 
-  // Only check alignment for scalar read/write operations (excluding code and pointer types)
+  // Only check alignment for scalar and vector read/write operations (excluding
+  // code and pointer types). A vector's lanes are only checked at their own
+  // width (#7907).
   if (
-    !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||
-    is_code_type(type) || is_pointer_type(type))
+    !(is_read(mode) || is_write(mode)) ||
+    !(is_scalar_type(type) || is_vector_type(type)) || is_code_type(type) ||
+    is_pointer_type(type))
   {
     return;
   }
@@ -1151,7 +1154,8 @@ static int src_flag(const expr2tc &value)
  * - s: scalar
  * - S: struct
  * - U: union
- * - A: array or string
+ * - A: array or string; as a source, also a vector
+ * - V: vector, as a destination
  * - c: code
  *
  *   src | dst | off | method                                         | note
@@ -1160,6 +1164,7 @@ static int src_flag(const expr2tc &value)
  *    *  |  c  |  *  | <none>                                         |
  *  -----+-----+-----+------------------------------------------------+---------
  *    *  |  A  |  *  | <unsupported>: "Can't construct rvalue ref..." |
+ *    *  |  V  |  *  | construct_vector_ref                           | rec
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  s  |  c  | construct_from_const_offset                    | st
  *    S  |  s  |  c  | construct_from_const_struct_offset             | rec
@@ -1572,6 +1577,19 @@ void dereferencet::construct_vector_ref(
     dereference_type_compare(value, type))
     return;
 
+  // An element of an array of such vectors, when the pointer's alignment
+  // puts it on one, as a SIMD loop over the array has it.
+  const BigInt vec_bits = type_byte_size_bits(type);
+  if (
+    is_array_type(value) && to_array_type(value->type).subtype == type &&
+    alignment >= vec_bits)
+  {
+    expr2tc elem =
+      div2tc(offset->type, offset, gen_long(offset->type, vec_bits));
+    value = index2tc(type, value, typecast2tc(index_type2(), elem));
+    return;
+  }
+
   const vector_type2t &vec_type = to_vector_type(type);
   const BigInt lane_bits = type_byte_size_bits(vec_type.subtype);
   // Each lane sits at a multiple of its power-of-two width from the start.
@@ -1590,12 +1608,9 @@ void dereferencet::construct_vector_ref(
     simplify(lane_offset);
     build_reference_rec(
       lane, lane_offset, vec_type.subtype, guard, mode, lane_alignment);
-    if (is_nil_expr(lane))
-    {
-      value = expr2tc();
-      return;
-    }
-    lanes.push_back(lane);
+    // As for a scalar access there: a free value, and a write goes nowhere.
+    lanes.push_back(
+      is_nil_expr(lane) ? make_failed_symbol(vec_type.subtype) : lane);
   }
 
   value = constant_vector2tc(type, std::move(lanes));
