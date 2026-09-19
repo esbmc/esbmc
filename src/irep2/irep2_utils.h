@@ -101,6 +101,16 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
 // fields (subtype, array_size, size_is_infinite). Callers that have a
 // type which they know is one of those two but don't care which use
 // these helpers to skip the per-kind switch.
+inline bool is_array_or_vector_type(const type2tc &t)
+{
+  return is_array_type(t) || is_vector_type(t);
+}
+
+inline bool is_array_or_vector_type(const expr2tc &e)
+{
+  return is_array_or_vector_type(e->type);
+}
+
 inline const type2tc &array_or_vector_subtype(const type2tc &t)
 {
   if (is_array_type(t))
