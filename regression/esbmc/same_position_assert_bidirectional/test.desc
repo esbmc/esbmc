@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-k-step 8 --bidirectional
+^\*\* 0 of 4 properties failed, 4 passed$
+^VERIFICATION SUCCESSFUL$
