@@ -1655,12 +1655,22 @@ public:
       source->type->type_id == type2t::array_id);
     /* member must exist exactly once in the parent struct/union — only
        checkable once the source type is resolved (skipped for the transient
-       cases) */
-    assert(
-      source->type->type_id == type2t::symbol_id ||
-      source->type->type_id == type2t::pointer_id ||
-      source->type->type_id == type2t::array_id ||
-      struct_union_get_component_number(source->type, memb).has_value());
+       cases above; the lookup throws on an unresolved source -- without that
+       guard `python2goto` cannot build the Python OM library, §162.2).
+
+       A code-typed member is the exception, and it is checked the other way
+       round: it names a method, methods are no part of a struct_type2t, so it
+       must NOT resolve to a component. What verifies such a member exists at
+       all is upstream, where a namespace is in hand --
+       clang_cpp_adjust_irep2::adjust_cpp_member looks it up by name and asserts
+       the symbol is code (docs/roadmap/frontends-to-irep2.md §76). */
+    if (
+      source->type->type_id != type2t::symbol_id &&
+      source->type->type_id != type2t::pointer_id &&
+      source->type->type_id != type2t::array_id)
+      assert(
+        struct_union_get_component_number(source->type, memb).has_value() ==
+        (type->type_id != type2t::code_id));
 #endif
   }
   member2t(const member2t &ref) = default;
