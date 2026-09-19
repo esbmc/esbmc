@@ -477,10 +477,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
     }
   }
 
-  if (
-    options.get_bool_option("multi-property") &&
-    options.get_bool_option("k-induction"))
-    diagnose_unknown_properties(options, goto_functions, last_k_step);
+  diagnose_unknown_properties(options, goto_functions, last_k_step);
 
   if (is_coverage)
   {
@@ -497,6 +494,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
       ctest_gen);
     return 0;
   }
+
+  // A violation recorded at some earlier k settles the program: reporting
+  // UNKNOWN here would contradict the counterexamples already printed, and
+  // exit 0 would say the run found nothing (D1 of
+  // docs/roadmap/multi-property-strategy-plan.md).
+  if (any_violation_found)
+    return conclude();
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
