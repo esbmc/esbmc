@@ -52,6 +52,107 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
   return new_rhs;
 }
 
+/* The claim a violated assert reports is written in source terms -- the GOTO
+ * guard still says `d->devnum` -- while the value only exists in the SSA
+ * condition symex built from it, where dereference lowering has replaced the
+ * pointer read with the object it resolved to. The two stay structurally
+ * parallel down to that substitution, so walking them together pairs each
+ * source lvalue with something the model can evaluate. Where the shapes
+ * diverge for any other reason -- a dereference that resolved to several
+ * objects, a byte-level access -- the walk stops and that operand is simply
+ * not recorded, which costs replay precision and nothing else (#7858).
+ *
+ * Only reads with no assignment step of their own are worth recording; every
+ * other value in the claim already reaches the witness through
+ * get_formated_assignment(). Those are the ones rooted at a dereference. */
+static bool reads_through_dereference(const expr2tc &e)
+{
+  if (is_dereference2t(e))
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &op) {
+    if (!is_nil_expr(op) && reads_through_dereference(op))
+      found = true;
+  });
+  return found;
+}
+
+/* The value of @p source in the counterexample, when it is a read this trace
+ * records nowhere else: a scalar lvalue reached through a dereference. Nil
+ * when it is anything else, or when the model does not pin it down. */
+static expr2tc nondet_read_value(
+  smt_convt &smt_conv,
+  const expr2tc &source,
+  const expr2tc &renamed)
+{
+  if (!is_member2t(source) && !is_index2t(source))
+    return expr2tc();
+
+  if (
+    !reads_through_dereference(source) || !is_scalar_type(source->type) ||
+    source->type != renamed->type)
+    return expr2tc();
+
+  expr2tc value = smt_conv.get(renamed);
+  return is_constant_expr(value) ? value : expr2tc();
+}
+
+static void collect_nondet_reads(
+  smt_convt &smt_conv,
+  const expr2tc &source,
+  const expr2tc &renamed_in,
+  std::list<std::pair<expr2tc, expr2tc>> &out)
+{
+  if (is_nil_expr(source) || is_nil_expr(renamed_in))
+    return;
+
+  /* An assert's SSA condition is the claim under its path guards, so strip
+   * those implications to reach the part the GOTO guard corresponds to. A
+   * claim that is itself an implication keeps its own shape. */
+  expr2tc renamed = renamed_in;
+  while (is_implies2t(renamed) && !is_implies2t(source))
+    renamed = to_implies2t(renamed).side_2;
+
+  expr2tc value = nondet_read_value(smt_conv, source, renamed);
+  if (!is_nil_expr(value))
+  {
+    out.emplace_back(source, value);
+    return;
+  }
+
+  /* Descend only while the substitution is the single difference between the
+   * two: a differing kind or arity means the shapes have parted and the
+   * operands no longer correspond. */
+  if (source->expr_id != renamed->expr_id)
+    return;
+
+  std::vector<expr2tc> source_ops, renamed_ops;
+  source->foreach_operand(
+    [&source_ops](const expr2tc &op) { source_ops.push_back(op); });
+  renamed->foreach_operand(
+    [&renamed_ops](const expr2tc &op) { renamed_ops.push_back(op); });
+
+  if (source_ops.size() != renamed_ops.size())
+    return;
+
+  for (size_t i = 0; i < source_ops.size(); i++)
+    collect_nondet_reads(smt_conv, source_ops[i], renamed_ops[i], out);
+}
+
+/* Pair the claim of a violated assert with the values its dereference-rooted
+ * reads take here. A claim that held records nothing. */
+static void record_violated_reads(
+  smt_convt &smt_conv,
+  const expr2tc &ssa_cond,
+  goto_trace_stept &step)
+{
+  if (step.guard)
+    return;
+
+  collect_nondet_reads(smt_conv, step.pc->guard, ssa_cond, step.nondet_reads);
+}
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -142,7 +243,10 @@ void build_goto_trace(
     // quantifier) must render as violated, not as held: this is the assertion
     // the solver already reported as failing. Hence is_true(), not !is_false().
     if (SSA_step.is_assert())
+    {
       goto_trace_step.guard = smt_conv.l_get(SSA_step.cond_expr).is_true();
+      record_violated_reads(smt_conv, SSA_step.cond, goto_trace_step);
+    }
     // Keeps the opposite idiom on purpose: here guard is a direction bit, not
     // a violation flag, so unknown has no fail-safe value and flipping would
     // swap one invented branch direction for another.
