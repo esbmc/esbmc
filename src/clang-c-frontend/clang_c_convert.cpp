@@ -4158,7 +4158,6 @@ bool clang_c_convertert::get_cast_expr(
 
   case clang::CK_ToVoid:
   case clang::CK_LValueToRValue:
-  case clang::CK_LValueBitCast:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
@@ -4166,6 +4165,7 @@ bool clang_c_convertert::get_cast_expr(
     break;
 
   case clang::CK_BitCast:
+  case clang::CK_LValueBitCast:
     convert_bit_cast(ns, expr, type);
     break;
 

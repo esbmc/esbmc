@@ -288,22 +288,23 @@ smt_astt smt_solver_baset::convert_bitcast_to_struct(
 /* A cast involving a vector reinterprets the object representation, so it has
  * to follow the target's byte order: flatten_to_bitvector alone puts lane 0 in
  * the low bits, but on a big-endian target each lane's own bytes are the other
- * way round. These give a lane's or scalar's bits with its lowest-addressed
- * byte lowest, and back; byte swapping is its own inverse (#7905). */
+ * way round. This puts a lane's or scalar's lowest-addressed byte lowest,
+ * and back, byte swapping being its own inverse (#7905). */
+static expr2tc in_memory_order(const expr2tc &bits)
+{
+  return config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN
+           ? bswap2tc(bits->type, bits)
+           : bits;
+}
+
 static expr2tc to_memory_order(const expr2tc &value)
 {
-  expr2tc bits = flatten_to_bitvector(value);
-  if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
-    bits = bswap2tc(bits->type, bits);
-  return bits;
+  return in_memory_order(flatten_to_bitvector(value));
 }
 
 static expr2tc from_memory_order(const expr2tc &bits, const type2tc &type)
 {
-  expr2tc value = bits;
-  if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
-    value = bswap2tc(value->type, value);
-  return bitcast2tc(type, value);
+  return bitcast2tc(type, in_memory_order(bits));
 }
 
 /** The object representation of @p value, lowest address in the low bits. */
@@ -338,6 +339,43 @@ static expr2tc from_object_bits(const expr2tc &bits, const type2tc &type)
   return constant_vector2tc(type, members);
 }
 
+/* Under integer encoding there are no bits to lay out, so cast lane by lane,
+ * converting the value as a scalar bitcast there does. Lanes of another width
+ * have no such reading. */
+static expr2tc lanewise_bitcast(const expr2tc &from, const type2tc &to)
+{
+  const bool same_lanes =
+    is_vector_type(from) && is_vector_type(to) &&
+    to_constant_int2t(to_vector_type(from->type).array_size).value ==
+      to_constant_int2t(to_vector_type(to).array_size).value;
+  if (!same_lanes)
+  {
+    log_error("Cannot bitcast a vector to another lane width under --ir");
+    abort();
+  }
+
+  const vector_type2t &vec = to_vector_type(to);
+  std::vector<expr2tc> lanes;
+  for (size_t i = 0; i < to_constant_int2t(vec.array_size).value.to_uint64();
+       i++)
+    lanes.push_back(bitcast2tc(
+      vec.subtype,
+      index2tc(
+        to_vector_type(from->type).subtype,
+        from,
+        constant_int2tc(index_type2(), i))));
+  return constant_vector2tc(to, lanes);
+}
+
+/* to_memory_order swaps a flattened struct or union as one scalar, which is
+ * not how its members sit on a big-endian target, so those keep the paths
+ * below. */
+static bool is_vector_bitcast(const type2tc &from, const type2tc &to)
+{
+  return (is_vector_type(from) || is_vector_type(to)) &&
+         !is_structure_type(from) && !is_structure_type(to);
+}
+
 smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
@@ -348,8 +386,10 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   if (smt_astt pointer = convert_pointer_bitcast(from, to_type))
     return pointer;
 
-  if (is_vector_type(to_type) || is_vector_type(from))
-    return convert_ast(from_object_bits(object_bits(from), to_type));
+  if (is_vector_bitcast(from->type, to_type))
+    return convert_ast(
+      int_encoding ? lanewise_bitcast(from, to_type)
+                   : from_object_bits(object_bits(from), to_type));
 
   if (is_floatbv_type(to_type))
   {
