@@ -603,7 +603,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bytes")
   {
     // TODO: Refactor to model using unsigned/signed char
-    return build_array(long_long_int_type(), type_size);
+    typet t = build_array(long_long_int_type(), type_size);
+    // Tags this array as `bytes` so `+` on it is recognised as
+    // concatenation (see type_utils::is_bytes_array).
+    type_utils::set_cpp_type(t, "bytes");
+    return t;
   }
 
   // bytearray — the mutable counterpart of bytes — is not modeled. Reject it

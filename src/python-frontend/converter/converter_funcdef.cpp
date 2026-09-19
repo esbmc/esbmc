@@ -24,6 +24,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 
 using namespace json_utils;
@@ -719,6 +720,124 @@ bool body_returns_list_value(const nlohmann::json &body)
   };
 
   return check(body);
+}
+
+// The call's first argument, if it is an integer Constant.
+std::optional<size_t> get_constant_int_arg0(const nlohmann::json &call)
+{
+  if (!call.contains("args") || call["args"].empty())
+    return std::nullopt;
+
+  const auto &arg0 = call["args"][0];
+  if (!arg0.is_object() || arg0.value("_type", std::string()) != "Constant")
+    return std::nullopt;
+
+  if (!arg0.contains("value") || !arg0["value"].is_number_integer())
+    return std::nullopt;
+
+  return static_cast<size_t>(arg0["value"].get<long long>());
+}
+
+// The call's first argument's element count, if it is a List literal.
+std::optional<size_t> get_list_arg0_size(const nlohmann::json &call)
+{
+  if (!call.contains("args") || call["args"].empty())
+    return std::nullopt;
+
+  const auto &arg0 = call["args"][0];
+  if (!arg0.is_object() || arg0.value("_type", std::string()) != "List")
+    return std::nullopt;
+
+  if (!arg0.contains("elts"))
+    return std::nullopt;
+
+  return arg0["elts"].size();
+}
+
+// A statically-known byte length for a single return expression:
+// nondet_bytes(N) or bytes(N) with a constant N, or a bytes([...]) literal
+// (sized by element count). Anything else (a variable, a slice, string
+// decoding, ...) returns nullopt -- the fixed-size array representation for
+// bytes needs a concrete size, and there is no general way to derive one from
+// an arbitrary expression.
+std::optional<size_t> try_get_constant_bytes_length(const nlohmann::json &val)
+{
+  if (!val.is_object() || val.value("_type", std::string()) != "Call")
+    return std::nullopt;
+
+  if (
+    !val.contains("func") || !val["func"].is_object() ||
+    !val["func"].contains("id"))
+    return std::nullopt;
+
+  const std::string &callee = val["func"]["id"].get<std::string>();
+  if (callee != "nondet_bytes" && callee != "bytes")
+    return std::nullopt;
+
+  if (auto len = get_constant_int_arg0(val))
+    return len;
+
+  if (callee == "bytes")
+    return get_list_arg0_size(val);
+
+  return std::nullopt;
+}
+
+// The concrete bytes length for a `-> bytes` function, inferred from every
+// return statement in 'body'. nullopt when no return yields a statically known
+// length, or when two returns disagree on it -- a fixed-size array cannot
+// encode a length that varies at runtime, so the caller keeps the pre-existing
+// size-0 default in that case.
+std::optional<size_t> infer_bytes_return_size(const nlohmann::json &body)
+{
+  std::optional<size_t> result;
+  bool ambiguous = false;
+
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &b) {
+      if (!b.is_array() || ambiguous)
+        return;
+      for (const auto &stmt : b)
+      {
+        if (!stmt.is_object() || ambiguous)
+          continue;
+        if (
+          stmt.value("_type", std::string()) == "Return" &&
+          stmt.contains("value") && !stmt["value"].is_null())
+        {
+          if (auto len = try_get_constant_bytes_length(stmt["value"]))
+          {
+            if (result && *result != *len)
+              ambiguous = true;
+            else
+              result = len;
+          }
+        }
+        for (const char *key : {"body", "orelse"})
+          if (stmt.contains(key))
+            scan(stmt[key]);
+      }
+    };
+
+  scan(body);
+  return ambiguous ? std::nullopt : result;
+}
+
+// Resolve a `-> <return_type>` annotation not already special-cased by the
+// caller's if/else chain (list/dict/str/Tuple/Callable/Optional/...). bytes
+// needs the function's own body to infer a concrete array size (see
+// infer_bytes_return_size); every other name defers entirely to
+// type_handler::get_typet, exactly as before this function existed.
+typet resolve_generic_return_type(
+  const std::string &return_type,
+  const nlohmann::json &function_node,
+  const type_handler &type_handler_)
+{
+  if (return_type == "bytes")
+    return type_handler_.get_typet(
+      "bytes", infer_bytes_return_size(function_node["body"]).value_or(0));
+
+  return type_handler_.get_typet(return_type);
 }
 } // namespace
 
@@ -1522,6 +1641,180 @@ bool python_converter::try_infer_numpy_param_type(
   return false;
 }
 
+// Resolves a `bytes`-producing AST expression to a compile-time-constant
+// A `nondet_bytes(N)`/`bytes(N)` call's constant length, or nullopt for any
+// other call shape (a slice, another function's return, a non-constant or
+// non-integer argument).
+static std::optional<long long>
+resolve_bytes_call_size(const nlohmann::json &call)
+{
+  const nlohmann::json &func = call.value("func", nlohmann::json::object());
+  const std::string callee = func.value("id", "");
+  if (
+    func.value("_type", "") != "Name" ||
+    (callee != "nondet_bytes" && callee != "bytes") || !call.contains("args") ||
+    call["args"].size() != 1 ||
+    call["args"][0].value("_type", "") != "Constant" ||
+    !call["args"][0].contains("value") ||
+    !call["args"][0]["value"].is_number_integer())
+    return std::nullopt;
+  return call["args"][0]["value"].get<long long>();
+}
+
+// The name an `Assign`/`AnnAssign` statement targets, or "" for any other
+// statement kind or an unsupported (non-`Name`) target.
+static std::string assignment_target_name(const nlohmann::json &stmt)
+{
+  const std::string stmt_type = stmt.value("_type", "");
+  if (
+    stmt_type == "Assign" && stmt.contains("targets") &&
+    !stmt["targets"].empty())
+    return stmt["targets"][0].value("id", "");
+  if (stmt_type == "AnnAssign" && stmt.contains("target"))
+    return stmt["target"].value("id", "");
+  return "";
+}
+
+// `visited` guards against a name-aliasing cycle (e.g. `x = y` followed by
+// `y = x` in the same scope): resolve_bytes_expr_size would otherwise recurse
+// between the two assignments forever, since scope_body's statements are
+// scanned in source order, not execution order, and can point at each other.
+static std::optional<long long> resolve_bytes_expr_size(
+  const nlohmann::json &expr,
+  const nlohmann::json &scope_body,
+  std::set<std::string> &visited)
+{
+  if (expr.value("_type", "") == "Call")
+    return resolve_bytes_call_size(expr);
+
+  if (expr.value("_type", "") != "Name" || !scope_body.is_array())
+    return std::nullopt;
+
+  const std::string name = expr.value("id", "");
+  if (!visited.insert(name).second)
+    return std::nullopt;
+
+  for (const auto &stmt : scope_body)
+    if (assignment_target_name(stmt) == name && stmt.contains("value"))
+      return resolve_bytes_expr_size(stmt["value"], scope_body, visited);
+
+  return std::nullopt;
+}
+
+static std::optional<long long> resolve_bytes_expr_size(
+  const nlohmann::json &expr,
+  const nlohmann::json &scope_body)
+{
+  std::set<std::string> visited;
+  return resolve_bytes_expr_size(expr, scope_body, visited);
+}
+
+bool python_converter::infer_bytes_param_size_from_call_sites(
+  const std::string &func_name,
+  size_t param_index,
+  long long &out_size) const
+{
+  std::set<std::string> visiting;
+  return infer_bytes_param_size_from_call_sites(
+    func_name, param_index, out_size, visiting);
+}
+
+// `arg` is a bare `Name` that did not resolve locally: if it names one of
+// `enclosing_function`'s own parameters, resolve that parameter's bytes
+// size recursively instead.
+std::optional<long long> python_converter::resolve_forwarded_bytes_param_size(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  const std::string &enclosing_function,
+  std::set<std::string> &visiting) const
+{
+  const nlohmann::json *enclosing_def =
+    find_function_def(module_body, enclosing_function);
+  if (enclosing_def == nullptr || !enclosing_def->contains("args"))
+    return std::nullopt;
+
+  const std::string arg_name = arg.value("id", "");
+  const nlohmann::json &enclosing_params = (*enclosing_def)["args"]["args"];
+  for (size_t i = 0; i < enclosing_params.size(); ++i)
+  {
+    if (enclosing_params[i].value("arg", "") != arg_name)
+      continue;
+
+    long long forwarded_size = 0;
+    if (infer_bytes_param_size_from_call_sites(
+          enclosing_function, i, forwarded_size, visiting))
+      return forwarded_size;
+    return std::nullopt;
+  }
+
+  return std::nullopt;
+}
+
+bool python_converter::infer_bytes_param_size_from_call_sites(
+  const std::string &func_name,
+  size_t param_index,
+  long long &out_size,
+  std::set<std::string> &visiting) const
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  if (!visiting.insert(key).second)
+    return false;
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  const nlohmann::json &module_body = (*ast_json)["body"];
+
+  bool found = false;
+  long long resolved = 0;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("_type", "") !=
+        "Name" ||
+      call["func"].value("id", "") != func_name || !call.contains("args") ||
+      call["args"].size() <= param_index)
+      continue;
+
+    const nlohmann::json *scope_body = &module_body;
+    if (!site.enclosing_function.empty())
+    {
+      const nlohmann::json *enclosing_def =
+        find_function_def(module_body, site.enclosing_function);
+      if (enclosing_def == nullptr || !enclosing_def->contains("body"))
+        continue;
+      scope_body = &(*enclosing_def)["body"];
+    }
+
+    const nlohmann::json &arg = call["args"][param_index];
+    std::optional<long long> size = resolve_bytes_expr_size(arg, *scope_body);
+
+    // Not resolvable locally: the argument may be forwarded through the
+    // enclosing function's own bytes parameter, the same "forwarded
+    // through an intermediate function" case try_infer_numpy_param_type
+    // handles for numpy shapes.
+    if (
+      !size && !site.enclosing_function.empty() &&
+      arg.value("_type", "") == "Name")
+      size = resolve_forwarded_bytes_param_size(
+        arg, module_body, site.enclosing_function, visiting);
+
+    if (!size)
+      continue;
+
+    if (found && resolved != *size)
+      return false;
+
+    resolved = *size;
+    found = true;
+  }
+
+  if (found)
+    out_size = resolved;
+  return found;
+}
+
 /// A `Callable` annotation with no `[[A], R]` signature, spelled either bare or
 /// through `typing`. A subscripted one carries its return type and is usable.
 static bool is_bare_callable_annotation(const nlohmann::json &ann)
@@ -1686,6 +1979,31 @@ bool python_converter::try_infer_dynamic_param_type(
   return false;
 }
 
+std::optional<typet> python_converter::try_infer_bytes_param_size(
+  const std::string &arg_name,
+  const typet &arg_type,
+  const symbol_id &id,
+  size_t param_index) const
+{
+  if (
+    arg_name == "self" || arg_name == "cls" ||
+    !type_utils::is_bytes_array(arg_type) ||
+    !to_array_type(arg_type).size().is_constant() ||
+    binary2integer(
+      to_constant_expr(to_array_type(arg_type).size()).value().c_str(), true) !=
+      0)
+    return std::nullopt;
+
+  long long inferred_size = 0;
+  if (
+    !infer_bytes_param_size_from_call_sites(
+      id.get_function(), param_index, inferred_size) ||
+    inferred_size <= 0)
+    return std::nullopt;
+
+  return type_handler_.get_typet("bytes", inferred_size);
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -1714,6 +2032,21 @@ size_t python_converter::register_function_argument(
     }
     else
       arg_type = get_type_from_annotation(element["annotation"], element);
+  }
+
+  // A bare `bytes` annotation carries no length (Python's type syntax has no
+  // way to spell one). Recover the real length from this parameter's call
+  // sites, so concatenation and hash() inside the callee see the argument's
+  // actual size. A generic bytes parameter with many different call-site
+  // lengths, like int.from_bytes's, has no single inferable size, and
+  // bytes_size_known stays false.
+  bool bytes_size_known = false;
+  if (
+    std::optional<typet> inferred = try_infer_bytes_param_size(
+      arg_name, arg_type, id, type.arguments().size()))
+  {
+    arg_type = *inferred;
+    bytes_size_known = true;
   }
 
   // An unannotated (or bare `list`) parameter defaults to Any/PyListObject*,
@@ -1768,7 +2101,13 @@ size_t python_converter::register_function_argument(
   std::optional<std::vector<std::size_t>> numpy_param_full_shape =
     numpy_param_full_shape_of(numpy_array_param, arg_type, type_handler_);
 
-  if (arg_type.is_array())
+  // A `bytes` parameter with a resolved length stays array-by-value: it is
+  // immutable, sized from the call site, and concatenation/hash() inside the
+  // callee need the array type directly.
+  // function_call_expr::build_positional_arguments passes such an argument
+  // by value to match. A generic bytes parameter (e.g. int.from_bytes's)
+  // still gets element-pointer decay, accepting callers of any length.
+  if (arg_type.is_array() && !bytes_size_known)
   {
     bool used_in_variable_index_subscript = false;
     if (numpy_array_param)
@@ -2290,8 +2629,8 @@ void python_converter::get_function_definition(
     }
     else
     {
-      type.return_type() =
-        type_handler_.get_typet(return_type.get<std::string>());
+      type.return_type() = resolve_generic_return_type(
+        return_type.get<std::string>(), function_node, type_handler_);
     }
   }
   else if (return_node["_type"] == "BinOp")

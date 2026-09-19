@@ -27,7 +27,12 @@ exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))
     return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
+  exprt result = migrate_expr_back(symbol_expr2tc(sym));
+  // migrate_type drops #cpp_type (e.g. the `bytes` tag on an otherwise-plain
+  // array type). Restore the symbol's declared type exactly, matching
+  // build_typecast below.
+  result.type() = sym.get_type();
+  return result;
 }
 
 exprt build_typecast(const exprt &from, const typet &t)

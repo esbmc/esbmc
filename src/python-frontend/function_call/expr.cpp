@@ -420,7 +420,7 @@ void function_call_expr::get_function_type()
 bool function_call_expr::is_nondet_call() const
 {
   static std::regex pattern(
-    R"(nondet_(int|char|bool|float|str|complex)|__VERIFIER_nondet_(int|char|bool|float|str|complex))");
+    R"(nondet_(int|char|bool|float|str|complex|bytes)|__VERIFIER_nondet_(int|char|bool|float|str|complex|bytes))");
 
   return std::regex_match(function_id_.get_function(), pattern);
 }
@@ -6624,6 +6624,17 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
       converter_.get_element_type_registry().assign_from(
         arg.identifier().as_string(), arg_id);
+    }
+
+    // A `bytes`-typed parameter with a resolved length is array-by-value, so
+    // the matching call-site argument is passed by value too.
+    if (
+      type_utils::is_bytes_array(arg.type()) && param_idx < params.size() &&
+      params[param_idx].type().is_array())
+    {
+      call.arguments().push_back(arg);
+      arg_index++;
+      continue;
     }
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
