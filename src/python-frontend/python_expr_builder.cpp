@@ -23,6 +23,14 @@ bool contains_dyn_array(const typet &t)
   return false;
 }
 
+void set_symbol_type(symbolt &sym, const typet &t)
+{
+  if (contains_dyn_array(t))
+    sym.set_type(t);
+  else
+    sym.set_type(migrate_type(t));
+}
+
 exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))

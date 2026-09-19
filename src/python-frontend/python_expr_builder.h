@@ -27,6 +27,10 @@ namespace python_expr
 // nil or non-constant (a dyn-sized array that does not survive migrate_type).
 bool contains_dyn_array(const typet &t);
 
+// Store `t` as `sym`'s type IREP2-side, or legacy when `t` holds a
+// dyn-sized array (docs/roadmap/scope-python-irep2.md §10.4).
+void set_symbol_type(symbolt &sym, const typet &t);
+
 // Symbol reference `sym`.
 exprt build_symbol(const symbolt &sym);
 
