@@ -126,12 +126,142 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   abort();
 }
 
+/* A pointer is an (object, offset) tuple, and its machine representation is its
+ * numeric address. That address does not identify it: finalize_pointer_chain()
+ * deliberately lets object 1, INVALID, overlap every other object, so
+ * convert_typecast_to_ptr() cannot tell which pointer an address came from and
+ * a pointer flattened into an untyped byte object read back as a different one
+ * (#7855).
+ *
+ * The address has to stay the representation -- a program can memset pointer
+ * storage or store a literal into it, and reading that back must still mean
+ * what the bits say (regression/esbmc/memset_pointer). So keep it, and record
+ * every pointer a bitcast flattens or rebuilds. Tying those pairwise, so two
+ * flattened pointers sharing an address are the same pointer, is what lets the
+ * round trip prove anything; it constrains only pointers that reach a bitcast,
+ * and leaves every address-space constraint alone.
+ *
+ * Only bitcast takes this path. A typecast keeps plain C integer-to-pointer
+ * semantics, where the address really is all the program has. */
+
+bool smt_solver_baset::pointer_repr_applies(
+  const type2tc &ptr_type,
+  const type2tc &bv_type)
+{
+  /* A CHERI pointer carries a third, capability field this pair would drop. */
+  if (config.ansi_c.cheri)
+    return false;
+
+  /* A narrower or wider reinterpretation truncates or extends the stored bits,
+   * so the value read back is not the representation that went in. */
+  return ptr_type->get_width() == bv_type->get_width();
+}
+
+/** Tie @p pointer to @p address, and to every pointer flattened before it. */
+void smt_solver_baset::record_flattened_pointer(
+  smt_astt address,
+  smt_astt pointer)
+{
+  for (const ptr_flatten_entry &prev : ptr_flatten_history)
+    assert_ast(mk_implies(
+      mk_eq(address, prev.address), pointer->eq(this, prev.pointer)));
+
+  ptr_flatten_history.push_back({address, pointer, ctx_level});
+}
+
+smt_astt smt_solver_baset::encode_pointer_repr(
+  const expr2tc &ptr,
+  const type2tc &to_type)
+{
+  smt_astt address = convert_ast(typecast2tc(to_type, ptr));
+  record_flattened_pointer(address, convert_ast(ptr));
+  return address;
+}
+
+smt_astt smt_solver_baset::decode_pointer_repr(
+  const expr2tc &repr,
+  const type2tc &to_type)
+{
+  smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
+  record_flattened_pointer(convert_ast(repr), pointer);
+  return pointer;
+}
+
+/** The pointer leg of convert_bitcast. Null when neither side is a pointer
+ *  whose representation this pair can carry. */
+smt_astt smt_solver_baset::convert_pointer_bitcast(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  if (
+    is_pointer_type(from->type) && is_bv_type(to_type) &&
+    pointer_repr_applies(from->type, to_type))
+    return encode_pointer_repr(from, to_type);
+
+  if (
+    is_pointer_type(to_type) && is_bv_type(from->type) &&
+    pointer_repr_applies(to_type, from->type))
+    return decode_pointer_repr(from, to_type);
+
+  return nullptr;
+}
+
+/** Rebuild a struct from the bits of @p from, member by member. Null when
+ *  those bits are not in a form this can take apart. */
+smt_astt smt_solver_baset::convert_bitcast_to_struct(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  expr2tc new_from = from;
+
+  // Converting from fp to struct, we simply convert the fp to bv and use
+  // the bv to struct method to do the job for us
+  if (is_floatbv_type(new_from))
+    new_from = bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
+
+  // Converting from array to struct, we convert it to bv and use the bv to
+  // struct method to do the job for us
+  if (is_array_type(new_from))
+    new_from = flatten_to_bitvector(new_from);
+
+  if (!is_bv_type(new_from) && !is_union_type(new_from))
+    return nullptr;
+
+  const struct_type2t &structtype = to_struct_type(to_type);
+
+  // We have to reconstruct the struct from the bitvector, so do it
+  // by extracting the offsets+size of each member from the bitvector.
+  // Zero-width members (e.g. empty C++ class fields) occupy no bits:
+  // emit a zero-valued constant of that type instead of a width-0 extract.
+  std::vector<expr2tc> fields;
+  for (unsigned int i = 0; i < structtype.members.size(); i++)
+  {
+    const type2tc &member_type = structtype.members[i];
+    unsigned int sz = type_byte_size_bits(member_type).to_uint64();
+    if (sz == 0)
+    {
+      fields.push_back(gen_zero(member_type));
+      continue;
+    }
+    unsigned int offset =
+      member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
+    expr2tc tmp =
+      extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
+    fields.push_back(bitcast2tc(member_type, tmp));
+  }
+
+  return convert_ast(constant_struct2tc(to_type, fields));
+}
+
 smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
 
   const expr2tc &from = to_bitcast2t(expr).from;
   const type2tc &to_type = to_bitcast2t(expr).type;
+
+  if (smt_astt pointer = convert_pointer_bitcast(from, to_type))
+    return pointer;
 
   // Converts to floating-point
   if (is_floatbv_type(to_type))
@@ -194,46 +324,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   }
   else if (is_struct_type(to_type))
   {
-    expr2tc new_from = from;
-
-    // Converting from fp to struct, we simply convert the fp to bv and use
-    // the bv to struct method to do the job for us
-    if (is_floatbv_type(new_from))
-      new_from =
-        bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
-
-    // Converting from array to struct, we convert it to bv and use the bv to
-    // struct method to do the job for us
-    if (is_array_type(new_from))
-      new_from = flatten_to_bitvector(new_from);
-
-    if (is_bv_type(new_from) || is_union_type(new_from))
-    {
-      const struct_type2t &structtype = to_struct_type(to_type);
-
-      // We have to reconstruct the struct from the bitvector, so do it
-      // by extracting the offsets+size of each member from the bitvector.
-      // Zero-width members (e.g. empty C++ class fields) occupy no bits:
-      // emit a zero-valued constant of that type instead of a width-0 extract.
-      std::vector<expr2tc> fields;
-      for (unsigned int i = 0; i < structtype.members.size(); i++)
-      {
-        const type2tc &member_type = structtype.members[i];
-        unsigned int sz = type_byte_size_bits(member_type).to_uint64();
-        if (sz == 0)
-        {
-          fields.push_back(gen_zero(member_type));
-          continue;
-        }
-        unsigned int offset =
-          member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
-        expr2tc tmp =
-          extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
-        fields.push_back(bitcast2tc(member_type, tmp));
-      }
-
-      return convert_ast(constant_struct2tc(to_type, fields));
-    }
+    if (smt_astt structure = convert_bitcast_to_struct(from, to_type))
+      return structure;
   }
   else if (is_union_type(to_type))
   {

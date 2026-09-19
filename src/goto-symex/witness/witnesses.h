@@ -268,6 +268,12 @@ std::string get_formated_assignment(
   const goto_trace_stept &step,
   bool yaml);
 
+/**
+ * Clear an assumption a witness validator would reject: one naming an
+ * ESBMC-internal object, or spelling anything but a C scalar expression.
+ */
+void check_replace_invalid_assignment(std::string &assignment);
+
 bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp);

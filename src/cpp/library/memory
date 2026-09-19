@@ -304,6 +304,45 @@ struct destroy_with<Alloc, T, false>
 };
 } // namespace __alloc_detail
 
+// [allocator.tag] and [allocator.uses.trait] (#7797), which
+// scoped_allocator_adaptor dispatches on. libc++ makes the tag's constructor
+// explicit in every language mode, so `allocator_arg_t x = {};` is rejected
+// there and here alike.
+struct allocator_arg_t
+{
+  explicit allocator_arg_t() = default;
+};
+
+#if __cplusplus >= 201703L
+inline constexpr allocator_arg_t allocator_arg{};
+#else
+const allocator_arg_t allocator_arg = allocator_arg_t();
+#endif
+
+namespace __alloc_detail
+{
+// Succeeds iff T names an allocator_type an Alloc converts to, the condition
+// [allocator.uses.trait] gives for uses_allocator.
+template <class T, class Alloc>
+auto test_uses_allocator(int) -> integral_constant<
+  bool,
+  is_convertible<Alloc, typename T::allocator_type>::value>;
+
+template <class T, class Alloc>
+false_type test_uses_allocator(...);
+} // namespace __alloc_detail
+
+template <class T, class Alloc>
+struct uses_allocator
+  : decltype(__alloc_detail::test_uses_allocator<T, Alloc>(0))
+{
+};
+
+#if __cplusplus >= 201703L
+template <class T, class Alloc>
+inline constexpr bool uses_allocator_v = uses_allocator<T, Alloc>::value;
+#endif
+
 // Minimal allocator_traits (github #6063): delegates to the allocator's own
 // members. Static member functions of class templates convert to GOTO
 // correctly (unlike free-function templates in OM headers).
