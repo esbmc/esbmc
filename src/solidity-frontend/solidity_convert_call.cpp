@@ -15,6 +15,7 @@
 #include <util/base/i2string.h>
 #include <util/arith/mp_arith.h>
 #include <util/irep/std_expr.h>
+#include <irep2/irep2_utils.h>
 #include <util/message/message.h>
 #include <fstream>
 #include <limits>
@@ -2057,7 +2058,7 @@ bool solidity_convertert::try_get_delegate_shadow_call(
   ss.lvalue = true;
   ss.file_local = true;
   auto &added_succ = *move_symbol_to_context(ss);
-  added_succ.set_value(false_exprt());
+  added_succ.set_value(gen_false_expr());
   {
     code_declt decl(symbol_expr(added_succ));
     decl.operands().push_back(false_exprt());
@@ -2352,7 +2353,8 @@ bool solidity_convertert::get_call_definition(
   func_body.move_to_operands(label);
 
   exprt addr_expr = symbol_expr(addr_added_symbol);
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+  const symbolt &msg_sender_sym = *context.find_symbol("c:@msg_sender");
+  exprt msg_sender = symbol_expr(msg_sender_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
   exprt this_address = member_exprt(this_expr, "$address", addr_t);
@@ -2368,7 +2370,7 @@ bool solidity_convertert::get_call_definition(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(msg_sender);
+  added_old_sender.set_value(symbol_expr2tc(msg_sender_sym));
   old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
@@ -2493,7 +2495,8 @@ bool solidity_convertert::model_transaction(
     return true;
 
   typet val_t = unsignedbv_typet(256);
-  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  const symbolt &msg_value_sym = *context.find_symbol("c:@msg_value");
+  exprt msg_value = symbol_expr(msg_value_sym);
 
   if (get_high_level_call_wrapper(cname, this_expr, front_block, back_block))
     return true;
@@ -2510,7 +2513,7 @@ bool solidity_convertert::model_transaction(
     loc);
   symbolt &added_old_value = *move_symbol_to_context(old_value);
   code_declt old_val_decl(symbol_expr(added_old_value));
-  added_old_value.set_value(msg_value);
+  added_old_value.set_value(symbol_expr2tc(msg_value_sym));
   old_val_decl.operands().push_back(msg_value);
   front_block.move_to_operands(old_val_decl);
 
@@ -2639,8 +2642,10 @@ bool solidity_convertert::get_call_value_definition(
   label.code() = code_skipt();
   func_body.operands().push_back(label);
 
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
-  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  const symbolt &msg_sender_sym = *context.find_symbol("c:@msg_sender");
+  exprt msg_sender = symbol_expr(msg_sender_sym);
+  const symbolt &msg_value_sym = *context.find_symbol("c:@msg_value");
+  exprt msg_value = symbol_expr(msg_value_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
   exprt this_address = member_exprt(this_expr, "$address", addrp_t);
@@ -2657,7 +2662,7 @@ bool solidity_convertert::get_call_value_definition(
     locationt());
   symbolt &added_old_value = *move_symbol_to_context(old_value);
   code_declt old_val_decl(symbol_expr(added_old_value));
-  added_old_value.set_value(msg_value);
+  added_old_value.set_value(symbol_expr2tc(msg_value_sym));
   old_val_decl.operands().push_back(msg_value);
   func_body.move_to_operands(old_val_decl);
 
@@ -2672,7 +2677,7 @@ bool solidity_convertert::get_call_value_definition(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(msg_sender);
+  added_old_sender.set_value(symbol_expr2tc(msg_sender_sym));
   old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
@@ -2864,8 +2869,10 @@ bool solidity_convertert::get_transfer_definition(
   label.code() = code_skipt();
   func_body.operands().push_back(label);
 
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
-  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  const symbolt &msg_sender_sym = *context.find_symbol("c:@msg_sender");
+  exprt msg_sender = symbol_expr(msg_sender_sym);
+  const symbolt &msg_value_sym = *context.find_symbol("c:@msg_value");
+  exprt msg_value = symbol_expr(msg_value_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
   exprt this_address = member_exprt(this_expr, "$address", addrp_t);
@@ -2883,7 +2890,7 @@ bool solidity_convertert::get_transfer_definition(
     locationt());
   symbolt &added_old_value = *move_symbol_to_context(old_value);
   code_declt old_val_decl(symbol_expr(added_old_value));
-  added_old_value.set_value(msg_value);
+  added_old_value.set_value(symbol_expr2tc(msg_value_sym));
   old_val_decl.operands().push_back(msg_value);
   func_body.move_to_operands(old_val_decl);
 
@@ -2899,7 +2906,7 @@ bool solidity_convertert::get_transfer_definition(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(msg_sender);
+  added_old_sender.set_value(symbol_expr2tc(msg_sender_sym));
   old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
@@ -3110,8 +3117,10 @@ bool solidity_convertert::get_send_definition(
   label.code() = code_skipt();
   func_body.operands().push_back(label);
 
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
-  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  const symbolt &msg_sender_sym = *context.find_symbol("c:@msg_sender");
+  exprt msg_sender = symbol_expr(msg_sender_sym);
+  const symbolt &msg_value_sym = *context.find_symbol("c:@msg_value");
+  exprt msg_value = symbol_expr(msg_value_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
   exprt this_address = member_exprt(this_expr, "$address", addr_t);
@@ -3128,7 +3137,7 @@ bool solidity_convertert::get_send_definition(
     locationt());
   symbolt &added_old_value = *move_symbol_to_context(old_value);
   code_declt old_val_decl(symbol_expr(added_old_value));
-  added_old_value.set_value(msg_value);
+  added_old_value.set_value(symbol_expr2tc(msg_value_sym));
   old_val_decl.operands().push_back(msg_value);
   func_body.move_to_operands(old_val_decl);
 
@@ -3143,7 +3152,7 @@ bool solidity_convertert::get_send_definition(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(msg_sender);
+  added_old_sender.set_value(symbol_expr2tc(msg_sender_sym));
   old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
@@ -3327,7 +3336,8 @@ bool solidity_convertert::get_staticcall_definition(
   func_body.move_to_operands(label);
 
   exprt addr_expr = symbol_expr(addr_added_symbol);
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+  const symbolt &msg_sender_sym = *context.find_symbol("c:@msg_sender");
+  exprt msg_sender = symbol_expr(msg_sender_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
   exprt this_address = member_exprt(this_expr, "$address", addr_t);
@@ -3343,7 +3353,7 @@ bool solidity_convertert::get_staticcall_definition(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(msg_sender);
+  added_old_sender.set_value(symbol_expr2tc(msg_sender_sym));
   old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
@@ -3379,7 +3389,7 @@ bool solidity_convertert::get_staticcall_definition(
         std::to_string(aux_counter++),
       locationt());
     symbolt &added_snap = *move_symbol_to_context(snap_sym);
-    added_snap.set_value(static_ins);
+    added_snap.set_value(migrate_expr(static_ins));
     code_declt snap_decl(symbol_expr(added_snap));
     snap_decl.operands().push_back(static_ins);
     then.move_to_operands(snap_decl);

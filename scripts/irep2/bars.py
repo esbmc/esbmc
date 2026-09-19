@@ -16,7 +16,8 @@ wording. Both columns are given. The refinement is syntactic: it strips // and /
 string literals, and treats a write as IREP2 when its argument is a migrate_* call, a
 *2tc constructor, or a name ending in `2tc`/`2t`. It recognises three shapes of IREP2
 argument: a `migrate_*` call, a `*2tc` constructor or a call to a method whose name ends
-in `2t`/`2tc`, and a bare name declared as `expr2tc`/`type2tc` somewhere in the same file.
+in `2t`/`2tc`, and a name declared as `expr2tc`/`type2tc` somewhere in the same file, whether
+written bare or as a field reached through it.
 
 The last is what makes a converted site stop counting: a conversion usually names its
 result `value2`, `body` or similar, and the bare name keeps the grep matching. Matching
@@ -45,15 +46,28 @@ IREP2_CALL = re.compile(r"^[A-Za-z_][\w.>\-\[\]]*(?:2t|2tc)\s*\(")
 # Names declared as an IREP2 container anywhere in the file. Converting a site
 # typically names its result `value2`, `body`, `values2` and so on, which keeps
 # the grep matching; this is what makes such a site stop counting as debt.
-IREP2_DECL = re.compile(r"\b(?:const\s+)?(?:expr2tc|type2tc)\s*&?\s*([A-Za-z_]\w*)\s*[;=,){]")
+IREP2_DECL = re.compile(r"\b(?:const\s+)?(?:expr2tc|type2tc)\s*>?\s*&?\s*([A-Za-z_]\w*)"
+                        r"\s*[;=,){]")
 # A reference to an IREP2 node: every field of one is itself IREP2, so
-# `code_type.arguments[i]` needs no migration.
+# `code_type.arguments[i]` needs no migration. The same holds through an IREP2
+# container's `operator->`, so `callee->type` counts once `callee` is declared
+# `expr2tc` -- which is why the two name sets are searched together below.
 IREP2_NODE = re.compile(r"\b(?:const\s+)?[A-Za-z_]\w*2t\s*&\s*([A-Za-z_]\w*)\s*[;=]")
+# The root of a field, element or member access, so `arguments[0]`, `x->type`
+# and `code_type.arguments` are all tested against the name they start from.
+BASE_NAME = re.compile(r"[.\[(>-]")
+# IREP2 builders whose names do not end in `2t`/`2tc`. Only the ones with no
+# legacy namesake: `gen_zero`, `gen_one` and `gen_nondet` are declared for both
+# `typet` and `type2tc` (util/expr/expr_util.h, irep2/irep2_utils.h), so their
+# spelling cannot say which was called and they keep counting.
+IREP2_HELPER = re.compile(r"^(?:gen_true_expr|gen_false_expr|gen_long|gen_ulong)\s*\(")
 
 
 def strip_noise(text):
     """Remove block comments, line comments and string literals."""
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    # Keep the line count: `--list` reports file line numbers, and collapsing a
+    # block comment to nothing would shift every line after it.
+    text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
     out = []
     for line in text.split("\n"):
         line = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line)
@@ -76,6 +90,38 @@ def argument_of(line, start):
     return line[i + 1:].strip()
 
 
+def statements(clean):
+    """Yield (line map, joined text) for each statement.
+
+    The map is (offset, line number) pairs, because neither end of a join is the
+    right answer: a write split over several lines has no argument on the line
+    its call starts, and a brace-less `if (...)` does not terminate a statement,
+    so the write sits several lines after the one the join began on.
+    """
+    buf, lines, depth = "", [], 0
+    for lineno, line in enumerate(clean.split("\n"), 1):
+        if buf:
+            buf += " "
+        lines.append((len(buf), lineno))
+        buf += line.strip()
+        depth = max(0, depth + line.count("(") - line.count(")"))
+        if depth == 0 and re.search(r"[;{}]\s*$", buf):
+            yield lines, buf
+            buf, lines = "", []
+    if buf:
+        yield lines, buf
+
+
+def line_of(lines, offset):
+    """The source line an offset into a joined statement came from."""
+    result = lines[0][1]
+    for start, lineno in lines:
+        if start > offset:
+            break
+        result = lineno
+    return result
+
+
 def files(frontend):
     """The frontend's tracked C++ sources and headers."""
     out = subprocess.run(["git", "ls-files", "src/" + frontend],
@@ -85,24 +131,26 @@ def files(frontend):
     return [f for f in out.split() if f.endswith((".cpp", ".h"))]
 
 
+def is_irep2(arg, irep2_names):
+    """Whether the argument of a symbol-table write is already IREP2."""
+    if IREP2_ARG.search(arg) or IREP2_CALL.match(arg) or IREP2_HELPER.match(arg):
+        return True
+    return BASE_NAME.split(arg)[0] in irep2_names
+
+
 def count_b2(path, clean, listing=None):
     """B-2 writes in one cleaned file: raw, and those not already IREP2."""
     raw = refined = 0
-    irep2_names = set(IREP2_DECL.findall(clean))
-    irep2_nodes = set(IREP2_NODE.findall(clean))
-    for line in clean.split("\n"):
+    irep2_names = set(IREP2_DECL.findall(clean)) | set(IREP2_NODE.findall(clean))
+    for lines, line in statements(clean):
         for m in WRITE.finditer(line):
             raw += 1
             arg = argument_of(line, m.start())
-            if IREP2_ARG.search(arg) or IREP2_CALL.match(arg):
-                continue
-            if arg in irep2_names:
-                continue
-            if arg.split(".")[0].split("-")[0] in irep2_nodes:
+            if is_irep2(arg, irep2_names):
                 continue
             refined += 1
             if listing is not None:
-                listing.append(f"{path}: {arg}")
+                listing.append(f"{path}:{line_of(lines, m.start())}: {arg}")
     return raw, refined
 
 
