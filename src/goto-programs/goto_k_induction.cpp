@@ -406,7 +406,8 @@ bool reaches_back_edge(
 
     goto_programt::const_targetst successors;
     body.get_successors(it, successors);
-    if (continue_past_failed_assertions && it->is_assert() && successors.empty())
+    if (
+      continue_past_failed_assertions && it->is_assert() && successors.empty())
       successors.push_back(std::next(it));
     work.insert(work.end(), successors.begin(), successors.end());
   }
@@ -508,9 +509,8 @@ void transform_loop(
   // Collected here, applied last: splicing a havoc block displaces the GOTO
   // onto a fresh instruction whose location_number is 0, which is what
   // adjust_loop_head_and_exit keys its loop-exit test on.
-  const std::vector<goto_programt::targett> entry_jumps =
-    collect_entry_jumps(
-      goto_function.body, loop, slot, continue_past_failed_assertions);
+  const std::vector<goto_programt::targett> entry_jumps = collect_entry_jumps(
+    goto_function.body, loop, slot, continue_past_failed_assertions);
   const std::vector<expr2tc> vars = ordered_modified_vars(loop);
 
   // Loop-scoped cache for get_entry_cond_rec. Nested loops in the same
