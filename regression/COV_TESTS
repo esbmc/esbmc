@@ -1749,3 +1749,6 @@ regression/numpy/int8_mod_floordiv
 regression/esbmc/github_7891_bf16_fixedbv
 regression/esbmc-cpp/cpp/por_local_reinterpret_escape_fail
 regression/esbmc-unix/por_local_memcpy_read_fail
+regression/esbmc/multi_property_or_assert_fold_keeps_code
+regression/esbmc/multi_property_or_assert_fold_keeps_code_native
+regression/esbmc/multi_property_or_assert_fold_assume_kept
