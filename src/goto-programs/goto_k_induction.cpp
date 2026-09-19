@@ -403,6 +403,9 @@ bool reaches_back_edge(
 
     goto_programt::const_targetst successors;
     body.get_successors(it, successors);
+    // get_successors ends a path at a false ASSERT; symex runs on past it.
+    if (it->is_assert() && successors.empty())
+      successors.push_back(std::next(it));
     work.insert(work.end(), successors.begin(), successors.end());
   }
   return false;

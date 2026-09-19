@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --multi-property --max-k-step 6
+^\s+UNKNOWN\s+\[main\.assertion\.\d+\]\s+line\s+15\s+assertion i < 500
+\A(?![\s\S]*Solution found by the inductive step)[\s\S]*\Z

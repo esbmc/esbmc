@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-induction --multi-property
+^Solution found by the inductive step \(k = 2\)$
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z
