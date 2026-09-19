@@ -22,10 +22,16 @@
 #include <util/expr/type_byte_size.h>
 
 thread_local unsigned int dereferencet::invalid_counter = 0;
+thread_local std::unordered_map<
+  dereferencet::failed_symbol_keyt,
+  expr2tc,
+  dereferencet::failed_symbol_key_hasht>
+  dereferencet::failed_symbols;
 
 void dereferencet::reset_object_counter()
 {
   invalid_counter = 0;
+  failed_symbols.clear();
 }
 
 // Look for the base of an expression such as &a->b[1];, where all we're doing
@@ -677,7 +683,7 @@ expr2tc dereferencet::dereference(
 
   expr2tc value;
   if (!known_exhaustive)
-    value = make_failed_symbol(type);
+    value = failed_symbol_for(src, type, mode);
 
   // Where p can land: every target build_reference_to() produced a guard for.
   expr2tc resolved = gen_false_expr();
@@ -725,10 +731,42 @@ expr2tc dereferencet::dereference(
     /* Fallback if dereference failes entirely: to make this a valid formula,
      * return a failed symbol, so that this assignment gets a well typed free
      * value. */
-    value = make_failed_symbol(type);
+    value = failed_symbol_for(src, type, mode);
   }
 
   return value;
+}
+
+/* Two reads of one location through a pointer the value-set cannot resolve must
+ * agree: a fresh symbol per read let them hold different values, and hence
+ * different pointer identities at equal addresses, which is the false alarm in
+ * #5369. Key on the location, renamed to its SSA value so that a write to the
+ * pointer yields a different key.
+ *
+ * Reads only. A write through an unresolved pointer is emitted to a symbol
+ * nothing else reads (the "unknown" part of the value-set is a write-only
+ * sink); sharing that with a read would make the read observe a store symex
+ * does not otherwise model, and a shared lvalue would also need the phi merge
+ * that symex_goto.cpp skips for these names. */
+expr2tc dereferencet::failed_symbol_for(
+  const expr2tc &src,
+  const type2tc &type,
+  modet mode)
+{
+  if (mode.op != modet::READ)
+    return make_failed_symbol(type);
+
+  expr2tc location = src;
+  dereference_callback.rename(location);
+
+  failed_symbol_keyt key{location, type};
+  auto it = failed_symbols.find(key);
+  if (it != failed_symbols.end())
+    return it->second;
+
+  expr2tc sym = make_failed_symbol(type);
+  failed_symbols.emplace(std::move(key), sym);
+  return sym;
 }
 
 expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)

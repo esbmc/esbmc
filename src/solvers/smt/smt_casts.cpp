@@ -545,6 +545,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
       ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
     smt_astt addr = convert_ast(address);
     assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    tie_int_to_ptr_cast(target, output);
     return output;
   }
 
@@ -553,7 +554,25 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt is_inv = mk_and(obj_eq, offs_eq);
 
   assert_ast(mk_implies(not_matched, is_inv));
+  tie_int_to_ptr_cast(target, output);
   return output;
+}
+
+/* An address determines a pointer: the address space lays objects out in
+ * disjoint ranges, so two reconstructions of the same integer denote the same
+ * (object, offset). The if-then-else chain above does not say so on its own,
+ * because it enumerates only the objects converted before it -- the same bytes
+ * read twice reconstruct to the invalid object before some object's address is
+ * converted and to that object afterwards, and the two compare unequal at equal
+ * addresses (#5369). Tying equal addresses together removes those models
+ * without widening any reconstruction's candidate set, which is what the
+ * invalid-pointer check reads. */
+void smt_solver_baset::tie_int_to_ptr_cast(smt_astt target, smt_astt output)
+{
+  for (const auto &[addr, ptr] : int_to_ptr_casts.back())
+    assert_ast(mk_implies(addr->eq(this, target), ptr->eq(this, output)));
+
+  int_to_ptr_casts.back().emplace_back(target, output);
 }
 
 smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)

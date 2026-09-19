@@ -3,6 +3,8 @@
 
 #include <pointer-analysis/value_sets.h>
 #include <set>
+#include <unordered_map>
+#include <utility>
 #include <util/irep/expr.h>
 #include <irep2/irep2_guard.h>
 #include <util/symtab/namespace.h>
@@ -293,6 +295,22 @@ private:
    *  (--k-induction-parallel) don't race when minting unique
    *  `symex::invalid_objectN` names. */
   static thread_local unsigned invalid_counter;
+  /** A dereferenced location: the pointer expression, renamed to its SSA
+   *  value so an intervening write to it yields a different key, and the type
+   *  read through it. */
+  using failed_symbol_keyt = std::pair<expr2tc, type2tc>;
+  struct failed_symbol_key_hasht
+  {
+    size_t operator()(const failed_symbol_keyt &k) const
+    {
+      return k.first.crc() ^ (k.second->crc() << 1);
+    }
+  };
+  /** Reads that have already been given a free value, keyed by location. Shares
+   *  invalid_counter's lifetime -- reset_object_counter() clears both. */
+  static thread_local std::
+    unordered_map<failed_symbol_keyt, expr2tc, failed_symbol_key_hasht>
+      failed_symbols;
   /** Whether or not we're operating in a big endian environment. Value for this
    *  is taken from config.ansi_c.endianness. */
   bool is_big_endian;
@@ -415,6 +433,12 @@ private:
    *  @return The new, free variable.
    */
   expr2tc make_failed_symbol(const type2tc &out_type);
+
+  /** The free value standing for a read through a pointer the value-set could
+   *  not resolve. Shared between reads of the same location, unlike
+   *  make_failed_symbol() (#5369). */
+  expr2tc
+  failed_symbol_for(const expr2tc &src, const type2tc &type, modet mode);
 
   /** Try to build a reference to a data object. When we have a data object that
    *  a pointer (might) point at and need an expression to access it, this
