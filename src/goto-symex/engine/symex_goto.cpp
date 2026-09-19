@@ -621,6 +621,50 @@ void goto_symext::merge_value_sets(const statet::merge_statet &src)
   cur_state->value_set.make_union(src.value_set, true);
 }
 
+/// Each entry pairs the record a phi assigns on this path with the record
+/// whose value the merged path contributes.
+using phi_recordst = std::vector<
+  std::pair<renaming::level2t::name_record, renaming::level2t::name_record>>;
+
+/// A DECL re-run on a back-edge moves the frame to a fresh L1 instance, while
+/// a path parked before it still holds its value in the older one (#7903).
+/// Only instances still live on the parked path are carried over.
+static void collect_l1_phis(
+  const renaming::level1t &level1,
+  const goto_symext::statet::merge_statet &merge_state,
+  phi_recordst &changed)
+{
+  auto l1_record = [&level1](const irep_idt &name, unsigned l1_num) {
+    return renaming::level2t::name_record(to_symbol2t(symbol2tc(
+      get_empty_type(),
+      name,
+      symbol_renaming_level::level1,
+      l1_num,
+      0,
+      level1.thread_id,
+      0)));
+  };
+
+  // A path is parked and merged in the same frame, whose L1 names are never
+  // removed and whose activation numbers only grow.
+  level1.current_names.diff(
+    merge_state.level1_names,
+    [](const auto &) {
+      SYMEX_INVARIANT(false, "L1 name dropped since the path was parked");
+    },
+    [](const auto &) {},
+    [&](const auto &cur_kv, const auto &merge_kv) {
+      SYMEX_INVARIANT(
+        cur_kv.second > merge_kv.second,
+        "L1 activation counter moved backwards");
+      const irep_idt &name = cur_kv.first.base_name;
+      renaming::level2t::name_record merge_record =
+        l1_record(name, merge_kv.second);
+      if (merge_state.local_variables.count(merge_record))
+        changed.emplace_back(l1_record(name, cur_kv.second), merge_record);
+    });
+}
+
 void goto_symext::phi_function(const statet::merge_statet &merge_state)
 {
   if (merge_state.guard.is_false() && cur_state->guard.is_false())
@@ -630,9 +674,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
   const auto &merge_variables = merge_state.level2.current_names;
 
   guard2tc tmp_guard;
-  if (
-    !variables.empty() && !cur_state->guard.is_false() &&
-    !merge_state.guard.is_false())
+  if (!cur_state->guard.is_false() && !merge_state.guard.is_false())
   {
     tmp_guard = merge_state.guard;
 
@@ -642,9 +684,9 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
 
   // Only the names whose SSA record differs between the two paths need a
   // phi. Structurally diff the two persistent maps to visit exactly those
-  // (O(divergence)) rather than every tracked name. A name on only one path
-  // — added() (merge only) or removed() (this path only) — gets no phi.
-  std::vector<renaming::level2t::name_record> changed;
+  // (O(divergence)) rather than every tracked name. An SSA name on only one
+  // path — added() (merge only) or removed() (this path only) — gets no phi.
+  phi_recordst changed;
   variables.diff(
     merge_variables,
     [](const auto &) {},
@@ -652,10 +694,11 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     [&](const auto &cur_kv, const auto &merge_kv) {
       // A differing assignment counter marks a name as needing a phi.
       if (cur_kv.second.count != merge_kv.second.count)
-        changed.push_back(cur_kv.first);
+        changed.emplace_back(cur_kv.first, cur_kv.first);
     });
+  collect_l1_phis(cur_state->top().level1, merge_state, changed);
 
-  for (const renaming::level2t::name_record &variable : changed)
+  for (const auto &[variable, merge_variable] : changed)
   {
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
@@ -672,7 +715,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     renaming::level2t::rename_to_record(cur_state_rhs, variable);
 
     expr2tc merge_state_rhs = symbol2tc(type, symbol.id);
-    renaming::level2t::rename_to_record(merge_state_rhs, variable);
+    renaming::level2t::rename_to_record(merge_state_rhs, merge_variable);
 
     // Semi-manually rename these symbols: we may be referring to an l1
     // variable not in the current scope, thus we need to directly specify

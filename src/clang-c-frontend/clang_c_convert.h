@@ -247,6 +247,14 @@ protected:
   bool
   get_binary_operator_expr(const clang::BinaryOperator &binop, exprt &new_expr);
 
+  void get_vector_comparison(
+    const clang::BinaryOperator &binop,
+    irep_idt relation,
+    exprt lhs,
+    exprt rhs,
+    const typet &type,
+    exprt &new_expr);
+
   bool get_compound_assign_expr(
     const clang::CompoundAssignOperator &compop,
     exprt &new_expr);
