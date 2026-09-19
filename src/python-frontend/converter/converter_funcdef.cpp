@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/type/python_typechecking.h>
@@ -2457,7 +2458,7 @@ void python_converter::get_function_definition(
         typet optional_type = type_handler_.build_optional_type(value_type);
         type.return_type() = optional_type;
         current_element_type = optional_type;
-        added_symbol->set_type(migrate_type(type));
+        python_expr::set_function_type(*added_symbol, type);
       }
     }
     else
@@ -2468,7 +2469,7 @@ void python_converter::get_function_definition(
         type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
-      added_symbol->set_type(migrate_type(type));
+      python_expr::set_function_type(*added_symbol, type);
     }
   }
 
@@ -2490,7 +2491,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       current_element_type = inferred_type;
-      added_symbol->set_type(migrate_type(type));
+      python_expr::set_function_type(*added_symbol, type);
     }
   }
 
@@ -2540,7 +2541,7 @@ void python_converter::get_function_definition(
                                   : type_handler_.get_typet(nondet_suffix);
 
     type.return_type() = natural_type;
-    added_symbol->set_type(migrate_type(type));
+    python_expr::set_function_type(*added_symbol, type);
 
     exprt nondet_value("sideeffect", natural_type);
     nondet_value.statement("nondet");
@@ -2628,7 +2629,7 @@ void python_converter::get_function_definition(
     if (ret_type)
     {
       type.return_type() = *ret_type;
-      added_symbol->set_type(migrate_type(type));
+      python_expr::set_function_type(*added_symbol, type);
     }
   }
 
@@ -2651,7 +2652,7 @@ void python_converter::get_function_definition(
     !is_importing_module && !function_is_generator(function_node))
   {
     type.return_type() = none_type();
-    added_symbol->set_type(migrate_type(type));
+    python_expr::set_function_type(*added_symbol, type);
 
     code_returnt implicit_none;
     implicit_none.return_value() = gen_zero(none_type());
