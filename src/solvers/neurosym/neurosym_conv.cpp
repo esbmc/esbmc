@@ -434,13 +434,28 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
       BigInt r = to_signed(*lhs, width) % to_signed(*rhs, width);
       return mask_to_width(r, width);
     }
+    /* A shift by >= the operand width shifts every bit out: zero for
+     * bvshl/bvlshr, the replicated sign bit for bvashr (SMT-LIB2
+     * FixedSizeBitVectors). The guard is load-bearing, not a nicety:
+     * mp_arith's operator<< / operator>> both go through power(2, n),
+     * which loops n BigInt multiplications, so an unguarded shift amount
+     * taken from the model (any value up to 2^width - 1) does not
+     * terminate in practice. */
     case SMT_FUNC_BVSHL:
     case SMT_FUNC_SHL:
+      if (*rhs >= BigInt(width))
+        return BigInt(0);
       return mask_to_width(*lhs << *rhs, width);
     case SMT_FUNC_BVLSHR:
+      if (*rhs >= BigInt(width))
+        return BigInt(0);
       return mask_to_width(*lhs >> *rhs, width);
     case SMT_FUNC_BVASHR:
     {
+      if (*rhs >= BigInt(width))
+        return to_signed(*lhs, width) < BigInt(0)
+                 ? mask_to_width(BigInt(-1), width)
+                 : BigInt(0);
       BigInt shifted = to_signed(*lhs, width) >> *rhs;
       return mask_to_width(shifted, width);
     }
