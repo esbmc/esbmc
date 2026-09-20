@@ -1,6 +1,5 @@
-THOROUGH
-main.i
---parallel-solving --k-induction
-^Bug found \(k = 1\)$
+CORE
+main.c
+--k-induction --multi-property --max-k-step 6
 ^VERIFICATION FAILED$
 \A(?![\s\S]*Unable to prove or falsify the program)[\s\S]*\Z
