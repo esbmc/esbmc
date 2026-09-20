@@ -215,10 +215,11 @@ static bool numeric_value(const std::string &v, bool is_signed, BigInt &out)
     return true;
   }
   size_t digits_from = (!v.empty() && v[0] == '-') ? 1 : 0;
-  if (v.size() > digits_from &&
-      std::all_of(v.begin() + digits_from, v.end(), [](unsigned char c) {
-        return std::isdigit(c);
-      }))
+  if (
+    v.size() > digits_from &&
+    std::all_of(v.begin() + digits_from, v.end(), [](unsigned char c) {
+      return std::isdigit(c);
+    }))
   {
     out = string2integer(v);
     return true;
@@ -261,9 +262,9 @@ neurosym_convt::local_lookup(const std::string &symname) const
   return m;
 }
 
-std::optional<BigInt>
-neurosym_convt::local_eval_array_at(smt_astt array_term, const BigInt &index)
-  const
+std::optional<BigInt> neurosym_convt::local_eval_array_at(
+  smt_astt array_term,
+  const BigInt &index) const
 {
   const auto *ast = to_solver_smt_ast<smtlib_smt_ast>(array_term);
 
@@ -408,7 +409,8 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
     case SMT_FUNC_BVUDIV:
       if (*rhs == BigInt(0))
         return mask_to_width(
-          (BigInt(1) << BigInt(width)) - BigInt(1), width); // SMT-LIB2 udiv-by-0
+          (BigInt(1) << BigInt(width)) - BigInt(1),
+          width); // SMT-LIB2 udiv-by-0
       return mask_to_width(*lhs / *rhs, width);
     case SMT_FUNC_BVSDIV:
     {
@@ -624,14 +626,11 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
     if (!lhs || !rhs)
       return std::nullopt;
     std::size_t width = ast->args[0]->sort->get_data_width();
-    bool is_signed_cmp = ast->kind == SMT_FUNC_LT ||
-                          ast->kind == SMT_FUNC_GT ||
-                          ast->kind == SMT_FUNC_LTE ||
-                          ast->kind == SMT_FUNC_GTE ||
-                          ast->kind == SMT_FUNC_BVSLT ||
-                          ast->kind == SMT_FUNC_BVSGT ||
-                          ast->kind == SMT_FUNC_BVSLTE ||
-                          ast->kind == SMT_FUNC_BVSGTE;
+    bool is_signed_cmp =
+      ast->kind == SMT_FUNC_LT || ast->kind == SMT_FUNC_GT ||
+      ast->kind == SMT_FUNC_LTE || ast->kind == SMT_FUNC_GTE ||
+      ast->kind == SMT_FUNC_BVSLT || ast->kind == SMT_FUNC_BVSGT ||
+      ast->kind == SMT_FUNC_BVSLTE || ast->kind == SMT_FUNC_BVSGTE;
     BigInt l = is_signed_cmp ? to_signed(*lhs, width) : *lhs;
     BigInt r = is_signed_cmp ? to_signed(*rhs, width) : *rhs;
     switch (ast->kind)
@@ -714,8 +713,8 @@ smt_solver_baset *create_new_neurosym_solver(
    * flattening can blow a modest formula up into a CNF with well over a
    * million boolean variables (measured), most of which read-over-write
    * resolves away for free instead of ever materializing as clauses. */
-  auto *conv    = new neurosym_convt(ns, options);
-  *array_api    = static_cast<array_iface *>(conv);
+  auto *conv = new neurosym_convt(ns, options);
+  *array_api = static_cast<array_iface *>(conv);
   return conv;
 }
 
@@ -736,10 +735,10 @@ neurosym_convt::neurosym_convt(
       options,
       oneshot_process::model_prog(options, "neurosym"),
       _formula_path,
-      "QF_ABV"),   // QF_ABV, not QF_BV: array_api is now enabled above, so
-                   // the emitted header must declare the logic that
-                   // actually matches -- QF_ABV is a superset of QF_BV, so
-                   // this is correct for array-free formulas too.
+      "QF_ABV"), // QF_ABV, not QF_BV: array_api is now enabled above, so
+                 // the emitted header must declare the logic that
+                 // actually matches -- QF_ABV is a superset of QF_BV, so
+                 // this is correct for array-free formulas too.
     formula_path(_formula_path)
 {
 }
