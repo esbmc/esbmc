@@ -70,15 +70,49 @@ bool may_carry_pointer(const type2tc &t)
 
 /// Whether an object of this type can hold an address: anything that can hold
 /// a pointer, and an integer, which CIL-style code uses for every field access
-/// (`*(T *)((unsigned long)p + off)`).
+/// (`*(T *)((unsigned long)p + off)`), including inside an aggregate.
 bool may_hold_address(const type2tc &t)
 {
-  return may_carry_pointer(t) || is_bv_type(t);
+  if (is_nil_type(t))
+    return false;
+  if (may_carry_pointer(t) || is_bv_type(t) || is_bool_type(t))
+    return true;
+  if (is_array_type(t))
+    return may_hold_address(to_array_type(t).subtype);
+  if (is_struct_type(t) || is_union_type(t))
+  {
+    const std::vector<type2tc> &members =
+      is_struct_type(t) ? to_struct_type(t).members : to_union_type(t).members;
+    for (const type2tc &m : members)
+      if (may_hold_address(m))
+        return true;
+  }
+  return false;
+}
+
+/// Whether \p e or any operand of it is a pointer: a value this model cannot
+/// track (a float, say) may still hide the address one of them holds.
+bool mentions_pointer(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (may_carry_pointer(e->type))
+    return true;
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &op) {
+    found = found || mentions_pointer(op);
+  });
+  return found;
 }
 
 expr2tc top_source_expr()
 {
   return symbol2tc(pointer_type2(), "andersen::top_source");
+}
+
+expr2tc nondet_object_expr()
+{
+  return symbol2tc(pointer_type2(), andersent::nondet_object_name);
 }
 
 expr2tc return_symbol(const irep_idt &fn)
@@ -325,12 +359,17 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     }
 
     case sideeffect2t::allockind::nondet:
+    {
       // Symbolic execution resolves a dereference of an unconstrained pointer
       // (an uninitialised local, a bodyless call's result) to an invalid
       // object, never a named one, even under an assumption equating it with
-      // an address. Treating it as TOP would taint, flow-insensitively, every
-      // local declared before it is assigned.
-      return fresh_node();
+      // an address. It points at a sentinel rather than nothing, so a
+      // consumer can tell it apart from a set no constraint ever reached.
+      const node_id t = fresh_node();
+      add_constraint(
+        constraint_kindt::ADDRESS_OF, t, get_node(nondet_object_expr()));
+      return t;
+    }
 
     default:
       break;
@@ -383,14 +422,20 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
   // An integer carries the addresses it is computed from: `(long)p + 44`
   // still points into p's object. A constant operand is an offset and carries
   // none; a constant on its own is a fabricated address, left to TOP below.
-  if (
-    (is_bv_type(r->type) || is_bool_type(r->type)) && !is_constant_int2t(r))
+  if ((is_bv_type(r->type) || is_bool_type(r->type)) && !is_constant_int2t(r))
   {
-    const node_id t = fresh_node();
-    r->foreach_operand([this, &t, loc](const expr2tc &op) {
+    std::vector<node_id> carried;
+    r->foreach_operand([this, &carried, loc](const expr2tc &op) {
       if (!is_nil_expr(op) && !is_constant_int2t(strip_casts(op)))
-        add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+        carried.push_back(eval_rhs(op, loc));
     });
+    // `(long)p + 44` reaches what p does: share its node rather than build a
+    // chain of copies, which CIL emits for every field access.
+    if (carried.size() == 1)
+      return carried.front();
+    const node_id t = fresh_node();
+    for (node_id c : carried)
+      add_constraint(constraint_kindt::COPY, t, c);
     return t;
   }
 
@@ -400,7 +445,7 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
   {
     const node_id t = fresh_node();
     r->foreach_operand([this, &t, loc](const expr2tc &op) {
-      if (!is_nil_expr(op) && may_carry_pointer(op->type))
+      if (!is_nil_expr(op) && may_hold_address(op->type))
         add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
     });
     return t;
@@ -448,10 +493,15 @@ void andersent::handle_assign(
 
   const expr2tc r = strip_casts(rhs);
 
-  // An integer holds no address unless it is computed from one.
-  if (
-    !may_hold_address(lhs->type) ||
-    (!may_carry_pointer(lhs->type) && is_constant_int2t(r)))
+  // An integer holds no address unless it is computed from one; a value this
+  // model does not track at all may still hide the one it was built from.
+  if (!may_hold_address(lhs->type))
+  {
+    if (mentions_pointer(r))
+      assign_top(lhs, loc);
+    return;
+  }
+  if (!may_carry_pointer(lhs->type) && is_constant_int2t(r))
     return;
 
   // Field- and index-insensitivity means the destination of `s.f = q` and
@@ -493,11 +543,11 @@ void andersent::widen_call(
   const std::vector<expr2tc> &arguments,
   unsigned loc)
 {
-  if (!is_nil_expr(ret) && may_carry_pointer(ret->type))
+  if (!is_nil_expr(ret) && may_hold_address(ret->type))
     assign_top(ret, loc);
 
   for (const expr2tc &arg : arguments)
-    if (!is_nil_expr(arg) && may_carry_pointer(arg->type))
+    if (!is_nil_expr(arg) && may_hold_address(arg->type))
       add_constraint(constraint_kindt::STORE, eval_rhs(arg, loc), top_source());
 }
 

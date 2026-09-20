@@ -541,6 +541,7 @@ struct targetst
   loopst::loop_varst named;
   bool heap = false;
   bool anything = false;
+  bool nondet = false;
 };
 
 targetst
@@ -553,9 +554,13 @@ targets_of(andersent &points_to, const loopst &loop, const expr2tc &ptr)
   {
     const expr2tc object =
       is_object_descriptor2t(v) ? to_object_descriptor2t(v).object : expr2tc();
-    if (!is_nil_expr(object) && is_symbol2t(object) && check_var_name(object))
+    if (is_nil_expr(object))
+      t.anything = true;
+    else if (andersent::is_nondet_object(object))
+      t.nondet = true;
+    else if (is_symbol2t(object) && check_var_name(object))
       t.named.insert(object);
-    else if (!is_nil_expr(object) && is_dynamic_object2t(object))
+    else if (is_dynamic_object2t(object))
       t.heap = true;
     else
       t.anything = true;
@@ -571,10 +576,11 @@ bool named_targets(
   const expr2tc &ptr,
   loopst::loop_varst &objects)
 {
-  // A pointer with no target (only ever nondet or null) writes no named
-  // object: symex sends such a write to an invalid object.
+  // An unconstrained pointer writes no named object: symex sends such a write
+  // to an invalid object. An empty set is different — no constraint reached
+  // the pointer, so the analysis knows nothing about it.
   const targetst t = targets_of(points_to, loop, ptr);
-  if (t.heap || t.anything)
+  if (t.heap || t.anything || (t.named.empty() && !t.nondet))
   {
     if (messaget::state.target("k-induction", VerbosityLevel::Debug))
       log_debug(
@@ -582,7 +588,7 @@ bool named_targets(
         "cannot name what {} may point to at {}: {}",
         ptr->pretty(0),
         loop.get_original_loop_head()->location.as_string(),
-        t.anything ? "anything" : "heap");
+        t.anything ? "anything" : t.heap ? "heap" : "nothing");
     return false;
   }
   objects.insert(t.named.begin(), t.named.end());
