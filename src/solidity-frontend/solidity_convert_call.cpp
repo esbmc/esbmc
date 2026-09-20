@@ -16,6 +16,7 @@
 #include <util/arith/mp_arith.h>
 #include <util/irep/std_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/irep/migrate.h>
 #include <util/message/message.h>
 #include <fstream>
 #include <limits>
@@ -930,7 +931,7 @@ bool solidity_convertert::get_high_level_member_access(
     func_body.move_to_operands(_ret);
   }
 
-  added_fsymbol.set_value(func_body);
+  added_fsymbol.set_value(migrate_expr(func_body));
 
   // construct function call
   side_effect_expr_function_callt _call;
@@ -1552,7 +1553,7 @@ bool solidity_convertert::get_typed_call_definition(
 
     arg_param_ids.push_back(pid);
   }
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // Body construction.
   code_blockt func_body;
@@ -1625,7 +1626,7 @@ bool solidity_convertert::get_typed_call_definition(
     func_body.move_to_operands(ret_false);
   }
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   out_sym = &added_symbol;
   return false;
 }
@@ -1859,7 +1860,7 @@ bool solidity_convertert::try_inline_delegate_shadow_helper_call(
     ls.lvalue = true;
     ls.file_local = true;
     auto &added_local = *move_symbol_to_context(ls);
-    added_local.set_value(arg_exprs[i]);
+    added_local.set_value(migrate_expr(arg_exprs[i]));
 
     code_declt decl(symbol_expr(added_local));
     decl.operands().push_back(arg_exprs[i]);
@@ -1888,7 +1889,11 @@ bool solidity_convertert::try_inline_delegate_shadow_helper_call(
       get_default_symbol(rs, debug_modulename, rt, rname, rid, loc);
       rs.lvalue = true;
       rs.file_local = true;
-      rs.set_value(gen_zero(get_complete_type(rt, ns), true));
+      // expr2tc return type, so this cannot silently fall back to the legacy
+      // gen_zero the decl operand below still wants.
+      const expr2tc rzero =
+        gen_zero(migrate_type(get_complete_type(rt, ns)), true);
+      rs.set_value(rzero);
       auto &added_ret = *move_symbol_to_context(rs);
       code_declt rdecl(symbol_expr(added_ret));
       rdecl.operands().push_back(gen_zero(get_complete_type(rt, ns), true));
@@ -2040,7 +2045,7 @@ bool solidity_convertert::try_get_delegate_shadow_call(
     ls.lvalue = true;
     ls.file_local = true;
     auto &added_local = *move_symbol_to_context(ls);
-    added_local.set_value(arg_exprs[i]);
+    added_local.set_value(migrate_expr(arg_exprs[i]));
 
     code_declt decl(symbol_expr(added_local));
     decl.operands().push_back(arg_exprs[i]);
@@ -2139,7 +2144,10 @@ bool solidity_convertert::try_get_delegate_shadow_call(
         get_default_symbol(rs, debug_modulename, rt, rname, rid, loc);
         rs.lvalue = true;
         rs.file_local = true;
-        rs.set_value(gen_zero(get_complete_type(rt, ns), true));
+        // expr2tc return type; see the sibling site.
+        const expr2tc rzero =
+          gen_zero(migrate_type(get_complete_type(rt, ns)), true);
+        rs.set_value(rzero);
         auto &added_ret = *move_symbol_to_context(rs);
         code_declt rdecl(symbol_expr(added_ret));
         rdecl.operands().push_back(gen_zero(get_complete_type(rt, ns), true));
@@ -2327,7 +2335,7 @@ bool solidity_convertert::get_call_definition(
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body:
   /*
@@ -2451,7 +2459,7 @@ bool solidity_convertert::get_call_definition(
   return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
   return false;
 }
@@ -2604,7 +2612,7 @@ bool solidity_convertert::get_call_value_definition(
   param.cmt_identifier(val_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body:
   /*
@@ -2808,7 +2816,7 @@ bool solidity_convertert::get_call_value_definition(
   return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
   return false;
 }
@@ -2857,7 +2865,7 @@ bool solidity_convertert::get_transfer_definition(
   param.cmt_identifier(val_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   code_blockt func_body;
   exprt addr_expr = symbol_expr(addr_added_symbol);
@@ -3055,7 +3063,7 @@ bool solidity_convertert::get_transfer_definition(
   return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
   return false;
 }
@@ -3105,7 +3113,7 @@ bool solidity_convertert::get_send_definition(
   param.cmt_identifier(val_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   code_blockt func_body;
   exprt addr_expr = symbol_expr(addr_added_symbol);
@@ -3285,7 +3293,7 @@ bool solidity_convertert::get_send_definition(
   return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
 
   return false;
@@ -3325,7 +3333,7 @@ bool solidity_convertert::get_staticcall_definition(
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body: same as call#0
   code_blockt func_body;
@@ -3446,7 +3454,7 @@ bool solidity_convertert::get_staticcall_definition(
   return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
   return false;
 }
@@ -3488,7 +3496,7 @@ bool solidity_convertert::get_delegatecall_definition(
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
 
-  added_symbol.set_type(t);
+  added_symbol.set_type(migrate_type(t));
 
   // body:
   // Unlike call, delegatecall does NOT change msg.sender or msg.value.
@@ -3563,7 +3571,7 @@ bool solidity_convertert::get_delegatecall_definition(
   return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
-  added_symbol.set_value(func_body);
+  added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
   return false;
 }

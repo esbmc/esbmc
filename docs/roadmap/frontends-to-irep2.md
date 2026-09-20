@@ -4367,3 +4367,199 @@ type through the namespace is asking the symbol table a question it cannot answe
 Two causes known, of two different kinds: one wants a type kind built, the other says this site
 cannot be converted at all. Neither is a rendering difference and neither yields to another
 attribute carry -- which retires the §69-§72 approach on evidence.
+
+## 75. All fifteen accounted for (2026-09-16)
+
+§74 left one abort group undiagnosed on clang-c's local value-write arm. It is diagnosed, and the
+list is now complete.
+
+All four are `valarray` tests, and dumping the source type's components at the failure gives the
+answer directly:
+
+```
+member=c:@N@std@S@slice@F@size#1  source_type_id=3 (struct)
+components: _start, _length, _stride
+```
+
+The member is a **method**; the resolved struct has only data members. Legacy
+`struct_union_typet` keeps methods in a separate `methods()` list (`std_types.h:204-211`, irep key
+`"methods"`), and `grep -c methods src/util/irep/migrate.cpp` is **0** -- the seam migrates
+components and never methods. It does not normally bite because `member2t`'s assertion is skipped
+for an unresolved source type, which is what a method access usually carries; converting the value
+write makes the source type resolved, so the check applies and the method is not there.
+
+```
+7  the tag symbol is not in the table yet   §53's precondition  → this site cannot convert
+4  no bit_field2t                                               → a new type2t kind
+4  a resolved struct has no methods                              → see §76: the access is transient
+```
+
+Three causes, three kinds of answer, none an attribute carry. That is the point worth keeping: the
+arm was never 3 341 differences away from converting -- it was three structural questions away, and
+97% of the differences were a debug dump. §69 through §72 removed real losses and none of them was
+on this list.
+
+## 76. The third group was a wrong assertion, not a missing carry (2026-09-16)
+
+§75 listed group 3 as "methods() must cross the seam". Reading one more field of the failing node
+says otherwise. The member's own type is `code` and the source is a plain object symbol, so the
+shape is `OBJECT.f` with `f` a function designator -- and an in-tree arm exists to consume exactly
+that: `clang_cpp_adjust_irep2`'s `is_cpp_member_call` is `is_member2t && is_code_type &&
+!member.empty()`, and its `adjust_cpp_member` resolves the member through the namespace, aborting if
+it is absent and asserting the symbol is code. The legacy counterpart
+(`clang_cpp_adjust_expr.cpp:210-248`) does the same for the three frontends that run it -- clang-cpp,
+Solidity and Python. So the shape is transient, like the three source shapes the assertion already
+tolerates, and for the same reason: a declaration's value is migrated during conversion, before the
+adjuster runs.
+
+The assertion also never checked anything here. A code-typed member is always a method -- by C17
+6.7.2.1p3 for the clang frontends ("a structure or union shall not contain a member with incomplete
+or function type"), and by measurement for the three that build struct types programmatically: none
+of the 29 `components().push_back` sites pushes a code type. Methods are not components on either
+side -- legacy's own `get_component` searches `components()` only (`std_types.cpp:45-56`) -- so the
+lookup could only produce a spurious abort. The power is re-established upstream instead, by the
+namespace lookup above, which verifies the method exists *as a symbol*; and the diff asserts the
+converse, that a code-typed member must not resolve to a component, keeping a tripwire for the
+#4566 shape.
+
+The fix adds one disjunct to an `assert` under `#ifndef NDEBUG`. A disjunct can only make an
+assertion pass more often, so nothing else can move, and a release build is unaffected. Measured with
+the local-arm conversion applied: all four `valarray` programs go from `SIGABRT` to the verdict their
+descriptor asks for. Eleven of the fifteen remain -- 7 under §74's precondition, 4 needing a
+`bit_field2t`.
+
+`methods()` still does not cross the seam. That question survives, narrowed to class **type** writes:
+three consumers read the list back through `symbolt::get_type()` --
+`goto-programs/destructor.cpp:21-23`, `solidity-frontend/solidity_convert_builtin.cpp:266`, and
+`clang-cpp-frontend/clang_cpp_convert.cpp:3430`. The last is the base-class method-inheritance loop
+and is the worst of the three: it would not abort on an empty list, it would silently give the
+derived class no inherited methods. So the carry costs destructor lowering *and* C++ method
+inheritance -- not the value write this sequence was chasing.
+
+## 77. Solidity's builtin cluster, and the fourth name loss (2026-09-16)
+
+`solidity_convert_call.cpp` was the densest convertible cluster left anywhere -- 19 of 144 remaining
+B-2* writes, one repeated idiom across the synthesised low-level-call builtins. Nine landed: seven
+`code_typet` writes and two `gen_zero` writes hoisted into a typed local so a silent fall back to the
+legacy overload cannot compile. Every converted line is exercised -- the six unconditional builtins in
+523 of 525 tests each, the thinnest site in one (`delegate_shadow_8`) -- proven by sweeping for the
+symbol each builtin synthesises.
+
+The oracle is worth stating precisely, because the obvious one is vacuous. Over all 525 tests both
+`-only` dumps are byte-identical, but that is blind to exactly the field at risk: clearing the
+argument identifiers before the store leaves the suite green *and* the dumps identical, because
+`from_type` prints argument types only. What pins the seven type writes is
+`migrate_symbol_type`'s round-trip assertion (`migrate.cpp:477`), read on every symbol type via
+`goto_convert_functions.cpp:1819` -- delete the `argument_names` carry and the build itself stops. The
+two value writes are verification-inert (the GOTO reads the `code_declt` operand on the next line), so
+nothing end-to-end can pin them; a unit test does, asserting the two `gen_zero` overloads agree on
+every type reachable there, since they demonstrably disagree elsewhere.
+
+The remaining ten are GOTO-neutral too but move 523 of 525 symbol-table dumps, and the cause is
+generic rather than Solidity's: `symbol_expr` sets both `identifier` and `name`
+(`util/expr/expr_util.cpp:239-245`), `symbol2t` carries only `thename`, so a back-migrated symbol
+expression is a second, inequivalent spelling of the same symbol. `get_shorthands` compares whole
+`exprt`s in a `std::set`, so the two spellings register a namespace collision and the printer emits
+full mangled ids. That is the fourth name the seam has dropped, after `argument_base_names` (§44),
+`member_base_names` (§46) and `#cformat` (§69).
+
+It is also the one with a semantic precedent rather than a cosmetic one.
+`clang_c_adjust::do_special_functions` (`clang_c_adjust_expr.cpp:1406`) dispatches every builtin
+lowering on `to_symbol_expr(f_op).name()`, so a callee missing it stops matching -- §90.2 records the
+result, an `assert` left as a plain `FUNCTION_CALL` -- and `clang_c_adjust_irep2` already patches
+around it twice by hand (`:1597`, `:1647`) with
+`name(get_pretty_name(id2string(id)))`.
+
+So the fix is a *derivation*, not a new field: `get_pretty_name` (`util/symtab/pretty.h:9`) is a pure
+string function, needing no symbol table and no growth in `symbol2t`, which is the most-constructed
+node in the tool. Doing it once in `migrate_expr_back` would retire both workarounds, the §90.2 class,
+and these ten writes together. It still needs its own corpus-wide A/B, because setting `name` changes
+`irept::operator==` for every back-migrated symbol expression -- which is simultaneously the point and
+the risk.
+
+Solidity B-2* 65 -> 56; repo total 144 -> 135.
+
+## 78. The fourth name loss was a printer bug (2026-09-16)
+
+§77 deferred ten Solidity writes because `migrate_expr_back` drops the `name` `symbol_expr` sets, so
+one symbol reaches the printer in two spellings and `get_shorthands` reports a namespace collision.
+The premise was right and the conclusion was wrong: the defect is in the question `get_shorthands`
+asks, not in the seam.
+
+It compared whole `exprt`s to decide whether a shorthand was ambiguous, and that test was a tautology:
+`symbols` is a `std::set<exprt>` ordered by `compare()`, and `compare()` and `operator==` ignore the
+same field (comments, `irep.cpp:186-205`), so every pair of distinct elements is unequal and the guard
+marked every clash. Comparing identifiers is the first form that distinguishes anything, and it is
+sound because the identifier already carries the SSA renaming (`symbol2t::get_symbol_name` appends
+`?l1!thr` and `&node#l2`, `irep2_expr.cpp:198-225`), while `next_symbol` and `nondet_symbol` -- the two
+kinds that could share an identifier meaning different values -- are never collected
+(`c_expr2string.cpp:31-38`).
+
+It is a live defect independent of the migration: of 5864 clashes over the Solidity corpus, 12 are two
+spellings of one symbol, in twelve named tests. Three consumers inherit the function, and the one that
+matters most is `goto2c::expr2ct`, which emits C that must compile: a declaration took the short name
+while a use took the mangled one, naming an identifier the output never declared. Two invariants made
+this worth care rather than a one-liner -- `goto_coverage.cpp:818-828` warns that altering `from_expr`
+formatting can silently deflate k-path coverage, and `witnesses.cpp:939-959` builds SV-COMP witness
+assignments through it. `goto-transcoder` 268/268, `goto-coverage` 144/144 (67 of its descriptors pin a
+percentage), `witnesses` 163/163; the change carries `needs-svcomp-run`.
+
+The lesson generalises past this instance. Three of the four name losses so far were fixed by carrying
+the field (§44, §46, §69). This one should not be, and nor should it be fixed by deriving the name in
+`migrate_expr_back`: a consumer that treats two spellings of one symbol as two symbols is wrong
+whether or not the seam preserves spelling. Before adding a field to carry a marker across, it is
+worth asking whether the reader's use of it is defensible -- here it was not, and the fix is a line in
+the reader rather than storage in the hottest node in the tool.
+
+## 79. Zero in solidity_convert_call.cpp, and what the detour cost (2026-09-16)
+
+The ten writes §78 deferred are in, and inert: base against change over all 526 Solidity tests,
+`--goto-functions-only` and `--symbol-table-only` both byte-identical, 0 of 526 on either, against 523
+of 525 symbol tables before the printer was fixed. The file is at zero B-2* residue, 19 of 19.
+Solidity 56 -> 46; the repo total 135 -> 125.
+
+The eight body writes are gated differently from the type writes of §77. `migrate_symbol_value`'s
+round-trip assertion skips function bodies by design (`migrate.cpp:496`), so what pins them is the
+byte-identical GOTO -- which for a function body is the stronger instrument, not a weaker one, because
+goto-convert builds the GOTO *from* the value written. The two local-symbol writes are covered by that
+assertion on an asserts build.
+
+Worth keeping from the detour: §78 priced these ten at reconstructing `name` in `migrate_expr_back`,
+i.e. adding a derivation to the most-constructed node's back-migration to satisfy a consumer that was
+wrong. The consumer's test turned out to be a tautology, and fixing it cost one line and repaired a
+live defect in all three printers. The general form: when a marker appears not to survive the seam,
+price fixing the reader before paying to carry the marker.
+
+## 80. `#cpp_type` crosses the seam (2026-09-17)
+
+The fifth attribute to be carried, after `argument_base_names` (§44), `member_base_names` (§46),
+`cformat` (§69) and a symbol's `name` -- which was *not* carried, because §78 found its reader was
+wrong. This one's reader is right, so it is carried.
+
+`irep_idt cpp_type`, unreflected, on `unsignedbv_type2t`, `signedbv_type2t` and `floatbv_type2t`, both
+directions in `migrate_type`, back-write guarded on non-empty. The kinds come from enumerating the
+attribute's **writers**, not from sampling a corpus -- `scope-python-irep2.md` §9.3 records what
+sampling cost. Only the signedbv arm is carried because a *Python* consumer reads it; unsignedbv is
+platform symmetry under `char_is_unsigned` plus `goto2c`, and floatbv has no Python reader at all and is
+carried for `cpp_expr2string` and the exception-id path (§10.1).
+
+It also costs something worth stating: `sizeof` goes 48 -> 56 on the two bitvector kinds -- the most
+constructed nodes in the tool -- and leaves `fields_cover_class` with zero margin, so each kind now pins
+its own layout with a `static_assert`. A carry is not free even when it is unreflected.
+
+Why it had to be carried: `python_converter::get_python_type_category` (`converter_binop.cpp:619`)
+distinguishes a 1-char string element from an 8-bit int by the spelling, so dropping it turns
+`val = "hello"[0]; assert val == "h"` into a false alarm. That defect was *predicted* in
+`scope-python-irep2.md` §3, re-derived wrongly in §9's first attempt, and is now pinned by
+`regression/python/github_4715_cpp_type_char{,_fail}` plus a unit test that asserts the spelling is no
+part of the type's identity.
+
+It unblocks eight of the eleven writes in `handle_assignment_type_adjustments`; the other three
+lose markers the carry does not cover (`scope-python-irep2.md` §10.4). By §3's table it also unblocks
+the ten in `converter_funcdef.cpp` -- which is the next cluster.
+
+The pattern across the five is now clear enough to state as a rule. When a marker does not survive the
+seam, there are three answers and the choice is empirical: carry it as an unreflected field (four of
+five), fix the reader if the reader is wrong (§78), or change the type model if the marker is really a
+distinct type (`scope-python-irep2.md` §8.1, still open). What settles it is who reads the marker and
+whether their use of it is defensible -- not how easy the carry is.

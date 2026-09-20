@@ -9414,3 +9414,257 @@ type kind that needs building, the other a precondition that says this particula
 converted at all. Neither is a rendering difference, and neither is helped by another attribute
 carry -- which retires the approach §155 through §158 took, on evidence rather than on my
 impatience with it.
+
+## 161. The last four: a resolved struct has no methods (2026-09-16)
+
+§159.2's third abort group, diagnosed. All fifteen of the local arm's hard failures now have a
+cause.
+
+### 161.1 What the failure says
+
+All four are `valarray` tests and all four fail identically. Instrumenting `member2t`'s constructor
+assertion (`irep2_expr.h:1659`) to print the member and the source type's component list:
+
+```
+[MEMB]  member=c:@N@std@S@slice@F@size#1  source_type_id=3
+[MEMBC]   _start
+[MEMBC]   _length
+[MEMBC]   _stride
+```
+
+Type id 3 is `struct` (`type_kinds.inc`), so the source type is a **resolved** struct. Its three
+components are `std::slice`'s data members. The member being looked up,
+`c:@N@std@S@slice@F@size#1`, is a **method** -- `@F@` and the overload suffix say so -- and it is
+not among them.
+
+### 161.2 Why it is not among them
+
+Legacy `struct_union_typet` keeps methods in a **separate list** from components:
+`methods()` at `std_types.h:204-211`, stored under the irep key `"methods"`
+(`typet::a_methods`, `type.cpp:47`). And `grep -c methods src/util/irep/migrate.cpp` returns
+**0** -- the seam migrates `components()` and never touches `methods()`, so an IREP2
+`struct_type2t` has data members and nothing else.
+
+That does not normally bite, because `member2t`'s assertion is *skipped* when the source type is a
+`symbol_id` -- the unresolved case -- and the comment at `:1656` says exactly that: the check is
+"only checkable once the source type is resolved". A method access ordinarily carries an
+unresolved source type, the assert is skipped, and resolution later happens through the legacy
+type where `methods()` exists.
+
+Converting the value write changes that: the source type arrives **resolved**, the assertion now
+applies, and the method is not in a resolved IREP2 struct because it never was.
+
+### 161.3 All fifteen, accounted for
+
+| assertion | count | cause | kind of answer |
+|---|---|---|---|
+| `symbol' failed | 7 | the tag symbol is not in the table yet (§160) | a precondition: this site cannot convert |
+| `sz % a == 0' | 4 | no `bit_field2t` (§153) | a new `type2t` kind |
+| component lookup | 4 | a resolved `struct_type2t` has no methods | `methods()` must cross the seam, or the access must stay unresolved |
+
+Three causes, three different kinds of answer, and none of them an attribute carry. The list is
+complete, which is what §147 through §158 were missing: the arm was never 3 341 differences away,
+it was three structural questions away, and the differences were mostly a debug dump.
+
+### 161.4 What this says about Phase 6's remaining two writes
+
+Both arms are blocked, and now by named things:
+
+```
+:632 static   the bitfield assertion, corpus-wide           §153
+:659 local    three causes above, 15 programs               §160, §153, §161
+```
+
+Neither is a measurement question any more. The cheapest of the three is arguably the method one --
+carrying `methods()` across the seam is the §44 pattern applied to a list that already exists on
+both sides -- but it is the one that most obviously affects C++ class layout, so it wants its own
+measurement rather than an assumption that it is cheap.
+
+## 162. The method access is transient, so the assertion was wrong (2026-09-16)
+
+§161 left group 3 with two possible answers -- carry `methods()` across the seam, or let the access
+stay unresolved. It is the second, and the evidence says so without needing either measured.
+
+### 162.1 The member's own type names the answer
+
+§161 read the source type and the component list. The field it did not read is the *member's* type.
+Printing it:
+
+```
+[MEMB] memb=c:@N@std@S@slice@F@size#1 src_type_id=3 memb_type_id=5 src_expr_id=10
+```
+
+`memb_type_id=5` is `code` and `src_expr_id=10` is `symbol` (`type_kinds.inc`, `expr_kinds.inc`).
+So the shape is `OBJECT.f` where `OBJECT` is a plain object symbol of resolved struct type and `f`
+is a function designator -- and that is the exact shape
+`clang_cpp_adjust::adjust_cpp_member` exists to remove:
+
+```cpp
+// clang_cpp_adjust_expr.cpp:210-248
+const symbolt *comp_symb = ns.lookup(expr.component_name());
+...
+exprt method_call = symbol_expr(*comp_symb);
+expr.swap(method_call);
+```
+
+It replaces the member access with the method's symbol, unconditionally, and aborts if the symbol
+is missing -- and that arm is not clang-cpp-only: Solidity (`solidity_language.cpp:370`) and Python
+(`python_language.cpp:287`) run `clang_cpp_adjust` too. The operative consumer on the IREP2 path is
+its native counterpart, `clang_cpp_adjust_irep2::adjust_cpp_member`, gated on
+`is_cpp_member_call` -- which is this disjunct's predicate spelled out (§162.3).
+
+So a code-typed member is transient in exactly the sense the three disjuncts already in the assertion
+are transient, and for the same reason: a declaration's value is migrated during conversion, before
+the adjuster runs. Two configurations have no such rewrite -- `--python-irep2-adjust-only` replaces
+`clang_cpp_adjust` with `python_adjust`, whose member arm has no cpp-member case
+(`python_adjust.cpp:302-328`), and the Jimple frontend runs no adjuster and builds `member2tc`
+directly (`jimple_expr.cpp:485`). Neither can produce a code type today, so that is latent rather
+than live; "cannot reach symex" holds for every path that can build the shape.
+
+### 162.2 The assertion never had any power here
+
+A code-typed member is always a method. For the clang frontends that is the language: C17 6.7.2.1p3
+says "a structure or union shall not contain a member with incomplete or function type", so a field
+holds a function *pointer* and its type kind is `pointer`. For the three frontends that build struct
+types programmatically, with no parser to reject anything, it is a measured property rather than a
+guaranteed one -- across the 29 `components().push_back` sites in `src/`, none pushes a code type --
+and the margin is thinner than it looks:
+
+- Python's `get_callable_type` returns `gen_pointer_type(fn_type)`
+  (`converter/converter_types.cpp:184-203`), and the comment at `converter/converter_class.cpp:645`
+  says why: the bare code type has no computable width and aborts with `symbolic_type_excp` (#4566).
+  That is a *prior violation of this invariant*, fixed by convention at one site.
+- Solidity's `!is_method` arm of `move_builtin_to_contract`
+  (`solidity_convert_builtin.cpp:245-262`) pushes `sym.type()` into `components()` with no
+  `is_code()` guard, where the `ErrorDef`/`EventDef` arm (`solidity_convert_decl.cpp:876-882`) does
+  check. Safe today by caller discipline only.
+- `solidity_convert_constructor.cpp:293` already builds a code-typed `member_exprt` over a contract
+  struct; it is assigned and never read, so it is inert -- but it is the counterexample in waiting.
+
+Methods are not components on either side of the seam: legacy's own
+`struct_union_typet::get_component` searches `components()` only (`std_types.cpp:45-56`), and
+`component_number` `assert(false)`s on a miss. So for a code-typed member the component lookup could
+only ever produce a spurious abort. Adding the disjunct removes false alarms and no checking.
+
+Put more sharply: for a code-typed member the check is not weakened, it is **uncheckable**. There is
+nothing on the IREP2 side to check the name against, because the seam carries no method list at all.
+That is the honest description, and it is what makes §162.4 the follow-up rather than this.
+
+The checking power is not lost, though -- it is *re-established upstream*, by something stronger than
+the lookup it replaces. `clang_cpp_adjust_irep2::adjust_cpp_member` resolves the member through the
+namespace and aborts if it is not there:
+
+```cpp
+// clang_cpp_adjust_irep2.cpp:113-131
+const symbolt *comp = ns.lookup(m.member);
+if (!comp) { log_error("adjust_cpp_member: unresolved C++ member component `{}' ..."); abort(); }
+assert(comp->get_type().is_code());
+```
+
+That verifies the method exists *as a symbol*, which the component lookup never did. It is also the
+paired post-adjust re-enforcement the three existing relaxations each have, in the layer that has a
+namespace in hand -- not `python_adjust::collect_unresolved_sources`, which audits the Python
+adjuster's own output and would never see this shape.
+
+The converse is still worth asserting, and the diff does: a code-typed member must *not* resolve to a
+component. That keeps a live tripwire for the #4566 shape returning, instead of a blanket skip. It is
+written as one two-way check -- a member resolves to a component exactly when it is not code-typed --
+so the data-member case keeps its original strength.
+
+It has to stay behind the resolved-source guard, and that is measured rather than argued. Dropping the
+guard so the lookup runs unconditionally does not merely regress a test; ESBMC stops building:
+
+```
+FAILED: src/python-frontend/pysrc64.goto
+  python2goto library_entry.py --output .../pysrc64.goto
+terminate called after throwing an instance of 'irep2_cast_error'
+  what():  irep2: struct_union_member_names() called on incompatible type (type_id = symbol)
+```
+
+`struct_union_member_names` throws on anything outside struct/union/complex
+(`irep2_type.cpp:428-441`), and the Python OM library build constructs a code-typed `member2t` over a
+by-name source. So the three transient source kinds must keep skipping the lookup entirely -- which is
+also independent confirmation that the shape this section is about is built today, by the build
+itself.
+
+Two alternatives were considered and rejected, recorded so they are not re-litigated. Consulting the
+method list from inside `member2t` inverts the layering: `src/irep2/` has no reference to
+`migrate_namespace_lookup`, which is declared a layer above in `util/irep/migrate.h:17`. Collapsing a
+code-typed `member_exprt` to the method's `symbol2t` inside `migrate.cpp` would break the round-trip
+equality the migration measures itself by (`goto_convert_functions.cpp:1839`,
+`clang_c_adjust_irep2.cpp:55`).
+
+That also bounds the blast radius exactly: the change adds a disjunct to an `assert` inside
+`#ifndef NDEBUG`. A disjunct can only make an assertion pass more often, and the assertion has no
+side effects, so no program's behaviour can change except by not aborting -- and in a release build
+nothing changes at all.
+
+### 162.3 Measured
+
+With the `:659` local-arm conversion applied on top (not landed -- it still aborts on the other two
+causes), all four programs go from `SIGABRT` to the verdict their descriptor asks for:
+
+```
+                   before          after            test.desc
+valarray           SIGABRT         SUCCESSFUL       ^VERIFICATION SUCCESSFUL$
+valarray4          SIGABRT         SUCCESSFUL       ^VERIFICATION SUCCESSFUL$
+valarray4_fail     SIGABRT         FAILED           ^VERIFICATION FAILED$
+valarray_fail      SIGABRT         FAILED           ^VERIFICATION FAILED$
+```
+
+The seven other `valarray*` programs are unchanged. Group 3 is retired; eleven of the fifteen
+remain, 7 under §160 and 4 under §153.
+
+No regression test can bite this, but not because the shape is unbuilt -- it is built today. The
+native C++ adjuster's arm is gated on exactly this disjunct's predicate:
+
+```cpp
+// clang_cpp_adjust_irep2.cpp:15-19
+static bool is_cpp_member_call(const expr2tc &expr)
+{
+  return is_member2t(expr) && is_code_type(expr->type) &&
+         !to_member2t(expr).member.empty();
+}
+```
+
+and `--clang-cpp-irep2-adjust-only` (`options.cpp:209`) runs it, under 185 `test.desc` files. What
+in-tree paths do *not* produce is a **resolved** source: a record variable's type is by-name
+(`clang_c_convert.cpp:1216`, `new_type = symbol_typet(id)`), so those members migrate to a
+`symbol_type2t` source and the pre-existing `symbol_id` disjunct already covers them. Only the
+unlanded `:659` conversion yields the `src_type_id=3` of §162.1. So this disjunct is staged enabling
+infra in the same sense as the `symbol_id` one, and no end-to-end test can reach it until `:659`
+lands. `unit/util/migrate.test.cpp` is what pins it instead: it migrates a
+legacy `member_exprt` over a method and asserts the method survives with the source type resolved
+and the component genuinely absent. Mutation-checked -- removing the disjunct turns the test into a
+`SIGABRT`, and it is the only case in the file that does, so it is a gate on this line and nothing
+else.
+
+The last of those assertions is also a tripwire. It pins the *premise* -- that the component really
+is absent -- so if the seam ever starts carrying `methods()` (§162.4), the test fails and says so,
+and the relaxation can be tightened to consult the method list instead of skipping the check.
+
+### 162.4 What is left of the third structural question
+
+`methods()` still does not cross the seam, and that is still a real gap -- but not this one. Three
+consumers read the method list back through `symbolt::get_type()`:
+
+```
+goto-programs/destructor.cpp:21-23 lookup, :32 read  ns.lookup("tag-" + tag)->get_type()
+solidity-frontend/solidity_convert_builtin.cpp:266   c_sym.get_type()
+clang-cpp-frontend/clang_cpp_convert.cpp:3430        context.find_symbol(class_id)->get_type()
+```
+
+The third is the one that matters most, and it is the reason the deferred carry is not just about
+destructors. `:3430` is the base-class method-inheritance loop: it reads a base's methods off the
+symbol table and copies them into the derived type. If a base class's *type* is ever written
+IREP2-side, that loop does not abort -- it finds an empty list, and the derived class silently
+inherits no methods. A silent wrong answer is worse than the other two, which fail loudly.
+
+`destructor.cpp` already carries a partial mitigation: it re-resolves an inline degraded struct type
+through `tag-` + tag precisely because a round trip strips the methods sub (`:10-28`), so only its
+*type symbol* case is exposed.
+
+So the question is scoped to class type writes, not to the value write §147-§161 were chasing, and
+it costs destructor lowering plus C++ method inheritance. The remaining readers
+(`clang_cpp_convert.cpp:3522`, `clang_cpp_convert_vft.cpp:668`) take the in-flight local type from
+their callers and never cross; `clang_cpp_convert_vft.cpp:51` is the clang AST, not our type.

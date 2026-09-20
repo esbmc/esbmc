@@ -1405,3 +1405,127 @@ TEST_CASE("a const-qualified integer keeps its qualifier", "[migrate]")
     REQUIRE(migrate_type(q)->crc() == migrate_type(unsignedbv_typet(8))->crc());
   }
 }
+
+// A code-typed member names a method, which is no part of a struct_type2t, so
+// member2t's component assertion has nothing to check it against. In-tree
+// sources are by-name and covered by the `symbol_id` disjunct; a *resolved*
+// source is what the clang-c local value write produces
+// (docs/roadmap/frontends-to-irep2.md §76).
+TEST_CASE("migrating a member access naming a method keeps it", "[migrate]")
+{
+  use_test_ns();
+
+  struct_typet st;
+  st.tag("slice");
+  st.components().push_back(
+    struct_typet::componentt("slice::_start", "_start", int_type()));
+
+  code_typet mt;
+  mt.return_type() = int_type();
+  mt.arguments().push_back(code_typet::argumentt(pointer_typet(st)));
+  st.methods().push_back(struct_typet::componentt("slice::size", "size", mt));
+
+  symbolt obj;
+  obj.id = obj.name = "sl";
+  obj.set_type(st);
+  obj.lvalue = true;
+  test_context().add(obj);
+
+  expr2tc out;
+  migrate_expr(member_exprt(symbol_exprt("sl", st), "slice::size", mt), out);
+
+  REQUIRE(is_member2t(out));
+  REQUIRE(to_member2t(out).member == irep_idt("slice::size"));
+  REQUIRE(is_code_type(to_member2t(out).type));
+  // The source is resolved, which is what makes the lookup applicable at all.
+  REQUIRE(is_struct_type(to_member2t(out).source_value->type));
+  // And the method is genuinely absent from it: the assertion is relaxed, not
+  // satisfied by the seam having started to carry methods().
+  REQUIRE_FALSE(struct_union_get_component_number(
+                  to_member2t(out).source_value->type, "slice::size")
+                  .has_value());
+}
+
+// The two Solidity delegate-shadow sites that store a zero return value now
+// build it with the IREP2 gen_zero over a migrated type, where they built a
+// legacy zero and let the setter migrate it. Those are different functions, so
+// this pins that they agree on the types reaching those sites. The sites are
+// verification-inert -- the GOTO takes the value from the code_declt operand on
+// the next line -- so no regression test can bite, and this is the pin
+// (docs/roadmap/scope-solidity-irep2.md §16.1).
+TEST_CASE(
+  "the two gen_zero overloads agree on Solidity return types",
+  "[migrate]")
+{
+  use_test_ns();
+
+  auto agree = [](const typet &t) {
+    const type2tc t2 = migrate_type(t);
+    expr2tc via_legacy;
+    migrate_expr(gen_zero(t, true), via_legacy);
+    const expr2tc via_irep2 = gen_zero(t2, true);
+    INFO("type kind id = " << get_type_id(t2));
+    REQUIRE(via_irep2 == via_legacy);
+  };
+
+  // uint256 and address: every corpus test reaching those sites returns one of
+  // these, `address` being an unsignedbv(160) carrying #sol_type.
+  agree(unsignedbv_typet(256));
+  agree(unsignedbv_typet(160));
+  agree(bool_typet());
+  agree(signedbv_typet(32));
+
+  SECTION("a Solidity string is a pointer, and agrees too")
+  {
+    agree(pointer_typet(signed_char_type()));
+  }
+}
+
+// `#cpp_type` is the source language's own spelling of a type. Unreflected --
+// two bitvectors of a width are the same type however spelled -- but a
+// consumer reads it back: python_converter::get_python_type_category tells a
+// 1-char string element from an 8-bit int by it, so dropping it at the seam
+// folds a char comparison to false (docs/roadmap/scope-python-irep2.md §9).
+TEST_CASE("a type keeps its source spelling", "[migrate]")
+{
+  SECTION("the spelling round-trips on the three kinds that carry one")
+  {
+    signedbv_typet c(8);
+    c.cpp_type("char");
+    REQUIRE(to_signedbv_type(migrate_type(c)).cpp_type == irep_idt("char"));
+    REQUIRE(migrate_type_back(migrate_type(c)).cpp_type() == irep_idt("char"));
+
+    unsignedbv_typet u(64);
+    u.cpp_type("unsigned_long");
+    REQUIRE(
+      migrate_type_back(migrate_type(u)).cpp_type() ==
+      irep_idt("unsigned_long"));
+
+    floatbv_typet d;
+    d.set_f(52);
+    d.set_width(64);
+    d.cpp_type("double");
+    REQUIRE(
+      migrate_type_back(migrate_type(d)).cpp_type() == irep_idt("double"));
+  }
+
+  SECTION("an unspelled type gains no key")
+  {
+    // `#cpp_type` is a comment field, so writing it empty inserts a key the
+    // printer then reads -- the §158 hazard, three times over by now.
+    const typet back = migrate_type_back(migrate_type(signedbv_typet(8)));
+    REQUIRE(back.find(irept::a_cpp_type).is_nil());
+    // full_eq, not ==: `operator==` skips comments, so it cannot see a leaked
+    // `#cpp_type` and asserting on it would be a tautology (§78's lesson).
+    REQUIRE(full_eq(back, signedbv_typet(8)));
+  }
+
+  SECTION("the spelling is no part of the type's identity")
+  {
+    signedbv_typet spelled(8);
+    spelled.cpp_type("char");
+    REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
+    REQUIRE(
+      migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
+  }
+}
