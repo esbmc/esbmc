@@ -1,6 +1,6 @@
-/* The counterpart to github_5369_scalar: two *different* unresolvable locations
- * must still be free to hold different values, so sharing is keyed on the
- * location rather than applied to every unresolved read alike. */
+/* Two *different* unresolvable locations must stay free to hold different
+ * values: a fix for #5369 that shares one free value across every unresolved
+ * read alike, rather than keying on the location, turns this SUCCESSFUL. */
 #include <assert.h>
 
 unsigned long nondet_ulong(void);
