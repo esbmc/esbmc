@@ -143,6 +143,7 @@ PyRtObject *pyrt_float_power(PyRtObject *a, PyRtObject *b)
     return &pyrt_NotImplemented;
   }
   double result = 1.0;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_POW_BOUND && i < magnitude; ++i)
     result *= base;
   if (n < 0)

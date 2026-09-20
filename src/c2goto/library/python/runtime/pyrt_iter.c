@@ -32,6 +32,7 @@ PyRtObject *pyrt_contains(PyRtObject *container, PyRtObject *item)
     return pyrt_bool_from(
       pyrt_dict_find((PyRtDictObject *)container, item) >= 0);
   int64_t length = pyrt_iter_length(container);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < length; ++i)
     if (pyrt_key_equal(pyrt_iter_item(container, i), item))
       return pyrt_bool_from(true);

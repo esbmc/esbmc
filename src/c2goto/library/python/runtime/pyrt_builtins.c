@@ -19,6 +19,7 @@ PyRtObject *pyrt_builtin_abs(PyRtObject *o)
 PyRtObject *pyrt_builtin_all(PyRtObject *o)
 {
   int64_t length = pyrt_iter_length(o);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < length; ++i)
     if (!pyrt_is_true(pyrt_iter_item(o, i)))
       return pyrt_bool_from(false);
@@ -28,6 +29,7 @@ PyRtObject *pyrt_builtin_all(PyRtObject *o)
 PyRtObject *pyrt_builtin_any(PyRtObject *o)
 {
   int64_t length = pyrt_iter_length(o);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < length; ++i)
     if (pyrt_is_true(pyrt_iter_item(o, i)))
       return pyrt_bool_from(true);
@@ -38,6 +40,7 @@ PyRtObject *pyrt_builtin_sum(PyRtObject *o)
 {
   int64_t length = pyrt_iter_length(o);
   PyRtObject *total = pyrt_long_from(0);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < length; ++i)
     total = pyrt_number_add(total, pyrt_iter_item(o, i));
   return total;
@@ -48,6 +51,7 @@ PyRtObject *pyrt_builtin_sum_start(PyRtObject *o, PyRtObject *start)
 {
   int64_t length = pyrt_iter_length(o);
   PyRtObject *total = start;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < length; ++i)
     total = pyrt_number_add(total, pyrt_iter_item(o, i));
   return total;
@@ -72,6 +76,7 @@ PyRtObject *pyrt_builtin_min_iter(PyRtObject *o)
     return &pyrt_None;
   }
   PyRtObject *best = pyrt_iter_item(o, 0);
+  #pragma unroll
   for (int64_t i = 1; i < PYRT_LIST_CAPACITY && i < length; ++i)
     best = pyrt_builtin_min2(best, pyrt_iter_item(o, i));
   return best;
@@ -86,6 +91,7 @@ PyRtObject *pyrt_builtin_max_iter(PyRtObject *o)
     return &pyrt_None;
   }
   PyRtObject *best = pyrt_iter_item(o, 0);
+  #pragma unroll
   for (int64_t i = 1; i < PYRT_LIST_CAPACITY && i < length; ++i)
     best = pyrt_builtin_max2(best, pyrt_iter_item(o, i));
   return best;

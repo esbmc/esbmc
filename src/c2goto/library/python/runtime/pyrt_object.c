@@ -279,6 +279,7 @@ PyRtObject *pyrt_getslice(
     char *buffer = __ESBMC_alloca(PYRT_STR_CAPACITY);
     int64_t taken = 0;
     int64_t at = from;
+    #pragma unroll
     for (int64_t k = 0; k < PYRT_STR_CAPACITY; ++k, at += by)
     {
       if (by > 0 ? at >= to : at <= to)
@@ -293,6 +294,7 @@ PyRtObject *pyrt_getslice(
   const bool as_tuple = o->ob_type == &PyRtTuple_Type;
   PyRtObject *result = as_tuple ? pyrt_tuple_new() : pyrt_list_new();
   int64_t at = from;
+  #pragma unroll
   for (int64_t k = 0; k < PYRT_LIST_CAPACITY; ++k, at += by)
   {
     if (by > 0 ? at >= to : at <= to)

@@ -30,6 +30,7 @@ PyRtObject *pyrt_list_richcompare(PyRtObject *a, PyRtObject *b, int op)
   PyRtListObject *x = (PyRtListObject *)a;
   PyRtListObject *y = (PyRtListObject *)b;
   bool equal = x->size == y->size;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < x->size && equal; ++i)
     if (!pyrt_key_equal(x->items[i], y->items[i]))
       equal = false;

@@ -17,6 +17,7 @@ PyRtObject *pyrt_attrs_find(PyRtAttrs *attrs, const char *name)
     return 0;
   /* The capacity keeps the loop finite once the size is only known as a
    * merged symbol. */
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_ATTRS_CAPACITY && i < attrs->size; ++i)
     if (attrs->names[i] == name)
       return attrs->values[i];
@@ -25,6 +26,7 @@ PyRtObject *pyrt_attrs_find(PyRtAttrs *attrs, const char *name)
 
 void pyrt_attrs_set(PyRtAttrs *attrs, const char *name, PyRtObject *value)
 {
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_ATTRS_CAPACITY && i < attrs->size; ++i)
     if (attrs->names[i] == name)
     {
@@ -42,6 +44,7 @@ void pyrt_attrs_set(PyRtAttrs *attrs, const char *name, PyRtObject *value)
 /* Single inheritance, so the MRO is the tp_base chain. */
 PyRtObject *pyrt_type_lookup(PyRtTypeObject *t, const char *name)
 {
+  #pragma unroll
   for (int64_t depth = 0; t && depth < PYRT_MAX_CLASSES; t = t->tp_base, ++depth)
   {
     PyRtObject *value = pyrt_attrs_find(t->tp_attrs, name);
@@ -241,11 +244,13 @@ void pyrt_update_slot(PyRtTypeObject *t, const char *name)
   PyRtTypeObject *work[PYRT_MAX_CLASSES] = {0};
   int64_t pending = 0;
   work[pending++] = t;
+  #pragma unroll
   for (int64_t visited = 0; pending > 0 && visited < PYRT_MAX_CLASSES;
        ++visited)
   {
     PyRtTypeObject *s = work[--pending];
     int64_t children = 0;
+    #pragma unroll
     for (PyRtTypeObject *sub = s->tp_subclass;
          sub && children < PYRT_MAX_CLASSES;
          sub = sub->tp_sibling, ++children)

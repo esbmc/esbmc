@@ -158,6 +158,7 @@ PyRtObject *pyrt_long_power(PyRtObject *a, PyRtObject *b)
     return &pyrt_NotImplemented;
   }
   int64_t result = 1;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_POW_BOUND && i < e; ++i)
     result *= base;
   return pyrt_long_from(result);

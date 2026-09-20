@@ -205,6 +205,12 @@ struct __pyrt_type
     __ESBMC_assume(0);                                                         \
   } while (0)
 
+/* Every loop in the models is bounded by one of the capacities below, so each
+ * carries `#pragma unroll` and is unrolled in full. Without it a model loop
+ * spends the caller's --unwind budget, and a program pinning a small bound for
+ * its own loops could not run a model loop at all: most of this corpus pins
+ * --unwind 1. The bound stays a property of the model rather than of whoever
+ * is being verified. */
 #define PYRT_MAX_CLASSES 16
 #define PYRT_STR_CAPACITY 64
 #define PYRT_POW_BOUND 64

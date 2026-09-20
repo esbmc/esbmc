@@ -26,6 +26,7 @@ PyRtObject *pyrt_set_new(void)
 
 int64_t pyrt_set_find(PyRtSetObject *s, PyRtObject *value)
 {
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_SET_CAPACITY && i < s->size; ++i)
     if (pyrt_key_equal(s->items[i], value))
       return i;
@@ -51,6 +52,7 @@ void pyrt_set_discard(PyRtObject *o, PyRtObject *value)
   const int64_t at = pyrt_set_find(s, value);
   if (at < 0)
     return;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_SET_CAPACITY - 1; ++i)
     if (i >= at && i + 1 < s->size)
       s->items[i] = s->items[i + 1];
@@ -88,6 +90,7 @@ PyRtObject *pyrt_set_richcompare(PyRtObject *a, PyRtObject *b, int op)
   PyRtSetObject *x = (PyRtSetObject *)a;
   PyRtSetObject *y = (PyRtSetObject *)b;
   bool equal = x->size == y->size;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_SET_CAPACITY && i < x->size && equal; ++i)
     if (pyrt_set_find(y, x->items[i]) < 0)
       equal = false;

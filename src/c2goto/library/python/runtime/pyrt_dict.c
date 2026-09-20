@@ -41,6 +41,7 @@ int64_t pyrt_key_hash(PyRtObject *key)
   {
     PyRtStrObject *s = (PyRtStrObject *)key;
     int64_t hash = s->length;
+    #pragma unroll
     for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < s->length; ++i)
       hash = hash * 31 + s->data[i];
     return hash;
@@ -68,6 +69,7 @@ bool pyrt_key_equal(PyRtObject *a, PyRtObject *b)
 int64_t pyrt_dict_find(PyRtDictObject *d, PyRtObject *key)
 {
   int64_t hash = pyrt_key_hash(key);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_DICT_CAPACITY && i < d->size; ++i)
     if (d->hashes[i] == hash && pyrt_key_equal(d->keys[i], key))
       return i;

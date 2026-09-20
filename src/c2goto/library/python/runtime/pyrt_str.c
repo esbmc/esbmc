@@ -58,8 +58,10 @@ PyRtObject *pyrt_str_concat(PyRtObject *a, PyRtObject *b)
     PYRT_RAISE("pyrt: string longer than the model holds");
 
   char *buffer = __ESBMC_alloca(PYRT_STR_CAPACITY);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < x->length; ++i)
     buffer[i] = x->data[i];
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < y->length; ++i)
     buffer[x->length + i] = y->data[i];
   buffer[total] = 0;
@@ -75,6 +77,7 @@ PyRtObject *pyrt_str_richcompare(PyRtObject *a, PyRtObject *b, int op)
   PyRtStrObject *x = (PyRtStrObject *)a;
   PyRtStrObject *y = (PyRtStrObject *)b;
   bool equal = x->length == y->length;
+  #pragma unroll
   for (int64_t i = 0; equal && i < PYRT_STR_CAPACITY && i < x->length; ++i)
     equal = x->data[i] == y->data[i];
   return pyrt_bool_from(op == Py_EQ ? equal : !equal);
@@ -91,6 +94,7 @@ static PyRtObject *pyrt_str_sub(const char *data, int64_t from, int64_t n)
   __ESBMC_assert(
     n < PYRT_STR_CAPACITY, "pyrt: string longer than the model holds");
   char *buffer = __ESBMC_alloca(PYRT_STR_CAPACITY);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < n; ++i)
     buffer[i] = data[from + i];
   buffer[n] = 0;
@@ -107,6 +111,7 @@ static bool pyrt_str_match(
 {
   if (at + nn > hn)
     return false;
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < nn; ++i)
     if (hay[at + i] != needle[i])
       return false;
@@ -118,6 +123,7 @@ static bool pyrt_str_stripped(char c, PyRtStrObject *chars)
 {
   if (!chars)
     return pyrt_str_space(c);
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < chars->length; ++i)
     if (chars->data[i] == c)
       return true;
@@ -136,6 +142,7 @@ PyRtObject *pyrt_strmeth_split(PyRtObject *o, PyRtObject *sep)
   if (!sep || sep == &pyrt_None)
   {
     int64_t start = -1;
+    #pragma unroll
     for (int64_t i = 0; i < PYRT_STR_CAPACITY && i <= s->length; ++i)
     {
       bool boundary = i == s->length || pyrt_str_space(s->data[i]);
@@ -158,6 +165,7 @@ PyRtObject *pyrt_strmeth_split(PyRtObject *o, PyRtObject *sep)
 
   int64_t start = 0;
   int64_t at = 0;
+  #pragma unroll
   for (int64_t guard = 0; guard < PYRT_STR_CAPACITY; ++guard)
   {
     if (at + d->length > s->length)
@@ -184,9 +192,12 @@ PyRtObject *pyrt_strmeth_join(PyRtObject *sep, PyRtObject *iterable)
   char *buffer = __ESBMC_alloca(PYRT_STR_CAPACITY + 1);
   int64_t length = 0;
 
+  #pragma unroll
   for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < count; ++i)
   {
     if (i > 0)
+    {
+      #pragma unroll
       for (int64_t k = 0; k < PYRT_STR_CAPACITY && k < d->length; ++k)
       {
         __ESBMC_assert(
@@ -194,11 +205,13 @@ PyRtObject *pyrt_strmeth_join(PyRtObject *sep, PyRtObject *iterable)
           "pyrt: string longer than the model holds");
         buffer[length++] = d->data[k];
       }
+    }
 
     PyRtObject *item = pyrt_iter_item(iterable, i);
     if (!pyrt_str_check(item))
       PYRT_RAISE("TypeError: sequence item is not str");
     PyRtStrObject *piece = (PyRtStrObject *)item;
+    #pragma unroll
     for (int64_t k = 0; k < PYRT_STR_CAPACITY && k < piece->length; ++k)
     {
       __ESBMC_assert(
@@ -223,6 +236,7 @@ pyrt_strmeth_replace(PyRtObject *o, PyRtObject *old, PyRtObject *rep)
   int64_t length = 0;
   int64_t at = 0;
 
+  #pragma unroll
   for (int64_t guard = 0; guard < PYRT_STR_CAPACITY && at <= s->length; ++guard)
   {
     /* An empty `old` matches before every character and once at the end,
@@ -232,6 +246,7 @@ pyrt_strmeth_replace(PyRtObject *o, PyRtObject *old, PyRtObject *rep)
                  : pyrt_str_match(s->data, s->length, a->data, a->length, at);
     if (hit)
     {
+      #pragma unroll
       for (int64_t k = 0; k < PYRT_STR_CAPACITY && k < b->length; ++k)
       {
         __ESBMC_assert(
@@ -264,18 +279,24 @@ pyrt_strmeth_strip(PyRtObject *o, PyRtObject *chars, bool left, bool right)
   int64_t lo = 0;
   int64_t hi = s->length;
   if (left)
+  {
+    #pragma unroll
     for (int64_t i = 0; i < PYRT_STR_CAPACITY && lo < hi; ++i)
     {
       if (!pyrt_str_stripped(s->data[lo], set))
         break;
       ++lo;
     }
+  }
   if (right)
+  {
+    #pragma unroll
     for (int64_t i = 0; i < PYRT_STR_CAPACITY && hi > lo; ++i)
     {
       if (!pyrt_str_stripped(s->data[hi - 1], set))
         break;
       --hi;
     }
+  }
   return pyrt_str_sub(s->data, lo, hi - lo);
 }

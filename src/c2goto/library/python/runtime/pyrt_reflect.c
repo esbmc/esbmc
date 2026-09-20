@@ -10,6 +10,7 @@ bool pyrt_isinstance(PyRtObject *o, PyRtObject *cls)
   if (cls->ob_type != &PyRtType_Type)
     PYRT_RAISE("TypeError: isinstance() arg 2 must be a type");
   PyRtTypeObject *t = o->ob_type;
+  #pragma unroll
   for (int64_t depth = 0; t && depth < PYRT_MAX_CLASSES; t = t->tp_base, ++depth)
     if (t == (PyRtTypeObject *)cls)
       return true;
