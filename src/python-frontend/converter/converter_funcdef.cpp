@@ -1443,6 +1443,67 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
 // dynamic list-size runtime call, not a static shape read), so rejecting it
 // here would be a regression, not a fix -- see array_param_shape_symbolic_
 // len_success.
+static bool is_numpy_static_shape_name(
+  const nlohmann::json &node,
+  const std::string &param_name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == param_name;
+}
+
+// `param_name.shape`/`.ndim`/`.size`/`.T`. Split out of
+// uses_numpy_static_shape_op to keep its own decision count down.
+static bool is_numpy_static_shape_attribute_of(
+  const nlohmann::json &node,
+  const std::string &param_name)
+{
+  if (
+    node.value("_type", "") != "Attribute" || !node.contains("value") ||
+    !is_numpy_static_shape_name(node["value"], param_name))
+    return false;
+
+  static const std::set<std::string> shape_attrs = {
+    "shape", "ndim", "size", "T"};
+  return shape_attrs.count(node.value("attr", "")) != 0;
+}
+
+// `numpy.transpose(param_name)`/`numpy.sort(param_name)`/
+// `numpy.argsort(param_name)` (module form) or
+// `param_name.transpose()`/`.sort()`/`.argsort()` (method form). Split out
+// of uses_numpy_static_shape_op to keep its own decision count down.
+static bool is_numpy_static_shape_call_on(
+  const nlohmann::json &node,
+  const std::string &param_name)
+{
+  if (node.value("_type", "") != "Call" || !node.contains("func"))
+    return false;
+
+  const nlohmann::json &func = node["func"];
+  if (func.value("_type", "") != "Attribute")
+    return false;
+
+  static const std::set<std::string> shape_ops = {
+    "transpose", "sort", "argsort"};
+  if (shape_ops.count(func.value("attr", "")) == 0)
+    return false;
+
+  if (
+    node.contains("args") && !node["args"].empty() &&
+    is_numpy_static_shape_name(node["args"][0], param_name))
+    return true;
+  return func.contains("value") &&
+         is_numpy_static_shape_name(func["value"], param_name);
+}
+
+// True when `node` (or, recursively, any of its descendants) reads one of
+// the numpy metadata/methods that need a statically known shape --
+// `.shape`/`.ndim`/`.size`/`.T` on `param_name`, or `numpy.transpose`/
+// `numpy.sort`/`numpy.argsort` (module or method form) applied to it.
+// Deliberately excludes `len()`: unlike the others, len(a) on a symbolic-
+// shape parameter is already handled soundly elsewhere (it resolves to the
+// dynamic list-size runtime call, not a static shape read), so rejecting it
+// here would be a regression, not a fix -- see array_param_shape_symbolic_
+// len_success.
 static bool uses_numpy_static_shape_op(
   const nlohmann::json &node,
   const std::string &param_name)
@@ -1457,40 +1518,10 @@ static bool uses_numpy_static_shape_op(
   if (!node.is_object())
     return false;
 
-  const std::string type = node.value("_type", "");
-  auto is_param_name = [&](const nlohmann::json &n) {
-    return n.is_object() && n.value("_type", "") == "Name" &&
-           n.value("id", "") == param_name;
-  };
-
   if (
-    type == "Attribute" && node.contains("value") &&
-    is_param_name(node["value"]))
-  {
-    static const std::set<std::string> shape_attrs = {
-      "shape", "ndim", "size", "T"};
-    if (shape_attrs.count(node.value("attr", "")) != 0)
-      return true;
-  }
-  else if (type == "Call" && node.contains("func"))
-  {
-    const nlohmann::json &func = node["func"];
-    static const std::set<std::string> shape_ops = {
-      "transpose", "sort", "argsort"};
-    // np.transpose(a)/np.sort(a)/np.argsort(a): module-form call whose
-    // first positional argument is the parameter.
-    if (
-      func.value("_type", "") == "Attribute" &&
-      shape_ops.count(func.value("attr", "")) != 0 && node.contains("args") &&
-      !node["args"].empty() && is_param_name(node["args"][0]))
-      return true;
-    // a.transpose()/a.sort()/a.argsort(): method form on the parameter.
-    if (
-      func.value("_type", "") == "Attribute" && func.contains("value") &&
-      is_param_name(func["value"]) &&
-      shape_ops.count(func.value("attr", "")) != 0)
-      return true;
-  }
+    is_numpy_static_shape_attribute_of(node, param_name) ||
+    is_numpy_static_shape_call_on(node, param_name))
+    return true;
 
   for (auto it = node.begin(); it != node.end(); ++it)
     if (uses_numpy_static_shape_op(it.value(), param_name))
@@ -1507,6 +1538,55 @@ static bool uses_numpy_static_shape_op(
 // parameter at all (register_function_argument's caller) previously left it
 // as a plain `any_type()`, so those reads fell through to a generic runtime
 // AttributeError with no indication the actual problem is a symbolic shape.
+// If `call` invokes `func_name` by bare name with a `param_index`-th
+// positional argument that is itself a `Name`, that name; nullopt otherwise.
+// Split out of numpy_param_call_site_has_symbolic_shape to keep that
+// function's own decision count down.
+static std::optional<std::string> numpy_call_site_arg_name(
+  const nlohmann::json &call,
+  const std::string &func_name,
+  size_t param_index)
+{
+  if (
+    call.value("func", nlohmann::json::object()).value("_type", "") != "Name" ||
+    call["func"].value("id", "") != func_name || !call.contains("args") ||
+    call["args"].size() <= param_index)
+    return std::nullopt;
+
+  const nlohmann::json &arg = call["args"][param_index];
+  if (arg.value("_type", "") != "Name")
+    return std::nullopt;
+  return arg.value("id", "");
+}
+
+// True when some top-level statement in `module_body` binds `arg_name` to a
+// numpy array constructor call with a non-literal shape. Split out of
+// numpy_param_call_site_has_symbolic_shape to keep that function's own
+// decision count down.
+bool python_converter::module_level_symbolic_ctor_binding(
+  const nlohmann::json &module_body,
+  const std::string &arg_name) const
+{
+  for (const auto &stmt : module_body)
+  {
+    const std::string stmt_type = stmt.value("_type", "");
+    std::string target_name;
+    if (
+      stmt_type == "Assign" && stmt.contains("targets") &&
+      !stmt["targets"].empty())
+      target_name = stmt["targets"][0].value("id", "");
+    else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+      target_name = stmt["target"].value("id", "");
+
+    if (
+      target_name == arg_name && stmt.contains("value") &&
+      is_numpy_array_constructor_expr(stmt["value"]) &&
+      numpy_ctor_shape_arg_is_symbolic(stmt["value"]))
+      return true;
+  }
+  return false;
+}
+
 bool python_converter::numpy_param_call_site_has_symbolic_shape(
   const std::string &func_name,
   size_t param_index,
@@ -1525,38 +1605,36 @@ bool python_converter::numpy_param_call_site_has_symbolic_shape(
 
   for (const numpy_param_call_site &site : call_sites)
   {
-    const nlohmann::json &call = *site.call;
-    if (
-      call.value("func", nlohmann::json::object()).value("_type", "") !=
-        "Name" ||
-      call["func"].value("id", "") != func_name || !call.contains("args") ||
-      call["args"].size() <= param_index)
-      continue;
-
-    const nlohmann::json &arg = call["args"][param_index];
-    if (arg.value("_type", "") != "Name")
-      continue;
-
-    const std::string arg_name = arg.value("id", "");
-    for (const auto &stmt : module_body)
-    {
-      const std::string stmt_type = stmt.value("_type", "");
-      std::string target_name;
-      if (
-        stmt_type == "Assign" && stmt.contains("targets") &&
-        !stmt["targets"].empty())
-        target_name = stmt["targets"][0].value("id", "");
-      else if (stmt_type == "AnnAssign" && stmt.contains("target"))
-        target_name = stmt["target"].value("id", "");
-
-      if (
-        target_name == arg_name && stmt.contains("value") &&
-        is_numpy_array_constructor_expr(stmt["value"]) &&
-        numpy_ctor_shape_arg_is_symbolic(stmt["value"]))
-        return true;
-    }
+    std::optional<std::string> arg_name =
+      numpy_call_site_arg_name(*site.call, func_name, param_index);
+    if (arg_name && module_level_symbolic_ctor_binding(module_body, *arg_name))
+      return true;
   }
   return false;
+}
+
+// Throws when `numpy_array_param` is false (register_function_argument's own
+// inference already failed) and some call site feeds this parameter from a
+// numpy array constructor call with a non-literal shape. Split out of
+// register_function_argument so its own `if` doesn't add another decision
+// point to that function, already far over the complexity gate.
+void python_converter::reject_if_symbolic_shape_param(
+  bool numpy_array_param,
+  const typet &arg_type,
+  const std::string &func_name,
+  size_t param_index,
+  const std::string &arg_name) const
+{
+  if (
+    numpy_array_param || arg_name == "self" || arg_name == "cls" ||
+    (arg_type != any_type() && arg_type != type_handler_.get_list_type()))
+    return;
+
+  if (numpy_param_call_site_has_symbolic_shape(
+        func_name, param_index, arg_name))
+    throw std::runtime_error(
+      "TypeError: numpy array parameter shape must be concrete for "
+      ".shape/.ndim/.size/len()/transpose()/sort()/argsort()");
 }
 
 bool python_converter::try_infer_numpy_param_type(
@@ -1890,12 +1968,13 @@ size_t python_converter::register_function_argument(
       arg_type = inferred_array_type;
       numpy_array_param = true;
     }
-    else if (numpy_param_call_site_has_symbolic_shape(
-               id.get_function(), type.arguments().size(), arg_name))
-      throw std::runtime_error(
-        "TypeError: numpy array parameter shape must be concrete for "
-        ".shape/.ndim/.size/len()/transpose()/sort()/argsort()");
   }
+  reject_if_symbolic_shape_param(
+    numpy_array_param,
+    arg_type,
+    id.get_function(),
+    type.arguments().size(),
+    arg_name);
 
   // Same idea, but for a parameter fed a dynamically-typed local variable.
   if (
@@ -2352,54 +2431,88 @@ namespace
 // header of its own.
 bool numpy_ctor_args_equal_ignoring_location(
   const nlohmann::json &a,
-  const nlohmann::json &b)
+  const nlohmann::json &b);
+
+bool is_loc_key(const std::string &k)
 {
   static constexpr const char *loc_keys[] = {
     "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto is_loc_key = [&](const std::string &k) {
-    for (const char *lk : loc_keys)
-      if (k == lk)
-        return true;
-    return false;
-  };
+  for (const char *lk : loc_keys)
+    if (k == lk)
+      return true;
+  return false;
+}
 
+// Object case of numpy_ctor_args_equal_ignoring_location. Split out to keep
+// that function's own decision count down.
+bool numpy_ctor_objects_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  for (auto it = a.begin(); it != a.end(); ++it)
+  {
+    if (is_loc_key(it.key()))
+      continue;
+    if (
+      !b.contains(it.key()) ||
+      !numpy_ctor_args_equal_ignoring_location(it.value(), b[it.key()]))
+      return false;
+  }
+  for (auto it = b.begin(); it != b.end(); ++it)
+    if (!is_loc_key(it.key()) && !a.contains(it.key()))
+      return false;
+  return true;
+}
+
+// Array case of numpy_ctor_args_equal_ignoring_location. Split out to keep
+// that function's own decision count down.
+bool numpy_ctor_arrays_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (size_t i = 0; i < a.size(); ++i)
+    if (!numpy_ctor_args_equal_ignoring_location(a[i], b[i]))
+      return false;
+  return true;
+}
+
+bool numpy_ctor_args_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
   if (a.type() != b.type())
     return false;
-
   if (a.is_object())
-  {
-    for (auto it = a.begin(); it != a.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (
-        !b.contains(it.key()) ||
-        !numpy_ctor_args_equal_ignoring_location(it.value(), b[it.key()]))
-        return false;
-    }
-    for (auto it = b.begin(); it != b.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (!a.contains(it.key()))
-        return false;
-    }
-    return true;
-  }
-
+    return numpy_ctor_objects_equal_ignoring_location(a, b);
   if (a.is_array())
-  {
-    if (a.size() != b.size())
-      return false;
-    for (size_t i = 0; i < a.size(); ++i)
-      if (!numpy_ctor_args_equal_ignoring_location(a[i], b[i]))
-        return false;
-    return true;
-  }
-
+    return numpy_ctor_arrays_equal_ignoring_location(a, b);
   return a == b;
 }
 } // namespace
+
+// `<name> = ...` as a plain, single-target Name assignment. Split out of
+// find_numpy_ctor_value_assigned_to to keep its own decision count down.
+static bool
+is_simple_name_assign_to(const nlohmann::json &stmt, const std::string &name)
+{
+  return stmt.value("_type", "") == "Assign" && stmt.contains("targets") &&
+         stmt["targets"].is_array() && stmt["targets"].size() == 1 &&
+         stmt["targets"][0].is_object() &&
+         stmt["targets"][0].value("_type", "") == "Name" &&
+         stmt["targets"][0].value("id", "") == name;
+}
+
+// An `If` statement with a non-empty `orelse` arm -- the only shape
+// find_numpy_ctor_value_assigned_to follows into both branches of. Split
+// out to keep that function's own decision count down.
+static bool is_if_else_with_both_arms(const nlohmann::json &stmt)
+{
+  return stmt.value("_type", "") == "If" && stmt.contains("body") &&
+         stmt["body"].is_array() && stmt.contains("orelse") &&
+         stmt["orelse"].is_array() && !stmt["orelse"].empty();
+}
 
 // The last direct assignment to `name` in `block[0..end)`, following into
 // both arms of a trailing if/else so a branching function is handled the
@@ -2421,14 +2534,8 @@ const nlohmann::json *python_converter::find_numpy_ctor_value_assigned_to(
     const nlohmann::json &stmt = block[i];
     if (!stmt.is_object())
       continue;
-    const std::string type = stmt.value("_type", "");
 
-    if (
-      type == "Assign" && stmt.contains("targets") &&
-      stmt["targets"].is_array() && stmt["targets"].size() == 1 &&
-      stmt["targets"][0].is_object() &&
-      stmt["targets"][0].value("_type", "") == "Name" &&
-      stmt["targets"][0].value("id", "") == name)
+    if (is_simple_name_assign_to(stmt, name))
     {
       if (
         !stmt.contains("value") || !stmt["value"].is_object() ||
@@ -2437,10 +2544,7 @@ const nlohmann::json *python_converter::find_numpy_ctor_value_assigned_to(
       return &stmt["value"];
     }
 
-    if (
-      type == "If" && stmt.contains("body") && stmt["body"].is_array() &&
-      stmt.contains("orelse") && stmt["orelse"].is_array() &&
-      !stmt["orelse"].empty())
+    if (is_if_else_with_both_arms(stmt))
     {
       const nlohmann::json *then_value = find_numpy_ctor_value_assigned_to(
         stmt["body"], stmt["body"].size(), name);
@@ -2478,54 +2582,92 @@ bool python_converter::local_var_numpy_array_return(
     body, body.size() - 1, last["value"].value("id", ""));
 }
 
-void python_converter::reject_incompatible_numpy_local_return_branches(
-  const nlohmann::json &func_def) const
+// The name `body`'s own trailing `return <Name>` returns, or nullopt for
+// anything else (no trailing return, or a return of something other than a
+// bare Name). Split out of reject_incompatible_numpy_local_return_branches
+// and shared by nothing else only because local_var_numpy_array_return
+// needs the finer-grained block_assigns_numpy_array_to instead -- this one
+// just needs the name itself.
+static std::optional<std::string>
+get_directly_returned_name(const nlohmann::json &body)
 {
-  const nlohmann::json &body = func_def["body"];
   if (!body.is_array() || body.empty())
-    return;
+    return std::nullopt;
 
   const nlohmann::json &last = body.back();
   if (
     !last.is_object() || last.value("_type", "") != "Return" ||
     !last.contains("value") || !last["value"].is_object() ||
     last["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  return last["value"].value("id", "");
+}
+
+// Throws when `then_value`/`else_value` (each a numpy array constructor call
+// node, or nullptr) disagree on shape. Split out of
+// reject_incompatible_numpy_local_return_branches to keep that function's
+// own decision count down.
+static void throw_if_branch_shapes_mismatch(
+  const nlohmann::json *then_value,
+  const nlohmann::json *else_value)
+{
+  // Conservatively compared by AST equality of the constructor's args,
+  // ignoring source location (the same call spelled on two different
+  // branch lines, e.g. `np.zeros(3)` on both arms, must not be treated as a
+  // mismatch): a solid static shape-equivalence proof (e.g. np.zeros(3) vs
+  // np.zeros((3,))) is out of scope here, and rejecting a same-shape pair
+  // spelled differently is a false positive ESBMC can live with -- the
+  // alternative is joining two differently-shaped concrete array types at
+  // the branch merge, which crashes body conversion outright.
+  if (
+    then_value && else_value && then_value->contains("args") &&
+    else_value->contains("args") &&
+    !numpy_ctor_args_equal_ignoring_location(
+      (*then_value)["args"], (*else_value)["args"]))
+    throw std::runtime_error(
+      "TypeError: numpy local array return requires the same shape "
+      "across all branches");
+}
+
+void python_converter::reject_incompatible_numpy_local_return_branches(
+  const nlohmann::json &func_def) const
+{
+  const nlohmann::json &body = func_def["body"];
+  std::optional<std::string> name = get_directly_returned_name(body);
+  if (!name)
     return;
 
-  const std::string name = last["value"].value("id", "");
   for (std::size_t i = body.size() - 1; i-- > 0;)
   {
     const nlohmann::json &stmt = body[i];
     if (!stmt.is_object() || stmt.value("_type", "") != "If")
       continue;
-    if (
-      !stmt.contains("body") || !stmt["body"].is_array() ||
-      !stmt.contains("orelse") || !stmt["orelse"].is_array() ||
-      stmt["orelse"].empty())
+    if (!is_if_else_with_both_arms(stmt))
       return;
 
-    const nlohmann::json *then_value = find_numpy_ctor_value_assigned_to(
-      stmt["body"], stmt["body"].size(), name);
-    const nlohmann::json *else_value = find_numpy_ctor_value_assigned_to(
-      stmt["orelse"], stmt["orelse"].size(), name);
-    // Conservatively compared by AST equality of the constructor's args,
-    // ignoring source location (the same call spelled on two different
-    // branch lines, e.g. `np.zeros(3)` on both arms, must not be treated as
-    // a mismatch): a solid static shape-equivalence proof (e.g. np.zeros(3)
-    // vs np.zeros((3,))) is out of scope here, and rejecting a same-shape
-    // pair spelled differently is a false positive ESBMC can live with --
-    // the alternative is joining two differently-shaped concrete array
-    // types at the branch merge, which crashes body conversion outright.
-    if (
-      then_value && else_value && then_value->contains("args") &&
-      else_value->contains("args") &&
-      !numpy_ctor_args_equal_ignoring_location(
-        (*then_value)["args"], (*else_value)["args"]))
-      throw std::runtime_error(
-        "TypeError: numpy local array return requires the same shape "
-        "across all branches");
+    throw_if_branch_shapes_mismatch(
+      find_numpy_ctor_value_assigned_to(
+        stmt["body"], stmt["body"].size(), *name),
+      find_numpy_ctor_value_assigned_to(
+        stmt["orelse"], stmt["orelse"].size(), *name));
     return;
   }
+}
+
+// The `returns` annotation get_function_definition's own dispatch should
+// see: null when local_var_numpy_array_return's pattern applies (so the
+// bogus numpy-model-derived list annotation never locks the return type),
+// function_node["returns"] otherwise. Split out so the ternary it needs
+// doesn't add a decision point to get_function_definition itself, which is
+// already far over the complexity gate.
+const nlohmann::json &python_converter::resolve_return_annotation_node(
+  const nlohmann::json &function_node) const
+{
+  static const nlohmann::json null_return_annotation = nullptr;
+  if (local_var_numpy_array_return(function_node))
+    return null_return_annotation;
+  return function_node["returns"];
 }
 
 void python_converter::get_function_definition(
@@ -2535,10 +2677,8 @@ void python_converter::get_function_definition(
 
   // Function return type
   code_typet type;
-  static const nlohmann::json null_return_annotation = nullptr;
   const nlohmann::json &return_node =
-    local_var_numpy_array_return(function_node) ? null_return_annotation
-                                                : function_node["returns"];
+    resolve_return_annotation_node(function_node);
 
   // Tracks annotations that already encode Optional (e.g. Optional[T] or
   // T | None). When true, the later body_has_none_return pass must not

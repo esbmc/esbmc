@@ -1234,6 +1234,13 @@ private:
   // already-correct fallback instead of duplicating it.
   bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
 
+  // The `returns` node get_function_definition's own dispatch should use:
+  // null when local_var_numpy_array_return applies, function_node["returns"]
+  // otherwise. Split out to keep the ternary this needs out of
+  // get_function_definition's own decision count.
+  const nlohmann::json &
+  resolve_return_annotation_node(const nlohmann::json &function_node) const;
+
   // Throws an explicit TypeError when local_var_numpy_array_return's
   // trailing if/else binds the returned name from a numpy array constructor
   // call with a different literal shape argument on each arm -- e.g.
@@ -1259,6 +1266,25 @@ private:
     const std::string &func_name,
     size_t param_index,
     const std::string &param_name) const;
+
+  // True when some top-level statement in `module_body` binds `arg_name` to
+  // a numpy array constructor call with a non-literal shape. Split out of
+  // numpy_param_call_site_has_symbolic_shape to keep that function's own
+  // decision count down.
+  bool module_level_symbolic_ctor_binding(
+    const nlohmann::json &module_body,
+    const std::string &arg_name) const;
+
+  // Throws when `numpy_array_param` is false and some call site feeds this
+  // parameter from a numpy array constructor call with a non-literal shape.
+  // Split out of register_function_argument to keep the `if` this check
+  // needs out of that function's own decision count.
+  void reject_if_symbolic_shape_param(
+    bool numpy_array_param,
+    const typet &arg_type,
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &arg_name) const;
 
   // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
   // itself returns a numpy array is never an is_numpy_array_constructor_expr
