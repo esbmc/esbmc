@@ -43,6 +43,8 @@ protected:
     /// it writes through one it cannot name. See loopst::add_written_pointer.
     loopst::loop_varst written_pointers;
     bool unnamed_write = false;
+    /// The variables whose address the callee takes.
+    std::unordered_set<irep_idt, irep_id_hash> address_taken;
 
     bool writes_through_pointer() const
     {
@@ -75,6 +77,8 @@ protected:
     const irep_idt &fname,
     std::vector<irep_idt> &in_progress,
     function_summaryt &out);
+
+  void collect_address_taken(const expr2tc &expr, function_summaryt &out) const;
 
   /// Collect the leaf symbols of `expr` into `out`, applying check_var_name.
   void collect_loop_symbols(const expr2tc &expr, loopst::loop_varst &out) const;

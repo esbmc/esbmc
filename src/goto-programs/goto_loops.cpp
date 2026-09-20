@@ -205,6 +205,28 @@ static bool writes_through_first_argument(const irep_idt &function)
   return writers.count(function.as_string()) != 0;
 }
 
+/// A variable whose address the callee takes can be reassigned through that
+/// address, which collect_lhs_symbols does not see.
+void goto_loopst::collect_address_taken(
+  const expr2tc &e,
+  function_summaryt &out) const
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_address_of2t(e))
+  {
+    expr2tc obj = to_address_of2t(e).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+      obj = is_member2t(obj)  ? to_member2t(obj).source_value
+            : is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_typecast2t(obj).from;
+    if (is_symbol2t(obj))
+      out.address_taken.insert(to_symbol2t(obj).thename);
+  }
+  e->foreach_operand(
+    [this, &out](const expr2tc &op) { collect_address_taken(op, out); });
+}
+
 void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
 {
   const expr2tc ptr = extract_queried_pointer(lhs);
@@ -225,9 +247,16 @@ static expr2tc replace_symbols(
     auto it = by.find(to_symbol2t(e).thename);
     if (it == by.end())
       return e;
-    return it->second->type == e->type ? it->second
-                                        : typecast2tc(e->type, it->second);
+    if (it->second->type == e->type)
+      return it->second;
+    return typecast2tc(e->type, it->second);
   }
+  bool changed = false;
+  e->foreach_operand([&by, &changed](const expr2tc &op) {
+    changed = changed || (!is_nil_expr(op) && replace_symbols(op, by) != op);
+  });
+  if (!changed)
+    return e;
   expr2tc copy = e;
   copy->Foreach_operand([&by](expr2tc &op) { op = replace_symbols(op, by); });
   return copy;
@@ -243,15 +272,16 @@ void goto_loopst::function_summaryt::bind_arguments(
   if (!is_code_type(callee.type))
     return;
   const code_type2t &type = to_code_type(callee.type);
-  std::unordered_set<irep_idt, irep_id_hash> reassigned;
+  std::unordered_set<irep_idt, irep_id_hash> reassigned = address_taken;
   for (const expr2tc &v : modified)
     if (is_symbol2t(v))
       reassigned.insert(to_symbol2t(v).thename);
 
-  // check_var_name also filters the modified set, so a parameter it rejects
-  // may be reassigned unseen.
+  // check_var_name filters the modified set, and an assignment through the
+  // parameter's own address never enters it, so both are ruled out here.
   std::unordered_map<irep_idt, expr2tc, irep_id_hash> actual;
-  const std::size_t n = std::min(type.argument_names.size(), arguments.size());
+  const std::size_t n = std::min(
+    {type.arguments.size(), type.argument_names.size(), arguments.size()});
   for (std::size_t i = 0; i < n; ++i)
     if (
       !is_nil_expr(arguments[i]) && !type.argument_names[i].empty() &&
@@ -269,6 +299,7 @@ void goto_loopst::function_summaryt::bind_arguments(
 
 void goto_loopst::function_summaryt::merge(const function_summaryt &other)
 {
+  address_taken.insert(other.address_taken.begin(), other.address_taken.end());
   modified.insert(other.modified.begin(), other.modified.end());
   unmodified.insert(other.unmodified.begin(), other.unmodified.end());
   modifies_pointer_array |= other.modifies_pointer_array;
@@ -355,6 +386,8 @@ bool goto_loopst::compute_function_summary(
 
   for (const auto &instr : it->second.body.instructions)
   {
+    collect_address_taken(instr.code, local);
+    collect_address_taken(instr.guard, local);
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;
