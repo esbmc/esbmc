@@ -180,6 +180,33 @@ pyrt_call_method(PyRtObject *o, const char *name, PyRtArgs args, int64_t nargs)
         name != pyrt_str_rstrip,
         name != pyrt_str_lstrip);
     }
+    if (
+      name == pyrt_str_upper || name == pyrt_str_lower ||
+      name == pyrt_str_title)
+    {
+      if (nargs != 0)
+        PYRT_RAISE("TypeError: this str method takes no arguments");
+      return pyrt_strmeth_case(
+        o, name == pyrt_str_upper ? 1 : (name == pyrt_str_title ? 2 : 0));
+    }
+    if (name == pyrt_str_startswith || name == pyrt_str_endswith)
+    {
+      if (nargs != 1)
+        PYRT_RAISE("TypeError: this str method takes exactly one argument");
+      return pyrt_strmeth_affix(o, args.a0, name == pyrt_str_endswith);
+    }
+    if (
+      name == pyrt_str_find || name == pyrt_str_rfind ||
+      name == pyrt_str_index || name == pyrt_str_count)
+    {
+      if (nargs != 1)
+        PYRT_RAISE("TypeError: this str method takes exactly one argument");
+      if (name == pyrt_str_index)
+        return pyrt_strmeth_strindex(o, args.a0);
+      if (name == pyrt_str_count)
+        return pyrt_strmeth_strcount(o, args.a0);
+      return pyrt_strmeth_find(o, args.a0, name == pyrt_str_rfind);
+    }
   }
   if (o->ob_type == &PyRtDict_Type)
   {

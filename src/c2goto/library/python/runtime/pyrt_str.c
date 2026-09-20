@@ -130,6 +130,108 @@ static bool pyrt_str_stripped(char c, PyRtStrObject *chars)
   return false;
 }
 
+/* ASCII only, which is what this model's bytes-backed str can express. */
+PyRtObject *pyrt_strmeth_case(PyRtObject *o, int mode)
+{
+  PyRtStrObject *s = (PyRtStrObject *)o;
+  __ESBMC_assert(
+    s->length < PYRT_STR_CAPACITY, "pyrt: string longer than the model holds");
+  char *buffer = __ESBMC_alloca(PYRT_STR_CAPACITY + 1);
+  bool at_word_start = true;
+  #pragma unroll
+  for (int64_t i = 0; i < PYRT_STR_CAPACITY && i < s->length; ++i)
+  {
+    char c = s->data[i];
+    bool alpha = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    if (mode == 1 || (mode == 2 && at_word_start))
+      c = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+    else
+      c = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+    buffer[i] = c;
+    at_word_start = !alpha;
+  }
+  buffer[s->length] = 0;
+  return pyrt_str_new(buffer, s->length);
+}
+
+PyRtObject *pyrt_strmeth_affix(PyRtObject *o, PyRtObject *affix, bool at_end)
+{
+  if (!pyrt_str_check(affix))
+    PYRT_RAISE("TypeError: this argument must be str");
+  PyRtStrObject *s = (PyRtStrObject *)o;
+  PyRtStrObject *a = (PyRtStrObject *)affix;
+  if (a->length > s->length)
+    return pyrt_bool_from(false);
+  int64_t at = at_end ? s->length - a->length : 0;
+  return pyrt_bool_from(
+    pyrt_str_match(s->data, s->length, a->data, a->length, at));
+}
+
+/* Leftmost match, or the rightmost one when from_right; -1 when absent. */
+int64_t pyrt_str_search(PyRtStrObject *s, PyRtStrObject *sub, bool from_right)
+{
+  int64_t found = -1;
+  #pragma unroll
+  for (int64_t i = 0; i < PYRT_STR_CAPACITY; ++i)
+  {
+    if (i + sub->length > s->length)
+      break;
+    if (pyrt_str_match(s->data, s->length, sub->data, sub->length, i))
+    {
+      found = i;
+      if (!from_right)
+        break;
+    }
+  }
+  return found;
+}
+
+PyRtObject *pyrt_strmeth_find(PyRtObject *o, PyRtObject *sub, bool from_right)
+{
+  if (!pyrt_str_check(sub))
+    PYRT_RAISE("TypeError: find() argument must be str");
+  return pyrt_long_from(
+    pyrt_str_search((PyRtStrObject *)o, (PyRtStrObject *)sub, from_right));
+}
+
+PyRtObject *pyrt_strmeth_strindex(PyRtObject *o, PyRtObject *sub)
+{
+  if (!pyrt_str_check(sub))
+    PYRT_RAISE("TypeError: index() argument must be str");
+  int64_t at =
+    pyrt_str_search((PyRtStrObject *)o, (PyRtStrObject *)sub, false);
+  if (at < 0)
+    PYRT_RAISE("ValueError: substring not found");
+  return pyrt_long_from(at);
+}
+
+/* Non-overlapping, as CPython counts: "aaa".count("aa") is 1. */
+PyRtObject *pyrt_strmeth_strcount(PyRtObject *o, PyRtObject *sub)
+{
+  if (!pyrt_str_check(sub))
+    PYRT_RAISE("TypeError: count() argument must be str");
+  PyRtStrObject *s = (PyRtStrObject *)o;
+  PyRtStrObject *t = (PyRtStrObject *)sub;
+  if (t->length == 0)
+    return pyrt_long_from(s->length + 1);
+  int64_t seen = 0;
+  int64_t at = 0;
+  #pragma unroll
+  for (int64_t guard = 0; guard < PYRT_STR_CAPACITY; ++guard)
+  {
+    if (at + t->length > s->length)
+      break;
+    if (pyrt_str_match(s->data, s->length, t->data, t->length, at))
+    {
+      ++seen;
+      at += t->length;
+    }
+    else
+      ++at;
+  }
+  return pyrt_long_from(seen);
+}
+
 /* sep == 0 is str.split()'s no-argument form: split on runs of whitespace and
  * drop empty fields, which is a different rule from splitting on a separator
  * (CPython: "  a  ".split() == ["a"], but "a,,".split(",") == ["a","",""]). */

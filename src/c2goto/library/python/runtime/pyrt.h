@@ -302,6 +302,24 @@ extern const char pyrt_str_index[];
 extern const char pyrt_str_insert[];
 extern const char pyrt_str_sort[];
 extern const char pyrt_str_count[];
+extern const char pyrt_str_upper[];
+extern const char pyrt_str_lower[];
+extern const char pyrt_str_title[];
+extern const char pyrt_str_startswith[];
+extern const char pyrt_str_endswith[];
+extern const char pyrt_str_find[];
+extern const char pyrt_str_rfind[];
+
+/* 0 lower, 1 upper, 2 title. */
+PyRtObject *pyrt_strmeth_case(PyRtObject *o, int mode);
+PyRtObject *
+pyrt_strmeth_affix(PyRtObject *o, PyRtObject *affix, bool at_end);
+int64_t
+pyrt_str_search(PyRtStrObject *s, PyRtStrObject *sub, bool from_right);
+PyRtObject *
+pyrt_strmeth_find(PyRtObject *o, PyRtObject *sub, bool from_right);
+PyRtObject *pyrt_strmeth_strindex(PyRtObject *o, PyRtObject *sub);
+PyRtObject *pyrt_strmeth_strcount(PyRtObject *o, PyRtObject *sub);
 
 PyRtObject *pyrt_dictmeth_get(PyRtObject *o, PyRtObject *key, PyRtObject *dflt);
 PyRtObject *pyrt_dictmeth_keys(PyRtObject *o);

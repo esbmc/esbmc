@@ -24,7 +24,13 @@ PyRtObject *pyrt_iter_item(PyRtObject *o, int64_t i)
 PyRtObject *pyrt_contains(PyRtObject *container, PyRtObject *item)
 {
   if (container->ob_type == &PyRtStr_Type)
-    PYRT_RAISE("pyrt: substring test is not modelled");
+  {
+    if (container->ob_type != item->ob_type)
+      PYRT_RAISE("TypeError: 'in <string>' requires string as left operand");
+    return pyrt_bool_from(
+      pyrt_str_search(
+        (PyRtStrObject *)container, (PyRtStrObject *)item, false) >= 0);
+  }
   if (container->ob_type == &PyRtSet_Type)
     return pyrt_bool_from(
       pyrt_set_find((PyRtSetObject *)container, item) >= 0);
