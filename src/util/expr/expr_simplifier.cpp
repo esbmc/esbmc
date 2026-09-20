@@ -1451,6 +1451,13 @@ static bool same_value_and_sign(const expr2tc &a, const expr2tc &b)
   return a == b && float_signs_agree(a, b);
 }
 
+/* An index may be out of bounds. That's an error in the program, but not in
+ * the model we're generating, so permit it. Can't simplify it though. */
+static bool index_outside(const constant_int2t &index, size_t size)
+{
+  return index.value.is_negative() || index.value >= size;
+}
+
 expr2tc with2t::do_simplify() const
 {
   // with(with(s, f, v_old), f, v_new) -> with(s, f, v_new). Two writes to
@@ -1509,12 +1516,7 @@ expr2tc with2t::do_simplify() const
     const constant_array2t &array = to_constant_array2t(source_value);
     const constant_int2t &index = to_constant_int2t(update_field);
 
-    // Index may be out of bounds. That's an error in the program, but not in
-    // the model we're generating, so permit it. Can't simplify it though.
-    if (index.value.is_negative())
-      return expr2tc();
-
-    if (index.value >= array.datatype_members.size())
+    if (index_outside(index, array.datatype_members.size()))
       return expr2tc();
 
     if (same_value_and_sign(
@@ -1525,17 +1527,13 @@ expr2tc with2t::do_simplify() const
     arr.datatype_members[index.as_ulong()] = update_value;
     return constant_array2tc(std::move(arr));
   }
-  else if (is_constant_vector2t(source_value))
+  else if (
+    is_constant_vector2t(source_value) && is_constant_int2t(update_field))
   {
     const constant_vector2t &vec = to_constant_vector2t(source_value);
     const constant_int2t &index = to_constant_int2t(update_field);
 
-    // Index may be out of bounds. That's an error in the program, but not in
-    // the model we're generating, so permit it. Can't simplify it though.
-    if (index.value.is_negative())
-      return expr2tc();
-
-    if (index.value >= vec.datatype_members.size())
+    if (index_outside(index, vec.datatype_members.size()))
       return expr2tc();
 
     if (same_value_and_sign(

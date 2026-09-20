@@ -598,15 +598,13 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
-  /// Build a vector-typed rvalue from \p value one lane at a time, each lane
-  /// an ordinary access at its own offset (#7907).
   void construct_vector_ref(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
     const guard2tc &guard,
     modet mode,
-    unsigned long alignment = 0);
+    unsigned long alignment);
   class quantifier_scopet;
 
   /** Variables bound by quantifiers enclosing the expression currently being

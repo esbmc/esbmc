@@ -22,6 +22,13 @@ static bool is_lvalue(const expr2tc &e)
          is_dereference2t(e);
 }
 
+/// A literal holding one lvalue per element: an array member, or a vector a
+/// dereference rebuilt lane by lane (#7907).
+static bool is_elementwise_literal(const expr2tc &e)
+{
+  return is_constant_array2t(e) || is_constant_vector2t(e);
+}
+
 goto_symext::goto_symext(
   const namespacet &_ns,
   contextt &_new_context,
@@ -697,7 +704,7 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if (is_constant_array2t(lhs))
+  else if (is_elementwise_literal(lhs))
   {
     symex_assign_array_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
@@ -811,23 +818,26 @@ void goto_symext::symex_assign_array_structure(
   guard2tc &guard,
   const bool hidden)
 {
-  const array_type2t &arrtype = to_array_type(lhs->type);
-  const constant_array2t &the_array = to_constant_array2t(lhs);
+  const type2tc &subtype = array_or_vector_subtype(lhs->type);
+  const std::vector<expr2tc> &elems =
+    is_constant_vector2t(lhs) ? to_constant_vector2t(lhs).datatype_members
+                              : to_constant_array2t(lhs).datatype_members;
 
   // Explicitly project lhs elements out of the array literal and recurse,
   // mirroring symex_assign_structure. This handles a re-constituted array
   // (e.g. an array-typed struct member surfaced by symex_assign_structure)
-  // by assigning element-wise through the index expressions.
+  // by assigning element-wise through the index expressions. A vector rebuilt
+  // lane by lane is assigned the same way.
   //
   // The sibling constant_array_of2t (repeat-initialised array) is deliberately
   // not handled here: its members alias a single initializer value rather than
   // distinct element lvalues, so it falls through to the unhandled-lhs abort as
   // before. Projecting it would need per-index lvalues that it does not carry.
-  for (std::size_t i = 0; i < the_array.datatype_members.size(); i++)
+  for (std::size_t i = 0; i < elems.size(); i++)
   {
-    const expr2tc &lhs_elem = the_array.datatype_members[i];
+    const expr2tc &lhs_elem = elems[i];
     expr2tc rhs_elem =
-      index2tc(arrtype.subtype, rhs, constant_int2tc(index_type2(), BigInt(i)));
+      index2tc(subtype, rhs, constant_int2tc(index_type2(), BigInt(i)));
     symex_assign_rec(lhs_elem, full_lhs, rhs_elem, full_rhs, guard, hidden);
   }
 }
