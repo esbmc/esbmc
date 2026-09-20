@@ -288,6 +288,45 @@ extern const char pyrt_str_replace[];
 extern const char pyrt_str_strip[];
 extern const char pyrt_str_lstrip[];
 extern const char pyrt_str_rstrip[];
+extern const char pyrt_str_get[];
+extern const char pyrt_str_items[];
+extern const char pyrt_str_keys[];
+extern const char pyrt_str_values[];
+extern const char pyrt_str_setdefault[];
+extern const char pyrt_str_update[];
+extern const char pyrt_str_pop[];
+extern const char pyrt_str_clear[];
+extern const char pyrt_str_copy[];
+extern const char pyrt_str_extend[];
+extern const char pyrt_str_index[];
+extern const char pyrt_str_insert[];
+extern const char pyrt_str_sort[];
+extern const char pyrt_str_count[];
+
+PyRtObject *pyrt_dictmeth_get(PyRtObject *o, PyRtObject *key, PyRtObject *dflt);
+PyRtObject *pyrt_dictmeth_keys(PyRtObject *o);
+PyRtObject *pyrt_dictmeth_values(PyRtObject *o);
+PyRtObject *pyrt_dictmeth_items(PyRtObject *o);
+PyRtObject *pyrt_dictmeth_pop(PyRtObject *o, PyRtObject *key, PyRtObject *dflt);
+PyRtObject *
+pyrt_dictmeth_setdefault(PyRtObject *o, PyRtObject *key, PyRtObject *dflt);
+void pyrt_dictmeth_update(PyRtObject *o, PyRtObject *other);
+void pyrt_dictmeth_clear(PyRtObject *o);
+PyRtObject *pyrt_dictmeth_copy(PyRtObject *o);
+
+int64_t pyrt_list_find(PyRtListObject *l, PyRtObject *value);
+PyRtObject *pyrt_listmeth_pop(PyRtObject *o, PyRtObject *index);
+void pyrt_listmeth_extend(PyRtObject *o, PyRtObject *iterable);
+PyRtObject *pyrt_listmeth_index(PyRtObject *o, PyRtObject *value);
+void pyrt_listmeth_insert(
+  PyRtObject *o,
+  PyRtObject *index,
+  PyRtObject *value);
+void pyrt_listmeth_remove(PyRtObject *o, PyRtObject *value);
+PyRtObject *pyrt_listmeth_count(PyRtObject *o, PyRtObject *value);
+void pyrt_listmeth_clear(PyRtObject *o);
+PyRtObject *pyrt_listmeth_copy(PyRtObject *o);
+void pyrt_listmeth_sort(PyRtObject *o);
 
 PyRtObject *pyrt_bool_from(bool b);
 bool pyrt_long_check(PyRtObject *o);

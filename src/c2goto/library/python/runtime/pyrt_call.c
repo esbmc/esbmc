@@ -181,5 +181,92 @@ pyrt_call_method(PyRtObject *o, const char *name, PyRtArgs args, int64_t nargs)
         name != pyrt_str_lstrip);
     }
   }
+  if (o->ob_type == &PyRtDict_Type)
+  {
+    if (name == pyrt_str_get || name == pyrt_str_pop ||
+        name == pyrt_str_setdefault)
+    {
+      if (nargs < 1 || nargs > 2)
+        PYRT_RAISE("TypeError: this dict method takes one or two arguments");
+      PyRtObject *dflt = nargs == 2 ? args.a1 : 0;
+      if (name == pyrt_str_get)
+        return pyrt_dictmeth_get(o, args.a0, dflt);
+      if (name == pyrt_str_pop)
+        return pyrt_dictmeth_pop(o, args.a0, dflt);
+      return pyrt_dictmeth_setdefault(o, args.a0, dflt);
+    }
+    if (name == pyrt_str_keys || name == pyrt_str_values ||
+        name == pyrt_str_items || name == pyrt_str_copy ||
+        name == pyrt_str_clear)
+    {
+      if (nargs != 0)
+        PYRT_RAISE("TypeError: this dict method takes no arguments");
+      if (name == pyrt_str_keys)
+        return pyrt_dictmeth_keys(o);
+      if (name == pyrt_str_values)
+        return pyrt_dictmeth_values(o);
+      if (name == pyrt_str_items)
+        return pyrt_dictmeth_items(o);
+      if (name == pyrt_str_copy)
+        return pyrt_dictmeth_copy(o);
+      pyrt_dictmeth_clear(o);
+      return &pyrt_None;
+    }
+    if (name == pyrt_str_update)
+    {
+      if (nargs != 1)
+        PYRT_RAISE("TypeError: update() takes exactly one argument");
+      pyrt_dictmeth_update(o, args.a0);
+      return &pyrt_None;
+    }
+  }
+  if (o->ob_type == &PyRtList_Type)
+  {
+    if (name == pyrt_str_pop)
+    {
+      if (nargs > 1)
+        PYRT_RAISE("TypeError: pop() takes at most one argument");
+      return pyrt_listmeth_pop(o, nargs == 1 ? args.a0 : 0);
+    }
+    if (name == pyrt_str_extend || name == pyrt_str_remove ||
+        name == pyrt_str_index || name == pyrt_str_count)
+    {
+      if (nargs != 1)
+        PYRT_RAISE("TypeError: this list method takes exactly one argument");
+      if (name == pyrt_str_extend)
+      {
+        pyrt_listmeth_extend(o, args.a0);
+        return &pyrt_None;
+      }
+      if (name == pyrt_str_remove)
+      {
+        pyrt_listmeth_remove(o, args.a0);
+        return &pyrt_None;
+      }
+      if (name == pyrt_str_index)
+        return pyrt_listmeth_index(o, args.a0);
+      return pyrt_listmeth_count(o, args.a0);
+    }
+    if (name == pyrt_str_insert)
+    {
+      if (nargs != 2)
+        PYRT_RAISE("TypeError: insert() takes exactly two arguments");
+      pyrt_listmeth_insert(o, args.a0, args.a1);
+      return &pyrt_None;
+    }
+    if (name == pyrt_str_sort || name == pyrt_str_clear ||
+        name == pyrt_str_copy)
+    {
+      if (nargs != 0)
+        PYRT_RAISE("TypeError: this list method takes no arguments");
+      if (name == pyrt_str_copy)
+        return pyrt_listmeth_copy(o);
+      if (name == pyrt_str_sort)
+        pyrt_listmeth_sort(o);
+      else
+        pyrt_listmeth_clear(o);
+      return &pyrt_None;
+    }
+  }
   return pyrt_call(pyrt_getattr(o, name), args, nargs);
 }
