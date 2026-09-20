@@ -99,6 +99,18 @@ public:
   /// Reserved "may point anywhere"
   static constexpr node_id TOP = 0;
 
+  /// The object an unconstrained pointer points at: symbolic execution
+  /// resolves a dereference of one to an invalid object, so a consumer can
+  /// skip it, while an empty set still means "nothing constrained this".
+  static constexpr const char *nondet_object_name = "andersen::nondet";
+
+  /// True iff \p object is that sentinel.
+  static bool is_nondet_object(const expr2tc &object)
+  {
+    return is_symbol2t(object) &&
+           to_symbol2t(object).thename == nondet_object_name;
+  }
+
   /// The four inclusion-constraint shapes of \ref andersen_constraints.
   enum class constraint_kindt
   {
