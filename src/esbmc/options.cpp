@@ -678,8 +678,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("<cmd>"),
      "Command running NeuroSym on an SMT-LIB2 file; every %f is replaced by "
      "the formula file, appended when absent (default: "
-     "\"$HOME/bin/neurosym-cpp-solve "
-     "%f\")"},
+     "\"neurosym-cpp-solve %f\")"},
     {"neurosym-model-prog",
      boost::program_options::value<std::string>()->value_name("<cmd>"),
      "Local interactive SMT-LIB2 solver used to build the counterexample "

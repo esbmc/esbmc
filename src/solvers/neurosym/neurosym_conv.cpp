@@ -11,19 +11,11 @@
 static std::string prog_command(const optionst &options)
 {
   std::string cmd = options.get_option("neurosym-prog");
-  if (!cmd.empty())
-    return cmd;
-  // Default now points directly at the standalone C++ NeuroSym solver via
-  // its ESBMC-output-formatting wrapper (no Python involved at all -- this
-  // used to default to "python main.py %f", the original Python entry
-  // point; NeuroSym has since been reimplemented in C++ with its own
-  // native SMT-LIB2 parser, so the default was updated to match rather
-  // than relying on a main.py shim that just re-exec'd into this same
-  // wrapper). $HOME is resolved at runtime, not baked in at compile time,
-  // so this still works across machines/checkouts.
-  const char *home = std::getenv("HOME");
-  std::string base = home ? std::string(home) : std::string(".");
-  return base + "/bin/neurosym-cpp-solve %f";
+  // Resolved through PATH, like the sibling bitwuzllob backend's "mallob"
+  // default: NeuroSym ships a wrapper of this name alongside its native C++
+  // solver. The original "python main.py %f" entry point still works when
+  // named explicitly through --neurosym-prog.
+  return cmd.empty() ? "neurosym-cpp-solve %f" : cmd;
 }
 
 static void skip_ws(const std::string &s, size_t &pos)
