@@ -214,6 +214,59 @@ void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
     written_pointers.insert(ptr);
 }
 
+static expr2tc replace_symbols(
+  const expr2tc &e,
+  const std::unordered_map<irep_idt, expr2tc, irep_id_hash> &by)
+{
+  if (is_nil_expr(e))
+    return e;
+  if (is_symbol2t(e))
+  {
+    auto it = by.find(to_symbol2t(e).thename);
+    if (it == by.end())
+      return e;
+    return it->second->type == e->type ? it->second
+                                        : typecast2tc(e->type, it->second);
+  }
+  expr2tc copy = e;
+  copy->Foreach_operand([&by](expr2tc &op) { op = replace_symbols(op, by); });
+  return copy;
+}
+
+/// Restate the callee's written pointers in the caller's scope: a parameter
+/// the callee never reassigns holds the argument this call passes, which
+/// resolves more precisely than the parameter every call site shares.
+void goto_loopst::function_summaryt::bind_arguments(
+  const goto_functiont &callee,
+  const std::vector<expr2tc> &arguments)
+{
+  if (!is_code_type(callee.type))
+    return;
+  const code_type2t &type = to_code_type(callee.type);
+  std::unordered_set<irep_idt, irep_id_hash> reassigned;
+  for (const expr2tc &v : modified)
+    if (is_symbol2t(v))
+      reassigned.insert(to_symbol2t(v).thename);
+
+  // check_var_name also filters the modified set, so a parameter it rejects
+  // may be reassigned unseen.
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> actual;
+  const std::size_t n = std::min(type.argument_names.size(), arguments.size());
+  for (std::size_t i = 0; i < n; ++i)
+    if (
+      !is_nil_expr(arguments[i]) && !type.argument_names[i].empty() &&
+      !reassigned.count(type.argument_names[i]) &&
+      check_var_name(symbol2tc(type.arguments[i], type.argument_names[i])))
+      actual.emplace(type.argument_names[i], arguments[i]);
+  if (actual.empty())
+    return;
+
+  loopst::loop_varst bound;
+  for (const expr2tc &ptr : written_pointers)
+    bound.insert(replace_symbols(ptr, actual));
+  written_pointers = std::move(bound);
+}
+
 void goto_loopst::collect_loop_symbols(
   const expr2tc &expr,
   loopst::loop_varst &out) const
@@ -343,6 +396,8 @@ bool goto_loopst::summarise_call(
     for (const expr2tc &arg : call.operands)
       if (!is_nil_expr(arg) && is_pointer_type(arg->type))
         written_ptrs.push_back(arg);
+  callee_summary.bind_arguments(
+    goto_functions.function_map.at(callee), call.operands);
   merge_summary(callee_summary, local);
   return complete;
 }
@@ -508,6 +563,8 @@ void goto_loopst::get_modified_variables(
     // instead of re-walking the helper from scratch.
     function_summaryt summary;
     compute_function_summary(identifier, function_names, summary);
+    summary.bind_arguments(
+      goto_functions.function_map.at(identifier), function_call.operands);
     apply_callee_summary(*loop, summary, function_call);
   }
   else if (

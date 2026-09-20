@@ -51,6 +51,9 @@ protected:
     bool unnamed_write = false;
 
     void record_write(const expr2tc &lhs);
+    void bind_arguments(
+      const goto_functiont &callee,
+      const std::vector<expr2tc> &arguments);
   };
   std::unordered_map<irep_idt, function_summaryt, irep_id_hash>
     function_summary_cache;
