@@ -1,36 +1,121 @@
 #ifndef STL_CSIGNAL
 #define STL_CSIGNAL
 
-#include "definitions.h"
+#include <errno.h>
+#include <signal.h>
+#include <stdlib.h>
 
-typedef void (*sighandler)(int);
+#ifdef NSIG
+#define __ESBMC_NSIG NSIG
+#else
+#define __ESBMC_NSIG 65
+#endif
 
-sighandler __sighandlers[16];
+extern bool nondet_bool();
+extern int nondet_int();
 
-void signal(int sig, sighandler func)
+static void (*__ESBMC_sighandlers[__ESBMC_NSIG])(int);
+static bool __ESBMC_sigknown[__ESBMC_NSIG];
+static bool __ESBMC_sigblocked[__ESBMC_NSIG];
+static bool __ESBMC_sigpending[__ESBMC_NSIG];
+
+// A signal may start ignored, inherited across exec (C11 7.14.1.1p6).
+static void (*&__ESBMC_sigdisposition(int sig))(int)
 {
-  __ESBMC_assert(
-    (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11) ||
-      (sig == 15),
-    "Signal must be equal to defined at lib csignal");
-
-  __sighandlers[sig] = func;
+  if (!__ESBMC_sigknown[sig])
+  {
+    __ESBMC_sigknown[sig] = true;
+    __ESBMC_sighandlers[sig] = nondet_bool() ? SIG_IGN : SIG_DFL;
+  }
+  return __ESBMC_sighandlers[sig];
 }
 
-int raise(int sig)
+static bool __ESBMC_sigrefused(int sig, void (*func)(int))
 {
-  __ESBMC_assert(
-    (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11) ||
-      (sig == 15),
-    "Signal must be equal to defined at lib csignal");
+  if (sig <= 0 || sig >= __ESBMC_NSIG || func == SIG_ERR)
+    return true;
+#ifdef SIGKILL
+  if (sig == SIGKILL || sig == SIGSTOP)
+    return true;
+#endif
+  return false;
+}
 
-  if (__sighandlers[sig] != 0)
+extern "C" void (*signal(int sig, void (*func)(int)))(int)
+{
+  if (__ESBMC_sigrefused(sig, func))
   {
-    __sighandlers[sig](sig);
+    errno = EINVAL;
+    return SIG_ERR;
+  }
+
+  void (*&disposition)(int) = __ESBMC_sigdisposition(sig);
+  void (*previous)(int) = disposition;
+  disposition = func;
+  return previous;
+}
+
+// The six signals C11 7.14 names all terminate the program by default.
+static bool __ESBMC_sigterminates(int sig)
+{
+  return sig == SIGABRT || sig == SIGFPE || sig == SIGILL || sig == SIGINT ||
+         sig == SIGSEGV || sig == SIGTERM;
+}
+
+extern "C" int raise(int sig)
+{
+  // Signal 0 is the null signal: checked, never delivered (POSIX kill()).
+  if (sig < 0 || sig >= __ESBMC_NSIG)
+  {
+    errno = EINVAL;
+    int failure = nondet_int();
+    __ESBMC_assume(failure != 0);
+    return failure;
+  }
+
+  if (__ESBMC_sigblocked[sig])
+  {
+    __ESBMC_sigpending[sig] = true;
     return 0;
   }
 
-  return nondet_uint();
+  void (*&disposition)(int) = __ESBMC_sigdisposition(sig);
+  void (*handler)(int) = disposition;
+  if (handler == SIG_IGN)
+    return 0;
+  if (handler == SIG_DFL)
+  {
+    if (__ESBMC_sigterminates(sig))
+      abort();
+    // Other default actions are over-approximated by returning.
+    return 0;
+  }
+
+  // C11 7.14.1.1p3: the disposition is reset to SIG_DFL, or the signal is
+  // blocked until the handler returns and then delivered if raised meanwhile.
+  if (nondet_bool())
+  {
+    disposition = SIG_DFL;
+    handler(sig);
+    return 0;
+  }
+
+  __ESBMC_sigblocked[sig] = true;
+  handler(sig);
+  __ESBMC_sigblocked[sig] = false;
+  if (__ESBMC_sigpending[sig])
+  {
+    __ESBMC_sigpending[sig] = false;
+    raise(sig);
+  }
+  return 0;
 }
+
+namespace std
+{
+using ::raise;
+using ::sig_atomic_t;
+using ::signal;
+} // namespace std
 
 #endif

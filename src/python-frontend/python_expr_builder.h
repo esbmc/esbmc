@@ -16,8 +16,9 @@
 // Two migrate_type round-trip hazards are guarded uniformly:
 //   * a dynamically-sized array type (non-constant size) throws get_width
 //     downstream, so the relevant helpers fall back to the legacy constructor;
-//   * type attributes such as #cpp_type are dropped by migrate_type, so the
-//     member/index/typecast/dereference helpers restore the exact result type
+//   * some type attributes are dropped by migrate_type (#cpp_type itself is
+//     carried since §10), so the member/index/typecast/dereference helpers
+//     restore the exact result type
 //     (result.type() = t) -- load-bearing e.g. to keep a 1-char string element
 //     distinct from an 8-bit int.
 namespace python_expr
@@ -25,6 +26,10 @@ namespace python_expr
 // True iff `t` is, or transitively points to/contains, an array whose size is
 // nil or non-constant (a dyn-sized array that does not survive migrate_type).
 bool contains_dyn_array(const typet &t);
+
+// Store `t` as `sym`'s type IREP2-side, or legacy when `t` holds a
+// dyn-sized array (docs/roadmap/scope-python-irep2.md §10.4).
+void set_symbol_type(symbolt &sym, const typet &t);
 
 // Symbol reference `sym`.
 exprt build_symbol(const symbolt &sym);
