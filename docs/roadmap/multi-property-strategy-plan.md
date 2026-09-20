@@ -10,7 +10,7 @@ mode, and which modes can its results be trusted under? Related open issues:
 [#1599](https://github.com/esbmc/esbmc/issues/1599),
 [#2075](https://github.com/esbmc/esbmc/issues/2075),
 [#7503](https://github.com/esbmc/esbmc/issues/7503).
-**Last updated:** 2026-09-18.
+**Last updated:** 2026-09-19.
 
 **Measurement environment.** aarch64 macOS, ESBMC 8.5.0 built from master
 `25b71af213`, default solver (Bitwuzla 0.9.1). Every result below is a verdict
@@ -353,18 +353,54 @@ W4 on §4's base-case rule from W3.
 
 Post §1's table as the answer, and link this plan. No code change.
 
-### W1 — final verdict and early stop (D1, #1902)
+### W1 — final verdict (D1) — done
 
 - Route the exhausted-k exit through `conclude()`, so a recorded violation
   ends `VERIFICATION FAILED`, exit 1.
-- After each k step, stop when every claim in the program has a final
-  verdict.
-- **Tests (pair).** `vac2.c --incremental-bmc --multi-property --max-k-step 10`
-  → `^VERIFICATION FAILED$`; `vac2_safe.c` under the same flags →
-  `^VERIFICATION SUCCESSFUL$`, so W1 does not turn a proof into FAILED.
-- Mutation check: restore the old exit and confirm the FAILED test changes
+- **Tests.** `vac2.c --incremental-bmc --multi-property --max-k-step 10` and
+  `vac3.c --k-induction --multi-property --max-k-step 6` →
+  `^VERIFICATION FAILED$` with no `Unable to prove or falsify` line;
+  `vac2_safe.c` under both strategies → `^VERIFICATION SUCCESSFUL$`, so W1
+  does not turn a proof into FAILED; a `while (1)` program whose only claim
+  is not violated within the bound → `^VERIFICATION UNKNOWN$`, so the new
+  exit stays scoped to a recorded violation. `vac2.c` under `--k-induction`
+  is **not** a W1 test: master already ends FAILED there through the
+  inductive step, so it pins nothing.
+- Mutation check: restore the old exit and confirm both FAILED tests change
   verdict.
 - Labels: `needs-svcomp-run` (changes a strategy's exit code).
+
+**Dropped: the early stop.** The second bullet of this workstream — after
+each k step, stop when every claim has a final verdict — was implemented and
+then removed as unsound. "No claim left" is only observable through the GOTO
+program, because `clear_verified_claims_in_goto` is what records it, and a
+claim generated during symex has no GOTO `ASSERT` behind it. Measured: in
+
+```c
+int main() {
+  unsigned n = nondet_uint();
+  assert(n != 1);                 /* the program's only GOTO ASSERT */
+  int *p = 0;
+  for (unsigned i = 0; i < n; ++i)
+    if (i == 4) *p = 1;           /* NULL deref, first claimed at k = 5 */
+}
+```
+
+the whole GOTO program holds one `ASSERT`. Violating it at k = 1 empties the
+program, the stop fires, and `main.null-pointer-dereference.1` — which the
+same program without the first assert reports at k = 5 — is never checked,
+under a line claiming every property has a final verdict. The defect it would
+report is silently lost; `--keep-verified-claims` recovers it, the default
+path does not.
+
+The generalisation is that a claim can first appear at a larger k, so no claim
+set observed at k bounds the claim set at k+1. The only sound stopping signal
+is proof that the program is fully unwound — the forward condition or the
+inductive step — and both already return through `conclude()`. #1902's own
+reproducer confirms there is nothing left to win here: it stops at k = 2
+through the forward condition on master and on the W1 build alike. Anything
+further belongs to W3, which gives claims program-wide ids and a verdict
+store, and even there the bound-vs-proof distinction above still applies.
 
 ### W2 — the missed claim under interval analysis (D3)
 

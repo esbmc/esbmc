@@ -394,3 +394,303 @@ mistake B-2's spelling-based count invites. The program-entry body writes (§6) 
 correct as they are: `set_value(const exprt &)` defers migration until the symbol table
 is complete, which is exactly what a body needs. Converting them is not blocked work, it
 is work that must not be done.
+
+## 9. §3's prediction, confirmed — and the cost of not reading §3 (2026-09-17)
+
+`handle_assignment_type_adjustments` (`converter_stmt.cpp:1200-1455`) holds twelve B-2 writes, the
+densest single-function cluster left in the migration. Eleven were converted, measured, reviewed, and
+**reverted**: they break seven CORE tests. §3 of this document already said they would.
+
+### 9.1 The finding, and the two-line reproducer
+
+```python
+val = "hello"[0]
+assert val == "h"
+```
+
+```
+base arm                VERIFICATION SUCCESSFUL
+eleven writes converted VERIFICATION FAILED     (GOTO shows ASSERT 0)
+```
+
+Attributed by stashing the change and rebuilding, not inferred. Seven CORE tests fail the same way and
+pass on base: `casting14`, `enumerate8`, `for-loop3`, `for-loop6`, `for-loop8_fail`,
+`python_irep2_adjust_only_string_index`, `string-concat6`. `assert "hello"[0] == "h"` is unaffected --
+the defect needs the char to pass *through a symbol*, which is exactly what these writes change.
+
+The chain, each link at a line:
+
+```
+list_access.cpp:4119      tags a string-subscript result #cpp_type == "char"
+converter_stmt.cpp:1402   set_type(migrate_type(rhs.type())) on that tagged type
+migrate.cpp:3238          rebuilds signedbv_typet(width); #cpp_type is not carried
+converter_expr.cpp:1763   a Name read is typed from symbol->get_type()
+converter_binop.cpp:619   get_python_type_category returns "numeric", not "string"
+                          -> the comparison folds cross-type to false
+```
+
+`list_access.cpp:4119`'s own comment names the consumer it is feeding, which is the one that breaks.
+
+### 9.2 §3 predicted exactly this, in this file
+
+§3's table, above:
+
+| site | symptom | cause |
+|---|---|---|
+| `converter/converter_stmt.cpp` (11 writes) | `casting14` fails | most write `rhs.type()`, which carries `#cpp_type` |
+
+Eleven writes, this file, `casting14`, `#cpp_type`. An earlier pass had already measured it. The work
+above re-measured it from scratch, reached the opposite conclusion, and appended a section to the same
+document without reading the section three headings up. That is the whole finding worth keeping: the
+answer was in the file being edited.
+
+### 9.3 Why three instruments all missed it
+
+None of them was aimed at the attribute.
+
+- **The A/B is structurally blind to `#cpp_type`.** `python_languaget::from_type` routes to
+  `c_type2string` (`python_language.cpp:362-370`), and `c_expr2string.cpp` never reads `#cpp_type` --
+  only `cpp_expr2string.cpp:138` and `goto2c/expr2c.cpp:174` do. The failing case prints
+  `Type........: signed char` either way, because the width-8 fallback produces that string without the
+  tag. So "0 of 76 differ" was evidence about branch flips in 76 programs, not about the attribute, and
+  reading it as corroboration was wrong.
+- **The census sampled the shape out.** It counted `#cpp_type` on writes in the 78-test stratified
+  corpus: 51 `double`, 14 `unsigned_long`, no `char`. But site `:1402` runs in 338 tests and the corpus
+  held 78, chosen for *site execution* rather than for the attribute -- so the `char`-spelled writes
+  were simply not in it. §9.1 of the reverted text criticised precisely this error about an earlier
+  filter and then repeated it one section later.
+- **The census also read the wrong node.** `is_char_type` is asked of an array *subtype*
+  (`string_handler.cpp:2397`, `:2431`), and a probe on `rhs.type().cpp_type()` cannot see a tag on
+  `rhs.type().subtype()`.
+
+A census aimed at an attribute must enumerate its **writers** (`type_handler.cpp:651`,
+`list_access.cpp:4120`, `convert_float_literal.cpp:26/31/36`) and route each through each site. Counting
+what a convenience corpus happens to contain measures the corpus.
+
+### 9.4 What this changes in the plan
+
+These eleven writes are blocked on the `#cpp_type` carry §8.1 scopes -- not blocked on more measurement.
+So is the next cluster: §3's table also lists `converter_funcdef.cpp`'s ten writes failing
+`class_var_param_augassign{,_fail}` for the same reason, and `python_adjust.cpp:70` for the analogous
+loss of the legacy-only `bases` sub-irep.
+
+The frontend already compensates for this loss by hand at six call sites in
+`python_expr_builder.cpp` (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`), each commented "migrate_type
+does not round-trip `#cpp_type`; restore the exact target type". Seven ad-hoc restorations is the
+argument for the carry, not for an eighth.
+
+So the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
+
+## 10. The carry, and the eleven writes with it (2026-09-17)
+
+§9 left the cluster blocked on `#cpp_type`. The attribute now crosses the seam, and the eleven writes
+land behind it.
+
+### 10.1 Three kinds, chosen by writer
+
+`irep_idt cpp_type` is added to `unsignedbv_type2t`, `signedbv_type2t` and `floatbv_type2t`, carried
+both ways in `migrate_type`/`migrate_type_back`, with the back-write guarded on non-empty -- `#cpp_type`
+is a comment field, and writing it empty inserts a key the printer reads, which is the §158 hazard for
+the fourth time.
+
+§9.3's mistake was censusing a corpus, so the kinds come from enumerating the **writers** --
+`type_handler.cpp:651` and `list_access.cpp:4120` both tag `char_type()`, i.e. signedbv, and
+`convert_float_literal.cpp:26/31/36` tag `float_type()`, `long_double_type()` and `double_type()`, i.e.
+floatbv. Two qualifications the first draft of this section got wrong:
+
+- **unsignedbv is not carried for a Python writer.** `char_type()` is unsignedbv when
+  `config.ansi_c.char_is_unsigned` (`c_types.cpp:190`), so the arm exists for platform symmetry, and it
+  is the arm `goto2c/expr2c.cpp:174` reads. The `unsigned_long` spellings §9.3 counted come from
+  `clang_c_convert.cpp:1549`, in the **C** frontend; nothing in `src/python-frontend/` writes that
+  spelling.
+- **The enumeration is of Python's writers, not the tree's.** `clang_c_convert.cpp:1503-1607` tags
+  every clang builtin, and around fifteen Solidity sites tag theirs, so `bool_type2t` and
+  `empty_type2t` also receive spellings and **still drop them**. That is left alone deliberately:
+  `cpp_expr2string` handles neither string, `goto2c` reads only the bitvector kinds, and
+  `id2string(bool_typet().id())` already equals `"bool"` so the exception-id fallback coincides. It is
+  not a claim that no other kind is ever spelled.
+
+The field is **unreflected**, like `argument_base_names` (§44), `member_base_names` (§46), `cformat`
+(§69) and `constant_qualified` before it: a spelling is no part of a type's identity, so two bitvectors
+of a width stay the same type however they were spelled, and the unit test asserts that on `==` and
+`crc()` both.
+
+Why each arm is carried differs, and only one of the three answers is "a Python consumer reads it":
+
+```
+signedbv    is_char_type (type_utils.h:207) -- the only Python reader of the spelling
+unsignedbv  the same reader under char_is_unsigned, plus goto2c/expr2c.cpp:174
+floatbv     no Python reader at all: is_char_type tests the bitvector kinds only,
+            get_python_type_category branches on is_floatbv() rather than the
+            spelling, and python printing goes through c_expr2string, which never
+            reads it. Carried for cpp_expr2string.cpp:166 and the exception-id
+            path, and pinned by the unit round-trip rather than end-to-end.
+```
+
+That last row matters for what a future regression would catch: dropping **only** the floatbv carry
+fails the unit test and nothing else.
+
+A third reader the first draft missed, and it is not a printer:
+`clang_cpp_exception_id.cpp:45` feeds throw/catch id matching, and
+`clang_cpp_adjust_irep2.cpp:147`/`:161` call it on `migrate_type_back` output -- so it sits directly in
+this change's blast radius. `esbmc-cpp/try_catch` is 172/172, which discharges it empirically.
+`python_adjust.cpp:1051`'s comment claimed the attribute never survives migration and that Python types
+never carry it; both halves were false after this change and are corrected there.
+
+### 10.2 The evidence, which §9's attempt did not have
+
+```
+base -- no carry, no writes                     VERIFICATION SUCCESSFUL
+the eleven writes, no carry                     VERIFICATION FAILED      (§9)
+the eleven writes, with the carry               VERIFICATION SUCCESSFUL
+with the carry mutated out of migrate_type      VERIFICATION FAILED
+```
+
+`regression/python/github_4715_cpp_type_char{,_fail}` pins it, and both halves are gates. The
+SUCCESSFUL half fails with `assertion 0` when the forward carry is removed. The `_fail` half needed
+help to be one: `^VERIFICATION FAILED$` alone holds either way, so it also pins the *claim shape* --
+
+```
+assertion (signed int)((signed char)val) == (signed int)((signed char)({ 120, 0 }[0]))
+```
+
+-- which a dropped spelling collapses to `assertion 0`. That is the difference between a test that
+records the verdict and a test that records why.
+
+The seven CORE tests §9 named now pass: `casting14`, `enumerate8`, `for-loop3`, `for-loop6`,
+`for-loop8_fail`, `python_irep2_adjust_only_string_index`, `string-concat6`.
+
+Because the change is in `irep2_type.h` it is global, so the breadth matters, and each figure names a
+command a reader can run:
+
+```sh
+ctest -LE regression                      884/884   (883 before this change adds its own case)
+ctest -L esbmc-solidity                   526/526
+ctest -L esbmc-cpp/cpp                    1065, six failures already failing on master (§2726)
+ctest -R "regression/esbmc-cpp/try_catch" 172/172   the exception-id reader above
+ctest -R "irep2"                          238/238   190 of them in the core C suite
+```
+
+`fields_cover_class` accepts the new field on all three kinds -- but only just, and that is worth
+recording rather than celebrating. Measured: `sizeof` goes 48 -> 56 on the two bitvector kinds, leaving
+`derived - covered` at exactly the `alignof - 1` budget of 7. The `irep_idt` pushes `constant_qualified`
+into a fresh eight-byte slot and leaves four bytes of genuine trailing padding, so a further unreflected
+field would fit in the hole **without** tripping the guard -- verified by an A/B on two header trees:
+adding a spare `unsigned int` fails the static assert before this change and passes after it. No
+declaration order avoids it, since `width + cpp_type + bool` cannot fit in eight bytes. Each bv kind
+therefore now pins its own layout with a `static_assert`, so the next field has to come through that
+comment first. This is the second time the repo has been bitten around `fields_cover_class`.
+
+The eight bytes cost nothing measurable in time, which is worth having checked rather than assumed for
+the most-constructed nodes in the tool. `ESBMC_REGRESS_TIMEOUT_MAX=45 ctest -L esbmc-solidity` reports
+one test over budget, `mul_cnt_ver_2`; standalone it takes **39.90 s with the carry against 39.99 s
+without**, so it is the known `-j4` contention artefact rather than a regression, and it passes
+uncapped.
+
+Python B-2* 54 -> 43; repo total 125 -> 114. (Three of the eleven went back to legacy; see §10.4.)
+
+### 10.3 What this does not settle
+
+§8.1 asked for something else: give IREP2 the distinction, on the ground that a Python character is not
+a spelling detail and `unsignedbv` of width 8 is the wrong model for it. This change does not do that.
+It carries the spelling, which unblocks the writes and pins the behaviour, and leaves the type-model
+question exactly where §8.1 put it. The carry is compatible with either answer -- if the distinction is
+later given its own kind, the field becomes redundant and can go -- but it should not be read as having
+decided the question.
+
+Two of `python_expr_builder.cpp`'s six hand-restorations (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`,
+each commented "migrate_type does not round-trip `#cpp_type`") are now redundant for these kinds and
+could be removed; that is a separate change with its own measurement, not a rider.
+
+### 10.4 Three of the eleven stay legacy (2026-09-18)
+
+§10.2's breadth check ran no Python suite -- neither `-L python` nor `-L numpy` / `-L humaneval`, which
+hold three of the failures below -- and CI did: sixteen Python tests regressed, most to
+a wrong verdict. Converting the eleven sites one at a time puts every failure on three of them, and none
+of the three is about `#cpp_type`:
+
+```
+tuple arm, set_type     migrate_type drops #python_aggregate, which `in` dispatches on
+                        tuple9{,_fail}, tuple17-nondet, tuple_str_membership,
+                        github_5936_type_is, humaneval_146, humaneval_78
+str/list arm, set_type  a dynamically-sized array cannot cross the seam
+                        numpy/view_descriptor_1d_symbolic_bound_edge
+trailing set_value      a class used as a value is a char-array constant_exprt with the name
+                        in `value` and no operands (converter_expr.cpp:1287 for a builtin
+                        type, :1727 for a class); migrate_expr makes it `{ }`, and
+                        isinstance folds on that
+                        github_3520_{3_fail,4,5,7_fail,8,9}, github_7549{,_fail}
+```
+
+The tuple arm and the trailing value write go back to legacy. The str/list arm keeps the IREP2 write and
+falls back only for a dynamically-sized array, through `python_expr::contains_dyn_array`, the guard the
+expression builders already use for this hazard. It has to stay converted because it is the arm
+`val = "hello"[0]` takes: with the carry mutated out of `migrate_type`, `github_4715_cpp_type_char{,_fail}`
+and the seven §9 tests fail, but with this arm legacy they pass either way and the pair gates nothing.
+
+`bars.py` counts each of the three as a legacy write, so Python B-2* is three higher than the eleven
+conversions alone would leave it: 51 against 48, measured on the current base rather than the one §10.2's
+43 came from. The two losses behind them, `#python_aggregate` on a struct type and
+a class object with no IREP2 shape, are separate questions from this carry.
+
+## 11. The funcdef cluster: two blockers, neither of them `#cpp_type` (2026-09-17)
+
+§3's table listed `converter_funcdef.cpp`'s writes as failing `class_var_param_augassign{,_fail}` with
+the cause "same shape, parameter and return types" -- i.e. `#cpp_type`. With §10's carry in, they still
+fail, so that attribution was wrong. Measured, and the two halves fail differently.
+
+### 11.1 Split by half, because the whole tells you nothing
+
+`get_function_definition` (`:2055-2548`) holds eight of the file's twelve writes: seven
+`added_symbol->set_type(type)` over the function's own `code_typet`, and one
+`added_symbol->set_value(function_body)`.
+
+```
+both halves converted        SIGSEGV
+the body write alone         SIGSEGV
+the seven type writes alone  VERIFICATION FAILED -- "assertion count == 5"
+base                         both tests pass
+```
+
+Converting all eight and seeing one failure would have suggested one cause. They are two.
+
+### 11.2 The body write must not be converted, and §8.2 says so
+
+The crash is in `std::construct_at<irep_idt>` under `process_goto_program`, i.e. a consumer copying
+names out of the symbol after conversion. The reason is already in this document: §6 is titled *a body
+cannot be migrated before its symbols exist*, and §8.2 is explicit --
+
+> The program-entry body writes (§6) are correct as they are: `set_value(const exprt &)` defers
+> migration until the symbol table is complete, which is exactly what a body needs. Converting them is
+> not blocked work, it is work that must not be done.
+
+`:2539` is one of those writes. The B-2 bar counts it as residue because it counts the argument's
+spelling, and that is the bar being wrong rather than the code. It should be struck from the residue
+rather than left looking like debt -- the same correction §8.2 already made for two writes and this one
+escaped.
+
+### 11.3 The type writes are a real blocker, and not this attribute
+
+The seven type writes produce a wrong verdict, not a crash: `class_var_param_augassign` asserts
+`count == 5` after an augmented assignment to a class variable through a `Class*` parameter, and with
+the function's `code_typet` stored IREP2-side that assertion fails. So a `code_typet` round trip loses
+something this path needs, and it is not `#cpp_type` -- that is carried now, and the failure is
+unchanged.
+
+What it is remains open. Candidates, in the order worth testing: an argument's `#default_value`, which
+`code_type2t` has no field for and which `python_adjust.cpp:86-90` already documents as lost; the
+parameter's `symbol_typet` subtype resolution, since the failing shape is specifically a pointer to a
+class; and `#identifier`/`#base_name` on the arguments, which §44's carry covers but only for types
+built by `migrate_type`. Each is a one-build experiment against a named oracle, which is the cheap
+shape -- unlike §9, no corpus is needed, because the test that discriminates is already in the tree.
+
+### 11.4 Standing
+
+Python B-2* stays where §10.4 leaves it. The funcdef cluster is not ten writes blocked on one attribute,
+as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
+loss, and the next step is the three experiments above rather than another conversion attempt.
+So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
