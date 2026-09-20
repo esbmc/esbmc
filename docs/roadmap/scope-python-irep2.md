@@ -803,8 +803,11 @@ it; it was simply the one reached for first.
 
 ### 11.4 Standing
 
-Python B-2* 43 -> 37; repo total 114 -> 108, measured with `python3 scripts/irep2/bars.py`, and
-`ctest -R regression/python/class_var_param_augassign` 2/2.
+Python B-2* 51 -> 46; repo total 121 -> 114, measured with `python3 scripts/irep2/bars.py` against master
+`1b1ff7a15e` (2026-09-20), and `ctest -R regression/python/class_var_param_augassign` 2/2. The python move
+is five, not six: the six converted sites leave the count and `set_function_type`'s legacy fallback arm
+enters it, which `--list` shows at both ends. The other two of the seven are solidity, from the
+builtin-body changes this branch also carries.
 
 The pair pins the **reader fix**, not the conversion: both halves fail without it. Nothing fails if the
 six writes are reverted, so the bar move is the only evidence for that half -- inherent to a migration
@@ -819,7 +822,7 @@ test in the suite reaches and whose guard re-runs the same
 than a conversion. Converting an unexercised line is how `:2539`'s SIGSEGV was found.
 
 On the body write, "B-2 should stop counting it" is an ask on `scripts/irep2/bars.py`, which still counts
-it -- the 36/107 figures above include it. Recorded as a proposal, not as an applied exclusion; until the
+it -- the 46/114 figures above include it. Recorded as a proposal, not as an applied exclusion; until the
 script implements §8.2's category the next survey re-adds the write as debt.
 
 That makes it the sixth marker found not to survive the seam, and the second where the plain key and the
