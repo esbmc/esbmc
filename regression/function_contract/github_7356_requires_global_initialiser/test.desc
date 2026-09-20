@@ -1,0 +1,6 @@
+CORE
+main.c
+--enforce-contract w --function w --multi-property
+^VERIFICATION FAILED$
+^ +FAILED.*assigns compliance: c:@y not in assigns clause$
+^ +FAILED.*contract ensures$

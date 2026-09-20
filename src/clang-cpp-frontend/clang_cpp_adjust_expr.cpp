@@ -64,7 +64,12 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   adjust_assign(copy_ctor_assign);
   ctor_body.operands().push_back(copy_ctor_assign);
 
-  symbol.set_value(std::move(value));
+  // Resolvable only because clang_c_adjust::adjust() points
+  // migrate_namespace_lookup at the context being adjusted; without that both
+  // operands collapse onto one name (§52).
+  expr2tc value2;
+  migrate_expr(value, value2);
+  symbol.set_value(value2);
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
@@ -76,7 +81,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
   if (symbol.get_type().is_code())
   {
     typet t = symbol.get_type();
-    finalize_exception_specification(t);
+    ::finalize_exception_specification(ns, t);
     symbol.set_type(std::move(t));
   }
 

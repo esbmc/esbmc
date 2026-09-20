@@ -32,7 +32,9 @@ exprt destructor_binding(
       continue;
 
     for (const auto &entry : to_struct_type(candidate).components())
-      if (entry.get("virtual_name") == dtor.get("virtual_name"))
+      // A vtable entry's `pretty_name` is its `virtual_name`
+      // (add_vtable_type_entry); the class-side component still spells it out.
+      if (entry.pretty_name() == dtor.get("virtual_name"))
       {
         vptr = &comp;
         slot = &entry;

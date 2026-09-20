@@ -235,6 +235,8 @@ symbolt python_lambda::create_symbol(
   symbolt symbol;
   symbol.id = id;
   symbol.name = name;
+  // Left legacy: migrate_type drops #cpp_type, and the python type checker
+  // reads it -- a bool default otherwise lowers as double (#4715).
   symbol.set_type(type);
   symbol.location = location;
   symbol.mode = "Python";
@@ -760,7 +762,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
         {
           typet t = added_symbol->get_type();
           to_code_type(t).return_type() = actual_ret;
-          added_symbol->set_type(std::move(t));
+          added_symbol->set_type(migrate_type(t));
         }
       }
     }
@@ -796,7 +798,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
       lambda_body = closure_body;
     }
 
-    added_symbol->set_value(lambda_body);
+    added_symbol->set_value(migrate_expr(lambda_body));
   }
 
   // Restore context only if we changed it (top-level lambda only)

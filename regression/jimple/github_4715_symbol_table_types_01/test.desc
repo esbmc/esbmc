@@ -1,0 +1,12 @@
+CORE
+main.jimple
+--irep2-bodies --force-malloc-success --symbol-table-only
+^Symbol\.+: tag-OriginalKt\n(?:.*\n){3}Type\.+:  OriginalKt \{ signed int tag-x; \}$
+^Symbol\.+: OriginalKt:bump_2\n(?:.*\n){3}Type\.+: signed int \(signed int, signed int\)$
+^Symbol\.+: OriginalKt:bump_2@@this\n(?:.*\n){3}Type\.+: signed int$
+^Symbol\.+: OriginalKt:bump_2@@parameter0\n(?:.*\n){3}Type\.+: signed int$
+^Symbol\.+: OriginalKt:bump_2@\$i0\n(?:.*\n){3}Type\.+: signed int$
+^Symbol\.+: OriginalKt:main_0@\$r0\n(?:.*\n){3}Type\.+: signed int \*$
+^Symbol\.+: OriginalKt:main_0@return_value\$tmp\$0\n(?:.*\n){3}Type\.+: signed int \* \*$
+^Symbol\.+: malloc\n(?:.*\n){3}Type\.+: void \* \(unsigned int\)$
+^Symbol\.+: __ESBMC_get_object_size\n(?:.*\n){3}Type\.+: unsigned int \(void \*\)$

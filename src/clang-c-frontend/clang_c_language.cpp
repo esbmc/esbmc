@@ -323,6 +323,13 @@ write_witness_tmp(const std::string &content)
   return tmp;
 }
 
+// Clang returns no unit, rather than one with errors, when it cannot set up the
+// compilation (e.g. an unknown target triple); its diagnostic is already out.
+static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
+{
+  return !unit || unit->getDiagnostics().hasErrorOccurred();
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -405,8 +412,7 @@ bool clang_c_languaget::parse(const std::string &path)
   // Generate ASTUnit and add to our vector
   auto newAST = buildASTs(intrinsics, new_compiler_args);
 
-  // Use diagnostics to find errors, rather than the return code.
-  if (newAST->getDiagnostics().hasErrorOccurred())
+  if (ast_failed(newAST))
     return true;
 
   if (!AST)
@@ -475,10 +481,14 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
       return true;
   }
 
-  // Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only,
-  // so flag-on and flag-off are byte-identical by construction; what the flag
-  // buys is migrating every value in the corpus through get_value2(), which
-  // aborts on a construct migrate_expr cannot represent.
+  // Phase 6 C.3. Two modes, and only the second is read-only:
+  // --clang-c-irep2-adjust-only skipped the legacy pass above, so this walk
+  // *is* the adjust pass and writes back every value it changes -- which is why
+  // the divergence count under that flag is the phase's metric, not a
+  // tautology.
+  // --clang-c-irep2-adjust runs both, with set_irep2_owns_arms() ceding the
+  // ported arms, and there the walk only migrates every value through
+  // get_value2(), which aborts on a construct migrate_expr cannot represent.
   if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
   {
     clang_c_adjust_irep2 irep2_adjuster(

@@ -173,7 +173,6 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
       /* Raw pointer: FileManager * up to clang 21, IntrusiveRefCntPtr in 22,
        * which converts implicitly and retains. */
       Files.get()));
-  assert(unit);
 
   return unit;
 }

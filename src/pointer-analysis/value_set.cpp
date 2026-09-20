@@ -673,8 +673,10 @@ void value_sett::get_value_set_rec(
     const index2t &idx = to_index2t(expr);
 
 #ifndef NDEBUG
+    /* A vector is indexed like an array and its elements sit at the same
+     * offsets, so both are sources here (#7907). */
     const type2tc &source_type = idx.source_value->type;
-    assert(is_array_type(source_type));
+    assert(is_array_or_vector_type(source_type));
 #endif
 
     // Attach '[]' to the suffix, identifying the variable tracking all the
@@ -1207,7 +1209,9 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // the source value, and store a reference to all those things.
     const index2t &index = to_index2t(expr);
 
-    assert(is_array_type(index.source_value));
+    /* Vectors index like arrays; assign_rec below already admits both (#7907).
+     */
+    assert(is_array_or_vector_type(index.source_value));
 
     // Compute the offset introduced by this index.
     BigInt index_offset;
@@ -1538,6 +1542,10 @@ void value_sett::assign_struct_union(
     else
     {
       expr2tc rhs_member = make_member(rhs, name);
+      // make_member declines when the component does not resolve in the
+      // source's type; the may-points-to set widens rather than aborts.
+      if (is_nil_expr(rhs_member))
+        rhs_member = unknown2tc(subtype);
 
       // XXX -- shouldn't this be one level of indentation up?
       assign(lhs_member, rhs_member, add_to_sets);
@@ -1974,9 +1982,16 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
 
   if (is_constant_struct2t(src))
   {
-    unsigned no =
-      struct_union_get_component_number(type, component_name).value();
-    return to_constant_struct2t(src).datatype_members[no];
+    // A literal shorter than its own type, or a component the type does not
+    // describe, is not this analysis's to guess at: report "cannot tell" and
+    // let the caller widen to unknown. `.value()` here threw
+    // bad_optional_access instead (docs/roadmap/scope-clang-cpp-irep2.md §7.4).
+    const std::optional<unsigned int> no =
+      struct_union_get_component_number(type, component_name);
+    const constant_struct2t &lit = to_constant_struct2t(src);
+    if (!no.has_value() || *no >= lit.datatype_members.size())
+      return expr2tc();
+    return lit.datatype_members[*no];
   }
   if (is_constant_union2t(src))
   {
@@ -2008,8 +2023,12 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = struct_union_get_component_number(type, component_name).value();
-  const type2tc &subtype = members[no];
+  const std::optional<unsigned int> no =
+    struct_union_get_component_number(type, component_name);
+  if (!no.has_value())
+    return expr2tc();
+
+  const type2tc &subtype = members[*no];
   expr2tc memb = member2tc(subtype, src, component_name);
   return memb;
 }

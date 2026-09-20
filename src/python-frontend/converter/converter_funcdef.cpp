@@ -391,7 +391,7 @@ symbolt python_converter::create_return_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid.to_string();
   temp_symbol.name = temp_sid.to_string();
-  temp_symbol.set_type(return_type);
+  temp_symbol.set_type(migrate_type(return_type));
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;
@@ -1007,6 +1007,27 @@ static bool param_is_list_like_in_body(
   return false;
 }
 
+// The pre-decay shape of a 2-D+ numpy array parameter, or nullopt for a
+// non-numpy or rank <2 one. register_function_argument's own row-pointer
+// decay (further down) keeps only the row shape, so this is captured ahead
+// of that decay and recorded into numpy_param_shapes_ once the parameter's
+// id is known. Split out to keep register_function_argument's own decision
+// count down.
+static std::optional<std::vector<std::size_t>> numpy_param_full_shape_of(
+  bool numpy_array_param,
+  const typet &arg_type,
+  const type_handler &type_handler)
+{
+  if (!numpy_array_param || !arg_type.is_array())
+    return std::nullopt;
+
+  std::vector<int> dims = type_handler.get_array_type_shape(arg_type);
+  if (dims.size() < 2)
+    return std::nullopt;
+
+  return std::vector<std::size_t>(dims.begin(), dims.end());
+}
+
 // True for a `np.array([...])` call node with a literal list argument whose
 // shape `type_handler::get_typet` can already resolve.
 static bool is_numpy_array_literal_call(const nlohmann::json &node)
@@ -1023,6 +1044,83 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
 
   return node.contains("args") && node["args"].is_array() &&
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
+}
+
+// Recursively collects every `Return` statement reachable in `body` without
+// crossing into a nested function scope (FunctionDef/AsyncFunctionDef/
+// Lambda) -- a return inside an if/try/for still belongs to the enclosing
+// function, but one inside a nested def does not.
+static void collect_reachable_returns(
+  const nlohmann::json &body,
+  std::vector<const nlohmann::json *> &out)
+{
+  if (!body.is_array())
+    return;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string type = stmt.value("_type", "");
+    if (type == "Return")
+    {
+      out.push_back(&stmt);
+      continue;
+    }
+    if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda")
+      continue;
+
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key))
+        collect_reachable_returns(stmt[key], out);
+
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        if (handler.contains("body"))
+          collect_reachable_returns(handler["body"], out);
+  }
+}
+
+// `np.array(...)` returned by a user function on every reachable path:
+// recognizes `def make(): return np.array([...])` at a call site like
+// `process(make())`, the same shape try_infer_numpy_param_type already
+// resolves for a literal or forwarded-parameter argument. Every Return
+// reachable without crossing a nested function scope must return a supported
+// array literal of the *same* shape; a branching function with divergent or
+// unsupported shapes, or no return at all, is declined rather than guessing.
+static bool numpy_array_literal_return(
+  const nlohmann::json &func_def,
+  nlohmann::json &out_literal_call,
+  const type_handler &type_handler)
+{
+  std::vector<const nlohmann::json *> returns;
+  collect_reachable_returns(func_def["body"], returns);
+  if (returns.empty())
+    return false;
+
+  std::optional<typet> shape_type;
+  const nlohmann::json *first_call = nullptr;
+  for (const nlohmann::json *ret : returns)
+  {
+    if (
+      !ret->contains("value") || !is_numpy_array_literal_call((*ret)["value"]))
+      return false; // a reachable return without a fixed-shape literal:
+                    // declined
+
+    const nlohmann::json &call = (*ret)["value"];
+    typet this_type = type_handler.get_typet(call["args"][0]);
+    if (!shape_type)
+    {
+      shape_type = this_type;
+      first_call = &call;
+    }
+    else if (*shape_type != this_type)
+      return false; // divergent shapes across returns: declined
+  }
+
+  out_literal_call = *first_call;
+  return true;
 }
 
 // One `Call` node together with the name of the function whose body it
@@ -1284,6 +1382,32 @@ bool python_converter::infer_list_elem_type_from_call_sites(
   return found;
 }
 
+std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body) const
+{
+  if (is_numpy_array_literal_call(arg))
+    return type_handler_.get_typet(arg["args"][0]);
+
+  if (arg.value("_type", "") != "Call")
+    return std::nullopt;
+
+  const nlohmann::json &callee_func =
+    arg.value("func", nlohmann::json::object());
+  if (callee_func.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const nlohmann::json *callee_def =
+    find_function_def(module_body, callee_func.value("id", ""));
+  nlohmann::json literal_call;
+  if (
+    callee_def == nullptr ||
+    !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
+    return std::nullopt;
+
+  return type_handler_.get_typet(literal_call["args"][0]);
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -1327,9 +1451,11 @@ bool python_converter::try_infer_numpy_param_type(
 
     const nlohmann::json &arg = call["args"][param_index];
 
-    if (is_numpy_array_literal_call(arg))
+    if (
+      std::optional<typet> inferred_from_call =
+        try_infer_numpy_array_arg_type(arg, module_body))
     {
-      record(type_handler_.get_typet(arg["args"][0]));
+      record(*inferred_from_call);
       continue;
     }
 
@@ -1396,6 +1522,170 @@ bool python_converter::try_infer_numpy_param_type(
   return false;
 }
 
+/// A `Callable` annotation with no `[[A], R]` signature, spelled either bare or
+/// through `typing`. A subscripted one carries its return type and is usable.
+static bool is_bare_callable_annotation(const nlohmann::json &ann)
+{
+  if (!ann.is_object())
+    return false;
+  const std::string kind = ann.value("_type", "");
+  if (kind == "Name")
+    return ann.value("id", "") == "Callable";
+  if (kind == "Attribute")
+    return ann.value("attr", "") == "Callable";
+  return false;
+}
+
+/// Whether the parameter takes the Any (void*) default: no annotation at all,
+/// or a bare `Callable`, which is worse than none.
+static bool parameter_defaults_to_any(const nlohmann::json &element)
+{
+  if (!element.contains("annotation") || element["annotation"].is_null())
+    return true;
+  return is_bare_callable_annotation(element["annotation"]);
+}
+
+void python_converter::track_numpy_param(
+  const std::string &arg_id,
+  const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+  bool numpy_array_param)
+{
+  if (numpy_param_full_shape)
+    numpy_param_shapes_[arg_id] = *numpy_param_full_shape;
+
+  // classify_numpy_method_call()'s dispatch_rewrite_methods (sort/transpose/
+  // sum/.../.T, .../) only rewrites `a.<method>(...)` into the free-function
+  // np.<method>(a, ...) shape for a receiver method_base_is_tracked_numpy_array
+  // already recognises -- populated elsewhere for a local `np.array(...)`
+  // variable's own symbol id, never for a parameter. Without this, a numpy
+  // array parameter's method call falls through to the generic function-call
+  // dispatch instead, which resolves "transpose" (etc.) as an unrelated
+  // same-named symbol and raises a spurious "missing required positional
+  // argument" TypeError.
+  if (numpy_array_param)
+    numpy_array_symbols_.insert(arg_id);
+}
+
+// True if 'param_name' is referenced anywhere within 'node'.
+static bool
+references_name(const nlohmann::json &node, const std::string &param_name)
+{
+  if (node.is_object())
+  {
+    if (
+      node.value("_type", std::string()) == "Name" &&
+      node.value("id", std::string()) == param_name)
+      return true;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (references_name(it.value(), param_name))
+        return true;
+  }
+  else if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (references_name(elem, param_name))
+        return true;
+  }
+  return false;
+}
+
+// Safe only as a `Compare` (always bool); anything else, e.g. `v + v`, may
+// itself evaluate to a tagged value the fixed return type can't hold.
+static bool return_value_safe_for_tagged_param(
+  const nlohmann::json &value,
+  const std::string &param_name)
+{
+  return !references_name(value, param_name) ||
+         value.value("_type", std::string()) == "Compare";
+}
+
+// True if some `return` statement anywhere in 'body' would be unsafe once
+// 'param_name' becomes a tagged parameter.
+static bool any_return_unsafe_for_tagged_param(
+  const nlohmann::json &body,
+  const std::string &param_name)
+{
+  if (!body.is_array())
+    return false;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+    if (
+      stmt.value("_type", std::string()) == "Return" &&
+      stmt.contains("value") && !stmt["value"].is_null() &&
+      !return_value_safe_for_tagged_param(stmt["value"], param_name))
+      return true;
+    for (const char *key : {"body", "orelse"})
+      if (
+        stmt.contains(key) &&
+        any_return_unsafe_for_tagged_param(stmt[key], param_name))
+        return true;
+  }
+  return false;
+}
+
+bool python_converter::try_infer_dynamic_param_type(
+  const std::string &func_name,
+  const std::string &param_name,
+  size_t param_index) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+
+  // Refuse when tagging this param could leak into an already-fixed
+  // return type (e.g. `return v + v`).
+  const nlohmann::json *func_def = find_function_def(module_body, func_name);
+  if (
+    func_def != nullptr && func_def->contains("body") &&
+    any_return_unsafe_for_tagged_param((*func_def)["body"], param_name))
+    return false;
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  auto scope_body_for =
+    [&](const numpy_param_call_site &site) -> const nlohmann::json * {
+    if (site.enclosing_function.empty())
+      return &module_body;
+    const nlohmann::json *enclosing_def =
+      find_function_def(module_body, site.enclosing_function);
+    return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
+  };
+
+  auto diverges_at_site =
+    [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
+      if (value_node.value("_type", "") != "Name")
+        return false;
+      const nlohmann::json *scope_body = scope_body_for(site);
+      return scope_body != nullptr &&
+             dynamic_type_handler_.scope_assigns_divergent_literal_types(
+               value_node.value("id", ""), *scope_body);
+    };
+
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("_type", "") !=
+        "Name" ||
+      call["func"].value("id", "") != func_name)
+      continue;
+
+    if (
+      call.contains("args") && call["args"].size() > param_index &&
+      diverges_at_site(call["args"][param_index], site))
+      return true;
+
+    if (call.contains("keywords") && call["keywords"].is_array())
+      for (const auto &kw : call["keywords"])
+        if (
+          kw.value("arg", "") == param_name && kw.contains("value") &&
+          diverges_at_site(kw["value"], site))
+          return true;
+  }
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -1414,10 +1704,12 @@ size_t python_converter::register_function_argument(
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
   else
   {
-    if (!element.contains("annotation") || element["annotation"].is_null())
+    if (parameter_defaults_to_any(element))
     {
       // Python does not require type annotations; treat unannotated parameters
-      // as Any (void*) to follow Python semantics.
+      // as Any (void*) to follow Python semantics. A bare `Callable` resolves
+      // to a pointer whose code type returns void, so a call through the
+      // parameter would carry no value -- Any is the better default (#7672).
       arg_type = any_type();
     }
     else
@@ -1449,6 +1741,16 @@ size_t python_converter::register_function_argument(
     }
   }
 
+  // Same idea, but for a parameter fed a dynamically-typed local variable.
+  if (
+    !numpy_array_param && arg_name != "self" && arg_name != "cls" &&
+    arg_type == any_type() &&
+    try_infer_dynamic_param_type(
+      id.get_function(), arg_name, type.arguments().size()))
+  {
+    arg_type = type_handler_.get_tagged_object_type();
+  }
+
   // Arrays are converted to pointers so that the backend receives the same
   // representation regardless of how the parameter is declared: normally
   // pointer-to-element (or pointer-to-row for a 2-D array), matching C decay.
@@ -1463,6 +1765,9 @@ size_t python_converter::register_function_argument(
   // since a bare-variable subscript of it (e.g. `s[i]` in a loop) is a
   // completely unrelated, extremely common pattern that must not be
   // mistaken for numpy mask indexing.
+  std::optional<std::vector<std::size_t>> numpy_param_full_shape =
+    numpy_param_full_shape_of(numpy_array_param, arg_type, type_handler_);
+
   if (arg_type.is_array())
   {
     bool used_in_variable_index_subscript = false;
@@ -1502,6 +1807,8 @@ size_t python_converter::register_function_argument(
   arg.identifier(arg_id);
   arg.location() = get_location_from_decl(element);
 
+  track_numpy_param(arg_id, numpy_param_full_shape, numpy_array_param);
+
   type.arguments().push_back(arg);
   size_t inserted_index = type.arguments().size() - 1;
 
@@ -1533,7 +1840,9 @@ size_t python_converter::register_function_argument(
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
   // this parameter.
-  if (arg_name != "self" && arg_name != "cls")
+  if (
+    arg_name != "self" && arg_name != "cls" &&
+    !type_handler_.is_tagged_scalar_type(arg_type))
   {
     typet base_type = arg_type.is_pointer() ? arg_type.subtype() : arg_type;
     if (base_type.id() == "symbol")
