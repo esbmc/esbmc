@@ -1122,22 +1122,6 @@ enum target_flags
   flag_is_dyn_offs = 0x100,
 };
 
-/* A vector has an array's layout, and index2t reads both (#7907). */
-static int src_flag(const expr2tc &value)
-{
-  if (is_struct_type(value))
-    return flag_src_struct;
-  if (is_union_type(value))
-    return flag_src_union;
-  if (is_scalar_type(value))
-    return flag_src_scalar;
-  if (is_array_or_vector_type(value))
-    return flag_src_array;
-
-  log_error("Unrecognized src type during dereference\n{}", *value->type);
-  abort();
-}
-
 /*
  * Legend:
  * - src = value
@@ -1197,6 +1181,41 @@ static int src_flag(const expr2tc &value)
  *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  */
 
+/// Which row of build_reference_rec's table the destination type selects.
+static int dst_flag_of(const type2tc &type)
+{
+  if (is_struct_type(type))
+    return flag_dst_struct;
+  if (is_union_type(type))
+    return flag_dst_union;
+  if (is_scalar_type(type))
+    return flag_dst_scalar;
+  if (is_array_type(type))
+  {
+    log_error(
+      "Can't construct rvalue reference to array type during dereference\n"
+      "(It isn't allowed by C anyway)\n");
+    abort();
+  }
+  log_error("Unrecognized dest type during dereference\n{}", *type);
+  abort();
+}
+
+/// Which column the source value selects.
+static int src_flag_of(const expr2tc &value)
+{
+  if (is_struct_type(value))
+    return flag_src_struct;
+  if (is_union_type(value))
+    return flag_src_union;
+  if (is_scalar_type(value))
+    return flag_src_scalar;
+  if (is_array_or_vector_type(value))
+    return flag_src_array;
+  log_error("Unrecognized src type during dereference\n{}", *value->type);
+  abort();
+}
+
 void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
@@ -1232,32 +1251,17 @@ void dereferencet::build_reference_rec(
     return;
   }
 
+  /* A vector destination is a value, not an array of lanes to be indexed:
+   * construct_vector_ref answers it whole or lane by lane, so it needs no row
+   * in the table below (#7907). */
   if (is_vector_type(type))
   {
     construct_vector_ref(value, offset, type, guard, mode, alignment);
     return;
   }
 
-  if (is_struct_type(type))
-    flags |= flag_dst_struct;
-  else if (is_union_type(type))
-    flags |= flag_dst_union;
-  else if (is_scalar_type(type))
-    flags |= flag_dst_scalar;
-  else if (is_array_type(type))
-  {
-    log_error(
-      "Can't construct rvalue reference to array type during dereference\n"
-      "(It isn't allowed by C anyway)\n");
-    abort();
-  }
-  else
-  {
-    log_error("Unrecognized dest type during dereference\n{}", *type);
-    abort();
-  }
-
-  flags |= src_flag(value);
+  flags |= dst_flag_of(type);
+  flags |= src_flag_of(value);
 
   // Consider the myriad of reference construction cases here
   switch (flags)
@@ -1429,7 +1433,6 @@ void dereferencet::construct_from_array(
   assert(is_array_or_vector_type(value));
 
   type2tc arr_subtype = array_or_vector_subtype(value->type);
-  const expr2tc arr_size = array_or_vector_size(value->type);
 
   if (is_array_or_vector_type(arr_subtype))
   {
@@ -1521,6 +1524,7 @@ void dereferencet::construct_from_array(
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
+    const expr2tc &arr_size = array_or_vector_size(value->type);
     if (arr_size && arr_size->type != div->type)
       div = typecast2tc(arr_size->type, div);
     value = index2tc(arr_subtype, value, div);

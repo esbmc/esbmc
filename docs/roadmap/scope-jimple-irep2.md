@@ -2163,6 +2163,159 @@ overrides the replacement. So the criterion is:
 That is checkable without running anything, it is what the table above applies, and it
 would have prevented all three over-deletions. B-1 is 124: the true figure once the three
 restorations are counted, against the 110 §42 claimed.
+
+## 45. The legacy expression tree retired (2026-09-15)
+
+§44.2's criterion -- an arm may be deleted only if its class declares the native
+replacement -- applied to what was left. Five arms qualify and are deleted:
+`jimple_assignment`, `jimple_constant`, `jimple_symbol`, `jimple_expr_invoke` and
+`jimple_virtual_invoke`. 227 lines, 29 of 29 jimple and 876 of 876 unit tests, B-1
+124 -> **103**.
+
+The deletion is safe by inspection rather than by the suite: every direct `to_exprt` call
+on an expression was inside one of those five arms, so they formed a closed cycle that the
+`to_code2t`/`to_expr2t` conversions had already routed around. Re-auditing afterwards, the
+only expression class still declaring a legacy arm is the base `jimple_expr` itself, whose
+arm is the default the whole scheme hangs off.
+
+### 45.1 What remains, and it is exactly two things
+
+| class | why it still has a legacy arm |
+|---|---|
+| `jimple_identity` | no native `to_code2t`; restored in §44.1 |
+| `jimple_assertion` | no native `to_code2t`; restored in §44.1 |
+
+Both need converting before their arms can go, and neither is exercised by any test --
+`regression/jimple` asserts through the `If`/`AssertionError` idiom rather than the
+`Assertion` object, and nothing in the corpus emits `Identity`. So the next slice is a test
+first, as §43.2 was for the virtual invoke, and only then the conversion. Converting them
+blind is how §40.3's deletions passed while breaking both.
+
+Jimple's B-1 over this run: **190 -> 103**, of which 87 is deleted dead code and three
+restorations are the correction for measuring reachability where reachability was not the
+question.
+
+## 46. `jimple_assertion` is parse-only, and the audit has to include `unit/` (2026-09-15)
+
+§45.1 named `jimple_identity` and `jimple_assertion` as the two classes still needing a
+native arm. One of them does not need one at all.
+
+There is no `statement::Assertion` enumerator (`jimple_method_body.h:108-122`) and no
+`"Assertion"` entry in the JSON dispatcher's `from_map`, so the body walk can never build a
+`jimple_assertion`. Its `to_exprt` has no production path, and §44.1's restoration of it was
+unnecessary -- harmless, but it was restoring something unreachable. The arm is deleted
+again, this time with the reason; the class stays. B-1 103 -> **97**.
+
+### 46.1 How that was nearly got wrong, again
+
+The first attempt deleted the whole class. The build failed:
+
+```
+unit/jimple-frontend/jimple_ast.test.cpp:165: 'jimple_assertion' was not declared
+```
+
+`unit/` constructs one and tests its `from_json`. So the class is live, only its lowering is
+not -- and §44.2's criterion, applied to `src/` alone, would have missed that. The criterion
+needs its scope stated:
+
+> an arm may be deleted only if its class declares the native replacement, and a class only
+> if nothing in `src/` **or `unit/`** names it.
+
+The compiler enforces the second half for free, which is why this attempt cost a build
+rather than a regression.
+
+### 46.2 `jimple_identity` is the last one, and its arm looks broken
+
+`Identity` *is* in the enum and the dispatcher, so that class is reachable and its arm has to
+stay until it is converted. Reading it first, though:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare jimple local (`$i0`), not a qualified symbol id, and every other
+lookup in this frontend goes through `get_symbol_name(class, function, name)`. So the arm
+dereferences the result of a lookup that looks certain to miss. No test builds an `Identity`
+statement, so nothing has exercised it either way.
+
+That makes the next slice a probe rather than a conversion: author a jimple input with an
+`Identity` statement and find out whether the existing arm works at all. Converting it first
+would port a defect into IREP2 and call it a migration.
+
+## 47. The identity statement crashes, and that is why it could not be converted (2026-09-15)
+
+§46.2 suspected `jimple_identity::to_exprt` was broken and said to probe before converting.
+Probing it took two attempts and both were informative.
+
+The first used `"object": "Identity"` and got `ERROR: Unknown type`. The dispatcher's
+`from_map` spells it **lowercase** -- `{"identity", statement::Identity}`
+(`jimple_method_body.h:129`) -- while `to_map`, which is only used for printing, spells it
+`"Identity"`. Reading the wrong one of the two is how the tag was got wrong.
+
+With `"object": "identity"`, a three-statement method -- declare `$i0`, identify it as
+`@parameter0`, return -- **SIGSEGVs during GOTO conversion**. The cause is the one §46.2
+read off the source:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare local (`$i0`); every other lookup in this frontend goes through
+`get_symbol_name(class, function, name)`. The lookup misses and the dereference is on null.
+
+### 47.1 Pinned, not fixed, and why
+
+`regression/jimple/github_4715_identity_crash_01` is the reproducer, as `KNOWNBUG`. It
+passes ctest, which in this repo means the bug is still live.
+
+It is not fixed here because the fix is not mechanical. The arm's right-hand side is a
+`symbolt` that is never added to the context:
+
+```cpp
+symbolt rhs;
+rhs.name = "@" + at_identifier;
+rhs.id = "@" + at_identifier;
+code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
+```
+
+so the statement was meant to assign from a symbol nothing declares. Since the arm has never
+run -- it crashes first -- there is no observed behaviour to preserve, and choosing what
+`$i0 = @parameter0` should lower to is a design decision about how this frontend binds
+parameters, not a migration step. Converting it would be inventing semantics and calling it
+IREP2.
+
+So jimple's B-1 stops at 97 with one legacy statement arm left, and that arm is blocked on a
+question about the frontend rather than about the migration.
+
+## 48. B-2's residue, and two more spelling false positives (2026-09-15)
+
+§39 recorded jimple's B-2 as met. `scripts/irep2/bars.py` reports 10 raw and 8 refined, so
+the two disagree, and taking the eight one at a time explains why.
+
+**Three convert**: `jimple_method.cpp:92` (a method's code type),
+`jimple-language.cpp:97` and `:193` (a post-processed symbol's type and `main`'s). 30 of 30
+jimple and 876 of 876 unit tests; B-2* 8 -> **5**.
+
+**Two were never debt**, and both are cases the script's own caveat names:
+
+- `jimple_ast.h:69` -- `create_jimple_symbolt` takes a `const type2tc &`, so
+  `symbol.set_type(t)` already writes IREP2. The grep matched the spelling `set_type(t)` and
+  the refinement could not tell, because the argument is a plain name.
+- `jimple_method.cpp:93` -- `set_value(body->to_code2t(...))` passes an `expr2tc` returned by
+  a method call, which is neither a `migrate_*` call nor a `*2tc` constructor.
+
+Wrapping the first in `migrate_type` does not compile, which is how it was caught. §58's
+`B-2*` is an upper bound for exactly this reason, and jimple is the frontend where the
+remaining count is small enough for the residue to matter: 5 of the 8 are real.
+
+**Three stay legacy, each for a reason already recorded**: `jimple_file.cpp:159` sets a
+`width` attribute on the class struct type immediately before writing it, and that attribute
+is read by this frontend's own `newarray` arms (§45.2 of the parent document);
+`jimple-language.cpp:108` and `:194` are body writes, which §6.1 of
+`scope-python-irep2.md` established must stay lazy until every symbol they name exists.
+
+So jimple's B-2 residue is 5 reported, 3 of which are by design and 2 of which are miscounts.
+That is what "met" in §39 meant, stated in numbers.
 ## 38. Every binop the frontend supports, and what a zero still hid
 
 §37.3 concluded that the expression `to_exprt` arms were callerless. They were

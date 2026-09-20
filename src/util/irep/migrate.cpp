@@ -217,14 +217,14 @@ static type2tc migrate_type0(const typet &type)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return signedbv_type2tc(iwidth);
+    return signedbv_type2tc(iwidth, type.cmt_constant(), type.cpp_type());
   }
 
   if (type.id() == typet::t_unsignedbv)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return unsignedbv_type2tc(iwidth);
+    return unsignedbv_type2tc(iwidth, type.cmt_constant(), type.cpp_type());
   }
 
   if (type.id() == "c_enum" || type.id() == "incomplete_c_enum")
@@ -364,7 +364,7 @@ static type2tc migrate_type0(const typet &type)
     unsigned int frac_bits = to_floatbv_type(type).get_f();
     unsigned int expo_bits = to_floatbv_type(type).get_e();
 
-    return floatbv_type2tc(frac_bits, expo_bits);
+    return floatbv_type2tc(frac_bits, expo_bits, type.cpp_type());
   }
 
   if (type.id() == typet::t_complex)
@@ -501,9 +501,11 @@ type2tc migrate_symbol_type(const symbolt &sym)
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 {
   // The IREP2 form is the source of truth on `symbolt`; get_value2() returns
-  // it directly (lazily populated if a legacy-side setter wrote last). Kept
-  // as a named chokepoint so the round-trip cross-check below runs on every
-  // real symbol value the pipeline reads.
+  // it directly (lazily populated if a legacy-side setter wrote last). Note
+  // this is NOT the chokepoint its type counterpart is: it has one caller
+  // (contracts.cpp), against 34 for migrate_symbol_type, because symbol values
+  // are read through get_value()/get_value2() directly. The cross-check below
+  // therefore covers one C contract path, not the pipeline at large.
   dest = sym.get_value2();
 #ifndef NDEBUG
   // Cross-check: assert the IREP2 value form is stable under the
@@ -1234,7 +1236,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    new_expr_ref = constant_int2tc(type, val);
+    new_expr_ref = constant_int2tc(type, val, expr.cformat());
     return;
   }
 
@@ -1244,7 +1246,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     uint64_t enumval = atoi(expr.value().as_string().c_str());
 
-    new_expr_ref = constant_int2tc(type, BigInt(enumval));
+    new_expr_ref = constant_int2tc(type, BigInt(enumval), expr.cformat());
     return;
   }
 
@@ -1285,7 +1287,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     ieee_floatt bv(to_constant_expr(expr));
 
-    new_expr_ref = constant_floatbv2tc(bv);
+    new_expr_ref = constant_floatbv2tc(bv, expr.cformat());
     return;
   }
 
@@ -3156,6 +3158,20 @@ typet migrate_type_back(const type2tc &ref)
   return result;
 }
 
+/// `#constant` and `#cpp_type` are comment fields: writing them when unset
+/// still inserts the key, which the printer then reads back as a qualifier or a
+/// spelling (§158).
+static void restore_type_comments(
+  typet &t,
+  bool constant_qualified,
+  const irep_idt &cpp_type)
+{
+  if (constant_qualified)
+    t.cmt_constant(true);
+  if (!cpp_type.empty())
+    t.cpp_type(cpp_type);
+}
+
 static typet migrate_type_back_uncached(const type2tc &ref)
 {
   switch (ref->type_id)
@@ -3271,13 +3287,17 @@ static typet migrate_type_back_uncached(const type2tc &ref)
   {
     const unsignedbv_type2t &ref2 = to_unsignedbv_type(ref);
 
-    return unsignedbv_typet(ref2.width);
+    unsignedbv_typet t(ref2.width);
+    restore_type_comments(t, ref2.constant_qualified, ref2.cpp_type);
+    return t;
   }
   case type2t::signedbv_id:
   {
     const signedbv_type2t &ref2 = to_signedbv_type(ref);
 
-    return signedbv_typet(ref2.width);
+    signedbv_typet t(ref2.width);
+    restore_type_comments(t, ref2.constant_qualified, ref2.cpp_type);
+    return t;
   }
   case type2t::fixedbv_id:
   {
@@ -3295,6 +3315,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     floatbv_typet thetype;
     thetype.set_f(ref2.fraction);
     thetype.set_width(ref2.get_width());
+    restore_type_comments(thetype, false, ref2.cpp_type);
     return thetype;
   }
   case type2t::complex_id:
@@ -3529,8 +3550,21 @@ static exprt back_sideeffect(const expr2tc &ref)
     size = migrate_expr_back(ref2.size);
   back_sideeffect_operands(ref2, theexpr);
 
-  theexpr.cmt_type(cmttype);
-  theexpr.cmt_size(size);
+  // Only when there is something to say. Writing these unconditionally gives a
+  // node that never had them a `#type: empty` and a `#size: nil`, which is
+  // invisible to irept::operator== -- comments are not compared -- but shows up
+  // in every printed symbol table and goto program (§155). Keyed off the source
+  // fields rather than off the locals: a default-constructed `typet` has an
+  // empty id, and `is_not_nil()` reports that as present, which is the same
+  // third state the `size` comment above warns about.
+  // Nil *and* empty: `side_effect_function_call2tc` stores `get_empty_type()`
+  // as the canonical alloctype because that is what round-trips (:533), but the
+  // legacy node it came from carries no `#type` at all, so writing the empty
+  // type back invents one (§157.1).
+  if (!is_nil_type(ref2.alloctype) && !is_empty_type(ref2.alloctype))
+    theexpr.cmt_type(cmttype);
+  if (!is_nil_expr(ref2.size))
+    theexpr.cmt_size(size);
 
   // For cpp_new[] also restore the "size" field the frontend uses. Under
   // --irep2-bodies this back-migration feeds the legacy conversion pipeline,
@@ -3547,15 +3581,23 @@ static exprt back_sideeffect(const expr2tc &ref)
   if (ref2.constructor)
     theexpr.set("constructor", true);
 
-  // ref2.location is deliberately *not* restored onto the legacy node.
-  // goto_convert falls back to the enclosing statement's location for a side
-  // effect carrying none, so writing this one back moves the instruction's
-  // column on the default path -- measured at 126 of 131 goto programs over a
-  // stride-16 sample of regression/esbmc. That is very likely the more
-  // faithful column, but it is a user-visible change to counterexamples and
-  // witnesses, so it needs its own PR and an SV-COMP run
-  // (scope-clang-c-irep2.md §136.3).
+  // Restored. goto_convert falls back to the enclosing statement's location for
+  // a side effect carrying none, so a call's instruction took the statement's
+  // column rather than its own; carrying the location back gives it the call's
+  // (scope-clang-c-irep2.md §156).
+  if (ref2.location.is_not_nil())
+    theexpr.location() = ref2.location;
   return theexpr;
+}
+
+/// Restores `#cformat` only when there is one: it is a comment field, but an
+/// empty one still makes c_expr2string prefer it over deriving the text, so it
+/// would print nothing at all (§63).
+static exprt with_cformat(exprt e, const irep_idt &cformat)
+{
+  if (!cformat.empty())
+    e.cformat(cformat);
+  return e;
 }
 
 static exprt migrate_expr_back_dispatch(const expr2tc &ref);
@@ -4461,7 +4503,7 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
-    return theexpr;
+    return with_cformat(std::move(theexpr), ref2.cformat);
   }
   case expr2t::sizeof_id:
   {
@@ -4479,7 +4521,8 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   }
   case expr2t::constant_floatbv_id:
   {
-    return to_constant_floatbv2t(ref).value.to_expr();
+    const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
+    return with_cformat(ref2.value.to_expr(), ref2.cformat);
   }
   case expr2t::constant_bool_id:
   {

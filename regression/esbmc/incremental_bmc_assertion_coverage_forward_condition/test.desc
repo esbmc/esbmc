@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --assertion-coverage --max-k-step 10
+^Solution found by the forward condition; all states are reachable \(k = 5\)$
+^Reached Assertion Instances: 2$
+^Assertion Instances Coverage: 100%$

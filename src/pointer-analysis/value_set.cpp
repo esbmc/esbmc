@@ -673,6 +673,8 @@ void value_sett::get_value_set_rec(
     const index2t &idx = to_index2t(expr);
 
 #ifndef NDEBUG
+    /* A vector is indexed like an array and its elements sit at the same
+     * offsets, so both are sources here (#7907). */
     const type2tc &source_type = idx.source_value->type;
     assert(is_array_or_vector_type(source_type));
 #endif
@@ -1207,7 +1209,9 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // the source value, and store a reference to all those things.
     const index2t &index = to_index2t(expr);
 
-    assert(is_array_type(index.source_value));
+    /* Vectors index like arrays; assign_rec below already admits both (#7907).
+     */
+    assert(is_array_or_vector_type(index.source_value));
 
     // Compute the offset introduced by this index.
     BigInt index_offset;

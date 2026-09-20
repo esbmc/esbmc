@@ -1340,6 +1340,10 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+
+    // The functor edits a copy of the operand, so the folded value would keep
+    // the operand's source spelling, which c_expr2string prints in its place.
+    to_constant_floatbv2t(simpl_res).cformat = irep_idt();
   }
   else
     return expr2tc();

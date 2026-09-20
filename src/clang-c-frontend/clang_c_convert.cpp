@@ -369,19 +369,19 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (!rd.isCompleteDefinition())
     return false;
 
-  /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
-   * infinite recursion if the type we're defining refers to itself
-   * (via pointers): it either is already being defined (up the stack somewhere)
-   * or it's already a complete struct or union in the context. */
+  /* Convert only while the symbol still holds the incomplete type put there
+   * above. A record whose conversion is in progress can be re-entered -- a
+   * field of X reaches Y and Y's base is X (#2323,
+   * regression/esbmc-cpp/bug_fixes/github_2323_2) -- because get_base_map
+   * (clang_cpp_convert.cpp:3390) is not gated on find_symbol the way
+   * get_type's Record arm is. That arrival must fall through rather than bail,
+   * which is why the id is tested as well as the flag (de9158daeb); it
+   * terminates because every non-re-entrant arrival inserts its symbol
+   * first. */
   if (
     !sym->get_type().incomplete() &&
     sym->get_type().id() != "incomplete_struct")
     return false;
-  {
-    typet t = sym->get_type();
-    t.remove(irept::a_incomplete);
-    sym->set_type(std::move(t));
-  }
 
   clang::RecordDecl *rd_def = rd.getDefinition();
   assert(rd_def);
@@ -822,6 +822,42 @@ static exprt label_address(std::size_t index)
   const BigInt id(index + 1);
   return constant_exprt(
     integer2binary(id, bv_width(size_type())), integer2string(id), size_type());
+}
+
+/// Reinterpret \p expr's object representation as \p type, where a typecast
+/// would convert its value.
+static void make_bitcast(exprt &expr, const typet &type)
+{
+  if (expr.type() == type)
+    return;
+
+  exprt bc("bitcast", type);
+  bc.copy_to_operands(expr);
+  expr.swap(bc);
+}
+
+/// Whether clang's CK_BitCast from \p from to \p to reinterprets the bits of
+/// a vector as another vector or scalar of its size (#7905), rather than
+/// converting a pointer. An operand ESBMC does not model -- a header's call to
+/// a builtin it lacks -- keeps the typecast path.
+static bool is_vector_bit_cast(const typet &from, const typet &to)
+{
+  auto carries_bits = [](const typet &t) {
+    return t.is_vector() || t.id() == typet::t_signedbv ||
+           t.id() == typet::t_unsignedbv || t.id() == typet::t_floatbv ||
+           t.id() == typet::t_fixedbv;
+  };
+  return (from.is_vector() || to.is_vector()) && carries_bits(from) &&
+         carries_bits(to);
+}
+
+static void
+convert_bit_cast(const namespacet &ns, exprt &expr, const typet &type)
+{
+  if (is_vector_bit_cast(ns.follow(expr.type()), ns.follow(type)))
+    make_bitcast(expr, type);
+  else
+    gen_typecast(ns, expr, type);
 }
 
 void clang_c_convertert::collect_address_taken_labels(const clang::Stmt &body)
@@ -2755,7 +2791,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     assert(t.return_type().is_vector());
-    fake_call.type() = t;
+    fake_call.type() = t.return_type();
 
     exprt e;
     if (get_expr(*convertVector.getSrcExpr(), e))
@@ -2783,7 +2819,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     assert(t.return_type().is_vector());
-    fake_call.type() = t;
+    fake_call.type() = t.return_type();
 
     for (unsigned j = 0; j < shuffle.getNumSubExprs(); j++)
     {
@@ -3835,12 +3871,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // into the float value 4.29e9 rather than the IEEE-NaN whose bits match
     // the input.  Use the irep1 "bitcast" node, which migrates to bitcast2tc
     // and is handled by symex as a byte-level reinterpret.  See #4191.
-    if (new_expr.type() != t)
-    {
-      exprt bc("bitcast", t);
-      bc.copy_to_operands(new_expr);
-      new_expr.swap(bc);
-    }
+    make_bitcast(new_expr, t);
     break;
   }
 
@@ -4118,13 +4149,16 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_FloatingCast:
 
   case clang::CK_ToVoid:
-  case clang::CK_BitCast:
   case clang::CK_LValueToRValue:
-  case clang::CK_LValueBitCast:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
     gen_typecast(ns, expr, type);
+    break;
+
+  case clang::CK_BitCast:
+  case clang::CK_LValueBitCast:
+    convert_bit_cast(ns, expr, type);
     break;
 
   // Member-pointer casts. ESBMC stores data-member pointers as plain pointers

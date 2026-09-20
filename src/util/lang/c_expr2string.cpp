@@ -48,8 +48,12 @@ void c_expr2stringt::get_shorthands(const exprt &expr)
     std::pair<std::map<irep_idt, exprt>::iterator, bool> result =
       shorthands.insert(std::pair<irep_idt, exprt>(sh, symbol));
 
+    // Compare identifiers: `symbols` is a set ordered by the same comparison
+    // `operator==` uses, so two distinct elements were always unequal and the
+    // old test marked every clash. Two spellings of one symbol are not a
+    // collision (`symbol_expr` sets `name`, `symbol_exprt` does not).
     if (!result.second)
-      if (result.first->second != symbol)
+      if (result.first->second.identifier() != symbol.identifier())
       {
         ns_collision.insert(symbol.identifier());
         ns_collision.insert(result.first->second.identifier());
