@@ -832,9 +832,11 @@ public:
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
-  /** The pointer and struct legs of convert_bitcast, split out so the
-   *  dispatcher stays readable. Both return null when they do not apply. */
+  /** The pointer, floating-point and struct legs of convert_bitcast, split
+   *  out so the dispatcher stays readable. Each returns null when it does not
+   *  apply. */
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,

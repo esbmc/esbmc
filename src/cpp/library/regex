@@ -1,0 +1,669 @@
+#ifndef ESBMC_REGEX
+#define ESBMC_REGEX
+
+// C++11 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// The matching itself is not modelled: a regular-expression engine unrolled
+// into SSA is not something a solver can carry, and a *wrong* engine would
+// prove properties that do not hold. Every function that reports a match
+// returns a nondeterministic answer, every sub_match past the whole match is
+// nondeterministically participating, and its iterators and text are
+// unconstrained. A property that depends on a particular pattern matching is
+// therefore reported FAILED rather than proved: incomplete, not unsound.
+//
+// The one bound that remains is <string>'s: a modelled basic_string holds at
+// most STRING_CAPACITY characters, so `result.size() < STRING_CAPACITY` is
+// provable of matched text -- as it is of every string in this tree, not just
+// of these. Nothing here is tighter than that.
+//
+// Exact, by contrast: the flag bitmasks, regex_error's code, mark_count()
+// including bracket expressions, rejection of an unbalanced pattern, and the
+// agreement between a match_results and the call that filled it.
+//
+// Not modelled, each failing at compile time: regex_iterator and
+// regex_token_iterator, which would have to walk real match positions;
+// sub_match's relational operators; match_results::position and its
+// comparisons; regex_replace's OutputIt form; regex_traits' collation and
+// character-class interface beyond what basic_regex needs; and the
+// allocator-extended match_results constructors.
+#if __cplusplus >= 201103L
+
+#  include "cstddef"
+#  include "iterator"
+#  include "stdexcept"
+#  include "string"
+#  include "utility"
+#  include "vector"
+
+extern bool nondet_bool();
+extern unsigned int nondet_uint();
+extern char nondet_char();
+
+namespace std
+{
+namespace regex_constants
+{
+typedef unsigned int syntax_option_type;
+
+static const syntax_option_type icase = 1 << 0;
+static const syntax_option_type nosubs = 1 << 1;
+static const syntax_option_type optimize = 1 << 2;
+static const syntax_option_type collate = 1 << 3;
+static const syntax_option_type ECMAScript = 1 << 4;
+static const syntax_option_type basic = 1 << 5;
+static const syntax_option_type extended = 1 << 6;
+static const syntax_option_type awk = 1 << 7;
+static const syntax_option_type grep = 1 << 8;
+static const syntax_option_type egrep = 1 << 9;
+static const syntax_option_type multiline = 1 << 10;
+
+typedef unsigned int match_flag_type;
+
+static const match_flag_type match_default = 0;
+static const match_flag_type match_not_bol = 1 << 0;
+static const match_flag_type match_not_eol = 1 << 1;
+static const match_flag_type match_not_bow = 1 << 2;
+static const match_flag_type match_not_eow = 1 << 3;
+static const match_flag_type match_any = 1 << 4;
+static const match_flag_type match_not_null = 1 << 5;
+static const match_flag_type match_continuous = 1 << 6;
+static const match_flag_type match_prev_avail = 1 << 7;
+static const match_flag_type format_default = 0;
+static const match_flag_type format_sed = 1 << 8;
+static const match_flag_type format_no_copy = 1 << 9;
+static const match_flag_type format_first_only = 1 << 10;
+
+enum error_type
+{
+  error_collate,
+  error_ctype,
+  error_escape,
+  error_backref,
+  error_brack,
+  error_paren,
+  error_brace,
+  error_badbrace,
+  error_range,
+  error_space,
+  error_badrepeat,
+  error_complexity,
+  error_stack
+};
+} // namespace regex_constants
+
+class regex_error : public runtime_error
+{
+  regex_constants::error_type __code;
+
+public:
+  // Bare, like vector::at and map::at: __stdexcept_base's message-taking
+  // constructor mallocs, so a caught regex_error surfaces as bad_alloc.
+  explicit regex_error(regex_constants::error_type ecode)
+    : runtime_error(), __code(ecode)
+  {
+  }
+
+  regex_constants::error_type code() const
+  {
+    return __code;
+  }
+};
+
+template <class CharT>
+struct regex_traits
+{
+  typedef CharT char_type;
+  typedef basic_string<CharT> string_type;
+  typedef size_t size_type;
+
+  static size_type length(const char_type *p)
+  {
+    size_type n = 0;
+    while (p[n] != char_type())
+      ++n;
+    return n;
+  }
+
+  char_type translate(char_type c) const
+  {
+    return c;
+  }
+};
+
+template <class CharT, class Traits = regex_traits<CharT>>
+class basic_regex
+{
+public:
+  typedef CharT value_type;
+  typedef Traits traits_type;
+  typedef typename Traits::string_type string_type;
+  typedef regex_constants::syntax_option_type flag_type;
+
+private:
+  flag_type __flags;
+  unsigned int __marks;
+
+  // [re.grammar]: a marked sub-expression is an unescaped '(' not followed by
+  // '?', and inside a bracket expression '(' is a literal. ECMAScript, the
+  // default grammar, has no POSIX leading-']' literal -- "[]" is an empty
+  // class, which is why the first ']' always closes. One scanner over anything
+  // indexable, so the two pattern spellings cannot drift apart.
+  // Counted on construction rather than stored with the pattern, which
+  // basic_regex offers no way to read back.
+  template <class Indexable>
+  static unsigned int __scan(const Indexable &p, size_t n)
+  {
+    unsigned int marks = 0;
+    long depth = 0;
+    bool in_bracket = false;
+    for (size_t i = 0; i < n; ++i)
+    {
+      const CharT c = p[i];
+      if (c == (CharT)'\\')
+      {
+        ++i;
+        continue;
+      }
+      if (in_bracket)
+      {
+        if (c == (CharT)']')
+          in_bracket = false;
+        continue;
+      }
+      if (c == (CharT)'[')
+      {
+        in_bracket = true;
+        continue;
+      }
+      if (c == (CharT)'(')
+      {
+        ++depth;
+        if (i + 1 >= n || p[i + 1] != (CharT)'?')
+          ++marks;
+      }
+      else if (c == (CharT)')' && --depth < 0)
+        throw regex_error(regex_constants::error_paren);
+    }
+    if (depth != 0)
+      throw regex_error(regex_constants::error_paren);
+    if (in_bracket)
+      throw regex_error(regex_constants::error_brack);
+    return marks;
+  }
+
+  static unsigned int __count(const CharT *p)
+  {
+    return __scan(p, Traits::length(p));
+  }
+
+public:
+  basic_regex() : __flags(regex_constants::ECMAScript), __marks(0)
+  {
+  }
+
+  explicit basic_regex(
+    const CharT *p,
+    flag_type f = regex_constants::ECMAScript)
+    : __flags(f), __marks(__count(p))
+  {
+  }
+
+  basic_regex(
+    const CharT *p,
+    size_t len,
+    flag_type f = regex_constants::ECMAScript)
+    : __flags(f), __marks(__scan(p, len))
+  {
+  }
+
+  explicit basic_regex(
+    const string_type &p,
+    flag_type f = regex_constants::ECMAScript)
+    : __flags(f), __marks(__scan(p, p.size()))
+  {
+  }
+
+  basic_regex &assign(const CharT *p, flag_type f = regex_constants::ECMAScript)
+  {
+    __flags = f;
+    __marks = __count(p);
+    return *this;
+  }
+
+  basic_regex &
+  assign(const string_type &p, flag_type f = regex_constants::ECMAScript)
+  {
+    __flags = f;
+    __marks = __scan(p, p.size());
+    return *this;
+  }
+
+  basic_regex &operator=(const CharT *p)
+  {
+    return assign(p);
+  }
+
+  basic_regex &operator=(const string_type &p)
+  {
+    return assign(p);
+  }
+
+  unsigned int mark_count() const
+  {
+    return __marks;
+  }
+
+  flag_type flags() const
+  {
+    return __flags;
+  }
+
+  void swap(basic_regex &other)
+  {
+    flag_type tf = __flags;
+    __flags = other.__flags;
+    other.__flags = tf;
+    unsigned int tm = __marks;
+    __marks = other.__marks;
+    other.__marks = tm;
+  }
+};
+
+typedef basic_regex<char> regex;
+typedef basic_regex<wchar_t> wregex;
+
+namespace __regex_detail
+{
+// Declared and never defined, so ESBMC havocs the result: a match's iterators
+// are unconstrained whatever BidirIt is, rather than comparing equal because
+// both were value-initialised.
+template <class It>
+It nondet_iter();
+
+// Likewise bodyless: the whole string is havoc'd, so neither its contents nor
+// its length is constrained. Storing one in a sub_match instead would put a
+// STRING_CAPACITY-bounded copy loop on every match_results copy, which no
+// regression test can afford to unwind.
+template <class StringT>
+StringT nondet_text();
+} // namespace __regex_detail
+
+template <class BidirIt>
+class sub_match : public pair<BidirIt, BidirIt>
+{
+public:
+  typedef typename iterator_traits<BidirIt>::value_type value_type;
+  typedef basic_string<value_type> string_type;
+  typedef typename iterator_traits<BidirIt>::difference_type difference_type;
+  typedef BidirIt iterator;
+
+  bool matched;
+
+  sub_match() : matched(false)
+  {
+  }
+
+  // Unconstrained when matched, and not stable across calls: nothing about
+  // the match is determined in this model, so there is no text to be stable.
+  string_type str() const
+  {
+    return matched ? __regex_detail::nondet_text<string_type>() : string_type();
+  }
+
+  operator string_type() const
+  {
+    return str();
+  }
+
+  difference_type length() const
+  {
+    return (difference_type)str().size();
+  }
+
+  int compare(const string_type &s) const
+  {
+    return str().compare(s);
+  }
+
+  int compare(const sub_match &s) const
+  {
+    return str().compare(s.str());
+  }
+
+  int compare(const value_type *s) const
+  {
+    return str().compare(string_type(s));
+  }
+
+  void __set_nondet()
+  {
+    matched = true;
+    this->first = __regex_detail::nondet_iter<BidirIt>();
+    this->second = __regex_detail::nondet_iter<BidirIt>();
+  }
+};
+
+typedef sub_match<const char *> csub_match;
+typedef sub_match<const wchar_t *> wcsub_match;
+typedef sub_match<string::const_iterator> ssub_match;
+typedef sub_match<wstring::const_iterator> wssub_match;
+
+template <class BidirIt, class Alloc = allocator<sub_match<BidirIt>>>
+class match_results
+{
+public:
+  typedef sub_match<BidirIt> value_type;
+  typedef const value_type &const_reference;
+  typedef const_reference reference;
+  typedef typename vector<value_type>::const_iterator const_iterator;
+  typedef const_iterator iterator;
+  typedef typename iterator_traits<BidirIt>::difference_type difference_type;
+  typedef size_t size_type;
+  typedef Alloc allocator_type;
+  typedef typename iterator_traits<BidirIt>::value_type char_type;
+  typedef basic_string<char_type> string_type;
+
+private:
+  vector<value_type> __m;
+  bool __ready;
+  value_type __unmatched;
+  value_type __prefix;
+  value_type __suffix;
+
+public:
+  match_results() : __ready(false)
+  {
+  }
+
+  bool ready() const
+  {
+    return __ready;
+  }
+
+  size_type size() const
+  {
+    return __m.size();
+  }
+
+  bool empty() const
+  {
+    return __m.empty();
+  }
+
+  const_iterator begin() const
+  {
+    return __m.begin();
+  }
+
+  const_iterator end() const
+  {
+    return __m.end();
+  }
+
+  const_iterator cbegin() const
+  {
+    return __m.begin();
+  }
+
+  const_iterator cend() const
+  {
+    return __m.end();
+  }
+
+  // [re.results.acc]: an out-of-range index names an unmatched sub_match
+  // rather than being undefined.
+  const_reference operator[](size_type n) const
+  {
+    return n < __m.size() ? __m[n] : __unmatched;
+  }
+
+  string_type str(size_type n = 0) const
+  {
+    return (*this)[n].str();
+  }
+
+  difference_type length(size_type n = 0) const
+  {
+    return (*this)[n].length();
+  }
+
+  const_reference prefix() const
+  {
+    return __prefix;
+  }
+
+  const_reference suffix() const
+  {
+    return __suffix;
+  }
+
+  allocator_type get_allocator() const
+  {
+    return allocator_type();
+  }
+
+  void swap(match_results &other)
+  {
+    vector<value_type> tm = __m;
+    __m = other.__m;
+    other.__m = tm;
+    bool tr = __ready;
+    __ready = other.__ready;
+    other.__ready = tr;
+    value_type tp = __prefix;
+    __prefix = other.__prefix;
+    other.__prefix = tp;
+    value_type ts = __suffix;
+    __suffix = other.__suffix;
+    other.__suffix = ts;
+  }
+
+  // A match fills sub-expression 0 (the whole match) plus one per mark, so
+  // size() agrees with what the call reported. Only group 0 is known to have
+  // participated: [re.results.state] leaves the rest to the pattern, so an
+  // alternation's losing branch must not be provable as matched.
+  void __set_matched(unsigned int marks)
+  {
+    __m.clear();
+    for (unsigned int i = 0; i <= marks; ++i)
+    {
+      value_type sm;
+      if (i == 0 || nondet_bool())
+        sm.__set_nondet();
+      __m.push_back(sm);
+    }
+    __prefix.__set_nondet();
+    __suffix.__set_nondet();
+    __ready = true;
+  }
+
+  void __set_unmatched()
+  {
+    __m.clear();
+    __prefix = value_type();
+    __suffix = value_type();
+    __ready = true;
+  }
+};
+
+typedef match_results<const char *> cmatch;
+typedef match_results<const wchar_t *> wcmatch;
+typedef match_results<string::const_iterator> smatch;
+typedef match_results<wstring::const_iterator> wsmatch;
+
+namespace __regex_detail
+{
+template <class M, class CharT, class Traits>
+bool decide(M &m, const basic_regex<CharT, Traits> &re)
+{
+  bool hit = nondet_bool();
+  if (hit)
+    m.__set_matched(re.mark_count());
+  else
+    m.__set_unmatched();
+  return hit;
+}
+} // namespace __regex_detail
+
+template <class BidirIt, class Alloc, class CharT, class Traits>
+bool regex_match(
+  BidirIt,
+  BidirIt,
+  match_results<BidirIt, Alloc> &m,
+  const basic_regex<CharT, Traits> &re,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return __regex_detail::decide(m, re);
+}
+
+template <class BidirIt, class CharT, class Traits>
+bool regex_match(
+  BidirIt,
+  BidirIt,
+  const basic_regex<CharT, Traits> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return nondet_bool();
+}
+
+template <class CharT, class Alloc, class Traits>
+bool regex_match(
+  const CharT *s,
+  match_results<const CharT *, Alloc> &m,
+  const basic_regex<CharT, Traits> &re,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  (void)s;
+  return __regex_detail::decide(m, re);
+}
+
+template <class CharT, class Traits>
+bool regex_match(
+  const CharT *,
+  const basic_regex<CharT, Traits> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return nondet_bool();
+}
+
+template <class CharT, class ST, class SA, class Alloc, class Traits>
+bool regex_match(
+  const basic_string<CharT, ST, SA> &s,
+  match_results<typename basic_string<CharT, ST, SA>::const_iterator, Alloc> &m,
+  const basic_regex<CharT, Traits> &re,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  (void)s;
+  return __regex_detail::decide(m, re);
+}
+
+template <class CharT, class ST, class SA, class Traits>
+bool regex_match(
+  const basic_string<CharT, ST, SA> &,
+  const basic_regex<CharT, Traits> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return nondet_bool();
+}
+
+template <class BidirIt, class Alloc, class CharT, class Traits>
+bool regex_search(
+  BidirIt,
+  BidirIt,
+  match_results<BidirIt, Alloc> &m,
+  const basic_regex<CharT, Traits> &re,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return __regex_detail::decide(m, re);
+}
+
+template <class BidirIt, class CharT, class Traits>
+bool regex_search(
+  BidirIt,
+  BidirIt,
+  const basic_regex<CharT, Traits> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return nondet_bool();
+}
+
+template <class CharT, class Alloc, class Traits>
+bool regex_search(
+  const CharT *s,
+  match_results<const CharT *, Alloc> &m,
+  const basic_regex<CharT, Traits> &re,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  (void)s;
+  return __regex_detail::decide(m, re);
+}
+
+template <class CharT, class Traits>
+bool regex_search(
+  const CharT *,
+  const basic_regex<CharT, Traits> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return nondet_bool();
+}
+
+template <class CharT, class ST, class SA, class Alloc, class Traits>
+bool regex_search(
+  const basic_string<CharT, ST, SA> &s,
+  match_results<typename basic_string<CharT, ST, SA>::const_iterator, Alloc> &m,
+  const basic_regex<CharT, Traits> &re,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  (void)s;
+  return __regex_detail::decide(m, re);
+}
+
+template <class CharT, class ST, class SA, class Traits>
+bool regex_search(
+  const basic_string<CharT, ST, SA> &,
+  const basic_regex<CharT, Traits> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return nondet_bool();
+}
+
+// Which occurrences were replaced is as nondeterministic as the match, so the
+// result is unconstrained rather than the subject echoed back: echoing it
+// would prove `result == input` for a subject the pattern does match.
+template <class CharT, class ST, class SA, class Traits>
+basic_string<CharT, ST, SA> regex_replace(
+  const basic_string<CharT, ST, SA> &,
+  const basic_regex<CharT, Traits> &,
+  const CharT *,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return __regex_detail::nondet_text<basic_string<CharT, ST, SA>>();
+}
+
+template <class CharT, class ST, class SA, class Traits>
+basic_string<CharT, ST, SA> regex_replace(
+  const basic_string<CharT, ST, SA> &,
+  const basic_regex<CharT, Traits> &,
+  const basic_string<CharT, ST, SA> &,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return __regex_detail::nondet_text<basic_string<CharT, ST, SA>>();
+}
+
+template <class CharT, class Traits>
+basic_string<CharT> regex_replace(
+  const CharT *,
+  const basic_regex<CharT, Traits> &,
+  const CharT *,
+  regex_constants::match_flag_type = regex_constants::match_default)
+{
+  return __regex_detail::nondet_text<basic_string<CharT>>();
+}
+
+} // namespace std
+
+#endif // __cplusplus >= 201103L
+
+#endif // ESBMC_REGEX

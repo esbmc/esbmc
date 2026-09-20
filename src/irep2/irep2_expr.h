@@ -283,13 +283,23 @@ class constant_int2t : public expr2t
 {
 public:
   BigInt value;
+  /// How the literal was written in the source, as `#cformat` records it.
+  /// Unreflected: two constants of the same value and type are the same
+  /// constant however they were spelled, so this must not reach hashing or
+  /// equality. Kept because `c_expr2string` prefers it over deriving the text
+  /// from the type, and dropping it re-renders every printed literal
+  /// (docs/roadmap/frontends-to-irep2.md §63).
+  irep_idt cformat;
 
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
    */
-  constant_int2t(const type2tc &type, const BigInt &input)
-    : expr2t(type, constant_int_id), value(input)
+  constant_int2t(
+    const type2tc &type,
+    const BigInt &input,
+    const irep_idt &fmt = irep_idt())
+    : expr2t(type, constant_int_id), value(input), cformat(fmt)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -301,6 +311,7 @@ public:
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_int2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -334,18 +345,25 @@ class constant_floatbv2t : public expr2t
 {
 public:
   ieee_floatt value;
+  /// The literal's source spelling; see constant_int2t::cformat. Unreflected
+  /// for the same reason, and load-bearing for the same printer, which derives
+  /// an `f`/`l` suffix when it is absent.
+  irep_idt cformat;
 
   /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
-  constant_floatbv2t(const ieee_floatt &value)
-    : expr2t(value.spec.get_type(), constant_floatbv_id), value(value)
+  constant_floatbv2t(const ieee_floatt &value, const irep_idt &fmt = irep_idt())
+    : expr2t(value.spec.get_type(), constant_floatbv_id),
+      value(value),
+      cformat(fmt)
   {
   }
   constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_floatbv2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1637,12 +1655,22 @@ public:
       source->type->type_id == type2t::array_id);
     /* member must exist exactly once in the parent struct/union — only
        checkable once the source type is resolved (skipped for the transient
-       cases) */
-    assert(
-      source->type->type_id == type2t::symbol_id ||
-      source->type->type_id == type2t::pointer_id ||
-      source->type->type_id == type2t::array_id ||
-      struct_union_get_component_number(source->type, memb).has_value());
+       cases above; the lookup throws on an unresolved source -- without that
+       guard `python2goto` cannot build the Python OM library, §162.2).
+
+       A code-typed member is the exception, and it is checked the other way
+       round: it names a method, methods are no part of a struct_type2t, so it
+       must NOT resolve to a component. What verifies such a member exists at
+       all is upstream, where a namespace is in hand --
+       clang_cpp_adjust_irep2::adjust_cpp_member looks it up by name and asserts
+       the symbol is code (docs/roadmap/frontends-to-irep2.md §76). */
+    if (
+      source->type->type_id != type2t::symbol_id &&
+      source->type->type_id != type2t::pointer_id &&
+      source->type->type_id != type2t::array_id)
+      assert(
+        struct_union_get_component_number(source->type, memb).has_value() ==
+        (type->type_id != type2t::code_id));
 #endif
   }
   member2t(const member2t &ref) = default;
