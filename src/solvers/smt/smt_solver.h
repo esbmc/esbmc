@@ -838,12 +838,11 @@ public:
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
-   *  and rebuild it from one. Both record the pointer so that later flattened
-   *  pointers are tied to it; see the comment on the definitions in
+   *  and rebuild it from one. Both record the pointer, which is what a later
+   *  rebuild reads back; see the comment on the definitions in
    *  smt_bitcast.cpp. */
   smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
   smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
-  void record_flattened_pointer(smt_astt address, smt_astt pointer);
   /** True when @p ptr_type's representation occupies @p bv_type exactly, so
    *  the bits read back are the bits that were written. */
   bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
@@ -1107,8 +1106,8 @@ public:
     smt_astt pointer;
     unsigned int level;
   };
-  /** Every such pointer in this context, tied pairwise so that two flattened
-   *  pointers sharing an address are the same pointer. Pruned on pop_ctx like
+  /** Every such pointer in this context; a rebuilt pointer whose bits are one
+   *  of these addresses is defined to be that pointer. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
 

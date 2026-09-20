@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --incremental-bmc
+^VERIFICATION FAILED$
+^  FAILED +\[main\.null-pointer-dereference\.\d+\] +line +\d+ +dereference failure: NULL pointer$

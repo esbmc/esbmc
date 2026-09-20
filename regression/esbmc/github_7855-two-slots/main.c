@@ -1,5 +1,11 @@
 // esbmc/esbmc#7855: two pointers flattened into neighbouring slots each read
-// back as themselves, so the byte round trip does not merge them.
+// back as themselves, so the byte round trip does not merge them. KNOWNBUG
+// with both keys of unknown provenance: ESBMC compares pointers as (object,
+// offset) tuples, so a model where the two differ as tuples yet share an
+// address -- one of them the INVALID object, which overlaps every other --
+// reads one slot back as the other. C compares addresses, so both assertions
+// hold; closing this needs the address-space model, not a constraint tying
+// every flattened pointer to every other (#7895).
 #include <stdlib.h>
 
 struct entry
