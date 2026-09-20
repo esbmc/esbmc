@@ -7,25 +7,18 @@
 #include <optional>
 
 /** Backend for NeuroSym, a neural-guided SMT solver (a GAN proposes candidate
- *  models, with a Z3/Bitwuzla fallback preserving soundness and
- *  completeness). NeuroSym natively parses the QF_BV, QF_ABV, and QF_LIA
- *  fragments of SMT-LIB2 (arrays via a read-over-write bit-blaster encoding,
- *  not a full decision procedure), and this backend drives it as a QF_ABV
- *  solver. NeuroSym is a Python program that cannot be linked into another
- *  application, so this backend reuses the smtlib backend's SMT-LIB2
- *  serializer to render the formula into a file and runs NeuroSym on it in
- *  one-shot batch mode (--neurosym-prog, "%f" is replaced by the file path).
+ *  models, with a Z3 fallback preserving soundness and completeness).
+ *  NeuroSym natively parses only the QF_BV and QF_LIA fragments of SMT-LIB2,
+ *  and this backend drives it as a pure QF_BV solver. NeuroSym runs as a
+ *  separate program that cannot be linked into another application, so this
+ *  backend reuses the smtlib backend's SMT-LIB2 serializer to render the
+ *  formula into a file and runs NeuroSym on it in one-shot batch mode
+ *  (--neurosym-prog, "%f" is replaced by the file path).
  *
- *  Arrays are enabled (array_api set in the factory): neurosym_convt
- *  inherits array_iface from smtlib_convt, which already serializes native
- *  (Array ...) / select / store syntax, so ESBMC passes arrays through
- *  instead of pre-flattening every access into per-index bit-vector
- *  equality/implication chains -- for an array-heavy program that
- *  flattening can otherwise blow a modest formula up into a CNF with well
- *  over a million boolean variables. NeuroSym has no native floating-point
- *  or tuple support, so those two interfaces stay unset and ESBMC's
- *  flatteners still lower them to pure bit-vectors; the header emitted
- *  before the formula is overridden to (set-logic QF_ABV) accordingly.
+ *  NeuroSym has no native array, floating-point, or tuple support, so the
+ *  factory leaves those capability interfaces unset and ESBMC's flatteners
+ *  lower everything to pure QF_BV; the header emitted before the formula is
+ *  overridden to (set-logic QF_BV) accordingly.
  *  Integer/real encoding (--ir) is rejected in solve.cpp because the
  *  flattened int-mode logic would be QF_AUFLIRA, which NeuroSym cannot
  *  parse.

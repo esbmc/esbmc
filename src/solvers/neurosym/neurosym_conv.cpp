@@ -680,7 +680,7 @@ smt_solver_baset *create_new_neurosym_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
-  array_iface **array_api,
+  array_iface **array_api [[maybe_unused]],
   fp_convt **fp_api [[maybe_unused]])
 {
   /* NeuroSym solves a single formula per invocation; strategies that reuse
@@ -712,25 +712,10 @@ smt_solver_baset *create_new_neurosym_solver(
       abort();
     }
 
-  /* NeuroSym has no native tuple or floating-point support, so those two
-   * interfaces stay unset -- create_solver() installs the flatteners that
-   * lower structs and floating-point to pure bit-vectors before they reach
-   * the serializer, same as before.
-   *
-   * Arrays are different: neurosym_convt inherits array_iface from its
-   * smtlib_convt base (smtlib_conv.h), which already knows how to serialize
-   * native SMT-LIB2 (Array ...) / select / store syntax -- that support was
-   * simply never wired up for this backend. NeuroSym's own bit-blaster now
-   * has a real array-theory encoding (read-over-write + weak consistency
-   * axioms), so setting *array_api lets ESBMC pass arrays through natively
-   * instead of pre-flattening every access into per-index bit-vector
-   * equality/implication chains -- for an array-heavy program that
-   * flattening can blow a modest formula up into a CNF with well over a
-   * million boolean variables (measured), most of which read-over-write
-   * resolves away for free instead of ever materializing as clauses. */
-  auto *conv = new neurosym_convt(ns, options);
-  *array_api = static_cast<array_iface *>(conv);
-  return conv;
+  /* NeuroSym is QF_BV-only: leaving the tuple/array/fp interfaces unset makes
+   * create_solver() install the flatteners that lower structs, arrays and
+   * floating-point to pure bit-vectors before they reach the serializer. */
+  return new neurosym_convt(ns, options);
 }
 
 neurosym_convt::neurosym_convt(const namespacet &ns, const optionst &options)
@@ -750,10 +735,7 @@ neurosym_convt::neurosym_convt(
       options,
       oneshot_process::model_prog(options, "neurosym"),
       _formula_path,
-      "QF_ABV"), // QF_ABV, not QF_BV: array_api is now enabled above, so
-                 // the emitted header must declare the logic that
-                 // actually matches -- QF_ABV is a superset of QF_BV, so
-                 // this is correct for array-free formulas too.
+      "QF_BV"),
     formula_path(_formula_path)
 {
 }
