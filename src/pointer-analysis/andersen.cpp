@@ -42,23 +42,6 @@ expr2tc base_object(const expr2tc &e)
   }
 }
 
-bool may_carry_pointer(const type2tc &t);
-
-/// Whether \p e or any operand of it can hold an address: an integer computed
-/// from a pointer can be cast back into one.
-bool mentions_pointer(const expr2tc &e)
-{
-  if (is_nil_expr(e))
-    return false;
-  if (may_carry_pointer(e->type))
-    return true;
-  bool found = false;
-  e->foreach_operand([&found](const expr2tc &op) {
-    found = found || mentions_pointer(op);
-  });
-  return found;
-}
-
 /// Whether a value of this type can hold an address.  Field insensitivity
 /// means a whole-struct copy still moves the pointers buried inside it.
 bool may_carry_pointer(const type2tc &t)
@@ -83,6 +66,14 @@ bool may_carry_pointer(const type2tc &t)
         return true;
   }
   return false;
+}
+
+/// Whether an object of this type can hold an address: anything that can hold
+/// a pointer, and an integer, which CIL-style code uses for every field access
+/// (`*(T *)((unsigned long)p + off)`).
+bool may_hold_address(const type2tc &t)
+{
+  return may_carry_pointer(t) || is_bv_type(t);
 }
 
 expr2tc top_source_expr()
@@ -334,16 +325,12 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     }
 
     case sideeffect2t::allockind::nondet:
-    {
-      // A nondet *pointer* is an unconstrained bit pattern that symbolic
-      // execution may later constrain to equal an existing object's address,
-      // so it may name anything.  Only a value that cannot carry a pointer at
-      // all names nothing.
-      const node_id t = fresh_node();
-      if (may_carry_pointer(side.type))
-        points_to_top(t);
-      return t;
-    }
+      // Symbolic execution resolves a dereference of an unconstrained pointer
+      // (an uninitialised local, a bodyless call's result) to an invalid
+      // object, never a named one, even under an assumption equating it with
+      // an address. Treating it as TOP would taint, flow-insensitively, every
+      // local declared before it is assigned.
+      return fresh_node();
 
     default:
       break;
@@ -390,6 +377,20 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
       return get_node(obj);
     const node_id t = fresh_node();
     add_constraint(constraint_kindt::LOAD, t, pointer_of(obj, loc));
+    return t;
+  }
+
+  // An integer carries the addresses it is computed from: `(long)p + 44`
+  // still points into p's object. A constant operand is an offset and carries
+  // none; a constant on its own is a fabricated address, left to TOP below.
+  if (
+    (is_bv_type(r->type) || is_bool_type(r->type)) && !is_constant_int2t(r))
+  {
+    const node_id t = fresh_node();
+    r->foreach_operand([this, &t, loc](const expr2tc &op) {
+      if (!is_nil_expr(op) && !is_constant_int2t(strip_casts(op)))
+        add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+    });
     return t;
   }
 
@@ -447,16 +448,11 @@ void andersent::handle_assign(
 
   const expr2tc r = strip_casts(rhs);
 
-  // A pointer cast into an integer object (`x = (long)p`) leaves this model:
-  // the integer arithmetic that may follow is not tracked, so whatever is cast
-  // back out of x later may name any object.  Dropping the assignment would
-  // leave x empty, and `q = (void *)x` would then copy that empty set.
-  if (!may_carry_pointer(lhs->type))
-  {
-    if (mentions_pointer(r))
-      assign_top(lhs, loc);
+  // An integer holds no address unless it is computed from one.
+  if (
+    !may_hold_address(lhs->type) ||
+    (!may_carry_pointer(lhs->type) && is_constant_int2t(r)))
     return;
-  }
 
   // Field- and index-insensitivity means the destination of `s.f = q` and
   // `p->f = q` is decided entirely by the base object.
@@ -527,7 +523,7 @@ void andersent::bind_call(
 
   for (std::size_t i = 0; i < argc; ++i)
   {
-    if (!may_carry_pointer(ftype.arguments[i]))
+    if (!may_hold_address(ftype.arguments[i]))
       continue;
 
     if (ftype.argument_names[i].empty())
@@ -551,7 +547,7 @@ void andersent::bind_call(
   if (!unbound.empty())
     widen_call(expr2tc(), unbound, loc);
 
-  if (!is_nil_expr(ret) && may_carry_pointer(ret->type))
+  if (!is_nil_expr(ret) && may_hold_address(ret->type))
     handle_assign(ret, return_symbol(callee_name), loc);
 }
 
@@ -687,7 +683,7 @@ void andersent::collect_constraints(const goto_functionst &goto_functions)
       else if (i_it->is_return())
       {
         const expr2tc &value = to_code_return2t(i_it->code).operand;
-        if (!is_nil_expr(value) && may_carry_pointer(value->type))
+        if (!is_nil_expr(value) && may_hold_address(value->type))
           add_constraint(
             constraint_kindt::COPY,
             return_node(f_it->first),

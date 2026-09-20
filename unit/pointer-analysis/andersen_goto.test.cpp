@@ -240,12 +240,13 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "andersen frontend routes a pointer laundered through an integer to TOP",
+  "andersen frontend tracks a pointer laundered through an integer",
   "[andersen][goto]")
 {
-  // Nothing tracks the arithmetic an integer holding an address may undergo,
-  // so the value cast back out of x names any object.  Dropping the store into
-  // x would leave it empty and q would inherit that empty set.
+  // An integer carries the addresses it is computed from, as long as the
+  // arithmetic stays inside those objects, which the memory model already
+  // assumes.  Dropping the store into x would leave it empty and q would
+  // inherit that empty set.
   std::string src = R"(
     int a;
     int main(void)
@@ -262,7 +263,7 @@ TEST_CASE(
   andersen(functions);
 
   REQUIRE(
-    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"*"});
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"a"});
   // The laundering must not cost precision on the pointer itself.
   REQUIRE(
     targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
@@ -454,11 +455,11 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "andersen frontend widens an integer computed from a pointer",
+  "andersen frontend follows an address through integer arithmetic",
   "[andersen][goto]")
 {
-  // The integer arithmetic is not modelled, so what it casts back to a
-  // pointer may point anywhere; an empty set would be unsound.
+  // CIL writes field accesses as `*(T *)((unsigned long)p + off)`: the
+  // integer still points into p's object, and an empty set would be unsound.
   std::string src = R"(
     int b[2];
     int main(void)
@@ -474,5 +475,6 @@ TEST_CASE(
   andersent andersen;
   andersen(functions);
 
-  REQUIRE(targets_of(andersen, functions, "main", "q").count("*") == 1);
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"b"});
 }

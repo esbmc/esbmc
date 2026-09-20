@@ -539,7 +539,6 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
 struct targetst
 {
   loopst::loop_varst named;
-  bool none = false;
   bool heap = false;
   bool anything = false;
 };
@@ -550,7 +549,6 @@ targets_of(andersent &points_to, const loopst &loop, const expr2tc &ptr)
   value_setst::valuest values;
   points_to.get_values(loop.get_original_loop_head(), ptr, values);
   targetst t;
-  t.none = values.empty();
   for (const expr2tc &v : values)
   {
     const expr2tc object =
@@ -573,9 +571,20 @@ bool named_targets(
   const expr2tc &ptr,
   loopst::loop_varst &objects)
 {
+  // A pointer with no target (only ever nondet or null) writes no named
+  // object: symex sends such a write to an invalid object.
   const targetst t = targets_of(points_to, loop, ptr);
-  if (t.none || t.heap || t.anything)
+  if (t.heap || t.anything)
+  {
+    if (messaget::state.target("k-induction", VerbosityLevel::Debug))
+      log_debug(
+        "k-induction",
+        "cannot name what {} may point to at {}: {}",
+        ptr->pretty(0),
+        loop.get_original_loop_head()->location.as_string(),
+        t.anything ? "anything" : "heap");
     return false;
+  }
   objects.insert(t.named.begin(), t.named.end());
   return true;
 }
