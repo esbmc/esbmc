@@ -36,6 +36,40 @@ bool is_input_symbol(const expr2tc &e)
          starts_with(to_symbol2t(e).thename.as_string(), "nondet$symex::");
 }
 
+/// Memo keys are raw nodes of `e`, so it must not outlive the walk: a freed
+/// temporary's address can be recycled by the next allocation.
+expr2tc bind_execution_guard_rec(
+  const expr2tc &e,
+  std::unordered_map<const expr2t *, expr2tc> &memo)
+{
+  static const irep_idt guard_name = execution_statet::guard_execution_name;
+  if (is_nil_expr(e))
+    return e;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == guard_name)
+    return gen_true_expr();
+  auto it = memo.find(e.get());
+  if (it != memo.end())
+    return it->second;
+  expr2tc out = e;
+  out.get()->Foreach_operand([&memo](expr2tc &op) {
+    op = bind_execution_guard_rec(op, memo);
+  });
+  memo.emplace(e.get(), out);
+  return out;
+}
+
+/// symex guards every claim with the top-level execution guard, a level-1
+/// boolean that no SSA step defines. It occurs only positively, and only in
+/// p.violated, so binding it to true is exact; left free it becomes another
+/// frozen state in the export.
+expr2tc bind_execution_guard(const expr2tc &e)
+{
+  std::unordered_map<const expr2t *, expr2tc> memo;
+  expr2tc out = bind_execution_guard_rec(e, memo);
+  simplify(out);
+  return out;
+}
+
 /// Pointers in the state would need their points-to sets preserved across
 /// steps; empty aggregates are never assigned, so their markers never fire.
 bool unsupported_state_type(const type2tc &t)
@@ -525,7 +559,9 @@ bool extract_transition_system(
     if (!s.is_assert())
       continue;
     const std::string &comment = s.comment.as_string();
-    if (i < post_first && comment.find("unwinding assertion") != std::string::npos)
+    if (
+      i < post_first &&
+      comment.find("unwinding assertion") != std::string::npos)
     {
       reason = "a loop or recursion inside a step runs more than once";
       return false;
@@ -609,7 +645,7 @@ bool extract_transition_system(
     {
       const expr2tc &a = prefix ? prefix_assumpt : body_assumpt;
       ts_propertyt p;
-      p.violated = not2tc(implies2tc(a, s.cond));
+      p.violated = bind_execution_guard(not2tc(implies2tc(a, s.cond)));
       p.comment = s.comment.as_string();
       p.location = s.source.pc->location;
       (prefix ? ts.prefix_bad : ts.bad).push_back(p);

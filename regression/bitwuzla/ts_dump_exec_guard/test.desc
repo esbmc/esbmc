@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --ts-dump
+^  \[.*\] error label: goto_symex::guard[?!&#0-9]*$
