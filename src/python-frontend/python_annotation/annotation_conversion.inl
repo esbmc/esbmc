@@ -4727,7 +4727,12 @@ void python_annotation<Json>::annotate_function(Json &function_element)
 
       if (!has_none_return)
       {
-        // Update the function node to include the return type annotation
+        // Update the function node to include the return type annotation.
+        // Marked _inferred_annotation so a downstream converter check (e.g.
+        // local numpy array returns) can tell this apart from an annotation
+        // the user actually wrote -- should_override replaces an explicit
+        // one only because the user opted into that via
+        // override-return-annotation, so it is not authoritative either.
         function_element["returns"] = {
           {"_type", "Name"},
           {"id", inferred_type},
@@ -4737,7 +4742,8 @@ void python_annotation<Json>::annotate_function(Json &function_element)
           {"end_lineno", function_element["lineno"]},
           {"end_col_offset",
            function_element["col_offset"].template get<int>() +
-             inferred_type.size()}};
+             inferred_type.size()},
+          {"_inferred_annotation", true}};
       }
     }
     else if (inferred_type == "NoneType")
@@ -4750,7 +4756,8 @@ void python_annotation<Json>::annotate_function(Json &function_element)
         {"col_offset", function_element["col_offset"]},
         {"end_lineno", function_element["lineno"]},
         {"end_col_offset",
-         function_element["col_offset"].template get<int>() + 4}};
+         function_element["col_offset"].template get<int>() + 4},
+        {"_inferred_annotation", true}};
     }
     // If no return type could be inferred, leave returns as null
     // (function has no explicit return statement)

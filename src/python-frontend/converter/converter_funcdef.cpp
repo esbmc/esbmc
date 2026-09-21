@@ -2674,9 +2674,18 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   const nlohmann::json &function_node) const
 {
   static const nlohmann::json null_return_annotation = nullptr;
-  if (local_var_numpy_array_return(function_node))
+  const nlohmann::json &returns = function_node["returns"];
+
+  // Only bypass an annotation the annotator itself produced (absent, or
+  // marked _inferred_annotation) -- an annotation the user actually wrote
+  // (e.g. `def make() -> list:`) is authoritative and must not be silently
+  // discarded even when the body happens to match the local-array-return
+  // shape.
+  bool is_synthesized =
+    returns.is_null() || returns.value("_inferred_annotation", false);
+  if (is_synthesized && local_var_numpy_array_return(function_node))
     return null_return_annotation;
-  return function_node["returns"];
+  return returns;
 }
 
 void python_converter::get_function_definition(
