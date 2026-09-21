@@ -1681,7 +1681,7 @@ void python_converter::reject_if_symbolic_shape_param(
         func_name, param_index, arg_name))
     throw std::runtime_error(
       "TypeError: numpy array parameter shape must be concrete for "
-      ".shape/.ndim/.size/len()/transpose()/sort()/argsort()");
+      ".shape/.ndim/.size/transpose()/sort()/argsort()");
 }
 
 bool python_converter::try_infer_numpy_param_type(
