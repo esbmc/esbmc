@@ -6793,14 +6793,41 @@ stable_argsort_of(const nlohmann::json &arr, const std::string &diagnostic)
   return indices;
 }
 
+// True when `node` (already known to be an is_argsort_call node) sorts the
+// bare Name `array_name` -- either `array_name.argsort()` (method form) or
+// `np.argsort(array_name)` (module form). resolve_searchsorted_sorter uses
+// this to confirm sorter=argsort(...) reuses the same array searchsorted is
+// searching (see is_argsort_call for why that is the only case it computes
+// directly) instead of accepting an unrelated array's argsort by callee
+// spelling alone.
+static bool argsort_call_targets_array(
+  const nlohmann::json &node,
+  const std::string &array_name,
+  const nlohmann::json &ast)
+{
+  const nlohmann::json &receiver = node["func"]["value"];
+  if (
+    receiver.value("_type", std::string()) == "Name" &&
+    is_imported_numpy_module_alias(ast, receiver.value("id", std::string())))
+    return node.contains("args") && !node["args"].empty() &&
+           node["args"][0].value("_type", std::string()) == "Name" &&
+           node["args"][0].value("id", std::string()) == array_name;
+
+  return receiver.value("_type", std::string()) == "Name" &&
+         receiver.value("id", std::string()) == array_name;
+}
+
 // Resolves `sorter_arg` (following it through a Name binding first) to a
 // literal array of integer indices: either a literal list/tuple of integer
-// Constants, or a np.argsort(...)/....argsort() call (computed directly,
-// see is_argsort_call). Throws explicitly for anything else -- a symbolic
-// element, a non-literal expression -- rather than silently misreading it.
+// Constants, or a np.argsort(...)/....argsort() call on `array_name` itself
+// (computed directly, see is_argsort_call and argsort_call_targets_array).
+// Throws explicitly for anything else -- a symbolic element, a non-literal
+// expression, an argsort of an unrelated array -- rather than silently
+// misreading it.
 static std::vector<std::size_t> resolve_searchsorted_sorter(
   nlohmann::json sorter_arg,
   const nlohmann::json &arr_arg,
+  const std::string &array_name,
   python_converter &converter)
 {
   if (
@@ -6815,10 +6842,16 @@ static std::vector<std::size_t> resolve_searchsorted_sorter(
   }
 
   if (is_argsort_call(sorter_arg))
+  {
+    if (!argsort_call_targets_array(sorter_arg, array_name, converter.ast()))
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() sorter=argsort(...) must sort the "
+        "same array being searched");
     return stable_argsort_of(
       arr_arg,
       "TypeError: numpy.searchsorted() array must contain finite numeric "
       "values");
+  }
 
   std::optional<nlohmann::json> literal =
     get_literal_numpy_array_arg(sorter_arg);
@@ -6949,6 +6982,11 @@ exprt numpy_call_expr::handle_searchsorted_call()
   const nlohmann::json *sorter_node =
     call_["args"].size() == 4 ? &call_["args"][3] : sorter_kw;
 
+  const std::string array_name =
+    call_["args"][0].value("_type", std::string()) == "Name"
+      ? call_["args"][0].value("id", std::string())
+      : std::string();
+
   nlohmann::json arr_arg = call_["args"][0];
   if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
     arr_arg = resolve_literal_numpy_array_input(arr_arg, function, false);
@@ -6961,7 +6999,9 @@ exprt numpy_call_expr::handle_searchsorted_call()
   nlohmann::json search_space = arr_arg;
   if (sorter_node != nullptr)
     search_space = apply_searchsorted_sorter(
-      arr_arg, resolve_searchsorted_sorter(*sorter_node, arr_arg, converter_));
+      arr_arg,
+      resolve_searchsorted_sorter(
+        *sorter_node, arr_arg, array_name, converter_));
   else if (!is_sorted_numeric_list(
              arr_arg,
              "TypeError: numpy.searchsorted() array must contain finite "
