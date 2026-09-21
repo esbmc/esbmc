@@ -101,6 +101,72 @@ static std::string unescape_smtlib_name(const std::string &s)
   return out;
 }
 
+/* Parse one "(define-fun NAME () SORT VALUE)" entry starting at s[pos],
+ * leaving pos just past it. Returns false only when the text runs out
+ * mid-entry, so the caller stops; an entry this cannot make sense of leaves
+ * name or value empty and is skipped, which degrades that one variable to
+ * the --neurosym-model-prog fallback. Split out of parse_model_block() to
+ * keep it inside the repo's cyclomatic-complexity gate. */
+static bool parse_define_fun(
+  const std::string &s,
+  size_t &pos,
+  std::string &name,
+  std::string &value)
+{
+  const size_t n = s.size();
+  size_t entry_open = pos;
+  pos++; // past '('
+  skip_ws(s, pos);
+  std::string keyword = read_token(s, pos);
+  if (keyword != "define-fun")
+  {
+    // Not a form we understand (e.g. a comment leaked through as a list) --
+    // skip this whole parenthesized entry and move on to the next.
+    pos = entry_open;
+    skip_paren_group(s, pos);
+    return true;
+  }
+
+  skip_ws(s, pos);
+  if (pos < n && s[pos] == '|')
+  {
+    size_t close = s.find('|', pos + 1);
+    if (close == std::string::npos)
+      return false;
+    name = s.substr(pos + 1, close - pos - 1);
+    pos = close + 1;
+  }
+  else
+    name = read_token(s, pos);
+  // NeuroSym echoes back the escaped/pipe-quoted form it read from the
+  // formula file, not the raw name ESBMC's own AST holds (symname) --
+  // see unescape_smtlib_name()'s comment. A no-op for a name that was
+  // never escaped in the first place.
+  name = unescape_smtlib_name(name);
+
+  skip_ws(s, pos); // the empty parameter list "()"
+  skip_paren_group(s, pos);
+
+  skip_ws(s, pos); // the sort -- "(_ BitVec N)" or a bare "Int"/"Bool"
+  if (pos < n && s[pos] == '(')
+    skip_paren_group(s, pos);
+  else
+    read_token(s, pos);
+
+  skip_ws(s, pos);
+  if (pos < n && s[pos] == '(')
+  {
+    /* A parenthesized value, e.g. SMT-LIB2's "(- 5)" for a negative
+     * numeral -- not currently interpreted; leave value empty so this one
+     * variable falls back to --neurosym-model-prog instead of guessing. */
+    skip_paren_group(s, pos);
+  }
+  else
+    value = read_token(s, pos);
+
+  return true;
+}
+
 void neurosym_convt::parse_model_block(const std::string &output)
 {
   /* Purpose-built for exactly the format NeuroSym's own format_output()
@@ -130,58 +196,9 @@ void neurosym_convt::parse_model_block(const std::string &output)
     if (output[pos] != '(')
       break; // unrecognized content where another define-fun was expected
 
-    size_t entry_open = pos;
-    pos++; // past '('
-    skip_ws(output, pos);
-    std::string keyword = read_token(output, pos);
-    if (keyword != "define-fun")
-    {
-      // Not a form we understand (e.g. a comment leaked through as a list) --
-      // skip this whole parenthesized entry and move on to the next.
-      pos = entry_open;
-      skip_paren_group(output, pos);
-      continue;
-    }
-
-    skip_ws(output, pos);
-    std::string name;
-    if (pos < n && output[pos] == '|')
-    {
-      size_t close = output.find('|', pos + 1);
-      if (close == std::string::npos)
-        break;
-      name = output.substr(pos + 1, close - pos - 1);
-      pos = close + 1;
-    }
-    else
-      name = read_token(output, pos);
-    // NeuroSym echoes back the escaped/pipe-quoted form it read from the
-    // formula file, not the raw name ESBMC's own AST holds (symname) --
-    // see unescape_smtlib_name()'s comment. A no-op for a name that was
-    // never escaped in the first place.
-    name = unescape_smtlib_name(name);
-
-    skip_ws(output, pos); // the empty parameter list "()"
-    skip_paren_group(output, pos);
-
-    skip_ws(output, pos); // the sort -- "(_ BitVec N)" or a bare "Int"/"Bool"
-    if (pos < n && output[pos] == '(')
-      skip_paren_group(output, pos);
-    else
-      read_token(output, pos);
-
-    skip_ws(output, pos);
-    std::string value;
-    if (pos < n && output[pos] == '(')
-    {
-      /* A parenthesized value, e.g. SMT-LIB2's "(- 5)" for a negative
-       * numeral -- not currently interpreted; leave value empty so this one
-       * variable falls back to --neurosym-model-prog instead of guessing. */
-      skip_paren_group(output, pos);
-    }
-    else
-      value = read_token(output, pos);
-
+    std::string name, value;
+    if (!parse_define_fun(output, pos, name, value))
+      break;
     if (!name.empty() && !value.empty())
       local_model[name] = value;
 
@@ -285,6 +302,104 @@ std::optional<BigInt> neurosym_convt::local_eval_array_at(
     // NeuroSym's model output has no whole-array representation to fall
     // back on locally, so this is an honest "don't know", not a bug.
     return std::nullopt;
+  }
+}
+
+/* Bitwise ops over `width` bits: BigInt has no native bitwise operators, so
+ * go via the binary strings mask_to_width() already relies on. */
+template <typename F>
+static BigInt
+bitwise_bv(const BigInt &a, const BigInt &b, std::size_t width, F &&bit)
+{
+  std::string a_bits = integer2binary(a, width);
+  std::string b_bits = integer2binary(b, width);
+  std::string out(width, '0');
+  for (std::size_t i = 0; i < width; i++)
+    out[i] = bit(a_bits[i] == '1', b_bits[i] == '1') ? '1' : '0';
+  return binary2integer(out, false);
+}
+
+/* The binary bit-vector operators, split out of local_eval_bv() to keep that
+ * function inside the repo's cyclomatic-complexity gate. Operands and result
+ * are unsigned `width`-bit patterns. */
+static std::optional<BigInt> eval_bv_binop(
+  smt_func_kind kind,
+  const BigInt &lhs,
+  const BigInt &rhs,
+  std::size_t width)
+{
+  switch (kind)
+  {
+  case SMT_FUNC_ADD:
+  case SMT_FUNC_BVADD:
+    return mask_to_width(lhs + rhs, width);
+  case SMT_FUNC_SUB:
+  case SMT_FUNC_BVSUB:
+    return mask_to_width(lhs - rhs, width);
+  case SMT_FUNC_MUL:
+  case SMT_FUNC_BVMUL:
+    return mask_to_width(lhs * rhs, width);
+  case SMT_FUNC_BVUDIV:
+    if (rhs == BigInt(0))
+      return mask_to_width(
+        (BigInt(1) << BigInt(width)) - BigInt(1),
+        width); // SMT-LIB2 udiv-by-0
+    return mask_to_width(lhs / rhs, width);
+  case SMT_FUNC_BVSDIV:
+  {
+    if (rhs == BigInt(0))
+      return mask_to_width(
+        to_signed(lhs, width) >= BigInt(0)
+          ? (BigInt(1) << BigInt(width)) - BigInt(1)
+          : BigInt(1),
+        width);
+    BigInt q = to_signed(lhs, width) / to_signed(rhs, width);
+    return mask_to_width(q, width);
+  }
+  case SMT_FUNC_BVUMOD:
+    if (rhs == BigInt(0))
+      return mask_to_width(lhs, width); // SMT-LIB2 urem-by-0
+    return mask_to_width(lhs % rhs, width);
+  case SMT_FUNC_BVSMOD:
+  {
+    if (rhs == BigInt(0))
+      return mask_to_width(lhs, width);
+    BigInt r = to_signed(lhs, width) % to_signed(rhs, width);
+    return mask_to_width(r, width);
+  }
+  /* A shift by >= the operand width shifts every bit out: zero for
+   * bvshl/bvlshr, the replicated sign bit for bvashr (SMT-LIB2
+   * FixedSizeBitVectors). The guard is load-bearing, not a nicety:
+   * mp_arith's operator<< / operator>> both go through power(2, n),
+   * which loops n BigInt multiplications, so an unguarded shift amount
+   * taken from the model (any value up to 2^width - 1) does not
+   * terminate in practice. */
+  case SMT_FUNC_BVSHL:
+  case SMT_FUNC_SHL:
+    if (rhs >= BigInt(width))
+      return BigInt(0);
+    return mask_to_width(lhs << rhs, width);
+  case SMT_FUNC_BVLSHR:
+    if (rhs >= BigInt(width))
+      return BigInt(0);
+    return mask_to_width(lhs >> rhs, width);
+  case SMT_FUNC_BVASHR:
+  {
+    if (rhs >= BigInt(width))
+      return to_signed(lhs, width) < BigInt(0)
+               ? mask_to_width(BigInt(-1), width)
+               : BigInt(0);
+    BigInt shifted = to_signed(lhs, width) >> rhs;
+    return mask_to_width(shifted, width);
+  }
+  case SMT_FUNC_BVAND:
+    return bitwise_bv(lhs, rhs, width, [](bool a, bool b) { return a && b; });
+  case SMT_FUNC_BVOR:
+    return bitwise_bv(lhs, rhs, width, [](bool a, bool b) { return a || b; });
+  case SMT_FUNC_BVXOR:
+    return bitwise_bv(lhs, rhs, width, [](bool a, bool b) { return a != b; });
+  default:
+    return std::nullopt; // unreachable given the outer switch
   }
 }
 
@@ -394,106 +509,7 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
     auto rhs = local_eval_bv(ast->args[1]);
     if (!lhs || !rhs)
       return std::nullopt;
-
-    // Unsigned division/mod/shift/ashr need the *signed* interpretation of
-    // their bit pattern for the sign-sensitive variants; the unsigned bit
-    // pattern (mask_to_width's output) is already correct for the rest.
-    switch (ast->kind)
-    {
-    case SMT_FUNC_ADD:
-    case SMT_FUNC_BVADD:
-      return mask_to_width(*lhs + *rhs, width);
-    case SMT_FUNC_SUB:
-    case SMT_FUNC_BVSUB:
-      return mask_to_width(*lhs - *rhs, width);
-    case SMT_FUNC_MUL:
-    case SMT_FUNC_BVMUL:
-      return mask_to_width(*lhs * *rhs, width);
-    case SMT_FUNC_BVUDIV:
-      if (*rhs == BigInt(0))
-        return mask_to_width(
-          (BigInt(1) << BigInt(width)) - BigInt(1),
-          width); // SMT-LIB2 udiv-by-0
-      return mask_to_width(*lhs / *rhs, width);
-    case SMT_FUNC_BVSDIV:
-    {
-      if (*rhs == BigInt(0))
-        return mask_to_width(
-          to_signed(*lhs, width) >= BigInt(0)
-            ? (BigInt(1) << BigInt(width)) - BigInt(1)
-            : BigInt(1),
-          width);
-      BigInt q = to_signed(*lhs, width) / to_signed(*rhs, width);
-      return mask_to_width(q, width);
-    }
-    case SMT_FUNC_BVUMOD:
-      if (*rhs == BigInt(0))
-        return mask_to_width(*lhs, width); // SMT-LIB2 urem-by-0
-      return mask_to_width(*lhs % *rhs, width);
-    case SMT_FUNC_BVSMOD:
-    {
-      if (*rhs == BigInt(0))
-        return mask_to_width(*lhs, width);
-      BigInt r = to_signed(*lhs, width) % to_signed(*rhs, width);
-      return mask_to_width(r, width);
-    }
-    /* A shift by >= the operand width shifts every bit out: zero for
-     * bvshl/bvlshr, the replicated sign bit for bvashr (SMT-LIB2
-     * FixedSizeBitVectors). The guard is load-bearing, not a nicety:
-     * mp_arith's operator<< / operator>> both go through power(2, n),
-     * which loops n BigInt multiplications, so an unguarded shift amount
-     * taken from the model (any value up to 2^width - 1) does not
-     * terminate in practice. */
-    case SMT_FUNC_BVSHL:
-    case SMT_FUNC_SHL:
-      if (*rhs >= BigInt(width))
-        return BigInt(0);
-      return mask_to_width(*lhs << *rhs, width);
-    case SMT_FUNC_BVLSHR:
-      if (*rhs >= BigInt(width))
-        return BigInt(0);
-      return mask_to_width(*lhs >> *rhs, width);
-    case SMT_FUNC_BVASHR:
-    {
-      if (*rhs >= BigInt(width))
-        return to_signed(*lhs, width) < BigInt(0)
-                 ? mask_to_width(BigInt(-1), width)
-                 : BigInt(0);
-      BigInt shifted = to_signed(*lhs, width) >> *rhs;
-      return mask_to_width(shifted, width);
-    }
-    case SMT_FUNC_BVAND:
-    {
-      // No native BigInt bitwise-and; compute via binary strings, same
-      // width-safe route mask_to_width already relies on.
-      std::string a_bits = integer2binary(*lhs, width);
-      std::string b_bits = integer2binary(*rhs, width);
-      std::string out(width, '0');
-      for (std::size_t i = 0; i < width; i++)
-        out[i] = (a_bits[i] == '1' && b_bits[i] == '1') ? '1' : '0';
-      return binary2integer(out, false);
-    }
-    case SMT_FUNC_BVOR:
-    {
-      std::string a_bits = integer2binary(*lhs, width);
-      std::string b_bits = integer2binary(*rhs, width);
-      std::string out(width, '0');
-      for (std::size_t i = 0; i < width; i++)
-        out[i] = (a_bits[i] == '1' || b_bits[i] == '1') ? '1' : '0';
-      return binary2integer(out, false);
-    }
-    case SMT_FUNC_BVXOR:
-    {
-      std::string a_bits = integer2binary(*lhs, width);
-      std::string b_bits = integer2binary(*rhs, width);
-      std::string out(width, '0');
-      for (std::size_t i = 0; i < width; i++)
-        out[i] = (a_bits[i] != b_bits[i]) ? '1' : '0';
-      return binary2integer(out, false);
-    }
-    default:
-      return std::nullopt; // unreachable given the outer switch
-    }
+    return eval_bv_binop(ast->kind, *lhs, *rhs, width);
   }
 
   default:
@@ -503,6 +519,123 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
     // --neurosym-model-prog, same as before this evaluator existed.
     return std::nullopt;
   }
+}
+
+/* The bit-vector comparisons, split out of local_eval_bool() to keep that
+ * function inside the repo's cyclomatic-complexity gate. Operands are
+ * unsigned `width`-bit patterns; signedness comes from the operator. */
+static std::optional<bool> eval_bv_compare(
+  smt_func_kind kind,
+  const BigInt &lhs,
+  const BigInt &rhs,
+  std::size_t width)
+{
+  bool is_signed_cmp = kind == SMT_FUNC_LT || kind == SMT_FUNC_GT ||
+                       kind == SMT_FUNC_LTE || kind == SMT_FUNC_GTE ||
+                       kind == SMT_FUNC_BVSLT || kind == SMT_FUNC_BVSGT ||
+                       kind == SMT_FUNC_BVSLTE || kind == SMT_FUNC_BVSGTE;
+  BigInt l = is_signed_cmp ? to_signed(lhs, width) : lhs;
+  BigInt r = is_signed_cmp ? to_signed(rhs, width) : rhs;
+  switch (kind)
+  {
+  case SMT_FUNC_LT:
+  case SMT_FUNC_BVSLT:
+  case SMT_FUNC_BVULT:
+    return l < r;
+  case SMT_FUNC_GT:
+  case SMT_FUNC_BVSGT:
+  case SMT_FUNC_BVUGT:
+    return l > r;
+  case SMT_FUNC_LTE:
+  case SMT_FUNC_BVSLTE:
+  case SMT_FUNC_BVULTE:
+    return l <= r;
+  case SMT_FUNC_GTE:
+  case SMT_FUNC_BVSGTE:
+  case SMT_FUNC_BVUGTE:
+    return l >= r;
+  default:
+    return std::nullopt;
+  }
+}
+
+std::optional<bool>
+neurosym_convt::local_lookup_bool(const std::string &symname) const
+{
+  /* local_lookup() only understands numeric text; a genuinely Bool-sorted
+   * model entry is textual ("true"/"false"), as NeuroSym's own define-fun
+   * output and parse_model_block() emit it. Handle that form directly
+   * rather than failing through local_lookup()'s numeric parse and forcing
+   * every boolean-guarded trace out to the external fallback solver. */
+  auto it = local_model.find(symname);
+  if (it == local_model.end())
+    return std::nullopt;
+  if (it->second == "true")
+    return true;
+  if (it->second == "false")
+    return false;
+  auto v = local_lookup(symname);
+  if (!v)
+    return std::nullopt;
+  return *v != BigInt(0);
+}
+
+std::optional<bool> neurosym_convt::eval_bool_fold(
+  smt_func_kind kind,
+  const smtlib_smt_ast *ast) const
+{
+  // ESBMC commonly ANDs/ORs many guard literals together in one node
+  // (not necessarily just two), e.g. combining a whole path condition --
+  // fold left over however many args are actually there.
+  if (ast->args.empty())
+    return std::nullopt;
+  auto acc = local_eval_bool(ast->args[0]);
+  if (!acc)
+    return std::nullopt;
+  bool result = *acc;
+  for (std::size_t i = 1; i < ast->args.size(); i++)
+  {
+    auto v = local_eval_bool(ast->args[i]);
+    if (!v)
+      return std::nullopt;
+    switch (kind)
+    {
+    case SMT_FUNC_AND:
+      result = result && *v;
+      break;
+    case SMT_FUNC_OR:
+      result = result || *v;
+      break;
+    case SMT_FUNC_XOR:
+      result = result != *v;
+      break;
+    default:
+      return std::nullopt;
+    }
+  }
+  return result;
+  return result;
+}
+
+std::optional<bool>
+neurosym_convt::eval_bool_eq(const smtlib_smt_ast *ast) const
+{
+  /* The operand sort decides whether to compare as bit-vectors or as
+   * booleans; array/tuple equality is not handled (rare for a counterexample
+   * query, and it falls back). */
+  if (ast->args[0]->sort->id == SMT_SORT_BOOL)
+  {
+    auto lhs = local_eval_bool(ast->args[0]);
+    auto rhs = local_eval_bool(ast->args[1]);
+    if (!lhs || !rhs)
+      return std::nullopt;
+    return *lhs == *rhs;
+  }
+  auto lhs = local_eval_bv(ast->args[0]);
+  auto rhs = local_eval_bv(ast->args[1]);
+  if (!lhs || !rhs)
+    return std::nullopt;
+  return *lhs == *rhs;
 }
 
 std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
@@ -515,25 +648,7 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
     return ast->boolval;
 
   case SMT_FUNC_SYMBOL:
-  {
-    // local_lookup() only understands numeric text; a genuinely Bool-sorted
-    // model entry is textual ("true"/"false"), as NeuroSym's own
-    // define-fun output and parse_model_block() emit it -- handle that form
-    // directly here rather than failing through local_lookup()'s numeric
-    // parse and forcing every boolean-guarded trace out to the external
-    // fallback solver.
-    auto it = local_model.find(ast->symname);
-    if (it == local_model.end())
-      return std::nullopt;
-    if (it->second == "true")
-      return true;
-    if (it->second == "false")
-      return false;
-    auto v = local_lookup(ast->symname);
-    if (!v)
-      return std::nullopt;
-    return *v != BigInt(0);
-  }
+    return local_lookup_bool(ast->symname);
 
   case SMT_FUNC_NOT:
   {
@@ -546,38 +661,7 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
   case SMT_FUNC_AND:
   case SMT_FUNC_OR:
   case SMT_FUNC_XOR:
-  {
-    // ESBMC commonly ANDs/ORs many guard literals together in one node
-    // (not necessarily just two), e.g. combining a whole path condition --
-    // fold left over however many args are actually there.
-    if (ast->args.empty())
-      return std::nullopt;
-    auto acc = local_eval_bool(ast->args[0]);
-    if (!acc)
-      return std::nullopt;
-    bool result = *acc;
-    for (std::size_t i = 1; i < ast->args.size(); i++)
-    {
-      auto v = local_eval_bool(ast->args[i]);
-      if (!v)
-        return std::nullopt;
-      switch (ast->kind)
-      {
-      case SMT_FUNC_AND:
-        result = result && *v;
-        break;
-      case SMT_FUNC_OR:
-        result = result || *v;
-        break;
-      case SMT_FUNC_XOR:
-        result = result != *v;
-        break;
-      default:
-        return std::nullopt;
-      }
-    }
-    return result;
-  }
+    return eval_bool_fold(ast->kind, ast);
 
   case SMT_FUNC_IMPLIES:
   {
@@ -602,28 +686,10 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
   case SMT_FUNC_EQ:
   case SMT_FUNC_NOTEQ:
   {
-    // Operand sort tells us whether to compare as bit-vectors or as
-    // booleans; array/tuple equality is not handled (rare for a
-    // counterexample query, falls back).
-    smt_sort_kind sk = ast->args[0]->sort->id;
-    bool eq;
-    if (sk == SMT_SORT_BOOL)
-    {
-      auto lhs = local_eval_bool(ast->args[0]);
-      auto rhs = local_eval_bool(ast->args[1]);
-      if (!lhs || !rhs)
-        return std::nullopt;
-      eq = (*lhs == *rhs);
-    }
-    else
-    {
-      auto lhs = local_eval_bv(ast->args[0]);
-      auto rhs = local_eval_bv(ast->args[1]);
-      if (!lhs || !rhs)
-        return std::nullopt;
-      eq = (*lhs == *rhs);
-    }
-    return ast->kind == SMT_FUNC_EQ ? eq : !eq;
+    auto eq = eval_bool_eq(ast);
+    if (!eq)
+      return std::nullopt;
+    return ast->kind == SMT_FUNC_EQ ? *eq : !*eq;
   }
 
   case SMT_FUNC_LT:
@@ -643,35 +709,8 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
     auto rhs = local_eval_bv(ast->args[1]);
     if (!lhs || !rhs)
       return std::nullopt;
-    std::size_t width = ast->args[0]->sort->get_data_width();
-    bool is_signed_cmp =
-      ast->kind == SMT_FUNC_LT || ast->kind == SMT_FUNC_GT ||
-      ast->kind == SMT_FUNC_LTE || ast->kind == SMT_FUNC_GTE ||
-      ast->kind == SMT_FUNC_BVSLT || ast->kind == SMT_FUNC_BVSGT ||
-      ast->kind == SMT_FUNC_BVSLTE || ast->kind == SMT_FUNC_BVSGTE;
-    BigInt l = is_signed_cmp ? to_signed(*lhs, width) : *lhs;
-    BigInt r = is_signed_cmp ? to_signed(*rhs, width) : *rhs;
-    switch (ast->kind)
-    {
-    case SMT_FUNC_LT:
-    case SMT_FUNC_BVSLT:
-    case SMT_FUNC_BVULT:
-      return l < r;
-    case SMT_FUNC_GT:
-    case SMT_FUNC_BVSGT:
-    case SMT_FUNC_BVUGT:
-      return l > r;
-    case SMT_FUNC_LTE:
-    case SMT_FUNC_BVSLTE:
-    case SMT_FUNC_BVULTE:
-      return l <= r;
-    case SMT_FUNC_GTE:
-    case SMT_FUNC_BVSGTE:
-    case SMT_FUNC_BVUGTE:
-      return l >= r;
-    default:
-      return std::nullopt;
-    }
+    return eval_bv_compare(
+      ast->kind, *lhs, *rhs, ast->args[0]->sort->get_data_width());
   }
 
   default:

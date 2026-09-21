@@ -104,6 +104,13 @@ private:
    *  (AND/OR/NOT/IMPLIES/XOR), and ITE. */
   std::optional<bool> local_eval_bool(smt_astt a) const;
 
+  /** local_eval_bool()'s SYMBOL and AND/OR/XOR arms, split out to keep it
+   *  inside the repo's cyclomatic-complexity gate. */
+  std::optional<bool> local_lookup_bool(const std::string &symname) const;
+  std::optional<bool>
+  eval_bool_fold(smt_func_kind kind, const smtlib_smt_ast *ast) const;
+  std::optional<bool> eval_bool_eq(const smtlib_smt_ast *ast) const;
+
   /** Inert while the factory leaves array_iface unset: ESBMC flattens every
    *  array to bit-vectors, so no SELECT or STORE node reaches this backend
    *  and neither this nor local_eval_bv()'s SELECT arm is entered. Both are
