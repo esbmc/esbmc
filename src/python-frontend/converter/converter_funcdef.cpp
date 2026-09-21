@@ -1605,6 +1605,12 @@ bool python_converter::module_level_symbolic_ctor_binding(
   const nlohmann::json &module_body,
   const std::string &arg_name) const
 {
+  // Tracks the *last* module-level binding of `arg_name`, not merely any
+  // historical one: `a = np.ones(n); a = np.ones(3)` must be judged by the
+  // second, concrete-shaped assignment, since that is the value any later
+  // read of `a` actually sees.
+  bool last_binding_is_symbolic = false;
+  bool found_binding = false;
   for (const auto &stmt : module_body)
   {
     const std::string stmt_type = stmt.value("_type", "");
@@ -1618,11 +1624,14 @@ bool python_converter::module_level_symbolic_ctor_binding(
 
     if (
       target_name == arg_name && stmt.contains("value") &&
-      is_numpy_array_constructor_expr(stmt["value"]) &&
-      numpy_ctor_shape_arg_is_symbolic(stmt["value"]))
-      return true;
+      is_numpy_array_constructor_expr(stmt["value"]))
+    {
+      last_binding_is_symbolic =
+        numpy_ctor_shape_arg_is_symbolic(stmt["value"]);
+      found_binding = true;
+    }
   }
-  return false;
+  return found_binding && last_binding_is_symbolic;
 }
 
 bool python_converter::numpy_param_call_site_has_symbolic_shape(
