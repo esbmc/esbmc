@@ -6793,6 +6793,28 @@ stable_argsort_of(const nlohmann::json &arr, const std::string &diagnostic)
   return indices;
 }
 
+// Follows `node` through a single-assignment Name binding to the value it
+// was assigned, or returns `node` unchanged for anything else (a
+// multiply-assigned name, or an expression that isn't a Name at all).
+// Shared by resolve_searchsorted_sorter and resolve_searchsorted_value_vector,
+// which both need to see through a local variable before inspecting its
+// literal shape.
+static nlohmann::json
+resolve_single_assignment_name(nlohmann::json node, python_converter &converter)
+{
+  if (
+    node.value("_type", std::string()) != "Name" ||
+    json_utils::has_multiple_assignments_in_scope(
+      node["id"], converter.current_function_name(), converter.ast()))
+    return node;
+
+  nlohmann::json resolved = json_utils::find_var_decl(
+    node["id"], converter.current_function_name(), converter.ast());
+  if (resolved.contains("value") && resolved["value"].is_object())
+    return resolved["value"];
+  return node;
+}
+
 // True when `node` (already known to be an is_argsort_call node) sorts the
 // bare Name `array_name` -- either `array_name.argsort()` (method form) or
 // `np.argsort(array_name)` (module form). resolve_searchsorted_sorter uses
@@ -6830,16 +6852,7 @@ static std::vector<std::size_t> resolve_searchsorted_sorter(
   const std::string &array_name,
   python_converter &converter)
 {
-  if (
-    sorter_arg.value("_type", std::string()) == "Name" &&
-    !json_utils::has_multiple_assignments_in_scope(
-      sorter_arg["id"], converter.current_function_name(), converter.ast()))
-  {
-    nlohmann::json resolved = json_utils::find_var_decl(
-      sorter_arg["id"], converter.current_function_name(), converter.ast());
-    if (resolved.contains("value") && resolved["value"].is_object())
-      sorter_arg = resolved["value"];
-  }
+  sorter_arg = resolve_single_assignment_name(sorter_arg, converter);
 
   if (is_argsort_call(sorter_arg))
   {
@@ -6922,16 +6935,7 @@ static std::optional<nlohmann::json> resolve_searchsorted_value_vector(
   nlohmann::json value_arg,
   python_converter &converter)
 {
-  if (
-    value_arg.value("_type", std::string()) == "Name" &&
-    !json_utils::has_multiple_assignments_in_scope(
-      value_arg["id"], converter.current_function_name(), converter.ast()))
-  {
-    nlohmann::json resolved = json_utils::find_var_decl(
-      value_arg["id"], converter.current_function_name(), converter.ast());
-    if (resolved.contains("value") && resolved["value"].is_object())
-      value_arg = resolved["value"];
-  }
+  value_arg = resolve_single_assignment_name(value_arg, converter);
 
   const std::string type = value_arg.value("_type", std::string());
   nlohmann::json elts;
