@@ -314,6 +314,7 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
 
   case SMT_FUNC_SELECT:
   {
+    // Unreachable while arrays are flattened; see local_eval_array_at().
     // args: (select array idx)
     auto idx_val = local_eval_bv(ast->args[1]);
     if (!idx_val)
@@ -825,14 +826,15 @@ smt_resultt neurosym_convt::dec_solve()
    * expected model format, or this particular formula has no free
    * variables) -- fall back to the original --neurosym-model-prog path in
    * full, right away, exactly as before this change. */
-  ensure_model_prog_ready();
-  return P_SATISFIABLE;
+  return ensure_model_prog_ready() || options.get_bool_option("result-only")
+           ? P_SATISFIABLE
+           : P_ERROR;
 }
 
-void neurosym_convt::ensure_model_prog_ready()
+bool neurosym_convt::ensure_model_prog_ready()
 {
   if (model_prog_response_read)
-    return;
+    return static_cast<bool>(emit_proc);
   model_prog_response_read = true;
 
   /* A satisfiable formula with nothing usable in local_model needs a live
@@ -848,7 +850,7 @@ void neurosym_convt::ensure_model_prog_ready()
   if (!emit_proc)
   {
     if (options.get_bool_option("result-only"))
-      return;
+      return false;
     if (options.get_option("neurosym-model-prog").empty())
       log_error(
         "neurosym: formula is satisfiable, but building the counterexample "
@@ -859,7 +861,7 @@ void neurosym_convt::ensure_model_prog_ready()
       log_error(
         "neurosym: the local model solver is unavailable; cannot build a "
         "counterexample");
-    abort();
+    return false;
   }
 
   smt_resultt model_res;
@@ -872,7 +874,7 @@ void neurosym_convt::ensure_model_prog_ready()
     log_error(
       "neurosym: the local model solver is unavailable; cannot build a "
       "counterexample");
-    abort();
+    return false;
   }
   if (model_res != P_SATISFIABLE)
   {
@@ -881,6 +883,7 @@ void neurosym_convt::ensure_model_prog_ready()
       "refusing to build a counterexample from a diverging model");
     abort();
   }
+  return true;
 }
 
 tvt neurosym_convt::get_bool(smt_astt a)
@@ -916,18 +919,13 @@ tvt neurosym_convt::l_get(smt_astt a)
     return tvt(*v);
 
   ensure_model_prog_ready();
-  /* ensure_model_prog_ready() can return having done nothing -- under
-   * --result-only with no --neurosym-model-prog, it stays silent instead of
-   * aborting, since dec_solve() itself only calls it to decide whether to
-   * bail out, and never touches its result otherwise. But error_trace()
-   * still walks the whole trace and calls l_get()/get_bv() for every
-   * variable even under --result-only (only the final printing is
-   * suppressed), so this path is reached for real. Falling through to
-   * smtlib_convt::l_get() here would send a (get-value) query to emit_proc
-   * and block reading a response from a solver that was never started --
-   * confirmed as a genuine multi-hour hang, not a slow solve. The trace
-   * built along this path is never printed, so the exact value returned
-   * does not matter; unknown is honest about not having one. */
+  /* Reaching here without a model solver means --result-only: any other
+   * configuration made dec_solve() return P_ERROR. error_trace() bails out
+   * immediately in that mode (bmc.cpp:327), so no counterexample is built
+   * from this value; the caller is the property-identification pass, which
+   * reports the claim as not checked. Falling through to
+   * smtlib_convt::l_get() would instead send a (get-value) to a solver that
+   * was never started and block forever reading its response. */
   if (!emit_proc)
     return tvt(tvt::TV_UNKNOWN);
   return smtlib_convt::l_get(a);
@@ -957,9 +955,7 @@ BigInt neurosym_convt::get_bv(smt_astt a, bool is_signed)
   {
     if (!is_signed)
       return *v;
-    std::size_t width = a->sort->get_data_width();
-    BigInt top_bit = BigInt(1) << BigInt(width - 1);
-    return *v >= top_bit ? *v - (BigInt(1) << BigInt(width)) : *v;
+    return to_signed(*v, a->sort->get_data_width());
   }
 
   ensure_model_prog_ready();

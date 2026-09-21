@@ -88,7 +88,7 @@ private:
   /** Recursively evaluate a bit-vector-sorted expression using local_model
    *  for its leaf symbols. Handles literals, bit-vector arithmetic
    *  (BVADD/SUB/MUL/UDIV/SDIV/UMOD/SMOD/SHL/LSHR/ASHR/NEG/NOT/AND/OR/XOR),
-   *  EXTRACT/CONCAT, ITE, and SELECT (via local_eval_array). Returns
+   *  EXTRACT/CONCAT and ITE. Returns
    *  nullopt the moment any subterm is a leaf symbol not in local_model, or
    *  a node kind not handled (floating-point, uninterpreted functions) --
    *  the caller falls back to --neurosym-model-prog in that case, exactly
@@ -104,7 +104,13 @@ private:
    *  (AND/OR/NOT/IMPLIES/XOR), and ITE. */
   std::optional<bool> local_eval_bool(smt_astt a) const;
 
-  /** Evaluate an array-sorted term at one concrete index: walks a
+  /** Inert while the factory leaves array_iface unset: ESBMC flattens every
+   *  array to bit-vectors, so no SELECT or STORE node reaches this backend
+   *  and neither this nor local_eval_bv()'s SELECT arm is entered. Both are
+   *  kept for the native-array mode they were written against, and become
+   *  live the moment that is enabled.
+   *
+   *  Evaluate an array-sorted term at one concrete index: walks a
    *  STORE-chain looking for a write at `index`, recursing into the base
    *  array on a miss; an ITE picks a branch by its (evaluated) condition
    *  and recurses into it with the same index. A bare array SYMBOL leaf has
@@ -124,7 +130,7 @@ private:
    *  never called at all, and the model solver's answer -- on a large
    *  formula, potentially itself a multi-minute solve -- is never waited
    *  for. Safe to call repeatedly; only acts once. */
-  void ensure_model_prog_ready();
+  bool ensure_model_prog_ready();
   bool model_prog_response_read = false;
 
   std::string formula_path;
