@@ -2466,79 +2466,6 @@ void python_converter::upgrade_param_type_from_default(
     param_sym->set_type(default_type);
 }
 
-namespace
-{
-// Structural equality of two AST JSON nodes, ignoring source-location keys
-// (lineno/col_offset/...). Two textually identical constructor calls on
-// different source lines -- e.g. `np.zeros(3)` on both arms of an if/else --
-// differ only in their location fields, so a raw `==`/`dump()` comparison
-// would wrongly report them as different shapes. Mirrors
-// ast_equal_ignoring_location in python-list/list_access.cpp; duplicated
-// rather than shared since that copy lives in an anonymous namespace with no
-// header of its own.
-bool numpy_ctor_args_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b);
-
-bool is_loc_key(const std::string &k)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  for (const char *lk : loc_keys)
-    if (k == lk)
-      return true;
-  return false;
-}
-
-// Object case of numpy_ctor_args_equal_ignoring_location. Split out to keep
-// that function's own decision count down.
-bool numpy_ctor_objects_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b)
-{
-  for (auto it = a.begin(); it != a.end(); ++it)
-  {
-    if (is_loc_key(it.key()))
-      continue;
-    if (
-      !b.contains(it.key()) ||
-      !numpy_ctor_args_equal_ignoring_location(it.value(), b[it.key()]))
-      return false;
-  }
-  for (auto it = b.begin(); it != b.end(); ++it)
-    if (!is_loc_key(it.key()) && !a.contains(it.key()))
-      return false;
-  return true;
-}
-
-// Array case of numpy_ctor_args_equal_ignoring_location. Split out to keep
-// that function's own decision count down.
-bool numpy_ctor_arrays_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b)
-{
-  if (a.size() != b.size())
-    return false;
-  for (size_t i = 0; i < a.size(); ++i)
-    if (!numpy_ctor_args_equal_ignoring_location(a[i], b[i]))
-      return false;
-  return true;
-}
-
-bool numpy_ctor_args_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b)
-{
-  if (a.type() != b.type())
-    return false;
-  if (a.is_object())
-    return numpy_ctor_objects_equal_ignoring_location(a, b);
-  if (a.is_array())
-    return numpy_ctor_arrays_equal_ignoring_location(a, b);
-  return a == b;
-}
-} // namespace
-
 // `<name> = ...` as a plain, single-target Name assignment. Split out of
 // find_numpy_ctor_value_assigned_to to keep its own decision count down.
 static bool
@@ -2705,7 +2632,7 @@ static void throw_if_branch_shapes_mismatch(
   if (
     then_value && else_value && then_value->contains("args") &&
     else_value->contains("args") &&
-    !numpy_ctor_args_equal_ignoring_location(
+    !json_utils::ast_equal_ignoring_location(
       (*then_value)["args"], (*else_value)["args"]))
     throw std::runtime_error(
       "TypeError: numpy local array return requires the same shape "
