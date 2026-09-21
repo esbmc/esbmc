@@ -2561,6 +2561,34 @@ static bool is_if_else_with_both_arms(const nlohmann::json &stmt)
          stmt["orelse"].is_array() && !stmt["orelse"].empty();
 }
 
+// True when `name` is assigned (as a plain single-target Name) anywhere in
+// `block`, including inside a nested if/else. find_numpy_ctor_value_assigned_to
+// uses this to tell "this if/else doesn't touch `name` at all, keep scanning
+// past it" apart from "this if/else assigns `name` but the branches
+// disagree or one doesn't assign it", which must stop the scan instead.
+static bool block_assigns_name_anywhere(
+  const nlohmann::json &block,
+  const std::string &name)
+{
+  if (!block.is_array())
+    return false;
+
+  for (const auto &stmt : block)
+  {
+    if (!stmt.is_object())
+      continue;
+    if (is_simple_name_assign_to(stmt, name))
+      return true;
+    if (
+      stmt.value("_type", std::string()) == "If" && stmt.contains("body") &&
+      (block_assigns_name_anywhere(stmt["body"], name) ||
+       (stmt.contains("orelse") &&
+        block_assigns_name_anywhere(stmt["orelse"], name))))
+      return true;
+  }
+  return false;
+}
+
 // The last direct assignment to `name` in `block[0..end)`, following into
 // both arms of a trailing if/else so a branching function is handled the
 // same as a straight-line one. Returns the assigned value node only when it
@@ -2597,7 +2625,14 @@ const nlohmann::json *python_converter::find_numpy_ctor_value_assigned_to(
         stmt["body"], stmt["body"].size(), name);
       const nlohmann::json *else_value = find_numpy_ctor_value_assigned_to(
         stmt["orelse"], stmt["orelse"].size(), name);
-      return (then_value && else_value) ? then_value : nullptr;
+      if (then_value && else_value)
+        return then_value;
+      if (
+        block_assigns_name_anywhere(stmt["body"], name) ||
+        block_assigns_name_anywhere(stmt["orelse"], name))
+        return nullptr;
+      // Neither arm touches `name` at all -- this if/else is unrelated,
+      // keep scanning earlier statements in the outer block for it.
     }
   }
   return nullptr;
