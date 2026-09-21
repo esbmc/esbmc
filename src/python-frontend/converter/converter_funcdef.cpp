@@ -1046,16 +1046,54 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
 }
 
-// True when `ctor_call`'s shape argument (args[0], a scalar for 1-D or a
-// Tuple for 2-D+) is not made entirely of literal Constants -- e.g.
-// `np.ones(n)` for a variable `n`, as opposed to `np.ones(3)`. The converter
-// has no static value for such a shape, so a parameter fed this call cannot
-// be typed as a concrete array.
+// True when any element of `args` is not a literal Constant -- used for
+// `np.arange(...)`, whose output length depends on every numeric argument
+// given (start/stop/step), unlike the other constructors' single shape
+// argument.
+static bool numpy_arange_length_is_symbolic(const nlohmann::json &args)
+{
+  for (const auto &arg : args)
+    if (arg.value("_type", "") != "Constant")
+      return true;
+  return false;
+}
+
+// True when `ctor_call` is `np.linspace(...)` and its length-determining
+// `num` argument (3rd positional, or the `num=` keyword; literal 50 when
+// neither is given) is not a literal Constant.
+static bool numpy_linspace_length_is_symbolic(const nlohmann::json &ctor_call)
+{
+  if (ctor_call["args"].size() >= 3)
+    return ctor_call["args"][2].value("_type", "") != "Constant";
+  if (ctor_call.contains("keywords"))
+    for (const auto &kw : ctor_call["keywords"])
+      if (kw.value("arg", "") == "num")
+        return kw["value"].value("_type", "") != "Constant";
+  return false;
+}
+
+// True when `ctor_call`'s shape is not made entirely of literal Constants --
+// e.g. `np.ones(n)` for a variable `n`, as opposed to `np.ones(3)`. The
+// converter has no static value for such a shape, so a parameter fed this
+// call cannot be typed as a concrete array. `arange`/`linspace` derive their
+// output length from different arguments than the other constructors'
+// single shape argument (args[0], a scalar for 1-D or a Tuple for 2-D+), so
+// they are checked separately.
 static bool numpy_ctor_shape_arg_is_symbolic(const nlohmann::json &ctor_call)
 {
-  if (
-    !ctor_call.contains("args") || !ctor_call["args"].is_array() ||
-    ctor_call["args"].empty())
+  if (!ctor_call.contains("args") || !ctor_call["args"].is_array())
+    return false;
+
+  const std::string ctor_name =
+    ctor_call.contains("func") && ctor_call["func"].is_object()
+      ? ctor_call["func"].value("attr", "")
+      : "";
+  if (ctor_name == "arange")
+    return numpy_arange_length_is_symbolic(ctor_call["args"]);
+  if (ctor_name == "linspace")
+    return numpy_linspace_length_is_symbolic(ctor_call);
+
+  if (ctor_call["args"].empty())
     return false;
 
   const nlohmann::json &shape_arg = ctor_call["args"][0];
