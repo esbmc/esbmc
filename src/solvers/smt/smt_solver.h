@@ -274,6 +274,9 @@ public:
    *          reason. */
   virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
+  /** get_by_ast's body, without the model-value cache in front of it. */
+  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
+
   /** Resolve @p expr's model value through its converted AST. Unlike
    *  get_by_type, the struct/pointer case goes through the AST-based
    *  tuple getter, so @p expr need not be a symbol (it may be a member /
@@ -1050,6 +1053,15 @@ public:
    *  by the boolean smt_ast pointer (solver ASTs are hash-consed, so
    *  identical pointer ⇒ identical term ⇒ identical model value). */
   std::unordered_map<smt_astt, tvt> l_get_cache;
+  /** Model-value cache for get_by_ast(), on the same terms and with the same
+   *  invalidation as l_get_cache. Building a trace re-reads the same term
+   *  under several steps -- a value assigned once and read back by later
+   *  assignments, a loop-invariant index -- and each miss is a solver model
+   *  query, which bitwuzla answers by substituting the term's definition and
+   *  rewriting it: cost proportional to that definition, not to the value.
+   *  The stored type is part of the key in effect, since get_by_ast reads the
+   *  same bit-vector as signed or unsigned depending on it. */
+  std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
