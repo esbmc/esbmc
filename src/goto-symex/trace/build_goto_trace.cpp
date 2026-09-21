@@ -172,6 +172,20 @@ static expr2tc build_component_value(
   return is_model_value(value) ? value : expr2tc();
 }
 
+/* The value an assignment step reports: the component the step prints where
+ * that can be read on its own, the whole rewritten object otherwise. */
+static expr2tc build_assignment_value(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step)
+{
+  expr2tc component = build_component_value(smt_conv, step);
+  if (!is_nil_expr(component))
+    return component;
+
+  return build_rhs(
+    smt_conv, is_nil_expr(step.original_rhs) ? step.rhs : step.original_rhs);
+}
+
 /* The claim a violated assert reports is written in source terms -- the GOTO
  * guard still says `d->devnum` -- while the value only exists in the SSA
  * condition symex built from it, where dereference lowering has replaced the
@@ -319,15 +333,7 @@ void build_goto_trace(
       assert(!goto_trace_step.value);
       try
       {
-        goto_trace_step.value = build_component_value(smt_conv, SSA_step);
-
-        if (!goto_trace_step.value)
-        {
-          if (is_nil_expr(SSA_step.original_rhs))
-            goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
-          else
-            goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
-        }
+        goto_trace_step.value = build_assignment_value(smt_conv, SSA_step);
 
         // Try asking solver if value was not built
         if (
