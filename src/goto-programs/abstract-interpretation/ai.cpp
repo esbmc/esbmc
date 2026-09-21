@@ -125,6 +125,8 @@ bool ai_baset::visit(
 
   goto_programt::const_targetst successors;
   goto_program.get_successors(l, successors);
+  if (continue_past_failed_assertions && l->is_assert() && successors.empty())
+    successors.push_back(std::next(l));
 
   for (const auto &to_l : successors)
   {

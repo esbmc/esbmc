@@ -220,6 +220,38 @@ smt_astt smt_solver_baset::convert_pointer_bitcast(
   return nullptr;
 }
 
+/** Read a floating-point value from the bits of @p from. Null when those bits
+ *  are not in a form this can take apart. */
+smt_astt smt_solver_baset::convert_bitcast_to_fp(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  expr2tc new_from = from;
+
+  // Converting from struct/array to fp, we simply convert it to bv and use
+  // the bv to fp method to do the job for us
+  if (is_struct_type(new_from) || is_array_type(new_from))
+    new_from = flatten_to_bitvector(new_from);
+
+  // When int_encoding is true, integer types are represented as integers
+  // in the SMT solver, but fp_api expects bitvectors. Fall back to value-based
+  // conversion.
+  if (
+    int_encoding &&
+    (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
+  {
+    // Fall back to value-based conversion instead of bit-pattern conversion
+    return convert_ast(typecast2tc(to_type, new_from));
+  }
+
+  // from bitvectors should go through the fp api
+  if (is_bv_type(new_from) || is_union_type(new_from))
+    return fp_api->mk_from_bv_to_fp(
+      convert_ast(new_from), convert_sort(to_type));
+
+  return nullptr;
+}
+
 /** Rebuild a struct from the bits of @p from, member by member. Null when
  *  those bits are not in a form this can take apart. */
 smt_astt smt_solver_baset::convert_bitcast_to_struct(
@@ -267,6 +299,97 @@ smt_astt smt_solver_baset::convert_bitcast_to_struct(
   return convert_ast(constant_struct2tc(to_type, fields));
 }
 
+/* A cast involving a vector reinterprets the object representation, so it has
+ * to follow the target's byte order: flatten_to_bitvector alone puts lane 0 in
+ * the low bits, but on a big-endian target each lane's own bytes are the other
+ * way round. This puts a lane's or scalar's lowest-addressed byte lowest,
+ * and back, byte swapping being its own inverse (#7905). */
+static expr2tc in_memory_order(const expr2tc &bits)
+{
+  return config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN
+           ? bswap2tc(bits->type, bits)
+           : bits;
+}
+
+static expr2tc to_memory_order(const expr2tc &value)
+{
+  return in_memory_order(flatten_to_bitvector(value));
+}
+
+static expr2tc from_memory_order(const expr2tc &bits, const type2tc &type)
+{
+  return bitcast2tc(type, in_memory_order(bits));
+}
+
+/** The object representation of @p value, lowest address in the low bits. */
+static expr2tc object_bits(const expr2tc &value)
+{
+  if (!is_vector_type(value))
+    return to_memory_order(value);
+
+  const vector_type2t &vec = to_vector_type(value->type);
+  const size_t lanes = to_constant_int2t(vec.array_size).value.to_uint64();
+  return concat_tree(0, lanes, [&](size_t i) {
+    return to_memory_order(index2tc(
+      vec.subtype, value, constant_int2tc(index_type2(), lanes - i - 1)));
+  });
+}
+
+/** Read an object of @p type back from its representation @p bits. */
+static expr2tc from_object_bits(const expr2tc &bits, const type2tc &type)
+{
+  if (!is_vector_type(type))
+    return from_memory_order(bits, type);
+
+  const vector_type2t &vec = to_vector_type(type);
+  const size_t lanes = to_constant_int2t(vec.array_size).value.to_uint64();
+  const size_t lane_bits = type_byte_size_bits(vec.subtype).to_uint64();
+  std::vector<expr2tc> members;
+  for (size_t i = 0; i < lanes; i++)
+    members.push_back(from_memory_order(
+      extract2tc(
+        get_uint_type(lane_bits), bits, (i + 1) * lane_bits - 1, i * lane_bits),
+      vec.subtype));
+  return constant_vector2tc(type, members);
+}
+
+/* Under integer encoding there are no bits to lay out, so cast lane by lane,
+ * converting the value as a scalar bitcast there does. Lanes of another width
+ * have no such reading. */
+static expr2tc lanewise_bitcast(const expr2tc &from, const type2tc &to)
+{
+  const bool same_lanes =
+    is_vector_type(from) && is_vector_type(to) &&
+    to_constant_int2t(to_vector_type(from->type).array_size).value ==
+      to_constant_int2t(to_vector_type(to).array_size).value;
+  if (!same_lanes)
+  {
+    log_error("Cannot bitcast a vector to another lane width under --ir");
+    abort();
+  }
+
+  const vector_type2t &vec = to_vector_type(to);
+  std::vector<expr2tc> lanes;
+  for (size_t i = 0; i < to_constant_int2t(vec.array_size).value.to_uint64();
+       i++)
+    lanes.push_back(bitcast2tc(
+      vec.subtype,
+      index2tc(
+        to_vector_type(from->type).subtype,
+        from,
+        constant_int2tc(index_type2(), i))));
+  return constant_vector2tc(to, lanes);
+}
+
+/* to_memory_order swaps a flattened struct or union as one scalar, which is
+ * not how its members sit on a big-endian target, so those keep the paths
+ * below. */
+static bool is_vector_bitcast(const type2tc &from, const type2tc &to)
+{
+  return (is_vector_type(from) || is_vector_type(to)) &&
+         !is_structure_type(from) && !is_structure_type(to);
+}
+
 smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
@@ -277,30 +400,15 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   if (smt_astt pointer = convert_pointer_bitcast(from, to_type))
     return pointer;
 
-  // Converts to floating-point
+  if (is_vector_bitcast(from->type, to_type))
+    return convert_ast(
+      int_encoding ? lanewise_bitcast(from, to_type)
+                   : from_object_bits(object_bits(from), to_type));
+
   if (is_floatbv_type(to_type))
   {
-    expr2tc new_from = from;
-
-    // Converting from struct/array to fp, we simply convert it to bv and use
-    // the bv to fp method to do the job for us
-    if (is_struct_type(new_from) || is_array_type(new_from))
-      new_from = flatten_to_bitvector(new_from);
-
-    // When int_encoding is true, integer types are represented as integers
-    // in the SMT solver, but fp_api expects bitvectors. Fall back to value-based conversion.
-    if (
-      int_encoding &&
-      (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
-    {
-      // Fall back to value-based conversion instead of bit-pattern conversion
-      return convert_ast(typecast2tc(to_type, new_from));
-    }
-
-    // from bitvectors should go through the fp api
-    if (is_bv_type(new_from) || is_union_type(new_from))
-      return fp_api->mk_from_bv_to_fp(
-        convert_ast(new_from), convert_sort(to_type));
+    if (smt_astt fp = convert_bitcast_to_fp(from, to_type))
+      return fp;
   }
   else if (is_fixedbv_type(to_type))
   {

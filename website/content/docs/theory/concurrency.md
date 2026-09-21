@@ -81,6 +81,14 @@ schedules, exploring one representative per equivalence class. POR is on by
 default; disable it with `--no-por` (for example, to cross-check that the
 reduction is not hiding a schedule).
 
+Shared state is keyed by object. Every **address-taken local** is keyed as a
+global is, alongside static and heap-typed objects. Keying only the latter two
+meant a mutex or a datum in `main`'s frame, handed to a worker through a pointer,
+had no key in either thread, so MPOR pruned the only schedule reaching the bug —
+and a write to such a local was not a context-switch point either, so `--no-por`
+missed it too. `std::mutex` and `std::condition_variable` locals hit the same
+case ([#7826](https://github.com/esbmc/esbmc/pull/7826)).
+
 ## State hashing
 
 ```sh
@@ -130,6 +138,14 @@ interleaving), ESBMC offers concurrency-specific checks:
 | Atomicity at visible assignments | `--atomicity-check` |
 
 `--data-races-check-only` narrows the run to race checks to reduce overhead.
+
+Race instrumentation keeps a **callee outside** the atomic block guarding its
+caller's own accesses. A call whose result is stored in shared memory
+(`results[i] = f()`), or one made through a global function pointer, used to run
+under that lock, so races inside the callee were never reported and racy
+programs verified `SUCCESSFUL`
+([#7768](https://github.com/esbmc/esbmc/issues/7768)). The result is now stored
+through a thread-local after the call.
 
 ## Modelled synchronisation primitives
 

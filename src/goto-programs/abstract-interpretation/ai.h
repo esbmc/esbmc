@@ -77,6 +77,13 @@ public:
   {
   }
 
+  /// goto_programt::get_successors gives an ASSERT whose guard is false no
+  /// successor, as though a violation ended the run. Symex continues past a
+  /// failed assertion, so a run that checks claims beyond one
+  /// (--multi-property, coverage) must set this, or the states that follow
+  /// the violation are missing from every invariant computed here.
+  bool continue_past_failed_assertions = false;
+
   virtual void
   output(const goto_functionst &goto_functions, std::ostream &out) const;
 
