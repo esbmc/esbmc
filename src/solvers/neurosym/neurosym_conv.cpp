@@ -300,7 +300,17 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
     return mask_to_width(ast->intval, width);
 
   case SMT_FUNC_SYMBOL:
-    return local_lookup(ast->symname);
+  {
+    /* Mask like every other arm: NeuroSym may print a value in any form
+     * numeric_value() accepts, including a negative or out-of-range
+     * decimal. Returning it verbatim leaks a value that is not a canonical
+     * unsigned width-bit pattern, which to_signed() then misreads and which
+     * slips past the shift guards below into power(2, negative). */
+    auto v = local_lookup(ast->symname);
+    if (!v)
+      return std::nullopt;
+    return mask_to_width(*v, width);
+  }
 
   case SMT_FUNC_SELECT:
   {
