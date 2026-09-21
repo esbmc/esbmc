@@ -22,6 +22,9 @@ struct loop_shapet
 {
   unsigned entry, head, back;
   std::vector<expr2tc> havoc_vars;
+  /// main has no loop: the whole program is the prefix, there is no state and
+  /// no step, and the prefix check alone decides it.
+  bool loop_free = false;
 };
 
 bool is_input_symbol(const expr2tc &e)
@@ -166,8 +169,12 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
     }
   if (back == body.instructions.end())
   {
-    log_warning("main has no loop");
-    return false;
+    // No loop: every step is prefix. Calls still have to be supported, and an
+    // unwinding assertion from a callee loop still rejects the program later.
+    shape.loop_free = true;
+    std::vector<irep_idt> stack{main_id};
+    return calls_are_supported(
+      fns, body.instructions.begin(), body.instructions.end(), false, stack);
   }
   if (!is_true(back->guard))
   {
@@ -350,6 +357,7 @@ bool extract_transition_system(
 
   // Introduce the magic markers
   const unsigned n = shape.havoc_vars.size();
+  if (!shape.loop_free)
   {
     auto back = find_location(main_body, shape.back);
     auto head = find_location(main_body, shape.head);
@@ -363,10 +371,12 @@ bool extract_transition_system(
     main_body.instructions.begin(),
     main_body.instructions.end(),
     [](const auto &i) { return i.is_backwards_goto(); });
-  // Only the main loop's own unwinding assertion is expected; any other is a
-  // callee's, and rejects below.
+  // Only the main loop's own unwinding assertion is expected; without a loop
+  // there is none, and any that appears is a callee's and rejects below.
   const std::string main_unwinding =
-    "unwinding assertion loop " + std::to_string(main_back->loop_number);
+    main_back == main_body.instructions.end()
+      ? std::string()
+      : "unwinding assertion loop " + std::to_string(main_back->loop_number);
 
   optionst opts = options;
   opts.set_option("inductive-step", true);
@@ -446,16 +456,26 @@ bool extract_transition_system(
       seen_post[k]++;
     }
   }
-  for (unsigned k = 0; k < n; k++)
-    if (seen_init[k] != 1 || seen_pre[k] != 1 || seen_post[k] != 1)
+  if (shape.loop_free)
+  {
+    // Everything is prefix: `prefix = i < init_first` must hold throughout,
+    // and the body and havoc regions must stay empty.
+    init_first = post_first = steps.size();
+    ts.back_guard = gen_false_expr();
+  }
+  else
+  {
+    for (unsigned k = 0; k < n; k++)
+      if (seen_init[k] != 1 || seen_pre[k] != 1 || seen_post[k] != 1)
+      {
+        log_warning("loop markers were not executed exactly once");
+        return false;
+      }
+    if (!(init_first < pre_first && pre_last < post_first))
     {
-      log_warning("loop markers were not executed exactly once");
+      log_warning("loop markers out of order");
       return false;
     }
-  if (!(init_first < pre_first && pre_last < post_first))
-  {
-    log_warning("loop markers out of order");
-    return false;
   }
   for (size_t i = 0; i < steps.size(); i++)
   {
