@@ -60,7 +60,8 @@ int esbmc_parseoptionst::do_ts_strategy(
     std::ostringstream btor2;
     try
     {
-      write_btor2(ts, btor2);
+      const namespacet ns(context);
+      write_btor2(ts, btor2, cmdline.isset("ts-btor2-fp"), ns, options);
     }
     catch (const std::runtime_error &e)
     {

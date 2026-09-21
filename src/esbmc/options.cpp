@@ -548,6 +548,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ts-btor2",
      boost::program_options::value<std::string>()->value_name("file"),
      "Write the transition system to file as BTOR2 and stop"},
+    {"ts-btor2-fp",
+     NULL,
+     "Bit-blast floating point when writing BTOR2. Off by default: the "
+     "lowering is the generic softfloat one and is not optimised for BTOR2"},
     {"ts-bmc", NULL, "Bounded model checking over the transition system"},
     {"ts-k-induction", NULL, "k-induction over the transition system"},
     {"ts-pdr", NULL, "IC3/PDR over the transition system"},

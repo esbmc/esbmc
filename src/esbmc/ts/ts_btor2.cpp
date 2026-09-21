@@ -1,5 +1,8 @@
 #include <esbmc/ts/ts_btor2.h>
 
+#include <esbmc/ts/btor2_fp.h>
+#include <solvers/smt/fp/fp_conv.h>
+
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/mp_arith.h>
@@ -12,12 +15,39 @@
 
 namespace
 {
-unsigned width_of(const type2tc &t)
+/// BTOR2 has no floating-point sort, so floats have to be bit-blasted. The
+/// lowering is the generic softfloat one, correct but not tuned for BTOR2, so
+/// it is opt-in; the in-memory engines read the system directly and need none
+/// of it.
+const char *const fp_needs_opt_in =
+  "unsupported type floatbv. BTOR2 has no floating-point sort, so it must be "
+  "bit-blasted; pass --ts-btor2-fp to do that. The lowering is the generic "
+  "softfloat one and is not optimised for BTOR2, so the model grows by "
+  "roughly 700 nodes per add, 1400 per multiply and 2700 per fma. "
+  "--ts-k-induction, --ts-bmc and --ts-pdr read the transition system "
+  "directly and already handle floats without this";
+
+/// btor2_fp_convt drives fp_convt to emit BTOR2 and is wired in below, but it
+/// does not terminate yet: a single double addition allocates without bound,
+/// while the same lowering through an SMT backend costs about 700 terms. Ruled
+/// out so far: line-level sharing, AST hash-consing, slice underflow, and
+/// with_sort's in-place mutation. The open lead is that wrap() gives every
+/// result a plain SMT_SORT_BV sort, so a float loses its significand width and
+/// fp_conv.cpp:307's `i < sbits + 3` loop gets the wrong bound.
+const char *const fp_incomplete =
+  "floating-point BTOR2 export is not finished: it does not terminate on "
+  "programs containing floating-point operations. Use --ts-k-induction, "
+  "--ts-bmc or --ts-pdr, which read the transition system directly and handle "
+  "floats today";
+
+unsigned width_of(const type2tc &t, bool bitblast_fp)
 {
   if (is_bool_type(t))
     return 1;
   if (is_signedbv_type(t) || is_unsignedbv_type(t))
     return t->get_width();
+  if (is_floatbv_type(t))
+    throw std::runtime_error(bitblast_fp ? fp_incomplete : fp_needs_opt_in);
   throw std::runtime_error("unsupported type " + get_type_id(t));
 }
 
@@ -32,8 +62,13 @@ std::string sanitize(const std::string &name)
 class btor2_writert
 {
 public:
-  btor2_writert(const transition_systemt &ts, std::ostream &out)
-    : ts(ts), out(out)
+  btor2_writert(
+    const transition_systemt &ts,
+    std::ostream &out,
+    bool bitblast_fp,
+    const namespacet &ns,
+    const optionst &options)
+    : ts(ts), out(out), bitblast_fp(bitblast_fp), ns(ns), options(options)
   {
   }
 
@@ -42,11 +77,30 @@ public:
 private:
   const transition_systemt &ts;
   std::ostream &out;
+  const bool bitblast_fp;
+  const namespacet &ns;
+  const optionst &options;
+  std::unique_ptr<btor2_fp_convt> fp;
+
+  unsigned width_of(const type2tc &t) const
+  {
+    return ::width_of(t, bitblast_fp);
+  }
+
+  /// The softfloat lowering, built on first use: constructing it sets up a
+  /// whole smt_solver_baset, which an export with no floats should not pay for.
+  btor2_fp_convt &fp_conv();
+  /// Lower one floating-point expression through fp_convt.
+  unsigned convert_fp(const expr2tc &e);
+  /// The rounding mode operand as fp_convt wants it.
+  smt_astt rounding_mode(const expr2tc &rm);
+
   unsigned last = 0;
   std::map<unsigned, unsigned> sorts;
   std::unordered_map<expr2tc, unsigned, irep2_hash> leaves;
   std::unordered_map<expr2tc, expr2tc, irep2_hash> defs;
   std::unordered_map<const expr2t *, unsigned> memo;
+  std::unordered_map<std::string, unsigned> shared;
 
   unsigned emit(const std::string &line)
   {
@@ -62,13 +116,42 @@ private:
     return sorts[width] = emit("sort bitvec " + std::to_string(width));
   }
 
+  /// Declarations mean something different each time they appear: two `input`
+  /// lines are two independent inputs, and a state's `init`/`next` must not be
+  /// shared with another state's.
+  static bool is_declaration(const std::string &name)
+  {
+    return name == "state" || name == "input" || name == "init" ||
+           name == "next" || name == "bad" || name == "constraint";
+  }
+
   unsigned
   op(const std::string &name, unsigned width, std::vector<unsigned> args)
   {
     std::string line = name + ' ' + std::to_string(sort(width));
     for (unsigned a : args)
       line += ' ' + std::to_string(a);
-    return emit(line);
+    return is_declaration(name) ? emit(line) : shared_emit(line);
+  }
+
+  /// Structural sharing. fp_convt builds a DAG whose shared subterms it
+  /// revisits; without this each visit emits the subterm again and the
+  /// lowering of a single float operation blows up exponentially. Every
+  /// non-declaration line must go through here, constants included: an
+  /// unshared leaf gives its parents different operands and defeats the
+  /// sharing above it.
+  unsigned shared_emit(const std::string &line)
+  {
+    auto it = shared.find(line);
+    if (it != shared.end())
+      return it->second;
+    return shared[line] = emit(line);
+  }
+
+  unsigned constant(const BigInt &v, unsigned width)
+  {
+    return shared_emit(
+      "const " + std::to_string(sort(width)) + ' ' + integer2binary(v, width));
   }
 
   unsigned bool_const(bool v)
@@ -164,6 +247,133 @@ btor2_writert::cast(unsigned node, const type2tc &from, const type2tc &to)
     std::string(is_signedbv_type(from) ? "sext " : "uext ") +
     std::to_string(sort(tw)) + ' ' + std::to_string(node) + ' ' +
     std::to_string(tw - fw));
+}
+
+btor2_fp_convt &btor2_writert::fp_conv()
+{
+  if (!fp)
+    fp = std::make_unique<btor2_fp_convt>(
+      ns,
+      options,
+      [this](
+        const std::string &name,
+        unsigned width,
+        const std::vector<unsigned> &args) { return op(name, width, args); },
+      [this](const BigInt &v, unsigned width) {
+        return constant(v, width);
+      });
+  return *fp;
+}
+
+smt_astt btor2_writert::rounding_mode(const expr2tc &rm)
+{
+  // A non-constant rounding mode would have to be an ite over all five; no
+  // frontend produces one, so reject rather than silently pick one.
+  if (!is_constant_int2t(rm))
+    throw std::runtime_error("unsupported symbolic rounding mode");
+  const int64_t raw = to_constant_int2t(rm).value.to_int64();
+  switch (raw)
+  {
+  case ieee_floatt::ROUND_TO_EVEN:
+  case ieee_floatt::ROUND_TO_AWAY:
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+  case ieee_floatt::ROUND_TO_ZERO:
+    return fp_conv().fp().mk_smt_fpbv_rm(
+      static_cast<ieee_floatt::rounding_modet>(raw));
+  default:
+    throw std::runtime_error(
+      "unsupported rounding mode " + std::to_string(raw));
+  }
+}
+
+unsigned btor2_writert::convert_fp(const expr2tc &e)
+{
+  btor2_fp_convt &c = fp_conv();
+  // A BTOR2 node, wrapped so fp_convt can take it as an operand.
+  auto arg = [&](const expr2tc &x) {
+    return c.wrap(convert(x), width_of(x->type));
+  };
+  auto done = [](smt_astt a) { return btor2_fp_convt::node_of(a); };
+  const unsigned w = width_of(e->type);
+
+  switch (e->expr_id)
+  {
+  case expr2t::constant_floatbv_id:
+  {
+    // The IEEE bit pattern is the value; no lowering needed.
+    ieee_floatt v = to_constant_floatbv2t(e).value;
+    return constant(v.pack(), w);
+  }
+  case expr2t::ieee_add_id:
+  {
+    const ieee_add2t &o = to_ieee_add2t(e);
+    return done(
+      c.fp().mk_smt_fpbv_add(
+        arg(o.side_1), arg(o.side_2), rounding_mode(o.rounding_mode)));
+  }
+  case expr2t::ieee_sub_id:
+  {
+    const ieee_sub2t &o = to_ieee_sub2t(e);
+    return done(
+      c.fp().mk_smt_fpbv_sub(
+        arg(o.side_1), arg(o.side_2), rounding_mode(o.rounding_mode)));
+  }
+  case expr2t::ieee_mul_id:
+  {
+    const ieee_mul2t &o = to_ieee_mul2t(e);
+    return done(
+      c.fp().mk_smt_fpbv_mul(
+        arg(o.side_1), arg(o.side_2), rounding_mode(o.rounding_mode)));
+  }
+  case expr2t::ieee_div_id:
+  {
+    const ieee_div2t &o = to_ieee_div2t(e);
+    return done(
+      c.fp().mk_smt_fpbv_div(
+        arg(o.side_1), arg(o.side_2), rounding_mode(o.rounding_mode)));
+  }
+  case expr2t::ieee_sqrt_id:
+  {
+    const ieee_sqrt2t &o = to_ieee_sqrt2t(e);
+    return done(
+      c.fp().mk_smt_fpbv_sqrt(arg(o.value), rounding_mode(o.rounding_mode)));
+  }
+  case expr2t::ieee_fma_id:
+  {
+    const ieee_fma2t &o = to_ieee_fma2t(e);
+    return done(
+      c.fp().mk_smt_fpbv_fma(
+        arg(o.value_1),
+        arg(o.value_2),
+        arg(o.value_3),
+        rounding_mode(o.rounding_mode)));
+  }
+  case expr2t::isnan_id:
+    return done(c.fp().mk_smt_fpbv_is_nan(arg(to_isnan2t(e).value)));
+  case expr2t::isinf_id:
+    return done(c.fp().mk_smt_fpbv_is_inf(arg(to_isinf2t(e).value)));
+  case expr2t::isnormal_id:
+    return done(c.fp().mk_smt_fpbv_is_normal(arg(to_isnormal2t(e).value)));
+  case expr2t::isfinite_id:
+  {
+    // finite = not nan and not inf
+    smt_astt v = arg(to_isfinite2t(e).value);
+    smt_astt nan = c.fp().mk_smt_fpbv_is_nan(v);
+    smt_astt inf = c.fp().mk_smt_fpbv_is_inf(v);
+    return done(c.mk_not(c.mk_or(nan, inf)));
+  }
+  case expr2t::signbit_id:
+  {
+    // signbit returns int32, so widen the predicate rather than return a bit.
+    smt_astt neg =
+      c.fp().mk_smt_fpbv_is_negative(arg(to_signbit2t(e).operand));
+    return op("uext", w, {done(neg), w - 1});
+  }
+  default:
+    throw std::runtime_error(
+      "unsupported floating-point expression " + get_expr_id(*e));
+  }
 }
 
 unsigned btor2_writert::convert(const expr2tc &e)
@@ -326,6 +536,19 @@ unsigned btor2_writert::convert_expr(const expr2tc &e)
       "concat",
       w,
       {convert(to_concat2t(e).side_1), convert(to_concat2t(e).side_2)});
+  case expr2t::constant_floatbv_id:
+  case expr2t::ieee_add_id:
+  case expr2t::ieee_sub_id:
+  case expr2t::ieee_mul_id:
+  case expr2t::ieee_div_id:
+  case expr2t::ieee_sqrt_id:
+  case expr2t::ieee_fma_id:
+  case expr2t::isnan_id:
+  case expr2t::isinf_id:
+  case expr2t::isnormal_id:
+  case expr2t::isfinite_id:
+  case expr2t::signbit_id:
+    return convert_fp(e);
   default:
     throw std::runtime_error("unsupported expression " + get_expr_id(*e));
   }
@@ -424,7 +647,12 @@ void btor2_writert::write()
 }
 } // namespace
 
-void write_btor2(const transition_systemt &ts, std::ostream &out)
+void write_btor2(
+  const transition_systemt &ts,
+  std::ostream &out,
+  bool bitblast_fp,
+  const namespacet &ns,
+  const optionst &options)
 {
-  btor2_writert(ts, out).write();
+  btor2_writert(ts, out, bitblast_fp, ns, options).write();
 }
