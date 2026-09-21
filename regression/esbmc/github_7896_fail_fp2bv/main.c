@@ -1,5 +1,4 @@
 // #7896: _Float16 is IEEE binary16: 10 fraction bits, so 1 + 2^-11 rounds to 1.
-// Pins the fraction from above; github_7896_ulp_fp2bv pins it from below.
 #include <assert.h>
 
 _Float16 nondet_f16(void);
