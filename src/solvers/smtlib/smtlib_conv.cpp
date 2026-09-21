@@ -912,7 +912,8 @@ const std::string smtlib_convt::solver_text()
     // oneshot_process.cpp for anyone who needs it.
     std::string prog = options.get_option("smtlib-solver-prog");
     size_t sp = prog.find(' ');
-    std::string first_tok = (sp == std::string::npos) ? prog : prog.substr(0, sp);
+    std::string first_tok =
+      (sp == std::string::npos) ? prog : prog.substr(0, sp);
     size_t slash = first_tok.find_last_of('/');
     std::string base =
       (slash == std::string::npos) ? first_tok : first_tok.substr(slash + 1);
