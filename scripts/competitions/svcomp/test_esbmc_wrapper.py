@@ -138,6 +138,19 @@ class TransitionSystemStrategyTest(unittest.TestCase):
                           wrapper.ts_command_line(strat, 64, "t.c", "/tmp/x/m.btor2"))
         self.assertIn("/tmp/x/m.btor2", wrapper.ric3_command_line("/tmp/x/m.btor2"))
 
+    def test_ric3_seed_is_pinned(self):
+        # Unpinned, rIC3's search order decides the verdict: the same model has
+        # solved in 2.9s at seed 0 and timed out past 120s at seeds 1-5, so a
+        # run has to name its seed to be reproducible.
+        self.assertIn("--rseed 0", wrapper.ric3_command_line("m.btor2"))
+        self.assertIn("--rseed 7", wrapper.ric3_command_line("m.btor2", "7"))
+
+    def test_ric3_seed_precedes_the_model(self):
+        # rIC3 takes the model positionally, so an option after it is a parse
+        # error rather than a setting.
+        cmd = wrapper.ric3_command_line("m.btor2")
+        self.assertLess(cmd.index("--rseed"), cmd.index("m.btor2"))
+
     def test_rejected_program_is_unknown(self):
         self.assertEqual(
             self.verdict("TS-CHECK rejected: main has no loop\nVERIFICATION UNKNOWN\n"),

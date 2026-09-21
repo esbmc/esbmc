@@ -386,9 +386,16 @@ def ts_command_line(strat, arch, benchmark, model):
           "--enable-unreachability-intrinsic --no-pointer-check --no-bounds-check "
           "--error-label ERROR " + flags)
 
-def ric3_command_line(model):
+# rIC3's result depends on its search order, which --rseed fixes: the same
+# model has been measured solving in 2.9s at seed 0 and timing out past 120s at
+# seeds 1-5. Its own default is 0, but pin it explicitly so a run is
+# reproducible from the command line alone and the seed is visible in the log.
+RIC3_SEED = os.environ.get("RIC3_SEED", "0")
+
+def ric3_command_line(model, seed=None):
   here = os.path.dirname(os.path.abspath(__file__))
-  return os.environ.get("RIC3", os.path.join(here, "rIC3")) + " -e ic3 " + model
+  binary = os.environ.get("RIC3", os.path.join(here, "rIC3"))
+  return binary + " --rseed " + (seed or RIC3_SEED) + " -e ic3 " + model
 
 def parse_ric3(stdout):
   """rIC3 prints SAT (unsafe), UNSAT (safe) or UNKNOWN as its last line."""
