@@ -1187,14 +1187,6 @@ static bool numpy_array_literal_return(
   return true;
 }
 
-// One `Call` node together with the name of the function whose body it
-// textually appears in (empty for a module-level call).
-struct numpy_param_call_site
-{
-  const nlohmann::json *call;
-  std::string enclosing_function;
-};
-
 static void collect_call_sites(
   const nlohmann::json &node,
   const std::string &enclosing_function,
@@ -1634,6 +1626,17 @@ bool python_converter::module_level_symbolic_ctor_binding(
   return found_binding && last_binding_is_symbolic;
 }
 
+const std::vector<numpy_param_call_site> &
+python_converter::numpy_call_sites() const
+{
+  if (!numpy_call_sites_cached_)
+  {
+    collect_call_sites(*ast_json, "", numpy_call_sites_cache_);
+    numpy_call_sites_cached_ = true;
+  }
+  return numpy_call_sites_cache_;
+}
+
 bool python_converter::numpy_param_call_site_has_symbolic_shape(
   const std::string &func_name,
   size_t param_index,
@@ -1647,10 +1650,7 @@ bool python_converter::numpy_param_call_site_has_symbolic_shape(
     !uses_numpy_static_shape_op((*func_def)["body"], param_name))
     return false;
 
-  std::vector<numpy_param_call_site> call_sites;
-  collect_call_sites(*ast_json, "", call_sites);
-
-  for (const numpy_param_call_site &site : call_sites)
+  for (const numpy_param_call_site &site : numpy_call_sites())
   {
     std::optional<std::string> arg_name =
       numpy_call_site_arg_name(*site.call, func_name, param_index);

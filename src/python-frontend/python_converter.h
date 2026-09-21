@@ -47,6 +47,16 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+// One `Call` node together with the name of the function whose body it
+// textually appears in (empty for a module-level call). Declared here (Impl
+// in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
+// that finds these instead of every caller re-walking the AST itself.
+struct numpy_param_call_site
+{
+  const nlohmann::json *call;
+  std::string enclosing_function;
+};
+
 /**
  * @class python_converter
  * @brief Main converter for transforming Python AST into ESBMC's intermediate
@@ -1266,6 +1276,14 @@ private:
     const std::string &func_name,
     size_t param_index,
     const std::string &param_name) const;
+
+  // Every `Call` node in the AST, computed once and reused:
+  // register_function_argument calls numpy_param_call_site_has_symbolic_shape
+  // once per parameter, and each call previously re-walked the entire AST from
+  // scratch.
+  const std::vector<numpy_param_call_site> &numpy_call_sites() const;
+  mutable std::vector<numpy_param_call_site> numpy_call_sites_cache_;
+  mutable bool numpy_call_sites_cached_ = false;
 
   // True when some top-level statement in `module_body` binds `arg_name` to
   // a numpy array constructor call with a non-literal shape. Split out of
