@@ -43,6 +43,10 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 
 expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
 {
+  /* is_constant_expr() is syntactic, so this also returns an aggregate
+   * literal whose elements propagation left symbolic; is_model_value() below
+   * is the semantic test, and what keeps such a value out of a trace step
+   * that can report its lvalue instead. */
   if (is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
 
@@ -154,14 +158,18 @@ static expr2tc rebase_on_ssa_lhs(
  * grow quadratically in the number of iterations.
  *
  * Nil when the lvalue is not such a component, or when the model does not pin
- * it down; the caller then falls back to evaluating the RHS. */
+ * it down; the caller then falls back to evaluating the RHS. That covers more
+ * than the shapes rebase_on_ssa_lhs declines: smt_convt::get() reads a member
+ * of a member, and a member of pointer or aggregate type, as an expression
+ * rather than a value, so those components keep reporting the whole object.
+ * Array elements of the same types do resolve. */
 static expr2tc build_component_value(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step)
 {
   if (
-    !is_symbol2t(step.lhs) || is_nil_expr(step.original_lhs) ||
-    is_symbol2t(step.original_lhs))
+    is_nil_expr(step.lhs) || is_nil_expr(step.original_lhs) ||
+    !is_symbol2t(step.lhs) || is_symbol2t(step.original_lhs))
     return expr2tc();
 
   expr2tc component = rebase_on_ssa_lhs(smt_conv, step.original_lhs, step.lhs);
