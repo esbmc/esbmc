@@ -274,9 +274,6 @@ public:
    *          reason. */
   virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
-  /** get_by_ast's body, without the model-value cache in front of it. */
-  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
-
   /** Resolve @p expr's model value through its converted AST. Unlike
    *  get_by_type, the struct/pointer case goes through the AST-based
    *  tuple getter, so @p expr need not be a symbol (it may be a member /
@@ -1059,8 +1056,16 @@ public:
    *  assignments, a loop-invariant index -- and each miss is a solver model
    *  query, which bitwuzla answers by substituting the term's definition and
    *  rewriting it: cost proportional to that definition, not to the value.
-   *  The stored type is part of the key in effect, since get_by_ast reads the
-   *  same bit-vector as signed or unsigned depending on it. */
+   *
+   *  What makes a pointer key safe is not that solver ASTs are hash-consed --
+   *  it is that no smt_ast is freed between two clears of this map. Every ast
+   *  is owned by live_asts and deleted only by pop_ctx and the destructor,
+   *  and pop_ctx clears here before it deletes, so an address cannot be
+   *  reused for a different term while an entry for it survives.
+   *
+   *  The stored type gates reuse rather than keying it: get_by_ast reads the
+   *  same bit-vector as signed or unsigned depending on the type, and a read
+   *  under a second type replaces the entry instead of joining it. */
   std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
@@ -1185,6 +1190,9 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  /** get_by_ast's body, without the model-value cache in front of it. */
+  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
+
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);
