@@ -70,7 +70,7 @@ possible inputs. Classes of problems that can be detected include:
 - The Soot framework via Jimple as its Java/Kotlin frontend;
 - The [ast](https://docs.python.org/3/library/ast.html) and
   [ast2json](https://pypi.org/project/ast2json/) modules as its
-  [Python frontend](./src/python-frontend/README.md); the first SMT-based
+  [Python frontend](/docs/python/overview); the first SMT-based
   bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.

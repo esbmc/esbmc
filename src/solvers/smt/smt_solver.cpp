@@ -269,6 +269,10 @@ void smt_solver_baset::pop_ctx()
     it = entries.empty() ? uf_ackermann_history.erase(it) : std::next(it);
   }
 
+  std::erase_if(ptr_flatten_history, [this](const ptr_flatten_entry &e) {
+    return e.level >= ctx_level;
+  });
+
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
@@ -3131,12 +3135,12 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
-  assert(is_array_type(expr->type));
   smt_astt src, update;
-  const array_type2t &arrtype = to_array_type(expr->type);
+  // A vector is encoded as an array too (convert_sort).
+  const type2tc &subtype = array_or_vector_subtype(expr->type);
 
   // Workaround for bools-in-arrays.
-  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
+  if (is_bool_type(subtype) && !array_api->supports_bools_in_arrays)
   {
     expr2tc cast = typecast2tc(get_uint_type(1), update_val);
     update = convert_ast(cast);

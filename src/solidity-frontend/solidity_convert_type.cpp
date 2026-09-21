@@ -436,7 +436,6 @@ bool solidity_convertert::get_type_description(
 
     new_type = pointer_typet(symbol_typet(id));
     set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
-    set_sol_contract(new_type, cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -571,14 +570,6 @@ bool solidity_convertert::get_type_description(
   //    - Constant
   //    - Volatile
   //    - isRestrict
-
-  // set data location
-  if (typeIdentifier.find("_memory_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "memory");
-  else if (typeIdentifier.find("_storage_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "storage");
-  else if (typeIdentifier.find("_calldata_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "calldata");
 
   return false;
 }

@@ -327,9 +327,7 @@ enum class assert_foldt
 // Reproduce generate_ifthenelse's assert-folds (goto_convert.cpp): a branch
 // that reduces to a lone `assert(false)` collapses into the guard instead of
 // emitting a conditional GOTO. A labelled assert is excluded throughout --
-// the label is a jump target, so the branch cannot collapse. Note the `||`
-// idiom fold DISCARDS the branch's second instruction; that is legacy
-// behaviour, reproduced deliberately.
+// the label is a jump target, so the branch cannot collapse.
 static bool is_lone_false_assert(const goto_programt &p)
 {
   return p.instructions.size() == 1 && p.instructions.back().is_assert() &&
@@ -339,6 +337,8 @@ static bool is_lone_false_assert(const goto_programt &p)
 
 // The `(void)((cond) || (assert(0),0))` idiom C libraries use. Legacy gates it
 // on the else-branch being observationally empty, not on there being no else.
+// The fold discards the trailing `0`, so it must be a no-op: code after a
+// failed assertion still runs when later claims are checked (#7900).
 static bool
 is_or_idiom(const goto_programt &then_p, const goto_programt &else_p)
 {
@@ -346,7 +346,7 @@ is_or_idiom(const goto_programt &then_p, const goto_programt &else_p)
          then_p.instructions.front().is_assert() &&
          is_false(then_p.instructions.front().guard) &&
          then_p.instructions.front().labels.empty() &&
-         then_p.instructions.back().labels.empty();
+         is_no_op(then_p, std::prev(then_p.instructions.end()));
 }
 
 static assert_foldt fold_assert_branches(

@@ -440,10 +440,6 @@ public:
     return "Jimple Static Member";
   }
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,

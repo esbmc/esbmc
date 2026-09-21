@@ -815,7 +815,7 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
   aux_sym.file_local = true;
 
   auto &added_sym = *move_symbol_to_context(aux_sym);
-  added_sym.set_value(val);
+  added_sym.set_value(migrate_expr(val));
 
   code_declt decl(symbol_expr(added_sym));
   decl.operands().push_back(val);

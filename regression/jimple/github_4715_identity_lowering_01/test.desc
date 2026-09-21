@@ -1,0 +1,4 @@
+CORE
+main.jimple
+--goto-functions-only
+bind_2 \(OriginalKt:bind_2\):\n[\s\S]*?ASSIGN i0=this;\n[\s\S]*?ASSIGN i1=parameter0;

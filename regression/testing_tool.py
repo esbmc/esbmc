@@ -320,6 +320,10 @@ DYNAMIC_CAPABILITY_PROBES = {
         "source": '_Static_assert((__WCHAR_TYPE__)-1 < 0, "wchar_t is signed");\n'
         "int main() { return 0; }\n",
     },
+    # The AArch64 builtin __mfp8 parses: an AArch64 target and LLVM 20 or later.
+    "mfp8": {
+        "source": "__mfp8 m; int main() { return 0; }\n",
+    },
     # `long double` is the x87 80-bit format (64-bit significand) rather than
     # IEEE binary128. Exact floating-point identities hold in one and not the
     # other, so a test asserting one cannot hold on both.
