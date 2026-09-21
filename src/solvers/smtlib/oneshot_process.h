@@ -41,12 +41,9 @@ std::string model_prog(const optionst &options, const char *name);
  *  its standard output. Every %f in cmd is replaced by the (shell-quoted)
  *  formula path; if no %f is present, the path is appended.
  *
- *  When captured_output is non-null, the solver's *entire* stdout is also
- *  accumulated into it (not just the small diagnostic tail otherwise kept) --
- *  callers that can parse a model directly out of their solver's batch
- *  output (see neurosym_conv.cpp) use this to avoid a second, independent
- *  solve through a separate interactive model solver just to answer
- *  (get-value) queries. Left null, behaviour is unchanged. */
+ *  A non-null captured_output collects the solver's entire stdout, not just
+ *  the diagnostic tail, so a caller can parse a model straight out of it
+ *  (see neurosym_conv.cpp). Left null, behaviour is unchanged. */
 smt_resultt run_solver(
   const std::string &cmd,
   const std::string &formula_path,

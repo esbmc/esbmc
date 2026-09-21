@@ -11,10 +11,7 @@
 static std::string prog_command(const optionst &options)
 {
   std::string cmd = options.get_option("neurosym-prog");
-  // Resolved through PATH, like the sibling bitwuzllob backend's "mallob"
-  // default: NeuroSym ships a wrapper of this name alongside its native C++
-  // solver. The original "python main.py %f" entry point still works when
-  // named explicitly through --neurosym-prog.
+  // Resolved through PATH, like bitwuzllob's "mallob" default.
   return cmd.empty() ? "neurosym-cpp-solve %f" : cmd;
 }
 
@@ -24,8 +21,7 @@ static void skip_ws(const std::string &s, size_t &pos)
     pos++;
 }
 
-/* Skip one balanced-parens group starting at s[pos] == '(', leaving pos just
- * past its matching ')'. No-op (pos unchanged) if s[pos] is not '('. */
+/* Leaves pos past the matching ')'; no-op if s[pos] is not '('. */
 static void skip_paren_group(const std::string &s, size_t &pos)
 {
   if (pos >= s.size() || s[pos] != '(')
@@ -51,23 +47,12 @@ static std::string read_token(const std::string &s, size_t &pos)
   return s.substr(start, pos - start);
 }
 
-/* Inverse of quote_smtlib_symbol() (smtlib_conv.cpp): ESBMC's mangled names
- * contain characters ('@', '$', ':', ...) illegal in an unquoted SMT-LIB2
- * symbol, so the serializer pipe-quotes every name it writes and escapes
- * the three characters a quoted symbol still cannot contain --
- * "/" -> "//", "\" -> "/b", "|" -> "/p" (applied in that order). NeuroSym's
- * own model output simply echoes back whatever name it read out of the
- * formula file, so it is in this *escaped* form -- but smt_ast::symname
- * (what get_bv()/l_get() are actually asked to look up) is always the raw,
- * unescaped name. Without reversing the escaping here, local_model's keys
- * and every lookup against them silently mismatch for any name containing
- * one of these three characters -- confirmed directly: a program's own
- * "guard" bookkeeping symbols are named with a literal '\' internally,
- * which is common enough (present in seemingly every ESBMC-generated
- * formula, not some rare corner case) that this was the single largest
- * remaining gap in running NeuroSym with no --neurosym-model-prog at all.
- * Must undo in the reverse of the encode order to stay unambiguous:
- * "/p" -> "|" first, then "/b" -> "\", then finally "//" -> "/". */
+/* Inverse of quote_smtlib_symbol() (smtlib_conv.cpp), which escapes
+ * "/" -> "//", "\" -> "/b", "|" -> "/p". NeuroSym echoes back the escaped
+ * name, but smt_ast::symname is the raw one, so without this every lookup
+ * misses for a name holding one of the three -- ESBMC's own guard symbols
+ * contain a literal '\', so that is most of them. The escapes form a
+ * prefix code, so one left-to-right pass decodes unambiguously. */
 static std::string unescape_smtlib_name(const std::string &s)
 {
   std::string out;
@@ -101,12 +86,8 @@ static std::string unescape_smtlib_name(const std::string &s)
   return out;
 }
 
-/* Parse one "(define-fun NAME () SORT VALUE)" entry starting at s[pos],
- * leaving pos just past it. Returns false only when the text runs out
- * mid-entry, so the caller stops; an entry this cannot make sense of leaves
- * name or value empty and is skipped, which degrades that one variable to
- * the --neurosym-model-prog fallback. Split out of parse_model_block() to
- * keep it inside the repo's cyclomatic-complexity gate. */
+/* Leaves pos past the entry. False only when the text runs out mid-entry;
+ * an unreadable entry leaves name or value empty and is skipped. */
 static bool parse_define_fun(
   const std::string &s,
   size_t &pos,
@@ -120,8 +101,7 @@ static bool parse_define_fun(
   std::string keyword = read_token(s, pos);
   if (keyword != "define-fun")
   {
-    // Not a form we understand (e.g. a comment leaked through as a list) --
-    // skip this whole parenthesized entry and move on to the next.
+    // Not a define-fun (e.g. a log line that parsed as a list).
     pos = entry_open;
     skip_paren_group(s, pos);
     return true;
@@ -138,10 +118,6 @@ static bool parse_define_fun(
   }
   else
     name = read_token(s, pos);
-  // NeuroSym echoes back the escaped/pipe-quoted form it read from the
-  // formula file, not the raw name ESBMC's own AST holds (symname) --
-  // see unescape_smtlib_name()'s comment. A no-op for a name that was
-  // never escaped in the first place.
   name = unescape_smtlib_name(name);
 
   skip_ws(s, pos); // the empty parameter list "()"
@@ -156,9 +132,8 @@ static bool parse_define_fun(
   skip_ws(s, pos);
   if (pos < n && s[pos] == '(')
   {
-    /* A parenthesized value, e.g. SMT-LIB2's "(- 5)" for a negative
-     * numeral -- not currently interpreted; leave value empty so this one
-     * variable falls back to --neurosym-model-prog instead of guessing. */
+    /* A parenthesized value such as "(- 5)": leave it empty and fall back
+     * rather than guess. */
     skip_paren_group(s, pos);
   }
   else
@@ -169,19 +144,10 @@ static bool parse_define_fun(
 
 void neurosym_convt::parse_model_block(const std::string &output)
 {
-  /* Purpose-built for exactly the format NeuroSym's own format_output()
-   * emits (gansat/ns_solver.py, main.py):
-   *   (model
-   *     (define-fun NAME () SORT VALUE)
-   *     ...
-   *   )
-   * SORT is "Int", "Bool", or "(_ BitVec N)"; VALUE is a bare decimal
-   * numeral, a #x hex literal, or true/false. NAME may be pipe-quoted.
-   * Anything this does not recognize is simply skipped for that one
-   * variable -- it falls through to the --neurosym-model-prog fallback
-   * exactly as if local parsing had not been attempted, so a NeuroSym
-   * output format this cannot fully make sense of degrades to the old
-   * behaviour rather than building a wrong counterexample. */
+  /* "(model (define-fun NAME () SORT VALUE) ...)", as NeuroSym's
+   * format_output() prints it. An entry this cannot read is skipped, so an
+   * unexpected format degrades to the fallback rather than to a wrong
+   * counterexample. */
   size_t pos = output.find("(model");
   if (pos == std::string::npos)
     return;
@@ -208,9 +174,7 @@ void neurosym_convt::parse_model_block(const std::string &output)
   }
 }
 
-/* Mirrors smtlib_convt's own interp_numeric() (smtlib_conv.cpp, file-local
- * there) closely enough to interpret local_model's raw value text the same
- * way a real solver's (get-value) response would be. */
+/* Reads the same forms as smtlib_conv.cpp's interp_numeric(). */
 static bool numeric_value(const std::string &v, bool is_signed, BigInt &out)
 {
   if (v.size() > 2 && v[0] == '#' && v[1] == 'x')
@@ -236,14 +200,8 @@ static bool numeric_value(const std::string &v, bool is_signed, BigInt &out)
   return false;
 }
 
-/* Mask/reinterpret `val` to exactly `width` bits, as an unsigned bit
- * pattern (i.e. the value a fixed-width register holding the low `width`
- * bits of val would show, 0 <= result < 2^width). Reuses
- * integer2binary()/binary2integer() (mp_arith.h) rather than hand-rolling
- * BigInt bit operations: integer2binary(val, width) already truncates to
- * the low `width` bits (two's-complement, so this is correct for a
- * negative val too), and binary2integer(..., false) reads that back
- * unsigned. */
+/* The low `width` bits of val, unsigned. integer2binary() already truncates
+ * in two's complement, so a negative val is handled too. */
 static BigInt mask_to_width(const BigInt &val, std::size_t width)
 {
   return binary2integer(integer2binary(val, width), false);
@@ -305,8 +263,7 @@ std::optional<BigInt> neurosym_convt::local_eval_array_at(
   }
 }
 
-/* Bitwise ops over `width` bits: BigInt has no native bitwise operators, so
- * go via the binary strings mask_to_width() already relies on. */
+/* BigInt has no bitwise operators; go via the binary strings. */
 template <typename F>
 static BigInt
 bitwise_bv(const BigInt &a, const BigInt &b, std::size_t width, F &&bit)
@@ -319,9 +276,7 @@ bitwise_bv(const BigInt &a, const BigInt &b, std::size_t width, F &&bit)
   return binary2integer(out, false);
 }
 
-/* The binary bit-vector operators, split out of local_eval_bv() to keep that
- * function inside the repo's cyclomatic-complexity gate. Operands and result
- * are unsigned `width`-bit patterns. */
+/* Operands and result are unsigned `width`-bit patterns. */
 static std::optional<BigInt> eval_bv_binop(
   smt_func_kind kind,
   const BigInt &lhs,
@@ -521,9 +476,8 @@ std::optional<BigInt> neurosym_convt::local_eval_bv(smt_astt a) const
   }
 }
 
-/* The bit-vector comparisons, split out of local_eval_bool() to keep that
- * function inside the repo's cyclomatic-complexity gate. Operands are
- * unsigned `width`-bit patterns; signedness comes from the operator. */
+/* Operands are unsigned `width`-bit patterns; the operator carries the
+ * signedness. */
 static std::optional<bool> eval_bv_compare(
   smt_func_kind kind,
   const BigInt &lhs,
@@ -562,11 +516,8 @@ static std::optional<bool> eval_bv_compare(
 std::optional<bool>
 neurosym_convt::local_lookup_bool(const std::string &symname) const
 {
-  /* local_lookup() only understands numeric text; a genuinely Bool-sorted
-   * model entry is textual ("true"/"false"), as NeuroSym's own define-fun
-   * output and parse_model_block() emit it. Handle that form directly
-   * rather than failing through local_lookup()'s numeric parse and forcing
-   * every boolean-guarded trace out to the external fallback solver. */
+  /* A Bool-sorted entry is textual, which local_lookup()'s numeric parse
+   * would reject -- and that is every boolean-guarded trace. */
   auto it = local_model.find(symname);
   if (it == local_model.end())
     return std::nullopt;
@@ -584,9 +535,7 @@ std::optional<bool> neurosym_convt::eval_bool_fold(
   smt_func_kind kind,
   const smtlib_smt_ast *ast) const
 {
-  // ESBMC commonly ANDs/ORs many guard literals together in one node
-  // (not necessarily just two), e.g. combining a whole path condition --
-  // fold left over however many args are actually there.
+  // ESBMC folds a whole path condition into one node, so n-ary.
   if (ast->args.empty())
     return std::nullopt;
   auto acc = local_eval_bool(ast->args[0]);
@@ -619,9 +568,7 @@ std::optional<bool> neurosym_convt::eval_bool_fold(
 std::optional<bool>
 neurosym_convt::eval_bool_eq(const smtlib_smt_ast *ast) const
 {
-  /* The operand sort decides whether to compare as bit-vectors or as
-   * booleans; array/tuple equality is not handled (rare for a counterexample
-   * query, and it falls back). */
+  /* Array/tuple equality is not handled and falls back. */
   if (ast->args[0]->sort->id == SMT_SORT_BOOL)
   {
     auto lhs = local_eval_bool(ast->args[0]);
@@ -664,7 +611,6 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
 
   case SMT_FUNC_IMPLIES:
   {
-    // Binary by SMT-LIB2 definition, unlike AND/OR/XOR above.
     if (ast->args.size() != 2)
       return std::nullopt;
     auto lhs = local_eval_bool(ast->args[0]);
@@ -724,16 +670,10 @@ smt_solver_baset *create_new_neurosym_solver(
   array_iface **array_api [[maybe_unused]],
   fp_convt **fp_api [[maybe_unused]])
 {
-  /* NeuroSym solves a single formula per invocation; strategies that reuse
-   * one persistent solver context across repeated or incremental checks
-   * cannot be served by it. --multi-property is NOT in this list: without
-   * --smt-during-symex, bmct::multi_property_check() (bmc.cpp) allocates a
-   * fresh create_solver() instance per claim rather than reusing one across
-   * claims, which is exactly NeuroSym's one-shot-per-invocation model — so
-   * --multi-property (and the coverage modes built on it, e.g.
-   * --branch-coverage) work correctly, just at the cost of one NeuroSym
-   * subprocess per claim. Only --smt-during-symex, which explicitly shares
-   * one persistent solver across every claim, is genuinely incompatible. */
+  /* NeuroSym solves one formula per invocation, so any strategy reusing a
+   * persistent solver context is out. --multi-property is absent
+   * deliberately: multi_property_check() builds a fresh solver per claim,
+   * which matches that model at one subprocess per claim. */
   static const char *incompatible[] = {
     "incremental-bmc",
     "falsification",
@@ -846,24 +786,13 @@ smt_resultt neurosym_convt::dec_solve()
     return res;
   }
 
-  /* NeuroSym's own batch stdout already carries a sort-correct model on a
-   * sat verdict (see the class comment): parse it directly rather than
-   * unconditionally waiting on the local model solver's answer here. When it
-   * covers everything the trace ends up asking for -- the common case, since
-   * NeuroSym's model output normally lists every free variable in the
-   * formula -- --neurosym-model-prog's solve is never waited for at all,
-   * however long it takes on this formula. A variable that is not in
-   * local_model (parsing failure, or a value form local parsing does not
-   * understand) still falls back to it, lazily, the first time get_bv() /
-   * l_get() below actually needs it. */
+  /* Parse NeuroSym's own model rather than waiting on the model solver. A
+   * variable it does not cover still falls back, lazily, on first use. */
   parse_model_block(captured_output);
   if (!local_model.empty())
     return P_SATISFIABLE;
 
-  /* Local parsing found nothing usable (NeuroSym's output did not match the
-   * expected model format, or this particular formula has no free
-   * variables) -- fall back to the original --neurosym-model-prog path in
-   * full, right away, exactly as before this change. */
+  /* Nothing usable parsed: fall back in full, right away. */
   return ensure_model_prog_ready() || options.get_bool_option("result-only")
            ? P_SATISFIABLE
            : P_ERROR;
@@ -875,16 +804,9 @@ bool neurosym_convt::ensure_model_prog_ready()
     return static_cast<bool>(emit_proc);
   model_prog_response_read = true;
 
-  /* A satisfiable formula with nothing usable in local_model needs a live
-   * model solver to turn into a counterexample. It is absent either because
-   * the model solver died earlier (a command was given) or was never
-   * configured. Under --result-only no counterexample is ever built
-   * (bmc.cpp skips trace construction) and get_bv()/l_get() are normally
-   * never even called -- but dec_solve() itself still calls this eagerly as
-   * its own fallback when local_model comes up empty, regardless of
-   * --result-only, so that path still needs handling here explicitly: stay
-   * silent and let the (never-built) trace go on rather than erroring over
-   * a model nothing will read. */
+  /* Without local_model a counterexample needs a live model solver. Under
+   * --result-only none is built, so stay silent rather than error over a
+   * model nothing will read. */
   if (!emit_proc)
   {
     if (options.get_bool_option("result-only"))
@@ -945,25 +867,19 @@ tvt neurosym_convt::l_get(smt_astt a)
       BigInt m;
       if (numeric_value(v, false, m))
         return tvt(m != 0);
-      // Fall through: an entry exists but this parser could not make sense
-      // of its value (e.g. the "(- N)" form) -- treat it the same as a miss.
+      // An entry exists but its value is unreadable: treat it as a miss.
     }
   }
 
-  /* Either a composite expression (empty symname) or a leaf miss: try
-   * evaluating it locally from local_model before paying for the live
-   * solver at all. */
+  /* Composite expression or leaf miss: evaluate locally before paying for
+   * the live solver. */
   if (auto v = local_eval_bool(a))
     return tvt(*v);
 
   ensure_model_prog_ready();
-  /* Reaching here without a model solver means --result-only: any other
-   * configuration made dec_solve() return P_ERROR. error_trace() bails out
-   * immediately in that mode (bmc.cpp:327), so no counterexample is built
-   * from this value; the caller is the property-identification pass, which
-   * reports the claim as not checked. Falling through to
-   * smtlib_convt::l_get() would instead send a (get-value) to a solver that
-   * was never started and block forever reading its response. */
+  /* No model solver here means --result-only; error_trace() returns early
+   * in that mode (bmc.cpp:327), so this value is never printed. Falling
+   * through would block forever on a solver that was never started. */
   if (!emit_proc)
     return tvt(tvt::TV_UNKNOWN);
   return smtlib_convt::l_get(a);
@@ -983,12 +899,8 @@ BigInt neurosym_convt::get_bv(smt_astt a, bool is_signed)
     }
   }
 
-  /* Composite expression (array select, pointer-offset arithmetic, ...) or
-   * a leaf miss: evaluate it locally before falling back to the live
-   * solver. local_eval_bv() always returns an unsigned bit pattern;
-   * reinterpret it as signed here if the caller asked for that, matching
-   * how smtlib_convt::get_bv()/interp_numeric() already handle is_signed
-   * for a plain (get-value) response. */
+  /* local_eval_bv() returns an unsigned bit pattern; apply the caller's
+   * sign interpretation, as interp_numeric() does for a (get-value). */
   if (auto v = local_eval_bv(a))
   {
     if (!is_signed)
@@ -997,9 +909,7 @@ BigInt neurosym_convt::get_bv(smt_astt a, bool is_signed)
   }
 
   ensure_model_prog_ready();
-  // See the matching comment in l_get(): without a usable emit_proc this
-  // would otherwise block forever reading a (get-value) response from a
-  // solver that was never started.
+  // See l_get(): without emit_proc this would block forever.
   if (!emit_proc)
     return BigInt(0);
   return smtlib_convt::get_bv(a, is_signed);
@@ -1007,9 +917,6 @@ BigInt neurosym_convt::get_bv(smt_astt a, bool is_signed)
 
 const std::string neurosym_convt::solver_text()
 {
-  // Just the friendly name -- the full invocation (path + every flag +
-  // the temp formula path) is verbose noise at normal verbosity; it is
-  // still available via log_debug("solver", ...) in oneshot_process.cpp
-  // for anyone who needs the exact command.
+  // The full invocation is at log_debug in oneshot_process.cpp.
   return "NeuroSym";
 }

@@ -94,13 +94,9 @@ static std::string describe_exit_status(int status)
   return "status " + std::to_string(status);
 }
 
-/* Substitute the formula file for every %f in `cmd_template`, or append it
- * when there is none, quoting the path for the shell the command runs under.
- * On Windows popen() goes through cmd.exe, which only recognizes double
- * quotes ('"' is not a legal path character there); POSIX shells get single
- * quotes, with embedded single quotes (possible via --output) escaped as
- * '\''. Split out of run_solver() to keep it inside the repo's cyclomatic
- * complexity gate. */
+/* Every %f becomes the formula path, or it is appended when there is none.
+ * cmd.exe takes only double quotes; POSIX shells get single quotes, with
+ * embedded ones (possible via --output) escaped. */
 static std::string substitute_formula_path(
   const std::string &cmd_template,
   const std::string &formula_path)
@@ -134,11 +130,7 @@ smt_resultt run_solver(
 {
   std::string cmd = substitute_formula_path(cmd_template, formula_path);
 
-  // Demoted from log_status to log_debug: the exact subprocess command
-  // (full path + every flag + the temp formula path) is useful when
-  // debugging the solver integration, but is noise at normal verbosity
-  // -- solver_text() above already prints a short, friendly name for
-  // the routine "which solver is running" case.
+  // Debug-level: solver_text() already names the solver at normal verbosity.
   log_debug("solver", "Running {}: {}", name, cmd);
 
 #ifdef _WIN32

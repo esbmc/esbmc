@@ -904,12 +904,7 @@ const std::string smtlib_convt::solver_text()
 {
   if (emit_proc)
   {
-    // Show a short, friendly label instead of the full command line (path
-    // + all flags + %f placeholder) -- this backend is shared by several
-    // process-based solvers (bitwuzla-via-pipe, NeuroSym, ...), and the
-    // full invocation is verbose noise at normal verbosity here; the
-    // exact command actually run is still available via log_debug in
-    // oneshot_process.cpp for anyone who needs it.
+    // A short label; the full command is at log_debug in oneshot_process.cpp.
     std::string prog = options.get_option("smtlib-solver-prog");
     size_t sp = prog.find(' ');
     std::string first_tok =
