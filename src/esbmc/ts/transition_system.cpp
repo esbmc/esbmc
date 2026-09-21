@@ -23,6 +23,9 @@ struct loop_shapet
 {
   unsigned entry, head, back;
   std::vector<expr2tc> havoc_vars;
+  /// main has no loop: the whole program is the prefix, there is no state and
+  /// no step, and check_prefix alone decides it.
+  bool loop_free = false;
 };
 
 bool starts_with(const std::string &s, const std::string &prefix)
@@ -170,8 +173,17 @@ bool recognise(
     }
   if (back == body.instructions.end())
   {
-    reason = "main has no loop";
-    return false;
+    // No loop: every step is prefix. Calls still have to be supported, and an
+    // unwinding assertion from a callee loop still rejects the program later.
+    shape.loop_free = true;
+    std::vector<irep_idt> stack{main_id};
+    return calls_are_supported(
+      fns,
+      body.instructions.begin(),
+      body.instructions.end(),
+      false,
+      stack,
+      reason);
   }
   if (!is_true(back->guard))
   {
@@ -447,20 +459,27 @@ bool extract_transition_system(
   goto_functionst program = goto_functions;
   program.update();
   goto_programt &main_body = program.function_map[main_id].body;
-  auto back = find_location(main_body, shape.back);
-  auto head = find_location(main_body, shape.head);
-  auto entry = find_location(main_body, shape.entry);
   const unsigned n = shape.havoc_vars.size();
-  insert_markers(main_body, back, context, marker_post, shape.havoc_vars);
-  insert_markers(main_body, head, context, marker_pre, shape.havoc_vars);
-  insert_markers(main_body, entry, context, marker_init, shape.havoc_vars);
-  program.update();
+  if (!shape.loop_free)
+  {
+    auto back = find_location(main_body, shape.back);
+    auto head = find_location(main_body, shape.head);
+    auto entry = find_location(main_body, shape.entry);
+    insert_markers(main_body, back, context, marker_post, shape.havoc_vars);
+    insert_markers(main_body, head, context, marker_pre, shape.havoc_vars);
+    insert_markers(main_body, entry, context, marker_init, shape.havoc_vars);
+    program.update();
+  }
   const auto main_back = std::find_if(
     main_body.instructions.begin(),
     main_body.instructions.end(),
     [](const auto &i) { return i.is_backwards_goto(); });
+  // Only the main loop's own unwinding assertion is expected; without a loop
+  // there is none, and any that appears is a callee's and rejects below.
   const std::string main_unwinding =
-    "unwinding assertion loop " + std::to_string(main_back->loop_number);
+    main_back == main_body.instructions.end()
+      ? std::string()
+      : "unwinding assertion loop " + std::to_string(main_back->loop_number);
 
   // Unwinding assertions stay on: any loop other than the main one that runs
   // more than once in a single step, or before the loop, leaves one behind.
@@ -542,16 +561,26 @@ bool extract_transition_system(
       seen_post[k]++;
     }
   }
-  for (unsigned k = 0; k < n; k++)
-    if (seen_init[k] != 1 || seen_pre[k] != 1 || seen_post[k] != 1)
+  if (shape.loop_free)
+  {
+    // Everything is prefix: `prefix = i < init_first` must hold throughout,
+    // and the body and havoc regions must stay empty.
+    init_first = post_first = steps.size();
+    ts.back_guard = gen_false_expr();
+  }
+  else
+  {
+    for (unsigned k = 0; k < n; k++)
+      if (seen_init[k] != 1 || seen_pre[k] != 1 || seen_post[k] != 1)
+      {
+        reason = "loop markers were not executed exactly once";
+        return false;
+      }
+    if (!(init_first < pre_first && pre_last < post_first))
     {
-      reason = "loop markers were not executed exactly once";
+      reason = "loop markers out of order";
       return false;
     }
-  if (!(init_first < pre_first && pre_last < post_first))
-  {
-    reason = "loop markers out of order";
-    return false;
   }
   for (size_t i = 0; i < steps.size(); i++)
   {
