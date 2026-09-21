@@ -908,7 +908,17 @@ tvt smtlib_convt::get_bool(smt_astt a)
 const std::string smtlib_convt::solver_text()
 {
   if (emit_proc)
-    return "'" + options.get_option("smtlib-solver-prog") + "'";
+  {
+    // A short label; the full command is at log_debug in oneshot_process.cpp.
+    std::string prog = options.get_option("smtlib-solver-prog");
+    size_t sp = prog.find(' ');
+    std::string first_tok =
+      (sp == std::string::npos) ? prog : prog.substr(0, sp);
+    size_t slash = first_tok.find_last_of('/');
+    std::string base =
+      (slash == std::string::npos) ? first_tok : first_tok.substr(slash + 1);
+    return base.empty() ? prog : base;
+  }
 
   if (emit_opt_output)
     return "Text output";
