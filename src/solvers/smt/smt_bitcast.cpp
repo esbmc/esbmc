@@ -136,14 +136,26 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
  * The address has to stay the representation -- a program can memset pointer
  * storage or store a literal into it, and reading that back must still mean
  * what the bits say (regression/esbmc/memset_pointer). So keep it, record every
- * pointer a bitcast flattens, and define a rebuilt pointer as the one whose
- * representation those bits are, falling back to the address-space
- * reconstruction. The selection constrains only terms built here, never the
- * program's own pointers: tying those together pairwise instead, as #7895 did,
- * discards every model where two of them share an address and differ, which
- * costs real counterexamples. On an address shared by two flattened pointers
- * the one converted last wins; both readings have that address, so neither is
- * more right, and a decode converted before its flatten just falls back.
+ * pointer a bitcast flattens, and split what the record is used for.
+ *
+ * A flatten ties its pointer to the ones flattened before it: two values with
+ * the same object representation compare equal (C17 6.2.6.1p4). Without it a
+ * program storing two pointers in neighbouring slots reads either back as the
+ * other (regression/esbmc/github_7855-two-slots). The tie merges the
+ * (object, offset) tuples, which is stronger than C's ==; live objects' ranges
+ * are disjoint (finalize_pointer_chain()), so the pairs it can reach are the
+ * ones INVALID or a freed object puts at a live address.
+ *
+ * A rebuild is a definition instead -- the pointer whose representation those
+ * bits are, falling back to the address-space reconstruction. Tying that
+ * reconstruction in, as #7895 did, is what costs counterexamples: whenever a
+ * live object's range holds the address it is pinned to that object, so
+ * equating it with a pointer ESBMC places elsewhere -- NULL plus an offset --
+ * leaves no model at all, and the bug goes with it
+ * (github_7855-tie-hides-deref, and SV-COMP's ldv-linux-4.0-rc1-mav
+ * dvb-ttusb-budget task). The definition constrains nothing further: the tie
+ * above has already equated any two flattened pointers sharing an address, and
+ * a decode converted before its flatten falls back.
  *
  * Only bitcast takes this path. A typecast keeps plain C integer-to-pointer
  * semantics, where the address really is all the program has. */
@@ -166,7 +178,13 @@ smt_astt smt_solver_baset::encode_pointer_repr(
   const type2tc &to_type)
 {
   smt_astt address = convert_ast(typecast2tc(to_type, ptr));
-  ptr_flatten_history.push_back({address, convert_ast(ptr), ctx_level});
+  smt_astt pointer = convert_ast(ptr);
+
+  for (const ptr_flatten_entry &prev : ptr_flatten_history)
+    assert_ast(mk_implies(
+      mk_eq(address, prev.address), pointer->eq(this, prev.pointer)));
+
+  ptr_flatten_history.push_back({address, pointer, ctx_level});
   return address;
 }
 
@@ -180,7 +198,6 @@ smt_astt smt_solver_baset::decode_pointer_repr(
   for (const ptr_flatten_entry &prev : ptr_flatten_history)
     pointer = prev.pointer->ite(this, mk_eq(address, prev.address), pointer);
 
-  ptr_flatten_history.push_back({address, pointer, ctx_level});
   return pointer;
 }
 

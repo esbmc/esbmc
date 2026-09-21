@@ -838,8 +838,8 @@ public:
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
-   *  and rebuild it from one. Both record the pointer, which is what a later
-   *  rebuild reads back; see the comment on the definitions in
+   *  and rebuild it from one. A flatten records its pointer, which is what a
+   *  later rebuild reads back; see the comment on the definitions in
    *  smt_bitcast.cpp. */
   smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
   smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
@@ -1098,17 +1098,18 @@ public:
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter = 0;
 
-  /** One pointer flattened to, or rebuilt from, its machine representation by
-   *  a bitcast. See convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  /** One pointer flattened to its machine representation by a bitcast. See
+   *  convert_bitcast()'s helpers in smt_bitcast.cpp. */
   struct ptr_flatten_entry
   {
     smt_astt address;
     smt_astt pointer;
     unsigned int level;
   };
-  /** Every such pointer in this context; a rebuilt pointer whose bits are one
-   *  of these addresses is defined to be that pointer. Pruned on pop_ctx like
-   *  uf_ackermann_history, whose asts have the same lifetime. */
+  /** Every such pointer in this context, tied pairwise by address; a rebuilt
+   *  pointer whose bits are one of these addresses is defined to be that
+   *  pointer. Pruned on pop_ctx like uf_ackermann_history, whose asts have the
+   *  same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
