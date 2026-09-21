@@ -2,16 +2,18 @@ import numpy as np
 
 call_count = 0
 
-def make_array():
+
+def bump():
     global call_count
     call_count = call_count + 1
-    return np.array([5, 10, 15])
+    return call_count
 
 
-def process(arr):
-    return arr[0] + arr[1]
+def make_array(n):
+    a = np.array([5, 10, 15])
+    return a
 
 
-result = process(make_array())
+result = make_array(bump())
 # Wrong assertion: side effect should run exactly once, not twice
 assert call_count == 2

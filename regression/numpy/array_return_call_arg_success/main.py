@@ -2,18 +2,17 @@ import numpy as np
 
 call_count = 0
 
-
-def bump():
+def make_array():
     global call_count
     call_count = call_count + 1
-    return call_count
+    return np.array([5, 10, 15])
 
 
-def make_array(n):
-    a = np.array([5, 10, 15])
-    return a
+def process(arr):
+    return arr[0] + arr[1]
 
 
-result = make_array(bump())
-assert result[0] == 5
+# Call function returning array as argument - should execute once
+result = process(make_array())
+assert result == 15
 assert call_count == 1
