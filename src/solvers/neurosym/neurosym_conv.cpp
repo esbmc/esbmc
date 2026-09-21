@@ -614,7 +614,6 @@ std::optional<bool> neurosym_convt::eval_bool_fold(
     }
   }
   return result;
-  return result;
 }
 
 std::optional<bool>
