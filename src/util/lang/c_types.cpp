@@ -18,7 +18,8 @@ typet build_float_type(unsigned width)
   switch (width)
   {
   case 16:
-    result.set_f(11);
+    /* IEEE 754 binary16: 1 sign, 5 exponent, 10 significand (#7896). */
+    result.set_f(10);
     break;
   case 32:
     result.set_f(23);
@@ -48,7 +49,7 @@ type2tc build_float_type2(unsigned width)
   switch (width)
   {
   case 16:
-    fraction = 11;
+    fraction = 10;
     break;
   case 32:
     fraction = 23;
