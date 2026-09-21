@@ -17,8 +17,8 @@ Three different tasks are easy to confuse:
 
 | You want to… | Read |
 |---|---|
-| Add a new IR expression (irep2 → SMT) | [Adding New Expressions](../adding-new-expressions/) |
-| Add a whole new solver backend | [Integrating a New SMT Solver](../integrate-a-new-smt-solver-into-the-esbmc-backend/) |
+| Add a new IR expression (irep2 → SMT) | [Adding New Expressions](/docs/development/adding-new-expressions/) |
+| Add a whole new solver backend | [Integrating a New SMT Solver](/docs/development/smt/integrate-a-new-smt-solver-into-the-esbmc-backend/) |
 | Add a new **sort/operation family** the SMT layer can emit | **this page** |
 
 A "theory" here means new SMT sorts (e.g. `Int`, `Real`, `String`, `Set`) and the
