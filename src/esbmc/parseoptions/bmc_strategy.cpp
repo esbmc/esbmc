@@ -191,6 +191,28 @@ static void report_non_termination_cwe(
     sarif_goto_trace(options, ns, trace);
 }
 
+/// Give this run one property table for all its k steps, where it should have
+/// one: the strategy then owns the verdict store, each phase records into it,
+/// and the table is printed once where the run concludes (W3b of
+/// docs/roadmap/multi-property-strategy-plan.md). A coverage run reports
+/// reachability rather than properties and resets per pass by design;
+/// --termination asks about the loops, not the assertions; and a run that only
+/// emits a formula decides nothing to put in a table; so none of them join in.
+static void adopt_one_property_table(optionst &options, bool is_coverage)
+{
+  if (
+    !options.get_bool_option("multi-property") || is_coverage ||
+    options.get_bool_option("termination") ||
+    options.get_bool_option("dead-code-check") ||
+    options.get_bool_option("show-vcc") ||
+    options.get_bool_option("program-only") ||
+    options.get_bool_option("smt-formula-only"))
+    return;
+
+  options.set_option("k-step-property-table", true);
+  goto_functionst::property_verdicts.clear();
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -211,24 +233,6 @@ static void report_non_termination_cwe(
 // \param options - options for setting the verification strategy
 // and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
-/// Give this run one property table for all its k steps, where it should have
-/// one: the strategy then owns the verdict store, each phase records into it,
-/// and the table is printed once where the run concludes (W3b of
-/// docs/roadmap/multi-property-strategy-plan.md). A coverage run reports
-/// reachability rather than properties and resets per pass by design;
-/// --termination asks about the loops, not the assertions; so neither joins in.
-static void adopt_one_property_table(optionst &options, bool is_coverage)
-{
-  if (
-    !options.get_bool_option("multi-property") || is_coverage ||
-    options.get_bool_option("termination") ||
-    options.get_bool_option("dead-code-check"))
-    return;
-
-  options.set_option("k-step-property-table", true);
-  goto_functionst::property_verdicts.clear();
-}
-
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)

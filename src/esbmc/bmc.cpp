@@ -131,8 +131,12 @@ static bool reports_multi_property_verdict(const optionst &options)
          !strategy_owns_property_table(options);
 }
 
-/// Record that \p property was discharged, unless the round was bounded, in
-/// which case the claim keeps its row and stays undecided.
+/// Record what a solver's UNSAT earned \p property. Only a proof is bounded by
+/// k: at a bounded round it is withheld and the claim stays undecided. A
+/// vacuous discharge is not a proof but a diagnosis of the path, which a
+/// bounded round establishes as well as a conclusive one, so it is recorded
+/// either way -- and it has to be, since a k-step run reports the vacuity
+/// nowhere else.
 static void record_discharge(
   bool bounded_round,
   const std::string &property,
@@ -140,8 +144,10 @@ static void record_discharge(
   const property_locationt &loc,
   const std::string &note = "")
 {
-  if (!bounded_round)
-    goto_functionst::property_verdicts.record(property, verdict, loc, note);
+  if (bounded_round && verdict == property_verdictt::Passed)
+    return;
+
+  goto_functionst::property_verdicts.record(property, verdict, loc, note);
 }
 
 /// The closing line of a report that does not account for every property.
@@ -155,9 +161,33 @@ static void print_partial_report_note()
     "further.");
 }
 
+/// Whether the table a k-step run accumulated says the program holds. The
+/// run's verdict follows its table, so a row left undecided -- never settled
+/// within max-k, or discharged only vacuously -- is not a proof, and the phase
+/// that closes the search must not call it one. Vacuously true elsewhere: a
+/// single run's phase speaks for itself.
+static bool run_fully_proved(const optionst &options)
+{
+  return !strategy_owns_property_table(options) ||
+         goto_functionst::property_verdicts.all_passed();
+}
+
+/// Whether a phase left properties undecided that a later one must not take
+/// for proved: it skipped some claim, died before its per-claim loop, or only
+/// emitted a formula.
+static bool
+phase_left_properties_undecided(bool report_incomplete, smt_resultt res)
+{
+  return report_incomplete || res == P_ERROR || res == P_SMTLIB;
+}
+
 /// Whether this round discharges a claim only within the current k. A base
 /// case of a k-step strategy does: "not violated within k" is not a proof, and
 /// recording one would put a bounded result in the run's table as a verdict.
+/// Recording Unknown instead would be worse, since it outranks the proof a
+/// later forward condition or inductive step finds (§4 of
+/// docs/roadmap/multi-property-strategy-plan.md), so such a claim stays
+/// NotChecked.
 static bool is_bounded_round(const optionst &options)
 {
   return options.get_bool_option("base-case") &&
@@ -300,11 +330,18 @@ void bmct::record_satisfiable_claim(
   // the annotation being too weak rather than a reachable state (#7480).
   if (inductive_step)
   {
-    goto_functionst::property_verdicts.record(
-      claim.claim_cstr,
-      property_verdictt::Unknown,
-      loc,
-      "inductive step could not prove this claim");
+    // Interim under a k-step strategy: the loop goes on to k+1, where the step
+    // may well prove the claim, and Unknown outranks Passed in the store, so
+    // recording it here would bury that proof. The diagnostic pass runs once
+    // the search has given up, so its answer is the final one.
+    if (
+      !strategy_owns_property_table(options) ||
+      options.get_bool_option("diagnose-unknown-properties"))
+      goto_functionst::property_verdicts.record(
+        claim.claim_cstr,
+        property_verdictt::Unknown,
+        loc,
+        "inductive step could not prove this claim");
     return;
   }
 
@@ -1897,6 +1934,11 @@ void bmct::report_coverage_verbose(
   }
 }
 
+bool bmct::proves_the_program() const
+{
+  return !vacuity_detected && !ltl_uninstrumented && run_fully_proved(options);
+}
+
 void bmct::report_result(smt_resultt &res)
 {
   // k-induction prints its own messages
@@ -1963,7 +2005,7 @@ void bmct::report_result(smt_resultt &res)
         // verdict once the search becomes exhaustive.
         if (options.get_bool_option("suppress-bounded-success"))
           log_status("No violation found within the current context bound");
-        else if (vacuity_detected || ltl_uninstrumented)
+        else if (!proves_the_program())
           report_unknown();
         else
           report_success();
@@ -2042,8 +2084,10 @@ smt_resultt bmct::start_bmc()
 
   // Properties this phase skipped stay skipped for the run: a k-step strategy
   // promotes across phases, and the forward condition must not turn what a
-  // truncated base case never solved into a proof.
-  if (report_incomplete)
+  // truncated base case never solved into a proof. A phase that died before
+  // its per-claim loop, or only emitted a formula, skipped all of them and
+  // never sets report_incomplete, so read its result too.
+  if (phase_left_properties_undecided(report_incomplete, res))
     goto_functionst::property_verdicts.note_incomplete();
 
   // A single monolithic UNSAT refutes the disjunction of every claim's
@@ -2952,11 +2996,6 @@ smt_resultt bmct::multi_property_check(
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
-  // A base case under a k-step strategy discharges a claim only within k.
-  // Recording that as Passed is what puts bounded results in the run's table
-  // as proofs (D4 and §4 of docs/roadmap/multi-property-strategy-plan.md);
-  // recording Unknown instead would outrank the proof a later forward
-  // condition or inductive step finds, so the claim stays NotChecked.
   const bool bounded_round = is_bounded_round(options);
 
   // For multi-fail-fast
@@ -3592,18 +3631,24 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
     options.get_bool_option("dead-code-check"))
     return;
 
-  // The forward condition runs with --no-assertions, so its only claims are
-  // the unwinding assertions that ask whether the loop is exhausted: the
-  // strategy's own device, not the program's properties. They belong in the
-  // run's one table no more than "Checking forward condition" does.
-  if (
-    options.get_bool_option("k-step-property-table") &&
-    options.get_bool_option("forward-condition"))
-    return;
+  // A k-step strategy's forward condition asks whether the loop is exhausted,
+  // and asks it with an unwinding assertion. That is the strategy's own
+  // device, not a property of the program, and belongs in the run's one table
+  // no more than "Checking forward condition" does. Only that phase enables
+  // unwinding assertions -- every other one sets --no-unwinding-assertions --
+  // so the filter needs no further scoping.
+  const bool skip_unwinding_assertions =
+    strategy_owns_property_table(options) &&
+    options.get_bool_option("forward-condition");
 
   for (const auto &step : eq.SSA_steps)
   {
     if (!step.is_assert())
+      continue;
+
+    if (
+      skip_unwinding_assertions &&
+      id2string(step.comment).find("unwinding assertion") != std::string::npos)
       continue;
 
     const locationt &location = step.source.pc->location;
@@ -3894,7 +3939,7 @@ void bmct::report_property_verdicts(smt_resultt res) const
     verdicts,
     library_files,
     options.get_bool_option("color"),
-    options.get_bool_option("k-step-property-table"),
+    strategy_owns_property_table(options),
     !final);
 
   if (!final && !counts.anything_decided())

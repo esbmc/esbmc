@@ -94,6 +94,12 @@ public:
     return incomplete;
   }
 
+  /// Whether every property in the table reached Passed. A k-step run's
+  /// verdict follows its table (§4 of
+  /// docs/roadmap/multi-property-strategy-plan.md), so a row it could not
+  /// settle, or settled only vacuously, is not a proof of the program.
+  bool all_passed() const;
+
   /// How many distinct properties have been checked.
   std::size_t size() const;
 

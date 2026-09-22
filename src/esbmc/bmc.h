@@ -259,6 +259,11 @@ private:
   /// otherwise the only place a user learns the run proved anything.
   bool saw_bounded_loop_truncation = false;
 
+  /// Whether this phase's UNSAT may be reported as a proof of the program: no
+  /// claim discharged vacuously, the LTL monitor instrumented, and, under a
+  /// k-step strategy, every row of the run's table Passed.
+  bool proves_the_program() const;
+
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the
   /// path through report_result() that reaches report_success().
