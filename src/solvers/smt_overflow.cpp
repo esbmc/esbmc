@@ -53,7 +53,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       if (is_signed)
       {
         BigInt max_val = type_max_value(side1->type);
-        BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
+        BigInt min_val = -BigInt::power2(width - 1); // MIN_INT
 
         expr2tc max_int = constant_int2tc(side1->type, max_val);
         expr2tc min_int = constant_int2tc(side1->type, min_val);
@@ -128,7 +128,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 
         // Define minimum and maximum values for signed integers
         BigInt max_val = type_max_value(side1->type);
-        BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
+        BigInt min_val = -BigInt::power2(width - 1); // MIN_INT
 
         expr2tc max_int = constant_int2tc(side1->type, max_val);
         expr2tc min_int = constant_int2tc(side1->type, min_val);
