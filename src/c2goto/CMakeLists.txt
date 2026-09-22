@@ -463,7 +463,7 @@ add_library(clibs ${mangled_files} cprover_library.cpp cprover_libc_sources.cpp)
 target_include_directories(clibs
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(clibs PUBLIC esbmc_common PRIVATE c2gotoheaders fmt::fmt filesystem)
+target_link_libraries(clibs PUBLIC esbmc_common c2gotoheaders fmt::fmt filesystem)
 if(ENABLE_PYTHON_FRONTEND)
   add_dependencies(clibs gen_python_c_models)
 endif()

@@ -12,6 +12,6 @@ add_library(esbmc_internal_cpp esbmc_internal_cpp.cpp)
 target_include_directories(esbmc_internal_cpp
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(esbmc_internal_cpp PUBLIC esbmc_common PRIVATE cpp_includes)
+target_link_libraries(esbmc_internal_cpp PUBLIC esbmc_common cpp_includes)
 
-target_link_libraries(clangcppfrontend PUBLIC esbmc_common PRIVATE esbmc_internal_cpp fmt::fmt)
+target_link_libraries(clangcppfrontend PUBLIC esbmc_common esbmc_internal_cpp fmt::fmt)
