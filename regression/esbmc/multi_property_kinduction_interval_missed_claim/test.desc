@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --interval-analysis --multi-property --max-k-step 10
+^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line\s+12\s+assertion 1 == 2$
+\A(?![\s\S]*Solution found by the inductive step)[\s\S]*\Z

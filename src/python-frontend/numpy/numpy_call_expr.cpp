@@ -6635,7 +6635,13 @@ exprt numpy_call_expr::handle_argsort_call()
   parse_argsort_axis_keyword(
     resolve_argsort_axis_node(), argsort_flatten, argsort_axis);
 
-  if (numpy_reducer_has_unsupported_keywords_besides_axis(call_))
+  if (const nlohmann::json *kind_kw = find_keyword_arg("kind"))
+    validate_numpy_sort_kind_keyword_value(*kind_kw, "argsort");
+  if (const nlohmann::json *stable_kw = find_keyword_arg("stable"))
+    validate_numpy_stable_bool_keyword_value(*stable_kw, "argsort");
+
+  if (numpy_reducer_has_unsupported_keywords_besides(
+        call_, {"axis", "kind", "stable"}))
     throw std::runtime_error(
       "TypeError: numpy.argsort() does not support kind or order "
       "arguments yet");
@@ -6702,9 +6708,37 @@ exprt numpy_call_expr::handle_argsort_call()
 // numpy.searchsorted()'s side= keyword ('left'/'right', default 'left');
 // throws on any other keyword or an unrecognized side value. Split out of
 // handle_searchsorted_call to keep that function's own decision count down.
-static bool parse_searchsorted_side_keyword(const nlohmann::json &call)
+// Parses a literal 'left'/'right' side value (a Constant string node),
+// shared between the keyword and positional spellings of numpy.searchsorted's
+// third argument.
+static bool parse_searchsorted_side_value(const nlohmann::json &value)
+{
+  if (
+    !value.is_object() || value.value("_type", std::string()) != "Constant" ||
+    !value.contains("value") || !value["value"].is_string())
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
+
+  const std::string side = value["value"].get<std::string>();
+  if (side == "left")
+    return false;
+  if (side == "right")
+    return true;
+  throw std::runtime_error(
+    "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
+}
+
+// numpy.searchsorted()'s side= keyword (mapped to the `right` bool
+// parse_searchsorted_side_value returns) and sorter= keyword (returned as
+// the raw AST node, or nullptr if absent, so the caller can resolve it once
+// it also knows about a positional sorter). Any other keyword is rejected
+// explicitly.
+static bool parse_searchsorted_keywords(
+  const nlohmann::json &call,
+  const nlohmann::json *&sorter_kw)
 {
   bool right = false;
+  sorter_kw = nullptr;
   if (!call.contains("keywords"))
     return right;
 
@@ -6714,38 +6748,248 @@ static bool parse_searchsorted_side_keyword(const nlohmann::json &call)
       continue;
 
     const std::string arg = kw["arg"].get<std::string>();
-    if (arg != "side")
+    if (arg == "side")
+      right = parse_searchsorted_side_value(kw["value"]);
+    else if (arg == "sorter")
+      sorter_kw = &kw["value"];
+    else
       throw std::runtime_error(
         "TypeError: numpy.searchsorted() keyword '" + arg +
         "' is not supported");
-
-    const auto &value = kw["value"];
-    if (
-      !value.is_object() || value.value("_type", std::string()) != "Constant" ||
-      !value.contains("value") || !value["value"].is_string())
-      throw std::runtime_error(
-        "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
-
-    const std::string side = value["value"].get<std::string>();
-    if (side == "left")
-      right = false;
-    else if (side == "right")
-      right = true;
-    else
-      throw std::runtime_error(
-        "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
   }
   return right;
+}
+
+// True for a `np.argsort(...)`/`x.argsort()` call node (module or method
+// form share the same Attribute shape). resolve_searchsorted_sorter treats
+// either as "compute the stable argsort of arr_arg's own elements" --
+// reusing whatever array argsort() was actually called on is out of scope,
+// since the only sound, tested use of `sorter=argsort(...)` here is sorting
+// the same array searchsorted is already searching.
+static bool is_argsort_call(const nlohmann::json &node)
+{
+  return node.value("_type", std::string()) == "Call" &&
+         node.contains("func") &&
+         node["func"].value("_type", std::string()) == "Attribute" &&
+         node["func"].value("attr", std::string()) == "argsort";
+}
+
+// The stable argsort of `arr`'s own literal elements, as plain indices.
+// Shared by resolve_searchsorted_sorter's argsort-call case and (in
+// principle) any other caller needing the same permutation numpy.argsort()
+// would compute over a literal array.
+static std::vector<std::size_t>
+stable_argsort_of(const nlohmann::json &arr, const std::string &diagnostic)
+{
+  const auto &elements = arr["elts"];
+  std::vector<std::size_t> indices(elements.size());
+  for (std::size_t i = 0; i < indices.size(); ++i)
+    indices[i] = i;
+  std::stable_sort(
+    indices.begin(), indices.end(), [&](std::size_t lhs, std::size_t rhs) {
+      return numeric_to_key(elements[lhs], diagnostic) <
+             numeric_to_key(elements[rhs], diagnostic);
+    });
+  return indices;
+}
+
+// Follows `node` through a single-assignment Name binding to the value it
+// was assigned, or returns `node` unchanged for anything else (a
+// multiply-assigned name, or an expression that isn't a Name at all).
+// Shared by resolve_searchsorted_sorter and resolve_searchsorted_value_vector,
+// which both need to see through a local variable before inspecting its
+// literal shape.
+static nlohmann::json
+resolve_single_assignment_name(nlohmann::json node, python_converter &converter)
+{
+  if (
+    node.value("_type", std::string()) != "Name" ||
+    json_utils::has_multiple_assignments_in_scope(
+      node["id"], converter.current_function_name(), converter.ast()))
+    return node;
+
+  nlohmann::json resolved = json_utils::find_var_decl(
+    node["id"], converter.current_function_name(), converter.ast());
+  if (resolved.contains("value") && resolved["value"].is_object())
+    return resolved["value"];
+  return node;
+}
+
+// True when `node` (already known to be an is_argsort_call node) sorts the
+// bare Name `array_name` -- either `array_name.argsort()` (method form) or
+// `np.argsort(array_name)` (module form). resolve_searchsorted_sorter uses
+// this to confirm sorter=argsort(...) reuses the same array searchsorted is
+// searching (see is_argsort_call for why that is the only case it computes
+// directly) instead of accepting an unrelated array's argsort by callee
+// spelling alone.
+static bool argsort_call_targets_array(
+  const nlohmann::json &node,
+  const std::string &array_name,
+  const nlohmann::json &ast)
+{
+  const nlohmann::json &receiver = node["func"]["value"];
+  if (
+    receiver.value("_type", std::string()) == "Name" &&
+    is_imported_numpy_module_alias(ast, receiver.value("id", std::string())))
+    return node.contains("args") && !node["args"].empty() &&
+           node["args"][0].value("_type", std::string()) == "Name" &&
+           node["args"][0].value("id", std::string()) == array_name;
+
+  return receiver.value("_type", std::string()) == "Name" &&
+         receiver.value("id", std::string()) == array_name;
+}
+
+// Resolves `sorter_arg` (following it through a Name binding first) to a
+// literal array of integer indices: either a literal list/tuple of integer
+// Constants, or a np.argsort(...)/....argsort() call on `array_name` itself
+// (computed directly, see is_argsort_call and argsort_call_targets_array).
+// Throws explicitly for anything else -- a symbolic element, a non-literal
+// expression, an argsort of an unrelated array -- rather than silently
+// misreading it.
+static std::vector<std::size_t> resolve_searchsorted_sorter(
+  nlohmann::json sorter_arg,
+  const nlohmann::json &arr_arg,
+  const std::string &array_name,
+  python_converter &converter)
+{
+  sorter_arg = resolve_single_assignment_name(sorter_arg, converter);
+
+  if (is_argsort_call(sorter_arg))
+  {
+    if (!argsort_call_targets_array(sorter_arg, array_name, converter.ast()))
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() sorter=argsort(...) must sort the "
+        "same array being searched");
+    return stable_argsort_of(
+      arr_arg,
+      "TypeError: numpy.searchsorted() array must contain finite numeric "
+      "values");
+  }
+
+  std::optional<nlohmann::json> literal =
+    get_literal_numpy_array_arg(sorter_arg);
+  if (!literal)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() sorter must be a literal array of "
+      "indices");
+
+  std::vector<std::size_t> result;
+  result.reserve((*literal)["elts"].size());
+  for (const nlohmann::json &elt : (*literal)["elts"])
+  {
+    if (
+      elt.value("_type", std::string()) != "Constant" ||
+      !elt.contains("value") || !elt["value"].is_number_integer())
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() sorter must be a literal array of "
+        "indices");
+    result.push_back(static_cast<std::size_t>(elt["value"].get<int64_t>()));
+  }
+  return result;
+}
+
+// Validates `sorter` is a permutation of arr_arg's own index range, and
+// builds the virtually-reordered `arr_arg[sorter]` searchsorted actually
+// searches -- the same array numpy.searchsorted(a, v, sorter=sorter) would
+// search, letting an otherwise-unsorted `a` be searched via `sorter` instead
+// of requiring `a` itself to already be sorted.
+static nlohmann::json apply_searchsorted_sorter(
+  const nlohmann::json &arr_arg,
+  const std::vector<std::size_t> &sorter)
+{
+  if (sorter.size() != arr_arg["elts"].size())
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() sorter must be a 1-D array matching "
+      "the input length");
+
+  std::vector<bool> seen(sorter.size(), false);
+  for (std::size_t idx : sorter)
+  {
+    if (idx >= sorter.size())
+      throw std::runtime_error(
+        "ValueError: numpy.searchsorted() sorter index out of range");
+    if (seen[idx])
+      throw std::runtime_error(
+        "ValueError: numpy.searchsorted() sorter is not a valid "
+        "permutation");
+    seen[idx] = true;
+  }
+
+  nlohmann::json reordered;
+  reordered["_type"] = "List";
+  reordered["elts"] = nlohmann::json::array();
+  for (std::size_t idx : sorter)
+    reordered["elts"].push_back(arr_arg["elts"][idx]);
+  return reordered;
+}
+
+// True when `value_arg` (following it through a Name binding first, like
+// resolve_literal_numpy_array_input does for the array argument) is a
+// literal 1-D vector of values -- a List/Tuple literal, or a literal
+// np.array(...) -- rather than a single scalar value:
+// np.searchsorted(a, [2, 6])/np.searchsorted(a, (2, 6)). Declines (nullopt)
+// for anything that isn't one of those shapes, so the caller falls back to
+// the existing single-value path. Throws explicitly for a 2-D-shaped vector
+// (a nested List/Tuple element) rather than silently misreading it.
+static std::optional<nlohmann::json> resolve_searchsorted_value_vector(
+  nlohmann::json value_arg,
+  python_converter &converter)
+{
+  value_arg = resolve_single_assignment_name(value_arg, converter);
+
+  const std::string type = value_arg.value("_type", std::string());
+  nlohmann::json elts;
+  if (type == "List" || type == "Tuple")
+  {
+    if (!value_arg.contains("elts") || !value_arg["elts"].is_array())
+      return std::nullopt;
+    elts = value_arg["elts"];
+  }
+  else if (
+    std::optional<nlohmann::json> literal =
+      get_literal_numpy_array_arg(value_arg))
+    elts = (*literal)["elts"];
+  else
+    return std::nullopt;
+
+  for (const nlohmann::json &elt : elts)
+  {
+    const std::string elt_type = elt.value("_type", std::string());
+    if (elt_type == "List" || elt_type == "Tuple")
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() values must be a 1-D vector of "
+        "literals");
+  }
+
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = std::move(elts);
+  return result;
 }
 
 exprt numpy_call_expr::handle_searchsorted_call()
 {
   const std::string &function = function_id_.get_function();
-  if (call_["args"].size() != 2)
+  if (call_["args"].size() < 2 || call_["args"].size() > 4)
     throw std::runtime_error(
       "TypeError: numpy.searchsorted() expects array and value arguments");
 
-  const bool right = parse_searchsorted_side_keyword(call_);
+  const nlohmann::json *sorter_kw = nullptr;
+  bool right = parse_searchsorted_keywords(call_, sorter_kw);
+
+  // side and sorter are positional-or-keyword in real numpy
+  // (searchsorted(a, v, side='left', sorter=None)): a 3rd/4th positional
+  // argument wins over the matching keyword rather than conflicting with it,
+  // matching the sort()/argsort() axis handling elsewhere in this file.
+  if (call_["args"].size() >= 3)
+    right = parse_searchsorted_side_value(call_["args"][2]);
+  const nlohmann::json *sorter_node =
+    call_["args"].size() == 4 ? &call_["args"][3] : sorter_kw;
+
+  const std::string array_name =
+    call_["args"][0].value("_type", std::string()) == "Name"
+      ? call_["args"][0].value("id", std::string())
+      : std::string();
 
   nlohmann::json arr_arg = call_["args"][0];
   if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
@@ -6756,21 +7000,42 @@ exprt numpy_call_expr::handle_searchsorted_call()
     throw std::runtime_error(
       "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
 
-  if (!is_sorted_numeric_list(
-        arr_arg,
-        "TypeError: numpy.searchsorted() array must contain finite numeric "
-        "values"))
+  nlohmann::json search_space = arr_arg;
+  if (sorter_node != nullptr)
+    search_space = apply_searchsorted_sorter(
+      arr_arg,
+      resolve_searchsorted_sorter(
+        *sorter_node, arr_arg, array_name, converter_));
+  else if (!is_sorted_numeric_list(
+             arr_arg,
+             "TypeError: numpy.searchsorted() array must contain finite "
+             "numeric values"))
     throw std::runtime_error(
       "ValueError: numpy.searchsorted() requires the input array to be "
       "sorted");
 
-  nlohmann::json position;
-  position["_type"] = "Constant";
-  nlohmann::json value_arg = call_["args"][1];
+  const nlohmann::json &value_arg = call_["args"][1];
+  if (
+    std::optional<nlohmann::json> values =
+      resolve_searchsorted_value_vector(value_arg, converter_))
+  {
+    std::vector<std::size_t> indices;
+    indices.reserve((*values)["elts"].size());
+    for (const nlohmann::json &value : (*values)["elts"])
+    {
+      numeric_to_key(
+        value, "TypeError: numpy.searchsorted() requires a literal value");
+      indices.push_back(searchsorted_position(search_space, value, right));
+    }
+    return converter_.get_expr(make_integer_list(indices));
+  }
+
   numeric_to_key(
     value_arg, "TypeError: numpy.searchsorted() requires a literal value");
+  nlohmann::json position;
+  position["_type"] = "Constant";
   position["value"] =
-    static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
+    static_cast<int64_t>(searchsorted_position(search_space, value_arg, right));
   return converter_.get_expr(position);
 }
 
@@ -6808,6 +7073,11 @@ void numpy_call_expr::parse_sort_axis_and_keywords(
       continue;
 
     const std::string arg = kw["arg"].get<std::string>();
+    if (arg == "kind")
+    {
+      validate_numpy_sort_kind_keyword_value(kw["value"], "sort");
+      continue;
+    }
     if (arg != "axis")
       throw std::runtime_error(
         "TypeError: numpy.sort() keyword '" + arg + "' is not supported");

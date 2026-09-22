@@ -185,6 +185,9 @@ public:
    */
   void assume(const expr2tc &);
 
+  /// Under --interval-analysis-assume-asserts, narrows the state to \p guard.
+  void assume_assertion(const expr2tc &guard, const ai_baset &ai);
+
   /**
    * @brief Updates the interval state based on a single goto-program instruction.
    *

@@ -304,6 +304,24 @@ comment at `driver.cpp:196` records the same assert for
 `--loop-invariant-check` + `--termination`. With interval analysis, a
 `while (1)` loop whose head is an `ASSERT` hits it by another route.
 
+### D7 — the `(c) || assert(0)` fold drops code (plain BMC)
+
+```
+$ esbmc pw.c --multi-property      # if (nondet) { __ESBMC_assert(0,"v"); x = 1; } assert(x == 0);
+  FAILED       [main.assertion.1]  line  8  v
+  PASSED       [main.assertion.2]  line 11  assertion x == 0
+```
+
+`x == 0` is violated on the path through the failed assertion.
+`--goto-functions-only` shows the block folded to `ASSERT !nondet` with
+`x = 1` gone. This is a wrong row under plain BMC, so §1's first row holds
+only for programs without that idiom. W2b.
+
+### D8 — k-induction havoc misses an entry past `assert(0)`
+
+See W2c. Wrong row under `--k-induction --multi-property`, no interval
+analysis needed.
+
 ---
 
 ## 4. Target semantics
@@ -409,21 +427,63 @@ through the forward condition on master and on the W1 build alike. Anything
 further belongs to W3, which gives claims program-wide ids and a verdict
 store, and even there the bound-vs-proof distinction above still applies.
 
-### W2 — the missed claim under interval analysis (D3)
+### W2 — the missed claim under interval analysis (D3) — done
 
-- Localise with `esbmc-rca`, starting from `--show-vcc` of the k = 2 inductive
-  step of `i1361.c`, with and without `--multi-property`. The question to
-  answer is which constraint makes `assert(1==2)` unreachable in the inductive
-  step when the base case has already recorded `assert(2==3)` as failed.
-- Fix at the cause. If the cause is the interval pass's rewrite composing
-  badly with the per-claim skip, the fix belongs in whichever of the two is
-  wrong, not in the strategy loop.
-- **Tests (pair).** `i1361.c --k-induction --interval-analysis
-  --multi-property` must list `assertion 1==2` as FAILED. The `assert(i < 5)`
-  variant is the passing half: it already reports `i < 5` PASSED and `1==2`
-  FAILED at k = 3, which is what §4 asks for, so it pins that the fix does not
-  cost the proved row.
+**Cause.** `goto_programt::get_successors` gives an `ASSERT` whose guard is
+the literal `0` no successor, as though a failed assertion ended the run.
+Symex does not stop there: `int x = 0; assert(0); x = 1; assert(x == 0);`
+under `--multi-property` reports both claims FAILED. By the time the
+post-k-induction interval pass (`instrument_loop_bounds_after_kind`) runs,
+`assert(2==3)` has been folded to `ASSERT 0`, so the fixpoint never follows
+the loop's increment and back edge. It computes `i == 0` at the loop head and
+inserts `ASSUME 0 == i` there for the inductive step. Once
+`multi_property_check` clears the violated `ASSERT 0`, the path continues,
+`i` becomes 1, the assumption kills it, and `assert(1==2)` is unreachable:
+the inductive step generates no VCC and reports a proof.
+
+A guard must be literally false to trigger it: `assert(2==3)` does once
+folded, `assert(i < 0)` never does. `__ESBMC_assert(0, ...)` is literal from
+the start, so the first interval pass (plain BMC included) was exposed too.
+Without `--multi-property` the pruning costs nothing: it drops only states
+after a reachable violation, and the run is already FAILED.
+
+**Fix.** `ai_baset::continue_past_failed_assertions` restores the fall-through
+edge that `get_successors` drops, and stops `--interval-analysis-assume-asserts`
+from narrowing the state at an assertion, which had the same effect. Both
+interval passes set it when claims after a violation are still checked:
+`multi-property` (which `--parallel-solving`, `--all-witnesses` and
+`--synthesise-loop-invariants` imply) or a coverage run. `remove_unreachable`
+was skipped for a narrower, command-line-only version of that predicate, so it
+still deleted the code after a failed assertion under `--all-witnesses`; both
+now use one predicate. `get_successors` itself is unchanged.
+`goto_contractor.cpp` builds its own interval analyses without the flag; it is
+not compiled in the default build, so this was not measured.
+
+- **Tests.** #1361's program (`--k-induction --interval-analysis
+  --multi-property`) reports `1 == 2` FAILED and no inductive-step proof; its
+  `assert(i < 5)` twin keeps the PASSED row. A `github_1092_2_true` variant is
+  still proved only with the interval bound. `--interval-analysis-assume-asserts`,
+  the first pass on `__ESBMC_assert(0, ...)`, and `--all-witnesses` each have a
+  FAILED test that fails with its own fix site reverted, and a twin.
 - Labels: `needs-svcomp-run`.
+
+### W2b — the `(c) || assert(0)` fold drops code (D7)
+
+`goto_convert` folds `if (c) { assert(0); x = 1; }` to `ASSERT !c`, erasing
+the statement after the assertion (`goto_convert.cpp`, `is_or_idiom` in
+`goto_convert_functions.cpp`). Under plain `--multi-property`, with no other
+flag, `assert(x == 0)` after that block is reported PASSED although it is
+violated. Fix at the fold: apply it only when nothing follows the assertion,
+or only when the run stops at the first violation. Test pair on that program.
+
+### W2c — k-induction havoc skips an entry jump past `assert(0)` (D8)
+
+`reaches_back_edge` in `goto_k_induction.cpp` walks `get_successors`, so a
+literal-false assertion between a jump into the loop and its back edge hides
+that entry, and no havoc is inserted for it. `goto L;` into a loop whose body
+starts `L: __ESBMC_assert(0, "v");` then gets its later `assert(i < 500)`
+"proved" by the inductive step under `--k-induction --multi-property`. Fix in
+the walk, with the same predicate as W2. Test pair on that program.
 
 ### W3a — claims that share a position (D5) — done
 
@@ -565,7 +625,7 @@ waved through.
 
 ## 7. Open questions
 
-1. **D3's cause** (W2). Until it is known, W2 has no fix sketch.
+1. **D3's cause** (W2). Resolved: see W2.
 2. **Inductive-step granularity.** The inductive step proves all remaining
    claims together. A claim that is inductive on its own can fail to be proved
    because a non-inductive sibling shares the step. Per-claim inductive steps

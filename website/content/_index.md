@@ -6,8 +6,7 @@ toc: false
 {{< callout type="important" icon="sparkles" >}} **NEW:** Around 80 pull
 requests landed in early August — Python function contracts, a user-facing
 `esbmc.h`, concurrency soundness fixes and more. Read the
-[development update](/news/development-update-august-2026).
-{{< /callout >}}
+[development update](/news/development-update-august-2026). {{< /callout >}}
 
 {{< cards >}}
 {{< card link="https://dblp.org/pid/42/4311" title="Publications" icon="book-open" >}}
@@ -15,6 +14,7 @@ requests landed in early August — Python function contracts, a user-facing
 {{< card link="/test-comp" title="Test-COMP" icon="book-open" >}}
 {{< card link="https://ssvlab.github.io/" title="SSV Lab" icon="book-open" >}}
 {{< card link="https://github.com/esbmc/esbmc/releases/latest" title="Latest Release" icon="github" >}}
+{{< card link="https://esbmc.github.io/esbmc-demo" title="ESBMC Simulator" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/vscode-esbmc" title="VSCode Extension" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/agent-marketplace" title="Claude Code Plugin" icon="external-link" >}}
@@ -70,8 +70,8 @@ possible inputs. Classes of problems that can be detected include:
 - The Soot framework via Jimple as its Java/Kotlin frontend;
 - The [ast](https://docs.python.org/3/library/ast.html) and
   [ast2json](https://pypi.org/project/ast2json/) modules as its
-  [Python frontend](./src/python-frontend/README.md); the first SMT-based
-  bounded model checker for Python programs;
+  [Python frontend](/docs/python/overview); the first SMT-based bounded model
+  checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 

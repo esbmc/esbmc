@@ -9,11 +9,78 @@
 #include <functional>
 #include <unordered_map>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
 namespace json_utils
 {
+inline bool
+ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b);
+
+inline bool ast_location_key(const std::string &k)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  for (const char *lk : loc_keys)
+    if (k == lk)
+      return true;
+  return false;
+}
+
+// Object case of ast_equal_ignoring_location. Split out to keep that
+// function's own decision count down.
+inline bool ast_objects_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  for (auto it = a.begin(); it != a.end(); ++it)
+  {
+    if (ast_location_key(it.key()))
+      continue;
+    if (
+      !b.contains(it.key()) ||
+      !ast_equal_ignoring_location(it.value(), b[it.key()]))
+      return false;
+  }
+  for (auto it = b.begin(); it != b.end(); ++it)
+    if (!ast_location_key(it.key()) && !a.contains(it.key()))
+      return false;
+  return true;
+}
+
+// Array case of ast_equal_ignoring_location. Split out to keep that
+// function's own decision count down.
+inline bool ast_arrays_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (size_t i = 0; i < a.size(); ++i)
+    if (!ast_equal_ignoring_location(a[i], b[i]))
+      return false;
+  return true;
+}
+
+// Structural equality of two AST JSON nodes, ignoring source-location keys
+// (lineno/col_offset/...). Two textually distinct occurrences of the same
+// expression -- e.g. the `l[i+1:]` on each side of
+// `l[i+1:] = reversed(l[i+1:])`, or `np.zeros(3)` spelled on both arms of an
+// if/else -- differ only in their location fields, so a raw `==` would
+// wrongly report them as different.
+inline bool
+ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b)
+{
+  if (a.type() != b.type())
+    return false;
+  if (a.is_object())
+    return ast_objects_equal_ignoring_location(a, b);
+  if (a.is_array())
+    return ast_arrays_equal_ignoring_location(a, b);
+  return a == b;
+}
+
 /// Convert a dotted Python module name to a filesystem path segment.
 /// Example: "pkg.mod4" -> "pkg/mod4", "l.ks.foo" -> "l/ks/foo"
 inline std::string dotted_to_path(const std::string &module_name)
