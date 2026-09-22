@@ -37,9 +37,8 @@ if(ENABLE_CVC4)
 
     add_library(solvercvc4 cvc_conv.cpp)
     target_include_directories(solvercvc4
-            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solvercvc4 fmt::fmt "CVC4::cvc4")
+    target_link_libraries(solvercvc4 PUBLIC esbmc_common PRIVATE fmt::fmt "CVC4::cvc4")
 
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvercvc4)

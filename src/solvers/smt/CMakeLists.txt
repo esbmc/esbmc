@@ -17,12 +17,8 @@ add_library(smt
   smt_bitcast.cpp
 )
 
-target_include_directories(smt
-  PRIVATE ${Boost_INCLUDE_DIRS}
-)
-
 target_link_libraries(smt
-  PUBLIC fmt::fmt
+  PUBLIC esbmc_common fmt::fmt
 )
 
 # smttuple and smtfp include smt headers directly; declare the dep so the
