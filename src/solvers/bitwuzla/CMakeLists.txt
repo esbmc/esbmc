@@ -76,7 +76,7 @@ if(ENABLE_BITWUZLA)
     add_library(solverbitw bitwuzla_conv.cpp)
     target_include_directories(solverbitw
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solverbitw PUBLIC esbmc_common PRIVATE fmt::fmt PkgConfig::Bitwuzla)
+    target_link_libraries(solverbitw PUBLIC esbmc_common fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

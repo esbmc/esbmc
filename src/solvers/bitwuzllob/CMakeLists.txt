@@ -12,7 +12,7 @@ if(NOT ENABLE_BITWUZLLOB OR NOT ENABLE_SMTLIB)
 endif()
 
 add_library(solverbitwuzllob bitwuzllob_conv.cpp)
-target_link_libraries(solverbitwuzllob PUBLIC esbmc_common PRIVATE smtlib fmt::fmt)
+target_link_libraries(solverbitwuzllob PUBLIC esbmc_common smtlib fmt::fmt)
 target_include_directories(solverbitwuzllob
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )

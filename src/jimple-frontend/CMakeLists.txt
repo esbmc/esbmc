@@ -6,5 +6,4 @@ add_library(jimple
         jimple-converter.cpp)
 
 target_link_libraries(jimple
-        PUBLIC esbmc_common jimple_ast
-        PRIVATE clibs ESBMC::boost fmt::fmt nlohmann_json::nlohmann_json)
+        PUBLIC esbmc_common jimple_ast clibs ESBMC::boost fmt::fmt nlohmann_json::nlohmann_json)

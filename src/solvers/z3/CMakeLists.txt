@@ -44,9 +44,9 @@ if(ENABLE_Z3)
             PRIVATE ${Z3_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-    target_link_libraries(solverz3 PUBLIC esbmc_common PRIVATE fmt::fmt "${Z3_LIB}")
+    target_link_libraries(solverz3 PUBLIC esbmc_common fmt::fmt "${Z3_LIB}")
     if(BUILD_STATIC)
-        target_link_libraries(solverz3 PRIVATE -pthread "${LIBGOMP_LIB}" -ldl)
+        target_link_libraries(solverz3 PUBLIC -pthread "${LIBGOMP_LIB}" -ldl)
     endif()
     # Add to solver link
     target_link_libraries(solvers INTERFACE solverz3)

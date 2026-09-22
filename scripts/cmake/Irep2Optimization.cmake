@@ -25,8 +25,10 @@ set(esbmc_pch_targets
   gotoalgorithms
   abstract-interpretation
   smt
-  solve
-  esbmc-driver)
+  solve)
+# esbmc-driver is deliberately absent: with the PCH force-included, GCC 13 at
+# -O2 reports a false -Wstringop-overflow on the ESBMC_AVAILABLE_SOLVERS
+# concatenation in driver.cpp, which -Werror turns into a build failure.
 
 foreach(target IN LISTS esbmc_pch_targets)
   if(TARGET ${target})

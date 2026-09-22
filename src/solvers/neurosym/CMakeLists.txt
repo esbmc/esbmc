@@ -12,7 +12,7 @@ if(NOT ENABLE_NEUROSYM OR NOT ENABLE_SMTLIB)
 endif()
 
 add_library(solverneurosym neurosym_conv.cpp)
-target_link_libraries(solverneurosym PUBLIC esbmc_common PRIVATE smtlib fmt::fmt)
+target_link_libraries(solverneurosym PUBLIC esbmc_common smtlib fmt::fmt)
 target_include_directories(solverneurosym
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
