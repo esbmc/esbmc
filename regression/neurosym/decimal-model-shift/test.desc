@@ -2,5 +2,5 @@ CORE
 main.c
 --neurosym --neurosym-prog fake-neurosym.sh --neurosym-model-prog "z3 -in"
 ^\[Counterexample\]$
-^  w\.f = \{ \.f = 0 \}$
+^  w\.f = 0 \(00000000 00000000 00000000 00000000\)$
 ^VERIFICATION FAILED$
