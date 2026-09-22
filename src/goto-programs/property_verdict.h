@@ -77,8 +77,22 @@ public:
   /// Raises every NotChecked entry to Passed. Call only once the run has
   /// established that *all* properties hold -- a monolithic UNSAT refutes the
   /// disjunction of every claim violation, so each claim holds -- and never
-  /// after a merely bounded round such as a k-induction base case.
+  /// after a merely bounded round such as a k-induction base case. Does
+  /// nothing once note_incomplete() has been called.
   void promote_unchecked_to_passed();
+
+  /// Records that some phase of the run stopped before every property reached
+  /// a verdict. A k-step strategy promotes across phases -- the forward
+  /// condition proves what the base cases left NotChecked -- so a phase that
+  /// skipped properties has to disarm that promotion for the whole run, not
+  /// only for itself.
+  void note_incomplete();
+
+  /// Whether note_incomplete() has been called since the last clear().
+  bool is_incomplete() const
+  {
+    return incomplete;
+  }
 
   /// How many distinct properties have been checked.
   std::size_t size() const;
@@ -101,6 +115,7 @@ private:
   mutable std::mutex mutex;
   std::map<std::string, property_resultt> results;
   std::atomic<bool> violation{false};
+  std::atomic<bool> incomplete{false};
 };
 
 #endif

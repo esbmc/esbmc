@@ -213,15 +213,6 @@ private:
   /// silent, leaving the report to the phase that does.
   void report_property_verdicts(smt_resultt res) const;
 
-  /// Print the property table, grouped by file and function.
-  void print_property_rows(
-    const std::vector<struct property_rowt> &rows,
-    const struct property_countst &counts) const;
-
-  /// Print the "** N of M properties failed, ..." line.
-  void
-  print_property_summary(size_t total, const struct property_countst &) const;
-
   /// Render the verdict table as coverage goals rather than properties.
   void report_coverage_goal_verdicts(
     const std::map<std::string, property_resultt> &verdicts) const;
@@ -303,6 +294,15 @@ private:
   /// Atomic because multi_property_check sets it from parallel job threads.
   std::atomic<bool> report_incomplete{false};
 };
+
+/// Print the property table a k-step strategy accumulated across its phases,
+/// once, where the strategy concludes without a phase of its own having
+/// reported (the k steps ran out). Rows the run never decided print as
+/// UNKNOWN: every base case checked them, none settled them. A no-op on a run
+/// that keeps a table per phase.
+void report_k_step_property_table(
+  const optionst &options,
+  const goto_functionst &goto_functions);
 
 void report_coverage(
   const optionst &options,
