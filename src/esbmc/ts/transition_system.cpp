@@ -28,15 +28,9 @@ struct loop_shapet
   bool loop_free = false;
 };
 
-bool starts_with(const std::string &s, const std::string &prefix)
-{
-  return s.compare(0, prefix.size(), prefix) == 0;
-}
-
 bool is_input_symbol(const expr2tc &e)
 {
-  return is_symbol2t(e) &&
-         starts_with(to_symbol2t(e).thename.as_string(), "nondet$symex::");
+  return is_symbol2t(e) && has_prefix(to_symbol2t(e).thename, "nondet$symex::");
 }
 
 /// Memo keys are raw nodes of `e`, so it must not outlive the walk: a freed
@@ -327,7 +321,7 @@ int marker_index(const expr2tc &lhs, const std::string &kind)
   if (!is_symbol2t(lhs))
     return -1;
   const std::string &name = to_symbol2t(lhs).thename.as_string();
-  if (!starts_with(name, kind))
+  if (!name.starts_with(kind))
     return -1;
   return std::stoi(name.substr(kind.size()));
 }
@@ -731,7 +725,7 @@ bool extract_transition_system(
   for (const auto &e : body_lhs)
     if (
       before_loop.count(l1_name(e)) && !state.count(l1_name(e)) &&
-      !starts_with(to_symbol2t(e).thename.as_string(), "goto_symex::"))
+      !has_prefix(to_symbol2t(e).thename, "goto_symex::"))
     {
       reason = "the loop writes " + from_expr(ns, "", e) +
                " outside its havocked state";
