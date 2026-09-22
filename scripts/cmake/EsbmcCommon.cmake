@@ -13,6 +13,20 @@ target_compile_definitions(esbmc_common INTERFACE
   BOOST_ALL_NO_LIB
   YAML_CPP_STATIC_DEFINE)
 
+# Anything touching irep2 needs Boost's headers: irep2.h -> config.h ->
+# cmdline.h -> boost/program_options.hpp. Boost_INCLUDE_DIRS is named alongside
+# Boost::headers deliberately -- a target that has only the imported target and
+# not the path still builds on Linux, where Boost lives on an implicit search
+# path, and fails on macOS/Homebrew, where it does not.
+if(NOT Boost_INCLUDE_DIRS)
+  message(FATAL_ERROR
+    "Boost was found but Boost_INCLUDE_DIRS is empty, so ESBMC cannot put its "
+    "headers on the include path. Check the Boost package at ${Boost_DIR}.")
+endif()
+target_link_libraries(esbmc_common INTERFACE Boost::headers)
+target_include_directories(esbmc_common INTERFACE
+  "$<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>")
+
 add_library(esbmc_boost INTERFACE)
 add_library(ESBMC::boost ALIAS esbmc_boost)
 target_link_libraries(esbmc_boost INTERFACE
