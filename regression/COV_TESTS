@@ -1767,3 +1767,5 @@ regression/esbmc/all_witnesses_code_after_failed_assert
 regression/k-induction/multi_property_entry_jump_past_failed_assert
 regression/k-induction/entry_jump_past_failed_assert_single_property
 regression/k-induction/multi_property_entry_jump_past_failed_assert_pass
+regression/floats/github_7896
+regression/smtlib/github_7929
