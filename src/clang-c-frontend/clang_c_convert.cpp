@@ -405,7 +405,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * incomplete-type symbol with the now-complete type definition, in place.
    * The order of definitions in the context matters — this type must be
    * defined after any of the types it is composed of — so move it to the
-   * back of the insertion order afterwards.
+   * back of the insertion order afterwards. Since #7643 a record reached
+   * through a pointer field is converted eagerly, so a record composed of it
+   * can precede it; goto2c re-sorts compound types (goto2c_preprocess.cpp).
    *
    * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
    * through field types into other records, and any of those recursions may
@@ -415,6 +417,15 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
+
+  /* That recursion can also re-enter this very record and complete it (#2323).
+   * Completing it again would run the method pass a second time and add the
+   * vtable variable symbol twice, which aborts conversion (#7643). */
+  if (
+    !sym->get_type().incomplete() &&
+    sym->get_type().id() != "incomplete_struct")
+    return false;
+
   sym->set_type(t);
   sym = context.reorder_symbol_to_back(id);
 
@@ -1236,8 +1247,18 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Record:
   {
-    const clang::RecordDecl &rd =
-      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
+    const clang::RecordDecl *rdp =
+      (static_cast<const clang::RecordType &>(the_type)).getDecl();
+
+    /* The decl a RecordType carries need not be the defining one; resolve to
+     * the definition so this arm, which converts a record only while no symbol
+     * exists for it yet, does not register one that stays incomplete (#7643).
+     * Hand-rolled rather than RecordDecl::getDefinitionOrSelf(), LLVM >= 21. */
+    if (!rdp->isCompleteDefinition())
+      if (const clang::RecordDecl *def = rdp->getDefinition())
+        rdp = def;
+
+    const clang::RecordDecl &rd = *rdp;
 
     std::string id, name;
     get_decl_name(rd, name, id);

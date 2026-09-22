@@ -1769,3 +1769,6 @@ regression/k-induction/entry_jump_past_failed_assert_single_property
 regression/k-induction/multi_property_entry_jump_past_failed_assert_pass
 regression/floats/github_7896
 regression/smtlib/github_7929
+regression/esbmc-cpp/cpp/github_7643_record_definition
+regression/esbmc-cpp/cpp/github_7643_nested_base
+regression/esbmc-cpp/cpp/github_7643_friend_base
