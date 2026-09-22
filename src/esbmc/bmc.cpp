@@ -144,6 +144,17 @@ static void record_discharge(
     goto_functionst::property_verdicts.record(property, verdict, loc, note);
 }
 
+/// The closing line of a report that does not account for every property.
+static void print_partial_report_note()
+{
+  log_result(
+    "This report is partial: the run stopped before every property reached "
+    "a verdict, so properties are missing above, and a passing verdict "
+    "holds only for the thread interleavings explored. Raise "
+    "--multi-property-interleavings, or drop --multi-fail-fast, to check "
+    "further.");
+}
+
 /// Whether this round discharges a claim only within the current k. A base
 /// case of a k-step strategy does: "not violated within k" is not a proof, and
 /// recording one would put a bounded result in the run's table as a verdict.
@@ -3852,6 +3863,9 @@ void report_k_step_property_table(
     options.get_bool_option("color"),
     true,
     false);
+
+  if (goto_functionst::property_verdicts.is_incomplete())
+    print_partial_report_note();
 }
 
 void bmct::report_property_verdicts(smt_resultt res) const
@@ -3924,11 +3938,8 @@ void bmct::report_property_verdicts(smt_resultt res) const
     log_result("{}", timing_oss.str());
   }
 
-  if (report_incomplete)
-    log_result(
-      "This report is partial: the run stopped before every property reached "
-      "a verdict, so properties are missing above, and a passing verdict "
-      "holds only for the thread interleavings explored. Raise "
-      "--multi-property-interleavings, or drop --multi-fail-fast, to check "
-      "further.");
+  // The phase that prints a k-step run's table need not be the phase that
+  // stopped short, so the store carries that across phases too.
+  if (report_incomplete || goto_functionst::property_verdicts.is_incomplete())
+    print_partial_report_note();
 }
