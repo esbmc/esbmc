@@ -6414,8 +6414,7 @@ exprt function_call_expr::fold_from_bytes_byteorder(
       func_symbol.id.as_string(), "@C@int@F@from_bytes"))
     return arg;
 
-  const std::optional<std::string> byteorder =
-    constant_byteorder(node, module);
+  const std::optional<std::string> byteorder = constant_byteorder(node, module);
   if (byteorder != "big" && byteorder != "little")
     throw std::runtime_error(
       "int.from_bytes() byteorder must be the constant 'big' or 'little'");
