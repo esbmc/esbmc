@@ -118,6 +118,10 @@ bool calls_are_supported(
       return false;
     }
     const irep_idt &name = to_symbol2t(callee).thename;
+    // src/c2goto/library/setjmp.c models these as __ESBMC_unreachable(): the
+    // marker means "not modelled", but with the unreachability intrinsic
+    // enabled it becomes a reachable-error property, so every program using
+    // them reports a violation that is not in the program. Decline instead.
     if (
       name == "c:@F@setjmp" || name == "c:@F@_setjmp" || name == "c:@F@longjmp")
     {
