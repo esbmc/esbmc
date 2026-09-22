@@ -528,9 +528,34 @@ the walk, with the same predicate as W2. Test pair on that program.
   plain `--unwind` still reads a per-claim UNSAT as a proof.
 - Closes #1361.
 - Labels: `needs-svcomp-run`.
-- Residual: `--falsification` still leaves the k loop at the first violation,
-  so its table prints after that phase's `VERIFICATION FAILED` rather than
-  before. W4 routes it through `conclude()` and the order follows.
+- Residuals, none of them unsound, each conservative in the direction that
+  under-reports rather than over-reports:
+  - `--falsification` still leaves the k loop at the first violation, so its
+    table prints after that phase's `VERIFICATION FAILED` rather than before.
+    W4 routes it through `conclude()` and the order follows.
+  - `note_incomplete` latches for the whole run, but the invariant it guards
+    is per k: the promotion at the closing k is sound iff *that* k's base case
+    solved every claim. `--multi-fail-fast 1` skipping a claim at k = 1 so
+    disarms the proof the forward condition finds at k = 5, and the rows read
+    UNKNOWN. Making the signal per-round needs a second flag, reset at each
+    base case, and would also let the diagnostic pass decline a `Passed` it
+    has no base case behind (it records one today regardless, as it does on
+    master). W3c.
+  - The exhausted-k table has no `Solver: … • Decision procedure total time`
+    footer: `solver_stats` is per `bmct` and the driver has no run-wide total.
+  - Nothing enforces "printed once". It holds because every phase for which
+    `reports_final_verdict` is true also ends the strategy, and the two
+    driver-side calls are on mutually exclusive returns, but W4 moves one of
+    those returns.
+  - `goto_symext::claim` reads two driver options to apply the bounded-round
+    rule, which is a reporting-layer rule. The two sites agree in behaviour --
+    both withhold only a proof -- but one demotes and one skips.
+
+### W3c — make the completeness signal per round
+
+`property_verdict_tablet::note_incomplete` and the diagnostic pass, per W3b's
+residuals. Test: the `multi_property_kinduction_fail_fast` pair, whose UNKNOWN
+rows become PASSED once the signal is scoped to the closing k's base case.
 
 ### W4 — falsification and parallel k-induction (D4)
 
