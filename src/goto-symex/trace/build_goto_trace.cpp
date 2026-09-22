@@ -43,10 +43,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 
 expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
 {
-  /* is_constant_expr() is syntactic, so this also returns an aggregate
-   * literal whose elements propagation left symbolic; is_model_value() below
-   * is the semantic test, and what keeps such a value out of a trace step
-   * that can report its lvalue instead. */
   if (is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
 
@@ -56,10 +52,9 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
   return new_rhs;
 }
 
-/* Whether @p e is something the model produced rather than something symex
- * propagated. `is_constant_expr` cannot answer this: it is syntactic, and
- * constant propagation leaves `constant_struct`/`constant_array` nodes whose
- * elements are still symbolic. */
+/* Whether the model produced @p e rather than symex propagating it:
+ * is_constant_expr is syntactic and admits aggregates with symbolic
+ * elements. */
 static bool is_model_value(const expr2tc &e)
 {
   if (is_nil_expr(e))
@@ -104,12 +99,9 @@ static expr2tc rebase_on_ssa_lhs(
     return ssa_lhs;
   }
 
-  /* symex resolved the dereference to the object being assigned before it
-   * lowered the write, so the accesses above it in the source lvalue are
-   * accesses into that object -- but only where the dereference covered the
-   * whole of it. A sub-object target (`&a[3]`, `&w.s`) leaves @p ssa_lhs
-   * naming the enclosing object, and equal types rule that out: no type
-   * contains a distinct sub-object of its own type. */
+  /* Equal types rule out a sub-object target (`&a[3]`, `&w.s`), which would
+   * leave @p ssa_lhs naming the enclosing object: no type contains a distinct
+   * sub-object of its own type. */
   case expr2t::dereference_id:
     return lvalue->type == ssa_lhs->type ? ssa_lhs : expr2tc();
 
@@ -147,22 +139,12 @@ static expr2tc rebase_on_ssa_lhs(
   }
 }
 
-/* The value of the lvalue an assignment step prints, read from the model as
- * that lvalue rather than as the whole object the SSA assignment rewrote.
- *
- * symex lowers a write to a component -- `s.f = v`, `a[i] = v` -- into a
- * whole-object update `s = s WITH [f := v]`, so evaluating the step's RHS
- * answers for all of `s`: a value the printed lvalue does not have, obtained
- * at one model query per leaf of the object and printed in full, on every
- * step that touches it. Over a loop writing into a large aggregate both costs
- * grow quadratically in the number of iterations.
- *
- * Nil when the lvalue is not such a component, or when the model does not pin
- * it down; the caller then falls back to evaluating the RHS. That covers more
- * than the shapes rebase_on_ssa_lhs declines: smt_convt::get() reads a member
- * of a member, and a member of pointer or aggregate type, as an expression
- * rather than a value, so those components keep reporting the whole object.
- * Array elements of the same types do resolve. */
+/* The value of the lvalue an assignment step prints, read as that lvalue
+ * rather than as the whole object the SSA assignment rewrote: symex lowers
+ * `s.f = v` into `s = s WITH [f := v]`, so evaluating the RHS answers for all
+ * of `s`, at one model query per leaf and printed in full on every step that
+ * touches it. Nil where the model does not pin the component down; the caller
+ * then falls back to the RHS. */
 static expr2tc build_component_value(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step)
@@ -180,8 +162,8 @@ static expr2tc build_component_value(
   return is_model_value(value) ? value : expr2tc();
 }
 
-/* The value an assignment step reports: the component the step prints where
- * that can be read on its own, the whole rewritten object otherwise. */
+/* The component the step prints where that can be read on its own, the whole
+ * rewritten object otherwise. */
 static expr2tc build_assignment_value(
   smt_convt &smt_conv,
   const symex_target_equationt::SSA_stept &step)
