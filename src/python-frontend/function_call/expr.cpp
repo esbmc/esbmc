@@ -192,7 +192,8 @@ bool function_call_expr::is_string_arg(const nlohmann::json &arg) const
 
 static std::string get_classname_from_symbol_id(const std::string &symbol_id)
 {
-  // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
+  // This function might return "Base" for a symbol_id as:
+  // py:main.py@C@Base@F@foo@self
 
   std::string class_name;
   size_t class_pos = symbol_id.find(CLASS_MARKER);
@@ -345,7 +346,8 @@ void function_call_expr::get_function_type()
 
   // Check for nested instance attribute (e.g., self.b.a.method())
   // Exclude module.Class.method() pattern
-  // Walk the full attribute chain to find the root Name node, regardless of depth.
+  // Walk the full attribute chain to find the root Name node, regardless of
+  // depth.
   bool is_nested_instance_attr = false;
   if (node_type_of(func_value) == "Attribute")
   {
@@ -383,9 +385,11 @@ void function_call_expr::get_function_type()
   // Handling a function call as a class method call when:
   // (1) The caller corresponds to a class name, for example: MyClass.foo().
   // (2) Calling methods of built-in types, such as int.from_bytes()
-  //     All the calls to built-in methods are handled by class methods in operational models.
-  // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
-  // If the caller is a class or a built-in type, the following condition detects a class method call.
+  //     All the calls to built-in methods are handled by class methods in
+  //     operational models.
+  // (3) Calling a instance method from a built-in type object, for example:
+  // x.bit_length() when x is an int If the caller is a class or a built-in
+  // type, the following condition detects a class method call.
   if (
     !is_nested_instance_attr && !obj_is_temp_instance &&
     (is_class(caller, converter_.ast()) ||
@@ -429,6 +433,38 @@ bool function_call_expr::is_introspection_call() const
 {
   const std::string &func_name = function_id_.get_function();
   return func_name == "isinstance" || func_name == "hasattr";
+}
+
+bool function_call_expr::is_generic_hash_call() const
+{
+  if (
+    function_id_.get_function() != "hash" ||
+    !function_id_.get_class().empty() || !call_.contains("args") ||
+    call_["args"].empty())
+    return false;
+
+  // get_operand_type is a syntactic, side-effect-free AST check, safe to
+  // call from a dispatch predicate.
+  return type_handler_.get_operand_type(call_["args"][0]) != "bytes";
+}
+
+exprt function_call_expr::handle_generic_hash()
+{
+  const typet int_type = type_handler::python_int_typet();
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$hash$", int_type, exprt());
+
+  code_declt decl(build_symbol(tmp));
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", int_type);
+  nondet_value.statement("nondet");
+  code_assignt nondet_assign(build_symbol(tmp), nondet_value);
+  nondet_assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(nondet_assign);
+
+  return build_symbol(tmp);
 }
 
 bool function_call_expr::is_input_call() const
@@ -921,7 +957,8 @@ exprt function_call_expr::build_constant_from_arg() const
       // — an int 65 decodes to the character 'A' (rejected as non-digit) and a
       // float yields no string at all — so int(x) wrongly folds to 0. Route
       // numeric symbols through the general numeric conversion instead, which
-      // truncates floats toward zero and treats ints as identity. (GitHub #4770)
+      // truncates floats toward zero and treats ints as identity. (GitHub
+      // #4770)
       if (
         sym && sym->get_value().is_constant() &&
         type_utils::is_string_type(sym->get_type()))
@@ -1540,7 +1577,8 @@ std::string function_call_expr::get_object_name() const
   else
   {
     // Expect a plain Name node with an "id" field. Guard against
-    // missing "id" to avoid nlohmann::json::type_error on unexpected node shapes.
+    // missing "id" to avoid nlohmann::json::type_error on unexpected node
+    // shapes.
     if (subelement.contains("id") && subelement["id"].is_string())
       obj_name = subelement["id"].get<std::string>();
   }
@@ -1781,7 +1819,8 @@ bool function_call_expr::is_min_max_call() const
     }
   }
 
-  // Single argument that's not a tuple falls through to general handler (for lists)
+  // Single argument that's not a tuple falls through to general handler (for
+  // lists)
   return false;
 }
 
@@ -2148,10 +2187,11 @@ bool function_call_expr::receiver_is_non_dict_object() const
     t = converter_.ns.follow(t);
 
   // Only a positively-resolved non-dict struct defers to instance dispatch; an
-  // unresolved or "__python_dict__"-tagged receiver stays with the dict handler.
-  // list/set receivers also resolve to a (non-dict) struct here, but their
-  // dict-overlapping methods (pop/copy/update) are claimed by the list/set
-  // discriminators earlier in the dispatch table, so they never reach this.
+  // unresolved or "__python_dict__"-tagged receiver stays with the dict
+  // handler. list/set receivers also resolve to a (non-dict) struct here, but
+  // their dict-overlapping methods (pop/copy/update) are claimed by the
+  // list/set discriminators earlier in the dispatch table, so they never reach
+  // this.
   if (!t.is_struct())
     return false;
   return to_struct_type(t).tag().as_string() != "__python_dict__";
@@ -2698,17 +2738,18 @@ bool function_call_expr::is_list_method_call() const
   // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
   // mutators. The #6264 crash is specifically a *character array* (str/bytes)
   // receiver routed into the list model, where __ESBMC_list_push is handed an
-  // array where it expects a PyListObject* and aborts GOTO conversion. Claim the
-  // call unless the receiver resolves to such an array type. Every other receiver
-  // is routed into the list model, matching the historical catch-all here:
+  // array where it expects a PyListObject* and aborts GOTO conversion. Claim
+  // the call unless the receiver resolves to such an array type. Every other
+  // receiver is routed into the list model, matching the historical catch-all
+  // here:
   //   - a genuine list is a PyListObject* (a pointer, not an array);
   //   - a value the annotator can only type loosely still routes correctly —
   //     e.g. `m = min([l]); m.append(x)`, where min() is typed int though it
-  //     returns the list itself (#5955). A pure `resolves-to-list_type` positive
-  //     check is unsound here: it drops that receiver (whose static type is int)
-  //     and regresses the test.
-  // str/bytes reached through a Name, an attribute, or a subscript all resolve to
-  // an array type, so this also excludes `self.s.append(...)` and
+  //     returns the list itself (#5955). A pure `resolves-to-list_type`
+  //     positive check is unsound here: it drops that receiver (whose static
+  //     type is int) and regresses the test.
+  // str/bytes reached through a Name, an attribute, or a subscript all resolve
+  // to an array type, so this also excludes `self.s.append(...)` and
   // `xs[0].append(...)` (#6264 review), which then fall through to the correct
   // AttributeError path.
   {
@@ -3853,6 +3894,12 @@ std::vector<function_call_expr::FunctionHandler>
 function_call_expr::get_dispatch_table()
 {
   return {
+    // hash() on a non-bytes argument: Python's real hash(), not the
+    // consensus spec's bytes-returning one, which only applies to bytes.
+    {[this]() { return is_generic_hash_call(); },
+     [this]() { return handle_generic_hash(); },
+     "hash() on a non-bytes argument"},
+
     // Print function
     {[this]() { return is_print_call(); },
      [this]() { return handle_print(); },
@@ -3961,7 +4008,8 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_numpy_astype(); },
      "numpy astype"},
 
-    // Dict class methods (dict.fromkeys), matched before instance-method dispatch
+    // Dict class methods (dict.fromkeys), matched before instance-method
+    // dispatch
     // The receiver is the class name, not a dict symbol.
     {[this]() { return is_dict_class_method_call(); },
      [this]() {
@@ -4506,7 +4554,6 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
       combine_truthiness(result, compute_element_truthiness(elems[i]), op);
   return result;
 }
-
 
 void function_call_expr::reject_numpy_sort_write_through_view(
   const nlohmann::json &receiver_node) const
@@ -5676,7 +5723,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
       if (!func_symbol)
       {
         // If __init__() is not defined for the class and bases,
-        // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in python_converter::get_var_assign().
+        // an assignment (x = MyClass()) is converted to a declaration
+        // (x:MyClass) in python_converter::get_var_assign().
         return exprt("_init_undefined");
       }
       converter_.base_ctor_called = true;
@@ -5758,14 +5806,16 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           // We're in the same class if:
           // - current function is the class name (constructor)
           // - current function is __init__
-          // - the function symbol exists and contains the class marker for this class
+          // - the function symbol exists and contains the class marker for this
+          // class
           if (current_func == check_class || current_func == "__init__")
           {
             is_in_same_class = true;
             break;
           }
 
-          // Check if current function belongs to this class by looking for @C@ClassName pattern
+          // Check if current function belongs to this class by looking for
+          // @C@ClassName pattern
           std::string class_marker = std::string(CLASS_MARKER) + check_class +
                                      std::string(FUNCTION_MARKER);
           const symbolt *current_func_sym =
@@ -5837,7 +5887,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
             }
             else if (arg.is_constant())
             {
-              // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+              // Constant array (e.g., folded string concat) must be
+              // materialized before address_of_exprt.
               symbolt &tmp = converter_.create_tmp_symbol(
                 call_, "$const_str_arg$", arg.type(), arg);
               code_declt tmp_decl(build_symbol(tmp));
@@ -5938,7 +5989,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
             }
             else if (arg.is_constant())
             {
-              // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+              // Constant array (e.g., folded string concat) must be
+              // materialized before address_of_exprt.
               symbolt &tmp = converter_.create_tmp_symbol(
                 call_, "$const_str_arg$", arg.type(), arg);
               code_declt tmp_decl(build_symbol(tmp));
@@ -5967,8 +6019,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         // `random.choice(...)`, or an unannotated value) we cannot prove the
         // attribute is missing — the module/object may genuinely provide it and
         // ESBMC simply does not model it — so fall through to the generic
-        // unsupported-function stub. Bare free-function calls (`func()`, a Name)
-        // likewise keep that stub.
+        // unsupported-function stub. Bare free-function calls (`func()`, a
+        // Name) likewise keep that stub.
         if (
           call_.contains("func") && call_["func"].is_object() &&
           call_["func"].value("_type", "") == "Attribute")
@@ -6123,7 +6175,8 @@ size_t function_call_expr::bind_call_receiver(
       // get_return_statements() will handle return statements, we only handle
       // standalone calls (e.g., Positive(2))
       // Self parameter will be added later if needed (see end of function)
-      // param_offset is 1 because first user arg maps to param[1] (skipping self)
+      // param_offset is 1 because first user arg maps to param[1] (skipping
+      // self)
       param_offset = 1;
     }
   }
@@ -6211,7 +6264,8 @@ size_t function_call_expr::bind_call_receiver(
       first_param = func_type.arguments()[0].get_base_name().as_string();
 
     // If first parameter is 'self' and we have positional arguments,
-    // the first positional arg should be treated as 'self', not as a regular argument
+    // the first positional arg should be treated as 'self', not as a regular
+    // argument
     if (
       first_param == "self" && !call_["args"].empty() &&
       (!call_.contains("keywords") || call_["keywords"].empty() ||
@@ -6268,7 +6322,8 @@ size_t function_call_expr::bind_call_receiver(
       }
       else if (call_["func"]["value"]["_type"] == "BinOp")
       {
-        // Handling function call from binary expressions such as: (x+1).bit_length()
+        // Handling function call from binary expressions such as:
+        // (x+1).bit_length()
         call.arguments().push_back(converter_.get_expr(call_["func"]["value"]));
       }
     }
@@ -6523,15 +6578,16 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         }
       }
 
-      // Handle struct argument passed to a union-typed parameter (e.g. str | T).
-      // Union parameters are stored as pointer(char[0]). When the actual argument
-      // is a struct (class instance), take its address and cast to the pointer type
-      // so that the attribute access handler can safely cast back and dereference.
-      // Follow symbol types because class symbols use symbol_typet, not struct_typet.
-      // NOTE: python_converter.cpp has a complementary post-processing pass that
-      // handles the general pointer-to-struct coercion case. This earlier pass is
-      // specific to the char[0]* union representation and materialises non-symbol
-      // struct temporaries before taking their address.
+      // Handle struct argument passed to a union-typed parameter (e.g. str |
+      // T). Union parameters are stored as pointer(char[0]). When the actual
+      // argument is a struct (class instance), take its address and cast to the
+      // pointer type so that the attribute access handler can safely cast back
+      // and dereference. Follow symbol types because class symbols use
+      // symbol_typet, not struct_typet. NOTE: python_converter.cpp has a
+      // complementary post-processing pass that handles the general
+      // pointer-to-struct coercion case. This earlier pass is specific to the
+      // char[0]* union representation and materialises non-symbol struct
+      // temporaries before taking their address.
       typet arg_followed_type = converter_.ns.follow(arg.type());
       if (
         param_type.is_pointer() && param_type.subtype().is_array() &&
@@ -6691,7 +6747,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       side_effect_expr_function_callt func_call;
       func_call.function() = arg.op1(); // The function being called
 
-      // Handle the arguments - op2() is an arguments expression containing operands
+      // Handle the arguments - op2() is an arguments expression containing
+      // operands
       const exprt &args_expr = to_code(arg).op2();
 
       // Set the type to the return type of the function
@@ -6802,9 +6859,10 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       {
         // Constant array (e.g. a folded string concat or a str-method result
         // like "{}".format(x)) must be materialized before address_of_exprt.
-        // The DECL alone leaves the temp uninitialised, so strlen/get_object_size
-        // over it reads nondet bytes and runs past the array bounds; emit an
-        // explicit assignment of the constant value (mirrors the list path).
+        // The DECL alone leaves the temp uninitialised, so
+        // strlen/get_object_size over it reads nondet bytes and runs past the
+        // array bounds; emit an explicit assignment of the constant value
+        // (mirrors the list path).
         symbolt &tmp = converter_.create_tmp_symbol(
           call_, "$const_str_arg$", arg.type(), exprt());
         code_declt tmp_decl(build_symbol(tmp));
@@ -6866,10 +6924,12 @@ exprt function_call_expr::finalize_call(
   size_t num_provided_args = call_["args"].size();
   size_t total_params = params.size();
 
-  // Calculate how many arguments will actually be present after implicit additions
+  // Calculate how many arguments will actually be present after implicit
+  // additions
   size_t num_actual_args = num_provided_args;
 
-  // For ClassMethod with no explicit args, check if object will be implicitly added
+  // For ClassMethod with no explicit args, check if object will be implicitly
+  // added
   if (function_type_ == FunctionType::ClassMethod && call_["args"].empty())
   {
     // Check the exact conditions where the object is added as an argument
@@ -6893,7 +6953,8 @@ exprt function_call_expr::finalize_call(
 
   // Check if we should skip validation for numpy functions
   // Numpy stub files often have incomplete/incorrect default parameter info
-  // TODO: we have to revisit the function signature handling for numpy functions
+  // TODO: we have to revisit the function signature handling for numpy
+  // functions
   bool skip_validation = false;
 
   if (call_["func"]["_type"] == "Attribute")
@@ -6950,7 +7011,8 @@ exprt function_call_expr::finalize_call(
     }
   }
 
-  // Validate required parameters and fill missing parameters with default values
+  // Validate required parameters and fill missing parameters with default
+  // values
   for (size_t param_idx = param_offset; param_idx < total_params; ++param_idx)
   {
     if (!provided_params[param_idx])
@@ -7046,7 +7108,8 @@ exprt function_call_expr::finalize_call(
     }
   }
 
-  // For constructors without current_lhs, create temp var and add self if needed
+  // For constructors without current_lhs, create temp var and add self if
+  // needed
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
     size_t num_provided_args = call_["args"].size();
@@ -7149,7 +7212,8 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
       return possible_classes;
     }
 
-    // Type is a primitive (e.g., floatbv) - trace through AST to find actual types
+    // Type is a primitive (e.g., floatbv) - trace through AST to find actual
+    // types
     std::string var_name = obj_symbol->name.as_string();
     nlohmann::json var_decl = json_utils::find_var_decl(
       var_name, converter_.current_function_name(), converter_.ast());
@@ -7221,7 +7285,8 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
 
     std::string return_type = returns["id"].get<std::string>();
 
-    // If return type is 'Any', analyze the function body to find actual return classes
+    // If return type is 'Any', analyze the function body to find actual return
+    // classes
     if (
       return_type == "Any" && func_node.contains("body") &&
       func_node["body"].is_array())
