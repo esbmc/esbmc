@@ -27,4 +27,6 @@ def compute_shuffled_index(index: uint64, index_count: uint64, seed: bytes) -> u
     return compute_shuffled_permutation(index_count, seed)[index]
 
 
-compute_shuffled_index(uint64(5), uint64(5), bytes(32))
+seed = nondet_bytes(32)
+result = compute_shuffled_index(uint64(0), uint64(2), seed)
+assert result >= 2
