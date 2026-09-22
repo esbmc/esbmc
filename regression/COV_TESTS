@@ -1769,3 +1769,10 @@ regression/k-induction/entry_jump_past_failed_assert_single_property
 regression/k-induction/multi_property_entry_jump_past_failed_assert_pass
 regression/floats/github_7896
 regression/smtlib/github_7929
+regression/python/github_7745
+regression/python/github_7745_fail
+regression/python/github_7745_int_elem
+regression/python/github_7745_int_elem_fail
+regression/python/github_7745_rebound
+regression/python/github_7745_annotated
+regression/python/github_7745_direct
