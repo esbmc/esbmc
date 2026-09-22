@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --enable-unreachability-intrinsic --ts-k-induction --ts-no-fallback --max-k-step 4
+^Not a transition system: calls c:@F@_?setjmp, which ESBMC does not model$
+^VERIFICATION UNKNOWN$
