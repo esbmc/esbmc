@@ -1776,3 +1776,10 @@ regression/goto-coverage/condition_coverage_goal_key
 regression/esbmc/multi_property_same_position_asserts_loop
 regression/esbmc/same_position_assert_bidirectional
 regression/esbmc/proof_cache_reuse
+regression/python/github_7745
+regression/python/github_7745_fail
+regression/python/github_7745_int_elem
+regression/python/github_7745_int_elem_fail
+regression/python/github_7745_rebound
+regression/python/github_7745_annotated
+regression/python/github_7745_direct
