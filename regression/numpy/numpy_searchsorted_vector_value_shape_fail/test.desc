@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+ERROR: TypeError: numpy.searchsorted\(\) values must be a 1-D vector of literals
