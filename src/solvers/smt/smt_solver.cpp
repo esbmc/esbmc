@@ -191,6 +191,7 @@ void smt_solver_baset::push_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -250,6 +251,7 @@ void smt_solver_baset::pop_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
@@ -3295,6 +3297,7 @@ void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
@@ -3582,6 +3585,17 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 }
 
 expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
+{
+  auto cached = get_ast_cache.find(a);
+  if (cached != get_ast_cache.end() && cached->second.first == type)
+    return cached->second.second;
+
+  expr2tc res = get_by_ast_uncached(type, a);
+  get_ast_cache[a] = {type, res};
+  return res;
+}
+
+expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
 {
   switch (type->type_id)
   {

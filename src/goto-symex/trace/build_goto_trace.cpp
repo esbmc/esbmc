@@ -52,6 +52,130 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
   return new_rhs;
 }
 
+/* Whether the model produced @p e rather than symex propagating it:
+ * is_constant_expr is syntactic and admits aggregates with symbolic
+ * elements. */
+static bool is_model_value(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_address_of2t(e))
+    return true;
+
+  if (is_symbol2t(e))
+    return to_symbol2t(e).thename == "NULL";
+
+  if (!is_constant_expr(e))
+    return false;
+
+  bool resolved = true;
+  e->foreach_operand([&resolved](const expr2tc &op) {
+    if (!is_model_value(op))
+      resolved = false;
+  });
+  return resolved;
+}
+
+/* Rebuild the source lvalue @p lvalue over @p ssa_lhs, the SSA symbol holding
+ * the object's post-assignment value. Nil unless the lvalue is a chain of
+ * member and constant-index accesses rooted at that same object. */
+static expr2tc rebase_on_ssa_lhs(
+  smt_convt &smt_conv,
+  const expr2tc &lvalue,
+  const expr2tc &ssa_lhs)
+{
+  switch (lvalue->expr_id)
+  {
+  case expr2t::symbol_id:
+  {
+    expr2tc root = ssa_lhs;
+    renaming::renaming_levelt::get_original_name(
+      root, symbol_renaming_level::level0);
+    if (
+      !is_symbol2t(root) ||
+      to_symbol2t(root).thename != to_symbol2t(lvalue).thename)
+      return expr2tc();
+    return ssa_lhs;
+  }
+
+  /* Equal types rule out a sub-object target (`&a[3]`, `&w.s`), which would
+   * leave @p ssa_lhs naming the enclosing object: no type contains a distinct
+   * sub-object of its own type. */
+  case expr2t::dereference_id:
+    return lvalue->type == ssa_lhs->type ? ssa_lhs : expr2tc();
+
+  case expr2t::member_id:
+  {
+    const member2t &mem = to_member2t(lvalue);
+    expr2tc src = rebase_on_ssa_lhs(smt_conv, mem.source_value, ssa_lhs);
+    if (is_nil_expr(src) || !is_structure_type(src->type))
+      return expr2tc();
+
+    std::optional<unsigned int> nr =
+      struct_union_get_component_number(src->type, mem.member);
+    if (!nr)
+      return expr2tc();
+
+    return member2tc(struct_union_members(src->type)[*nr], src, mem.member);
+  }
+
+  case expr2t::index_id:
+  {
+    const index2t &index = to_index2t(lvalue);
+    expr2tc src = rebase_on_ssa_lhs(smt_conv, index.source_value, ssa_lhs);
+    if (is_nil_expr(src) || !is_array_type(src->type))
+      return expr2tc();
+
+    expr2tc idx = smt_conv.get(index.index);
+    if (is_nil_expr(idx) || !is_constant_int2t(idx))
+      return expr2tc();
+
+    return index2tc(to_array_type(src->type).subtype, src, idx);
+  }
+
+  default:
+    return expr2tc();
+  }
+}
+
+/* The value of the lvalue an assignment step prints, read as that lvalue
+ * rather than as the whole object the SSA assignment rewrote: symex lowers
+ * `s.f = v` into `s = s WITH [f := v]`, so evaluating the RHS answers for all
+ * of `s`, at one model query per leaf and printed in full on every step that
+ * touches it. Nil where the model does not pin the component down; the caller
+ * then falls back to the RHS. */
+static expr2tc build_component_value(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step)
+{
+  if (
+    is_nil_expr(step.lhs) || is_nil_expr(step.original_lhs) ||
+    !is_symbol2t(step.lhs) || is_symbol2t(step.original_lhs))
+    return expr2tc();
+
+  expr2tc component = rebase_on_ssa_lhs(smt_conv, step.original_lhs, step.lhs);
+  if (is_nil_expr(component))
+    return expr2tc();
+
+  expr2tc value = build_rhs(smt_conv, component);
+  return is_model_value(value) ? value : expr2tc();
+}
+
+/* The component the step prints where that can be read on its own, the whole
+ * rewritten object otherwise. */
+static expr2tc build_assignment_value(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step)
+{
+  expr2tc component = build_component_value(smt_conv, step);
+  if (!is_nil_expr(component))
+    return component;
+
+  return build_rhs(
+    smt_conv, is_nil_expr(step.original_rhs) ? step.rhs : step.original_rhs);
+}
+
 /* The claim a violated assert reports is written in source terms -- the GOTO
  * guard still says `d->devnum` -- while the value only exists in the SSA
  * condition symex built from it, where dereference lowering has replaced the
@@ -199,10 +323,7 @@ void build_goto_trace(
       assert(!goto_trace_step.value);
       try
       {
-        if (is_nil_expr(SSA_step.original_rhs))
-          goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
-        else
-          goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
+        goto_trace_step.value = build_assignment_value(smt_conv, SSA_step);
 
         // Try asking solver if value was not built
         if (
