@@ -186,6 +186,10 @@ private:
   // annotation, else the type inferred from its return statements, else "Any".
   std::string
   method_return_type(const Json &member, const std::string &method_name);
+  // Type inferred from @p member's return statements, resolving names in the
+  // method's own scope, or empty.
+  std::string
+  infer_method_return_type(const Json &member, const std::string &method_name);
   void collect_return_types(
     const Json &body,
     const std::string &func_name,

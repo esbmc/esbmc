@@ -1,4 +1,5 @@
 import ast
+import copy
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -11,6 +12,7 @@ class ClassContextMixin:
         inits_before = len(self._pending_method_default_inits)
 
         node = self.expand_dataclass(node)
+        self._bind_classmethod_constructors(node)
         self._collect_class_attr_annotations(node)
         self._record_exit_suppresses_all(node)
         self._record_class_with_exit(node)
@@ -26,6 +28,53 @@ class ClassContextMixin:
             del self._pending_method_default_inits[inits_before:]
             return [node, *hoisted]
         return node
+
+    @staticmethod
+    def _classmethod_receiver(member):
+        """Name of a @classmethod's first parameter, or None."""
+        if not isinstance(member, ast.FunctionDef):
+            return None
+        if not any(
+                isinstance(d, ast.Name) and d.id == "classmethod" for d in member.decorator_list):
+            return None
+        positional = member.args.posonlyargs + member.args.args
+        return positional[0].arg if positional else None
+
+    def _bind_classmethod_constructors(self, class_node):
+        """Rewrite `cls(...)` inside a @classmethod to a call of the class it runs on.
+
+        A subclass that inherits such a method without overriding it gets its
+        own copy bound to the subclass, so `Sub.make()` constructs a `Sub`.
+        """
+        if not hasattr(self, "_cls_constructing_methods"):
+            self._cls_constructing_methods = {}
+
+        own = {m.name for m in class_node.body if isinstance(m, ast.FunctionDef)}
+        templates = {}
+        for base in class_node.bases:
+            if isinstance(base, ast.Name):
+                for name, method in self._cls_constructing_methods.get(base.id, {}).items():
+                    if name not in own and name not in templates:
+                        templates[name] = method
+                        class_node.body.append(copy.deepcopy(method))
+
+        for member in class_node.body:
+            receiver = self._classmethod_receiver(member)
+            if receiver is None:
+                continue
+            calls = [
+                n for n in ast.walk(member) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name) and n.func.id == receiver
+            ]
+            if not calls:
+                continue
+            templates.setdefault(member.name, copy.deepcopy(member))
+            for call in calls:
+                call.func = ast.copy_location(ast.Name(id=class_node.name, ctx=ast.Load()),
+                                              call.func)
+
+        if templates:
+            self._cls_constructing_methods[class_node.name] = templates
 
     def _record_exit_suppresses_all(self, class_node):
         """Cache classes whose __exit__ unconditionally returns True."""

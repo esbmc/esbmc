@@ -1963,9 +1963,21 @@ std::string python_annotation<Json>::method_return_type(
       ret.contains("value") && ret["value"].contains("id"))
       return ret["value"]["id"].template get<std::string>();
   }
+  std::string inferred = infer_method_return_type(member, method_name);
+  return inferred.empty() ? "Any" : inferred;
+}
+
+template <class Json>
+std::string python_annotation<Json>::infer_method_return_type(
+  const Json &member,
+  const std::string &method_name)
+{
+  const std::string saved_ctx = current_func_name_context_;
+  current_func_name_context_ = method_name;
   std::string inferred =
     infer_from_return_statements(member["body"], method_name);
-  return inferred.empty() ? "Any" : inferred;
+  current_func_name_context_ = saved_ctx;
+  return inferred;
 }
 
 template <class Json>
@@ -2471,22 +2483,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               if (
                 method["_type"] == "FunctionDef" &&
                 method["name"] == method_name)
-              {
-                if (method.contains("returns") && !method["returns"].is_null())
-                {
-                  const auto &ret = method["returns"];
-                  if (ret.contains("id"))
-                    return ret["id"].template get<std::string>();
-                  if (
-                    ret.contains("_type") && ret["_type"] == "Subscript" &&
-                    ret.contains("value") && ret["value"].contains("id"))
-                    return ret["value"]["id"].template get<std::string>();
-                }
-                // Infer return type from return statements when no annotation
-                std::string inferred =
-                  infer_from_return_statements(method["body"], method_name);
-                return inferred.empty() ? "Any" : inferred;
-              }
+                return method_return_type(method, method_name);
             }
           }
           // Chain resolved but method not in final class
@@ -2536,7 +2533,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type =
-            infer_from_return_statements(member["body"], method_name);
+            infer_method_return_type(member, method_name);
           if (!inferred_type.empty())
             return inferred_type;
         }
