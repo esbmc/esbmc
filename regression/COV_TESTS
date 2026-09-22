@@ -660,6 +660,7 @@ regression/python/github_6743_state
 regression/python/github_7074
 regression/python/github_7081_iter
 regression/python/github_7541_module_scope
+regression/python/github_7541_nested_class_body
 regression/python/global
 regression/python/harness_bytes_param_len_bound
 regression/python/harness_bytes_param_len_bound_fail
