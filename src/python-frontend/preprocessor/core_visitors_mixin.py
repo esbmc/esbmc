@@ -997,23 +997,37 @@ class CoreVisitorsMixin:
         ast.fix_missing_locations(result)
         return result
 
-    @staticmethod
-    def _normalize_int_from_bytes_endianness(node):
+    _FOLDED_BYTEORDER = "_esbmc_folded_byteorder"
+
+    def _fold_byteorder(self, value):
+        # A range loop visits its body twice (#7542), so an argument folded on
+        # the first visit must come back unchanged. The marker's leading
+        # underscore keeps ast2json from serialising it.
+        if getattr(value, self._FOLDED_BYTEORDER, False):
+            return value
+        if isinstance(value, ast.Constant) and value.value in ("big", "little"):
+            folded = ast.Constant(value=value.value == "big")
+            setattr(folded, self._FOLDED_BYTEORDER, True)
+            return ast.copy_location(folded, value)
+        err = NotImplementedError(
+            "int.from_bytes() byteorder must be the literal 'big' or 'little'")
+        err.esbmc_location = (self.module_name, value.lineno, value.col_offset)
+        raise err
+
+    def _normalize_int_from_bytes_endianness(self, node):
         if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "int" and node.func.attr == "from_bytes"):
             return
         # Positional byteorder: int.from_bytes(b, "big" | "little").
         if len(node.args) > 1:
-            is_big = isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"
-            node.args[1] = ast.Constant(value=is_big)
+            node.args[1] = self._fold_byteorder(node.args[1])
         # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
         # model names it "big_endian". Rename the keyword to the model's
         # parameter and fold its string value to the bool the model expects.
         for kw in node.keywords:
             if kw.arg == "byteorder":
-                is_big = isinstance(kw.value, ast.Constant) and kw.value.value == "big"
                 kw.arg = "big_endian"
-                kw.value = ast.Constant(value=is_big)
+                kw.value = self._fold_byteorder(kw.value)
         ast.fix_missing_locations(node)
 
     @staticmethod
