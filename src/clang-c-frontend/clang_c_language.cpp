@@ -265,12 +265,6 @@ void clang_c_languaget::build_compiler_args(
     // No longer show compiler warnings for SV-COMP
     compiler_args.push_back("-w");
     compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-    // clang 15+ promotes -Wint-conversion to a hard error by default, which
-    // rejects GCC-acceptable implicit int<->pointer conversions common in
-    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
-    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
-    // typecast logic, so downgrading the diagnostic does not affect semantics.
-    compiler_args.push_back("-Wno-int-conversion");
   }
 
   // Increase maximum bracket depth
@@ -286,6 +280,13 @@ void clang_c_languaget::build_compiler_args(
   // Suppress incompatible-pointer-types universally; became a hard error in
   // LLVM 22 and trips on system headers across all platforms.
   compiler_args.emplace_back("-Wno-incompatible-pointer-types");
+
+  // Likewise int-conversion, which clang 15+ promotes to a hard error while GCC
+  // still accepts it: preprocessed kernel/CIL sources write sentinel pointers
+  // as integer constants (0xffffffffffffffffUL), so erroring out rejects input
+  // a mainstream toolchain compiles. ESBMC models the conversion in its
+  // typecast logic, so downgrading the diagnostic does not affect semantics.
+  compiler_args.emplace_back("-Wno-int-conversion");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */
@@ -323,6 +324,13 @@ write_witness_tmp(const std::string &content)
   std::fwrite(content.c_str(), 1, content.size(), tmp.file());
   std::fflush(tmp.file());
   return tmp;
+}
+
+// Clang returns no unit, rather than one with errors, when it cannot set up the
+// compilation (e.g. an unknown target triple); its diagnostic is already out.
+static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
+{
+  return !unit || unit->getDiagnostics().hasErrorOccurred();
 }
 
 bool clang_c_languaget::parse(const std::string &path)
@@ -407,8 +415,7 @@ bool clang_c_languaget::parse(const std::string &path)
   // Generate ASTUnit and add to our vector
   auto newAST = buildASTs(intrinsics, new_compiler_args);
 
-  // Use diagnostics to find errors, rather than the return code.
-  if (newAST->getDiagnostics().hasErrorOccurred())
+  if (ast_failed(newAST))
     return true;
 
   if (!AST)
@@ -477,10 +484,14 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
       return true;
   }
 
-  // Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only,
-  // so flag-on and flag-off are byte-identical by construction; what the flag
-  // buys is migrating every value in the corpus through get_value2(), which
-  // aborts on a construct migrate_expr cannot represent.
+  // Phase 6 C.3. Two modes, and only the second is read-only:
+  // --clang-c-irep2-adjust-only skipped the legacy pass above, so this walk
+  // *is* the adjust pass and writes back every value it changes -- which is why
+  // the divergence count under that flag is the phase's metric, not a
+  // tautology.
+  // --clang-c-irep2-adjust runs both, with set_irep2_owns_arms() ceding the
+  // ported arms, and there the walk only migrates every value through
+  // get_value2(), which aborts on a construct migrate_expr cannot represent.
   if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
   {
     clang_c_adjust_irep2 irep2_adjuster(

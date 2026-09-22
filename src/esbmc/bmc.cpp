@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <mutex>
 #include <thread>
 #include <chrono>
 
@@ -28,13 +29,13 @@
 #include <esbmc/property_report.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
-#include <goto-symex/build_goto_trace.h>
+#include <goto-symex/trace/build_goto_trace.h>
 #include <goto-symex/symex_invariant.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/features.h>
-#include <goto-symex/sarif.h>
-#include <goto-symex/symex_symmetry.h>
-#include <goto-symex/xml_goto_trace.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/equation/features.h>
+#include <goto-symex/trace/sarif.h>
+#include <goto-symex/equation/symex_symmetry.h>
+#include <goto-symex/trace/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -762,6 +763,32 @@ void bmct::clear_verified_claims_in_goto(
 
 namespace
 {
+/// Run one claim's job, mapping a thrown diagnostic to ERROR. An exception
+/// escaping a thread's entry function is std::terminate, with none of the
+/// handling bmct::run_thread gives the sequential path, so the parallel
+/// scheduler has to convert it here.
+template <typename jobt>
+void run_job_guarded(
+  const jobt &job,
+  const size_t &i,
+  std::mutex &result_mutex,
+  smt_resultt &final_result,
+  std::atomic<bool> &report_incomplete)
+{
+  try
+  {
+    job(i);
+  }
+  catch (const std::string &error_str)
+  {
+    log_error("{}", error_str);
+    report_incomplete = true;
+    std::lock_guard lock(result_mutex);
+    if (final_result != P_SATISFIABLE)
+      final_result = P_ERROR;
+  }
+}
+
 /// True when the multi-witness report must avoid box-drawing glyphs. A console
 /// that is not reading UTF-8 renders them as mojibake on every line of the
 /// report (esbmc/esbmc#4311). On Windows the console's code page is queried;
@@ -3452,7 +3479,12 @@ smt_resultt bmct::multi_property_check(
     //       Should we also add a thread pool?
     std::vector<std::thread> parallel_jobs;
     for (const auto &i : jobs)
-      parallel_jobs.push_back(std::thread(job_function, i));
+      parallel_jobs.push_back(std::thread(
+        [&](const size_t &n) {
+          run_job_guarded(
+            job_function, n, result_mutex, final_result, report_incomplete);
+        },
+        i));
 
     // Main driver
     for (auto &t : parallel_jobs)

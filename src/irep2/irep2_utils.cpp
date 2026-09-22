@@ -128,7 +128,9 @@ expr2tc gen_zero(const type2tc &type, bool array_as_array_of)
   {
     auto union_type = to_union_type(type);
 
-    assert(!union_type.members.empty());
+    if (union_type.members.empty())
+      return constant_union2tc(type, irep_idt{}, std::vector<expr2tc>{});
+
     std::vector<expr2tc> members = {
       gen_zero(union_type.members.front(), array_as_array_of)};
 
@@ -524,6 +526,21 @@ std::string type_to_string(const constant_string_kindt &theval, int)
   abort();
 }
 
+std::string type_to_string(const pointer_ref_kindt &theval, int)
+{
+  switch (theval)
+  {
+  case pointer_ref_kindt::NONE:
+    return "none";
+  case pointer_ref_kindt::LVALUE:
+    return "lvalue_reference";
+  case pointer_ref_kindt::RVALUE:
+    return "rvalue_reference";
+  }
+  assert(0 && "Unrecognized pointer_ref_kindt enum value");
+  abort();
+}
+
 std::string type_to_string(const printf_kindt &theval, int)
 {
   switch (theval)
@@ -670,8 +687,8 @@ std::string type_to_string(const irep_idt &theval, int)
 }
 
 // do_type_lt overloads. Trivial cases (bool, unsigned int, enums,
-// fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) use the
-// primary template in irep2_dispatch.h.
+// fixedbvt, irep_idt, std::vector<irep_idt>) use the primary template
+// in irep2_dispatch.h.
 
 int do_type_lt(const BigInt &side1, const BigInt &side2)
 {

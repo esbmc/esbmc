@@ -206,21 +206,29 @@ static bool is_other_param_compatible(
   return true;
 }
 
-bool python_converter::is_user_class_struct_type(const typet &t)
+std::string python_converter::class_name_of(const typet &t)
 {
   // Read the class tag directly from a struct or an unresolved `tag-<Class>`
   // symbol reference — do not require the struct to be built yet (function
   // signatures are typed before some referenced classes are completed).
-  std::string tag;
   if (t.id() == "symbol")
-    tag = to_symbol_type(t).get_identifier().as_string();
-  else if (t.is_struct())
-    tag = to_struct_type(t).tag().as_string();
-  else
-    return false;
+    return extract_class_name_from_tag(
+      to_symbol_type(t).get_identifier().as_string());
+  if (t.is_struct())
+    return extract_class_name_from_tag(to_struct_type(t).tag().as_string());
+  return {};
+}
 
-  const std::string cls = extract_class_name_from_tag(tag);
+bool python_converter::is_user_class_struct_type(const typet &t)
+{
+  const std::string cls = class_name_of(t);
   return !cls.empty() && json_utils::is_class(cls, *ast_json);
+}
+
+bool python_converter::is_heap_migrated_class_type(const typet &t)
+{
+  return is_user_class_struct_type(t) &&
+         class_name_of(t).rfind("__ESBMC", 0) != 0;
 }
 
 bool python_converter::is_user_class_pointer(const typet &t)
@@ -278,7 +286,7 @@ void python_converter::retype_placeholder_to_class(
   if (
     is_user_class_pointer(new_type) && existing_is_safe_placeholder &&
     existing != new_type)
-    sym.set_type(new_type);
+    sym.set_type(migrate_type(new_type));
 }
 
 exprt python_converter::dispatch_dunder_operator(

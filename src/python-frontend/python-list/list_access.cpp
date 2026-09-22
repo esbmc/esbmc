@@ -7,66 +7,6 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
-namespace
-{
-// Structural equality of two AST JSON nodes, ignoring source-location keys
-// (lineno/col_offset/...). Two textually distinct occurrences of the same
-// expression — e.g. the `l[i+1:]` on each side of `l[i+1:] = reversed(l[i+1:])`
-// — differ only in their location fields, so a raw `==` would wrongly report
-// them as different. Used to prove the read-slice and write-slice are the same
-// before collapsing the reverse-in-place idiom.
-bool ast_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto is_loc_key = [&](const std::string &k) {
-    for (const char *lk : loc_keys)
-      if (k == lk)
-        return true;
-    return false;
-  };
-
-  if (a.type() != b.type())
-    return false;
-
-  if (a.is_object())
-  {
-    // Compare the non-location keys of both objects symmetrically.
-    for (auto it = a.begin(); it != a.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (
-        !b.contains(it.key()) ||
-        !ast_equal_ignoring_location(it.value(), b[it.key()]))
-        return false;
-    }
-    for (auto it = b.begin(); it != b.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (!a.contains(it.key()))
-        return false;
-    }
-    return true;
-  }
-
-  if (a.is_array())
-  {
-    if (a.size() != b.size())
-      return false;
-    for (size_t i = 0; i < a.size(); ++i)
-      if (!ast_equal_ignoring_location(a[i], b[i]))
-        return false;
-    return true;
-  }
-
-  return a == b;
-}
-} // namespace
-
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
@@ -1655,7 +1595,7 @@ const symbolt &python_list::get_str_slice_sym()
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
-    new_symbol.set_type(slice_type);
+    new_symbol.set_type(migrate_type(slice_type));
     converter_.symbol_table().add(new_symbol);
     sym = converter_.symbol_table().find_symbol(id);
   }
@@ -2817,8 +2757,13 @@ exprt python_list::handle_range_slice(
 
   // Shallow append: preserve element value pointers so nested lists survive the
   // slice copy uncorrupted (esbmc/esbmc#5102).
-  const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
+  // The source list's element width, when every element shares one. Without it
+  // the per-element copy length is the symbolic o->size and each copy unwinds
+  // memcpy's byte loop to --unwind, which is what made slicing the most
+  // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
+  const shallow_push_call shallow_push = select_shallow_push(
+    array, from_integer(uniform_elem_size(array), size_type()));
+  const symbolt *push_func = shallow_push.func;
   if (!push_func)
     throw std::runtime_error("Push function symbol not found");
 
@@ -2829,19 +2774,13 @@ exprt python_list::handle_range_slice(
     std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
       converter_.get_type_handler().get_list_type())),
     config.ansi_c.address_width));
-  // The source list's element width, when every element shares one. Without it
-  // the per-element copy length is the symbolic o->size and each copy unwinds
-  // memcpy's byte loop to --unwind, which is what made slicing the most
-  // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
-  BigInt slice_elem_size = uniform_scalar_elem_size(array);
-
   exprt push_call = build_call_expr(
     *push_func,
     bool_type(),
     {build_symbol(sliced_list),
      build_symbol(at_result),
      slice_list_type_id,
-     from_integer(slice_elem_size, size_type())});
+     shallow_push.last_arg});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -3040,7 +2979,7 @@ void python_list::handle_slice_assignment(
       list_value_["value"].value("_type", "") == "Name" &&
       arg["value"].value("id", "") == list_value_["value"].value("id", "") &&
       // Same slice bounds (ignoring source locations).
-      ast_equal_ignoring_location(arg["slice"], slice_node);
+      json_utils::ast_equal_ignoring_location(arg["slice"], slice_node);
 
     if (arg_is_same_slice)
     {
@@ -3339,6 +3278,137 @@ std::optional<exprt> python_list::resolve_nested_list_element(
   return std::nullopt;
 }
 
+/// The list's recorded element type when it is a tagged scalar and the index is
+/// not constant, else \p fallback unchanged. Kept out of handle_index_access so
+/// the dispatch adds no decision point to it.
+typet python_list::tagged_elem_type_or(
+  const exprt &array,
+  bool constant_index,
+  const typet &fallback) const
+{
+  if (constant_index || !array.is_symbol())
+    return fallback;
+  const typet uniform =
+    elem_types().uniform_element_type(array.identifier().as_string());
+  return converter_.get_type_handler().is_tagged_scalar_type(uniform)
+           ? uniform
+           : fallback;
+}
+
+bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
+{
+  return array.type().is_pointer() && array.is_symbol() &&
+         converter_.numpy_param_shapes_.count(array.identifier().as_string()) !=
+           0;
+}
+
+// True when a negative index over `array` must be normalized against the
+// array_typet's own compile-time size -- i.e. array isn't a numpy parameter
+// (handled separately via numpy_param_shapes_) and isn't backed by a literal
+// list either (handled by is_literal_list_backed below). Split out of
+// normalize_index_access_position to keep that function's own decision
+// count down.
+static bool array_size_negative_index_target(
+  const exprt &array,
+  const nlohmann::json &list_node)
+{
+  return !array.type().is_pointer() &&
+         (list_node.is_null() || !list_node.contains("value") ||
+          list_node["value"].value("_type", "") != "List");
+}
+
+// True when `list_node` is a variable declaration whose initializer is a
+// literal List AST node, giving a compile-time element count to normalize a
+// negative index against. Split out of normalize_index_access_position to
+// keep that function's own decision count down.
+static bool is_literal_list_backed(const nlohmann::json &list_node)
+{
+  return list_node.contains("value") &&
+         list_node["value"].value("_type", "") == "List" &&
+         list_node["value"].contains("elts") &&
+         list_node["value"]["elts"].is_array();
+}
+
+void python_list::normalize_index_access_position(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &list_node,
+  exprt &pos_expr,
+  size_t &index) const
+{
+  if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
+  {
+    // Both compile-time branches below assume the negated operand is a
+    // constant literal (a[-1]). For a non-constant operand (a[-i]) the value
+    // is only known at runtime, so leave pos_expr (= -i) and index untouched:
+    // build_list_at_call normalizes the negative index at runtime via
+    // __ESBMC_list_size, and the element-type lookup falls back to element 0,
+    // which is correct for the homogeneous lists ESBMC models (#4926).
+    const bool operand_is_constant =
+      slice_node.contains("operand") &&
+      slice_node["operand"]["_type"] == "Constant" &&
+      slice_node["operand"].contains("value");
+
+    if (!operand_is_constant)
+    {
+      // Nothing to do: runtime normalization handles a[-i].
+    }
+    // A 2-D+ numpy array parameter's row-pointer decay
+    // (register_function_argument) means array.type() is a pointer whose
+    // subtype only carries the row shape -- the outer (row) dimension
+    // needed to normalize a negative index here isn't in the type at all.
+    // Look it up from the pre-decay shape recorded in numpy_param_shapes_
+    // instead, the same source .shape/.ndim/.size and numpy.transpose()
+    // already consult for this parameter.
+    else if (is_numpy_param_negative_index_target(array))
+    {
+      BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
+      v *= -1;
+
+      const std::vector<std::size_t> &shape =
+        converter_.numpy_param_shapes_.at(array.identifier().as_string());
+      v += BigInt(shape[0]);
+      pos_expr = from_integer(v, pos_expr.type());
+    }
+    // For char* (string parameters), skip compile-time normalization: the size
+    // is not known statically, so normalization happens at runtime in the
+    // char* indexing block below.
+    else if (array_size_negative_index_target(array, list_node))
+    {
+      BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
+      v *= -1;
+
+      const array_typet &t = static_cast<const array_typet &>(array.type());
+      BigInt s = binary2integer(t.size().value().c_str(), true);
+
+      // For char arrays (strings), exclude null terminator from logical length
+      if (t.subtype() == char_type())
+        s -= 1;
+
+      v += s;
+      pos_expr = from_integer(v, pos_expr.type());
+    }
+    else if (is_literal_list_backed(list_node))
+    {
+      // Compute index for compile-time type lookup only.
+      // Do NOT overwrite pos_expr: the list may have been mutated
+      // (append/insert/extend), so we must resolve the negative index
+      // at runtime via build_list_at_call using __ESBMC_list_size.
+      index = slice_node["operand"]["value"].get<size_t>();
+      index = list_node["value"]["elts"].size() - index;
+    }
+    // A pointer-typed array without a literal list backing it (e.g. a numpy
+    // row/column view, which has no AST list assignment to read a
+    // compile-time element list from) leaves index at its default: the
+    // same "falls back to element 0" fallback documented above for a
+    // non-constant operand. No further branch is needed here.
+  }
+  else if (slice_node["_type"] == "Constant")
+  {
+    index = slice_node["value"].get<size_t>();
+  }
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -3372,58 +3442,8 @@ exprt python_list::handle_index_access(
       ": list indices must be integers or slices, not str");
   }
 
-  // Handle negative indices
-  if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
-  {
-    // Both compile-time branches below assume the negated operand is a
-    // constant literal (a[-1]). For a non-constant operand (a[-i]) the value
-    // is only known at runtime, so leave pos_expr (= -i) and index untouched:
-    // build_list_at_call normalizes the negative index at runtime via
-    // __ESBMC_list_size, and the element-type lookup falls back to element 0,
-    // which is correct for the homogeneous lists ESBMC models (#4926).
-    const bool operand_is_constant =
-      slice_node.contains("operand") &&
-      slice_node["operand"]["_type"] == "Constant" &&
-      slice_node["operand"].contains("value");
-
-    if (!operand_is_constant)
-    {
-      // Nothing to do: runtime normalization handles a[-i].
-    }
-    // For char* (string parameters), skip compile-time normalization: the size
-    // is not known statically, so normalization happens at runtime in the
-    // char* indexing block below.
-    else if (
-      !array.type().is_pointer() &&
-      (list_node.is_null() || list_node["value"]["_type"] != "List"))
-    {
-      BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
-      v *= -1;
-
-      const array_typet &t = static_cast<const array_typet &>(array.type());
-      BigInt s = binary2integer(t.size().value().c_str(), true);
-
-      // For char arrays (strings), exclude null terminator from logical length
-      if (t.subtype() == char_type())
-        s -= 1;
-
-      v += s;
-      pos_expr = from_integer(v, pos_expr.type());
-    }
-    else
-    {
-      // Compute index for compile-time type lookup only.
-      // Do NOT overwrite pos_expr: the list may have been mutated
-      // (append/insert/extend), so we must resolve the negative index
-      // at runtime via build_list_at_call using __ESBMC_list_size.
-      index = slice_node["operand"]["value"].get<size_t>();
-      index = list_node["value"]["elts"].size() - index;
-    }
-  }
-  else if (slice_node["_type"] == "Constant")
-  {
-    index = slice_node["value"].get<size_t>();
-  }
+  normalize_index_access_position(
+    array, slice_node, list_node, pos_expr, index);
 
   // Handle different array types
   const bool is_char_array = resolved_array_type.is_array() &&
@@ -3945,6 +3965,13 @@ exprt python_list::handle_index_access(
     if (mixed_numeric)
       elem_type = double_type();
 
+    // The constant-index block above is what reads the recorded element type;
+    // a variable index skips it, so a list of tagged scalars fell through to
+    // the generic `*(long *)item->value` unwrap and read 8 bytes out of a
+    // payload that is 2 for "a". Narrowed to the tagged case: every other
+    // element kind keeps whatever the code above resolved.
+    elem_type = tagged_elem_type_or(array, constant_index, elem_type);
+
     // A float-typed element read must dispatch on the stored type_id even for a
     // constant index into a statically "pure-float" list: a list[float]
     // parameter can receive a list whose elements are actually int (Python does
@@ -3960,19 +3987,9 @@ exprt python_list::handle_index_access(
     // struct, read it back as the pointer it actually is so
     // extract_pyobject_value dereferences a single `Class*` instead of copying
     // sizeof(struct) bytes off an 8-byte pointer slot, which overruns it
-    // (#4805). ESBMC-internal model helper classes (reserved `__ESBMC_` prefix,
-    // e.g. the dataclasses `__ESBMC_DataclassField`) are stored by value by
-    // their hand-written models and must be left as structs.
-    if (converter_.is_user_class_struct_type(elem_type))
-    {
-      const std::string tag =
-        elem_type.id() == "symbol"
-          ? to_symbol_type(elem_type).get_identifier().as_string()
-          : to_struct_type(elem_type).tag().as_string();
-      const std::string cls = converter_.extract_class_name_from_tag(tag);
-      if (cls.rfind("__ESBMC", 0) != 0)
-        elem_type = gen_pointer_type(elem_type);
-    }
+    // (#4805).
+    if (converter_.is_heap_migrated_class_type(elem_type))
+      elem_type = gen_pointer_type(elem_type);
 
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
@@ -4207,6 +4224,14 @@ exprt python_list::extract_pyobject_value(
       equality2tc(tid2, from_integer(float_type_id, migrate_type(size_type())));
     return migrate_expr_back(if2tc(et2, is_float, fv2, iaf2));
   }
+
+  // A tagged-scalar element (a variable that was itself dynamically typed
+  // before being stored) already IS a PyObject header with its own
+  // value/type_id/size -- unlike every other element kind, item->value does
+  // not point at a nested payload to dereference. Read the item directly
+  // instead of treating .value as a pointer to unwrap.
+  if (converter_.get_type_handler().is_tagged_scalar_type(elem_type))
+    return build_dereference(pyobject_expr, elem_type);
 
   // Extract value from PyObject: (*pyobject_expr).value
   exprt obj_value =

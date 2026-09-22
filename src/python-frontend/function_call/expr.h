@@ -86,6 +86,12 @@ private:
     const nlohmann::json &args,
     const nlohmann::json &keywords) const;
 
+  /// Whether `actual` satisfies `param`, counting every type the parameter's
+  /// annotation names -- a union's members are not all its declared type.
+  bool argument_matches_parameter(
+    const code_typet::argumentt &param,
+    const typet &actual) const;
+
   // Helper methods for AttributeError detection
   std::vector<std::string>
   find_possible_class_types(const symbolt *obj_symbol) const;
@@ -143,6 +149,19 @@ private:
    * Sets the function_type_ attribute based on the call information.
    */
   void get_function_type();
+
+  /*
+   * The AST node of the named class, from the main module or, when the main
+   * module's body does not hold it, from the module that defines it (#7546).
+   */
+  nlohmann::json find_class_node(const std::string &name) const;
+  bool resolves_to_staticmethod(
+    const nlohmann::json &class_node,
+    const std::string &method) const;
+  const symbolt *
+  find_inherited_classmethod(const std::string &func_symbol_id) const;
+  std::optional<exprt>
+  build_post_init_forward_call(const std::string &func_symbol_id);
 
   /*
    * Retrieves the object (caller) name from the AST.
@@ -608,6 +627,11 @@ private:
   // unchanged.
   std::optional<exprt> try_numpy_inplace_sort();
 
+  // a.sort()'s own axis= keyword scan: a literal integer or throws. Split
+  // out of try_numpy_inplace_sort to keep that function's own decision
+  // count down.
+  long long extract_numpy_inplace_sort_axis() const;
+
   // reject_numpy_view_mutating_method_call (called from
   // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
   // reshape view is not a copy (writes to it are meaningful) but sort() has
@@ -713,6 +737,53 @@ private:
    */
   std::optional<exprt> try_fold_identity_array_return();
 
+  /**
+   * Suffix selecting the models/random.py variant that matches a sequence
+   * argument's type: "_float" or "_str" for a list of those, "_chars" for a
+   * str, and "" for a list of ints and for any argument this cannot type,
+   * which keeps the base model it had before the dispatch existed.
+   *
+   * @param seq  the converted sequence argument.
+   * @param func_name  "choice" or "sample", used in the diagnostic.
+   * @return the suffix to append to the model function name.
+   * @throws std::runtime_error naming func_name for a tuple, which no model
+   *         parameter can take and on which the list model would raise a
+   *         spurious memory-safety claim; and from
+   *         element_type_registry::homogeneous_element_type for a list whose
+   *         elements mix incompatibly.
+   */
+  std::string
+  random_sequence_suffix(const exprt &seq, const std::string &func_name);
+
+  /**
+   * Selects an element of a tuple for random.choice(), inline.
+   *
+   * A model function cannot take a tuple, whose arity and member types vary
+   * per call site, so the choice is folded into a nested conditional over a
+   * nondet index instead.
+   *
+   * @param seq  the converted sequence argument.
+   * @return the selected element, or nullopt when @p seq is not a tuple.
+   * @throws std::runtime_error on an empty tuple, which has no element to
+   *         select, and on a tuple whose members differ in type, which one
+   *         conditional cannot carry.
+   */
+  std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
+
+  /**
+   * Folds sum() over a numeric tuple into a chain of additions.
+   *
+   * The sum/sum_float models iterate a list representation a tuple struct does
+   * not have, so they would return garbage.
+   *
+   * @param is_user_imported  whether a user import shadows the builtin.
+   * @param is_numpy_model_call  whether the call is inside models/numpy.py.
+   * @return the folded sum, or nullopt when the call is not sum() over a
+   *         numeric tuple.
+   */
+  std::optional<exprt>
+  fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
+
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
@@ -762,6 +833,17 @@ private:
     symbolt *obj_symbol,
     const symbolt *func_symbol,
     const locationt &location);
+
+  /*
+   * Reconciles a converted call argument with its parameter's type: passes
+   * an already-tagged argument through, boxes a concrete numeric/string
+   * scalar into a tagged-object temporary, or throws otherwise.
+   */
+  exprt coerce_tagged_argument(
+    exprt arg,
+    const typet &param_type,
+    const locationt &location) const;
+
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,

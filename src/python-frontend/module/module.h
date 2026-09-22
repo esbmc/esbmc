@@ -63,6 +63,46 @@ public:
   {
   }
 
+  /// Record a JSON AST this module's contents come from. The file is parsed
+  /// on first access, not here: a run imports a handful of the modules the
+  /// parser emits, and parsing the rest cost ~0.15s of every Python run.
+  ///
+  /// Invariant, load-bearing for the lazy split: parsing a source may only
+  /// add functions, classes and overloads. It must never add a source or a
+  /// submodule, because module_manager::find_module walks submodules_ WITHOUT
+  /// hydrating, so a dotted lookup traverses unhydrated nodes. Following
+  /// `Import` nodes here would make every dotted lookup silently miss.
+  void add_source(std::string json_path)
+  {
+    sources_.push_back(std::move(json_path));
+  }
+
+  const std::vector<std::string> &sources() const
+  {
+    return sources_;
+  }
+
+  bool hydrated() const
+  {
+    return hydrated_;
+  }
+
+  void mark_hydrated()
+  {
+    hydrated_ = true;
+  }
+
+  /// False once hydration has run and every source failed to parse.
+  bool readable() const
+  {
+    return readable_;
+  }
+
+  void set_readable(bool yes)
+  {
+    readable_ = yes;
+  }
+
   const std::string &name() const
   {
     return name_;
@@ -71,11 +111,6 @@ public:
   void add_function(const function &func)
   {
     functions_.insert(func);
-  }
-
-  void add_functions(const FunctionsList &other_functions)
-  {
-    functions_.insert(other_functions.begin(), other_functions.end());
   }
 
   void add_submodule(const std::shared_ptr<module> mod)
@@ -91,11 +126,6 @@ public:
   void add_class(const class_definition &cls)
   {
     classes_.insert(cls);
-  }
-
-  void add_classes(const ClassesList &other_classes)
-  {
-    classes_.insert(other_classes.begin(), other_classes.end());
   }
 
   /// @brief Retrieve a class definition by name
@@ -156,4 +186,7 @@ private:
   SubmodulesList submodules_;
   OverloadList overloads_;
   ClassesList classes_;
+  std::vector<std::string> sources_;
+  bool hydrated_ = false;
+  bool readable_ = true;
 };

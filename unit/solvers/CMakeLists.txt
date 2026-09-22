@@ -42,3 +42,8 @@ new_unit_test(simplification_equivalence_test
 # it. `solvers` rather than a named backend -- whichever is built in answers.
 new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
               "solvers;util_esbmc;filesystem;bigint")
+
+# Upstream's tuple_field_bounds_test pinned the bounds guard in the node and
+# sym flatteners, which camada replaces: it bounds the projection itself
+# (camadaimpl.cpp, "Tuple index out of range"), so there is no ESBMC-side
+# vector left to run off.

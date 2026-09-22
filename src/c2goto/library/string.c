@@ -263,6 +263,23 @@ __ESBMC_HIDE:;
   return str;
 }
 
+char *strsep(char **stringp, const char *delim)
+{
+__ESBMC_HIDE:;
+  char *begin = *stringp;
+  if (begin == NULL)
+    return NULL;
+  char *end = strpbrk(begin, delim);
+  if (end)
+  {
+    *end = '\0';
+    *stringp = end + 1;
+  }
+  else
+    *stringp = NULL;
+  return begin;
+}
+
 char *strdup(const char *str)
 {
 __ESBMC_HIDE:;

@@ -1,5 +1,5 @@
 // Exercises intrinsic_memset's read-only-target detection in
-// src/goto-symex/builtin_functions/memory_ops.cpp. When memset would
+// src/goto-symex/engine/builtin_functions/memory_ops.cpp. When memset would
 // write into a string literal, the optimiser must bail out and let
 // __memset_impl report the violation through WRITE-mode dereference.
 #include <string.h>

@@ -42,6 +42,7 @@ module_imports: dict[str, ModuleImportInfo] = {}
 module_exports: dict[str, tuple[set[str], dict[str, str], set[str] | None]] = {}
 _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
+_reported_unmodelled: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ def reset_state() -> None:
     module_exports.clear()
     _reported_cycles.clear()
     _reported_resolution_failures.clear()
+    _reported_unmodelled.clear()
     imported_signature_sources.clear()
     default_helper_exports.clear()
 
@@ -92,6 +94,32 @@ def _mark_import_resolution(
     node.module_resolution_reason = reason
 
 
+def _has_model_file(module_name: str, output_dir: str) -> bool:
+    """Whether a model stands in for this exact module.
+
+    The dotted name matters: `_emit_model_jsons` emits one JSON per
+    `models/*.py`, so a model for `string` says nothing about
+    `string.templatelib`, which the converter would then look for in vain.
+    """
+    base = os.path.join(output_dir, "models", *module_name.split("."))
+    return os.path.exists(base + ".py") or os.path.exists(os.path.join(base, "__init__.py"))
+
+
+def _warn_unmodelled_module(module_name: str) -> None:
+    if module_name in _reported_unmodelled:
+        return
+    _reported_unmodelled.add(module_name)
+    _resolver_warning(f"no operational model for module '{module_name}'; "
+                      "its names will be unresolved")
+
+
+def _warn_module_file_not_found(module_name: str) -> None:
+    """Warn unless `_warn_unmodelled_module` already named this module."""
+    if module_name in _reported_unmodelled:
+        return
+    _resolver_warning(f"{module_name} module-file-not-found")
+
+
 def _warn_resolution_failure(module_name: str, node: ast.AST, reason: str) -> None:
     location = _node_location(node)
     key = (module_name, reason, location)
@@ -118,6 +146,7 @@ def _is_imported_model(module_name: str) -> bool:
         "queue",
         "torch",
         "unittest",
+        "sys",
     }
     return module_name in models
 
@@ -228,6 +257,21 @@ def import_module_by_name(
         # Keep legacy error text: regression tests assert this exact line.
         _resolver_error(f"Module '{module_name}' not found.")
         return None
+    except SyntaxError as exc:
+        # Importing compiles the module, so a source ESBMC cannot parse
+        # escapes here and not as an ImportError. It reached the user as a raw
+        # CPython traceback naming files inside the extracted temp directory,
+        # gone by the time anyone reads them (#7678). Non-UTF-8 source arrives
+        # here too: CPython reports it as a SyntaxError carrying the decode
+        # error.
+        _resolver_warning(f"{module_name} module-parse-failed: {exc}")
+        return None
+    except Exception as exc:  # pylint: disable=broad-except
+        # Importing also *runs* the module body, so anything it raises escapes
+        # the same way. The module parsed; it failed executing, so the reason
+        # must not claim otherwise.
+        _resolver_warning(f"{module_name} module-import-failed: {exc}")
+        return None
 
 
 def _collect_import_targets(
@@ -257,6 +301,11 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
     if not module_names:
         return
 
+    # `import_module_name` in python_converter.cpp resolves an `import a, b`
+    # node to its first name alone, so only that name decides whether the node
+    # is convertible; flagging it for `b` would drop `a` too.
+    converter_target = module_names[0]
+
     for module_name in module_names:
         if module_name not in module_imports:
             module_imports[module_name] = {'import_all': False, 'specific_names': set()}
@@ -274,9 +323,13 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             continue
         filename = _module_filename(module)
         if filename is None:
-            # Keep historical behavior: modules without an emit-able file
-            # (e.g., standard library/builtins) are skipped, not treated as
-            # missing imports.
+            # Importable under CPython, no AST to emit, no model standing in
+            # for it: nothing to convert (#7674). Not `module_not_found` --
+            # that flag statically selects an `except ImportError` branch.
+            if not _has_model_file(module_name, output_dir):
+                _warn_unmodelled_module(module_name)
+                if module_name == converter_target:
+                    node.module_unmodelled = True
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
 
@@ -423,7 +476,7 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
             visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
-                _resolver_warning(f"{module_name} module-file-not-found")
+                _warn_module_file_not_found(module_name)
                 continue
             try:
                 tree, preprocessor = callbacks.parse_file_canonicalised(filename)
@@ -588,7 +641,7 @@ def emit_module_json(
     """Parse and emit JSON for one module resolved by qualified name."""
     filename = resolve_module_file(module_qualname, output_dir)
     if not filename:
-        _resolver_warning(f"{module_qualname} module-file-not-found")
+        _warn_module_file_not_found(module_qualname)
         return
     try:
         tree, _preprocessor = parse_file_canonicalised_fn(filename)

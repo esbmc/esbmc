@@ -24,6 +24,17 @@ Per frontend `F` in {clang-c, clang-cpp, python, solidity, jimple}:
 | B-3 | Bodies reach `goto_convert` with no `migrate_*` back-hop | native dispatcher coverage = 100 %, round-trip deleted |
 | B-4 | No `#`-attribute escape hatch into a shared pass | W3 removed, not merely seamed |
 
+B-2's command counts the spelling of the argument, not its type: a
+`symbol.set_type(t)` whose `t` is a `type2tc` still matches, because the `2tc`
+token is at the declaration and not at the call. Measuring jimple's declaration
+sites found this (`scope-jimple-irep2.md` §32.3) — read B-2 as an upper bound
+whose lines each need inspecting, not as a count.
+
+**jimple has met B-2** (2026-09-14), by inspection rather than by the command:
+every `set_type`/`set_value` call in `src/jimple-frontend` passes an IREP2
+argument, and the command still prints 7 (`scope-jimple-irep2.md` §35.2 lists
+them).
+
 B-1/B-2 are frontend-local. **B-3 and B-4 are shared** — they are one repo-wide
 job each, not five. That asymmetry is the whole shape of this program: do the
 two shared jobs once, then the five frontends become largely mechanical.
@@ -430,6 +441,14 @@ because it is exactly the failure mode §12.3's methodology note and §14.2's ru
 are about: a census must show the thing under test executed before its zero
 means anything. Both suites need Linux CI (Solidity) or a build with
 `-DENABLE_JIMPLE_FRONTEND=On` (Jimple).
+
+**Superseded for Solidity (2026-09-11).** With `ENABLE_SOLIDITY_FRONTEND=On` the
+suite runs locally: `ctest -L esbmc-solidity` is 523 of 525, the other two being
+`KNOWNBUG` rows that now pass. Tests ship a pre-generated `contract.solast`, and
+their flags line names it, so `solc` is not needed. Phase 8 is therefore
+measurable and is opened at `scope-solidity-irep2.md`. Jimple's blocker is not
+re-tested here, though the same build has `ENABLE_JIMPLE_FRONTEND=On` and 26
+`jimple` tests.
 
 ### 15.2 Python, re-censused with the §14 fix
 
@@ -2587,3 +2606,1960 @@ should treat §20.1 as its own pre-flight list.
 Phase 6 is **clang-c** (971 mentions, 49 already IREP2). Its first action is the
 census §39.1 asks for, not a slice. Phase 3 (the Python flip) remains open and
 independent.
+
+## 40. Phase 7 (clang-cpp) opened (2026-09-10)
+
+`scope-clang-cpp-irep2.md` is the scope doc, following §6's instruction that
+each of Phases 5-9 opens its own. Re-censused at master `35db62c320`: clang-cpp
+is 643 legacy mentions, **0** IREP2, 7 559 LOC, over a 2 842-test corpus.
+
+Two findings decide its sequencing, and neither is a slice.
+
+**The typecast pre-flight §39.2 named is entirely open.** All seven §20.1 gaps
+are still present: the irept `implicit_typecast_followed` is 163 lines
+(`c_typecast.cpp:602-765`), the `expr2tc` copy 67 (`:766-832`), and *none* of
+the C++-shaped arms — references, pointer-to-member, derived-to-base,
+string-to-array, `#reference`, qualifier warnings, `incomplete_array` — is in
+the IREP2 copy.
+
+Two of them cannot be ported at all as things stand.
+`is_lvalue_or_rvalue_reference` tests two irept *attributes*, and
+`pointer_type2t` has only `subtype` and `carry_provenance`, so a C++ reference
+and a plain pointer are the same IREP2 node (`migrate.cpp:205`). Unlike
+§113.3's attributed integer, this one is not cosmetic: the arm decides whether
+`T& F(T& a) { return a; }` returns `&a` or a typecast. Item 1 needs
+`pointer_type2t` to carry the reference kind first — a W2-class representation
+change on the phase's critical path.
+
+Instrumenting the arms over a stride-10 `regression/esbmc-cpp` sample (283
+runnable tests) prices it: the reference arm fires in **199** tests,
+derived-to-base in **198**, the source-reference dereference in 87,
+string-to-array in 6, and pointer-to-member in **0**. Every test in the sample
+fires at least one, so no first slice can be verified while they are missing.
+The zero is §39.1's census rule paying for itself — do not port item 2 on the
+strength of its being listed.
+
+**Phase 6's pass is not extensible, and does not decompose like the legacy
+one.** `clang_cpp_adjust` derives from `clang_c_adjust`, which declares 15
+virtual members, 13 of them overridden. `clang_c_adjust_irep2` declares **0**,
+and it deliberately unified `adjust_ifthenelse`/`adjust_while`/`adjust_for`
+into a single `adjust_statement_condition` — so `clang_cpp_adjust::adjust_while`
+has no seam to attach to. Retrofitting virtuals would re-import the seams that
+unification removed. The option that follows from merged work is a shared arm
+table, extending #7455's change that made the arm order data rather than
+control flow. Pricing that is Phase 7's first task; getting it wrong means
+re-doing Phase 6 inside Phase 7.
+
+There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
+whole instrument — one binary A/B'd against itself — does not exist here. A
+census by verdict waits on it.
+
+## 44. A code type loses its arguments' base names (2026-09-14)
+
+`scope-jimple-irep2.md` §34.1 states that a code type round-trips: that
+`migrate_type_back` restores the argument identifiers and the ellipsis, and that
+"the argument `#base_name` it does not restore has no reader". The first half is
+right. The second half is wrong, and it cost twelve broken tests to find.
+
+`code_type2t` reflects `arguments`, `ret_type`, `argument_names` and `ellipsis` --
+nothing else per argument. So an argument's `#base_name` has nowhere to live, and
+`migrate_type_back` cannot restore what was never carried. The identifier does
+survive, because `code_typet::argumentt::set_identifier` writes `#identifier`
+(`std_types.h`), which is the field `cmt_identifier` and `get_identifier` both read.
+
+Pinned in `unit/util/migrate.test.cpp` ("a code argument keeps its identifier and
+loses its base name"), so the distinction is checkable rather than re-derived.
+
+### 44.1 The reader
+
+`clang_cpp_convert_vft.cpp:471`, in the loop that adds a thunk's argument symbols:
+
+```cpp
+irep_idt base_name = arg.get_base_name();
+```
+
+Converting three writes in that file to store IREP2 -- two thunk code types and one
+symbol type -- broke **12 of 1 058** `esbmc-cpp/cpp` tests:
+`functional{,_fail,_fail2}`, `github_5868_function_signatures{,_fail}`,
+`github_7540_{capacity_fail,capacity_write_fail,precision}`,
+`ostringstream_str{,_fail}` and `pmr_memory_resource{,_fail}` -- all
+standard-library models, which is where thunks are generated. The change is
+reverted; the suite returns to the 6 failures master has anyway.
+
+### 44.2 The rule, and why jimple did not show it
+
+§34.1's claim was measured, and on jimple it holds: jimple writes its argument
+base names and never reads one back off a round-tripped type. The generalisation
+from that to code types in general is what failed.
+
+**A code-type symbol may be stored IREP2-side only where no consumer reads an
+argument's `#base_name`** -- until there is a field to restore it from. §44.4 adds
+one.
+
+### 44.3 The diagnosis this section first shipped was wrong
+
+It named `#identifier` rather than `#base_name`, on the reasoning that
+`migrate_type_back` calls `set_identifier` while the thunk builder reads
+`cmt_identifier`, and that those are different fields. They are different *fields*
+-- `irep.cpp` maps `cmt_identifier` to `#identifier` and `a_identifier` is plain
+`identifier` -- but `argumentt` overrides `set_identifier` to write the comment one,
+so the round trip preserves it. A four-line unit probe printing both fields after a
+round trip settled it in one build. It should have been written before the
+section, not after.
+
+### 44.4 The field, and the slice it unblocks
+
+`code_type2t` now carries `argument_base_names`, **unreflected**. Unreflected is
+the point rather than an economy: a parameter's spelling is no part of the function
+type (C11 6.7.6.3p15, the same clause §144 turned on), so two signatures differing
+only there must still hash and compare equal. A reflected field would have made
+them distinct and re-opened exactly the divergence §144 closed.
+
+It rides the pattern `struct_type2t::alignment` already uses -- a defaulted
+trailing constructor argument plus `excluded_field_bytes` -- so
+`fields_cover_class` passes and no `with_type` specialisation is needed. Both
+migrate arms carry it, and the back arm tolerates its absence, since a frontend
+that builds a `code_type2tc` directly supplies no base names.
+
+The unit case that pinned the loss now pins the carriage, and asserts the
+equality property alongside it: changing one argument's base name leaves
+`migrate_type` returning the same type.
+
+With that, the §44.1 slice works. The three writes in
+`clang_cpp_convert_vft.cpp` -- two thunk code types and one symbol type -- are
+converted, and `esbmc-cpp/cpp` is back to **6 failures out of 1 058**, the six
+master fails anyway (`ch8_5`, `github_7433*`). The 26 C++ probes of
+`scope-clang-cpp-irep2.md` §9-§10 abort nowhere, the Solidity suite is 525/525, and
+the unit suite is 874/874.
+
+## 45. A struct component loses its base name, and that blocks the rest of B-2
+
+§44.4 closed the code-type half of this. The struct half is the same defect with a
+larger blast radius, and it is what stops the remaining struct-typed symbol writes
+from moving.
+
+`struct_type2t` carries `members`, `member_names` and `member_pretty_names` --
+nothing else per component. So a component's `#base_name`, and any other attribute
+on it, is dropped by `migrate_type`. `unit/util/migrate.test.cpp` ("a struct
+component loses its base name") pins exactly that: `name` and `pretty_name` survive,
+`#base_name` and an arbitrary `#member_attr` do not.
+
+### 45.1 The measurement
+
+Converting the two vtable struct-type writes in `clang_cpp_convert_vft.cpp` to store
+IREP2 fails **653 of 1 058** `esbmc-cpp/cpp` tests. Not a subtle regression: the
+thunk builder takes its symbol name straight from the component,
+
+```cpp
+thunk_func_symb.name = component.base_name();
+```
+
+so every vtable component arrives with an empty base name and every thunk symbol is
+misnamed. Reverted; the suite returns to master's 6 failures.
+
+### 45.2 Why the earlier caution was right for the wrong reason
+
+`scope-clang-c-irep2.md` §139.3 declined to convert `pad_type_symbol` on the
+grounds that a padded struct's derived legacy form "loses what `migrate_type_back`
+does not restore", naming the `width` attribute and `#bitfield`. The conclusion
+holds; the reason given does not.
+
+A struct's legacy `width` is set in exactly one place in the tree --
+`jimple_file.cpp:158` -- and read only by jimple's own `newarray` arms. No C or C++
+struct symbol carries one, so losing it could not have been the blocker there. The
+blocker is the component base name, which every C++ vtable depends on.
+
+That distinction matters for the next attempt: it is not padding or bitfields that
+make a struct symbol unsafe to store IREP2-side, it is per-component metadata, and
+the fix is the §44.4 one applied to components rather than arguments.
+
+### 45.3 What closing it would take
+
+An unreflected `member_base_names` on `struct_type2t`, carried by both migrate
+arms, exactly as `argument_base_names` now is for code types. Unreflected for the
+same reason: a member's spelling is not part of the struct's identity, and making
+two otherwise-identical structs compare unequal would be a worse defect than the
+one being fixed.
+
+It is a wider change than the code-type one -- `struct_type2t` is far more heavily
+used, `union_type2t` shares its data base, and the field has to thread through
+`fields_cover_class` -- so it wants its own PR and its own gate rather than riding
+this one. With it, `pad_type_symbol`, the two vtable struct types, and
+`scope-jimple-irep2.md` §32.5's two completion sites all become tractable.
+
+## 46. `member_base_names` landed -- and §45 named the wrong field (2026-09-14)
+
+§45.3's field exists: `struct_type2t::member_base_names`, populated by `migrate_type`'s
+struct arm and written back by `migrate_type_back`'s, and left out of `fields` so a
+member's spelling is no part of the struct's identity. `union_type2t` needed no
+change -- it is a sibling of `struct_type2t`, not a subclass, and no union component
+in the tree carries a base name. `fields_cover_class` is satisfied by
+`excluded_field_bytes = sizeof(std::vector<irep_idt>)`, the field placed next to
+`member_pretty_names` so it packs against a same-size neighbour rather than into
+padding.
+
+### 46.1 The field §45 named does not exist on a component
+
+§45 says the dropped attribute is `#base_name`. It is not. Two different fields
+share one accessor name:
+
+| class | accessor | reads |
+|---|---|---|
+| `struct_union_typet::componentt` | `get_base_name()` | `base_name` (`std_types.h:121`) |
+| `code_typet::argumentt` | `get_base_name()` | `#base_name` (`std_types.h:337`) |
+
+The vtable writer and the thunk builder both use the plain one --
+`vt_entry.set("base_name", comp.base_name())` and
+`thunk_func_symb.name = component.base_name()`
+(`clang_cpp_convert_vft.cpp:311,375`) -- and every `cmt_base_name` writer in the
+tree is on a function parameter, never on a struct component. So
+`member_base_names` carries `base_name`, and §44's `argument_base_names` carries
+`#base_name`; they are not the same field under two names.
+
+This is the second consecutive section whose first diagnosis came from an
+accessor's name rather than its body (§44.3 was the first). Read the accessor.
+
+### 46.2 What it does not unblock, measured
+
+The two vtable struct-type writes still cannot flip, and the base name was not the
+only reason. The same builder puts `virtual_name`, `access`, `is_rtti_name` and
+`is_vtptr` on components, and reads three of them back: `virtual_name` at
+`clang_cpp_convert_vft.cpp:737` (the override switch map),
+`clang_cpp_destructor_call.cpp:35` (matching a destructor entry) and
+`is_rtti_name`/`is_vtptr` in the value builder and the destructor walk. None has a
+field on `struct_type2t`.
+
+So the base name is one of a family. Censusing what the five frontends write on a
+component,
+
+```sh
+grep -rnoE '(component|comp|vt_entry|new_compo|base_comp|c)\.(set|set_)[a-z_]*\("[^"]+"' \
+  src/clang-cpp-frontend src/clang-c-frontend src/solidity-frontend \
+  src/python-frontend src/jimple-frontend | grep -oE '"[^"]+"' | sort | uniq -c
+```
+
+gives thirteen attributes beyond `name` and `pretty_name`: `access`, `base_name`,
+`from_base`, `internal`, `is_base_subobject`, `is_pure_virtual`, `is_rtti_name`,
+`is_virtual`, `is_vtptr`, `virtual_name`, `#base_owner`, `#is_sol_virtual` and
+`#is_sol_override`. Nine of them, `base_name` included, have a reader somewhere in
+the tree; only `from_base`, `internal` and the two `#is_sol_*` have none.
+
+That changes what the next slice should be. Adding a vector per attribute does not
+scale past the second one, and each addition costs another `excluded_field_bytes`
+adjustment. The alternative is one unreflected carrier holding each component's
+leftover `irept` -- everything the reflected fields do not already describe -- which
+`migrate_type_back` uses as the component's starting value before overwriting
+`type`, `name` and `pretty_name`. That closes the whole family at once, including
+the `#member_attr` the unit test still records as dropped, and is what the vtable
+types and `scope-jimple-irep2.md` §32.5 need. It wants its own measurement: the cost
+is an `irept` per component on every struct type in the program.
+
+It would not reach `pad_type_symbol`, and §45.3 was wrong to list it. What blocks
+that one is `#bitfield` and `#extint`, which sit on the member's *type*, not on the
+component: `migrate_type_back` rebuilds an `unsignedbv_typet(width)` bare, so a
+round-tripped bit-field pad changes arm in `add_padding` (`padding.cpp:193` ->
+`:218` -> `:225`). A per-component carrier cannot see them.
+
+### 46.3 A note for whoever writes that slice
+
+`migrate_type_back_uncached` reached 15 on the complexity gate's `core > 15`
+threshold with this section's single `if` added, so the next per-component field
+would have blocked the gate. The struct and union back arms were copies of one
+component loop differing only in that line; they are now one
+`migrate_components_back` helper, which takes the function back under the ceiling.
+Extend the helper, not the arms.
+
+Two more things that slice has to get right, both found by review of this one.
+
+`base_name` is not a comment field: no leading `#`, so `irept::is_comment` routes
+it to `named_sub`, which `irept::operator==` compares. Writing it unconditionally
+would insert an empty key on every C struct component and stop the round trip being
+the identity on the legacy side. The carrier must write only what it has --
+`migrate_components_back` now guards on `!empty()`, and the unit test pins a
+component that had no base name gaining none.
+
+The round trip is **not length-preserving** on an unreflected member vector: zero
+entries in, `members.size()` entries out. That is safe only while the field is
+unreflected. `migrate_symbol_type`'s round-trip assertion (`migrate.cpp:475`)
+compares with `==`, so today it cannot see the asymmetry; reflect the carrier and it
+fires on every struct symbol in every DebugOpt build.
+
+Finally, a test note. The first cut of this section's unit test gave the component
+the same spelling for `pretty_name` and `base_name`, and two mutants that write one
+vector into the other's slot survived the whole 50-case suite -- the three vectors
+are pushed on consecutive lines and passed to the helper in a row, so crossing them
+is the likely edit. Spell every name differently in a test over per-component
+metadata.
+
+## 47. The vtable struct types need no new field after all (2026-09-14)
+
+§46.2 proposed one unreflected carrier for the whole per-component attribute
+family. Reading what the two vtable readers actually need says otherwise: every
+attribute they read is already recoverable from a *reflected* field, so the slice
+is to stop reading the unreflected one rather than to carry it.
+
+### 47.1 What the vtable type's components carry
+
+| attribute | set at | recoverable from |
+|---|---|---|
+| `name` | `:308`, `rtti_name_component` | reflected |
+| `pretty_name` | `:318`, `rtti_name_component` | reflected |
+| `base_name` | `:311`, `rtti_name_component` | §46's `member_base_names` |
+| `virtual_name` | `:319` | **its own `pretty_name`** -- `:318` and `:319` are set from the same expression, `comp.get("virtual_name")` |
+| `is_rtti_name` | `rtti_name_component` | **the component name**, which is exactly `rtti_name_component_id(vt_name)` |
+| `access` | both | nothing reads it (below) |
+
+So both readers can be rewritten against reflected data:
+`clang_cpp_convert_vft.cpp:737`'s override switch map keys on
+`compo.get("virtual_name")`, which equals `compo.pretty_name()` for every entry it
+walks; `clang_cpp_destructor_call.cpp:35` compares a vtable entry's `virtual_name`
+against a class method component's, and only the vtable side needs to change.
+`is_rtti_name` is a name test against the same helper that produced the name.
+
+`is_vtptr` is not in the table because `add_vptr` puts it on the *class* type, not
+the vtable type, so it is out of this slice; when the class types move, note that a
+class method component's `virtual_name` is the *ultimate overridden* method's id
+(`annotate_virtual_overriding_methods`), which is genuinely extra information and
+not derivable from that component's own names.
+
+### 47.2 `access` on a component is write-only
+
+`struct_union_typet::componentt::get_access()` (`util/irep/std_types.h:131`) has
+**no caller** in `src/` or `unit/`. `set_access` has five, plus three `set("access",
+…)` in the vtable builder. The field is written and never read, so the seam need not
+carry it and a later PR can delete the writes.
+
+### 47.3 Consequence for §46.2
+
+The leftover-`irept` carrier is not needed for this slice and should not be built
+for it. It would also work against the bars: a generic legacy-attribute carrier is
+exactly the escape hatch B-4 forbids, and it would let a frontend keep depending on
+legacy component metadata indefinitely. Derive from reflected data, or from the name
+as `restore_padding_flag` does (§137); carry a field only where the information
+exists nowhere else.
+
+### 47.4 Both writes now store IREP2 -- and §45.1's cause was wrong
+
+With the two readers rewritten, `add_vtable_type_symbol` stores
+`migrate_type(st)` and `add_vtable_type_entry` appends to the IREP2 type
+directly. `regression/esbmc-cpp/cpp` is **6 failures of 1 060**, master's
+baseline, and the whole `esbmc-cpp` tree is 8 of 3 155 -- the two extra pass when
+re-run serially.
+
+Three measurements on that state, each a rebuild plus the full label:
+
+| change | failures |
+|---|---|
+| both readers rewritten | 6 |
+| forward arm pushes an empty base name per component | **6** |
+| `is_rtti_name` reader restored | 655 |
+| `virtual_name` reader restored | 655 |
+
+The second row keeps the vector's length -- dropping the pushes altogether would
+trip `struct_type2t`'s length assertion on the first appended entry -- so it
+isolates the base names' *content*, which is what a reader would need. Nothing
+does. So §46's `member_base_names` is **not** what unblocks this, and §45.1 named
+the wrong consumer. The thunk builder's `component.base_name()` reads the component
+passed at `clang_cpp_convert_vft.cpp:104`, which is the **class** type's method
+component, not the vtable type's -- and class types still store IREP1, so that
+read never crosses this seam. §46 inherited the error.
+
+The real cause is either lost attribute on its own: the rtti entry is the first
+component of every vtable, so failing to recognise it sends `@rtti_name` into
+`switch_map.find`, which misses, and the assertion at
+`clang_cpp_convert_vft.cpp:753` fires on every polymorphic program. `virtual_name`
+does the same for every other entry.
+
+§46's field stays correct on its own terms -- a component's base name now survives
+the round trip, pinned by a unit test -- but it is not on this slice's critical
+path, and the 653-failure figure belongs to `virtual_name`.
+
+Tests: `regression/esbmc-cpp/cpp/github_4715_vtable_thunk_irep2{,_fail}`, a
+two-base hierarchy dispatching through the second base. Both halves change verdict
+when either reader is restored; neither moves when the base names are dropped,
+which is the measurement above in test form.
+
+## 48. The thunk symbols, and §44's field gets an end-to-end gate (2026-09-14)
+
+Three of the vtable builder's remaining B-2 writes go together, because two of
+them were feeding the third.
+
+`add_thunk_method` wrote the component's legacy type into the symbol, read it
+straight back out, adjusted the `this` argument, and wrote it again through
+`migrate_type`. The first write was never observed: `set_thunk_name` touches only
+the symbol's name. It now builds the adjusted type from `component.type()`
+directly and writes once.
+
+`add_thunk_method_arguments` then had the same shape one level down -- legacy type
+out, `#identifier` written on each argument, legacy type back in. It reads
+`code_type2t` instead: the argument types come from `arguments`, the base name a
+symbol is named after from `argument_base_names`, and the new identifiers are
+assembled into a fresh `code_type2tc`. The legacy round trip goes with it.
+
+### 48.1 What the slice moves, and what §44's gate already was
+
+Making `migrate_type`'s code arm push an empty base name per argument takes
+`regression/esbmc-cpp/cpp` from 6 failures to **18**:
+
+```
+functional, functional_fail, functional_fail2,
+github_5868_function_signatures, github_5868_function_signatures_fail,
+github_7540_capacity_fail, github_7540_capacity_write_fail,
+github_7540_precision, ostringstream_str, ostringstream_str_fail,
+pmr_memory_resource, pmr_memory_resource_fail
+```
+
+An argument symbol is named `<thunk>::<base_name>`, so an empty base name collides
+every argument of a thunk onto one symbol id.
+
+**That gate is not new, and an earlier draft of this section claimed it was.** §44.4
+already converted the thunk's type write, after which the argument loop read the
+base name back off `migrate_type_back`'s restoration (`migrate.cpp:3160`) via
+`arg.get_base_name()` -- the line §44.1 calls "The reader". The 12 tests have gated
+the field since then.
+
+What this slice moves is the *shape* of the dependency, and that is measurable.
+Disabling the back arm's restoration alone now leaves all 12, plus
+`thunk_multi_tu{,_fail}` and `github_4715_vtable_thunk_irep2{,_fail}`, green -- 16
+of 16 -- where before it was the thunk path's only source of the name. The read is
+direct, so `argument_base_names` is consumed as an IREP2 field rather than
+recovered through a legacy attribute.
+
+### 48.2 What pins the slice, stated exactly
+
+The slice moves no verdict -- measured, not asserted: the `--symbol-table-only`
+output for `pmr_memory_resource` (four-argument thunks) and `thunk_multi_tu` (the
+duplicate-symbol path) is byte-identical to the previous commit's. So it adds no
+verdict pair, and the honest accounting of what pins each half is:
+
+- the base-name read is pinned by the 12 tests above, and now also directly by
+  `regression/esbmc-cpp/cpp/github_4715_thunk_arg_symbols`, which asserts the two
+  argument symbols `…::a::0` and `…::b::1` exist. It fails in 0.3s under the
+  empty-base-name mutation, against 12 verdict flips.
+- the identifier bookkeeping (`identifiers[i] = arg_symb.id` and the
+  `code_type2tc` that carries it) is **not** pinned end to end, and was equally
+  unpinned before: deleting it, or the legacy `arg.set("#identifier", …)` it
+  replaces, leaves all 16 green on either version. Without it a thunk's formals
+  alias the callee's own parameter symbols and values still flow.
+
+A code type's `argument_base_names` are also inert *downstream* of this function in
+the C++ path -- dropping them from the final `code_type2tc` changes no output -- so
+the field earns its place at the point of construction, not after it.
+
+### 48.3 A pre-existing false alarm this slice's probing found
+
+An override whose *declaration* leaves its parameters unnamed gets empty
+`#base_name`s from `clang_cpp_convert.cpp`, so all of them collapse onto one thunk
+argument symbol and the thunk forwards the last actual for every parameter:
+
+```cpp
+struct Base { virtual ~Base() {} virtual int f(int, int) { return 0; } };
+struct Derived : Base { int f(int, int) override; };
+int Derived::f(int a, int b) { return a - b; }
+int main() { Derived d; Base *b = &d; assert(b->f(5, 2) == 3); }
+```
+
+`VERIFICATION FAILED` on a program whose answer is 3; naming the parameters in the
+declaration gives SUCCESSFUL. It reproduces identically on the previous commit --
+`pmr_memory_resource`'s thunk prints `do_allocate((…)this, , )` on both -- so it is
+not this slice's doing. It wants its own issue and a KNOWNBUG pair.
+
+## 49. Which converter-time writes can move, and which cannot (2026-09-15)
+
+Phase 7's remaining B-2 sites split on a line that was not visible until a value
+write was actually attempted.
+
+### 49.1 A value write at conversion time cannot be migrated eagerly
+
+`add_vtable_variable_symbols` ends with `vt_symb_var.set_value(values)`, a legacy
+struct `exprt`. Converting it to `migrate_expr` **breaks**
+`pmr_memory_resource{,_fail}` with a SIGSEGV inside BMC; the rest of
+`regression/esbmc-cpp/cpp` is unchanged at 6.
+
+The A/B of `--symbol-table-only` over five polymorphic tests says it is not a
+rendering difference. Every function pointer in every vtable initialiser gains a
+level-1 SSA suffix:
+
+```
+-    .c:@N@std@S@exception@F@~exception#=&~exception,
++    .c:@N@std@S@exception@F@~exception#=&~exception#&0#0,
+```
+
+so the migrated symbols are not at `level0`. The mechanism is already recorded, for
+a different purpose, at `clang_cpp_language.cpp:152`: before `c_link` a translation
+unit's own symbols are absent from what `migrate_namespace_lookup` resolves, and
+`sym_name_to_symbol` then substitutes the expression's own type for the symbol's.
+Type writes never met this because `migrate_type` needs no namespace -- which is
+why every site converted so far, here and in §47 and §48, has been a type.
+
+So the laziness of `symbolt::set_value(const exprt &)` is load-bearing at
+conversion time, and converter-side B-2 is bounded to type writes until the
+frontend stops naming symbols it has not yet linked. The adjust passes are not
+bounded this way: they run after the link, which re-orders what is left.
+
+### 49.2 `#member_name` blocks one more type write, and is derivable
+
+`clang_cpp_convert.cpp:3160` writes `component_type`, a ctor/dtor code type
+carrying `#member_name` (set at `:3139`) and read back at
+`clang_cpp_adjust_code_gen.cpp:57` and `:150`. `code_type2t` has no field for it and
+`migrate.cpp` carries none, so converting that write drops the class a vptr
+initialisation belongs to.
+
+It does not need a field. A ctor or dtor's first argument is `this`, so the class id
+is the pointee identifier of `arguments[0]` -- the same move §47 made for the vtable
+readers, and the same conclusion: derive from what the IREP2 type already holds
+rather than widen the type. That is the next slice.
+
+### 49.3 What did move
+
+`clang_cpp_convert.cpp:2463`, the `array_init$` temporary's struct type. It is a
+class struct type, so it was worth measuring rather than assuming after §47 showed
+per-component metadata mattering: nothing reads this temporary's components, and
+`regression/esbmc-cpp/cpp` stays at 6 of 1 061.
+
+## 50. `#member_name` retired, and what actually blocks the ctor/dtor write (2026-09-15)
+
+§49.2 proposed deriving a ctor's class from the `this` argument's pointee so that
+`clang_cpp_convert.cpp:3160` could store IREP2. The derivation is right and has
+landed; the *reason* §49.2 gave for the write being blocked was wrong, and
+measuring it is what showed that.
+
+### 50.1 The derivation
+
+A ctor's or dtor's first argument is `this`, so `arguments().front()`'s pointee
+identifier names the declaring class -- the same id `#member_name` held. Both
+readers (`clang_cpp_adjust_code_gen.cpp:66` and `:159`) now go through one
+`ctor_class_id` helper.
+
+Measured before changing them, by printing the derived id against
+`ctor_type.member_name()` at the reader: **420 observations over
+`regression/esbmc-cpp/{cpp,inheritance,polymorphism_bringup,polymorphism_bringup_overload,destructors}`,
+19 distinct pairs, no divergence.** The probe prints on *agreement* as well, which
+is what makes the zero meaningful: an earlier version printed only on divergence and
+its silence was indistinguishable from never running. Three named tests give 4, 6
+and 27 observations.
+
+The same probe over 40 `regression/python/class*` and `*inherit*` tests gives **0**
+observations, so `gen_vptr_initializations` never runs on Python input and the
+change cannot affect it.
+
+The derivation is pinned by the corpus, not only by the probe: taking
+`arguments().back()` instead of `front()` -- the plausible wrong edit, identical on
+a one-argument ctor -- fails **610 of 1 061**.
+
+With those two sites converted, `irept::member_name()` has **no reader left in the
+tree**. The two clang-cpp writes go with it -- the one on a ctor/dtor code type and
+the one `annotate_class_field` put on every field's type. The Solidity and Python
+writes are now dead too; they belong to those frontends' own slices, and the
+accessor's doc comment says so rather than continuing to name a reader that no
+longer exists.
+
+### 50.2 The write is blocked by the ctor/dtor pseudo return type, not by the name
+
+`fd_symb->set_type(migrate_type(component_type))` fails **254 of 1 061**
+`esbmc-cpp/cpp` tests. The cause is not `#member_name`:
+
+```cpp
+// src/util/irep/migrate.cpp:406-418
+if (type.id() == "destructor")   return get_empty_type();
+if (type.id() == "constructor")  return get_empty_type();
+```
+
+A ctor's or dtor's return type is a legacy pseudo-type, and `migrate_type` maps both
+to `void`. `gen_vptr_initializations` opens by testing exactly those two ids, so
+after migration every ctor and dtor looks like an ordinary void function, the pass
+returns early, and no vptr is ever initialised. Nothing to do with the class name.
+
+Closing it needs the ctor/dtor distinction to survive the seam: a flag on
+`code_type2t`, or a derivation from the symbol id as in §50.1, or leaving this one
+write legacy and saying why. That is the decision the next slice has to make, and it
+is the same question `scope-clang-cpp-irep2.md` will need for `annotate_ctor_dtor_rtn_type`.
+
+### 50.3 Method note: two readings came from a stale binary
+
+The first two measurements of this slice said 6 of 1 061 and were worthless. The
+build had failed -- `parent_class_id` was still used by the multi-TU vptr-init
+fallback below the line that declared it -- and the failure was invisible because
+the build command piped ninja through `grep -E 'error:|warning: unused' | head -5`,
+which filled all five lines with LLVM header warnings. `ctest` then ran the previous
+binary and reported the baseline.
+
+Check ninja's exit status, not a filtered tail of its output. The bisect that
+followed -- reverting only the `migrate_type` call -- is what separated the clean
+part of the slice from the broken one, and it is the only reason §50.2's cause is
+attributed correctly.
+
+## 51. An adjust-pass value write that still cannot move, and the hole it was hiding (2026-09-15)
+
+§49.1 concluded that converter-time value writes are bounded by the namespace and
+that "the adjust passes are not bounded this way". The first adjust-pass value write
+tried says the second half of that is too strong.
+
+### 51.1 The attempt
+
+`clang_cpp_adjust::gen_implicit_union_copy_move_constructor` builds the body of an
+implicit union copy or move constructor and ends with
+`symbol.set_value(std::move(value))`. Converting it to `migrate_expr` leaves
+`regression/esbmc-cpp/cpp` at **6 of 1 061** -- its baseline -- and is nevertheless
+**wrong**. A twelve-line program shows it:
+
+```cpp
+union U { int i; float f; };
+int main() { U a; a.i = 7; U b = a; assert(b.i == 7); }
+```
+
+`VERIFICATION SUCCESSFUL` before, `VERIFICATION FAILED` after. The GOTO body says
+why:
+
+```
+legacy:  ASSIGN *this = *U::ref;
+IREP2:   ASSIGN *U#&1#0 = *U#&1#0;
+```
+
+Both operands collapse onto one symbol. The body is built from the argument
+identifiers `this` and `U::ref`, and neither is a symbol-table id: an implicit
+constructor gets no argument symbols. Legacy does not care -- the name is just a
+name -- but `migrate_expr` resolves a symbol through
+`migrate_namespace_lookup`, and both unresolvable names fall back to the enclosing
+function symbol, producing a self-assignment that silently drops the copy.
+
+So the bound is not "converter versus adjust". It is whether every symbol the
+expression names exists in the symbol table. Closing this one means giving the
+implicit constructor real argument symbols, the shape
+`add_thunk_method_arguments` already uses (`<function>::<base_name>`), and only then
+migrating the body.
+
+### 51.2 The hole: the whole path had no test
+
+The label was 6 before and after, because **nothing in the suite constructed a union
+from another union**. There is no `*union*` directory under
+`regression/esbmc-cpp/cpp` at all, and a probe on the path recorded zero
+observations across it -- while the program above reaches it twice, once for the copy
+constructor and once for the move constructor.
+
+That is the part worth landing now:
+`regression/esbmc-cpp/cpp/github_4715_union_implicit_copy_ctor{,_fail}`. The
+SUCCESSFUL half is the gate -- it fails under the conversion above. The FAILED half
+does not distinguish the mutant, since a corrupted copy leaves the assertion false
+either way; it is there to pin that the assertion is generated and reached, which is
+what makes the passing half meaningful.
+
+### 51.3 The ctor/dtor pseudo return type is a design-level item, not a slice
+
+§50.2 left `clang_cpp_convert.cpp:3160` blocked on `migrate_type` mapping the
+`constructor` and `destructor` return-type ids to `void`. Censusing the readers
+before planning a fix: `clang_cpp_adjust_code_gen.cpp:61,62`,
+`clang_cpp_adjust_expr.cpp:25,266,395`, `goto-programs/destructor.cpp:40`, and the
+writer at `clang_cpp_convert.cpp:3563-3564`. One of those is outside the frontend
+entirely.
+
+So retiring the encoding is not a one-write slice, and "is this function a
+constructor" is a property of the function rather than of its type -- which is why
+the legacy form parks it in the return type. The options are a flag on the symbol, a
+derivation from the symbol id, or leaving the encoding and this one write legacy with
+the reason stated. It wants deciding before more of `annotate_class_method` moves.
+
+## 52. The real bound on migrating a body: the namespace the pass is not pointed at (2026-09-15)
+
+§51.1 blamed the implicit union constructor's missing argument symbols for the
+self-assignment its migrated body became. That was wrong, and applying the two
+candidate patches one at a time is what showed it.
+
+### 52.1 What the instrument said
+
+Declaring the two parameters as real symbols -- `<function>::this` and
+`<function>::ref`, the shape `add_thunk_method_arguments` uses -- did **not** fix it.
+Instrumenting the lookup at the point of use explains why:
+
+```
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::this found_in_context=1 found_in_migrate_ns=0
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::ref  found_in_context=1 found_in_migrate_ns=0
+```
+
+The symbols are in the context the pass writes to and invisible through
+`migrate_namespace_lookup`, which still points at what `language_ui` installed. A
+miss there does not fail loudly: `sym_name_to_symbol` (`migrate.cpp:715`) treats an
+unresolvable name as an SSA-renamed one and parses it for `?`, `!`, `&` and `#`. A
+clang USR contains `#` and `&`, so the id is truncated at the first `&` -- and both
+of this body's operands truncate to the same prefix, which is the self-assignment.
+
+### 52.2 The fix is the one the IREP2 adjust pass already documents
+
+`clang_c_adjust_irep2.cpp:20-27` has this exact comment and the exact fix:
+`std::exchange(migrate_namespace_lookup, &ns)` around the walk. The legacy C++
+adjust pass never did it. With the exchange in place the body migrates correctly --
+`ASSIGN *this = *U::ref`, `VERIFICATION SUCCESSFUL` -- and the argument-symbol patch
+turns out to be unnecessary and is not part of this change.
+
+So the bound is not "converter versus adjust" (§49.1) and not "the symbols do not
+exist" (§51.1). It is **whether the pass doing the migrating has pointed
+`migrate_namespace_lookup` at its own context**. Any pass that writes an IREP2 value
+must do that first, and the failure mode when it does not is silent name mangling
+rather than an error.
+
+### 52.3 Why this took three sections to get right
+
+Each earlier reading was consistent with the evidence available and wrong:
+
+- §49.1 measured a converter-time value write failing and generalised "before
+  `c_link` the symbols are absent" into a converter/adjust distinction.
+- §51.1 measured an adjust-time value write failing, found the identifiers were not
+  symbol-table ids, and stopped there.
+- §52.1 measured the lookup itself and found the namespace, not the symbols.
+
+The step that separated them was applying the two candidate patches **one at a
+time** -- the repo's own rule -- rather than together. Applied together they pass,
+and the argument-symbol half would have shipped as though it were load-bearing.
+
+## 53. §52's precondition made a property of the pass (2026-09-15)
+
+§52 fixed one call site. The precondition it found is not site-specific: any pass
+that migrates an expression has to point `migrate_namespace_lookup` at its own
+context first, and a pass that forgets gets silent name mangling rather than an
+error. So the exchange moves up to `clang_c_adjust::adjust()`, which both the C and
+C++ legacy adjust passes run through, and the per-site version in §52 goes away.
+
+Measured on the shared entry point, not just the C++ one: `regression/esbmc` is 2 of
+2 293 -- the two THOROUGH tests that pass when re-run serially -- and
+`regression/esbmc-cpp/cpp` stays at 6.
+
+### 53.1 The vptr-init body moves too
+
+With the precondition holding for the pass, `gen_vptr_initializations` stores the
+constructor body it rewrites IREP2-side. Two things had to be checked rather than
+assumed:
+
+`need_vptr_init` is the flag that pass consumes, and `migrate_expr` carries nothing
+like it -- but the write being converted is the one that *clears* it, and absent
+reads as false, so dropping it is what the line already meant.
+
+The body is the whole constructor, so it can contain a `new` whose initialiser is a
+constructor call, and that `constructor` flag is read after adjust
+(`goto-programs/builtin_functions.cpp:679`). `migrate_expr` does not carry it
+either. A probe with a nondet field value -- so the claim cannot be folded away --
+verifies: `PASSED ... assertion b->get() == v`. Landed as
+`regression/esbmc-cpp/cpp/github_4715_vptr_init_body_irep2{,_fail}`; both halves fail
+if the conversion is applied without the namespace fix, which is the combination
+this slice is.
+
+### 53.2 Two C++ frontend value writes remain, both converter-time
+
+`clang_cpp_convert.cpp:3189` (the `need_vptr_init` flag being *set*) and the vtable
+variable's initialiser (§49.1). Both are converter-time, so §52's precondition is
+necessary but not sufficient there: the converter is mid-population, and the
+namespace can only see what it has already added. Whether pointing it at the
+converter's own context is enough for those two is the next thing to measure.
+
+## 54. §49.1's blocker was the same precondition (2026-09-15)
+
+The vtable variable's initialiser -- the write §49.1 measured SIGSEGVing
+`pmr_memory_resource` and concluded was bounded by conversion order -- converts
+cleanly once `migrate_namespace_lookup` points at the context being built.
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 875 of 875.
+
+So §49.1's "converter-time value writes cannot be migrated eagerly" was the right
+observation with the wrong cause, and the exchange belongs at the site until someone
+decides where the converter's own entry point is. `clang_c_convert.cpp:2338-2344`
+already carried a TODO saying a related improvement "would require the
+migrate_namespace_lookup to be setup correctly"; this is that setup, for one write.
+
+### 54.1 An unexplained rendering change, recorded rather than waved past
+
+Comparing `--symbol-table-only` before §53 and after, every vptr-init statement
+renders its `this` unqualified where it used to carry the function prefix:
+
+```
+- ~A(&c:@S@B@F@~B#this->@base@tag-A)
++ ~A(&this->@base@tag-A)
+```
+
+What is measured: no verdict moves, across `esbmc-cpp/cpp` (1 065), the rest of
+`esbmc-cpp` (2 097), `regression/esbmc` (2 293) and the unit suite; and
+`vptr_cdtor_dispatch`, whose whole point is that a virtual call during destruction
+resolves to the declaring class's override, still passes -- which it could not if
+`this` were bound to the wrong object.
+
+What is **not** explained: why the name shortens. `sym_name_to_symbol`
+(`migrate.cpp:715-830`) should return the full id whether the lookup hits (level0,
+name = the id) or misses (level2_global, name = the id), since `c:@S@B@F@~B#this`
+contains no `&` for `end_of_name_pos` to cut at. Reading the function did not settle
+it and neither did the verdicts, so it is written down as an open question rather
+than a conclusion.
+
+No `test.desc` in the tree regexes a vptr-init line or a qualified `#this`, which is
+why the change is invisible to the suite -- and why it is worth a reader's attention:
+ESBMC's printed output is an interface.
+
+## 55. The renaming parser claims C++ symbol ids, and §54.1's open question (2026-09-15)
+
+§52 made the union constructor's body migrate by pointing
+`migrate_namespace_lookup` at the right context. That was the right fix for that
+site and it left the underlying defect in place: what `sym_name_to_symbol` does with
+an id it cannot resolve.
+
+### 55.1 Two ids, measured out of the frontend
+
+A unit case migrates two real C++ ids through a namespace that does not contain
+them:
+
+| id | before | after |
+|---|---|---|
+| `c:@S@B@F@~B#this` | `level2_global`, whole name kept, and `migrate_expr_back` returns `c:@S@B@F@~B#this&0#0` | `level0`, round-trips unchanged |
+| `c:@U@U@F@U#&1$@U@U#::ref` | truncated to `c:@U@U@F@U#` | `level0`, whole name |
+
+The first corrupts the id on the way back; the second is §52's collapse, since every
+id sharing that prefix becomes the same symbol. Both are silent.
+
+The discriminator is in the shape a renamed name actually has: the node counter is
+spelled between `&` and `#`, so `&` comes first. A clang USR has them the other way
+round -- it is full of `#`, and a reference parameter's mangling contains `&` -- or
+has no `&` at all. `sym_name_to_symbol` now requires `&` before `#` before claiming
+a name as `level2_global`, and otherwise returns `level0` with the whole name: not
+renamed, just not shown to this namespace.
+
+`migrate.cpp`'s own comment already said a miss is "ordinary while a context is
+still being built", so the fallback has to be lossless. Pointing the namespace
+correctly (§52, §53, §54) is still worth doing -- a hit carries the symbol-table type
+-- but a miss no longer changes the name.
+
+### 55.2 §54.1 closed: the printer, not the binding
+
+The `this` shortening §54.1 could not explain is a display difference. The parameter
+symbol's entry reads
+
+```
+Symbol......: c:@S@A@F@~A#this
+Base name...: this
+```
+
+and after migration the expression resolves well enough for the printer to use the
+base name, where the unmigrated body left it printing the raw identifier. Nothing
+about which object `this` denotes changes, which is what the unchanged verdicts and
+`vptr_cdtor_dispatch` were already saying. Recorded here because §54.1 promised an
+answer, and because the same shape -- output that improves and therefore differs --
+is what a `test.desc` regex would trip over.
+
+## 56. The vtable builder is out of non-IREP2 symbol writes (2026-09-15)
+
+The two thunk bodies were the last ones left in `clang_cpp_convert_vft.cpp`, and with
+§53's precondition available they need nothing else: the exchange goes around the
+dispatch in `add_thunk_method_body`, and both arms store `migrate_expr`'s result.
+
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 876 of 876.
+
+The marker that had to survive is `#base_to_derived`, set on the `this` typecast and
+read by `adjust_base_to_derived` after the converter. `typecast2t` reflects it
+(`irep2_expr.h:726`), and the GOTO dump confirms the adjustment is still applied
+rather than merely that the suite is green:
+
+```
+tag-B::thunk::to::c:@S@C@F@b#:
+  FUNCTION_CALL: return_value$_b$1 = b(this == 0 ? 0 : (C *)((signed char *)this - 8))
+```
+
+The `- 8` is the second base's displacement; without the marker the thunk would call
+`C::b` on an unadjusted `this`.
+
+### 56.1 What B-2 leaves in the C++ frontend, and why each is stuck
+
+The grep reports 12 sites in `src/clang-cpp-frontend`; seven are false positives that
+already write IREP2 (`migrate_type(...)`, a migrated `expr2tc`, a `type2tc` taken
+straight off a `code_type2t`), which is the same spelling-not-type property the bar
+has had since §39. Three real ones remain, each waiting on a decision rather than on
+work:
+
+| site | blocked on |
+|---|---|
+| `clang_cpp_convert.cpp:3156` | the `constructor`/`destructor` pseudo return type (§50.2, §51.3) |
+| `clang_cpp_convert.cpp:3185` | `need_vptr_init`, *set* here and consumed in the adjuster, carried by nothing |
+| `clang_cpp_adjust_expr.cpp:85` | `exception_specificationt::types_attribute()` on a code type (§49) |
+
+Two of the three are markers on a code type, which is the same shape §44 and §46
+solved by adding an unreflected field. Whether that is right here is exactly the
+question §51.3 poses for the ctor/dtor encoding: a constructor-ness and a
+vptr-init-needed flag are properties of the *function*, not of its type, so the field
+would be carrying a thing that does not belong to the type it rides on.
+
+### 56.2 A dead condition left in place, deliberately
+
+`add_thunk_method_body` still tests `return_type().id() != "destructor"`. Since §44
+made the thunk's type IREP2, `get_type()` derives it through `migrate_type_back`, and
+`migrate_type` maps the `destructor` pseudo-type to `empty` (`migrate.cpp:406`), so
+the second test can never add anything to the first. Removing it is a branch removal
+and owes a C-Dead proof; it is recorded here rather than done in passing, and it
+disappears on its own if §51.3 retires the encoding.
+
+## 57. Four phases, four walls, one question (2026-09-15)
+
+Phases 6, 7, 8 and 9 have each been driven until they stopped, by the same method:
+convert every symbol-table write of one kind, measure the whole suite, bisect the
+failures, keep what stays green, and record what the residue is made of. The four
+residues turn out to be the same thing seen four ways, which is worth stating in one
+place rather than leaving in four scope documents.
+
+### 57.1 What each phase's residue is
+
+| phase | what blocks its remaining writes | evidence |
+|---|---|---|
+| 6 (clang-c) | `restrict`, `volatile`, alignment, packing -- C type qualifiers and layout | `scope-clang-c-irep2.md` §145: all 21 type writes fail 620 of 2 293; the failing tests are the `restrict_*`, `volatile_*` and `github_7707-*` families |
+| 7 (clang-cpp) | the `constructor`/`destructor` pseudo return type, `need_vptr_init`, a code type's exception specification | §50.2, §51.3, §56.1 |
+| 8 (solidity) | eleven `#sol_*` attributes, of which `#sol_type` has 60 writes and 51 reads | `scope-solidity-irep2.md` §7.1, §13.1: all 23 type writes fail 151 of 525, and over 6 000 reads are in a class the IREP2 shape cannot separate |
+| 9 (python) | `#cpp_type`, via a predicate asking whether an 8-bit bitvector is a character | `scope-python-irep2.md` §8: seven conversion sites branch on it |
+
+Every row is the same sentence: **what the frontend needs to say about a type is wider
+than what `type2t` models**, and today the difference is parked in attributes on the
+legacy `typet` that `migrate_type` drops.
+
+### 57.2 What is not a wall, and was mistaken for one three times
+
+Three other causes were found and closed, and none of them is about the type system:
+
+- the namespace the migrating pass was not pointed at (§52, §53) -- fixed, and it
+  unblocked §49.1's blocker after all (§54);
+- a symbol that does not exist yet, which freezes a wrong type into a migrated body
+  (`scope-python-irep2.md` §6.1);
+- the cost of eagerness: migrating every symbol's value where the lazy path migrated
+  only what was asked for (`scope-clang-c-irep2.md` §146).
+
+The second and third mean two classes of write **must stay legacy** and counting them as
+debt is a mistake B-2's spelling-based count invites: a converter-time body, and a
+write that runs once per symbol.
+
+### 57.3 The question, and why it is not a measurement
+
+100% IREP2 in the frontends requires deciding what happens to the type information
+`type2t` does not model. The options, in the order they cost:
+
+1. **Accept it.** Frontend symbol types stay legacy where they carry language-level
+   meaning; B-2 is redefined to exclude them and the bar records why. Cheapest, and
+   leaves the seam permanently.
+2. **Widen `type2t`.** A qualifier set, a Solidity kind, a character flag. This is what
+   the closed type system exists to prevent, and four languages asking for four
+   extensions is the argument against it.
+3. **Move the meaning out of the type.** Each frontend keeps its language-level facts in
+   its own structures, keyed by something that survives migration -- a symbol id where
+   the reader has one (`scope-solidity-irep2.md` §10), the AST where it is still in scope
+   (§11 there), or derived from what IREP2 already holds (§8 there, §47 and §50 here).
+   Honest, and the largest refactor of the three.
+
+Options 1 and 3 are not exclusive: the derivations already landed took `#sol_contract`,
+`#member_name`, `#sol_state_var`, `#sol_name` and the vtable readers' three attributes
+off the table, and three write-only attributes were deleted outright. What is left after
+that is the genuinely irreducible part, and it is small enough to enumerate -- which is
+what §57.1 does.
+
+This is a design decision, not a measurement, and the measuring is done.
+## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
+
+A hop-off flag's divergence count is only as good as the inputs it is measured
+over. `scope-clang-c-irep2.md` §143 probed 22 constructs chosen for being
+unlikely to appear in the 112 tests that use `--clang-c-irep2-adjust-only`, and
+found one real defect (§144). This section records the next two batches and what
+they say about the two frontends that have a flag.
+
+### 40.1 clang-c: 15 more constructs, all agreeing
+
+Nested designated initialisers over an array of structs, a flexible array
+member, `__builtin_offsetof`, a pointer to an array, a round trip through
+`long`, `const`/`volatile` assignment, a compound assignment mixing `int` and
+`double`, pointer increment, a mixed-arithmetic conditional, `switch` on an
+enum, a bitfield inside a union, a struct return, whole-struct assignment, a call
+through a function-pointer struct member, and a variadic struct argument.
+
+All 15 agree, which puts the clang-c probe total at 37 of 38 over three batches.
+The one failure was §144's.
+
+### 40.2 python: every program diverges, at one site
+
+Twelve python probes -- mixed arithmetic, floor division and modulo, augmented
+assignment, boolean operators, `while`, `for ... range`, list append and
+indexing, a class with an attribute and a method, unary minus, a comparison
+chain, a nested function, float comparison -- **all diverge** under
+`--python-irep2-adjust-only`, and each by exactly 64 lines.
+
+That constant is the tell: it is one site, not twelve defects. Every diff line is
+inside the operational model `src/python-frontend/models/nondet.py` at the
+`list[str]` literal on line 283, and every one has the same shape:
+
+```
+- FUNCTION_CALL: list_push(..., &...$list_elem$281, ...)
++ FUNCTION_CALL: list_push(..., &...$list_elem$281[0], ...)
+```
+
+So the model is pulled in by every python program, and one argument in it is
+spelled `&a` on the default path and `&a[0]` under the flag.
+
+### 40.3 Which side is the outlier, measured
+
+The C frontend settles it. `sink(&buf)` and `sink(buf)` for a `char buf[4]` both
+emit `sink((void *)(&buf[0]))`, and they do so identically with and without
+`--clang-c-irep2-adjust-only`. The C path always decays, and agrees with itself.
+
+So the IREP2 python pass produces what the C frontend produces, and the *legacy*
+python pass is the one that skips the decay. It is not `restore_array_lvalue`
+either -- that undo exists in `clang_c_adjust` but is gated to
+`__ESBMC_assigns_impl` (#7010), so it cannot reach a `list_push` argument.
+
+### 40.4 The Phase 9 question, answered
+
+§40.3 first left this as a judgement about whether a model relies on receiving a
+pointer-to-array. It does not, and three measurements settle it:
+
+- `__ESBMC_list_push`'s parameter is `const void *value`
+  (`src/c2goto/library/python/list.c:190`), and it copies `type_size` bytes from
+  it. `&a` and `&a[0]` are the same address, so the callee cannot tell them apart.
+- No operational model under `src/c2goto/library/python/` declares a
+  pointer-to-array parameter at all.
+- All 12 probes give the same verdict with the flag and without it.
+
+So the IREP2 python pass is sound here, and the row is a **legacy inconsistency
+rather than a porting gap**: the default python path skips a decay its own C
+frontend always performs. The consequence for the phase is that this row should
+not be counted against the IREP2 pass when the python flag's divergence is
+measured -- it is one site, address-equivalent, verdict-neutral, and the flag-on
+side is the one that matches C.
+
+Changing the default path to match is still a behaviour change for every python
+program, so it stays its own PR; what is no longer open is which side is right.
+
+The 49 tests using the python flag all pass, before and after this measurement.
+They assert verdicts, and the divergence changes none -- which is exactly why it
+took a probe to see it.
+
+## 41. The python flag's divergence, filtered down to two known rows
+
+§40.2 found every python probe diverging and traced it to one model site. With
+that site filtered out, the same 12 probes show **zero** user-program divergence,
+so a second batch went after harder constructs: dict, tuple unpacking, string
+indexing, `try`/`except`/`raise`, a module global, default arguments, a list
+comprehension, inheritance with an override, simultaneous swap, `for`/`else`,
+`abs`/`max`/`min`, and nested loops with `continue`.
+
+Ten of the twelve agree. The two that do not are both already-known rows, and
+neither is an unported arm:
+
+| Probe | Shape | Status |
+|---|---|---|
+| `u01_dict` | `&a` against `&a[0]` on a `list_push` argument | §40.2/§40.4 -- address-equivalent, and the *legacy* side is the outlier |
+| `u01_dict`, `u03_string` | `(signed int)((signed char)x) == ...` against `(signed char)x == ...` | deliberate: `python_adjust.cpp` mirrors the usual arithmetic conversions only for shapes the SMT layer cannot encode |
+
+The second is worth quoting rather than re-deriving, because the code already
+says it: running `gen_typecast_arithmetic` on every relational node "was tried and
+rejected ... because it diverges corpus-wide from clang's promotions over the OM
+bodies", and the gate that replaced it admits a signedness mismatch and a
+float/integer mix while "a same-signedness width promotion (char vs int) is
+encodable and stays untouched". That is exactly the shape these two probes hit.
+
+### 41.1 What that means for Phase 9
+
+Twenty-four probes over two batches reduce to two characterised rows. Neither is
+a gap in the IREP2 pass: one is a legacy inconsistency (§40.4) and the other is a
+deliberate non-mirror with a prior failed attempt behind it. So the python flag's
+remaining divergence is a pair of *decisions*, not a backlog of porting work --
+and the next python step is to settle them, not to look for more gaps.
+
+Recorded because a raw diff count says the opposite. Every python program diverges
+under the flag, at 64 lines plus a handful more for a dict or a string, and none
+of it is an unported arm.
+
+## 42. Phase 8 is not an adjust-pass phase (2026-09-14)
+
+§1's four bars are written per frontend, which reads as five comparable jobs.
+Measuring solidity shows one of them is a different shape, and it changes what
+Phase 8 costs.
+
+| | B-1 legacy type mentions | B-2 non-IREP2 symbol writes | IREP2 nodes built | LOC | Owns an adjust pass |
+|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | many | 3 259 | no |
+| clang-c | 1 147 | 34, 33 real | some | 17 595 | yes |
+| solidity | 1 420 | **100, all real** | **0** | 23 599 | **no** |
+
+`grep -c '2tc('` over every `.cpp` in `src/solidity-frontend` is zero: the
+frontend constructs no IREP2 node anywhere, so all 100 symbol-table writes are
+genuinely legacy. And it owns no adjust pass -- `solidity_language.cpp:370`
+instantiates `clang_cpp_adjust`, the C++ one.
+
+### 42.1 What that means
+
+Phase 8 has no adjust pass to port. Its hop-off is Phase 7's pass measured over
+Solidity input, which is what PR #7753 wires up -- so Phase 8 inherits its metric
+rather than building one, and the arms it would otherwise have to write are
+already Phase 7's work.
+
+What is left for Phase 8 alone is the converter: 1 420 mentions, concentrated in
+`solidity_convert_call.cpp` (306), `solidity_convert_expr.cpp` (219) and
+`solidity_convert.h` (216). That is the same shape as clang-c's remainder (§139.1),
+where `clang_c_convert.cpp`'s 389 are also deliberately last.
+
+Two consequences for the phase list in §"Phases 5-9":
+
+- Solidity cannot reach B-3 or B-4 ahead of clang-cpp, because it does not own the
+  pass those bars are about. Sequencing it after Phase 7 is not a preference; it
+  is a dependency.
+- Its B-1 is the largest of the three measured so far, and every mention is
+  converter-side. A frontend that builds zero IREP2 nodes has no partial state to
+  preserve, so the converter work can be sliced by construct without the
+  round-trip gates the other phases needed.
+
+jimple owns no adjust pass either and reached B-2 regardless (§35), which is the
+evidence that the converter half is separable.
+
+## 43. All five frontends, measured and normalised (2026-09-14)
+
+§2's table is from 2026-08 and counts only legacy type mentions. §139 and §42
+re-measured clang-c and solidity; this completes the set, adds the two columns
+that change how the numbers read, and normalises by size as §2 asked for and
+nobody had.
+
+| Frontend | B-1 mentions | B-2 writes | IREP2 nodes built | LOC | B-1 per KLOC | Owns an adjust pass |
+|---|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | 3 | 3 428 | **28** | no |
+| clang-cpp | 639 | 16 | 8 | 8 011 | 80 | yes |
+| clang-c | 1 147 | 34, 33 real | 143 | 17 595 | 65 | yes |
+| solidity | 1 420 | 100, all real | 0 | 23 599 | 60 | no |
+| python | 6 457 | 106 | 84 | 92 366 | 70 | yes |
+
+### 43.1 What the normalisation says
+
+jimple is the only frontend whose expression and statement migrations are
+complete (`scope-jimple-irep2.md` §39), and it sits at **28 mentions per KLOC**
+against 60-80 for the other four. So the residue a finished frontend carries is
+roughly a third of an unstarted one's density, not zero -- and §1's "~0, modulo
+enumerated boundary glue" is worth reading as that ratio rather than as a target
+of zero. jimple's remaining 97 are the boundary: `jimple_type`'s two converters,
+the class and method builders, and `jimple-language.cpp`'s module symbols.
+
+The four unfinished ones sit within 20 of each other per KLOC, which is the
+useful negative result: there is no frontend where the legacy density is
+anomalous, so the ordering in §"Phases 5-9" cannot be improved by picking the
+"most legacy" one first. Absolute size is what differs, and python is 5× the next
+largest.
+
+### 43.2 The two columns §2 did not have
+
+**IREP2 nodes built** separates a frontend that has started from one that has
+not, which a mention count cannot. solidity builds **zero** -- so it has no
+partial state, and §42 draws the consequence. clang-cpp builds 8 against
+clang-c's 143, which is the measured form of §2's remark that clang-c "has a
+partial head start".
+
+**Owns an adjust pass** is the column that reorders the work. Two frontends do
+not: jimple reached B-2 without one, and solidity cannot reach B-3 or B-4 without
+Phase 7 (§42.1). A phase list written per frontend hides that dependency; the
+column makes it explicit.
+
+## 58. The bars measured properly, and what that changes (2026-09-15)
+
+Both bars are defined in §23 as greps, and across Phases 5-9 both were repeatedly found to
+over-count. `scripts/irep2/bars.py` reports them with the false positives removed, so future
+figures are comparable with each other rather than with whichever grep was typed that day.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1147     1234     1200       34     27
+clang-cpp-frontend          631      683      669       15      9
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     57
+jimple-frontend              97      118       96       10      8
+total                      9817    10817    10517      265    192
+```
+
+### 58.1 Three ways the quoted numbers differ from the bars' wording
+
+**B-1 counts lines, not mentions.** Every figure this document has quoted comes from
+`git grep -c`, which reports *matching lines*; the bar's wording is about legacy type
+mentions. The two differ by 10% overall and by 28% in jimple, whose remaining mentions cluster
+several to a line. Both columns are printed so a historical figure can still be reproduced --
+the `B-1 ln` column matches every number this document has used.
+
+**B-1 counts comments.** 300 of the 10 817 mentions are inside `//` and `/* */` blocks, much
+of it this migration's own documentation: explaining why a `typet` is still there adds to the
+count of `typet`s still there.
+
+**B-2 counts the argument's spelling.** This is the one that mattered most in practice. Of 265
+reported symbol-table writes, **73 already write IREP2** -- `set_type(migrate_type(t))`, a
+`*2tc` constructor, a `type2tc` variable. Per frontend the error is not uniform: python is
+108 reported against 57 real (47% false), clang-cpp 15 against 9, solidity 98 against 91.
+Every phase in this document hit that and each re-derived it by hand.
+
+### 58.2 What the refined figures say about the plan
+
+B-2's real total is 192, not 265. That is the number §57 should be read against: of it, the
+type-system question (§57.1) accounts for the great majority, two classes of write must stay
+legacy by design (§57.2), and what is left after those is small.
+
+The refinement is syntactic and the script says so: it does not resolve types, so a write
+passing an IREP2 value under an ordinary name still counts. `B-2*` is therefore an upper
+bound -- a tighter one than the grep, and honest about which.
+
+### 58.3 Sharpened, and validated against two hand audits
+
+The first version counted a *bare name* as debt, which meant **every site this plan
+converted stayed counted**: a conversion names its result `value2`, `body`, `values2`, and
+the grep keeps matching. Three more shapes are now recognised -- a call to a method whose
+name ends in `2t`/`2tc`, a name declared `expr2tc`/`type2tc` in the same file, and a field
+of a name declared as a reference to a `*2t` node, since every field of one is IREP2 by
+construction.
+
+| frontend | B-2 | B-2* first cut | B-2* now |
+|---|---|---|---|
+| clang-c | 34 | 27 | 26 |
+| clang-cpp | 15 | 9 | **3** |
+| solidity | 98 | 91 | 91 |
+| python | 108 | 57 | 54 |
+| jimple | 10 | 8 | **3** |
+| total | 265 | 192 | **177** |
+
+The two frontends with a small enough residue to audit by hand both now agree with the
+script exactly: clang-cpp's three are §56.1's three (the ctor/dtor pseudo return type,
+`need_vptr_init`, the exception specification) and jimple's three are §48's three (the
+`width` attribute and two body writes). That agreement is the reason to trust the other
+three rows.
+
+`--list` prints the sites it counted, so a disagreement is checkable rather than arguable.
+
+## 59. Phase 6's residue audited, and the third frontend to agree (2026-09-15)
+
+§58.3 trusted the three unaudited rows because the two audited ones agreed with the script.
+clang-c is now the third audited row: `scope-clang-c-irep2.md` §147 classifies each of its
+26 sites, six of which converted.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1139     1226     1191       33     20
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9809    10809    10508      264    171
+```
+
+The audit also found four measurement defects in the script. Three had the same effect
+§58.3 describes -- a converted site going on counting, four rows between them -- and the
+fourth made `--list` name a line that does not hold the write, in 10 of the 171 rows.
+`scope-clang-c-irep2.md` §147.3 has them individually. Running the corrected script over
+the pre-audit source reproduces §58.3's 26 and 177 exactly, so none of the four moves a
+baseline, and `scripts/irep2/test_bars.py` now pins all four: the bar is quoted in this
+document, so a script that over-counts silently is the one failure mode reading the table
+cannot catch.
+
+The audit's most consequential finding was not in the script or in the residue. Converting
+`declare_argc_argv` made it abort on `int main_loop(int, int)`, because both its call sites
+gate on a *prefix* of `main` and the IREP2 constructors validate where the legacy builders
+returned a nil type -- §147.5. The conversion's output was byte-identical on every `main`
+shape and still wrong, because the inputs the function receives are wider than its contract
+claimed. For the remaining 171 that is a second question to ask of each site, alongside
+§57's: not only whether it produces the same thing, but on what it runs at all.
+
+The residue itself splits the way §57 predicts and then some. Twelve of clang-c's twenty
+are converter-time writes handing on what a legacy builder produced, six are
+read-modify-write inside the legacy adjuster and go when it does, and two are §57.1's
+question in Phase 6's dialect: an incompleteness flag and a padding algorithm, neither of
+which `type2t` has a place for. So in the row audited here, the part that needs a
+decision rather than a conversion is 2 of 20 -- smaller again than §58.2 suggested, though
+the proportion does not carry over: clang-cpp's three are all §56.1's design questions.
+
+## 60. A write classified by what it looked like (2026-09-15)
+
+§59 counted 20 for clang-c and named two of them design questions. One was not a question.
+`clang_c_convert.cpp` cleared `#incomplete` on a record's type part-way through converting
+it, which §147.2 filed under "what `type2t` does not model" because the thing being written
+was an irep attribute. It was a recursion sentinel; it had been disabled in March 2025 by
+the fix for #2323, which added a second conjunct to the guard so the re-entrant arrival it
+was blocking would fall through. Nobody removed what the sentinel had been guarding with.
+
+Deleted, with the exhaustive state argument in `scope-clang-c-irep2.md` §148.3.1: for a
+struct or a class the guard falls through either way, and the one state where the two differ
+needs a union, which cannot be a base class or a lambda closure type -- the only two
+unguarded edges into an open window. The completeness check it preceded is load-bearing and
+stays; removing that one takes `esbmc-cpp/cpp` from 225 s to over 560 s.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9807    10807    10506      263    170
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§148.1 also closes the audit §59 opened. The migration has added nine validating IREP2
+casts across all five frontends; seven were `declare_argc_argv`, and the two in the vtable
+builder hold because each reads a symbol its own caller created three lines earlier.
+
+Two lessons, and the second is the one worth carrying. B-2 counts writes by their
+*argument*, so a write is classified by what it hands over, and this one was classified by
+that and by the type system it appeared to need; neither told anyone what it was for. Of
+the 170 left, the ones blocked on a legacy builder are genuinely blocked, and the ones that
+exist to mark state during construction are not -- nothing in the census distinguishes
+them. And twice now a claim in these documents has been refuted by widening the measured
+set rather than by a better argument: §147.3's 26 sites needed the script's own false
+positives removed, and §148.3's first draft claimed 0 re-entries from a corpus glob that
+had quietly dropped every suite nested one level deeper. The real figure is 7 of 8 682.
+
+## 61. Phase 8's first ten, and a third reader of a symbol's value (2026-09-15)
+
+§60 said a site that exists to mark state during construction is not blocked on anything,
+and that nothing in the census distinguishes it from one that is. Phase 8's first ten are
+that shape -- a local symbol's value written and then pushed onto the `code_declt` beside
+it -- and they are **not** dead. `mark_decl_as_non_det` (`mark_decl_as_non_det.cpp:31`)
+reads the symbol's value as its oracle for "was this declaration initialised", so removing
+the write inserts `ASSIGN sym = NONDET(...)` ahead of the real initialiser. The store is
+immediately overwritten, which is why deleting all ten still passes 525 of 525 -- the suite
+cannot see it and `--goto-functions-only` can.
+
+So they are converted rather than deleted, and the conversion is GOTO-identical across all
+515 measurable programs in `regression/esbmc-solidity` (501 distinct hashes, so the
+comparison has content). `scope-solidity-irep2.md` §14.4 has the three-reader table this
+turns on: `convert_decl` takes a local's initialiser from the decl operand,
+`static_lifetime_init` reads a static's symbol value, and `mark_decl_as_non_det` reads a
+local's value for its nil-ness. A frontend must satisfy all three, which is why
+`clang_c_convert.cpp:655-660` writes both channels for every initialised C local.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     81
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    160
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+This retracts, rather than refines, the discriminator §60 was reaching for. "Delete a
+candidate group and run the suite" cannot sort live writes from dead ones when deleting a
+live one leaves a dead store, and that is the normal case here. The replacement is not a
+sweep but a rule: a duplicated initialiser is read for its content when the symbol is
+`static_lifetime` and for its nil-ness when it is not, so the whole family is live and the
+family is convertible -- with the caveat in §14.4 that a static one emits its value into
+`__ESBMC_main`, where what the migrate seam drops is rendered rather than ignored. That is better news for the remaining 160 than a deletion
+sweep, and it is the second time in three ticks that a residue classified by what a write
+*looked* like turned out to be classified wrongly.
+
+## 62. The static case measured, and a fourth reader (2026-09-15)
+
+§61 converted ten writes and flagged one thing it could not settle: a `static_lifetime`
+symbol has its value's *content* emitted into `__ESBMC_main` by `init_variable`, so there the
+display name the migrate seam drops is rendered rather than ignored. Settling it needed a
+site reached by both kinds of symbol, and the obvious candidate was not one -- the
+dynarray-state arm is reached by 6 of 515 programs and by no static symbol at all, so the
+clean comparison it produced measured the case that was never in doubt. Counting every write
+in `solidity_convert_decl.cpp` by flag found the site that does: `:718`, 845 runs, 12 static.
+
+The answer splits. At `:718` the `--goto-functions-only` dump is identical for all 515
+programs, so `init_variable` emits the same assignment. The `--symbol-table-only` dump is not:
+12 programs render a state variable's address literal as `0x1F98...` instead of
+`180374...` -- the same number, differently written, because `migrate_expr_back` rebuilds a
+constant through `integer2binary` (`migrate.cpp:4408-4416`) and `a_hex_or_oct` does not cross
+the seam. So `:718` is left for the change that carries the spelling, the §44
+`argument_base_names` pattern, and the other sixteen sites land here with both artefacts
+identical.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§61's three-reader table needs a fourth row, and it is the row that makes attribute loss
+observable: `solidity_convert_constructor.cpp:499` reads a state variable's value and
+branches on `#zero_initializer` and, through `convert_type_expr`, on `#sol_type`,
+`#sol_bytesn_size` and `#sol_array_size` -- none of which appears anywhere in `migrate.cpp`.
+No program in the corpus shows a difference from it, but it is why the rest of Solidity's
+writes cannot be swept: a value that reaches `:499` has to keep attributes `migrate_expr`
+drops.
+
+The habit worth keeping is the one that caught both of these. Three ticks running, the error
+has not been a wrong argument but a measurement over the wrong set or the wrong artefact:
+a glob that dropped nested suites, a capture piped to `/dev/null`, a site no static symbol
+reaches, and a GOTO comparison that could not see a symbol table change. Instrument the site
+and count before reading a green comparison as an answer, and compare more than one artefact.
+
+## 63. The seam drops two things, and one of them is not cosmetic (2026-09-16)
+
+§62 converted sixteen Solidity writes of the duplicated-initialiser shape and left the
+seventeenth because it re-rendered a hex literal -- a difference §15.2 called cosmetic and
+set aside. Taking the same shape to clang-c, where the corpus is 8 682 programs rather than
+515, shows that was the wrong call twice over: the rendering loss is general, and there is a
+second loss underneath it that changes the program.
+
+`clang_c_convert.cpp:632` and `:659` are the two sites, and they split perfectly -- `:632`
+runs 86 244 times and only ever on a `static_lifetime` symbol, `:659` 138 735 times and only
+ever on a local -- so one diff exercises both readers of a symbol's value. Converting both:
+
+- the normalised `--goto-functions-only` dump differs in **2 112 of 8 682** programs. In the
+  inspected case a zero-initialised operational-model global becomes a nondeterministic
+  temporary, because `std::cin`'s value is a C++ `sideeffect` with
+  `statement: temporary_object` and the round trip drops its **empty operands list**. That is
+  §46's empty-key defect from the other side: there, writing a key empty made two types
+  unequal; here, dropping an empty key changes goto conversion.
+- the `--symbol-table-only` dump differs in **3 892 of 8 682** with `:659` alone. `#cformat`
+  (`irep.h:478`) holds a literal's source spelling, `c_expr2string.cpp:1120-1125` prefers it
+  over deriving text from the type, and `grep -c cformat src/util/irep/migrate.cpp` is **0**.
+  Solidity's hex address and clang-c's `1.000000e-1f` are one mechanism.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So Phase 6 stays at 19 and nothing is converted here. What this tick produces instead is the
+prerequisite for most of the 144 that remain: carry `#cformat` across the seam, the §44
+`argument_base_names` pattern with two precedents already in this migration, and decide
+whether `sideeffect2t` distinguishes an empty operand list from an absent one. 139 of the
+144 are value writes or the types behind them, python and jimple write the same shapes, and
+no amount of per-site auditing gets past either loss.
+
+It is also the fourth tick in a row where the finding came from measuring more than I had
+been: a wider corpus (8 682 against 515) and a second artefact (the GOTO, which §15 never
+compared for the site it left behind). §15.2's "cosmetic" verdict survived exactly as long
+as the evidence behind it was one frontend and one dump.
+
+## 64. One prerequisite done, and the big one finally has a number (2026-09-16)
+
+§63 named two things the value seam drops and called them the prerequisite for most of the
+remaining 144 writes. The first is now carried: `constant_int2t` and `constant_floatbv2t`
+hold an unreflected `cformat`, `migrate_expr` reads `#cformat` and `migrate_expr_back`
+restores it when non-empty, and `unit/util/migrate.test.cpp` pins the round trip in both
+directions, the absent-key case, and that spelling is no part of a constant's identity.
+
+The acceptance measurement is the useful part. Re-running §63's comparison with the carry in
+place, the symbol-table difference over the 8 682 C and C++ programs goes from 3 967 to
+**3 428** -- so `#cformat` was worth 539 programs and §63 was wrong to imply it accounted for
+3 892 of them. What the remaining 3 428 show is this:
+
+```
+- Value.......: (const unsigned char *)p1
++ Value.......: (unsigned char *)p1
+```
+
+`a_cmt_constant` is declared in `irep.h` and `grep -cE 'cmt_constant|#constant'
+src/util/irep/migrate.cpp` returns 0. C qualifiers do not cross the seam, and that is
+§57.1's type-system question -- the one §57.3 said the four phases had converged on without
+ever putting a number to it. The number is **3 428 of 8 682 C and C++ programs**, for value
+writes alone, which makes it larger than everything else outstanding in Phase 6 combined.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So the ordering for what is left is no longer a matter of taste. Of the three losses, only
+the `sideeffect` empty-operands one changes the GOTO program (2 112 programs, and §63's
+zero-initialised operational-model global becoming a nondeterministic temporary), so it goes
+next despite being the smaller of the two remaining. The qualifier decision is bigger but it
+is rendering, and it wants an answer about what `type2t` models rather than another
+measurement -- it now has all the measurement it needs.
+
+## 65. The blocker is one assertion, not three losses (2026-09-16)
+
+§64 ordered the three things the value seam drops and said the `sideeffect` empty-operands
+list should go next because it was the only one that changed the GOTO program. Measured, that
+was wrong twice: the fix for it changes nothing, and what does change the GOTO is the
+qualifier loss §64 had filed as rendering.
+
+Adding the missing `exprt::operands()` call to `back_sideeffect_operands` and converting the
+two clang-c sites still leaves **2 109 of 8 682** GOTO dumps differing, against 2 112 for the
+conversions alone. So the empty list was the most visible difference in a printed value, not
+the cause -- and it is not shipped, because a change whose effect cannot be stated should not
+land. `scope-clang-c-irep2.md` §151.1 also records how the first attempt at that measurement
+produced a meaningless 3 387 by moving three variables at once against a base that predated
+all of them.
+
+What actually happens is an abort:
+
+```
+esbmc: clang_c_adjust_expr.cpp:1081: clang_c_adjust::adjust_type(typet&):
+  Assertion `sz % a == 0' failed.
+```
+
+`adjust_type`'s post-`add_padding` check is the one place in the frontend that compares an
+IREP2-computed `type_byte_size` against a legacy-computed `alignment`. Converting a value
+write makes the symbol's legacy type derived on demand, the derivation drops the C qualifiers
+§64 measured at 3 428 programs, and a struct then reaches the check with a size and alignment
+that disagree. `regression/csmith/csmith01` aborts with the conversions and passes without
+them; 1 of 30 sampled differing programs aborts, the rest differ only in dump text.
+
+So Phase 6's value writes have exactly one blocker and it is §57.1's type-system question --
+no longer the largest of several measurements, but the only one, and with an abort behind it
+instead of a rendering diff. Three ways out, and only the last is cheap to try: `type2t`
+carries C qualifiers; or the frontends stop routing qualifier-bearing values through the seam;
+or that assertion is wrong to compare an IREP2 size against a legacy alignment. The first is
+the §44 unreflected-field pattern applied to types rather than constants, and it is the one
+the other four phases have been waiting on since §57.
+
+## 66. One question, two instances, and the cheap half is the one that aborts (2026-09-16)
+
+§65 said Phase 6's value writes had a single blocker. Splitting the two sites shows it is one
+question with two instances that want different answers, and that only one of them aborts.
+
+Converting the local arm alone (`clang_c_convert.cpp:659`, 138 735 executions) does not abort
+-- `regression/csmith/csmith01` exits 0 -- but still re-renders **3 378 of 8 682** symbol
+tables, because a local's value prints its type and the `const` is gone. Converting the static
+arm (`:632`, 86 244 executions) aborts `adjust_type`'s padding assertion, and the instrumented
+failure names what is missing:
+
+```
+[PADQ] sz=11 a=4 align_attr=set packed=0 tag=struct S0 ncomp=4
+```
+
+An explicit `__attribute__((aligned(N)))`. `struct_type2t` carries `packed` but no alignment
+field, and `grep -c '"alignment"' src/util/irep/migrate.cpp` is 0.
+
+So §57.1 is two questions wearing one coat, and they do not have the same answer. An explicit
+alignment is part of a type's identity -- two structs differing only in it are different types
+-- so carrying it means a **reflected** field and a changed hash for every struct type. A
+qualifier on a pointee changes how a value prints, not what it is, so it is the unreflected
+shape §64 already used for `#cformat`. The half that aborts is the cheaper half to reason
+about and the more expensive to implement; the half that only renders is the reverse.
+
+`scope-clang-c-irep2.md` §152 has the table. Phase 6 stays at B-2\* 19, and what it is waiting
+for is now specific enough to build rather than to flag.
+
+## 67. IREP2 has no bitfield, and that is what aborts (2026-09-16)
+
+§66 said the static arm wanted a reflected `alignment` field on `struct_type2t`. Carried it --
+forward from `type.find("alignment")`, back through `thetype.add("alignment")` -- and the abort
+is unchanged at exit 134. The fourth hypothesis on this question, refuted the same way as the
+first three, by one build.
+
+The cause is visible once the failing struct's components are dumped rather than reasoned
+about, and it reduces to nine lines:
+
+```c
+struct S0 { signed int f0 : 26; unsigned int f1 : 9; unsigned int f2; };
+struct S0 g = {1, 2, 3};
+int main(void) { return g.f2 == 3 ? 0 : 1; }
+```
+
+`VERIFICATION SUCCESSFUL` on master, exit 134 with `clang_c_convert.cpp:632` converted. The
+components come back as plain `signedbv` width 26 and `unsignedbv` width 9 -- the `c_bit_field`
+wrapper that made them bitfields is gone, `add_padding` cannot pack them, and 83 bits becomes a
+byte size of 11 against an alignment of 4.
+
+`grep -n c_bit_field src/util/irep/migrate.cpp` returns a single comment line;
+`grep -rn bit_field src/irep2/*.h` returns nothing. **IREP2 has no bitfield type.** So the
+static arm is not blocked on an attribute at all -- it wants a new `type2t` kind, with a width,
+a migration in both directions, and every switch over `type2t::type_ids` to answer for. That is
+§57's widen-the-type-system option in its strongest form, and it is now the one thing standing
+between Phase 6 and its last two value writes.
+
+`scope-clang-c-irep2.md` §153 has the dump and the corrections it forces to §152. The pattern
+across §63, §151, §152 and this section is one worth naming: each blamed the most visible
+difference -- an empty operands list, an assertion mixing two representations, a missing
+alignment attribute -- and each was refuted by the next measurement. What settled it was
+dumping the object under test instead of diffing artefacts around it.
+
+## 68. The local arm's cost, measured against the right base (2026-09-16)
+
+§66 and §67 put clang-c's local value-write arm at 3 378 differing symbol tables and attributed
+them to C qualifiers. Both were measured against a base predating the `#cformat` carry that is
+now merged in this stack. Measured correctly -- HEAD against HEAD plus the one line -- the cost
+is **3 341 of 8 682**, and the attribution was wrong: 2 571 of them are C++ programs whose
+difference is the side-effect round trip, not a qualifier.
+
+A C++ case differs in four ways, all from `back_sideeffect` (`migrate.cpp:3468`): it writes
+`cmt_type` and `cmt_size` unconditionally, so a node that had neither gains `#type: empty` and
+`#size: nil`; it drops the empty `operands` list §65 investigated; and it does not restore
+`#location`, which the code explains is deliberate -- restoring it moves instruction columns on
+126 of 131 sampled goto programs and so needs its own PR and an SV-COMP run
+(`scope-clang-c-irep2.md` §136.3). Only the C remainder is the qualifier, as
+`(const signed char *)src` losing its `const`.
+
+So the arm is not blocked on widening `type2t` after all. Two of its three causes are ordinary
+bugs in the back-migration -- stop writing empty comment keys, restore the empty operands list
+-- and the third is already scheduled. That is a better position than §67 left it in, and it was
+only visible once the comparison used a base from the same commit.
+
+`scope-clang-c-irep2.md` §154.3 records the method rule this keeps violating: the base arm must
+be built from the commit the change is applied to, and a residual must be characterised from a
+sample drawn out of the differing set rather than picked. Five figures in this stack were wrong
+for one of those two reasons.
+
+## 69. Two fewer keys the seam invents, and the arm is waiting on §136.3 (2026-09-16)
+
+§68 identified four shapes in a converted C++ value write's symbol-table difference, two of them
+`back_sideeffect` writing `#type: empty` and `#size: nil` onto nodes that had neither. Those are
+now written only when there is something to write, keyed off `ref2.alloctype` and `ref2.size`
+rather than off the locals -- a first attempt guarded on `cmttype.is_not_nil()` and failed,
+because a default-constructed `typet` has an empty id and `is_not_nil()` calls that present. A
+unit case pins it and fails on the unguarded version.
+
+The fix changes the printed symbol table of **2 059 of 8 682** programs on the default path, all
+of them losing `* #size: nil`. Disclosed because that is a quarter of the corpus; safe because
+comments are not compared by `irept::operator==`, both getters return nil either way, and no
+`test.desc` mentions either key.
+
+It does **not** help the value write it came from. Converting `clang_c_convert.cpp:659` costs
+3 341 differing symbol tables without this fix and 3 343 with it -- unchanged. §68's sample
+showed the empty keys because they were in the diff, not because they were the diff; the same
+program also loses an empty `operands` list and a `#location`, and either alone keeps it
+differing.
+
+So the local arm is blocked behind `scope-clang-c-irep2.md` §136.3 -- the deliberate decision not
+to restore a side effect's location, held for its own PR and an SV-COMP run because it moves
+instruction columns on 126 of 131 sampled goto programs. Not behind the type system, which is
+where §67 and §68 put it. The static arm remains blocked on IREP2 having no bitfield type.
+
+```
+:632 static   no bitfield type          needs a new type2t kind
+:659 local    #location (§136.3)        scheduled, SV-COMP run attached
+```
+
+Phase 6 stays at B-2\* 19. Three ticks of measurement have moved the blocker from "the type
+system" to two specific, named, already-documented items -- which is the useful outcome even
+though the count did not move.
+
+## 70. The location decision, taken (2026-09-16)
+
+§136.3 of `scope-clang-c-irep2.md` measured what restoring a side effect's location costs and
+deferred it; §69 established it is the one thing clang-c's local value write is waiting on. It is
+done here, with the number the deferral asked for.
+
+`back_sideeffect` restores the location when it is not nil, so a call's instruction carries the
+call's column instead of the enclosing statement's. Measured over the 8 682 C and C++ programs
+under `regression/`, both arms built from this branch: **8 283 change** -- 95% of the corpus,
+where §136.3's stride-16 sample of one suite had suggested 96%.
+
+Two tests pinned a column incidentally and both moved to the more precise one: `M_z = Foo(...)`
+from column 3 to the call at 9, and `while (t--)` from the `while` at 3 to the decrement at 10.
+Expectations updated; everything else at baseline.
+
+This is the first change in this stack that alters what a user sees. Counterexamples and
+witnesses now name the call's column, so it carries `needs-svcomp-run`: `parse_result()` in
+`esbmc-wrapper.py` classifies tasks by matching ESBMC's output, and #7250 is the precedent for
+changing output without checking it there. The wrapper reads verdict lines, not columns, so the
+expectation is no effect -- an expectation, not a measurement, which is exactly why the roadmap
+held this for a competition run rather than letting it ride along.
+
+What it unblocks is measurable only once it lands: the local arm's 3 341 differing symbol tables,
+whose C++ bulk §69 traced to this location and to the empty `operands` list.
+
+## 71. The arm has four causes, not one (2026-09-16)
+
+§70 restored the side-effect location, the last of the two shapes §68 blamed for clang-c's local
+value write differing in 3 341 symbol tables. Measured on top of it: **3 348**. Three fixes across
+four ticks and the figure has moved by seven programs.
+
+A five-program sample drawn from the differing list -- rather than the single program §68
+generalised from -- shows four independent causes:
+
+```
+> * #type: empty                       still added
+< * operands:                          still dropped
+< * constructor: N                     not previously identified
+< (const unsigned char *) → (unsigned char *)
+```
+
+The first is a bug in §69's own guard, fixed here. `side_effect_function_call2tc` stores
+`get_empty_type()` as its alloctype because empty, not nil, is what round-trips
+(`migrate.cpp:533`), so guarding the `#type` write on `!is_nil_type` alone let it through for
+every call -- which is exactly why §69 changed 2 059 programs and nothing about the arm. Guarding
+on both removes it: 2 061 more symbol tables on the default path, suites at baseline, and a unit
+case that fails on the nil-only guard.
+
+The dropped `constructor` key is recorded and not explained. Four sections in a row have
+explained a symptom and been refuted by the next measurement; this one stops at the observation.
+
+What the pattern says is that the arm is not one loss with a tail but several strata at one seam,
+and peeling them one per tick is the wrong shape of work. The two questions that would settle more
+at once are both open since §57: a `bit_field2t` for the static arm (§67), and whether `type2t`
+carries C qualifiers -- the fourth cause above, measured at 3 428 on its own in §64. The second is
+the better next move: bigger share, known shape, three precedents, and no new type kind.
+
+## 72. Four carries, 345 of 3 348, and a question about the criterion (2026-09-16)
+
+§71 recommended carrying C qualifiers next, because §64 had measured them at 3 428 programs on
+their own. Carried -- an unreflected `bool constant_qualified` on `unsignedbv_type2t` and
+`signedbv_type2t`, restored only when set, with a unit section pinning that it is no part of the
+type's identity -- and it removes **345** of the local arm's 3 348.
+
+```
+3 341  before any of it
+3 343  empty comment keys guarded (§69)
+3 348  side-effect location restored (§70)
+3 003  const carried (§72)
+```
+
+Four correct, verified fixes; 10% of the difference; no floor in sight. The rest includes §71's
+dropped empty `operands` list and its undiagnosed `constructor` key.
+
+The useful thing this tick produced is not the 345 but a doubt about what has been measured all
+along. Every one of those figures is a **symbol-table** difference, and the symbol table is a debug
+dump -- the GOTO program is what gets verified. If the local arm's GOTO is identical with these
+fixes in place and the suites stay green, then the conversion is safe and nine sections of
+symbol-table accounting have been holding it back for a cosmetic reason.
+
+So the next measurement is the local arm's GOTO cost, with all four fixes, against a base from the
+same commit. §63's 2 112 does not answer it -- that was both arms converted and none of the fixes.
+If the GOTO is clean the arm converts and Phase 6 moves; if not, §71's recommendation stands and
+the choice is a `type2t` base-class qualifier field against accepting the rendering difference.
+
+## 73. 106, not 3 003 -- and fifteen of them abort (2026-09-16)
+
+§72 doubted the criterion: every figure from §68 onward was a symbol-table difference, and the
+symbol table is a debug dump rather than the program that gets verified. Measured, the doubt was
+right and the hope behind it was wrong.
+
+Converting `clang_c_convert.cpp:659` with all four seam fixes in place, both arms from the same
+commit: **106 of 8 682** goto programs differ, against 3 003 symbol tables. So 97% of what five
+sections measured was rendering. The carries were correct -- the seam invents less now -- but the
+number they chased was the wrong one, and the "nine more sections" projection rested on it.
+
+Of the 106, **91 differ benignly and 15 abort**, across three distinct assertions: seven a null
+`symbol`, four the `sz % a == 0` padding assertion that §67 traced to IREP2 having no bitfield
+type, and four a failed struct member lookup. `regression/esbmc/github_571_3` is one of the
+padding four and has `unsigned b : 12` in its source, so that cause is shared with the static arm.
+The other two are recorded and not diagnosed.
+
+So neither arm converts, but the obstacle has changed shape: not thousands of differences needing
+more carries, but **fifteen programs failing hard for three reasons**, one known and two not. For
+the first time in this investigation the remaining work is a list rather than a slope.
+
+`scope-clang-c-irep2.md` §159 has the breakdown. Phase 6 stays at B-2\* 19.
+
+## 74. Seven of the fifteen are a precondition, not a defect (2026-09-16)
+
+§73 left three abort causes on clang-c's local value-write arm, two of them undiagnosed. The
+largest is now diagnosed, by instrumenting the failure rather than reasoning about it.
+
+Six of the seven `symbol' aborts are variadic programs, and the missing identifier is
+`tag-struct __va_list_tag`. That symbol **is** in the table -- `--symbol-table-only` without the
+conversion shows it with its four members -- so the name is right and the timing is wrong: it is
+not there yet when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`. `namespacet::follow`
+then asserts.
+
+That is the blocker §146 listed third and `scope-python-irep2.md` §6.1 named first: a symbol that
+does not exist yet. It is a constraint on *where* a value may be converted, not a defect to repair
+-- at converter time the clang AST is the only complete source, and a migration that resolves a
+type through the namespace is asking the symbol table a question it cannot answer.
+
+```
+7  `symbol' failed        §53's precondition -- tag not in the table yet
+4  `sz % a == 0'          no bit_field2t (§67)
+4  component lookup       undiagnosed
+```
+
+Two causes known, of two different kinds: one wants a type kind built, the other says this site
+cannot be converted at all. Neither is a rendering difference and neither yields to another
+attribute carry -- which retires the §69-§72 approach on evidence.
+
+## 75. All fifteen accounted for (2026-09-16)
+
+§74 left one abort group undiagnosed on clang-c's local value-write arm. It is diagnosed, and the
+list is now complete.
+
+All four are `valarray` tests, and dumping the source type's components at the failure gives the
+answer directly:
+
+```
+member=c:@N@std@S@slice@F@size#1  source_type_id=3 (struct)
+components: _start, _length, _stride
+```
+
+The member is a **method**; the resolved struct has only data members. Legacy
+`struct_union_typet` keeps methods in a separate `methods()` list (`std_types.h:204-211`, irep key
+`"methods"`), and `grep -c methods src/util/irep/migrate.cpp` is **0** -- the seam migrates
+components and never methods. It does not normally bite because `member2t`'s assertion is skipped
+for an unresolved source type, which is what a method access usually carries; converting the value
+write makes the source type resolved, so the check applies and the method is not there.
+
+```
+7  the tag symbol is not in the table yet   §53's precondition  → this site cannot convert
+4  no bit_field2t                                               → a new type2t kind
+4  a resolved struct has no methods                              → see §76: the access is transient
+```
+
+Three causes, three kinds of answer, none an attribute carry. That is the point worth keeping: the
+arm was never 3 341 differences away from converting -- it was three structural questions away, and
+97% of the differences were a debug dump. §69 through §72 removed real losses and none of them was
+on this list.
+
+## 76. The third group was a wrong assertion, not a missing carry (2026-09-16)
+
+§75 listed group 3 as "methods() must cross the seam". Reading one more field of the failing node
+says otherwise. The member's own type is `code` and the source is a plain object symbol, so the
+shape is `OBJECT.f` with `f` a function designator -- and an in-tree arm exists to consume exactly
+that: `clang_cpp_adjust_irep2`'s `is_cpp_member_call` is `is_member2t && is_code_type &&
+!member.empty()`, and its `adjust_cpp_member` resolves the member through the namespace, aborting if
+it is absent and asserting the symbol is code. The legacy counterpart
+(`clang_cpp_adjust_expr.cpp:210-248`) does the same for the three frontends that run it -- clang-cpp,
+Solidity and Python. So the shape is transient, like the three source shapes the assertion already
+tolerates, and for the same reason: a declaration's value is migrated during conversion, before the
+adjuster runs.
+
+The assertion also never checked anything here. A code-typed member is always a method -- by C17
+6.7.2.1p3 for the clang frontends ("a structure or union shall not contain a member with incomplete
+or function type"), and by measurement for the three that build struct types programmatically: none
+of the 29 `components().push_back` sites pushes a code type. Methods are not components on either
+side -- legacy's own `get_component` searches `components()` only (`std_types.cpp:45-56`) -- so the
+lookup could only produce a spurious abort. The power is re-established upstream instead, by the
+namespace lookup above, which verifies the method exists *as a symbol*; and the diff asserts the
+converse, that a code-typed member must not resolve to a component, keeping a tripwire for the
+#4566 shape.
+
+The fix adds one disjunct to an `assert` under `#ifndef NDEBUG`. A disjunct can only make an
+assertion pass more often, so nothing else can move, and a release build is unaffected. Measured with
+the local-arm conversion applied: all four `valarray` programs go from `SIGABRT` to the verdict their
+descriptor asks for. Eleven of the fifteen remain -- 7 under §74's precondition, 4 needing a
+`bit_field2t`.
+
+`methods()` still does not cross the seam. That question survives, narrowed to class **type** writes:
+three consumers read the list back through `symbolt::get_type()` --
+`goto-programs/destructor.cpp:21-23`, `solidity-frontend/solidity_convert_builtin.cpp:266`, and
+`clang-cpp-frontend/clang_cpp_convert.cpp:3430`. The last is the base-class method-inheritance loop
+and is the worst of the three: it would not abort on an empty list, it would silently give the
+derived class no inherited methods. So the carry costs destructor lowering *and* C++ method
+inheritance -- not the value write this sequence was chasing.
+
+## 77. Solidity's builtin cluster, and the fourth name loss (2026-09-16)
+
+`solidity_convert_call.cpp` was the densest convertible cluster left anywhere -- 19 of 144 remaining
+B-2* writes, one repeated idiom across the synthesised low-level-call builtins. Nine landed: seven
+`code_typet` writes and two `gen_zero` writes hoisted into a typed local so a silent fall back to the
+legacy overload cannot compile. Every converted line is exercised -- the six unconditional builtins in
+523 of 525 tests each, the thinnest site in one (`delegate_shadow_8`) -- proven by sweeping for the
+symbol each builtin synthesises.
+
+The oracle is worth stating precisely, because the obvious one is vacuous. Over all 525 tests both
+`-only` dumps are byte-identical, but that is blind to exactly the field at risk: clearing the
+argument identifiers before the store leaves the suite green *and* the dumps identical, because
+`from_type` prints argument types only. What pins the seven type writes is
+`migrate_symbol_type`'s round-trip assertion (`migrate.cpp:477`), read on every symbol type via
+`goto_convert_functions.cpp:1819` -- delete the `argument_names` carry and the build itself stops. The
+two value writes are verification-inert (the GOTO reads the `code_declt` operand on the next line), so
+nothing end-to-end can pin them; a unit test does, asserting the two `gen_zero` overloads agree on
+every type reachable there, since they demonstrably disagree elsewhere.
+
+The remaining ten are GOTO-neutral too but move 523 of 525 symbol-table dumps, and the cause is
+generic rather than Solidity's: `symbol_expr` sets both `identifier` and `name`
+(`util/expr/expr_util.cpp:239-245`), `symbol2t` carries only `thename`, so a back-migrated symbol
+expression is a second, inequivalent spelling of the same symbol. `get_shorthands` compares whole
+`exprt`s in a `std::set`, so the two spellings register a namespace collision and the printer emits
+full mangled ids. That is the fourth name the seam has dropped, after `argument_base_names` (§44),
+`member_base_names` (§46) and `#cformat` (§69).
+
+It is also the one with a semantic precedent rather than a cosmetic one.
+`clang_c_adjust::do_special_functions` (`clang_c_adjust_expr.cpp:1406`) dispatches every builtin
+lowering on `to_symbol_expr(f_op).name()`, so a callee missing it stops matching -- §90.2 records the
+result, an `assert` left as a plain `FUNCTION_CALL` -- and `clang_c_adjust_irep2` already patches
+around it twice by hand (`:1597`, `:1647`) with
+`name(get_pretty_name(id2string(id)))`.
+
+So the fix is a *derivation*, not a new field: `get_pretty_name` (`util/symtab/pretty.h:9`) is a pure
+string function, needing no symbol table and no growth in `symbol2t`, which is the most-constructed
+node in the tool. Doing it once in `migrate_expr_back` would retire both workarounds, the §90.2 class,
+and these ten writes together. It still needs its own corpus-wide A/B, because setting `name` changes
+`irept::operator==` for every back-migrated symbol expression -- which is simultaneously the point and
+the risk.
+
+Solidity B-2* 65 -> 56; repo total 144 -> 135.
+
+## 78. The fourth name loss was a printer bug (2026-09-16)
+
+§77 deferred ten Solidity writes because `migrate_expr_back` drops the `name` `symbol_expr` sets, so
+one symbol reaches the printer in two spellings and `get_shorthands` reports a namespace collision.
+The premise was right and the conclusion was wrong: the defect is in the question `get_shorthands`
+asks, not in the seam.
+
+It compared whole `exprt`s to decide whether a shorthand was ambiguous, and that test was a tautology:
+`symbols` is a `std::set<exprt>` ordered by `compare()`, and `compare()` and `operator==` ignore the
+same field (comments, `irep.cpp:186-205`), so every pair of distinct elements is unequal and the guard
+marked every clash. Comparing identifiers is the first form that distinguishes anything, and it is
+sound because the identifier already carries the SSA renaming (`symbol2t::get_symbol_name` appends
+`?l1!thr` and `&node#l2`, `irep2_expr.cpp:198-225`), while `next_symbol` and `nondet_symbol` -- the two
+kinds that could share an identifier meaning different values -- are never collected
+(`c_expr2string.cpp:31-38`).
+
+It is a live defect independent of the migration: of 5864 clashes over the Solidity corpus, 12 are two
+spellings of one symbol, in twelve named tests. Three consumers inherit the function, and the one that
+matters most is `goto2c::expr2ct`, which emits C that must compile: a declaration took the short name
+while a use took the mangled one, naming an identifier the output never declared. Two invariants made
+this worth care rather than a one-liner -- `goto_coverage.cpp:818-828` warns that altering `from_expr`
+formatting can silently deflate k-path coverage, and `witnesses.cpp:939-959` builds SV-COMP witness
+assignments through it. `goto-transcoder` 268/268, `goto-coverage` 144/144 (67 of its descriptors pin a
+percentage), `witnesses` 163/163; the change carries `needs-svcomp-run`.
+
+The lesson generalises past this instance. Three of the four name losses so far were fixed by carrying
+the field (§44, §46, §69). This one should not be, and nor should it be fixed by deriving the name in
+`migrate_expr_back`: a consumer that treats two spellings of one symbol as two symbols is wrong
+whether or not the seam preserves spelling. Before adding a field to carry a marker across, it is
+worth asking whether the reader's use of it is defensible -- here it was not, and the fix is a line in
+the reader rather than storage in the hottest node in the tool.
+
+## 79. Zero in solidity_convert_call.cpp, and what the detour cost (2026-09-16)
+
+The ten writes §78 deferred are in, and inert: base against change over all 526 Solidity tests,
+`--goto-functions-only` and `--symbol-table-only` both byte-identical, 0 of 526 on either, against 523
+of 525 symbol tables before the printer was fixed. The file is at zero B-2* residue, 19 of 19.
+Solidity 56 -> 46; the repo total 135 -> 125.
+
+The eight body writes are gated differently from the type writes of §77. `migrate_symbol_value`'s
+round-trip assertion skips function bodies by design (`migrate.cpp:496`), so what pins them is the
+byte-identical GOTO -- which for a function body is the stronger instrument, not a weaker one, because
+goto-convert builds the GOTO *from* the value written. The two local-symbol writes are covered by that
+assertion on an asserts build.
+
+Worth keeping from the detour: §78 priced these ten at reconstructing `name` in `migrate_expr_back`,
+i.e. adding a derivation to the most-constructed node's back-migration to satisfy a consumer that was
+wrong. The consumer's test turned out to be a tautology, and fixing it cost one line and repaired a
+live defect in all three printers. The general form: when a marker appears not to survive the seam,
+price fixing the reader before paying to carry the marker.
+
+## 80. `#cpp_type` crosses the seam (2026-09-17)
+
+The fifth attribute to be carried, after `argument_base_names` (§44), `member_base_names` (§46),
+`cformat` (§69) and a symbol's `name` -- which was *not* carried, because §78 found its reader was
+wrong. This one's reader is right, so it is carried.
+
+`irep_idt cpp_type`, unreflected, on `unsignedbv_type2t`, `signedbv_type2t` and `floatbv_type2t`, both
+directions in `migrate_type`, back-write guarded on non-empty. The kinds come from enumerating the
+attribute's **writers**, not from sampling a corpus -- `scope-python-irep2.md` §9.3 records what
+sampling cost. Only the signedbv arm is carried because a *Python* consumer reads it; unsignedbv is
+platform symmetry under `char_is_unsigned` plus `goto2c`, and floatbv has no Python reader at all and is
+carried for `cpp_expr2string` and the exception-id path (§10.1).
+
+It also costs something worth stating: `sizeof` goes 48 -> 56 on the two bitvector kinds -- the most
+constructed nodes in the tool -- and leaves `fields_cover_class` with zero margin, so each kind now pins
+its own layout with a `static_assert`. A carry is not free even when it is unreflected.
+
+Why it had to be carried: `python_converter::get_python_type_category` (`converter_binop.cpp:619`)
+distinguishes a 1-char string element from an 8-bit int by the spelling, so dropping it turns
+`val = "hello"[0]; assert val == "h"` into a false alarm. That defect was *predicted* in
+`scope-python-irep2.md` §3, re-derived wrongly in §9's first attempt, and is now pinned by
+`regression/python/github_4715_cpp_type_char{,_fail}` plus a unit test that asserts the spelling is no
+part of the type's identity.
+
+It unblocks eight of the eleven writes in `handle_assignment_type_adjustments`; the other three
+lose markers the carry does not cover (`scope-python-irep2.md` §10.4). By §3's table it also unblocks
+the ten in `converter_funcdef.cpp` -- which is the next cluster.
+
+The pattern across the five is now clear enough to state as a rule. When a marker does not survive the
+seam, there are three answers and the choice is empirical: carry it as an unreflected field (four of
+five), fix the reader if the reader is wrong (§78), or change the type model if the marker is really a
+distinct type (`scope-python-irep2.md` §8.1, still open). What settles it is who reads the marker and
+whether their use of it is defensible -- not how easy the carry is.

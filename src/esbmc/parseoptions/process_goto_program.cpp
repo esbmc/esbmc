@@ -2,9 +2,9 @@
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt_result.h>
 #include <solvers/solve.h>
@@ -31,6 +31,7 @@
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
+#include <goto-programs/goto_invariant_synthesis.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -198,8 +199,6 @@ bool esbmc_parseoptionst::process_goto_program(
       apply_taylor_terms(goto_functions, cmdline))
       return true;
 
-    bool is_mul =
-      cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
                   cmdline.isset("condition-coverage") ||
@@ -220,6 +219,11 @@ bool esbmc_parseoptionst::process_goto_program(
     // the coverage reporting rules must not apply to it (issue #6387).
     options.set_option(
       "coverage-measurement", is_coverage && !cmdline.isset("dead-code-check"));
+
+    // Claims after a violation are still checked, so no pass may treat a
+    // failed assertion as the end of its path (#7900).
+    const bool checks_past_violation =
+      options.get_bool_option("multi-property") || is_coverage;
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -291,7 +295,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimization below will remove codes during the Goto stage
     if (
-      !(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage) ||
+      !(cmdline.isset("no-remove-unreachable") || checks_past_violation) ||
       cmdline.isset("condition-coverage-rm") ||
       cmdline.isset("condition-coverage-claims-rm"))
       remove_unreachable(goto_functions);
@@ -376,7 +380,8 @@ bool esbmc_parseoptionst::process_goto_program(
         wants_kind_pipeline
           ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
           : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
-      interval_analysis(goto_functions, ns, options, mode);
+      interval_analysis(
+        goto_functions, ns, options, checks_past_violation, mode);
     }
 
     if (cmdline.isset("validate-correctness-witness"))
@@ -406,23 +411,22 @@ bool esbmc_parseoptionst::process_goto_program(
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      disable_is_if_unsound(goto_k_induction(goto_functions, ns));
+      disable_is_if_unsound(
+        goto_k_induction(goto_functions, ns, checks_past_violation));
     }
     else
     {
       // --k-induction and --loop-invariant-check are independent and may
       // both be specified.  remove_no_op only needs to run once.
-      if (is_k_induction || cmdline.isset("loop-invariant-check"))
+      if (is_k_induction || wants_loop_invariants())
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        disable_is_if_unsound(goto_k_induction(goto_functions, ns));
+        disable_is_if_unsound(
+          goto_k_induction(goto_functions, ns, checks_past_violation));
 
-      if (cmdline.isset("loop-invariant-check"))
-      {
-        bool use_frame_rule = cmdline.isset("loop-frame-rule");
-        goto_loop_invariant(goto_functions, context, use_frame_rule);
-      }
+      if (wants_loop_invariants())
+        apply_loop_invariants(goto_functions, context, options, is_k_induction);
     }
 
     // --termination: reduce non-termination to a reachability safety
@@ -481,7 +485,8 @@ bool esbmc_parseoptionst::process_goto_program(
        cmdline.isset("goto-contractor")) &&
       wants_kind_pipeline)
     {
-      instrument_loop_bounds_after_kind(goto_functions, ns, options);
+      instrument_loop_bounds_after_kind(
+        goto_functions, ns, options, checks_past_violation);
     }
 
     if (
@@ -548,7 +553,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage ||
+    if (!(cmdline.isset("no-remove-unreachable") || checks_past_violation ||
           skip_cleanup_for_termination))
       remove_unreachable(goto_functions);
 
@@ -834,4 +839,38 @@ bool esbmc_parseoptionst::process_goto_program(
   }
 
   return false;
+}
+
+/// Whether the run needs the loop-invariant machinery.
+/// --synthesise-loop-invariants supplies the invariants that
+/// --loop-invariant-check discharges, so it implies that mode.
+bool esbmc_parseoptionst::wants_loop_invariants() const
+{
+  return cmdline.isset("loop-invariant-check") ||
+         cmdline.isset("synthesise-loop-invariants");
+}
+
+/// Synthesise the invariants when asked, then run the schema that discharges
+/// them.
+void esbmc_parseoptionst::apply_loop_invariants(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const optionst &options,
+  bool k_induction_ran)
+{
+  if (cmdline.isset("synthesise-loop-invariants"))
+    // Read from `options`, the same object goto_check consults
+    // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
+    // instead happens to agree today only because nothing calls
+    // set_option on these two, which is a property of the current code
+    // rather than an enforced one.
+    goto_synthesise_loop_invariants(
+      goto_functions,
+      overflow_checkst{
+        options.get_bool_option("overflow-check"),
+        options.get_bool_option("unsigned-overflow-check")},
+      k_induction_ran);
+
+  bool use_frame_rule = cmdline.isset("loop-frame-rule");
+  goto_loop_invariant(goto_functions, context, use_frame_rule);
 }

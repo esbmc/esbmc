@@ -2,9 +2,9 @@
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt_result.h>
 #include <solvers/solve.h>
@@ -42,6 +42,20 @@
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
+#include <c2goto/cprover_library.h>
+#ifdef ENABLE_PYTHON_FRONTEND
+#  include <python-frontend/python_library.h>
+#endif
+
+namespace
+{
+void link_python_model_bodies([[maybe_unused]] goto_functionst &goto_functions)
+{
+#ifdef ENABLE_PYTHON_FRONTEND
+  link_cpython_library_bodies(goto_functions);
+#endif
+}
+} // namespace
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
@@ -383,8 +397,8 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 // type onto the bodyless
 // declaration lets symex resolve the call: argument_assignments binds actual
 // args using the copied type's parameter names, which match the copied body
-// (goto-symex/symex_function.cpp). The string bodies are byte loops, so a call
-// with a symbolic length needs an `--unwind` bound like any other loop.
+// (goto-symex/engine/symex_function.cpp). The string bodies are byte loops, so
+// a call with a symbolic length needs an `--unwind` bound like any other loop.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
@@ -648,6 +662,8 @@ bool esbmc_parseoptionst::parse_goto_program(
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
+    link_python_model_bodies(goto_functions);
+    assert_no_pruned_calls(goto_functions);
   }
 
   catch (const char *e)

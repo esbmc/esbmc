@@ -11,6 +11,15 @@
 
 #pragma once
 
+// Implemented in converter_stmt.cpp; declared there (via python_converter.h)
+// for python_converter/numpy_call_expr, and forward-declared here so this
+// template-only translation unit can share the same numpy-alias resolution
+// without pulling in python_converter.h (which this file predates in the
+// pipeline and must not depend on).
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name);
+
 // ---------- leaf inspectors ----------
 
 template <class Json>
@@ -1565,6 +1574,26 @@ std::string python_annotation<Json>::get_function_return_type(
     }
   }
 
+  // `Alias = bytes`-style constructor call (e.g. an unannotated
+  // `x = Alias(3)`): resolve to the aliased builtin's name.
+  {
+    const Json &decl =
+      json_utils::find_var_decl(func_name, get_current_func_name(), ast_);
+    if (
+      !decl.empty() && decl.contains("value") && decl["value"].is_object() &&
+      decl["value"].value("_type", "") == "Name" &&
+      decl["value"].contains("id"))
+    {
+      const std::string target =
+        decl["value"]["id"].template get<std::string>();
+      if (type_utils::is_builtin_type(target))
+      {
+        functions_in_analysis_.erase(func_name);
+        return target;
+      }
+    }
+  }
+
   functions_in_analysis_.erase(func_name);
 
   std::ostringstream oss;
@@ -1935,6 +1964,23 @@ template <class Json>
 std::string python_annotation<Json>::get_type_from_method(const Json &call)
 {
   std::string type("");
+
+  // random.choice / random.sample resolve to the models/random.py variant
+  // matching the argument's element type, so the base model's `-> int` is not
+  // this call's return type. Defer to the argument, as min/max/sum do by being
+  // "Any" in builtin_functions() (issue #7673).
+  if (
+    call["func"].contains("value") && call["func"]["value"].is_object() &&
+    call["func"]["value"].value("_type", std::string()) == "Name" &&
+    call["func"]["value"].value("id", std::string()) == "random" &&
+    call["func"].contains("attr"))
+  {
+    const std::string &method = call["func"]["attr"];
+    if (method == "choice")
+      return "Any";
+    if (method == "sample")
+      return "list";
+  }
 
   // Handle method calls on constant literals
   // When Python code has " ".join(l), the func["value"] is a Constant node
@@ -2654,6 +2700,81 @@ std::string python_annotation<Json>::get_type_from_ifexp(
 }
 
 template <class Json>
+bool python_annotation<Json>::is_numpy_array_ctor_call(
+  const Json &call_value) const
+{
+  if (
+    !call_value.is_object() ||
+    call_value.value("_type", std::string()) != "Call" ||
+    !call_value.contains("func") || !call_value["func"].is_object() ||
+    call_value["func"].value("_type", std::string()) != "Attribute" ||
+    !call_value["func"].contains("value") ||
+    !call_value["func"]["value"].is_object() ||
+    call_value["func"]["value"].value("_type", std::string()) != "Name")
+    return false;
+
+  static const std::set<std::string> numpy_array_ctors = {
+    "array", "zeros", "ones", "full", "empty", "arange", "eye", "identity",
+    "linspace"};
+  const std::string method_name = call_value["func"].value("attr", "");
+  const std::string module_alias =
+    call_value["func"]["value"].value("id", "");
+  return numpy_array_ctors.count(method_name) != 0 &&
+         is_imported_numpy_module_alias(
+           static_cast<const nlohmann::json &>(ast_), module_alias);
+}
+
+template <class Json>
+bool python_annotation<Json>::current_func_returns_name_directly(
+  const std::string &name) const
+{
+  if (current_func == nullptr || !current_func->contains("body"))
+    return false;
+
+  const Json *block = &(*current_func)["body"];
+  while (block->is_array() && !block->empty())
+  {
+    const Json &last = block->back();
+    if (!last.is_object())
+      return false;
+
+    const std::string type = last.value("_type", std::string());
+    if (type == "Return")
+      return last.contains("value") && last["value"].is_object() &&
+             last["value"].value("_type", std::string()) == "Name" &&
+             last["value"].value("id", std::string()) == name;
+
+    if (
+      type != "If" || !last.contains("body") || !last["body"].is_array() ||
+      !last.contains("orelse") || !last["orelse"].is_array() ||
+      last["orelse"].empty())
+      return false;
+
+    // Only the trailing if/else's own two arms matter here -- reuse this
+    // loop for the "then" arm and recurse once for the "else" arm, mirroring
+    // the two-branch pattern get_function_definition's own check accepts.
+    bool else_returns = false;
+    {
+      const Json *else_block = &last["orelse"];
+      if (!else_block->is_array() || else_block->empty())
+        return false;
+      const Json &else_last = else_block->back();
+      else_returns = else_last.is_object() &&
+                     else_last.value("_type", std::string()) == "Return" &&
+                     else_last.contains("value") &&
+                     else_last["value"].is_object() &&
+                     else_last["value"].value("_type", std::string()) ==
+                       "Name" &&
+                     else_last["value"].value("id", std::string()) == name;
+    }
+    if (!else_returns)
+      return false;
+    block = &last["body"];
+  }
+  return false;
+}
+
+template <class Json>
 InferResult python_annotation<Json>::infer_type(
   const Json &stmt,
   const Json &body,
@@ -2864,6 +2985,30 @@ InferResult python_annotation<Json>::infer_type(
   else if (
     value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
   {
+    // np.zeros/ones/full/array/... produce a concrete, fixed-shape array in
+    // the converter, but the numpy operational model declares them as
+    // returning the generic `list[float]` (numpy.py has no notion of the
+    // converter's later concrete shape). That mismatch is harmless on its
+    // own -- get_var_assign retypes the binding from the converted RHS
+    // regardless of a stale list annotation -- except for exactly one
+    // shape: a local variable the enclosing function then returns directly
+    // (`a = np.zeros(3); return a`), where get_function_definition reads
+    // this same generic list annotation from `function_node["returns"]`
+    // *before* the body is converted and locks the function's own return
+    // type to it (the array_return_local_* gap). Scope the decline to that
+    // shape specifically -- ANY other numpy-constructor assignment (module
+    // level, a parameter-feeding local, an unrelated local) keeps its usual
+    // annotation, which other inference still depends on (e.g.
+    // array_param_shape_metadata_success's module-level array passed into a
+    // function that reads its shape).
+    if (
+      is_numpy_array_ctor_call(stmt["value"]) &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      stmt["targets"].size() == 1 && stmt["targets"][0].contains("id") &&
+      current_func_returns_name_directly(
+        stmt["targets"][0]["id"].template get<std::string>()))
+      return InferResult::UNKNOWN;
+
     // Try get_type_from_call first (checks builtin_functions map)
     inferred_type = get_type_from_call(stmt);
 
@@ -3948,8 +4093,32 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
       std::string inferred_type;
 
+      // Leave the parameter unannotated if a call site feeds it a variable
+      // that's genuinely dynamically-typed (e.g. `x = 1`/`x = "a"` across an
+      // if/else), so it falls through to register_function_argument's own
+      // tagged-scalar detection instead of locking in a wrong concrete type.
+      bool arg_is_dynamically_typed = false;
+      if (needs_inference)
+      {
+        for (const Json &call : function_calls)
+        {
+          if (!call.contains("args") || i >= call["args"].size())
+            continue;
+          const Json &arg_node = call["args"][i];
+          if (
+            arg_node.contains("_type") && arg_node["_type"] == "Name" &&
+            arg_node.contains("id") &&
+            dynamic_type_detail::scope_assigns_divergent_literal_types(
+              arg_node["id"].template get<std::string>(), search_context))
+          {
+            arg_is_dynamically_typed = true;
+            break;
+          }
+        }
+      }
+
       // Try to infer type from function calls if available
-      if (needs_inference && !function_calls.empty())
+      if (needs_inference && !arg_is_dynamically_typed && !function_calls.empty())
       {
         std::vector<std::string> call_types =
           collect_parameter_types_from_calls(i, function_calls);
@@ -4209,7 +4378,9 @@ bool python_annotation<Json>::preprocess_function_calls(Json &root)
   }
 
   std::map<std::pair<std::string, size_t>, std::set<std::string>> param_types;
-  collect_function_call_arg_types(root, param_types, top_level_funcs);
+  std::set<std::pair<std::string, size_t>> dynamically_typed_params;
+  collect_function_call_arg_types(
+    root, param_types, top_level_funcs, dynamically_typed_params);
 
   // Second pass: for each top-level FunctionDef, if all observed call
   // sites agreed on a single type for a parameter, write the annotation.
@@ -4228,6 +4399,10 @@ bool python_annotation<Json>::preprocess_function_calls(Json &root)
       Json &param = params[i];
       if (param.contains("annotation") && !param["annotation"].is_null())
         continue;
+      // Leave it unannotated even if another call site agrees on one
+      // concrete type -- see the dynamically-typed check above.
+      if (dynamically_typed_params.count({fname, i}) != 0)
+        continue;
       auto it = param_types.find({fname, i});
       if (
         it == param_types.end() || it->second.size() != 1 ||
@@ -4244,7 +4419,8 @@ template <class Json>
 void python_annotation<Json>::collect_function_call_arg_types(
   Json &node,
   std::map<std::pair<std::string, size_t>, std::set<std::string>> &param_types,
-  const std::set<std::string> &top_level_funcs)
+  const std::set<std::string> &top_level_funcs,
+  std::set<std::pair<std::string, size_t>> &dynamically_typed_params)
 {
   if (node.is_object())
   {
@@ -4267,9 +4443,25 @@ void python_annotation<Json>::collect_function_call_arg_types(
       {
         const Json &call_args =
           node.contains("args") ? node["args"] : Json::array();
+        const Json &enclosing_scope_body =
+          current_func != nullptr ? (*current_func)["body"] : ast_["body"];
         for (size_t i = 0; i < call_args.size(); ++i)
         {
-          std::string arg_type = get_argument_type(call_args[i]);
+          const Json &arg_node = call_args[i];
+          // Same dynamically-typed check as above, applied to this pass's
+          // own call-site scan.
+          if (
+            arg_node.contains("_type") && arg_node["_type"] == "Name" &&
+            arg_node.contains("id") &&
+            dynamic_type_detail::scope_assigns_divergent_literal_types(
+              arg_node["id"].template get<std::string>(),
+              enclosing_scope_body))
+          {
+            dynamically_typed_params.insert({func_name, i});
+            continue;
+          }
+
+          std::string arg_type = get_argument_type(arg_node);
           // Ambiguous / under-specified types: NoneType is `bool*` in the
           // operational model (issue #3796) and Any leaves the type
           // uninformative; both would lock in a misleading annotation for
@@ -4301,7 +4493,8 @@ void python_annotation<Json>::collect_function_call_arg_types(
     }
 
     for (auto &kv : node.items())
-      collect_function_call_arg_types(kv.value(), param_types, top_level_funcs);
+      collect_function_call_arg_types(
+        kv.value(), param_types, top_level_funcs, dynamically_typed_params);
 
     if (is_function_def)
     {
@@ -4313,7 +4506,8 @@ void python_annotation<Json>::collect_function_call_arg_types(
   else if (node.is_array())
   {
     for (auto &element : node)
-      collect_function_call_arg_types(element, param_types, top_level_funcs);
+      collect_function_call_arg_types(
+        element, param_types, top_level_funcs, dynamically_typed_params);
   }
 }
 
@@ -4533,7 +4727,12 @@ void python_annotation<Json>::annotate_function(Json &function_element)
 
       if (!has_none_return)
       {
-        // Update the function node to include the return type annotation
+        // Update the function node to include the return type annotation.
+        // Marked _inferred_annotation so a downstream converter check (e.g.
+        // local numpy array returns) can tell this apart from an annotation
+        // the user actually wrote -- should_override replaces an explicit
+        // one only because the user opted into that via
+        // override-return-annotation, so it is not authoritative either.
         function_element["returns"] = {
           {"_type", "Name"},
           {"id", inferred_type},
@@ -4543,7 +4742,8 @@ void python_annotation<Json>::annotate_function(Json &function_element)
           {"end_lineno", function_element["lineno"]},
           {"end_col_offset",
            function_element["col_offset"].template get<int>() +
-             inferred_type.size()}};
+             inferred_type.size()},
+          {"_inferred_annotation", true}};
       }
     }
     else if (inferred_type == "NoneType")
@@ -4556,7 +4756,8 @@ void python_annotation<Json>::annotate_function(Json &function_element)
         {"col_offset", function_element["col_offset"]},
         {"end_lineno", function_element["lineno"]},
         {"end_col_offset",
-         function_element["col_offset"].template get<int>() + 4}};
+         function_element["col_offset"].template get<int>() + 4},
+        {"_inferred_annotation", true}};
     }
     // If no return type could be inferred, leave returns as null
     // (function has no explicit return statement)

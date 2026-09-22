@@ -20,6 +20,9 @@
 #include <util/symtab/namespace.h>
 #include <util/symtab/symbol.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 
 #include <algorithm>
 
@@ -309,4 +312,111 @@ TEST_CASE(
   REQUIRE(
     member_paths_of_type(int_ptr(), int_ptr(), ns) ==
     std::vector<std::string>{""});
+}
+
+namespace
+{
+struct_typet::componentt component(const std::string &name, const typet &type)
+{
+  struct_typet::componentt c;
+  c.set_name(name);
+  c.type() = type;
+  return c;
+}
+
+// `struct { char c; uint64_t u; }` as a legacy type: object_base_alignment
+// reads `packed` and `max_field_alignment`, which are irep attributes that do
+// not survive migration to irep2.
+struct_typet char_u64_struct()
+{
+  struct_typet st;
+  st.components().push_back(
+    component("c", migrate_type_back(signedbv_type2tc(8))));
+  st.components().push_back(
+    component("u", migrate_type_back(unsignedbv_type2tc(64))));
+  return st;
+}
+} // namespace
+
+TEST_CASE(
+  "object_base_alignment bumps a plain object to the size it admits",
+  "[core][util][type_byte_size]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  const struct_typet st = char_u64_struct();
+  REQUIRE(alignment(st, ns) == 8);
+
+  // The bump #6951 introduced: the address-space model gives every object the
+  // largest power-of-two alignment its size admits, capped at max_align_t, so
+  // dereferencet::check_alignment() may read an access as aligned from its
+  // offset alone.
+  REQUIRE(object_base_alignment(st, gen_ulong(16), ns) == 16);
+
+  // ... capped by the object's size, so a one-byte object stays 1-aligned.
+  struct_typet one_byte;
+  one_byte.components().push_back(
+    component("c", migrate_type_back(signedbv_type2tc(8))));
+  REQUIRE(object_base_alignment(one_byte, gen_ulong(1), ns) == 1);
+
+  // A symbolic size (VLA, dynamic object) admits any access, so assume the cap.
+  REQUIRE(
+    object_base_alignment(st, symbol2tc(size_type2(), "n"), ns) ==
+    config.ansi_c.max_alignment());
+}
+
+TEST_CASE(
+  "object_base_alignment leaves a type that declines alignment unbumped",
+  "[core][util][type_byte_size]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  // #7707: a packed object really can sit at an odd address, so the bump must
+  // not apply -- otherwise the deref check reads a laundered pointer into it
+  // as aligned and the false negative the issue reports survives.
+  struct_typet packed = char_u64_struct();
+  packed.set("packed", true);
+  REQUIRE(object_base_alignment(packed, gen_ulong(9), ns) == 1);
+
+  // `#pragma pack(n)` arrives as max_field_alignment; padding.cpp has already
+  // capped the members, so alignment() is the honest base and the bump is what
+  // has to be suppressed.
+  struct_typet pack2;
+  typet u32 = migrate_type_back(unsignedbv_type2tc(32));
+  u32.set("alignment", from_integer(2, size_type()));
+  pack2.components().push_back(component("u", u32));
+  pack2.set("max_field_alignment", 2);
+  REQUIRE(object_base_alignment(pack2, gen_ulong(4), ns) == 2);
+
+  // The opt-out is reached through an array's subtype, mirroring alignment().
+  const array_typet arr(packed, from_integer(4, size_type()));
+  REQUIRE(object_base_alignment(arr, gen_ulong(36), ns) == 1);
+
+  // An explicit alignas on a packed struct still constrains the base, so the
+  // check must consult alignment() rather than assume "packed is unaligned".
+  struct_typet overaligned = char_u64_struct();
+  overaligned.set("packed", true);
+  overaligned.set("alignment", from_integer(8, size_type()));
+  REQUIRE(object_base_alignment(overaligned, gen_ulong(9), ns) == 8);
+}
+
+TEST_CASE(
+  "is_power_of_two admits only positive powers of two",
+  "[core][util][type_byte_size]")
+{
+  REQUIRE(is_power_of_two(1));
+  REQUIRE(is_power_of_two(2));
+  REQUIRE(is_power_of_two(8));
+  REQUIRE(is_power_of_two(BigInt(1) << 40));
+
+  REQUIRE_FALSE(is_power_of_two(3));
+  REQUIRE_FALSE(is_power_of_two(12));
+
+  // check_alignment() gates the base-address arm on this, so a width that is
+  // not an alignment must answer false rather than fall through to a mask no
+  // address can satisfy. Zero and negatives are widths no access has.
+  REQUIRE_FALSE(is_power_of_two(0));
+  REQUIRE_FALSE(is_power_of_two(-8));
 }

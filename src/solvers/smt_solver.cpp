@@ -61,22 +61,25 @@ unsigned int smt_solver_baset::get_member_name_field(
   const type2tc &t,
   const irep_idt &name) const
 {
-  unsigned int idx = 0;
   // Pointer types lower to the synthetic pointer_struct tuple in SMT;
   // for them the named lookup uses pointer_struct's member_names.
-  const std::vector<irep_idt> &names =
-    struct_union_member_names(is_pointer_type(t) ? pointer_struct : t);
+  const type2tc &lookup_type = is_pointer_type(t) ? pointer_struct : t;
+  const std::vector<irep_idt> &names = struct_union_member_names(lookup_type);
 
-  for (const irep_idt &it : names)
-  {
-    if (it == name)
-      break;
-    idx++;
-  }
-  assert(
-    idx != names.size() && "Member name of with expr not found in struct type");
+  for (unsigned int idx = 0; idx < names.size(); idx++)
+    if (names[idx] == name)
+      return idx;
 
-  return idx;
+  // Never fall out returning names.size(): both callers index a tuple with the
+  // result, project() reading and update() writing, so an out-of-range answer
+  // is an out-of-bounds access rather than a diagnosable error. The assert
+  // that used to stand here vanished under NDEBUG.
+  log_error(
+    "Member '{}' is not a field of {}, whose members are: {}",
+    name,
+    struct_union_name(lookup_type),
+    fmt::join(names, ", "));
+  throw std::string("member name not found in struct type");
 }
 
 unsigned int smt_solver_baset::get_member_name_field(
@@ -188,6 +191,7 @@ void smt_solver_baset::push_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
@@ -244,6 +248,7 @@ void smt_solver_baset::pop_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
@@ -261,6 +266,10 @@ void smt_solver_baset::pop_ctx()
     });
     it = entries.empty() ? uf_ackermann_history.erase(it) : std::next(it);
   }
+
+  std::erase_if(ptr_flatten_history, [this](const ptr_flatten_entry &e) {
+    return e.level >= ctx_level;
+  });
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -3116,11 +3125,9 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
-  assert(is_array_type(expr->type));
   smt_astt src, update;
 
   update = convert_ast(update_val);
-
   src = convert_ast(with.source_value);
   return ast_update(src, update, 0, newidx);
 }
@@ -3266,12 +3273,25 @@ void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.
   add_tuple_constraints_for_solving();
   add_array_constraints_for_solving();
+}
+
+/* An element get_index_value() read from the model is a value already. Walking
+ * its operands would query the object inside an address_of: a function aborts,
+ * data prints as &0. A symbol element (NULL, INVALID<n>) is returned as is. */
+std::optional<expr2tc>
+smt_solver_baset::get_index(const expr2tc &expr, expr2tc &res)
+{
+  std::optional<expr2tc> v = get_index_value(expr, res);
+  if (!v && res != expr)
+    v = is_symbol2t(res) ? res : get(res);
+  return v;
 }
 
 /* get()'s index_id case: read one element out of the solver's array model
@@ -3353,7 +3373,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   switch (res->expr_id)
   {
   case expr2t::index_id:
-    if (auto v = get_index_value(expr, res))
+    if (auto v = get_index(expr, res))
       return *v;
     break;
 
@@ -3549,6 +3569,17 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 }
 
 expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
+{
+  auto cached = get_ast_cache.find(a.get());
+  if (cached != get_ast_cache.end() && cached->second.first == type)
+    return cached->second.second;
+
+  expr2tc res = get_by_ast_uncached(type, a);
+  get_ast_cache[a.get()] = {type, res};
+  return res;
+}
+
+expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
 {
   switch (type->type_id)
   {

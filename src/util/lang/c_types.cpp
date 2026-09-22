@@ -11,7 +11,8 @@ typet build_float_type(unsigned width)
   switch (width)
   {
   case 16:
-    result.set_f(11);
+    /* IEEE 754 binary16: 1 sign, 5 exponent, 10 significand (#7896). */
+    result.set_f(10);
     break;
   case 32:
     result.set_f(23);
@@ -38,7 +39,7 @@ type2tc build_float_type2(unsigned width)
   switch (width)
   {
   case 16:
-    fraction = 11;
+    fraction = 10;
     break;
   case 32:
     fraction = 23;
@@ -223,6 +224,17 @@ type2tc char_type2()
 typet half_float_type()
 {
   return build_float_type(config.ansi_c.short_int_width);
+}
+
+/* bfloat16 is 16 bits wide like binary16, but truncates float's significand
+ * instead of narrowing its exponent, so build_float_type(16) has the wrong
+ * floatbv layout for it. */
+typet bfloat16_type()
+{
+  floatbv_typet result;
+  result.set_width(16);
+  result.set_f(7);
+  return result;
 }
 
 typet float_type()

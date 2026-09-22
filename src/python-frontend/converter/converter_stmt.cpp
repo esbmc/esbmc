@@ -1237,7 +1237,7 @@ void python_converter::handle_assignment_type_adjustments(
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     return;
   }
 
@@ -1251,7 +1251,7 @@ void python_converter::handle_assignment_type_adjustments(
     rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
     lhs.type() = rhs.type();
   }
 
@@ -1271,10 +1271,12 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type
+      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
+      // drops #python_aggregate, which `in` dispatches on
+      // (docs/roadmap/scope-python-irep2.md §10.4).
       lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     }
   }
   else if (lhs_symbol)
@@ -1309,7 +1311,7 @@ void python_converter::handle_assignment_type_adjustments(
         // misread. Any is not a constraint, so adopt the rhs type. Only on
         // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
         // (1, 2)`) must not retype uses already emitted at the old type.
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
@@ -1325,7 +1327,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = typecast_exprt(rhs, lhs.type());
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->set_value(rhs);
+        lhs_symbol->set_value(migrate_expr(rhs));
       return;
     }
     // Handle string-to-string variable assignments
@@ -1337,7 +1339,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs_symbol->get_value().type().is_array())
       {
         rhs = rhs_symbol->get_value();
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1399,7 +1401,7 @@ void python_converter::handle_assignment_type_adjustments(
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
           {
-            lhs_symbol->set_type(rhs.type());
+            python_expr::set_symbol_type(*lhs_symbol, rhs.type());
             lhs.type() = rhs.type();
           }
         }
@@ -1417,7 +1419,7 @@ void python_converter::handle_assignment_type_adjustments(
       else
       {
         // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1445,10 +1447,13 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
-      lhs_symbol->set_type(rhs.type());
+      lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
     }
 
+    // Legacy: migrate_expr turns a class-object value (`x = int`) into an empty
+    // array constant, and isinstance folds on it
+    // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
       lhs_symbol->set_value(rhs);
   }
@@ -1805,6 +1810,19 @@ static bool json_literal_contains_boolean(const nlohmann::json &node)
   return false;
 }
 
+// `.shape[i]` indexes the plain int tuple `.shape` returns, never the
+// array's own data -- it must never be tracked as a numpy view/alias
+// (root_name_from_subscript drills through any Attribute to its base Name,
+// so without this guard `shape_0 = a.shape[0]` registers shape_0 as a view
+// copy of `a` itself). Split out of is_basic_numpy_view_subscript to keep
+// that function's own decision count down.
+static bool is_shape_attribute_value(const nlohmann::json &subscript_value)
+{
+  return subscript_value.is_object() &&
+         subscript_value.value("_type", "") == "Attribute" &&
+         subscript_value.value("attr", "") == "shape";
+}
+
 bool python_converter::is_basic_numpy_view_subscript(
   const nlohmann::json &node) const
 {
@@ -1852,6 +1870,14 @@ bool python_converter::is_basic_numpy_view_subscript(
   }
 
   return is_basic_index(slice);
+}
+
+bool python_converter::is_tracked_numpy_view_subscript(
+  const nlohmann::json &node) const
+{
+  return node.is_object() && node.contains("value") &&
+         !is_shape_attribute_value(node["value"]) &&
+         is_basic_numpy_view_subscript(node);
 }
 
 bool python_converter::is_numpy_array_constructor_expr(
@@ -2058,7 +2084,7 @@ bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
   if (!node.is_object())
     return false;
 
-  if (is_basic_numpy_view_subscript(node))
+  if (is_tracked_numpy_view_subscript(node))
     return true;
 
   if (
@@ -2082,7 +2108,7 @@ std::string python_converter::root_name_from_numpy_view_copy_expr(
   if (!node.is_object())
     return "";
 
-  if (is_basic_numpy_view_subscript(node))
+  if (is_tracked_numpy_view_subscript(node))
     return root_name_from_subscript(node["value"]);
 
   if (
@@ -2116,7 +2142,7 @@ bool python_converter::is_tracked_numpy_view_name_node(
 bool python_converter::is_basic_numpy_view_subscript_escape(
   const nlohmann::json &node)
 {
-  if (!is_basic_numpy_view_subscript(node))
+  if (!is_tracked_numpy_view_subscript(node))
     return false;
 
   const std::string root_name = root_name_from_subscript(node["value"]);
@@ -2445,6 +2471,14 @@ std::optional<std::vector<std::size_t>>
 python_converter::get_numpy_nditer_logical_shape(
   const std::string &root_id) const
 {
+  // A 2-D+ numpy array parameter: its own symbol type lost the outer
+  // dimension to the C-ABI row-pointer decay (register_function_argument),
+  // so the full shape must come from here rather than the fallback below,
+  // which would otherwise read the decayed (1-D) type instead.
+  if (auto param_it = numpy_param_shapes_.find(root_id);
+      param_it != numpy_param_shapes_.end())
+    return param_it->second;
+
   if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
       pointer_it != numpy_pointer_view_info_.end())
     return std::vector<std::size_t>{pointer_it->second.length};
@@ -5480,6 +5514,28 @@ void python_converter::propagate_list_type_info(
   }
 }
 
+/// Whether a module-scope assignment has to probe its RHS type before choosing
+/// the target's type.
+///
+/// The probe runs unconditionally for a symbol id carrying `@F`. At module
+/// scope it used to run only when the annotation already resolved to a tagged
+/// type, so copying a tagged name there (`y = x`) left the target scalar and
+/// the scalar path built a member over the tagged struct, aborting in member2t.
+/// The same assignment inside a function already worked. A `for` over a list of
+/// tagged scalars hits this too: the preprocessor unrolls it into exactly such
+/// a chain of tagged-name copies.
+bool python_converter::module_scope_rhs_needs_type_probe(
+  const nlohmann::json &value)
+{
+  if (!current_func_name_.empty())
+    return false;
+  if (type_handler_.is_tagged_scalar_type(current_element_type))
+    return true;
+  return value.is_object() && value.value("_type", "") == "Name" &&
+         value.contains("id") &&
+         dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -5784,8 +5840,7 @@ void python_converter::get_var_assign(
     if (
       (sid.to_string().find("@F") != std::string::npos &&
        sid.to_string().find("@C") == std::string::npos) ||
-      (type_handler_.is_tagged_scalar_type(current_element_type) &&
-       current_func_name_.empty()))
+      module_scope_rhs_needs_type_probe(ast_node["value"]))
     {
       is_right = true;
       if (!ast_node["value"].is_null())
@@ -7755,8 +7810,8 @@ void python_converter::get_return_statements(
     if (
       type_handler_.is_numeric_scalar_type(val.type()) ||
       type_handler_.is_string_type(val.type()))
-      val = dynamic_type_handler_.build_tagged_return_value(
-        val, location, target_block);
+      val =
+        dynamic_type_handler_.build_tagged_value(val, location, target_block);
     else
       throw std::runtime_error(
         "returning a value of this type from a dynamically-typed function "

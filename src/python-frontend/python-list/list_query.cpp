@@ -3,6 +3,56 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+/// `dict.items()` is modelled by a placeholder holding the dict's *keys*, not
+/// (key, value) tuples. Against a set of bare keys the fold below still answers
+/// correctly -- an items view never equals one, which github_7553_items_fail
+/// pins. Against a set of *tuples* it answered from contents that are not the
+/// view's, which proved `d.items() != {(k, v)}`, a property CPython makes false
+/// (#7553). Refuse only that shape, as set ordering already does.
+void python_list::reject_items_view_vs_tuple_set(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &converted_lhs,
+  const exprt &converted_rhs)
+{
+  const bool lhs_items = lhs.get_bool(PYTHON_ITEMS_VIEW_ATTR);
+  const bool rhs_items = rhs.get_bool(PYTHON_ITEMS_VIEW_ATTR);
+  if (!lhs_items && !rhs_items)
+    return;
+
+  const exprt &other = lhs_items ? converted_rhs : converted_lhs;
+  if (!other.is_symbol())
+    return;
+
+  const typet elem =
+    elem_types().uniform_element_type(other.identifier().as_string());
+  if (!elem.is_struct() && elem.id() != "symbol")
+    return;
+
+  throw std::runtime_error(
+    "comparing dict.items() with a set of tuples is not yet supported: the "
+    "view's (key, value) pairs are not modelled");
+}
+
+python_list::list_eq_target python_list::select_list_eq(
+  const exprt &l1,
+  const exprt &l2,
+  const symbolt &generic_func,
+  const std::vector<exprt> &generic_trailing_args) const
+{
+  if (!has_tagged_elements(l1) && !has_tagged_elements(l2))
+    return {&generic_func, generic_trailing_args};
+
+  const symbolt *eq_tagged_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq_tagged");
+  assert(eq_tagged_sym);
+  const type_handler &th = converter_.get_type_handler();
+  return {
+    eq_tagged_sym,
+    {th.tagged_scalar_type_id(long_long_int_type()),
+     th.tagged_scalar_type_id(bool_type())}};
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -52,6 +102,7 @@ exprt python_list::compare(
   const bool rhs_is_set = rhs_symbol->is_set || is_keys_view(l2);
   if (lhs_is_set || rhs_is_set)
   {
+    reject_items_view_vs_tuple_set(l1, l2, converted_l1, converted_l2);
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
 
@@ -78,7 +129,7 @@ exprt python_list::compare(
       typet list_ptr = converter_.get_type_handler().get_list_type();
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
-      new_symbol.set_type(func_type);
+      new_symbol.set_type(migrate_type(func_type));
 
       converter_.symbol_table().add(new_symbol);
       set_eq_func =
@@ -153,6 +204,13 @@ exprt python_list::compare(
       return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv();
     };
     auto is_bool = [](const typet &t) { return t == bool_type(); };
+    // A tuple is stored inline and compares by content, so it can be read out
+    // and compared here like a scalar. Without this the comparison falls to
+    // __ESBMC_list_eq, whose worklist loop reads its bound through a
+    // loop-carried index and so never converges without --unwind (#7691).
+    auto is_tuple = [&](const typet &t) {
+      return converter_.get_tuple_handler().is_tuple_type(t);
+    };
 
     auto is_concrete_map = [&](const std::string &list_id) -> bool {
       const auto *recorded = elem_types().find(list_id);
@@ -168,7 +226,7 @@ exprt python_list::compare(
         if (!elem_sym)
           return false;
         if (!(is_numeric(elem_sym->get_type()) ||
-              is_bool(elem_sym->get_type())))
+              is_bool(elem_sym->get_type()) || is_tuple(elem_sym->get_type())))
           return false;
       }
       return true;
@@ -261,8 +319,10 @@ exprt python_list::compare(
         else
         {
           if (
-            !(is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)) ||
-            !(is_numeric(rhs_elem_type) || is_bool(rhs_elem_type)))
+            !(is_numeric(lhs_elem_type) || is_bool(lhs_elem_type) ||
+              is_tuple(lhs_elem_type)) ||
+            !(is_numeric(rhs_elem_type) || is_bool(rhs_elem_type) ||
+              is_tuple(rhs_elem_type)))
             return false;
 
           const exprt index = from_integer(BigInt(i), size_type());
@@ -350,9 +410,13 @@ exprt python_list::compare(
 
             // Same-type numeric/bool compares directly; mixed numeric promotes
             // both sides to double first. (V.3: built in IREP2.)
+            // A tuple compares directly only against the identical tuple type:
+            // two tuples whose string members were padded to different widths
+            // are different struct sorts, which an equality would not relate.
             if (
               lhs_elem_type == rhs_elem_type &&
-              (is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)))
+              (is_numeric(lhs_elem_type) || is_bool(lhs_elem_type) ||
+               is_tuple(lhs_elem_type)))
             {
               // direct compare
             }
@@ -410,7 +474,7 @@ exprt python_list::compare(
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(int_type()));
       func_type.arguments().push_back(code_typet::argumentt(size_type()));
-      new_symbol.set_type(func_type);
+      new_symbol.set_type(migrate_type(func_type));
 
       converter_.symbol_table().add(new_symbol);
       list_lt_func_sym =
@@ -528,42 +592,37 @@ exprt python_list::compare(
 
   // Statically-known element byte size for the primitive comparison, so the
   // model's __ESBMC_values_equal takes its branch-free fast path instead of
-  // memcmp's symbolic-size byte loop (the dominant cost when comparing large
-  // lists, e.g. `assert l == [...]`). Emitted only when both operands' first
-  // element is the same fixed-width scalar; 0 otherwise, which makes the model
-  // fall back to the per-element a->size read (exact prior behaviour).
-  size_t eq_elem_size_bytes = 0;
-  {
-    auto scalar_width = [](const typet &t) -> size_t {
-      if (
-        (t.id() == "signedbv" || t.id() == "unsignedbv" ||
-         t.id() == "floatbv" || t.id() == "fixedbv") &&
-        !t.width().empty())
-        return std::stoull(t.width().as_string(), nullptr, 10) / 8;
-      return 0;
-    };
-    const typet lt =
-      elem_types().element_type(converted_l1.identifier().as_string(), 0);
-    const typet rt =
-      elem_types().element_type(converted_l2.identifier().as_string(), 0);
-    size_t lw = lt.is_nil() ? 0 : scalar_width(lt);
-    size_t rw = rt.is_nil() ? 0 : scalar_width(rt);
-    if (lw != 0 && lw == rw)
-      eq_elem_size_bytes = lw;
-  }
+  // memcmp's symbolic-size byte loop, which does not converge without --unwind
+  // (#7691). The model applies this one length to every element, so every
+  // recorded element on both sides has to agree on it: reading only the first
+  // element's width compared 8 bytes of an 11-byte string in
+  // `[1, "abcdefghij"] == [1, "abcdefghix"]` and proved two different lists
+  // equal (#7699). 0 keeps the model on its per-element a->size read.
+  const BigInt lhs_elem_size = uniform_elem_size(converted_l1);
+  const BigInt rhs_elem_size = uniform_elem_size(converted_l2);
+  const BigInt eq_elem_size_bytes =
+    (lhs_elem_size != 0 && lhs_elem_size == rhs_elem_size) ? lhs_elem_size
+                                                           : BigInt(0);
+
+  const list_eq_target eq_target = select_list_eq(
+    converted_l1,
+    converted_l2,
+    *list_eq_func_sym,
+    {list_type_id,
+     max_depth_expr,
+     from_integer(float_type_id, size_type()),
+     from_integer(eq_elem_size_bytes, size_type())});
 
   code_function_callt list_eq_func_call;
-  list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
-  // passing arguments
-  list_eq_func_call.arguments().push_back(build_symbol(*lhs_symbol)); // l1
-  list_eq_func_call.arguments().push_back(build_symbol(*rhs_symbol)); // l2
-  list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
-  list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
-  list_eq_func_call.arguments().push_back(
-    from_integer(float_type_id, size_type())); // float_type_id
-  list_eq_func_call.arguments().push_back(
-    from_integer(eq_elem_size_bytes, size_type())); // elem_size
+  list_eq_func_call.function() = build_symbol(*eq_target.func);
+  exprt::operandst &eq_args = list_eq_func_call.arguments();
+  eq_args.push_back(build_symbol(*lhs_symbol)); // l1
+  eq_args.push_back(build_symbol(*rhs_symbol)); // l2
+  eq_args.insert(
+    eq_args.end(),
+    eq_target.trailing_args.begin(),
+    eq_target.trailing_args.end());
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);

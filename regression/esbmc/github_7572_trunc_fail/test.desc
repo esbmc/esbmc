@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check
+^  FAILED       \[main\.assertion\.1\]\s+line 12  floating-point conversion out of range of unsignedbv on typecast$
+^VERIFICATION FAILED$

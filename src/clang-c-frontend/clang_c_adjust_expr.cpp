@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_base_layout.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/padding.h>
@@ -24,6 +25,22 @@ clang_c_adjust::clang_c_adjust(contextt &_context)
 
 bool clang_c_adjust::adjust()
 {
+  // migrate_expr and migrate_type resolve a symbol through this thread-local
+  // namespace, and the one language_ui installed does not see the context this
+  // pass adjusts. A miss there is silent: sym_name_to_symbol parses the
+  // unresolvable name as an SSA-renamed one, and a clang USR contains `#` and
+  // `&`, so the id is truncated (docs/roadmap/frontends-to-irep2.md §52).
+  // clang_c_adjust_irep2::adjust() does the same for the same reason.
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+  struct ns_restoret
+  {
+    const namespacet *old;
+    ~ns_restoret()
+    {
+      migrate_namespace_lookup = old;
+    }
+  } ns_restore{old_ns};
+
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
@@ -258,155 +275,9 @@ void clang_c_adjust::adjust_ptr_mem(exprt &expr)
   }
 }
 
-// Sum the offsets of the "@base@" components leading from `derived` down to
-// the struct symbol `base_id`. Offsets come from ESBMC's own layout, so they
-// agree with the member path the derived->base cast builds. adjust() fixes up
-// every type symbol before any value, so padding is already in place here.
-static bool base_subobject_offset(
-  const namespacet &ns,
-  const typet &derived,
-  const irep_idt &base_id,
-  BigInt &offset)
-{
-  const typet &d = ns.follow(derived);
-  if (!d.is_struct())
-    return false;
 
-  const struct_typet &st = to_struct_type(d);
-  const irep_idt want = base_subobject_name(base_id.as_string());
 
-  for (const auto &c : st.components())
-  {
-    if (!has_prefix(c.get_name(), BASE_SUBOBJECT_PREFIX))
-      continue;
 
-    BigInt nested = 0;
-    if (
-      c.get_name() != want &&
-      !base_subobject_offset(ns, c.type(), base_id, nested))
-      continue;
-
-    offset += member_offset(migrate_type(st), c.get_name(), &ns) + nested;
-    return true;
-  }
-
-  return false;
-}
-
-// get_base_components_methods copies a base's components into the derived
-// struct -- and stamps each with its declaring class -- only for the flattened
-// layout it falls back to when the hierarchy contains a virtual base.
-static bool uses_flattened_layout(const namespacet &ns, const typet &derived)
-{
-  const typet &d = ns.follow(derived);
-  if (!d.is_struct())
-    return false;
-
-  for (const auto &c : to_struct_type(d).components())
-    if (!c.get("#base_owner").empty())
-      return true;
-  return false;
-}
-
-// How far `c`, a component of the base, has moved in the derived struct.
-// Nothing if the derived has no such member: matching is on type and on which
-// class declared the member, not just on the name, because
-// is_duplicate_component merges by name alone -- two bases with a same-named
-// member share one slot, and a name-only match would confidently land in the
-// other base's storage. A member the base itself declares is owned by it.
-static std::optional<BigInt> member_delta(
-  const namespacet &ns,
-  const struct_typet &ds,
-  const type2tc &d2,
-  const type2tc &b2,
-  const struct_typet::componentt &c,
-  const irep_idt &base_id)
-{
-  const struct_typet::componentt &dc = ds.get_component(c.get_name());
-  const irep_idt owner =
-    c.get("#base_owner").empty() ? base_id : c.get("#base_owner");
-  if (dc.is_nil() || dc.type() != c.type() || dc.get("#base_owner") != owner)
-    return std::nullopt;
-
-  return member_offset(d2, c.get_name(), &ns) -
-         member_offset(b2, c.get_name(), &ns);
-}
-
-// Displacement of `base_id`'s members inside the flattened `derived` layout,
-// which get_base_components_methods produces for any hierarchy containing a
-// virtual base. Every member of the base must appear in the derived struct at
-// one common delta; a virtual base shared by two sibling bases has no such
-// delta, so the caller keeps the unadjusted pointer. Padding is already in
-// place here: adjust() completes every type symbol before any value.
-static bool flattened_base_offset(
-  const namespacet &ns,
-  const typet &derived,
-  const irep_idt &base_id,
-  BigInt &offset)
-{
-  const typet &d = ns.follow(derived);
-  const symbolt *base_sym = ns.lookup(base_id);
-  if (!d.is_struct() || !base_sym)
-    return false;
-
-  const typet &b = ns.follow(base_sym->get_type());
-  if (!b.is_struct())
-    return false;
-
-  const struct_typet &ds = to_struct_type(d);
-  const struct_typet &bs = to_struct_type(b);
-
-  // A base that keeps the nested layout reaches its own bases through an
-  // "@base@" component, yet get_base_components_methods *also* copies those
-  // ancestors' fields flat into the derived struct. The two copies alias only
-  // at displacement zero, which is what every other access assumes (the
-  // <ios>/<istream>/<ostream> models rely on it), so leave such a base alone.
-  for (const auto &c : bs.components())
-    if (c.get_bool("is_base_subobject"))
-      return false;
-
-  const type2tc d2 = migrate_type(ds);
-  const type2tc b2 = migrate_type(bs);
-
-  bool seen = false;
-  BigInt delta = 0;
-  for (const auto &c : bs.components())
-  {
-    if (c.get_is_padding() || c.get_is_unnamed_bitfield())
-      continue;
-
-    const std::optional<BigInt> d = member_delta(ns, ds, d2, b2, c, base_id);
-    if (!d)
-      return false;
-    if (seen && *d != delta)
-      return false;
-    delta = *d;
-    seen = true;
-  }
-
-  if (!seen || delta < 0)
-    return false;
-
-  offset = delta;
-  return true;
-}
-
-// Displacement of `base_id`'s subobject inside `derived`, from ESBMC's own
-// layout -- the only one the base-offset paths may use. Pick the oracle by
-// layout, never by whichever answers first: a flattened struct also carries
-// the "@base@" components it copied out of a nested-layout base, and walking
-// those lands on storage duplicated at displacement zero (the <ios> models
-// depend on that aliasing).
-static bool base_displacement(
-  const namespacet &ns,
-  const typet &derived,
-  const irep_idt &base_id,
-  BigInt &offset)
-{
-  return uses_flattened_layout(ns, derived)
-           ? flattened_base_offset(ns, derived, base_id, offset)
-           : base_subobject_offset(ns, derived, base_id, offset);
-}
 
 static bool has_side_effect(const exprt &expr)
 {
@@ -1083,8 +954,8 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
 
   expr.type() = typet("pointer");
 
-  // turn &array into &(array[0])
-  if (is_array_like(op.type()))
+  // turn &array into &(array[0]); a vector is a value, not an array (#7907)
+  if (op.type().is_array() || op.type().is_incomplete_array())
   {
     index_exprt index;
     index.array() = op;
@@ -1493,11 +1364,6 @@ static const char *float_lowering_id(
   const irep_idt &identifier,
   const side_effect_expr_function_callt &expr)
 {
-  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
-  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
-  static const std::pair<const char *, const char *> lowerings[] = {
-    {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
-
   /* c2goto compiles the models with this same binary, and libm/remainder.c's
    * own call is what puts ieee_rem into the model. The shape test would strip
    * it there, so only a program's call is checked -- which is where a
@@ -1512,9 +1378,19 @@ static const char *float_lowering_id(
         return nullptr;
   }
 
-  for (const auto &[name, node_id] : lowerings)
-    if (compare_float_suffix(identifier, name))
-      return node_id;
+  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  switch (ieee_float_builtin_of(identifier))
+  {
+  case ieee_float_builtin::nearbyint:
+    return "nearbyint";
+  case ieee_float_builtin::remainder:
+    return "ieee_rem";
+  case ieee_float_builtin::fma:
+    return "ieee_fma";
+  case ieee_float_builtin::none:
+    return nullptr;
+  }
 
   return nullptr;
 }
@@ -2001,39 +1877,45 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
 
 void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 {
-  const code_typet::argumentst &arguments =
-    to_code_type(main_symbol.get_type()).arguments();
-
-  if (arguments.size() == 0)
+  // Both call sites match a *prefix* of `main`, so `main_loop(int, int)` and a
+  // bodyless `mainq(double, char **)` arrive here too, and neither has the
+  // entry point's shape. clang_c_main reads argc'/argv' only for `name ==
+  // "main"`, so narrowing to that loses nothing and stops this building a
+  // symbol out of another function's parameters.
+  if (main_symbol.name != "main")
     return;
+
+  // C11 5.1.2.2.1 fixes what is left: `int main(void)`, the two-argument form
+  // and the common `char **` third parameter. Clang rejects anything else
+  // before the frontend runs, so the pointer shape below is guaranteed.
+  const std::vector<type2tc> &arguments =
+    to_code_type(main_symbol.get_type2()).arguments;
 
   if (arguments.size() != 2 && arguments.size() != 3)
     return;
 
-  const exprt &op0 = arguments[0];
-  const exprt &op1 = arguments[1];
-
   symbolt argc_symbol;
   argc_symbol.name = "argc";
   argc_symbol.id = "argc'";
-  argc_symbol.set_type(op0.type());
+  argc_symbol.set_type(arguments[0]);
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
 
   symbolt *argc_new_symbol;
   context.move(argc_symbol, argc_new_symbol);
 
-  // need to add one to the size -- the array is terminated
-  // with NULL
-  exprt one_expr = from_integer(1, argc_new_symbol->get_type());
-
-  exprt size_expr("+", argc_new_symbol->get_type());
-  size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
+  const type2tc &argc_type = argc_new_symbol->get_type2();
+  // The array is NULL-terminated, hence argc + 1 elements.
+  const expr2tc argv_size = add2tc(
+    argc_type,
+    symbol_expr2tc(*argc_new_symbol),
+    constant_int2tc(argc_type, BigInt(1)));
 
   symbolt argv_symbol;
   argv_symbol.name = "argv";
   argv_symbol.id = "argv'";
-  argv_symbol.set_type(array_typet(op1.type().subtype(), size_expr));
+  argv_symbol.set_type(
+    array_type2tc(to_pointer_type(arguments[1]).subtype, argv_size, false));
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
 
@@ -2042,12 +1924,10 @@ void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 
   if (arguments.size() == 3)
   {
-    const exprt &op2 = arguments[2];
-
     symbolt envp_size_symbol;
     envp_size_symbol.name = "envp_size";
     envp_size_symbol.id = "envp_size'";
-    envp_size_symbol.set_type(op0.type()); // same type as argc!
+    envp_size_symbol.set_type(arguments[0]);
     envp_size_symbol.static_lifetime = true;
 
     symbolt *envp_new_size_symbol;
@@ -2056,11 +1936,11 @@ void declare_argc_argv(contextt &context, const symbolt &main_symbol)
     symbolt envp_symbol;
     envp_symbol.name = "envp";
     envp_symbol.id = "envp'";
-    envp_symbol.set_type(op2.type());
+    envp_symbol.set_type(array_type2tc(
+      to_pointer_type(arguments[2]).subtype,
+      symbol_expr2tc(*envp_new_size_symbol),
+      false));
     envp_symbol.static_lifetime = true;
-    exprt size_expr = symbol_expr(*envp_new_size_symbol);
-    envp_symbol.set_type(
-      array_typet(envp_symbol.get_type().subtype(), size_expr));
 
     symbolt *envp_new_symbol;
     context.move(envp_symbol, envp_new_symbol);

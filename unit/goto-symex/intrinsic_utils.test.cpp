@@ -13,7 +13,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 
 SCENARIO("the memcpy generation can generate valid results", "[symex]")
 {

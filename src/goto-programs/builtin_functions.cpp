@@ -881,6 +881,70 @@ static exprt assigns_marker_operand(const exprt &target)
   return address_of_exprt(target);
 }
 
+/// Lower a call to ::operator new(n) into a cpp_new side effect. Kept out of
+/// do_function_call_symbol, which is already over the complexity gate.
+void goto_convertt::do_operator_new(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  assert(arguments.size() == 1);
+
+  // A byte count that is not a constant cannot be encoded in a type's
+  // width, and the fallback below would model operator new(n) as a
+  // *one-byte* object, reporting every in-bounds access through the returned
+  // pointer as out of bounds. Allocate the n bytes the call asks for
+  // instead, as an array new of unsigned char whose element count is the
+  // requested size: new[] already carries a symbolic extent, which is why
+  // `new T[n]` and `malloc(n)` never had this problem.
+  if (
+    sizeof_measured_type(arguments.front()).is_nil() &&
+    !arguments.front().is_constant())
+  {
+    side_effect_exprt new_array("cpp_new[]");
+    new_array.add("#location") = function.cmt_location();
+    new_array.size(arguments.front());
+    new_array.type() = pointer_typet(unsigned_char_type());
+    new_array.type().add("#location") = function.cmt_location();
+    do_cpp_new(lhs, new_array, dest);
+    return;
+  }
+
+  // Change it into a cpp_new expression
+  side_effect_exprt new_function("cpp_new");
+  new_function.add("#location") = function.cmt_location();
+  new_function.add("sizeof") = arguments.front();
+
+  // The allocated element type is the T of a `sizeof(T)` size argument,
+  // recovered from the unfolded sizeof node (esbmc/esbmc#5337). When the
+  // argument is not a sizeof (e.g. operator new(n) for a raw byte count),
+  // fall back to a single zero-initialised unsigned integer spanning the
+  // requested bytes: operator new(n) allocates n raw bytes, so a later typed
+  // read sees zero, matching the sizeof-present path.
+  typet sizeof_type = sizeof_measured_type(arguments.front());
+  if (sizeof_type.is_nil())
+  {
+    const unsigned char_width = config.ansi_c.char_width;
+    BigInt nbytes(1);
+    if (arguments.front().is_constant())
+      nbytes = binary2integer(arguments.front().value().as_string(), false);
+    // Fall back to a single byte for a non-constant or pathological size:
+    // 1 byte avoids the crash, and capping the byte count keeps the derived
+    // bitvector width from overflowing unsignedbv_typet's 32-bit width.
+    if (nbytes < 1 || nbytes > BigInt(0xFFFFFFFFu / char_width))
+      nbytes = 1;
+    sizeof_type = unsignedbv_typet(nbytes.to_uint64() * char_width);
+  }
+
+  // Set return type, a allocated pointer
+  // XXX jmorse, const-qual misery
+  new_function.type() = pointer_typet(sizeof_type);
+  new_function.type().add("#location") = function.cmt_location();
+
+  do_cpp_new(lhs, new_function, dest);
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -1456,42 +1520,7 @@ void goto_convertt::do_function_call_symbol(
     do_assert_fail(function, arguments, dest, base_name, 3, 0);
   }
   else if (base_name == "operator new")
-  {
-    assert(arguments.size() == 1);
-
-    // Change it into a cpp_new expression
-    side_effect_exprt new_function("cpp_new");
-    new_function.add("#location") = function.cmt_location();
-    new_function.add("sizeof") = arguments.front();
-
-    // The allocated element type is the T of a `sizeof(T)` size argument,
-    // recovered from the unfolded sizeof node (esbmc/esbmc#5337). When the
-    // argument is not a sizeof (e.g. operator new(n) for a raw byte count),
-    // fall back to a single zero-initialised unsigned integer spanning the
-    // requested bytes: operator new(n) allocates n raw bytes, so a later typed
-    // read sees zero, matching the sizeof-present path.
-    typet sizeof_type = sizeof_measured_type(arguments.front());
-    if (sizeof_type.is_nil())
-    {
-      const unsigned char_width = config.ansi_c.char_width;
-      BigInt nbytes(1);
-      if (arguments.front().is_constant())
-        nbytes = binary2integer(arguments.front().value().as_string(), false);
-      // Fall back to a single byte for a non-constant or pathological size:
-      // 1 byte avoids the crash, and capping the byte count keeps the derived
-      // bitvector width from overflowing unsignedbv_typet's 32-bit width.
-      if (nbytes < 1 || nbytes > BigInt(0xFFFFFFFFu / char_width))
-        nbytes = 1;
-      sizeof_type = unsignedbv_typet(nbytes.to_uint64() * char_width);
-    }
-
-    // Set return type, a allocated pointer
-    // XXX jmorse, const-qual misery
-    new_function.type() = pointer_typet(sizeof_type);
-    new_function.type().add("#location") = function.cmt_location();
-
-    do_cpp_new(lhs, new_function, dest);
-  }
+    do_operator_new(lhs, function, arguments, dest);
   else if (base_name == "__ESBMC_va_arg")
   {
     // This does two things.

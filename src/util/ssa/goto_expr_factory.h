@@ -1,6 +1,6 @@
 #pragma once
 
-#include "goto-symex/symex_target_equation.h"
+#include "goto-symex/equation/symex_target_equation.h"
 
 /**
  * @brief Create a constant_int expression

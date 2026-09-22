@@ -18,9 +18,9 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt_result.h>
 #include <solvers/solve.h>
@@ -897,6 +897,13 @@ void esbmc_parseoptionst::diagnose_unknown_properties(
   goto_functionst &goto_functions,
   const uint64_t k_step)
 {
+  // Only the multi-property k-induction path leaves per-claim outcomes
+  // undecided at the last k; every other strategy has already concluded.
+  if (
+    !options.get_bool_option("multi-property") ||
+    !options.get_bool_option("k-induction"))
+    return;
+
   if (options.get_bool_option("disable-inductive-step"))
     return;
 

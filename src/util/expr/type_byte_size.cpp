@@ -481,16 +481,14 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     const index2t &index = to_index2t(expr);
 
     expr2tc sub_size;
-    if (is_array_type(index.source_value))
-    {
-      const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = size_bits_expr(arr_type.subtype);
-    }
+    /* A vector indexes like an array and its lanes sit at the same offsets,
+     * so the element size is read the same way (#7907). */
+    if (is_array_or_vector_type(index.source_value))
+      sub_size =
+        size_bits_expr(array_or_vector_subtype(index.source_value->type));
     else
-    {
       throw std::runtime_error(
         "Unexpected index type in computer_pointer_offset");
-    }
 
     /* Expression needs to be of the bitwidth capable of addressing bits in the
      * standard address space. */
@@ -693,4 +691,60 @@ BigInt alignment(const typet &type, const namespacet &ns)
     result = a_int;
 
   return result;
+}
+
+/* Whether a type opts out of alignment entirely: `packed` and `#pragma
+ * pack(n)` both leave members at offsets their own types do not require, and
+ * the dereference check honours that (dereferencet::is_aligned_member). The
+ * recursion mirrors alignment()'s: ns.follow() resolves symbol types only, so
+ * an array of packed structs has to be reached through its subtype. */
+static bool declines_alignment(const typet &type, const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+
+  if (t.is_array())
+    return declines_alignment(t.subtype(), ns);
+
+  return t.get_bool("packed") || !t.get_string("max_field_alignment").empty();
+}
+
+/* The largest power-of-two alignment an access to an object of this size can
+ * demand, capped at the ABI's fundamental alignment. A symbolic size (VLA,
+ * dynamic object) admits any access the type allows, so assume the cap. */
+static BigInt base_alignment_bump(const expr2tc &size)
+{
+  const BigInt cap(config.ansi_c.max_alignment());
+
+  if (!is_constant_int2t(size))
+    return cap;
+
+  const BigInt &bytes = to_constant_int2t(size).value;
+  BigInt a = 1;
+  while (a * 2 <= bytes && a < cap)
+    a *= 2;
+  return a;
+}
+
+bool is_power_of_two(const BigInt &v)
+{
+  if (v <= 0)
+    return false;
+
+  BigInt p = 1;
+  while (p < v)
+    p *= 2;
+  return p == v;
+}
+
+BigInt object_base_alignment(
+  const typet &type,
+  const expr2tc &size,
+  const namespacet &ns)
+{
+  const BigInt a = alignment(type, ns);
+
+  if (declines_alignment(type, ns))
+    return a;
+
+  return std::max(a, base_alignment_bump(size));
 }

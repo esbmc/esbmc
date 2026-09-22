@@ -682,6 +682,20 @@ class CoreVisitorsMixin:
             return node
         return None
 
+    def _record_staticmethod(self, node, qualified_name):
+        """Note a @staticmethod, whose call binds no receiver (#7546)."""
+        if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
+            self.static_methods.add(qualified_name)
+
+    def _params_without_implicit_self(self, key):
+        """A method's parameters minus its implicit first argument.
+
+        A @staticmethod has no implicit first argument, so stripping one would
+        eat a real parameter and make every call look over-supplied (#7546).
+        """
+        params = self.functionParams[key]
+        return params if key in self.static_methods else params[1:]
+
     def _resolve_function_signature(self, node):
         function_name = None
         expected_args = None
@@ -707,18 +721,18 @@ class CoreVisitorsMixin:
                     qualified_name = f"{var_type}.{method_name}"
             if qualified_name and qualified_name in self.functionParams:
                 function_name = qualified_name
-                expected_args = self.functionParams[qualified_name][1:]
+                expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
             elif method_name in self.functionParams:
                 function_name = method_name
-                expected_args = self.functionParams[method_name][1:]
+                expected_args = self._params_without_implicit_self(method_name)
                 kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"
             if init_name in self.functionParams:
                 function_name = init_name
-                expected_args = self.functionParams[init_name][1:]
+                expected_args = self._params_without_implicit_self(init_name)
                 kwonly_args = self.functionKwonlyParams.get(init_name, [])
             elif func_name in self.functionParams:
                 function_name = func_name
@@ -726,16 +740,36 @@ class CoreVisitorsMixin:
                 kwonly_args = self.functionKwonlyParams.get(func_name, [])
         return function_name, expected_args, kwonly_args
 
-    def _scan_builtin_shadow_names(self, module_node):
-        """Builtin names from the table that this module binds anywhere.
+    @staticmethod
+    def _iter_own_scope_nodes(scope_node):
+        """The nodes whose name bindings belong to `scope_node`'s own scope.
+
+        A nested ``def`` opens a scope of its own, so its parameters and body
+        are skipped; the name it binds, its decorators and its default
+        expressions are evaluated here and are kept. Class bodies, async defs,
+        lambdas and comprehensions are walked into instead of skipped -- their
+        bindings are not visible here, but including them only ever disables a
+        rewrite, and no scope is opened for them below.
+        """
+        stack = list(ast.iter_child_nodes(scope_node))
+        while stack:
+            node = stack.pop()
+            yield node
+            if isinstance(node, ast.FunctionDef):
+                stack.extend(node.decorator_list)
+                stack.extend(d for d in node.args.defaults + node.args.kw_defaults if d)
+            else:
+                stack.extend(ast.iter_child_nodes(node))
+
+    def _scan_scope_builtin_shadows(self, scope_node):
+        """Builtin names from the table that `scope_node` binds in its own scope.
 
         Python resolves a name at call time, so a ``def pow(...)`` below the
-        call shadows the builtin exactly as one above it does. A syntactic pass
-        cannot answer that per scope, so over-approximate: any binding of the
-        name anywhere disables the rewrite for the whole module.
+        call shadows the builtin exactly as one above it does: a binding
+        anywhere in the scope covers the whole scope.
         """
         bound = set()
-        for n in ast.walk(module_node):
+        for n in self._iter_own_scope_nodes(scope_node):
             if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
                 bound.add(n.id)
             elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -747,6 +781,27 @@ class CoreVisitorsMixin:
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 bound.update(a.asname or a.name.split(".")[0] for a in n.names)
         return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+
+    def _scan_builtin_shadow_names(self, module_node):
+        """Builtin names bound at module scope, which every scope inherits."""
+        bound = self._scan_scope_builtin_shadows(module_node)
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Global):
+                # `global int` binds the module-level name from a function.
+                bound.update(set(n.names) & set(self._BUILTIN_POSITIONAL_PARAMS))
+        return bound
+
+    def _enter_builtin_shadow_scope(self, node):
+        """Open `node`'s name scope, returning the set to restore on exit.
+
+        A binding local to one function does not reach another, so the scan is
+        per scope; an inner scope still sees the names its enclosing scopes
+        bind, hence the union (#7557).
+        """
+        saved = self._builtin_shadow_names
+        if saved is not None:
+            self._builtin_shadow_names = saved | self._scan_scope_builtin_shadows(node)
+        return saved
 
     def _builtin_is_shadowed(self, name):
         # None means the module was never scanned: assume shadowed, so an
@@ -1543,6 +1598,124 @@ class CoreVisitorsMixin:
         self.generic_visit(node)
         return node
 
+    @staticmethod
+    def _index_name_for(call):
+        """A comprehension index name unique to one call site, so nesting is safe."""
+        return f"__esbmc_iter_idx_{call.lineno}_{call.col_offset}"
+
+    @staticmethod
+    def _load_name(ident, ctx=None):
+        return ast.Name(id=ident, ctx=ctx or ast.Load())
+
+    @staticmethod
+    def _builtin_call(func, args):
+        return ast.Call(func=CoreVisitorsMixin._load_name(func), args=args, keywords=[])
+
+    def _subscript(self, ident, idx):
+        return ast.Subscript(value=self._load_name(ident),
+                             slice=self._load_name(idx),
+                             ctx=ast.Load())
+
+    @staticmethod
+    def _sequence_literal_elts(seq):
+        """The element nodes of a list/tuple literal, else None.
+
+        A Starred element stands for an unknown number of elements, so the
+        literal's length is not known here and folding it would be wrong.
+        """
+        if not isinstance(seq, (ast.List, ast.Tuple)):
+            return None
+        if any(isinstance(e, ast.Starred) for e in seq.elts):
+            return None
+        return seq.elts
+
+    def _shortest_len(self, names):
+        """len(a) for one name, else min(len(a), len(b)) folded left."""
+        bound = self._builtin_call("len", [self._load_name(names[0])])
+        for other in names[1:]:
+            other_len = self._builtin_call("len", [self._load_name(other)])
+            bound = self._builtin_call("min", [bound, other_len])
+        return bound
+
+    @staticmethod
+    def _index_comprehension(idx, elt_parts, bound):
+        return ast.ListComp(elt=ast.Tuple(elts=elt_parts, ctx=ast.Load()),
+                            generators=[
+                                ast.comprehension(
+                                    target=CoreVisitorsMixin._load_name(idx, ast.Store()),
+                                    iter=CoreVisitorsMixin._builtin_call("range", [bound]),
+                                    ifs=[],
+                                    is_async=0)
+                            ])
+
+    def _zip_to_list(self, call):
+        literals = [self._sequence_literal_elts(s) for s in call.args]
+        if all(elts is not None for elts in literals):
+            width = min((len(elts) for elts in literals), default=0)
+            return ast.List(elts=[
+                ast.Tuple(elts=[copy.deepcopy(elts[i]) for elts in literals], ctx=ast.Load())
+                for i in range(width)
+            ],
+                            ctx=ast.Load())
+        if call.args and all(isinstance(s, ast.Name) for s in call.args):
+            idx = self._index_name_for(call)
+            return self._index_comprehension(idx, [self._subscript(s.id, idx) for s in call.args],
+                                             self._shortest_len([s.id for s in call.args]))
+        return None
+
+    def _enumerate_to_list(self, call):
+        if not 1 <= len(call.args) <= 2:
+            return None
+        seq = call.args[0]
+        start = call.args[1] if len(call.args) == 2 else ast.Constant(value=0)
+        constant_start = isinstance(start, ast.Constant) and isinstance(start.value, int)
+
+        elts = self._sequence_literal_elts(seq)
+        if elts is not None and constant_start:
+            return ast.List(elts=[
+                ast.Tuple(elts=[ast.Constant(value=start.value + i),
+                                copy.deepcopy(e)],
+                          ctx=ast.Load()) for i, e in enumerate(elts)
+            ],
+                            ctx=ast.Load())
+        # A non-constant start would land inside the comprehension body and be
+        # re-evaluated per element; CPython evaluates it once, before iterating.
+        # Hoisting it needs statement context this hook does not have.
+        if isinstance(seq, ast.Name) and constant_start:
+            idx = self._index_name_for(call)
+            position = self._load_name(idx) if start.value == 0 else ast.BinOp(
+                left=self._load_name(idx), op=ast.Add(), right=copy.deepcopy(start))
+            return self._index_comprehension(idx, [position, self._subscript(seq.id, idx)],
+                                             self._builtin_call("len", [self._load_name(seq.id)]))
+        return None
+
+    def _maybe_rewrite_list_over_iterator(self, node):
+        """list(zip(...)) / list(enumerate(...)) -> the equivalent literal or comprehension.
+
+        zip and enumerate are modelled only as a for-loop rewrite
+        (loop_mixin._transform_zip_for), so as a standalone value they reach the
+        generic call builder and produce a list of the wrong length and
+        elements — a false alarm on an assertion CPython holds (#7555).
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                and not node.keywords):
+            return None
+        inner = node.args[0]
+        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                and not inner.keywords):
+            return None
+        if inner.func.id == "zip":
+            rewritten = self._zip_to_list(inner)
+        elif inner.func.id == "enumerate":
+            rewritten = self._enumerate_to_list(inner)
+        else:
+            return None
+        if rewritten is None:
+            return None
+        ast.copy_location(rewritten, node)
+        ast.fix_missing_locations(rewritten)
+        return self.visit(rewritten)
+
     _OPERATOR_DUNDERS = {"__getitem__": 1, "__len__": 0, "__contains__": 1}
 
     def _maybe_rewrite_operator_dunder_call(self, node):
@@ -1584,6 +1757,9 @@ class CoreVisitorsMixin:
         rewritten_dict_list = self._maybe_rewrite_dict_to_list_call(node)
         if rewritten_dict_list is not None:
             return rewritten_dict_list
+        rewritten_iter_list = self._maybe_rewrite_list_over_iterator(node)
+        if rewritten_iter_list is not None:
+            return rewritten_iter_list
         rewritten_newtype = self._maybe_rewrite_newtype_call(node)
         if rewritten_newtype is not None:
             return rewritten_newtype
@@ -1682,6 +1858,7 @@ class CoreVisitorsMixin:
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
         saved_vararg_defs = self._enter_vararg_scope(node)
+        saved_builtin_shadows = self._enter_builtin_shadow_scope(node)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -1698,6 +1875,7 @@ class CoreVisitorsMixin:
 
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
             self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            self._record_staticmethod(node, qualified_name)
             self._record_vararg_function(node, qualified_name)
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
@@ -1723,4 +1901,5 @@ class CoreVisitorsMixin:
             self._single_return_funcs = saved_key_funcs
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
+            self._builtin_shadow_names = saved_builtin_shadows
             self._exit_vararg_scope(node, saved_vararg_defs)

@@ -280,6 +280,10 @@ public:
     const std::string &class_name,
     const std::string &expected_base) const;
 
+  /// Resolves `Alias = builtin` (e.g. `Bytes32 = bytes`) to the builtin's
+  /// name, or "" if `name` is not such an alias.
+  std::string resolve_builtin_alias(const std::string &name) const;
+
 private:
   /// Encapsulate the const_cast in one place with clear documentation
   exprt get_expr_helper(const nlohmann::json &json) const;

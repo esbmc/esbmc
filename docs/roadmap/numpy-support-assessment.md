@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-08-29.
+**Updated:** 2026-09-19.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -16,7 +16,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Feature | Status | Notes |
 |---|---|---|
-| General NumPy array returns from user functions | Partial | A user function can now return a concrete array/view/descriptor built from `np.array`/`np.zeros`/`np.ones`/`np.full`, a bare parameter, a subscript/subarray of a parameter, or a supported descriptor call over a parameter (e.g. `np.transpose(a)`); metadata (`len`, `.shape`, `.ndim`, `.size`), flattened reducers, `argmin`/`argmax`, and the ndarray method forms below all work on the result, multi-argument functions evaluate every argument, and side effects (statements before the `return`, argument calls with side effects) execute exactly once. Incompatible-type branches and container-escaped views/descriptors still reject explicitly. Three narrower gaps remain, each pinned by a `KNOWNBUG` regression: (1) `array_return_call_arg_edge` — mutating a captured list/array inside a function without a `global` declaration for it is a pre-existing, unrelated symbol-resolution gap, not specific to array returns; (2) `array_return_side_effect_edge` — an unannotated function whose body builds an array through a local variable before returning it (`a = np.zeros(3); return a`) gets its declared return type locked to the static annotator's own guess in `get_function_definition` before the body is converted, which pre-empts the later GOTO-scan correction; (3) `array_return_param_shape_transpose_knownbug` — an unannotated 2-D array parameter is typed as a flat 1-D array within the callee's own body, so `numpy.transpose`'s "1-D input is a no-op" fallback silently returns it unchanged whenever the caller-side return-value inlining that normally masks this can't apply (e.g. a call the inliner declines, or a second, function-local alias for `numpy`). (1) and (2) surface as an explicit wrong assertion outcome rather than a crash; (3) is the one case here that can produce a **silently wrong array value** instead of an explicit rejection — see the soundness section below. |
+| General NumPy array returns from user functions | Partial | A user function can now return a concrete array/view/descriptor built from `np.array`/`np.zeros`/`np.ones`/`np.full`, a bare parameter, a subscript/subarray of a parameter, or a supported descriptor call over a parameter (e.g. `np.transpose(a)`); metadata (`len`, `.shape`, `.ndim`, `.size`), flattened reducers, `argmin`/`argmax`, and the ndarray method forms below all work on the result, multi-argument functions evaluate every argument, and side effects (statements before the `return`, argument calls with side effects) execute exactly once. A 2-D array parameter now keeps its full shape (`numpy_param_shapes_`, populated ahead of the C-ABI row-pointer decay) through `.shape`/`.ndim`/`.size` and `numpy.transpose`/`.T`/`.transpose()`, instead of the decayed 1-D pointer type silently truncating both. **Closed this cycle:** a function that builds its returned array through a local variable before `return`ing it (`a = np.zeros(3); a[0] = 5; return a`) used to get its declared return type locked to the static annotator's own `list[float]` guess for the numpy constructor call ahead of body conversion — the annotator now declines that guess specifically for a name the function returns directly, letting the existing GOTO-scan fallback type it correctly from the converted body instead; branches that build the returned array from constructor calls of different shapes reject explicitly rather than crashing the branch-merge. See `array_return_local_construct_success`, `array_return_local_branch_success`, `array_return_local_branch_incompatible_fail`, and the promoted `array_return_side_effect_edge` (formerly `KNOWNBUG`, now `CORE`). One narrower gap remains, pinned by a `KNOWNBUG` regression: `array_return_call_arg_edge` — mutating a captured list/array inside a function without a `global` declaration for it is a pre-existing, unrelated symbol-resolution gap, not specific to array returns. A numpy array parameter with a genuinely symbolic (non-constant) shape is now rejected with a purpose-built diagnostic (`TypeError: numpy array parameter shape must be concrete for .shape/.ndim/.size/len()/transpose()/sort()/argsort()`) when the function body actually reads one of those — see `array_param_shape_unsupported_symbolic_fail`, `array_param_shape_symbolic_metadata_fail`, `array_param_shape_symbolic_transpose_fail`, `array_param_shape_symbolic_sort_fail`; `len()` on such a parameter already resolves soundly through a different path and is deliberately left alone (`array_param_shape_symbolic_len_success`). |
 | Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases fixed-shape 1-D/2-D views through frontend view metadata. Implemented consumers include literal 1-D slices (unit stride, step != 1, and reversed), 2-D row/column views, `diagonal`, `trace`, `fill_diagonal`, `ravel`/`.flat`, 2-D transpose (`np.transpose`, `.T`, `.transpose()`, `swapaxes`, `moveaxis`), contiguous `reshape` rank 1/2, `squeeze`, `expand_dims`, read-only `broadcast_to`, basic single-operand `nditer`, explicit descriptor materialization (`np.copy`, `view.copy`, `np.array(view)`, including empty descriptors), descriptor `tolist()` rank 1/2, and flattened descriptor reducers (`sum`, `mean`, `min`, `max`, `view.any()`, `view.all()`). Literal-index writes are mirrored across sibling 1-D/2-D descriptor views; non-constant view writes are rejected explicitly. Remaining gaps are 3-D+ view aliasing, symbolic shapes/axes/bounds, non-literal descriptor mutation, non-contiguous reshape beyond the explicit recut, advanced `nditer`, descriptor escape through unknown calls/containers/returns, and making `ndarray_descriptor` itself the consulted runtime structure rather than auxiliary frontend maps. |
 | Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
 
@@ -27,7 +27,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Category | Missing items |
 |---|---|
 | Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) and broad constructor parity. |
-| Sorting / searching | `np.sort`/`np.argsort`/`np.searchsorted`/`a.searchsorted()` now accept concrete ndarray *variables* (including ones returned by a pure user function), not just inline literals, and `a.sort()`/`a.argsort()` are supported as in-place/copy method forms over 1-D concrete arrays. Still missing: axis-aware and stable-kind variants, `sort`/`argsort`/`searchsorted` on 2-D arrays, sorter/vector-value forms of `searchsorted`, and symbolic arrays. |
+| Sorting / searching | `np.sort`/`np.argsort`/`np.searchsorted` and the `a.sort()`/`a.argsort()` method forms accept concrete ndarray *variables* (including ones returned by a pure user function, direct or via a local variable), row/column views (`a[i]`, `a[:, j]` — both axes, including through `np.searchsorted`), and 2-D arrays with an `axis` argument, positional or `axis=` keyword (never both). **Closed this cycle:** `numpy.searchsorted()` now accepts a vector of values (`np.searchsorted(a, [2, 6])`, a literal list/tuple or a `Name` bound to one) in addition to a scalar, returning an index per value — see `numpy_searchsorted_vector_values_success`, `numpy_searchsorted_tuple_values_success`, `numpy_searchsorted_sorter_vector_values_success`, and their edge/fail pairs; and a `sorter=` argument (positional or keyword, a literal index array or `np.argsort(a)`/`a.argsort()` computed directly), validated as a genuine permutation of the input's own index range and letting an otherwise-unsorted array be searched — see `numpy_searchsorted_sorter_success`, `ndarray_searchsorted_sorter_success`, `numpy_searchsorted_positional_sorter_success`, and the shape/oob/permutation/symbolic fail pairs. `kind='stable'`/`kind='mergesort'`/`kind=None` (and, for the ndarray method forms, `stable=True`) are now accepted no-ops on `np.sort`/`np.argsort`/`a.sort()`/`a.argsort()`, since the shared conversion-time bubble sort is already stable — any other `kind` still rejects explicitly with a diagnostic naming the supported values — see `numpy_sort_stable_kind_success`, `numpy_argsort_stable_kind_success`, `ndarray_sort_stable_kind_edge`, `ndarray_argsort_stable_kw_edge`, `numpy_sort_mergesort_alias_edge`, `numpy_sort_unknown_kind_fail`. Still missing: `searchsorted` on a genuine 2-D array (as opposed to a 1-D row/column view of one), and symbolic arrays. **Newly discovered gap:** unlike `sort`/`argsort` (which resolve a function-returned array via the same descriptor-materialization path a plain variable uses), `numpy.searchsorted()`'s array argument is resolved by tracing the AST back to a literal `np.array(...)`/constructor call; a variable bound to a function that returns its array through a local variable (`def make(): a = np.zeros(3); return a`) is not something that resolver follows, so `np.searchsorted(make(), ...)` still rejects even after binding the result to a name first — see `array_return_local_then_searchsorted_edge` (`KNOWNBUG`). |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
@@ -52,20 +52,38 @@ Architectural decisions that gate specific pendencies here (referenced as
    writes reject explicitly; 3-D+, symbolic shape/axis/bound cases, broad
    escape handling, and advanced iterator/method semantics remain
    intentionally incomplete.
-5. **One open soundness gap in general array returns.** An unannotated
-   function parameter typed as a 2-D array is represented internally as a
-   flat 1-D array (a pre-existing gap in this frontend's parameter shape
-   propagation, unrelated to array returns specifically). `numpy.transpose`'s
-   existing "1-D input is a no-op" fallback then silently returns such a
-   parameter unchanged instead of transposing it, whenever the caller-side
-   return-value inlining that normally masks this (by substituting the
-   caller's own, correctly-shaped argument before the callee's body ever
-   runs) does not apply — e.g. a second, function-local alias for `numpy`,
-   or any other call shape the inliner declines. Pinned as `KNOWNBUG` in
-   `regression/numpy/array_return_param_shape_transpose_knownbug`. The two
-   other array-return gaps in the table above (`array_return_call_arg_edge`,
-   `array_return_side_effect_edge`) surface as an explicit wrong verdict
-   rather than a silently accepted wrong array value.
+5. **Closed: the local-array-return return-type-locking soundness gap.** A
+   function returning a numpy array it built through a local variable
+   (`a = np.zeros(3); return a`) had its declared return type locked to a
+   generic `PyListObject*` ahead of body conversion, because the static
+   annotator resolved the local variable's own `np.zeros(...)` binding
+   through the numpy operational model's declared `list[float]` signature —
+   a mismatch invisible to the model, since the model has no notion of the
+   converter's later concrete array type. With a symbolic branch condition
+   this let a real out-of-bounds access go undetected (`VERIFICATION
+   SUCCESSFUL`) instead of being rejected — see
+   `array_return_divergent_branch_shape_fail` (from a related, already-fixed
+   nested-return-inference gap) for the same class of unsoundness. Fixed by
+   having the annotator decline that generic guess specifically when the
+   name being assigned is the one the enclosing function returns directly,
+   so the existing GOTO-scan fallback types the function from its actual
+   converted body instead. See `array_return_local_construct_success`,
+   `array_return_local_branch_success`, and the promoted
+   `array_return_side_effect_edge`.
+6. **Closed: the 2-D parameter shape/transpose soundness gap.** An
+   unannotated 2-D array parameter used to be represented internally as a
+   flat 1-D array after the C-ABI row-pointer decay, so `numpy.transpose`'s
+   "1-D input is a no-op" fallback silently returned such a parameter
+   unchanged instead of transposing it. Fixed by tracking the parameter's
+   full pre-decay shape (`numpy_param_shapes_`, `python_converter.h`) and
+   rematerializing it (via the same descriptor-materialization machinery the
+   reducers/sort use) wherever the decayed type alone no longer carries
+   enough dimensions — `.shape`/`.ndim`/`.size` and
+   `numpy.transpose`/`.T`/`.transpose()`. See
+   `array_return_param_shape_transpose_success` (formerly `KNOWNBUG`) and
+   `array_param_transpose_success`. The remaining array-return gap in the
+   table above (`array_return_call_arg_edge`) still surfaces as an explicit
+   wrong verdict rather than a silently accepted wrong array value.
 
 The numpy call-result chaining gap that used to be listed here — a `Name`
 argument whose declaration was itself a non-constructor numpy call resolving
@@ -89,16 +107,12 @@ verdict. By that bar, every gap in "Missing indexing / slicing" and
 "Missing API surface" above is **not** a blocker for community testing —
 each one already rejects explicitly instead of misbehaving.
 
-With the call-result chaining fix above, the only known soundness gap left in
-this file is the narrow parameter-shape/`transpose` case in "Soundness /
-performance concerns" item 5, pinned as a `KNOWNBUG` regression rather than
-left silently passing. **A build can be cut for community testing from
-here** — everything else remaining is documented backlog that surfaces as an
-explicit "not supported yet" diagnostic, not a wrong answer; testers hitting
-the one open gap will see a plausible-looking but incorrect transposed array
-rather than a crash or rejection, so it is worth flagging in release notes
-for anyone exercising array-returning functions with unannotated 2-D
-parameters.
+With the call-result chaining fix, the parameter-shape/`transpose` fix, and
+the local-array-return return-type-locking fix (Soundness / performance
+concerns items 5–6) above, this file has **no known open soundness gap** —
+every remaining item is documented backlog that surfaces as an explicit "not
+supported yet" diagnostic, not a wrong answer. **A build can be cut for
+community testing from here.**
 
 ---
 
@@ -110,22 +124,17 @@ backlog, in priority order:
 1. **3-D+ and symbolic view descriptors (ADR-NP-003 etapa 3)** — extend the
    fixed-shape rank 1/2 descriptor model to higher ranks, symbolic
    shapes/axes/bounds, and broader stride combinations.
-2. **Parameter shape propagation for unannotated 2-D array parameters** —
-   root-cause why such a parameter is typed as flat 1-D within the callee's
-   own body (soundness item 5); this also underlies
-   `array_return_side_effect_edge`'s return-type-locking gap, since both
-   trace back to the static annotator's guess winning over the function
-   body's real shape.
-3. **Symbolic and broader multi-axis slicing** — support cases beyond the
+2. **Symbolic and broader multi-axis slicing** — support cases beyond the
    literal/fixed-shape recuts.
-4. **Axis-aware and 2-D `sort`/`argsort`/`searchsorted`** — extend the
-   now-concrete-variable 1-D recut to `axis=`, stable-kind kwargs, and 2-D
-   arrays.
-5. **Advanced dtype and constructor parity** — structured/object/custom dtype
+3. **`numpy.searchsorted()`'s remaining gaps** — a genuine 2-D array input
+   (as opposed to a row/column view), symbolic arrays, and resolving a
+   function-returned array the way `sort`/`argsort` already do (currently
+   `array_return_local_then_searchsorted_edge`, a `KNOWNBUG`).
+4. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
-6. **Random and iteration depth** — probability/replacement `choice`, extra
+5. **Random and iteration depth** — probability/replacement `choice`, extra
    distributions, and advanced `nditer`.
-7. **Linear algebra breadth** — larger matrices, symbolic entries, and more
+6. **Linear algebra breadth** — larger matrices, symbolic entries, and more
    faithful `norm`/`eig`/`svd`.
 
 ---
@@ -139,20 +148,19 @@ distinct designs are sized accordingly instead of assumed to be one PR each.
 1. **3-D+ / symbolic view descriptors** (~2 PRs) — extend the rank 1/2
    fixed-shape descriptor model to higher ranks, symbolic axes/bounds/shapes,
    and broader non-literal stride combinations.
-2. **Parameter shape propagation** (~1 PR) — fix the unannotated-2-D-array-
-   parameter typing gap (soundness item 5); closes the one remaining silent
-   wrong-answer case plus `array_return_side_effect_edge`.
-3. **Axis-aware and 2-D sort/searching** (~1 PR) — `axis=`, stable-kind
-   kwargs, and 2-D `sort`/`argsort`/`searchsorted`.
-4. **Advanced dtype and constructors** (~2 PRs) — dtype policy
+2. **`numpy.searchsorted()`'s remaining gaps** (~1 PR) — a genuine 2-D array
+   input, symbolic arrays, and resolving a function-returned array the same
+   way `sort`/`argsort` already do (stable-kind, sorter, and vector-value
+   forms over concrete arrays and row/column views are now implemented).
+3. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.
-5. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
+4. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
    separate from advanced `nditer`.
-6. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
+5. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
    separate from fuller `eig`/`svd`/`norm`.
 
-**Total to close every item in this file: ~10 PRs.**
+**Total to close every item in this file: ~9 PRs.**
 
 ---
 

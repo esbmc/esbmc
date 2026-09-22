@@ -1,5 +1,6 @@
 THOROUGH
 main.cu
---unwind 10  --force-malloc-success    
+--unwind 10 --force-malloc-success --context-bound 2 --data-races-check
 
 ^VERIFICATION FAILED$
+^.*data race on .*@F@_curand_init_scratch#.*@state::[0-9]+\.d$

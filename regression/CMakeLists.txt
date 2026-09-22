@@ -32,6 +32,17 @@ set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
+# cov-regression: the minimal coverage suite. One test name per line;
+# together with the unit tests it covers exactly the lines the full
+# regression suite covers (100% parity, line-level verified).
+set(ESBMC_COV_TESTS "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS" cov_manifest)
+    list(FILTER cov_manifest EXCLUDE REGEX "^#")
+    list(FILTER cov_manifest EXCLUDE REGEX "^[ \t]*$")
+    set(ESBMC_COV_TESTS "${cov_manifest}")
+endif()
+
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
@@ -105,6 +116,17 @@ if(ESBMC_SIZEOF_LONG EQUAL 8)
     list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
 endif()
 
+# A `z3` executable is on PATH. The smtlib backend reads model values from a
+# solver it spawns over a pipe (--smtlib-solver-prog), which it implements on
+# POSIX only -- see the _WIN32 arm of smtlib_convt::smtlib_convt. A linked z3
+# is not enough: the test names the program for a shell to look up.
+if(NOT WIN32)
+    find_program(ESBMC_TEST_Z3_BINARY z3)
+    if(ESBMC_TEST_Z3_BINARY)
+        list(APPEND ESBMC_TEST_CAPABILITIES z3_binary)
+    endif()
+endif()
+
 # The per-test budget is long enough for a test that takes minutes to solve.
 # ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
 # short leg allows has no way to ask for more; without this it is reported as
@@ -146,6 +168,9 @@ function(add_esbmc_regression_test folder modes test)
     endif()
     if("${folder}/${test}" IN_LIST ESBMC_PLATFORM_SENSITIVE_TESTS)
         string(APPEND extra_labels ";platform-sensitive")
+    endif()
+    if("${test_name}" IN_LIST ESBMC_COV_TESTS)
+        string(APPEND extra_labels ";cov-regression")
     endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
@@ -443,6 +468,30 @@ else()
   endif()
 endif()
 
+# CORE is a budget, not just a verdict: no CORE test may exceed 30 seconds.
+# CORE is what every platform and every reduced configuration runs -- the
+# Windows and macOS legs below, and the CORE_REGRESSION_ONLY builds (coverage,
+# sanitizers) -- so a slow CORE test is paid for on every one of them, and it is
+# the set a contributor waits on before a PR can merge. A test that needs longer
+# belongs in THOROUGH, which runs on Linux only.
+#
+# Measure in the DebugOpt PR build, not in a coverage or sanitizer build. Those
+# instrument every basic block and run at -j4: the same tests measure a median
+# 4.0x slower there (p90 5.5x), so a 30s rule applied to their numbers demotes
+# tests that take 5s in the build that actually gates PRs.
+#
+# To re-check, take a green `Build ESBMC (ubuntu-24.04)` job and read the
+# durations ctest prints:
+#     gh api repos/esbmc/esbmc/actions/jobs/<job-id>/logs \
+#       | grep -oP 'Test\s+#\d+:\s+\S+\s+\.*\s+\S+\s+[\d.]+\s+sec'
+# then cross-reference each name against its test.desc first line; only CORE
+# rows count. 410 tests were moved CORE -> THOROUGH on this basis on 2026-09-09
+# (runs 34333868660 DebugOpt and 34322944627 coverage); nothing then exceeded
+# 30s in either configuration.
+#
+# The slow/very-slow lists further down are a different thing: they widen the
+# per-test *timeout* for tests that legitimately sit near the cap, and say
+# nothing about which mode a test belongs in.
 foreach(regression IN LISTS REGRESSIONS)
     if(WIN32 OR APPLE) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE)
@@ -580,11 +629,6 @@ set(_slow_regression_tests
     # the run (see shortest_path_lengths note below; #4927).
     "regression/quixbugs/knapsack"
     "regression/quixbugs/knapsack_fail"
-    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
-    # defaultdict-free list). It does not converge under --unwind 9, so it is
-    # marked FUTURE (BMC scalability); the larger inner timeout lets
-    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
-    "regression/python-intensive/problem1_fail"
     # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
     # supports simple names, not Subscript". With subscript-target unpacking
     # support (#4792) the swap converts and ESBMC reaches the real nested-loop
@@ -697,6 +741,7 @@ set(_slow_regression_tests
     # floats-regression suite runs ~3x slower while the rest matches x86 to
     # within 5% (#7308). The 2x budget keeps the armv8 leg green.
     "regression/floats-regression/nn-tanh_5_unsafe"
+    "regression/consensus/get_subtree_index"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
@@ -742,6 +787,12 @@ set(_very_slow_regression_tests
     "regression/esbmc/github_1352"
     "regression/esbmc/github_1352-32bit"
     "regression/esbmc/github_1352-fail-32bit"
+    # problem1_fail was FUTURE for scalability (#4932); it converges now, at
+    # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
+    # above is ~70s locally against ~248s with assertions on, and that ratio
+    # puts this past the 2x tier's 240s (#7679). Its VmPeak is ~4.7GiB against
+    # the global 8GiB RLIMIT_AS, which has no per-test override.
+    "regression/python-intensive/problem1_fail"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

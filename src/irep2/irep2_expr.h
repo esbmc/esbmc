@@ -49,7 +49,7 @@ enum class constant_string_kindt
  *                       across functions).
  *   - level2_global   — like level2, but for a globally-scoped symbol.
  *
- * See src/goto-symex/renaming.cpp for the exact transitions. */
+ * See src/goto-symex/state/renaming.cpp for the exact transitions. */
 enum class symbol_renaming_level
 {
   level0,
@@ -285,13 +285,23 @@ class constant_int2t : public expr2t
 {
 public:
   BigInt value;
+  /// How the literal was written in the source, as `#cformat` records it.
+  /// Unreflected: two constants of the same value and type are the same
+  /// constant however they were spelled, so this must not reach hashing or
+  /// equality. Kept because `c_expr2string` prefers it over deriving the text
+  /// from the type, and dropping it re-renders every printed literal
+  /// (docs/roadmap/frontends-to-irep2.md §63).
+  irep_idt cformat;
 
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
    */
-  constant_int2t(const type2tc &type, const BigInt &input)
-    : expr2t(type, constant_int_id), value(input)
+  constant_int2t(
+    const type2tc &type,
+    const BigInt &input,
+    const irep_idt &fmt = irep_idt())
+    : expr2t(type, constant_int_id), value(input), cformat(fmt)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -303,6 +313,7 @@ public:
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_int2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -336,18 +347,25 @@ class constant_floatbv2t : public expr2t
 {
 public:
   ieee_floatt value;
+  /// The literal's source spelling; see constant_int2t::cformat. Unreflected
+  /// for the same reason, and load-bearing for the same printer, which derives
+  /// an `f`/`l` suffix when it is absent.
+  irep_idt cformat;
 
   /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
-  constant_floatbv2t(const ieee_floatt &value)
-    : expr2t(value.spec.get_type(), constant_floatbv_id), value(value)
+  constant_floatbv2t(const ieee_floatt &value, const irep_idt &fmt = irep_idt())
+    : expr2t(value.spec.get_type(), constant_floatbv_id),
+      value(value),
+      cformat(fmt)
   {
   }
   constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_floatbv2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -478,6 +496,12 @@ public:
  *  to the members described in the type. However, it seems the values pumped
  *  at us by CBMC only ever have one member (at position 0) representing the
  *  most recent value written to the union.
+ *
+ *  The one exception is a union type with no members, which occupies no
+ *  storage and so has no member to initialise: gen_zero answers with a
+ *  zero-member constant here. Such a constant is a zero-width value and must
+ *  not reach dereference, whose constant_union2t arm asserts the single
+ *  initialiser this comment describes.
  */
 class constant_union2t : public expr2t
 {
@@ -709,6 +733,18 @@ public:
   expr2tc from;
   expr2tc rounding_mode;
 
+  /// The base class this cast converts to, when the frontend could not route
+  /// the conversion through a `@base@` component and the displacement has to
+  /// be applied once the layout is padded (clang_c_adjust_expr.cpp, #7025).
+  /// Empty on every other cast. Carried because an IREP2 adjust pass cannot
+  /// otherwise tell such a cast apart, and reading the base subobject without
+  /// the displacement silently proves false assertions
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+  irep_idt derived_to_base;
+
+  /// The mirror: a downcast whose operand points at a base subobject.
+  bool base_to_derived;
+
   /** Primary constructor.
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
@@ -717,8 +753,14 @@ public:
   typecast2t(
     const type2tc &type,
     const expr2tc &from_,
-    const expr2tc &rounding_mode_)
-    : expr2t(type, typecast_id), from(from_), rounding_mode(rounding_mode_)
+    const expr2tc &rounding_mode_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
+    : expr2t(type, typecast_id),
+      from(from_),
+      rounding_mode(rounding_mode_),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -727,10 +769,16 @@ public:
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
    */
-  typecast2t(const type2tc &type, const expr2tc &from_)
+  typecast2t(
+    const type2tc &type,
+    const expr2tc &from_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
     : expr2t(type, typecast_id),
       from(from_),
-      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
+      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode")),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -740,7 +788,9 @@ public:
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
     &typecast2t::from,
-    &typecast2t::rounding_mode);
+    &typecast2t::rounding_mode,
+    &typecast2t::derived_to_base,
+    &typecast2t::base_to_derived);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1445,8 +1495,9 @@ public:
   address_of2t(
     const type2tc &subtype,
     const expr2tc &ptrobj,
-    bool is_implicit = false)
-    : expr2t(pointer_type2tc(subtype), address_of_id),
+    bool is_implicit = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : expr2t(pointer_type2tc(subtype, false, rk), address_of_id),
       ptr_obj(ptrobj),
       implicit(is_implicit)
   {
@@ -1634,12 +1685,22 @@ public:
       source->type->type_id == type2t::array_id);
     /* member must exist exactly once in the parent struct/union — only
        checkable once the source type is resolved (skipped for the transient
-       cases) */
-    assert(
-      source->type->type_id == type2t::symbol_id ||
-      source->type->type_id == type2t::pointer_id ||
-      source->type->type_id == type2t::array_id ||
-      struct_union_get_component_number(source->type, memb).has_value());
+       cases above; the lookup throws on an unresolved source -- without that
+       guard `python2goto` cannot build the Python OM library, §162.2).
+
+       A code-typed member is the exception, and it is checked the other way
+       round: it names a method, methods are no part of a struct_type2t, so it
+       must NOT resolve to a component. What verifies such a member exists at
+       all is upstream, where a namespace is in hand --
+       clang_cpp_adjust_irep2::adjust_cpp_member looks it up by name and asserts
+       the symbol is code (docs/roadmap/frontends-to-irep2.md §76). */
+    if (
+      source->type->type_id != type2t::symbol_id &&
+      source->type->type_id != type2t::pointer_id &&
+      source->type->type_id != type2t::array_id)
+      assert(
+        struct_union_get_component_number(source->type, memb).has_value() ==
+        (type->type_id != type2t::code_id));
 #endif
   }
   member2t(const member2t &ref) = default;
@@ -1881,6 +1942,23 @@ public:
   std::vector<expr2tc> arguments;
   type2tc alloctype;
   sideeffect_allockind kind;
+
+  /// This call constructs an object. The converter's `#constructor` marker,
+  /// which has nowhere else to live in IREP2 -- the callee's `constructor`
+  /// return type migrates to empty (migrate.cpp) and cannot be restored from
+  /// it. clang_cpp_maint::adjust_init reads the marker *after* this pass, so a
+  /// body written back without it loses a global's construction
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.17).
+  ///
+  /// Declared next to `kind`, where it packs into existing padding, and *not*
+  /// reflected: listing it in `fields` makes the primary constructor's
+  /// parameter order stop matching the field order (`location` sits between),
+  /// which is what supports_with_type_v tests -- with_type then rejects every
+  /// side effect at run time. Like `location`, it is therefore carried but not
+  /// compared, and dropped by a with_type rebuild, which reconstructs from
+  /// `fields` alone.
+  bool constructor;
+
   locationt location; // not reflected: source loc travels with the stmt
   static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
@@ -1901,13 +1979,15 @@ public:
     const std::vector<expr2tc> &a,
     const type2tc &alloct,
     sideeffect_allockind k,
-    const locationt &loc = locationt())
+    const locationt &loc = locationt(),
+    bool ctor = false)
     : expr2t(t, sideeffect_id),
       operand(oper),
       size(sz),
       arguments(a),
       alloctype(alloct),
       kind(k),
+      constructor(ctor),
       location(loc)
   {
     if (k == sideeffect_allockind::alloca)
@@ -2465,6 +2545,25 @@ class sideeffect_assign2t : public expr2t
 {
 public:
   irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
+
+  /// This assignment is a constructor's member initialiser. The C++ adjust
+  /// pass leaves such an lhs alone: a reference member is being *bound* here,
+  /// and reading it through would copy the referent instead
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.16). The converter marks the lhs
+  /// with `#member_init`, which has nowhere else to live in IREP2.
+  ///
+  /// Declared next to `op` deliberately: it packs into that field's padding, so
+  /// the class does not grow and fields_cover_class's slack is unaffected.
+  /// Placed after `location` the compiler packs it into the location's padding
+  /// and the invariant underflows instead.
+  ///
+  /// Not reflected, for the reason `sideeffect2t::constructor` is not: listing
+  /// it makes the field order stop matching the primary constructor's parameter
+  /// order (`location` sits between), which is what supports_with_type_v tests,
+  /// and every with_type on an assignment then aborts (§7.2). A with_type
+  /// rebuild carries it through the specialization in irep2_expr.cpp.
+  bool member_init;
+
   expr2tc lhs;
   expr2tc rhs;
   locationt location; // not reflected: source loc travels with the stmt
@@ -2475,8 +2574,14 @@ public:
     const irep_idt &o,
     const expr2tc &l,
     const expr2tc &r,
-    const locationt &loc = locationt())
-    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r), location(loc)
+    const locationt &loc = locationt(),
+    bool member_init_ = false)
+    : expr2t(t, sideeffect_assign_id),
+      op(o),
+      member_init(member_init_),
+      lhs(l),
+      rhs(r),
+      location(loc)
   {
   }
   sideeffect_assign2t(const sideeffect_assign2t &ref) = default;

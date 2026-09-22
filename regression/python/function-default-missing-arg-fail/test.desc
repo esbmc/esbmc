@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 1
-^TypeError: returns\_y\(\) missing 1 required positional argument: \'x\'$
+^ERROR: returns_y\(\) missing 1 required positional argument: \'x\'$

@@ -44,7 +44,8 @@ static_assert(
 
 // Phase 4.3 seam (Part IV §5/§6): lower an internally-built IREP2 type to the
 // legacy `typet` the symbol table and shared downstream passes consume,
-// re-attaching the `#cpp_type` hint IREP2 cannot carry (F-P5). The elementary
+// re-attaching attributes the seam still drops (`#cpp_type` itself is now
+// carried, §10). The elementary
 // builders construct `type2tc` via typed factories and pass through here, so
 // the legacy bytes reaching `create_symbol` stay byte-identical to before.
 typet lower_to_seam(const type2tc &t, const irep_idt &cpp_type = irep_idt())
@@ -128,7 +129,11 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   if (func_name == "__init__")
     return true;
 
-  if (type_utils::is_builtin_type(func_name))
+  // Consensus type names (Gwei, uint64, ...) are typed casts, not
+  // constructor calls, even when also declared as a plain user class.
+  if (
+    type_utils::is_builtin_type(func_name) ||
+    type_utils::is_consensus_type(func_name))
     return false;
 
   /* The statement is a constructor call if the function call on the
@@ -242,16 +247,24 @@ std::string type_handler::get_var_type(const std::string &var_name) const
 
   const auto &annotation = ref["annotation"];
 
+  // A simple `Alias = bytes`-style annotation names the alias, not the
+  // builtin; dispatch decisions elsewhere (e.g. len()'s strlen-vs-
+  // get_object_size choice, builder.cpp) key off the builtin name.
+  auto resolve = [this](const std::string &name) -> std::string {
+    const std::string resolved = resolve_builtin_alias(name);
+    return resolved.empty() ? name : resolved;
+  };
+
   // Handle simple type annotations: int, str, list, etc.
   if (annotation.is_object() && annotation.contains("id"))
-    return annotation["id"].get<std::string>();
+    return resolve(annotation["id"].get<std::string>());
 
   // Handle subscripted types: List[str], Optional[int], etc.
   if (
     annotation.is_object() && annotation.contains("_type") &&
     annotation["_type"] == "Subscript" && annotation.contains("value") &&
     annotation["value"].is_object() && annotation["value"].contains("id"))
-    return annotation["value"]["id"];
+    return resolve(annotation["value"]["id"]);
 
   // Handle Union types (e.g., list[str] | None, str | int)
   // Union is represented as BinOp with BitOr operator
@@ -272,13 +285,13 @@ std::string type_handler::get_var_type(const std::string &var_name) const
       {
         // Recursively extract type from left side
         if (left.contains("id"))
-          return left["id"].get<std::string>();
+          return resolve(left["id"].get<std::string>());
 
         // Handle subscripted types on left: list[str] | None
         if (
           left["_type"] == "Subscript" && left.contains("value") &&
           left["value"].contains("id"))
-          return left["value"]["id"].get<std::string>();
+          return resolve(left["value"]["id"].get<std::string>());
       }
     }
 
@@ -291,12 +304,12 @@ std::string type_handler::get_var_type(const std::string &var_name) const
             right.contains("value") && right["value"].is_null()))
       {
         if (right.contains("id"))
-          return right["id"].get<std::string>();
+          return resolve(right["id"].get<std::string>());
 
         if (
           right["_type"] == "Subscript" && right.contains("value") &&
           right["value"].contains("id"))
-          return right["value"]["id"].get<std::string>();
+          return resolve(right["value"]["id"].get<std::string>());
       }
     }
   }
@@ -573,7 +586,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       symbolt type_symbol;
       type_symbol.id = complex_type_id;
       type_symbol.name = "complex";
-      type_symbol.set_type(get_complex_struct_type());
+      type_symbol.set_type(migrate_type(get_complex_struct_type()));
       type_symbol.mode = "Python";
       type_symbol.is_type = true;
       symbol_table.move_symbol_to_context(type_symbol);
@@ -632,7 +645,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     if (type_size == 1)
     {
       // 8-bit char built IREP2-internal; #cpp_type "char" is re-attached at the
-      // seam for C-backend compatibility (F-P5 — IREP2 cannot carry it).
+      // seam for C-backend compatibility (F-P5; the seam carries it since §10).
       const type2tc char_t = config.ansi_c.char_is_unsigned
                                ? unsignedbv_type2tc(config.ansi_c.char_width)
                                : signedbv_type2tc(config.ansi_c.char_width);
@@ -770,6 +783,26 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   log_warning("Unknown or unsupported AST type: {}", ast_type);
 
   return empty_typet();
+}
+
+std::string type_handler::resolve_builtin_alias(const std::string &name) const
+{
+  const nlohmann::json &decl = json_utils::find_var_decl(
+    name, converter_.current_function_name(), converter_.ast());
+  if (decl.empty() || !decl.contains("value") || !decl["value"].is_object())
+    return "";
+
+  const nlohmann::json &value = decl["value"];
+  if (
+    !value.contains("_type") || value["_type"] != "Name" ||
+    !value.contains("id"))
+    return "";
+
+  const std::string &target = value["id"];
+  if (type_utils::is_builtin_type(target))
+    return target;
+
+  return "";
 }
 
 typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const

@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/irep/std_code.h>
@@ -668,6 +669,90 @@ static bool zero_initialises(const clang::Expr &init)
     return ce->requiresZeroInitialization();
 
   return false;
+}
+
+/// The id a catch handler matches a throw on. The catch type rides on the
+/// handler block's own type and is read off it exactly once -- here.
+/// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
+/// code_block2t has no type to carry it across the seam
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
+static void set_handler_exception_id(const namespacet &ns, exprt &handler)
+{
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, handler.type(), "", ids);
+  if (!ids.empty())
+    handler.set("exception_id", ids.front());
+}
+
+/// A pseudo-destructor call does nothing but evaluate its base
+/// ([expr.pseudo]/1) -- there is nothing to call. Reduce it where it is built,
+/// so the node never reaches the goto program: IREP2 has no kind for it, and an
+/// adjust pass that migrates first therefore cannot see it at all
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.15). Applied at get_expr's exit so
+/// it covers every call spelling, as clang_cpp_adjust's arm did.
+static void reduce_pseudo_destructor_call(exprt &expr)
+{
+  // The legacy arm only ever saw a side_effect_expr_function_callt. Say so,
+  // rather than leaning on "two operands whose first carries this id" -- true
+  // of nothing else today, but it states no precondition.
+  if (
+    expr.id() != "sideeffect" || expr.operands().size() != 2 ||
+    expr.op0().id() != "cpp-pseudo-destructor")
+    return;
+
+  assert(expr.op0().operands().size() == 1);
+  expr = expr.op0().op0();
+}
+
+/// Whether a thrown type's exception ids follow from the type alone, *and*
+/// cannot change between here and the adjust pass.
+///
+/// A class type's id is its symbol's name and its bases come from the symbol
+/// table, a lookup this early in conversion cannot rely on; everything else
+/// resolves to the `#cpp_type` spelling, which the IREP2 seam does not carry,
+/// so those ids are recorded at conversion time instead (§7.6). Pointer layers
+/// are stripped because convert_exception_id recurses through them.
+///
+/// An **array** operand is excluded: it decays between here and the legacy
+/// pass, so an id recorded from the pre-decay type is not the one the handler
+/// is matched against. A pointer is fine and is recursed through, as
+/// convert_exception_id does.
+static bool exception_id_needs_no_lookup(const typet &type)
+{
+  if (type.id() == "array")
+    return false;
+
+  if (type.id() == "pointer")
+    return exception_id_needs_no_lookup(type.subtype());
+
+  return type.id() != "symbol" && type.id() != "struct" &&
+         !type.cpp_type().empty();
+}
+
+/// Record a throw's exception ids at conversion time, for the operand types
+/// whose ids follow from the type alone.
+///
+/// A primitive's id is its `#cpp_type` spelling, and the IREP2 seam does not
+/// carry that: computed from a back-migrated type, `throw 1` reads as
+/// `signedbv` while the handler, whose ids never cross the seam, still reads
+/// `signed_int`, and the throw escapes uncaught. A class type is left to the
+/// adjust pass instead: its id is the type symbol's name, which crosses
+/// intact, and resolving its bases needs a lookup this early in conversion
+/// (docs/roadmap/scope-clang-cpp-irep2.md §7.6).
+static void
+record_primitive_exception_ids(exprt &throw_expr, const namespacet &ns)
+{
+  if (!exception_id_needs_no_lookup(throw_expr.op0().type()))
+    return;
+
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, throw_expr.op0().type(), "", ids);
+
+  irept exception_list("exception_list");
+  exception_list.get_sub().resize(ids.size());
+  for (std::size_t i = 0; i < ids.size(); i++)
+    exception_list.get_sub()[i].id(ids[i]);
+  throw_expr.set("exception_list", exception_list);
 }
 
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -1342,6 +1427,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*cxxtry.getHandler(i), handler))
         return true;
 
+      set_handler_exception_id(namespacet(context), handler);
       new_expr.move_to_operands(handler);
     }
 
@@ -1393,7 +1479,13 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       new_expr.move_to_operands(tmp);
+      // Deliberately the moved-from `tmp`, i.e. empty: a cpp-throw's own type
+      // is set by the adjust pass, and giving it the operand's type here
+      // changes the default path (three try_catch rows stop failing as they
+      // should).
       new_expr.type() = tmp.type();
+
+      record_primitive_exception_ids(new_expr, namespacet(context));
     }
 
     break;
@@ -1766,6 +1858,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
     break;
   }
+
+  reduce_pseudo_destructor_call(new_expr);
 
   new_expr.location() = location;
   return false;
@@ -2382,6 +2476,7 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
           build_member_from_component(fd, member);
+        size_flexible_array_member(*member_decl, member.type());
 
         // set #member_init flag again, as it has been cleared between the first call...
         member.set("#member_init", 1);
@@ -2423,7 +2518,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.set_type(this_type);
+            new_symbol.set_type(migrate_type(this_type));
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
@@ -3023,14 +3118,12 @@ bool clang_cpp_convertert::annotate_class_field(
   const struct_union_typet &type,
   struct_typet::componentt &comp)
 {
-  // set parent in component's type
+  // A field of a tagless class type has no parent to attach it to.
   if (type.tag().empty())
   {
     log_error("Goto empty tag in parent class type in {}", __func__);
     return true;
   }
-  std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().member_name(parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -3094,12 +3187,11 @@ bool clang_cpp_convertert::annotate_class_method(
   /*
    * The order of annotations matters.
    */
-  // annotate parent — derive the id via get_decl_name so it matches the
-  // record's symbol id exactly (Clang 22+ prepends the kind name; older
-  // versions don't).
+  // The multi-TU vptr-init fallback below needs the class id; derive it via
+  // get_decl_name so it matches the record's symbol id exactly (Clang 22+
+  // prepends the kind name; older versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.member_name(parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
@@ -3112,9 +3204,8 @@ bool clang_cpp_convertert::annotate_class_method(
     /*
      * We also have a `component` in class type representing the ctor/dtor.
      * Need to sync the type of this function symbol and its corresponding type
-     * of the component inside the class' symbol
-     * We just need "#member_name" and "return_type" fields to be synced for later use
-     * in the adjuster.
+     * of the component inside the class' symbol: the adjuster reads the return
+     * type back to tell a ctor from a dtor.
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
@@ -3273,8 +3364,9 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
       derived_struct.is_struct() &&
       to_struct_type(derived_struct).has_component(base_comp))
     {
-      dereference_exprt deref(
-        implicit_this_symb, implicit_this_symb.type().subtype());
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(implicit_this_symb, implicit_this_symb.type());
       member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
       implicit_this_symb = address_of_exprt(m);
       routed = true;
