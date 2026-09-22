@@ -236,8 +236,8 @@ static bool declares_body_return_type(const typet &actual)
     actual.is_struct() &&
     actual.get("tag").as_string().find("Optional_") != std::string::npos;
   return (actual.is_pointer() && actual.subtype().is_code()) ||
-         is_optional_struct || actual.is_signedbv() ||
-         actual.is_unsignedbv() || actual.is_bool();
+         is_optional_struct || actual.is_signedbv() || actual.is_unsignedbv() ||
+         actual.is_bool();
 }
 
 symbolt python_lambda::create_symbol(
@@ -407,8 +407,7 @@ bool binds_list_literal(const nlohmann::json &scope, const std::string &name)
     // spellings have to be recognised here.
     const nlohmann::json *target = binding_target(stmt);
 
-    if (
-      target == nullptr || target->value("id", "") != name)
+    if (target == nullptr || target->value("id", "") != name)
       continue;
 
     // A bare annotation (`cars: list`) is an AnnAssign whose value is JSON
@@ -499,8 +498,7 @@ assigned_values(const nlohmann::json &scope, const std::string &name)
     // binds nothing -- and which throws if read as an object.
     if (
       target == nullptr || target->value("id", "") != name ||
-      !stmt.contains("value") ||
-      !stmt["value"].is_object())
+      !stmt.contains("value") || !stmt["value"].is_object())
       continue;
 
     values.push_back(&stmt["value"]);
@@ -602,7 +600,7 @@ bool binds_by_field(const nlohmann::json &node, const std::string &name)
   {
     const nlohmann::json &as =
       node.contains("asname") && node["asname"].is_string() ? node["asname"]
-                                                             : node["name"];
+                                                            : node["name"];
     const std::string bound = as.get<std::string>();
     return bound == "*" || bound.substr(0, bound.find('.')) == name;
   }
@@ -677,9 +675,8 @@ literal_type(const nlohmann::json &value, type_handler &types)
 /// The scalar type an assignment gives its target. A literal keeps its own
 /// type, as ESBMC's variables do, so an annotation contradicting it (`x: int =
 /// 2.5`) answers nothing rather than truncating.
-std::optional<typet> assigned_scalar_type(
-  const nlohmann::json &stmt,
-  type_handler &types)
+std::optional<typet>
+assigned_scalar_type(const nlohmann::json &stmt, type_handler &types)
 {
   const std::optional<typet> literal = literal_type(stmt["value"], types);
   if (stmt.value("_type", "") != "AnnAssign")
