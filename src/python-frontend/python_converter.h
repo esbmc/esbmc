@@ -834,6 +834,17 @@ private:
     const std::string &enclosing_function,
     std::set<std::string> &visiting) const;
 
+  /// A single call site's argument (at `param_index`) resolved to a bytes
+  /// length: locally within the call's enclosing scope, or forwarded
+  /// through that scope's own bytes parameter
+  /// (resolve_forwarded_bytes_param_size).
+  std::optional<long long> resolve_bytes_call_site_arg_size(
+    const std::string &enclosing_function,
+    const nlohmann::json &call,
+    size_t param_index,
+    const nlohmann::json &module_body,
+    std::set<std::string> &visiting) const;
+
   /// Wraps infer_bytes_param_size_from_call_sites for
   /// register_function_argument: nullopt for `self`/`cls`, a non-bytes or
   /// already-sized parameter, or one with no single inferable size; otherwise
