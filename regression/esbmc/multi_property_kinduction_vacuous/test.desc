@@ -1,0 +1,7 @@
+CORE
+main.c
+--k-induction --multi-property --check-vacuity --max-k-step 8
+^VERIFICATION UNKNOWN$
+^\s+UNKNOWN\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion x == 7 \(vacuous discharge: path assumptions are unsatisfiable;
+^\*\* 0 of 1 properties failed, 1 unknown$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z
