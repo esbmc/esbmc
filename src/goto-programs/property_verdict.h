@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 
 class optionst;
@@ -95,11 +96,12 @@ public:
     const property_locationt &loc,
     const std::string &note = "");
 
-  /// Raises every NotChecked entry to Passed. Call only once the run has
-  /// established that *all* properties hold -- a monolithic UNSAT refutes the
-  /// disjunction of every claim violation, so each claim holds -- and never
-  /// after a merely bounded round such as a k-induction base case. Does
-  /// nothing while is_incomplete().
+  /// Raises every NotChecked entry recorded since the last begin_round() or
+  /// clear() to Passed. Call only once the run has established that *all*
+  /// properties hold -- a monolithic UNSAT refutes the disjunction of every
+  /// claim violation, so each claim holds -- and never after a merely bounded
+  /// round such as a k-induction base case. Does nothing while
+  /// is_incomplete().
   void promote_unchecked_to_passed();
 
   /// Records that a phase stopped before every property reached a verdict,
@@ -107,14 +109,8 @@ public:
   void note_incomplete();
 
   /// Starts the round of a k-step strategy's next base case, incomplete until
-  /// complete_round(). A proof at k needs only that k's base case to have
-  /// solved every claim, since it covers every shorter path too, so what an
-  /// earlier k skipped no longer counts; a base case that throws never
-  /// completes its round.
-  void begin_round()
-  {
-    incomplete = true;
-  }
+  /// complete_round(). A row this round never records is not promoted.
+  void begin_round();
 
   /// Records that the round's base case solved every claim it raised.
   void complete_round()
@@ -155,6 +151,7 @@ public:
 private:
   mutable std::mutex mutex;
   std::map<std::string, property_resultt> results;
+  std::set<std::string> recorded_this_round;
   std::atomic<bool> violation{false};
   std::atomic<bool> incomplete{false};
 };

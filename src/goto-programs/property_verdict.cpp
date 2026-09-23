@@ -65,6 +65,7 @@ void property_verdict_tablet::record(
     violation = true;
 
   std::lock_guard lock(mutex);
+  recorded_this_round.insert(property);
   auto [it, inserted] =
     results.emplace(property, property_resultt{verdict, note, loc});
   if (inserted)
@@ -84,9 +85,19 @@ void property_verdict_tablet::promote_unchecked_to_passed()
     return;
 
   std::lock_guard lock(mutex);
-  for (auto &[property, result] : results)
+  for (const std::string &property : recorded_this_round)
+  {
+    property_resultt &result = results.at(property);
     if (result.verdict == property_verdictt::NotChecked)
       result.verdict = property_verdictt::Passed;
+  }
+}
+
+void property_verdict_tablet::begin_round()
+{
+  std::lock_guard lock(mutex);
+  recorded_this_round.clear();
+  incomplete = true;
 }
 
 void property_verdict_tablet::note_incomplete()
@@ -127,6 +138,7 @@ void property_verdict_tablet::clear()
 {
   std::lock_guard lock(mutex);
   results.clear();
+  recorded_this_round.clear();
   violation = false;
   incomplete = false;
 }

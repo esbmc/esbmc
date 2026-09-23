@@ -613,6 +613,10 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
   never solved the skipped claim, completed its round, and the promotion
   proved it. `goto_symext::assertion_message` names an assertion's own claim
   for both symex and this match.
+- The reverse direction: a settled assertion's skip also removes the
+  checks raised in its guard. So promotion covers only the rows the closing
+  round recorded (`recorded_this_round`); a row whose instruction a
+  settled claim removed stays `UNKNOWN`.
 - **Tests.** `multi_property_kinduction_fail_fast` now pins `PASSED`: the
   claim `--multi-fail-fast` skipped at k = 1 is solved at k = 2, and the
   forward condition proves it there. `multi_property_kinduction_diagnose_fail_fast`
@@ -627,6 +631,11 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
   `assertion *p == 2` `FAILED` after its NULL-pointer check fails at k = 1;
   skipping the assertion with the check reports it `PASSED`. Its twin
   `multi_property_kinduction_check_in_assert` pins the safe program proved.
+  `multi_property_incremental_check_in_skipped_assert_fail` pins the bounds
+  check inside a failed `assert(*p == 0)` `UNKNOWN`; promoting every row
+  reports it `PASSED`, where `--unwind 4` reports it `FAILED`. Its twin
+  `multi_property_incremental_check_in_skipped_assert` pins both rows
+  promoted on the safe program.
 - Not pinned by a test: a withheld proof keeping its claim, and a throwing
   base case leaving its round incomplete. Both need a phase to end in
   `P_ERROR` or an exception, which no regression input forces.
@@ -637,6 +646,11 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
     proofs of claims the same base case did solve, and a forward condition or
     inductive step that ends in `P_ERROR` withholds the diagnostic pass's
     proofs too. A per-claim skip set recorded by the base case would be exact.
+  - A check inside a settled assertion that no base case raised before the
+    skip never gets a row: `assert(*p == 0)` over a pointer that becomes
+    NULL at `i == 2` fails at k = 1, and the NULL-pointer row is missing
+    from the table that `--unwind 4` reports `FAILED`. Skipping an
+    instruction only once every claim it raises is settled would close it.
   - The per-claim inductive step under `--loop-invariant` is gated by the same
     predicate but has no test of its own.
   - `multi_property_kinduction_diagnose_fail_fast` depends on claims being
