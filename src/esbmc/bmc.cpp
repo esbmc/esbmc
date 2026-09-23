@@ -832,17 +832,17 @@ void bmct::clear_verified_claims_in_goto(
       if (!instr.is_assert())
         continue;
 
-      bool loc_match = (instr.location.as_string() == claim.claim_loc);
-      bool expr_match = false;
+      // Only the instruction's own assertion: --loop-invariant copies a loop
+      // body, and a check symex raises while evaluating an assertion's guard
+      // shares its instruction, so neither may skip it on its own verdict.
+      const bool match =
+        is_goto_cov
+          ? instr.location.as_string() == claim.claim_loc &&
+              instr.location.comment().as_string() == claim.claim_msg
+          : &instr == claim.claim_instruction &&
+              goto_symext::assertion_message(ns, instr) == claim.claim_comment;
 
-      std::string guard_str = from_expr(ns, "", instr.guard);
-
-      if (is_goto_cov)
-        expr_match = (instr.location.comment().as_string() == claim.claim_msg);
-      else
-        expr_match = (guard_str == claim.claim_msg);
-
-      if (loc_match && expr_match)
+      if (match)
       {
         instr.make_skip();
       }

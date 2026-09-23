@@ -517,6 +517,16 @@ void goto_symext::symex_assume()
   propagate_assume_equality(cond);
 }
 
+std::string goto_symext::assertion_message(
+  const namespacet &ns,
+  const goto_programt::instructiont &i)
+{
+  const std::string comment = i.location.comment().as_string();
+  if (!comment.empty())
+    return comment;
+  return "assertion " + from_expr(ns, "", migrate_expr_back(i.guard));
+}
+
 void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
@@ -529,12 +539,7 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  std::string msg = cur_state->source.pc->location.comment().as_string();
-  if (msg == "")
-  {
-    exprt guard = migrate_expr_back(instruction.guard);
-    msg = "assertion " + from_expr(ns, "", guard);
-  }
+  const std::string msg = assertion_message(ns, instruction);
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
