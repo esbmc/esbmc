@@ -99,24 +99,31 @@ public:
   /// established that *all* properties hold -- a monolithic UNSAT refutes the
   /// disjunction of every claim violation, so each claim holds -- and never
   /// after a merely bounded round such as a k-induction base case. Does
-  /// nothing once note_incomplete() has been called in this round.
+  /// nothing while is_incomplete().
   void promote_unchecked_to_passed();
 
   /// Records that a phase stopped before every property reached a verdict,
-  /// disarming proofs until the next begin_round().
+  /// disarming proofs until the next round completes.
   void note_incomplete();
 
-  /// Starts the round of a k-step strategy's next base case. A proof at k
-  /// needs only that k's base case to have solved every claim, since it
-  /// covers every shorter path too, so what an earlier k skipped no longer
-  /// counts.
+  /// Starts the round of a k-step strategy's next base case, incomplete until
+  /// complete_round(). A proof at k needs only that k's base case to have
+  /// solved every claim, since it covers every shorter path too, so what an
+  /// earlier k skipped no longer counts; a base case that throws never
+  /// completes its round.
   void begin_round()
+  {
+    incomplete = true;
+  }
+
+  /// Records that the round's base case solved every claim it raised.
+  void complete_round()
   {
     incomplete = false;
   }
 
-  /// Whether note_incomplete() has been called since the last clear() or
-  /// begin_round().
+  /// Whether a phase since the last clear() or complete_round() stopped short,
+  /// or the round's base case has not completed.
   bool is_incomplete() const
   {
     return incomplete;

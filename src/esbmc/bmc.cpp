@@ -181,13 +181,9 @@ phase_left_properties_undecided(bool report_incomplete, smt_resultt res)
   return report_incomplete || res == P_ERROR || res == P_SMTLIB;
 }
 
-/// Whether this round discharges a claim only within the current k. A base
-/// case of a k-step strategy does: "not violated within k" is not a proof, and
-/// recording one would put a bounded result in the run's table as a verdict.
-/// Recording Unknown instead would be worse, since it outranks the proof a
-/// later forward condition or inductive step finds (§4 of
-/// docs/roadmap/multi-property-strategy-plan.md), so such a claim stays
-/// NotChecked.
+/// Whether this phase is a k-step strategy's base case, which opens and
+/// completes a round and discharges a claim only within the current k
+/// (withholds_proofs()).
 static bool is_bounded_round(const optionst &options)
 {
   return options.get_bool_option("base-case") &&
@@ -2086,6 +2082,8 @@ smt_resultt bmct::start_bmc()
   // skipped every property and never sets report_incomplete.
   if (phase_left_properties_undecided(report_incomplete, res))
     goto_functionst::property_verdicts.note_incomplete();
+  else if (is_bounded_round(options))
+    goto_functionst::property_verdicts.complete_round();
 
   // A single monolithic UNSAT refutes the disjunction of every claim's
   // violation, so on a genuinely conclusive run each claim holds. Anything
@@ -3158,7 +3156,7 @@ smt_resultt bmct::multi_property_check(
       // or a warm k-induction / --incremental-bmc run keeps re-symexing the
       // claims a cold one had already dropped -- the opposite of the point
       // (esbmc/esbmc#7143). Same guard as the P_UNSATISFIABLE arm below.
-      if (!is_keep_verified && !bs)
+      if (!is_keep_verified && !bs && !withhold_proofs)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
         clear_verified_claims_in_goto(claim, is_goto_cov);
@@ -3565,8 +3563,9 @@ smt_resultt bmct::multi_property_check(
     else if (solver_result == P_UNSATISFIABLE)
       // for kind && incr: remove verified claims
       // when we find a property proven correct in
-      // either forward condition or inductive step
-      if (!is_keep_verified && !bs)
+      // either forward condition or inductive step; a claim whose proof is
+      // withheld stays for the next base case to solve.
+      if (!is_keep_verified && !bs && !withhold_proofs)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
         clear_verified_claims_in_goto(claim, is_goto_cov);
