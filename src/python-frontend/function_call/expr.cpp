@@ -710,6 +710,40 @@ static exprt retype_or_typecast(exprt expr, const typet &target)
   return expr;
 }
 
+exprt function_call_expr::handle_bool_call(
+  const nlohmann::json &arg,
+  size_t arg_size) const
+{
+  exprt value_expr = converter_.get_expr(arg);
+  if (value_expr.is_nil())
+    return value_expr;
+  if (value_expr.statement() == "cpp-throw")
+    return value_expr;
+
+  // A custom object defining __bool__ decides its own truthiness; otherwise
+  // the value's own type (numeric/pointer) is cast to bool below.
+  exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+    "bool", value_expr, converter_.get_location_from_decl(call_));
+  if (!dunder_result.is_nil())
+    return dunder_result;
+
+  if (is_complex_type(value_expr.type()))
+    return complex_to_bool_expr(value_expr);
+
+  // A container is true when non-empty; relabelling its pointer as a bool
+  // leaves a term the solver rejects. A str keeps the path below: strlen stops
+  // at an embedded NUL, which bool("\x00") must not.
+  if (!type_utils::is_string_type(value_expr.type()))
+  {
+    const exprt is_empty = converter_.build_emptiness_check(value_expr, call_);
+    if (is_empty.is_not_nil())
+      return not_exprt(is_empty);
+  }
+
+  const typet bool_t = type_handler_.get_typet("bool", arg_size);
+  return retype_or_typecast(value_expr, bool_t);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1196,26 +1230,7 @@ exprt function_call_expr::build_constant_from_arg() const
     return handle_abs(arg);
 
   else if (func_name == "bool")
-  {
-    exprt value_expr = converter_.get_expr(arg);
-    if (value_expr.is_nil())
-      return value_expr;
-    if (value_expr.statement() == "cpp-throw")
-      return value_expr;
-
-    // A custom object defining __bool__ decides its own truthiness; otherwise
-    // the value's own type (numeric/pointer) is cast to bool below.
-    exprt dunder_result = converter_.dispatch_unary_dunder_operator(
-      "bool", value_expr, converter_.get_location_from_decl(call_));
-    if (!dunder_result.is_nil())
-      return dunder_result;
-
-    if (is_complex_type(value_expr.type()))
-      return complex_to_bool_expr(value_expr);
-
-    const typet bool_t = type_handler_.get_typet(func_name, arg_size);
-    return retype_or_typecast(value_expr, bool_t);
-  }
+    return handle_bool_call(arg, arg_size);
 
   else if (func_name == "str")
   {
