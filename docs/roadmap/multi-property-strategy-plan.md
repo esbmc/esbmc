@@ -1,6 +1,6 @@
 # Plan — `--multi-property` under the k-step strategies
 
-**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed.
+**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage done.
 **Origin:** Discussion
 [#7900](https://github.com/esbmc/esbmc/discussions/7900), *"Current state of
 --multi-property support"*: is `--multi-property` orthogonal to the analysis
@@ -692,12 +692,32 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
 - The SV-COMP wrapper's `falsi` strategy does not pass `--multi-property`
   (`esbmc-wrapper.py:359`), so its runs take the unchanged path.
 
-### W5 — re-triage
+### W5 — re-triage — done
 
-Re-run the reproducers of #1599, #2075 and #7503 on the W1–W4 build. Close
-each one that passes with a `github_<N>` test. Check the KNOWNBUG suite for
-multi-property entries in the same pass. File D6 separately, after checking
-it against existing issues and KNOWNBUG tests.
+Re-ran the reproducers of #1599, #1902, #2075 and #7503 on the W4 build
+(`cb39ed84de`). None of the open ones is a multi-property defect:
+
+- **#1902** passes: `--k-induction --multi-property` ends at k = 2 through the
+  forward condition, `VERIFICATION FAILED`. Pinned by `github_1902` and
+  `github_1902_safe`. `--keep-verified-claims` brings the symptom back.
+- **#1599** still aborts in `array_convt::execute_array_joining_ite`
+  (Bitwuzla, Boolector; Z3 completes). Without `--multi-property` the run
+  stops at the scanf `assert(0)` that `--overflow` emits before it reaches the
+  crashing claim. Delete that scanf call and the plain run aborts too. It is a
+  solver-encoding defect, as the issue's 2024 comment already found.
+- **#2075**: both traces are valid witnesses. Forcing `valve == 1` gives a
+  trace that omits iteration 1's `valve = 2`. That is the slicer, and plain
+  BMC does it without `--multi-property` or `--branch-coverage`; `--no-slice`
+  prints the state.
+- **#7503** is live: a claim guarded by `i == 5` in a two-iteration loop is in
+  `--show-claims` but missing from the table under plain BMC, `--multi-property`
+  and `--incremental-bmc`. `--k-induction` lists it.
+
+KNOWNBUG: `loop-invariants/6-invariant_in_wrong_place` and
+`7-not_conjunct_invariant` still pass as KNOWNBUG and give the same verdict
+without `--multi-property`. `goto-coverage/github_1720_6` is a coverage count.
+D6 still aborts, and no issue or KNOWNBUG test covers it. Its assert predates
+#7587.
 
 ### W6 — documentation
 
