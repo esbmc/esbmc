@@ -137,6 +137,25 @@ int puts(const char *str);
 int getw(FILE *stream);
 int ungetc(int c, FILE *stream);
 
+/* getline is POSIX.1-2008, which also has <stdio.h> expose ssize_t. Guards
+ * and spelling as in <sys/socket.h>, so including both is not a redefinition. */
+#if !defined(_SSIZE_T_DEFINED) && !defined(__ssize_t_defined) &&               \
+  !defined(_SSIZE_T)
+#define _SSIZE_T_DEFINED
+#define __ssize_t_defined
+#define _SSIZE_T
+#ifdef __APPLE__
+typedef long ssize_t;
+#else
+typedef __PTRDIFF_TYPE__ ssize_t;
+#endif
+#endif
+
+ssize_t getline(
+  char **__ESBMC_restrict lineptr,
+  size_t *__ESBMC_restrict n,
+  FILE *__ESBMC_restrict stream);
+
 /* Misc */
 int remove(const char *pathname);
 int rename(const char *oldpath, const char *newpath);

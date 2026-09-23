@@ -262,7 +262,7 @@ bool clang_c_maint::clang_main()
         symbolt len_sym;
         len_sym.name = irep_idt(lname);
         len_sym.id = irep_idt("c:@" + lname);
-        len_sym.set_type(uint_type());
+        len_sym.set_type(migrate_type(uint_type()));
         len_sym.static_lifetime = true;
         len_sym.lvalue = true;
         symbolt *len_ptr = nullptr;
@@ -285,7 +285,7 @@ bool clang_c_maint::clang_main()
         symbolt str_sym;
         str_sym.name = irep_idt(sname);
         str_sym.id = irep_idt("c:@" + sname);
-        str_sym.set_type(array_typet(char_t, len));
+        str_sym.set_type(migrate_type(array_typet(char_t, len)));
         str_sym.static_lifetime = true;
         str_sym.lvalue = true;
         symbolt *str_ptr = nullptr;
@@ -436,7 +436,7 @@ bool clang_c_maint::clang_main()
   {
     typet t = new_symbol.get_type();
     t.swap(main_type);
-    new_symbol.set_type(std::move(t));
+    new_symbol.set_type(migrate_type(t));
   }
   {
     exprt v = new_symbol.get_value();

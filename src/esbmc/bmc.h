@@ -222,15 +222,6 @@ private:
   /// silent, leaving the report to the phase that does.
   void report_property_verdicts(smt_resultt res) const;
 
-  /// Print the property table, grouped by file and function.
-  void print_property_rows(
-    const std::vector<struct property_rowt> &rows,
-    const struct property_countst &counts) const;
-
-  /// Print the "** N of M properties failed, ..." line.
-  void
-  print_property_summary(size_t total, const struct property_countst &) const;
-
   /// Render the verdict table as coverage goals rather than properties.
   void report_coverage_goal_verdicts(
     const std::map<std::string, property_resultt> &verdicts) const;
@@ -277,6 +268,11 @@ private:
   /// otherwise the only place a user learns the run proved anything.
   bool saw_bounded_loop_truncation = false;
 
+  /// Whether this phase's UNSAT may be reported as a proof of the program: no
+  /// claim discharged vacuously, the LTL monitor instrumented, and, under a
+  /// k-step strategy, every row of the run's table Passed.
+  bool proves_the_program() const;
+
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the
   /// path through report_result() that reaches report_success().
@@ -312,6 +308,16 @@ private:
   /// Atomic because multi_property_check sets it from parallel job threads.
   std::atomic<bool> report_incomplete{false};
 };
+
+/// Print the property table a k-step strategy accumulated across its phases,
+/// once, where the strategy concludes without a phase of its own having
+/// reported (the k steps ran out). Rows the run never decided print as
+/// UNKNOWN: every base case checked them, none settled them. A no-op on a run
+/// that keeps a table per phase.
+void report_k_step_property_table(
+  const optionst &options,
+  const goto_functionst &goto_functions,
+  const namespacet &ns);
 
 void report_coverage(
   const optionst &options,

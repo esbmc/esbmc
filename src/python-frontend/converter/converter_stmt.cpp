@@ -923,6 +923,36 @@ bool is_imported_numpy_module_alias(
   return false;
 }
 
+// Converts a scalar RHS whose kind differs from the LHS's, returning whether
+// it did; both must run before Case 6, whose width alignment retypes the RHS
+// in place.
+// Case 5 (P19): a real RHS into a complex LHS is promoted. A complex struct is
+// 128-bit and a float 64-bit, so width alignment would otherwise corrupt the
+// float by assigning it the struct type. Handles z = 1.0, z = n, z = True.
+// Case 5b: a bool into an int or float LHS is a value conversion; retyped,
+// the constant `true` is read as a number and aborts in binary2integer.
+static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
+{
+  const typet rhs_type = rhs.type();
+  // is_bool() must be explicit since is_integer_type() excludes bool.
+  const bool is_real = rhs_type.is_floatbv() ||
+                       type_utils::is_integer_type(rhs_type) ||
+                       rhs_type.is_bool();
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  {
+    rhs = promote_to_complex(rhs);
+    return true;
+  }
+  if (
+    rhs_type.is_bool() &&
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  {
+    rhs = typecast_exprt(rhs, lhs_type);
+    return true;
+  }
+  return false;
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -1039,19 +1069,9 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
-  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
-  // while a scalar float is 64-bit, so width alignment would otherwise fire
-  // first and corrupt the float by assigning struct type to it.
-  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
-  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
-  else if (
-    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
-    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
-     rhs_type.is_bool()))
-  {
-    rhs = promote_to_complex(rhs);
-  }
+  // Cases 5 and 5b: see convert_scalar_rhs.
+  else if (convert_scalar_rhs(lhs_type, rhs))
+    return;
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
@@ -1237,7 +1257,7 @@ void python_converter::handle_assignment_type_adjustments(
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     return;
   }
 
@@ -1251,7 +1271,7 @@ void python_converter::handle_assignment_type_adjustments(
     rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
     lhs.type() = rhs.type();
   }
 
@@ -1271,10 +1291,12 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type
+      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
+      // drops #python_aggregate, which `in` dispatches on
+      // (docs/roadmap/scope-python-irep2.md §10.4).
       lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     }
   }
   else if (lhs_symbol)
@@ -1309,7 +1331,7 @@ void python_converter::handle_assignment_type_adjustments(
         // misread. Any is not a constraint, so adopt the rhs type. Only on
         // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
         // (1, 2)`) must not retype uses already emitted at the old type.
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
@@ -1325,7 +1347,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = typecast_exprt(rhs, lhs.type());
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->set_value(rhs);
+        lhs_symbol->set_value(migrate_expr(rhs));
       return;
     }
     // Handle string-to-string variable assignments
@@ -1337,7 +1359,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs_symbol->get_value().type().is_array())
       {
         rhs = rhs_symbol->get_value();
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1399,7 +1421,7 @@ void python_converter::handle_assignment_type_adjustments(
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
           {
-            lhs_symbol->set_type(rhs.type());
+            python_expr::set_symbol_type(*lhs_symbol, rhs.type());
             lhs.type() = rhs.type();
           }
         }
@@ -1417,7 +1439,7 @@ void python_converter::handle_assignment_type_adjustments(
       else
       {
         // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1445,10 +1467,13 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
-      lhs_symbol->set_type(rhs.type());
+      lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
     }
 
+    // Legacy: migrate_expr turns a class-object value (`x = int`) into an empty
+    // array constant, and isinstance folds on it
+    // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
       lhs_symbol->set_value(rhs);
   }
@@ -1805,6 +1830,19 @@ static bool json_literal_contains_boolean(const nlohmann::json &node)
   return false;
 }
 
+// `.shape[i]` indexes the plain int tuple `.shape` returns, never the
+// array's own data -- it must never be tracked as a numpy view/alias
+// (root_name_from_subscript drills through any Attribute to its base Name,
+// so without this guard `shape_0 = a.shape[0]` registers shape_0 as a view
+// copy of `a` itself). Split out of is_basic_numpy_view_subscript to keep
+// that function's own decision count down.
+static bool is_shape_attribute_value(const nlohmann::json &subscript_value)
+{
+  return subscript_value.is_object() &&
+         subscript_value.value("_type", "") == "Attribute" &&
+         subscript_value.value("attr", "") == "shape";
+}
+
 bool python_converter::is_basic_numpy_view_subscript(
   const nlohmann::json &node) const
 {
@@ -1852,6 +1890,14 @@ bool python_converter::is_basic_numpy_view_subscript(
   }
 
   return is_basic_index(slice);
+}
+
+bool python_converter::is_tracked_numpy_view_subscript(
+  const nlohmann::json &node) const
+{
+  return node.is_object() && node.contains("value") &&
+         !is_shape_attribute_value(node["value"]) &&
+         is_basic_numpy_view_subscript(node);
 }
 
 bool python_converter::is_numpy_array_constructor_expr(
@@ -2058,7 +2104,7 @@ bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
   if (!node.is_object())
     return false;
 
-  if (is_basic_numpy_view_subscript(node))
+  if (is_tracked_numpy_view_subscript(node))
     return true;
 
   if (
@@ -2082,7 +2128,7 @@ std::string python_converter::root_name_from_numpy_view_copy_expr(
   if (!node.is_object())
     return "";
 
-  if (is_basic_numpy_view_subscript(node))
+  if (is_tracked_numpy_view_subscript(node))
     return root_name_from_subscript(node["value"]);
 
   if (
@@ -2116,7 +2162,7 @@ bool python_converter::is_tracked_numpy_view_name_node(
 bool python_converter::is_basic_numpy_view_subscript_escape(
   const nlohmann::json &node)
 {
-  if (!is_basic_numpy_view_subscript(node))
+  if (!is_tracked_numpy_view_subscript(node))
     return false;
 
   const std::string root_name = root_name_from_subscript(node["value"]);
@@ -2445,6 +2491,14 @@ std::optional<std::vector<std::size_t>>
 python_converter::get_numpy_nditer_logical_shape(
   const std::string &root_id) const
 {
+  // A 2-D+ numpy array parameter: its own symbol type lost the outer
+  // dimension to the C-ABI row-pointer decay (register_function_argument),
+  // so the full shape must come from here rather than the fallback below,
+  // which would otherwise read the decayed (1-D) type instead.
+  if (auto param_it = numpy_param_shapes_.find(root_id);
+      param_it != numpy_param_shapes_.end())
+    return param_it->second;
+
   if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
       pointer_it != numpy_pointer_view_info_.end())
     return std::vector<std::size_t>{pointer_it->second.length};
@@ -6987,8 +7041,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   nlohmann::json call_node;
   bool is_wrapped_in_unary = false;
 
-  // Check for function call wrapped in UnaryOp (e.g., "not func()")
-  if (test_type == "UnaryOp" && ast_node["test"].contains("operand"))
+  // Check for function call wrapped in `not` (e.g., "not func()"). Only `not`
+  // is re-applied below; -, ~ and + over a call take the general expression
+  // path, which dropped here used to leave the condition as the bare call.
+  if (
+    test_type == "UnaryOp" && ast_node["test"].contains("operand") &&
+    ast_node["test"]["op"]["_type"] == "Not")
   {
     auto operand_type = ast_node["test"]["operand"]["_type"].get<std::string>();
     if (operand_type == "Call")
@@ -7259,14 +7317,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       if (!is_wrapped_in_unary)
         return base_expr;
 
-      auto op = ast_node["test"]["op"]["_type"].get<std::string>();
-      if (op == "Not")
-      {
-        exprt unary_expr("not", bool_type());
-        unary_expr.copy_to_operands(base_expr);
-        return unary_expr;
-      }
-      return base_expr;
+      exprt unary_expr("not", bool_type());
+      unary_expr.copy_to_operands(base_expr);
+      return unary_expr;
     };
 
     // Get the function call expression with special handling
@@ -7776,8 +7829,8 @@ void python_converter::get_return_statements(
     if (
       type_handler_.is_numeric_scalar_type(val.type()) ||
       type_handler_.is_string_type(val.type()))
-      val = dynamic_type_handler_.build_tagged_return_value(
-        val, location, target_block);
+      val =
+        dynamic_type_handler_.build_tagged_value(val, location, target_block);
     else
       throw std::runtime_error(
         "returning a value of this type from a dynamically-typed function "

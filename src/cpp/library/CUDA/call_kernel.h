@@ -15,6 +15,52 @@ int threadGlobal;
 
 #define GPU_threads 2
 
+// The device count is platform-dependent. It is chosen once, before any thread
+// starts; the upper bound keeps __cudaPeerIndex within an unsigned int.
+int __cudaChooseDeviceCount()
+{
+  int n = nondet_int();
+  __ESBMC_assume(n >= 1 && n <= 65536);
+  return n;
+}
+
+int __cudaDeviceCount = __cudaChooseDeviceCount();
+// CUDA keeps the current device per host thread.
+__thread int __cudaCurrentDevice = 0;
+// Owning device plus one of each cudaMalloc allocation; zero for host memory.
+__attribute__((annotate("__ESBMC_inf_size"))) int __cudaDeviceOf[1];
+// Whether a device may dereference a peer's memory.
+__attribute__((annotate("__ESBMC_inf_size"))) bool __cudaPeerAccess[1];
+
+unsigned int __cudaPeerIndex(int device, int peer)
+{
+  return (unsigned int)device * 65536u + (unsigned int)peer;
+}
+
+template <class T>
+void __cudaCheckKernelArg(T)
+{
+}
+
+// A kernel runs on the current device and may only dereference that device's
+// memory, or a peer's once peer access is enabled.
+template <class T>
+void __cudaCheckKernelArg(T *p)
+{
+  const int owner = __cudaDeviceOf[__ESBMC_POINTER_OBJECT((const void *)p)];
+  __ESBMC_assert(
+    owner == 0 || owner == __cudaCurrentDevice + 1 ||
+      __cudaPeerAccess[__cudaPeerIndex(__cudaCurrentDevice, owner - 1)],
+    "kernel argument is allocated on another device");
+}
+
+template <class... Ts>
+void __cudaCheckKernelArgs(Ts... args)
+{
+  int checked[] = {0, (__cudaCheckKernelArg(args), 0)...};
+  (void)checked;
+}
+
 /*ESBMC_verify_kernel()*/
 typedef void *(*voidFunction_no_params)();
 typedef void *(*voidFunction_one)(int *arg);
@@ -1030,6 +1076,7 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_with_one_arg(
     (voidFunction_one)kernel,
@@ -1054,6 +1101,7 @@ void ESBMC_verify_kernel(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_with_two_args(
     (voidFunction_two)kernel,
@@ -1080,6 +1128,7 @@ void ESBMC_verify_kernel(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_with_three_args(
     (voidFunction_three)kernel,
@@ -1107,6 +1156,7 @@ void ESBMC_verify_kernel_i(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_with_two_args_i(
     (voidFunction_two_i)kernel,
@@ -1128,6 +1178,7 @@ void ESBMC_verify_kernel_u(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_with_one_args_u(
     (voidFunction_one_u)kernel,
@@ -1152,6 +1203,7 @@ void ESBMC_verify_kernel_u(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_with_two_args_u(
     (voidFunction_two_u)kernel,
@@ -1178,6 +1230,7 @@ void ESBMC_verify_kernel_u(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_with_three_args_u(
     (voidFunction_three_u)kernel,
@@ -1205,6 +1258,7 @@ void ESBMC_verify_kernel_f(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_ffloat(
     (voidFunction_ffloat)kernel,
@@ -1225,6 +1279,7 @@ void ESBMC_verify_kernel_f(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_float(
     (voidFunction_float)kernel,
@@ -1263,6 +1318,7 @@ void ESBMC_verify_kernel_f(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3, arg4, arg5, arg6, arg7);
 
   ESBMC_verify_kernel_f5i2(
     (voidFunction_f5i2)kernel,
@@ -1295,6 +1351,7 @@ void ESBMC_verify_kernel_c(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_c3(
     (voidFunction_c3)kernel,
@@ -1316,6 +1373,7 @@ void ESBMC_verify_kernel_c(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_d1(
     (voidFunction_d1)kernel,
@@ -1340,6 +1398,7 @@ void ESBMC_verify_kernel_c(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_d2(
     (voidFunction_d2)kernel,
@@ -1366,6 +1425,7 @@ void ESBMC_verify_kernel_intt(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel__intt(
     (voidFunction_intt)kernel,
@@ -1393,6 +1453,7 @@ void ESBMC_verify_kernel_fuintt(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel__fuintt(
     (voidFunction_fuintt)kernel,
@@ -1419,6 +1480,7 @@ void ESBMC_verify_kernel_fuintt(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel__fuint(
     (voidFunction_fuint)kernel,
@@ -1446,6 +1508,7 @@ void ESBMC_verify_kernel_fuintint(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel__fuintint(
     (voidFunction_fuintint)kernel,
@@ -1472,6 +1535,7 @@ void ESBMC_verify_kernel_fuintint(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel__fint(
     (voidFunction_fint)kernel,
@@ -1499,6 +1563,7 @@ void ESBMC_verify_kernel_three_args_iuull(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_with_three_args_iuull(
     (voidFunction_iuull)kernel,
@@ -1536,6 +1601,7 @@ void ESBMC_verify_kernel_four(
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3, arg4);
 
   ESBMC_verify_kernel_with_four__args_i_ui_ull_f(
     (voidFunction_i_ui_ull_f)kernel,
@@ -1559,6 +1625,7 @@ void ESBMC_verify_kernel_ui(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   //ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_one_ui(
     (voidFunction_one_ui)kernel,

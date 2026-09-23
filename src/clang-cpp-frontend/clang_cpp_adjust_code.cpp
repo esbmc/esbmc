@@ -333,31 +333,3 @@ void clang_cpp_adjust::adjust_catch(codet &code)
     to_code_block(to_code(*it)).type() = code_typet();
   }
 }
-
-void clang_cpp_adjust::finalize_exception_specification(typet &type)
-{
-  if (
-    type.get(exception_specificationt::kind_attribute()) != "dynamic" ||
-    type.find("exception_spec_decl").is_nil())
-    return;
-
-  // Resolve each declared exception type to its exception id. As in the old
-  // throw_decl handling, we keep only the leading id per declared type (the
-  // literal type itself); base classes are expanded at the throw site.
-  irept &decl = type.add("exception_spec_decl");
-  irept resolved;
-  for (const auto &op : decl.get_sub())
-  {
-    std::vector<irep_idt> ids;
-    convert_exception_id(static_cast<const typet &>(op), "", ids);
-    if (!ids.empty())
-    {
-      irept entry;
-      entry.id(ids.front());
-      resolved.get_sub().push_back(entry);
-    }
-  }
-
-  type.set(exception_specificationt::types_attribute(), resolved);
-  type.remove("exception_spec_decl");
-}

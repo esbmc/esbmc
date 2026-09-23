@@ -740,16 +740,36 @@ class CoreVisitorsMixin:
                 kwonly_args = self.functionKwonlyParams.get(func_name, [])
         return function_name, expected_args, kwonly_args
 
-    def _scan_builtin_shadow_names(self, module_node):
-        """Builtin names from the table that this module binds anywhere.
+    @staticmethod
+    def _iter_own_scope_nodes(scope_node):
+        """The nodes whose name bindings belong to `scope_node`'s own scope.
+
+        A nested ``def`` opens a scope of its own, so its parameters and body
+        are skipped; the name it binds, its decorators and its default
+        expressions are evaluated here and are kept. Class bodies, async defs,
+        lambdas and comprehensions are walked into instead of skipped -- their
+        bindings are not visible here, but including them only ever disables a
+        rewrite, and no scope is opened for them below.
+        """
+        stack = list(ast.iter_child_nodes(scope_node))
+        while stack:
+            node = stack.pop()
+            yield node
+            if isinstance(node, ast.FunctionDef):
+                stack.extend(node.decorator_list)
+                stack.extend(d for d in node.args.defaults + node.args.kw_defaults if d)
+            else:
+                stack.extend(ast.iter_child_nodes(node))
+
+    def _scan_scope_builtin_shadows(self, scope_node):
+        """Builtin names from the table that `scope_node` binds in its own scope.
 
         Python resolves a name at call time, so a ``def pow(...)`` below the
-        call shadows the builtin exactly as one above it does. A syntactic pass
-        cannot answer that per scope, so over-approximate: any binding of the
-        name anywhere disables the rewrite for the whole module.
+        call shadows the builtin exactly as one above it does: a binding
+        anywhere in the scope covers the whole scope.
         """
         bound = set()
-        for n in ast.walk(module_node):
+        for n in self._iter_own_scope_nodes(scope_node):
             if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
                 bound.add(n.id)
             elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -761,6 +781,27 @@ class CoreVisitorsMixin:
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 bound.update(a.asname or a.name.split(".")[0] for a in n.names)
         return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+
+    def _scan_builtin_shadow_names(self, module_node):
+        """Builtin names bound at module scope, which every scope inherits."""
+        bound = self._scan_scope_builtin_shadows(module_node)
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Global):
+                # `global int` binds the module-level name from a function.
+                bound.update(set(n.names) & set(self._BUILTIN_POSITIONAL_PARAMS))
+        return bound
+
+    def _enter_builtin_shadow_scope(self, node):
+        """Open `node`'s name scope, returning the set to restore on exit.
+
+        A binding local to one function does not reach another, so the scan is
+        per scope; an inner scope still sees the names its enclosing scopes
+        bind, hence the union (#7557).
+        """
+        saved = self._builtin_shadow_names
+        if saved is not None:
+            self._builtin_shadow_names = saved | self._scan_scope_builtin_shadows(node)
+        return saved
 
     def _builtin_is_shadowed(self, name):
         # None means the module was never scanned: assume shadowed, so an
@@ -955,25 +996,6 @@ class CoreVisitorsMixin:
         ast.copy_location(result, node)
         ast.fix_missing_locations(result)
         return result
-
-    @staticmethod
-    def _normalize_int_from_bytes_endianness(node):
-        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
-            return
-        # Positional byteorder: int.from_bytes(b, "big" | "little").
-        if len(node.args) > 1:
-            is_big = isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"
-            node.args[1] = ast.Constant(value=is_big)
-        # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
-        # model names it "big_endian". Rename the keyword to the model's
-        # parameter and fold its string value to the bool the model expects.
-        for kw in node.keywords:
-            if kw.arg == "byteorder":
-                is_big = isinstance(kw.value, ast.Constant) and kw.value.value == "big"
-                kw.arg = "big_endian"
-                kw.value = ast.Constant(value=is_big)
-        ast.fix_missing_locations(node)
 
     @staticmethod
     def _normalize_math_gcd_lcm_variadic(node):
@@ -1740,7 +1762,6 @@ class CoreVisitorsMixin:
             return rewritten_ratio
 
         self._normalize_builtin_keyword_args(node)
-        self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
         self._apply_call_signature_defaults(node)
@@ -1817,6 +1838,7 @@ class CoreVisitorsMixin:
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
         saved_vararg_defs = self._enter_vararg_scope(node)
+        saved_builtin_shadows = self._enter_builtin_shadow_scope(node)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -1859,4 +1881,5 @@ class CoreVisitorsMixin:
             self._single_return_funcs = saved_key_funcs
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
+            self._builtin_shadow_names = saved_builtin_shadows
             self._exit_vararg_scope(node, saved_vararg_defs)

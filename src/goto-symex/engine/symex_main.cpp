@@ -149,11 +149,27 @@ void goto_symext::record_property_verdict(
   property_verdictt verdict,
   const std::string &note)
 {
-  const locationt &location = cur_state->source.pc->location;
+  // A base case of a k-step strategy discharges a claim only within k: the
+  // simplifier saw the paths this unwinding reached and no others, so the
+  // discharge is bounded exactly as the solver's UNSAT there is. The claim
+  // keeps its row and stays undecided until the forward condition or the
+  // inductive step settles it (§4 of
+  // docs/roadmap/multi-property-strategy-plan.md).
+  if (
+    verdict == property_verdictt::Passed &&
+    options.get_bool_option("k-step-property-table") &&
+    options.get_bool_option("base-case"))
+    verdict = property_verdictt::NotChecked;
+
+  const goto_programt::instructiont &pc = *cur_state->source.pc;
+  // A coverage report prints the key, so its goals keep description and
+  // position.
+  const bool coverage = options.get_bool_option("coverage-measurement") ||
+                        options.get_bool_option("dead-code-check");
   goto_functionst::property_verdicts.record(
-    msg + " at " + location.as_string(),
+    coverage ? msg + " at " + pc.location.as_string() : property_key(pc, msg),
     verdict,
-    property_location(location, msg),
+    property_location(pc, msg),
     note);
 }
 
@@ -265,6 +281,22 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
     remaining_claims,
     simplified_claims,
     bounded_loop_truncations);
+}
+
+void goto_symext::key_intrinsic_pointer_reads(
+  const code_function_call2t &call,
+  const irep_idt &id)
+{
+  // These four read through a pointer argument inside symex, so no dereference
+  // reaches the MPOR access analysis and the reads go unkeyed (#7826).
+  if (
+    id != "c:@F@__ESBMC_memcpy" && id != "c:@F@__ESBMC_memmove" &&
+    id != "c:@F@__ESBMC_memcmp" && id != "c:@F@__ESBMC_memchr")
+    return;
+
+  for (const expr2tc &operand : call.operands)
+    if (is_pointer_type(operand))
+      analyze_args(dereference2tc(get_uint_type(8), operand));
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -389,6 +421,7 @@ void goto_symext::symex_step(reachability_treet &art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
+        key_intrinsic_pointer_reads(call, id);
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
         return;

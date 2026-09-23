@@ -1,4 +1,6 @@
 CORE
 main.cpp
 --compact-trace
-^  this->x = \{ \.x=2 \}$
+^  this->x = \{ \.x=1 \}$
+^  this->x = 2 \(00000000 00000000 00000000 00000010\)$
+^VERIFICATION FAILED$

@@ -685,24 +685,26 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
 
   return bin_expr;
 }
+
+void python_converter::convert_function_call_to_side_effect(exprt &expr)
+{
+  if (!expr.is_function_call())
+    return;
+  side_effect_expr_function_callt side_effect;
+  code_function_callt &code = static_cast<code_function_callt &>(expr);
+  side_effect.function() = code.function();
+  side_effect.location() = code.location();
+  side_effect.type() = code.type();
+  side_effect.arguments() = code.arguments();
+  expr = side_effect;
+}
+
 void python_converter::convert_function_calls_to_side_effects(
   exprt &lhs,
   exprt &rhs)
 {
-  auto to_side_effect_call = [](exprt &expr) {
-    side_effect_expr_function_callt side_effect;
-    code_function_callt &code = static_cast<code_function_callt &>(expr);
-    side_effect.function() = code.function();
-    side_effect.location() = code.location();
-    side_effect.type() = code.type();
-    side_effect.arguments() = code.arguments();
-    expr = side_effect;
-  };
-
-  if (lhs.is_function_call())
-    to_side_effect_call(lhs);
-  if (rhs.is_function_call())
-    to_side_effect_call(rhs);
+  convert_function_call_to_side_effect(lhs);
+  convert_function_call_to_side_effect(rhs);
 }
 
 /// Handle chained comparisons

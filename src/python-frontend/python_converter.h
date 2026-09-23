@@ -47,6 +47,16 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+// One `Call` node together with the name of the function whose body it
+// textually appears in (empty for a module-level call). Declared here (Impl
+// in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
+// that finds these instead of every caller re-walking the AST itself.
+struct numpy_param_call_site
+{
+  const nlohmann::json *call;
+  std::string enclosing_function;
+};
+
 /**
  * @class python_converter
  * @brief Main converter for transforming Python AST into ESBMC's intermediate
@@ -623,6 +633,23 @@ private:
     const symbolt &symbol,
     const std::string &attr_name);
 
+  // v.shape / v.ndim / v.size where v is a 2-D+ numpy array parameter: its
+  // full logical shape is tracked in numpy_param_shapes_ (populated by
+  // register_function_argument before the C-ABI row-pointer decay erases the
+  // outer dimension). Mirrors try_get_numpy_pointer_view_shape_attr's split
+  // reasoning. Returns std::nullopt for any other attribute or an untracked
+  // symbol, so the caller falls through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_param_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  // Tries try_get_numpy_pointer_view_shape_attr then
+  // try_get_numpy_param_shape_attr, so get_expr's own Attribute dispatch
+  // needs a single `if` for both tracked-shape sources instead of growing
+  // its own decision count by one per source.
+  std::optional<exprt>
+  try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -693,6 +720,15 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  // Records a numpy array parameter's pre-decay shape (when 2-D+) and its
+  // tracked-array-symbol status once its arg_id is known. Split out of
+  // register_function_argument to keep that function's own decision count
+  // down -- both conditions live in here instead of as two more `if`s there.
+  void track_numpy_param(
+    const std::string &arg_id,
+    const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+    bool numpy_array_param);
+
   size_t register_function_argument(
     const nlohmann::json &element,
     code_typet &type,
@@ -747,6 +783,29 @@ private:
     size_t param_index,
     typet &out,
     std::set<std::string> &visiting) const;
+
+  // A call-site argument that resolves to a numpy array's element type: a
+  // literal `np.array([...])` call (is_numpy_array_literal_call), or a
+  // `Call` to a user function whose body unconditionally returns one
+  // (numpy_array_literal_return in converter_funcdef.cpp). nullopt for
+  // anything else. Replaces try_infer_numpy_param_type's own former
+  // is_numpy_array_literal_call() check one-for-one (same call count there)
+  // instead of adding a second, separate dispatch branch for the `Call`
+  // case, to keep that function's own decision count down.
+  std::optional<typet> try_infer_numpy_array_arg_type(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body) const;
+
+  /**
+   * @brief True if some call site of @c func_name (positional at
+   * @c param_index, or keyword matching @c param_name) passes a bare `Name`
+   * that its enclosing scope assigns genuinely incompatible literal kinds
+   * across an if/else
+   */
+  bool try_infer_dynamic_param_type(
+    const std::string &func_name,
+    const std::string &param_name,
+    size_t param_index) const;
 
   void validate_return_paths(
     const nlohmann::json &function_node,
@@ -895,6 +954,9 @@ private:
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
+  symbolt *find_model_symbol(const std::string &sym_id) const;
+  void collect_model_namespaces();
+  void build_models_block(code_blockt &models_block, bool models_precompiled);
 
   void copy_instance_attributes(
     const std::string &src_obj_id,
@@ -916,6 +978,14 @@ private:
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+
+  /// A PEP 604 union annotation, as the single type this
+  /// monomorphic frontend has to represent it with.
+  typet get_union_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
+  typet narrow_union_to_member(const std::string &member_name);
 
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 
@@ -1116,6 +1186,15 @@ private:
 
   bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
 
+  // is_basic_numpy_view_subscript(), excluding `.shape[i]`: that indexes the
+  // plain int tuple `.shape` returns, never the array's own data, so it must
+  // never be tracked as a numpy view/alias (root_name_from_subscript drills
+  // through any Attribute to its base Name, so without this exclusion
+  // `shape_0 = a.shape[0]` would register shape_0 as a view copy of `a`
+  // itself). A wrapper, not a change to is_basic_numpy_view_subscript
+  // itself, to keep that already-large function's own decision count as-is.
+  bool is_tracked_numpy_view_subscript(const nlohmann::json &node) const;
+
   // True for a transpose()/reshape()/ravel()/diagonal() Attribute-call node
   // (module or method form), independent of whether its root array name can
   // be resolved. Shared by is_numpy_view_copy_expr and
@@ -1124,6 +1203,106 @@ private:
   bool is_numpy_view_copy_call_node(const nlohmann::json &node) const;
 
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  // The last direct assignment to `name` in `block[0..end)`, following into
+  // both arms of a trailing if/else (nullptr unless both arms agree it's a
+  // numpy array constructor call). Shared by block_assigns_numpy_array_to
+  // and reject_incompatible_numpy_local_return_branches so both walk the
+  // same "what did this name last bind to" search -- one only needs to know
+  // whether it resolved, the other needs the value node itself to compare
+  // shapes between branches.
+  const nlohmann::json *find_numpy_ctor_value_assigned_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `block[0..end)` ends (directly, or through both arms of a
+  // trailing if/else) in an assignment binding `name` from a numpy array
+  // constructor call. Shared by local_var_numpy_array_return's straight-line
+  // and branching cases so both walk the same "what did this name last bind
+  // to" search.
+  bool block_assigns_numpy_array_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `func_def`'s only top-level statement is `return <Name>`, and
+  // that Name was last bound (directly, or identically on both arms of an
+  // if/else) by a numpy array constructor call. get_function_definition
+  // checks this before its own return-type dispatch: the static annotator's
+  // pre-pass already resolved such a Name's own `np.zeros(...)`-shaped
+  // assignment through the numpy operational model's declared signature
+  // (`list[float]`) and wrote that bogus annotation into
+  // `function_node["returns"]` ahead of real conversion -- locking the
+  // function's return type to a generic PyListObject* before the body (which
+  // actually returns a concrete array) is ever converted. A direct
+  // `return np.zeros(...)` never hits this: static inference only chases a
+  // Name-based callee, not np.zeros's Attribute-based one, so it leaves the
+  // return type empty and the existing GOTO-scan fallback already types it
+  // correctly. Treating the local-var case the same way here (by having the
+  // caller skip the annotation-driven dispatch entirely) reaches that same
+  // already-correct fallback instead of duplicating it.
+  bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
+
+  // The `returns` node get_function_definition's own dispatch should use:
+  // null when local_var_numpy_array_return applies, function_node["returns"]
+  // otherwise. Split out to keep the ternary this needs out of
+  // get_function_definition's own decision count.
+  const nlohmann::json &
+  resolve_return_annotation_node(const nlohmann::json &function_node) const;
+
+  // Throws an explicit TypeError when local_var_numpy_array_return's
+  // trailing if/else binds the returned name from a numpy array constructor
+  // call with a different literal shape argument on each arm -- e.g.
+  // np.zeros(3) on one branch, np.zeros((2, 2)) on the other. Left
+  // unchecked, converting the branch merge with two different concrete
+  // array types crashes value_sett::assign's type-compatibility assertion
+  // instead of rejecting cleanly (ADR-NP principle 3).
+  void reject_incompatible_numpy_local_return_branches(
+    const nlohmann::json &func_def) const;
+
+  // True when `func_name`'s own body reads `param_name`'s `.shape`/`.ndim`/
+  // `.size`/`.T`, or passes it to `numpy.transpose`/`numpy.sort`/
+  // `numpy.argsort`, *and* some call site feeds the `param_index`-th
+  // argument from a module-level numpy array constructor call whose shape
+  // argument is not a literal (e.g. `np.ones(n)` for a variable `n`).
+  // register_function_argument uses this to reject such a parameter with an
+  // explicit diagnostic instead of leaving it untyped, which previously
+  // surfaced as a generic runtime AttributeError the first time the callee
+  // touched one of those. Deliberately excludes `len()`, which already
+  // resolves soundly for a symbolic-shape parameter through a different
+  // path.
+  bool numpy_param_call_site_has_symbolic_shape(
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &param_name) const;
+
+  // Every `Call` node in the AST, computed once and reused:
+  // register_function_argument calls numpy_param_call_site_has_symbolic_shape
+  // once per parameter, and each call previously re-walked the entire AST from
+  // scratch.
+  const std::vector<numpy_param_call_site> &numpy_call_sites() const;
+  mutable std::vector<numpy_param_call_site> numpy_call_sites_cache_;
+  mutable bool numpy_call_sites_cached_ = false;
+
+  // True when some top-level statement in `module_body` binds `arg_name` to
+  // a numpy array constructor call with a non-literal shape. Split out of
+  // numpy_param_call_site_has_symbolic_shape to keep that function's own
+  // decision count down.
+  bool module_level_symbolic_ctor_binding(
+    const nlohmann::json &module_body,
+    const std::string &arg_name) const;
+
+  // Throws when `numpy_array_param` is false and some call site feeds this
+  // parameter from a numpy array constructor call with a non-literal shape.
+  // Split out of register_function_argument to keep the `if` this check
+  // needs out of that function's own decision count.
+  void reject_if_symbolic_shape_param(
+    bool numpy_array_param,
+    const typet &arg_type,
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &arg_name) const;
 
   // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
   // itself returns a numpy array is never an is_numpy_array_constructor_expr
@@ -1588,6 +1767,10 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// A call statement nested in an expression is invisible to goto-convert's
+  /// side-effect removal, so it would reach the solver unevaluated.
+  static void convert_function_call_to_side_effect(exprt &expr);
+
   /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
@@ -1928,6 +2111,17 @@ private:
   };
   std::unordered_map<std::string, numpy_reshape_view_infot>
     numpy_reshape_view_info_;
+  /// Namespace of each operational model loaded this run, in load order.
+  std::vector<std::string> model_namespaces_;
+  // A 2-D+ numpy array parameter's full logical shape, keyed by the
+  // parameter's own symbol id. register_function_argument decays such a
+  // parameter to a pointer to its row type for the C ABI (gen_pointer_type
+  // over arg_type.subtype()), which is what the backend needs but erases the
+  // outer dimension from the parameter's own type -- unwrapping the pointer
+  // recovers only the row shape, not the row count. `.shape`/`.ndim`/`.size`
+  // and the array-consuming numpy calls (transpose, sort/argsort/
+  // searchsorted, reducers) read the pre-decay shape from here instead.
+  std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

@@ -22,6 +22,21 @@ class locationt;
 class function_call_expr
 {
 public:
+  /**
+   * Folds a CPython byteorder string bound to params[param_idx] of the
+   * int.from_bytes model, whose parameter is a bool, and leaves every other
+   * argument unchanged.
+   * Throws unless the argument is the constant "big" or "little": a literal,
+   * or a name `module` binds exactly once, at top level, to a literal.
+   */
+  static exprt fold_from_bytes_byteorder(
+    exprt arg,
+    const nlohmann::json &node,
+    const symbolt &func_symbol,
+    const code_typet::argumentst &params,
+    std::size_t param_idx,
+    const nlohmann::json &module);
+
   function_call_expr(
     const symbol_id &function_id,
     const nlohmann::json &call,
@@ -86,6 +101,12 @@ private:
     const nlohmann::json &args,
     const nlohmann::json &keywords) const;
 
+  /// Whether `actual` satisfies `param`, counting every type the parameter's
+  /// annotation names -- a union's members are not all its declared type.
+  bool argument_matches_parameter(
+    const code_typet::argumentt &param,
+    const typet &actual) const;
+
   // Helper methods for AttributeError detection
   std::vector<std::string>
   find_possible_class_types(const symbolt *obj_symbol) const;
@@ -149,6 +170,13 @@ private:
    * module's body does not hold it, from the module that defines it (#7546).
    */
   nlohmann::json find_class_node(const std::string &name) const;
+  bool resolves_to_staticmethod(
+    const nlohmann::json &class_node,
+    const std::string &method) const;
+  const symbolt *
+  find_inherited_classmethod(const std::string &func_symbol_id) const;
+  std::optional<exprt>
+  build_post_init_forward_call(const std::string &func_symbol_id);
 
   /*
    * Retrieves the object (caller) name from the AST.
@@ -614,6 +642,11 @@ private:
   // unchanged.
   std::optional<exprt> try_numpy_inplace_sort();
 
+  // a.sort()'s own axis= keyword scan: a literal integer or throws. Split
+  // out of try_numpy_inplace_sort to keep that function's own decision
+  // count down.
+  long long extract_numpy_inplace_sort_axis() const;
+
   // reject_numpy_view_mutating_method_call (called from
   // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
   // reshape view is not a copy (writes to it are meaningful) but sort() has
@@ -815,6 +848,17 @@ private:
     symbolt *obj_symbol,
     const symbolt *func_symbol,
     const locationt &location);
+
+  /*
+   * Reconciles a converted call argument with its parameter's type: passes
+   * an already-tagged argument through, boxes a concrete numeric/string
+   * scalar into a tagged-object temporary, or throws otherwise.
+   */
+  exprt coerce_tagged_argument(
+    exprt arg,
+    const typet &param_type,
+    const locationt &location) const;
+
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,

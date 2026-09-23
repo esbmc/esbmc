@@ -83,6 +83,10 @@ class TestFromBytes:
         expected = int.from_bytes(data, byteorder, signed=signed)
         assert ModelInt.from_bytes(data, big_endian, signed) == expected
 
+    @given(data=byte_blobs)
+    def test_default_byteorder_is_big(self, data):
+        assert ModelInt.from_bytes(data) == int.from_bytes(data)
+
     @given(big_endian=st.booleans())
     def test_empty_unsigned_is_zero(self, big_endian):
         assert ModelInt.from_bytes(b"", big_endian, False) == 0
