@@ -817,14 +817,18 @@ exprt function_call_expr::handle_ascii() const
     return converter_.get_string_builder().build_string_literal(out);
   }
 
-  // Non-string argument: ascii(x) == repr(x), which for numbers and bools is
-  // identical to str(x). Reuse the existing str conversion machinery.
+  // A runtime value: ascii(x) == repr(x) for a number, a bool and an ASCII
+  // str; __python_str_repr leaves a non-ASCII str unconstrained.
   exprt value_expr = converter_.get_expr(arg);
   if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
   {
-    const typet &vt = value_expr.type();
-    if (vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv())
-      return converter_.get_string_handler().convert_to_string(value_expr);
+    auto &strings = converter_.get_string_handler();
+    if (value_expr.type().is_floatbv())
+      return strings.convert_to_string(value_expr);
+    exprt repr =
+      strings.build_repr(value_expr, converter_.get_location_from_decl(call_));
+    if (repr.is_not_nil())
+      return repr;
   }
   return converter_.get_exception_handler().gen_exception_raise(
     "TypeError", "ascii() argument type not supported");

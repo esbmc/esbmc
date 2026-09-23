@@ -4096,18 +4096,15 @@ function_call_expr::get_dispatch_table()
        {
          if (is_complex_type(value_expr.type()))
            return handle_complex_to_str();
-         // repr(x) == str(x) for an int or a float (only str/container/object
-         // reprs differ from str), so reuse str()'s numeric folding via
-         // convert_to_string: it folds a constant to a char-array literal and
-         // dispatches a non-constant to the matching __python_*_to_str model.
-         // Bool, strings and everything else keep the general-call fallback
-         // (repr(True) is "True", repr("x") adds quotes) — a clean error, never
-         // a wrong fold.
-         const typet &vt = value_expr.type();
-         if (
-           !vt.is_bool() &&
-           (type_utils::is_integer_type(vt) || vt.is_floatbv()))
-           return converter_.get_string_handler().convert_to_string(value_expr);
+         // Types without a repr model keep the general-call fallback: a clean
+         // error, never a wrong fold. A float's repr is its str().
+         auto &strings = converter_.get_string_handler();
+         if (value_expr.type().is_floatbv())
+           return strings.convert_to_string(value_expr);
+         exprt repr = strings.build_repr(
+           value_expr, converter_.get_location_from_decl(call_));
+         if (repr.is_not_nil())
+           return repr;
        }
        return handle_general_function_call();
      },
