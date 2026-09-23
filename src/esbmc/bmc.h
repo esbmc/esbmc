@@ -307,7 +307,8 @@ private:
 /// that keeps a table per phase.
 void report_k_step_property_table(
   const optionst &options,
-  const goto_functionst &goto_functions);
+  const goto_functionst &goto_functions,
+  const namespacet &ns);
 
 void report_coverage(
   const optionst &options,

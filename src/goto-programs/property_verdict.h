@@ -1,6 +1,7 @@
 #ifndef CPROVER_GOTO_PROGRAMS_PROPERTY_VERDICT_H
 #define CPROVER_GOTO_PROGRAMS_PROPERTY_VERDICT_H
 
+#include <goto-programs/goto_program.h>
 #include <util/irep/location.h>
 
 #include <atomic>
@@ -34,10 +35,28 @@ struct property_locationt
   std::string description;
   unsigned line = 0;
   unsigned column = 0;
+  /// The asserting instruction's location_number and condition, when the
+  /// property is that instruction's own assertion: they order and label rows
+  /// of assertions that share a description and a position.
+  unsigned instruction = 0;
+  expr2tc condition;
 };
 
-property_locationt
-property_location(const locationt &, const std::string &description);
+/// Where the claim \p description raised at \p pc lives, with the assertion's
+/// instruction and condition when the claim is \p pc's own assertion.
+property_locationt property_location(
+  const goto_programt::instructiont &pc,
+  const std::string &description);
+
+/// The table key for the claim \p description raised at \p pc. Two assertions
+/// can share a description and a source position -- `a[i] + a[j]` has two
+/// array bound checks on one column -- so an assertion's key also names its
+/// instruction; without it they share a row, and one's violation skips the
+/// other. Any other claim symex raises there, such as a dereference check in
+/// the asserted expression, keeps description and position only.
+std::string property_key(
+  const goto_programt::instructiont &pc,
+  const std::string &description);
 
 /// A verdict together with where it applies and a note explaining how it was
 /// reached -- that a discharge came from interval analysis rather than the

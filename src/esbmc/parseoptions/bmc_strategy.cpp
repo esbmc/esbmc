@@ -496,7 +496,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
         is_base_case_violated(options, goto_functions, k_step).is_true();
       if (violated && !is_coverage)
       {
-        report_k_step_property_table(options, goto_functions);
+        report_k_step_property_table(
+          options, goto_functions, namespacet(context));
         return 1;
       }
       // A coverage run has no verdict to falsify, so nothing would ever stop
@@ -528,7 +529,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   }
 
-  report_k_step_property_table(options, goto_functions);
+  report_k_step_property_table(options, goto_functions, namespacet(context));
 
   // A violation recorded at some earlier k settles the program: reporting
   // UNKNOWN here would contradict the counterexamples already printed, and

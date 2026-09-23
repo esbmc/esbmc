@@ -338,7 +338,7 @@ void bmct::record_satisfiable_claim(
       !strategy_owns_property_table(options) ||
       options.get_bool_option("diagnose-unknown-properties"))
       goto_functionst::property_verdicts.record(
-        claim.claim_cstr,
+        claim.claim_key,
         property_verdictt::Unknown,
         loc,
         "inductive step could not prove this claim");
@@ -354,12 +354,12 @@ void bmct::record_satisfiable_claim(
   {
     weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
-      claim.claim_cstr, property_verdictt::Unknown, loc, weak_invariant_note);
+      claim.claim_key, property_verdictt::Unknown, loc, weak_invariant_note);
     return;
   }
 
   goto_functionst::property_verdicts.record(
-    claim.claim_cstr, property_verdictt::Failed, loc);
+    claim.claim_key, property_verdictt::Failed, loc);
 }
 
 void bmct::record_violated_properties(
@@ -403,9 +403,9 @@ void bmct::record_violated_properties(
     if (weak_invariant)
       weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
-      description + " at " + location.as_string(),
+      property_key(*step.source.pc, description),
       weak_invariant ? property_verdictt::Unknown : property_verdictt::Failed,
-      property_location(location, description),
+      property_location(*step.source.pc, description),
       weak_invariant ? weak_invariant_note : "");
   }
 }
@@ -3085,8 +3085,7 @@ smt_resultt bmct::multi_property_check(
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
-    const property_locationt claim_ploc =
-      property_location(claim.claim_location, claim.claim_comment);
+    const property_locationt &claim_ploc = claim.claim_ploc;
 
     if (fail_fast_hit)
     {
@@ -3095,16 +3094,15 @@ smt_resultt bmct::multi_property_check(
       if (claim.claim_property == "instrumented assertion")
       {
         goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown, claim_ploc);
+          claim.claim_key, property_verdictt::Unknown, claim_ploc);
         note_undecided_cov_goal("--multi-fail-fast limit reached");
       }
       return;
     }
 
-    // Drop claims that verified to be failed
-    // we use the "comment + location" to distinguish each claim
-    // to avoid double verifying the claims that are already verified
-    //! This algo is unsound, need a better signature to distinguish claims
+    // Skip a claim already found violated. property_key still merges two
+    // claims of one kind that symex raises at one instruction, such as the
+    // NULL checks of `*p + *q` (discussion #7900).
     bool is_verified = false;
     std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
     if (is_assert_cov)
@@ -3116,7 +3114,7 @@ smt_resultt bmct::multi_property_check(
     else
     {
       std::lock_guard lock(reached_claims_mutex);
-      is_verified = reached_claims.count(claim.claim_cstr) ? true : false;
+      is_verified = reached_claims.count(claim.claim_key) ? true : false;
     }
     if (is_assert_cov && is_verified)
     {
@@ -3152,7 +3150,7 @@ smt_resultt bmct::multi_property_check(
           cached_proof))
     {
       record_discharge(
-        bounded_round, claim.claim_cstr, property_verdictt::Passed, claim_ploc);
+        bounded_round, claim.claim_key, property_verdictt::Passed, claim_ploc);
 
       // A reused proof has to leave the run in the state a fresh one would,
       // or a warm k-induction / --incremental-bmc run keeps re-symexing the
@@ -3260,7 +3258,7 @@ smt_resultt bmct::multi_property_check(
       if (solver_result == P_UNSATISFIABLE)
         record_discharge(
           bounded_round,
-          claim.claim_cstr,
+          claim.claim_key,
           is_vacuous ? property_verdictt::Unknown : property_verdictt::Passed,
           claim_ploc,
           is_vacuous ? "vacuous discharge: path assumptions are unsatisfiable; "
@@ -3284,7 +3282,7 @@ smt_resultt bmct::multi_property_check(
           // Neither reached nor unreached. Recorded so the goal still gets a
           // line and the run closes as INCOMPLETE.
           goto_functionst::property_verdicts.record(
-            claim.claim_cstr, property_verdictt::Unknown, claim_ploc);
+            claim.claim_key, property_verdictt::Unknown, claim_ploc);
           note_undecided_cov_goal(
             solver_result == P_SMTLIB
               ? "SMT formula only, no solving performed"
@@ -3519,7 +3517,7 @@ smt_resultt bmct::multi_property_check(
         if (is_goto_cov)
           reached_claims.emplace(claim_sig);
         else
-          reached_claims.emplace(claim.claim_cstr);
+          reached_claims.emplace(claim.claim_key);
       }
 
       // for verbose output of cond coverage
@@ -3651,12 +3649,11 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
       id2string(step.comment).find("unwinding assertion") != std::string::npos)
       continue;
 
-    const locationt &location = step.source.pc->location;
     const std::string description = id2string(step.comment);
     goto_functionst::property_verdicts.record(
-      description + " at " + location.as_string(),
+      property_key(*step.source.pc, description),
       property_verdictt::NotChecked,
-      property_location(location, description));
+      property_location(*step.source.pc, description));
   }
 }
 
@@ -3864,10 +3861,11 @@ static property_countst print_property_table(
   const std::set<std::string> &library_files,
   bool is_color,
   bool unchecked_is_unknown,
-  bool decided_only)
+  bool decided_only,
+  const std::function<std::string(const expr2tc &)> &render_condition)
 {
   std::vector<property_rowt> rows =
-    build_property_rows(verdicts, library_files);
+    build_property_rows(verdicts, library_files, render_condition);
 
   if (unchecked_is_unknown)
     for (auto &row : rows)
@@ -3888,7 +3886,8 @@ static property_countst print_property_table(
 
 void report_k_step_property_table(
   const optionst &options,
-  const goto_functionst &goto_functions)
+  const goto_functionst &goto_functions,
+  const namespacet &ns)
 {
   if (!strategy_owns_property_table(options))
     return;
@@ -3907,7 +3906,8 @@ void report_k_step_property_table(
       : collect_library_assertion_files(goto_functions),
     options.get_bool_option("color"),
     true,
-    false);
+    false,
+    [&ns](const expr2tc &e) { return from_expr(ns, "", e); });
 
   if (goto_functionst::property_verdicts.is_incomplete())
     print_partial_report_note();
@@ -3940,7 +3940,8 @@ void bmct::report_property_verdicts(smt_resultt res) const
     library_files,
     options.get_bool_option("color"),
     strategy_owns_property_table(options),
-    !final);
+    !final,
+    [this](const expr2tc &e) { return from_expr(ns, "", e); });
 
   if (!final && !counts.anything_decided())
     return;

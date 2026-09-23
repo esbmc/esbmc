@@ -161,11 +161,15 @@ void goto_symext::record_property_verdict(
     options.get_bool_option("base-case"))
     verdict = property_verdictt::NotChecked;
 
-  const locationt &location = cur_state->source.pc->location;
+  const goto_programt::instructiont &pc = *cur_state->source.pc;
+  // A coverage report prints the key, so its goals keep description and
+  // position.
+  const bool coverage = options.get_bool_option("coverage-measurement") ||
+                        options.get_bool_option("dead-code-check");
   goto_functionst::property_verdicts.record(
-    msg + " at " + location.as_string(),
+    coverage ? msg + " at " + pc.location.as_string() : property_key(pc, msg),
     verdict,
-    property_location(location, msg),
+    property_location(pc, msg),
     note);
 }
 
