@@ -46,6 +46,3 @@ docs/html/
 
 # Created by the pm-deepen (improve-codebase-architecture) Claude Code skill
 .architecture/
-
-# Per-developer companion to CMakePresets.json; holds local paths and flags
-CMakeUserPresets.json

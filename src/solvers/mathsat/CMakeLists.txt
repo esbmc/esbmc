@@ -42,8 +42,9 @@ if(ENABLE_MATHSAT)
     add_library(solvermsat mathsat_conv.cpp)
     target_include_directories(solvermsat
             PRIVATE ${Mathsat_INCLUDE_DIRS}
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solvermsat PUBLIC esbmc_common "${Mathsat_LIB}" fmt::fmt)
+    target_link_libraries(solvermsat "${Mathsat_LIB}" fmt::fmt)
 
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvermsat)

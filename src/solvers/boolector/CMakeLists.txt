@@ -54,8 +54,9 @@ if(ENABLE_BOOLECTOR)
   add_library(solverbtor boolector_conv.cpp)
   target_include_directories(
     solverbtor
+    PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(solverbtor PUBLIC esbmc_common Boolector::boolector fmt::fmt)
+  target_link_libraries(solverbtor Boolector::boolector fmt::fmt)
 
   target_link_libraries(solvers INTERFACE solverbtor)
 

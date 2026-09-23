@@ -1,7 +1,5 @@
 # Module to configure static build
 
-include_guard(GLOBAL)
-
 message(STATUS "ESBMC will be built in static mode")
 if(NOT APPLE)
     if(ESBMC_SANITIZERS_ENABLED)
@@ -11,11 +9,11 @@ if(NOT APPLE)
         # Keep PIC and static dependency archives, but link the executables
         # dynamically so the sanitizer runtime resolves.
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+        set(CMAKE_CC_FLAGS "${CMAKE_CC_FLAGS} -fPIC")
     else()
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+        set(CMAKE_EXE_LINKER_FLAGS " -static")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static -fPIC")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static -fPIC")
+        set(CMAKE_CC_FLAGS "${CMAKE_CC_FLAGS} -static -fPIC")
     endif()
 endif()
 set(Boost_USE_STATIC_LIBS        ON)

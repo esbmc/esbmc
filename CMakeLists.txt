@@ -1,21 +1,18 @@
 #################################
 # Project Information           #
 #################################
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.18)
 
-foreach(policy CMP0135 CMP0167 CMP0169)
-  if(POLICY ${policy})
-    cmake_policy(SET ${policy} NEW)
-  endif()
-endforeach()
+# HACK: This msvc policy needs to be set before project()
+# This can be removed when we move to CMake >= 3.15
+cmake_policy(SET CMP0091 NEW)
 
-# VERSION also sets ESBMC_VERSION and ESBMC_VERSION_{MAJOR,MINOR,PATCH}, which
-# cmake_config.in and CPack read.
-project(ESBMC
-  VERSION 8.5.0
-  DESCRIPTION "Efficient SMT-based Context-Bounded Model Checker"
-  HOMEPAGE_URL "https://github.com/esbmc/esbmc"
-  LANGUAGES C CXX)
+project(ESBMC)
+
+set(ESBMC_VERSION_MAJOR 8)
+set(ESBMC_VERSION_MINOR 5)
+set(ESBMC_VERSION_PATCH 0)
+set(ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
 set(ESBMC_AVAILABLE_SOLVERS "smtlib")
@@ -28,13 +25,10 @@ set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 22)
 #################################
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# TODO: adopt C++20 modules once the CI baseline moves to GCC 14+/CMake 3.28+
-# and ccache can cache module compilations (it cannot as of 4.12).
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Adds custom modules from ESBMC and default Options
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/scripts/cmake/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake/")
 
 # Set a default build type if none was specified
 set(default_build_type "RelWithDebInfo")
@@ -47,9 +41,13 @@ endif()
 # Set the possible values of build type for cmake-gui
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-O2 -g" CACHE STRING "C++ compiler flags for DebugOpt build" FORCE)
 set(CMAKE_C_FLAGS_DEBUGOPT "-O2 -g" CACHE STRING "C compiler flags for DebugOpt build" FORCE)
+#set(CMAKE_EXE_LINKER_FLAGS_DEBUGOPT "")
+#set(CMAKE_SHARED_LINKER_FLAGS_DEBUGOPT "")
 mark_as_advanced(
   CMAKE_CXX_FLAGS_DEBUGOPT
   CMAKE_C_FLAGS_DEBUGOPT
+  #CMAKE_EXE_LINKER_FLAGS_DEBUGOPT
+  #CMAKE_SHARED_LINKER_FLAGS_DEBUGOPT
 )
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
              "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Sanitizer" "DebugOpt")
@@ -122,6 +120,8 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
     endif()
 endif()
 
+
+
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 # In boost-1.89, system and filesystem has been remove
 # To support the older version, added "optional" here
@@ -138,12 +138,35 @@ include(SetupImmer)
 
 # Optimization
 include(OptimizationCCache)
-include(BuildOptimizations)
 include(WError)
 
-# The include paths, definitions and Boost dependency every ESBMC target shares.
-# Must follow find_package(Boost) and the dependency setup above.
-include(EsbmcCommon)
+
+if(ENABLE_SOLIDITY_FRONTEND)
+  add_definitions(-DENABLE_SOLIDITY_FRONTEND)
+endif()
+if(ENABLE_JIMPLE_FRONTEND)
+    add_definitions(-DENABLE_JIMPLE_FRONTEND)
+endif()
+
+if(ENABLE_PYTHON_FRONTEND)
+    add_definitions(-DENABLE_PYTHON_FRONTEND)
+endif()
+
+option(ENABLE_LD_FRONTEND "Enable SAFE-LD IEC 61131-3 Ladder Diagram front-end" OFF)
+if(ENABLE_LD_FRONTEND)
+    add_definitions(-DENABLE_LD_FRONTEND)
+endif()
+
+# Debug aid: prove every simplifier rewrite equivalent with an SMT solver
+# (esbmc/esbmc#4625). Orders of magnitude slower -- never enable for a release.
+option(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK "Prove each simplifier rewrite with an SMT solver" OFF)
+if(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK)
+    add_definitions(-DENABLE_SIMPLIFIER_EQUIVALENCE_CHECK)
+endif()
+
+if(ENABLE_GOTO_CONTRACTOR)
+  add_compile_options(-DENABLE_GOTO_CONTRACTOR)
+endif()
 
 add_subdirectory(src)
 
@@ -158,8 +181,10 @@ configure_file(
 # This should be added after all source files
 include(Docs)
 
-include(CTest) # calls enable_testing()
+include(CTest)
 if(BUILD_TESTING)
+    enable_testing()
+    include_directories(src)
     add_subdirectory(unit)
     if(ENABLE_LD_FRONTEND)
         add_subdirectory(regression/ld)
