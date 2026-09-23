@@ -1792,12 +1792,38 @@ void solidity_convertert::convert_type_expr(
       // `function f(address a) internal pure returns (I) { return I(a); }`).
       // Convert that contract on demand; get_contract_definition saves and
       // restores the current conversion context for exactly this re-entry.
-      if (
-        !_cname.empty() && context.find_symbol(prefix + _cname) == nullptr &&
-        get_contract_definition(_cname))
+      // Bases first (most-base to most-derived): converting a derived
+      // interface registers builtins on its bases (move_builtin_to_contract
+      // aborts with "parsing order error" when a base is not registered yet).
+      if (!_cname.empty() && context.find_symbol(prefix + _cname) == nullptr)
       {
-        log_error("failed to convert contract {} referenced by a cast", _cname);
-        abort();
+        std::vector<std::string> order;
+        std::map<int, std::string> id2name;
+        const nlohmann::json *def = nullptr;
+        for (const auto &n : src_ast_json["nodes"])
+          if (n.value("nodeType", "") == "ContractDefinition")
+          {
+            id2name[n["id"].get<int>()] = n["name"].get<std::string>();
+            if (n["name"] == _cname)
+              def = &n;
+          }
+        if (def && def->contains("linearizedBaseContracts"))
+          for (auto it = (*def)["linearizedBaseContracts"].rbegin();
+               it != (*def)["linearizedBaseContracts"].rend();
+               ++it)
+            if (id2name.count(it->get<int>()))
+              order.push_back(id2name[it->get<int>()]);
+        if (order.empty())
+          order.push_back(_cname);
+        for (const auto &b : order)
+          if (
+            context.find_symbol(prefix + b) == nullptr &&
+            get_contract_definition(b))
+          {
+            log_error(
+              "failed to convert contract {} referenced by a cast", b);
+            abort();
+          }
       }
       get_static_contract_instance_ref(_cname, c_ins);
 

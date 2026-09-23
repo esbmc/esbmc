@@ -7,6 +7,7 @@
 /// ordering, and base contract constructor chaining for inheritance.
 
 #include <solidity-frontend/solidity_convert.h>
+#include <set>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -520,6 +521,68 @@ bool solidity_convertert::build_bound_drive_helper(
 
   const typet contract_struct_t = symbol_typet(prefix + c_name);
   const pointer_typet contract_ptr_t(contract_struct_t);
+
+  // RE-ENTRY GUARD. The symbol above is registered only after the body is
+  // built, and building the body drives every public method, whose
+  // contract-typed params come back here (assign_param_nondet ->
+  // get_non_library_function_call -> build_bound_drive_helper). Mutually
+  // referencing contracts (perennial IProduct <-> IController ...) recursed
+  // until the stack overflowed: SIGSEGV. A contract whose driver is already
+  // being built gets a PLAIN helper instead -- `new C()` only, no nondet
+  // dispatch loop -- so that nested instance keeps its constructor state
+  // (an under-approximation of that one level; the outer instance is still
+  // driven).
+  static std::set<std::string> building;
+  if (building.count(c_name))
+  {
+    const std::string p_name = "_ESBMC_nondet_new_plain_" + c_name;
+    const std::string p_id = "sol:@C@" + c_name + "@F@" + p_name + "#";
+    if (context.find_symbol(p_id) == nullptr)
+    {
+      code_blockt p_body;
+      p_body.make_block();
+      code_labelt p_label;
+      p_label.set_label("__ESBMC_HIDE");
+      p_label.code() = code_skipt();
+      p_body.operands().push_back(p_label);
+      exprt p_new;
+      if (get_new_object_ctor_call(c_name, empty_json, false, p_new))
+        return true;
+      code_returnt p_ret;
+      p_ret.return_value() = p_new;
+      p_body.move_to_operands(p_ret);
+      code_typet p_type;
+      p_type.return_type() = contract_ptr_t;
+      symbolt p_sym;
+      locationt p_loc;
+      p_loc.file(absolute_path);
+      get_default_symbol(
+        p_sym,
+        get_modulename_from_path(absolute_path),
+        p_type,
+        p_name,
+        p_id,
+        p_loc);
+      p_sym.lvalue = true;
+      p_sym.is_extern = false;
+      p_sym.file_local = false;
+      symbolt &p_added = *context.move_symbol_to_context(p_sym);
+      p_added.type = p_type;
+      p_added.value = p_body;
+    }
+    sym = *context.find_symbol(p_id);
+    return false;
+  }
+  building.insert(c_name);
+  struct erase_on_exit
+  {
+    std::set<std::string> &s;
+    std::string k;
+    ~erase_on_exit()
+    {
+      s.erase(k);
+    }
+  } _guard{building, c_name};
 
   // 1. Build function body
   code_blockt func_body;

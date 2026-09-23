@@ -652,6 +652,31 @@ bool solidity_convertert::get_statement(
     if (
       get_sol_type(return_exrp_type) == SolidityGrammar::SolType::TUPLE_RETURNS)
     {
+      // `return c ? (a, b) : (x, y);` -- a Conditional whose branches are
+      // tuples. Lower it to `if (c) return (a, b); else return (x, y);` by
+      // re-entering get_statement on a synthesized IfStatement whose branches
+      // are copies of this Return node with the branch expression swapped in,
+      // so each branch takes the existing tuple-return path. Previously a
+      // CONVERSION ERROR that aborted the whole file (perennial Product:
+      // PositionLib.settled).
+      if (
+        stmt["expression"]["nodeType"].get<std::string>() == "Conditional" &&
+        stmt["expression"].contains("trueExpression") &&
+        stmt["expression"].contains("falseExpression"))
+      {
+        nlohmann::json ret_t = stmt, ret_f = stmt;
+        ret_t["expression"] = stmt["expression"]["trueExpression"];
+        ret_f["expression"] = stmt["expression"]["falseExpression"];
+        nlohmann::json if_stmt = {
+          {"nodeType", "IfStatement"},
+          {"src", stmt["src"]},
+          {"condition", stmt["expression"]["condition"]},
+          {"trueBody", ret_t},
+          {"falseBody", ret_f}};
+        if (stmt.contains("id"))
+          if_stmt["id"] = stmt["id"];
+        return get_statement(if_stmt, new_expr);
+      }
       if (
         stmt["expression"]["nodeType"].get<std::string>() !=
           "TupleExpression" &&
