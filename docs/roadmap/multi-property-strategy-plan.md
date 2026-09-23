@@ -687,8 +687,8 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
   can raise claims no earlier k did. `--multi-fail-fast` limits each base case,
   not the run, as under `--incremental-bmc` and `--k-induction`
   (`multi_property_kinduction_fail_fast`).
-- Not done: the follow-up issue for merging per-claim verdicts under
-  `--k-induction-parallel` (§7.3).
+- Merging per-claim verdicts under `--k-induction-parallel` is #7968
+  (§7.3).
 - The SV-COMP wrapper's `falsi` strategy does not pass `--multi-property`
   (`esbmc-wrapper.py:359`), so its runs take the unchanged path.
 
