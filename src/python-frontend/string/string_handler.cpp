@@ -2339,18 +2339,13 @@ exprt string_handler::handle_ord_conversion(
   exprt str_expr = ensure_null_terminated_string(string_copy);
   exprt str_addr = get_array_base_address(str_expr);
 
-  // Code point of the single character: (int) *str_addr.
-  // V.3: build the dereference in IREP2, back-migrating once. dereference2t
-  // carries only (type, value) — no offset/guard — so the round-trip is
-  // byte-identical to dereference_exprt(str_addr, char) (mirrors build_index/
-  // build_dereference). Restore the exact element type migrate_type may drop.
-  expr2tc str_addr2;
-  migrate_expr(str_addr, str_addr2);
-  exprt first_char =
-    migrate_expr_back(dereference2tc(migrate_type(char_type()), str_addr2));
-  first_char.type() = char_type();
-  first_char.location() = location;
-  return build_typecast(first_char, int_type());
+  symbolt *ord_symbol = find_cached_c_function_symbol("c:@F@__python_ord");
+  if (!ord_symbol)
+    throw std::runtime_error("__python_ord function not found in symbol table");
+
+  exprt ord_call = build_call_expr(*ord_symbol, int_type(), {str_addr});
+  ord_call.location() = location;
+  return ord_call;
 }
 
 exprt string_handler::try_handle_len_string_fast_path(

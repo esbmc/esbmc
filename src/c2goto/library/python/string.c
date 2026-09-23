@@ -1451,6 +1451,35 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python ord() - the code point of the first character of `s`, decoded from
+// the UTF-8 that __python_chr produces. Byte-wise slicing can leave a lead
+// byte without its continuation bytes, so decoding stops at the first byte
+// that is not one; the NUL terminator never is, which keeps reads in bounds.
+int __python_ord(const char *s)
+{
+__ESBMC_HIDE:;
+  const unsigned char *u = (const unsigned char *)s;
+  if (u[0] < 0xC0)
+    return u[0];
+
+  // Unrolled rather than looped, so a small --unwind cannot cut it short.
+  const int len = u[0] < 0xE0 ? 2 : u[0] < 0xF0 ? 3 : 4;
+  int cp = u[0] & (0x7F >> len);
+  if ((u[1] & 0xC0) != 0x80)
+    return u[0];
+  cp = (cp << 6) | (u[1] & 0x3F);
+  if (len == 2)
+    return cp;
+  if ((u[2] & 0xC0) != 0x80)
+    return u[0];
+  cp = (cp << 6) | (u[2] & 0x3F);
+  if (len == 3)
+    return cp;
+  if ((u[3] & 0xC0) != 0x80)
+    return u[0];
+  return (cp << 6) | (u[3] & 0x3F);
+}
+
 // Python string concatenation - combines two strings
 char *__python_str_concat(const char *s1, const char *s2)
 {
