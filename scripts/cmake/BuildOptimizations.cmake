@@ -20,6 +20,11 @@ if(NOT ESBMC_LINKER STREQUAL "default" AND NOT MSVC)
 
   if(ESBMC_LINKER STREQUAL "auto")
     set(_esbmc_linker_candidates mold lld gold)
+    # gold-linked static aarch64 binaries abort in the unwinder on the first
+    # throw (uw_init_context_1 -> abort), which the link-only probe cannot see.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+      list(REMOVE_ITEM _esbmc_linker_candidates gold)
+    endif()
   else()
     set(_esbmc_linker_candidates ${ESBMC_LINKER})
   endif()
