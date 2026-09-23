@@ -25,6 +25,8 @@ option(ENABLE_SOLIDITY_FRONTEND "Enable Solidity language frontend (default: OFF
 option(ENABLE_GOTO_CONTRACTOR "Enable IBEX in the build (default: OFF)" OFF)
 option(ENABLE_JIMPLE_FRONTEND "Enable Jimple language frontend (default: OFF)" OFF)
 option(ENABLE_PYTHON_FRONTEND "Enable Python language frontend (default: OFF)" OFF)
+option(ENABLE_LD_FRONTEND "Enable SAFE-LD IEC 61131-3 Ladder Diagram front-end (default: OFF)" OFF)
+option(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK "Prove each simplifier rewrite with an SMT solver (default: OFF)" OFF)
 
 #############################
 # SOLVERS
@@ -54,6 +56,16 @@ option(DOWNLOAD_DEPENDENCIES "Download and build dependencies if needed (default
 option(ENABLE_MIMALLOC "Link the mimalloc allocator into esbmc (default: OFF). Speeds up the allocation-heavy symex path (~15% on high-unwind runs) but regresses some SV-COMP benchmarks. Found via find_package, or downloaded when DOWNLOAD_DEPENDENCIES is ON." OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
 option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (default: OFF)" OFF)
+
+#############################
+# BUILD PERFORMANCE
+#############################
+# See BuildOptimizations.cmake; all are opt-in except the linker probe.
+option(ENABLE_IPO "Link-time optimization, when the toolchain supports it (default: OFF)" OFF)
+option(ENABLE_UNITY_BUILD "Batch sources per translation unit to cut full-build time (default: OFF)" OFF)
+set(ESBMC_LINKER "auto" CACHE STRING
+    "Linker to use: auto (fastest available), mold, lld, gold, default")
+set_property(CACHE ESBMC_LINKER PROPERTY STRINGS auto mold lld gold default)
 
 #############################
 # PRE-BUILT DEPENDENCIES
@@ -143,6 +155,7 @@ set(ESBMC_BUNDLE_LIBC_32BIT "${ENABLE_BUNDLE_LIBC_32BIT}" CACHE BOOL "Enable 32-
 
 # Demand C++23
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Used by try_compile
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
