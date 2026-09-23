@@ -131,20 +131,20 @@ static bool reports_multi_property_verdict(const optionst &options)
          !strategy_owns_property_table(options);
 }
 
-/// Record what a solver's UNSAT earned \p property. Only a proof is bounded by
-/// k: at a bounded round it is withheld and the claim stays undecided. A
-/// vacuous discharge is not a proof but a diagnosis of the path, which a
-/// bounded round establishes as well as a conclusive one, so it is recorded
-/// either way -- and it has to be, since a k-step run reports the vacuity
-/// nowhere else.
+/// Record what a solver's UNSAT earned \p property. Only a proof needs backing:
+/// where withholds_proofs() says the phase cannot make one, the claim stays
+/// undecided. A vacuous discharge is not a proof but a diagnosis of the path,
+/// which a bounded round establishes as well as a conclusive one, so it is
+/// recorded either way -- and it has to be, since a k-step run reports the
+/// vacuity nowhere else.
 static void record_discharge(
-  bool bounded_round,
+  bool withhold_proofs,
   const std::string &property,
   property_verdictt verdict,
   const property_locationt &loc,
   const std::string &note = "")
 {
-  if (bounded_round && verdict == property_verdictt::Passed)
+  if (withhold_proofs && verdict == property_verdictt::Passed)
     return;
 
   goto_functionst::property_verdicts.record(property, verdict, loc, note);
@@ -2082,11 +2082,8 @@ smt_resultt bmct::start_bmc()
   if (!options.get_bool_option("multi-property"))
     report_trace(res, *eq);
 
-  // Properties this phase skipped stay skipped for the run: a k-step strategy
-  // promotes across phases, and the forward condition must not turn what a
-  // truncated base case never solved into a proof. A phase that died before
-  // its per-claim loop, or only emitted a formula, skipped all of them and
-  // never sets report_incomplete, so read its result too.
+  // A phase that died before its per-claim loop, or only emitted a formula,
+  // skipped every property and never sets report_incomplete.
   if (phase_left_properties_undecided(report_incomplete, res))
     goto_functionst::property_verdicts.note_incomplete();
 
@@ -2156,10 +2153,12 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   symex->setup_for_new_explore();
 
   const bool multi_property = options.get_bool_option("multi-property");
-  // A k-step strategy clears the store once, before its first phase: its
-  // phases accumulate into one table rather than print one each.
+  // A k-step strategy clears the store once, before its first phase, and
+  // starts a round at each base case.
   if (reports_multi_property_verdict(options))
     goto_functionst::property_verdicts.clear();
+  else if (is_bounded_round(options))
+    goto_functionst::property_verdicts.begin_round();
   report_incomplete = false;
 
   if (options.get_bool_option("schedule"))
@@ -2996,7 +2995,7 @@ smt_resultt bmct::multi_property_check(
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
-  const bool bounded_round = is_bounded_round(options);
+  const bool withhold_proofs = withholds_proofs(options);
 
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
@@ -3052,7 +3051,7 @@ smt_resultt bmct::multi_property_check(
                        &bs,
                        &fc,
                        &is,
-                       &bounded_round,
+                       &withhold_proofs,
                        &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found. A coverage run has
     // to identify the claim first: only instrumented probes count towards the
@@ -3150,7 +3149,10 @@ smt_resultt bmct::multi_property_check(
           cached_proof))
     {
       record_discharge(
-        bounded_round, claim.claim_key, property_verdictt::Passed, claim_ploc);
+        withhold_proofs,
+        claim.claim_key,
+        property_verdictt::Passed,
+        claim_ploc);
 
       // A reused proof has to leave the run in the state a fresh one would,
       // or a warm k-induction / --incremental-bmc run keeps re-symexing the
@@ -3257,7 +3259,7 @@ smt_resultt bmct::multi_property_check(
     {
       if (solver_result == P_UNSATISFIABLE)
         record_discharge(
-          bounded_round,
+          withhold_proofs,
           claim.claim_key,
           is_vacuous ? property_verdictt::Unknown : property_verdictt::Passed,
           claim_ploc,

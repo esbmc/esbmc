@@ -1,5 +1,6 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/property_verdict.h>
+#include <util/config/options.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -91,6 +92,13 @@ void property_verdict_tablet::promote_unchecked_to_passed()
 void property_verdict_tablet::note_incomplete()
 {
   incomplete = true;
+}
+
+bool withholds_proofs(const optionst &options)
+{
+  return options.get_bool_option("k-step-property-table") &&
+         (options.get_bool_option("base-case") ||
+          goto_functionst::property_verdicts.is_incomplete());
 }
 
 bool property_verdict_tablet::all_passed() const

@@ -10,6 +10,8 @@
 #include <mutex>
 #include <string>
 
+class optionst;
+
 /// Outcome of checking one property. Ordered by dominance: when a property is
 /// checked more than once in a run, the numerically greater verdict survives.
 ///
@@ -97,17 +99,24 @@ public:
   /// established that *all* properties hold -- a monolithic UNSAT refutes the
   /// disjunction of every claim violation, so each claim holds -- and never
   /// after a merely bounded round such as a k-induction base case. Does
-  /// nothing once note_incomplete() has been called.
+  /// nothing once note_incomplete() has been called in this round.
   void promote_unchecked_to_passed();
 
-  /// Records that some phase of the run stopped before every property reached
-  /// a verdict. A k-step strategy promotes across phases -- the forward
-  /// condition proves what the base cases left NotChecked -- so a phase that
-  /// skipped properties has to disarm that promotion for the whole run, not
-  /// only for itself.
+  /// Records that a phase stopped before every property reached a verdict,
+  /// disarming proofs until the next begin_round().
   void note_incomplete();
 
-  /// Whether note_incomplete() has been called since the last clear().
+  /// Starts the round of a k-step strategy's next base case. A proof at k
+  /// needs only that k's base case to have solved every claim, since it
+  /// covers every shorter path too, so what an earlier k skipped no longer
+  /// counts.
+  void begin_round()
+  {
+    incomplete = false;
+  }
+
+  /// Whether note_incomplete() has been called since the last clear() or
+  /// begin_round().
   bool is_incomplete() const
   {
     return incomplete;
@@ -142,5 +151,10 @@ private:
   std::atomic<bool> violation{false};
   std::atomic<bool> incomplete{false};
 };
+
+/// Whether a phase must leave a claim it discharges NotChecked rather than
+/// Passed: under a k-step strategy, a base case always, and any other phase
+/// while its round is incomplete.
+bool withholds_proofs(const optionst &options);
 
 #endif

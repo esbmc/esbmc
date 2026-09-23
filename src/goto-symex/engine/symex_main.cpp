@@ -149,16 +149,10 @@ void goto_symext::record_property_verdict(
   property_verdictt verdict,
   const std::string &note)
 {
-  // A base case of a k-step strategy discharges a claim only within k: the
-  // simplifier saw the paths this unwinding reached and no others, so the
-  // discharge is bounded exactly as the solver's UNSAT there is. The claim
-  // keeps its row and stays undecided until the forward condition or the
-  // inductive step settles it (§4 of
-  // docs/roadmap/multi-property-strategy-plan.md).
-  if (
-    verdict == property_verdictt::Passed &&
-    options.get_bool_option("k-step-property-table") &&
-    options.get_bool_option("base-case"))
+  // The simplifier's discharge is withheld exactly where the solver's UNSAT
+  // is: it saw the paths this unwinding reached and no others. The claim keeps
+  // its row and stays undecided.
+  if (verdict == property_verdictt::Passed && withholds_proofs(options))
     verdict = property_verdictt::NotChecked;
 
   const goto_programt::instructiont &pc = *cur_state->source.pc;
