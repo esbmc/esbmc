@@ -997,43 +997,6 @@ class CoreVisitorsMixin:
         ast.fix_missing_locations(result)
         return result
 
-    _FOLDED_BYTEORDER = "_esbmc_folded_byteorder"
-
-    def _fold_byteorder(self, value):
-        # A range loop visits its body twice (#7542), so an argument folded on
-        # the first visit must come back unchanged. The marker's leading
-        # underscore keeps ast2json from serialising it.
-        if getattr(value, self._FOLDED_BYTEORDER, False):
-            return value
-        if isinstance(value, ast.Constant) and value.value in ("big", "little"):
-            folded = ast.Constant(value=value.value == "big")
-            setattr(folded, self._FOLDED_BYTEORDER, True)
-            return ast.copy_location(folded, value)
-        err = NotImplementedError(
-            "int.from_bytes() byteorder must be the literal 'big' or 'little'")
-        err.esbmc_location = (self.module_name, value.lineno, value.col_offset)
-        raise err
-
-    @staticmethod
-    def _is_int_from_bytes_call(node):
-        return (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes")
-
-    def _normalize_int_from_bytes_endianness(self, node):
-        if not self._is_int_from_bytes_call(node):
-            return
-        # Positional byteorder: int.from_bytes(b, "big" | "little").
-        if len(node.args) > 1:
-            node.args[1] = self._fold_byteorder(node.args[1])
-        # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
-        # model names it "big_endian". Rename the keyword to the model's
-        # parameter and fold its string value to the bool the model expects.
-        for kw in node.keywords:
-            if kw.arg == "byteorder":
-                kw.arg = "big_endian"
-                kw.value = self._fold_byteorder(kw.value)
-        ast.fix_missing_locations(node)
-
     @staticmethod
     def _normalize_math_gcd_lcm_variadic(node):
         # math.gcd / math.lcm accept any number of integer arguments in CPython,
@@ -1799,7 +1762,6 @@ class CoreVisitorsMixin:
             return rewritten_ratio
 
         self._normalize_builtin_keyword_args(node)
-        self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
         self._apply_call_signature_defaults(node)

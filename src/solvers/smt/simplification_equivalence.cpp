@@ -154,6 +154,22 @@ bool is_unstatable_shape(const expr2tc &expr)
          is_bv_type(expr->type);
 }
 
+/** An IEEE 754 binary interchange format: half, single, double or quad. A
+ *  solver may reject any other float sort outright -- the bundled Bitwuzla
+ *  aborts on bfloat16 and on long double under --32 -- and the pipeline never
+ *  asks it for one when the simplifier has already folded such a term away
+ *  (#7326). */
+bool is_interchange_float(const type2tc &type)
+{
+  if (!is_floatbv_type(type))
+    return true;
+  const floatbv_type2t &f = to_floatbv_type(type);
+  return (f.exponent == 5 && f.fraction == 10) ||
+         (f.exponent == 8 && f.fraction == 23) ||
+         (f.exponent == 11 && f.fraction == 52) ||
+         (f.exponent == 15 && f.fraction == 112);
+}
+
 bool has_unsupported_subexpr(const expr2tc &expr)
 {
   if (is_nil_expr(expr))
@@ -161,7 +177,8 @@ bool has_unsupported_subexpr(const expr2tc &expr)
 
   if (
     is_sideeffect2t(expr) || is_dereference2t(expr) || is_address_of2t(expr) ||
-    is_pointer_type(expr->type) || is_code_type(expr->type))
+    is_pointer_type(expr->type) || is_code_type(expr->type) ||
+    !is_interchange_float(expr->type))
     return true;
 
   if (is_unstatable_shape(expr))

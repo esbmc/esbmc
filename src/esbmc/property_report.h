@@ -3,6 +3,7 @@
 
 #include <goto-programs/property_verdict.h>
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -19,6 +20,8 @@ struct property_rowt
   std::string note;
   unsigned line = 0;
   unsigned column = 0;
+  unsigned instruction = 0;
+  expr2tc condition;
   bool library = false;
   property_verdictt verdict = property_verdictt::NotChecked;
 };
@@ -66,8 +69,11 @@ collect_library_assertion_files(const goto_functionst &goto_functions);
 /// the number --claim takes: that one counts GOTO assert instructions in
 /// function_map order (goto-programs/set_claims.cpp), which is a different
 /// sequence from the source order used here.
+/// \p render_condition prints the condition of an assertion whose row would
+/// otherwise read the same as another's; without it such rows stay identical.
 std::vector<property_rowt> build_property_rows(
   const std::map<std::string, property_resultt> &verdicts,
-  const std::set<std::string> &library_files);
+  const std::set<std::string> &library_files,
+  const std::function<std::string(const expr2tc &)> &render_condition = {});
 
 #endif
