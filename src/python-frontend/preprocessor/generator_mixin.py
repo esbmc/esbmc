@@ -1184,8 +1184,8 @@ class GeneratorMixin:
         if not isinstance(key_value, ast.Lambda):
             return False
         args = key_value.args
-        if (len(args.args) != 1 or args.posonlyargs or args.kwonlyargs or args.vararg or args.kwarg
-                or args.defaults or args.kw_defaults):
+        if len(args.args) != 1 or any((args.posonlyargs, args.kwonlyargs, args.vararg, args.kwarg,
+                                       args.defaults, args.kw_defaults)):
             return False
         rebinding = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
                      ast.NamedExpr)
