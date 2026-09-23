@@ -1014,9 +1014,13 @@ class CoreVisitorsMixin:
         err.esbmc_location = (self.module_name, value.lineno, value.col_offset)
         raise err
 
+    @staticmethod
+    def _is_int_from_bytes_call(node):
+        return (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "int" and node.func.attr == "from_bytes")
+
     def _normalize_int_from_bytes_endianness(self, node):
-        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
+        if not self._is_int_from_bytes_call(node):
             return
         # Positional byteorder: int.from_bytes(b, "big" | "little").
         if len(node.args) > 1:

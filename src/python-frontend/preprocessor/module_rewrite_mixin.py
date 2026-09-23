@@ -210,8 +210,12 @@ class ModuleRewriteMixin:
         return None
 
     def _collect_module_const_ints(self, module_node):
-        """Names bound exactly once, unconditionally at module top level, to an
-        integer literal, and never rebound — genuine module constants.
+        return self._collect_module_consts(module_node, self._int_literal_value)
+
+    def _collect_module_consts(self, module_node, literal_value):
+        """Names bound exactly once, unconditionally at module top level, to a
+        literal that *literal_value* accepts (returns non-None for), and never
+        rebound — genuine module constants.
 
         ``_rebound_module_names`` already flags names assigned more than once,
         assigned inside any conditional/loop/``with``, or declared ``global``,
@@ -238,7 +242,7 @@ class ModuleRewriteMixin:
             if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
                     and isinstance(stmt.targets[0], ast.Name)):
                 name = stmt.targets[0].id
-                value = self._int_literal_value(stmt.value)
+                value = literal_value(stmt.value)
                 if (value is not None and name not in rebound and name not in local_binds):
                     consts[name] = value
         return consts
@@ -278,6 +282,29 @@ class ModuleRewriteMixin:
                     folded = ast.Constant(value=consts[arg.id])
                     ast.copy_location(folded, arg)
                     inner.args[i] = folded
+
+    @staticmethod
+    def _byteorder_literal(node):
+        if isinstance(node, ast.Constant) and node.value in ("big", "little"):
+            return node.value
+        return None
+
+    def fold_module_const_byteorder_args(self, module_node):
+        """Replace a module-constant ``byteorder`` of ``int.from_bytes`` --
+        ``ENDIANNESS = 'little'`` in the consensus specs -- with its literal, so
+        _fold_byteorder accepts it rather than refusing a non-literal (#7542)."""
+        consts = self._collect_module_consts(module_node, self._byteorder_literal)
+        if not consts:
+            return
+        for n in self._iter_module_scope(module_node, set(consts)):
+            if not (isinstance(n, ast.Call) and self._is_int_from_bytes_call(n)):
+                continue
+            if len(n.args) > 1 and isinstance(n.args[1], ast.Name) and n.args[1].id in consts:
+                n.args[1] = ast.copy_location(ast.Constant(value=consts[n.args[1].id]), n.args[1])
+            for kw in n.keywords:
+                if kw.arg == "byteorder" and isinstance(kw.value, ast.Name) \
+                        and kw.value.id in consts:
+                    kw.value = ast.copy_location(ast.Constant(value=consts[kw.value.id]), kw.value)
 
     def _rewrite_range_aliases(self, module_node, seed=frozenset()):
         """Rewrite module-scope alias = range (and chains) to canonical range."""
@@ -447,6 +474,7 @@ class ModuleRewriteMixin:
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+        self.fold_module_const_byteorder_args(node)
 
     def _scan_dict_literal_bindings_and_calls(self, node):
         """Collect evidence for parameter-dict element recovery (#5444).
