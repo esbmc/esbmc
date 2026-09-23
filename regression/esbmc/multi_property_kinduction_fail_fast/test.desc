@@ -1,0 +1,7 @@
+CORE
+main.c
+--k-induction --multi-property --multi-fail-fast 1 --max-k-step 3
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion n != 7$
+^\s+UNKNOWN\s+\[main\.assertion\.2\]\s+line\s+11\s+assertion m \+ 1 > m
+^This report is partial: the run stopped before every property reached a verdict

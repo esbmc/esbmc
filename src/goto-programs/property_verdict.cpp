@@ -79,10 +79,27 @@ void property_verdict_tablet::record(
 
 void property_verdict_tablet::promote_unchecked_to_passed()
 {
+  if (incomplete)
+    return;
+
   std::lock_guard lock(mutex);
   for (auto &[property, result] : results)
     if (result.verdict == property_verdictt::NotChecked)
       result.verdict = property_verdictt::Passed;
+}
+
+void property_verdict_tablet::note_incomplete()
+{
+  incomplete = true;
+}
+
+bool property_verdict_tablet::all_passed() const
+{
+  std::lock_guard lock(mutex);
+  for (const auto &[property, result] : results)
+    if (result.verdict != property_verdictt::Passed)
+      return false;
+  return true;
 }
 
 std::size_t property_verdict_tablet::size() const
@@ -103,4 +120,5 @@ void property_verdict_tablet::clear()
   std::lock_guard lock(mutex);
   results.clear();
   violation = false;
+  incomplete = false;
 }
