@@ -1052,6 +1052,15 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   {
     rhs = promote_to_complex(rhs);
   }
+  // Case 5b: a bool into a numeric variable is a value conversion. Case 6
+  // would retype it in place, reading the constant `true` as an int or float
+  // bit pattern and aborting in binary2integer.
+  else if (
+    rhs_type.is_bool() &&
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  {
+    rhs = typecast_exprt(rhs, lhs_type);
+  }
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
