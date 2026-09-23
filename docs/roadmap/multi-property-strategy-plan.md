@@ -586,10 +586,13 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
 ### W3c — make the completeness signal per round — done
 
 - A proof at k needs only that k's base case to have solved every claim: a
-  base case at k covers every shorter path too. So `note_incomplete` now marks
-  the round, and `property_verdict_tablet::begin_round` clears it at the start
-  of each k-step base case. One flag suffices; W3b's residual asked for a
-  second.
+  base case at k covers every shorter path too. So the completeness flag is
+  per round: `property_verdict_tablet::begin_round` marks the round
+  incomplete at the start of each k-step base case, and `complete_round`
+  clears it only when that base case reaches its report without leaving a
+  claim undecided. A base case that throws -- an `--smtlib` solver process
+  that dies, say -- never completes its round. One flag suffices; W3b's
+  residual asked for a second.
 - `withholds_proofs` (`property_verdict.h`) is the one rule both recording
   sites read -- the solver's UNSAT in `multi_property_check` and the
   simplifier's discharge in `goto_symext::claim`: under a k-step table, a base
@@ -598,17 +601,38 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
   a proof when the base case at max-k stopped short; before, it recorded
   `Passed` regardless. It also closes W3b's last residual: both sites now
   demote or skip under the same predicate.
+- A withheld proof leaves the claim in the program. The forward condition and
+  inductive step turned every claim they discharged into a SKIP, withheld or
+  not, so the next base case never saw it, completed its round, and the
+  promotion proved a claim no base case had solved.
+- `clear_verified_claims_in_goto` skips only the assertion that is the claim
+  itself, not every assertion with its position and guard. `--loop-invariant`
+  copies a loop body, so one copy's violation skipped the other; and a check
+  raised inside an assertion -- the NULL-pointer check in `assert(*p == 2)` --
+  skipped the assertion it was sliced from. Either way the next base case
+  never solved the skipped claim, completed its round, and the promotion
+  proved it. `goto_symext::assertion_message` names an assertion's own claim
+  for both symex and this match.
 - **Tests.** `multi_property_kinduction_fail_fast` now pins `PASSED`: the
   claim `--multi-fail-fast` skipped at k = 1 is solved at k = 2, and the
   forward condition proves it there. `multi_property_kinduction_diagnose_fail_fast`
   pins the diagnostic pass declining both proofs, the solver's and the
-  simplifier's (`UNKNOWN`, partial-report note); its twin
-  `multi_property_kinduction_diagnose` pins that without the skip the same
-  pass still proves them. Each of the three changed sites was mutated on its
-  own, and each mutant fails one of these tests.
+  simplifier's (`UNKNOWN`, partial-report note); `multi_property_kinduction_diagnose`
+  pins that without the skip the same pass still proves them.
+  `multi_property_loop_invariant_copy_fail` pins both copies of a violated
+  claim `FAILED` under `--loop-invariant --multi-fail-fast`; matching by
+  position and guard reports the second `PASSED`. Its twin
+  `multi_property_loop_invariant_copy` pins both copies of a safe claim
+  `PASSED`. `multi_property_kinduction_check_in_assert_fail` pins
+  `assertion *p == 2` `FAILED` after its NULL-pointer check fails at k = 1;
+  skipping the assertion with the check reports it `PASSED`. Its twin
+  `multi_property_kinduction_check_in_assert` pins the safe program proved.
+- Not pinned by a test: a withheld proof keeping its claim, and a throwing
+  base case leaving its round incomplete. Both need a phase to end in
+  `P_ERROR` or an exception, which no regression input forces.
 - The partial-report note now describes the closing round only: a skip at an
   earlier k whose claims a later base case solved no longer prints it.
-- Residuals, each conservative:
+- Residuals:
   - The signal is per round, not per claim: one skipped claim withholds the
     proofs of claims the same base case did solve, and a forward condition or
     inductive step that ends in `P_ERROR` withholds the diagnostic pass's
