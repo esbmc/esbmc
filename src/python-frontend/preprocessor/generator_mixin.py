@@ -1191,6 +1191,33 @@ class GeneratorMixin:
                      ast.NamedExpr)
         return not any(isinstance(node, rebinding) for node in ast.walk(key_value.body))
 
+    # Builtin keys and the dunder each dispatches to on a user class.
+    _BUILTIN_KEY_DUNDERS = {"len": "__len__", "abs": "__abs__"}
+
+    @classmethod
+    def _scan_unobservable_builtin_keys(cls, module_node):
+        """Builtin keys a scan may re-apply: unbound in the module, and no class
+        it can see defines their dunder, so a call has no side effect. A module
+        importing anything but ``typing`` may receive such a class, and is
+        excluded outright."""
+        bound, dunders = set(), set()
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Import) or (isinstance(n, ast.ImportFrom)
+                                             and n.module != "typing"):
+                return frozenset()
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(n.name)
+                if isinstance(n, ast.ClassDef):
+                    dunders.update(m.name for m in n.body if isinstance(m, ast.FunctionDef))
+            elif isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+                bound.add(n.id)
+            elif isinstance(n, ast.arg):
+                bound.add(n.arg)
+            elif isinstance(n, ast.Global):
+                bound.update(n.names)
+        return frozenset(name for name, dunder in cls._BUILTIN_KEY_DUNDERS.items()
+                         if name not in bound and dunder not in dunders)
+
     @staticmethod
     def _binds_key(key_value):
         """Whether a scan binds its key lambda to a name before applying it."""
@@ -1317,7 +1344,9 @@ class GeneratorMixin:
         Insertion sort with a strict ``>`` is stable, as CPython's sort is. The
         key is applied once per element, in order, into a parallel list the sort
         moves with the elements: CPython calls it exactly that way, and an impure
-        key re-applied in the shift loop was observable. The working list is
+        key re-applied in the shift loop was observable. A builtin key whose call
+        has no side effect is re-applied instead, since the second list costs the
+        solver several times the sort itself (humaneval_149). The working list is
         copied with a full slice rather than ``list(iterable)``, which aliases
         its argument -- sorting through the alias would mutate the caller's
         list, and ``sorted`` must not.
@@ -1362,8 +1391,17 @@ class GeneratorMixin:
         def length(name):
             return ast.Call(func=ast.Name(id="len", ctx=ast.Load()), args=[load(name)], keywords=[])
 
+        once = not (isinstance(key_kw.value, ast.Name)
+                    and key_kw.value.id in self._unobservable_builtin_keys)
+
+        def key_at(index_expr):
+            return at(index_expr, name=keys) if once else call_key(at(index_expr))
+
         def move(dst_index, src_value, name):
             return ast.Assign(targets=[at(dst_index, ast.Store(), name)], value=src_value)
+
+        def move_key(dst_index, src_value):
+            return [move(dst_index, src_value, keys)] if once else []
 
         fill_keys = ast.While(
             test=ast.Compare(left=load(i), ops=[ast.Lt()], comparators=[length(out)]),
@@ -1381,13 +1419,13 @@ class GeneratorMixin:
             test=ast.BoolOp(op=ast.And(),
                             values=[
                                 ast.Compare(left=load(j), ops=[ast.GtE()], comparators=[num(0)]),
-                                ast.Compare(left=at(load(j), name=keys),
+                                ast.Compare(left=key_at(load(j)),
                                             ops=[ast.Gt()],
                                             comparators=[load(cur_key)]),
                             ]),
             body=[
                 move(add(load(j), num(1)), at(load(j)), out),
-                move(add(load(j), num(1)), at(load(j), name=keys), keys),
+                *move_key(add(load(j), num(1)), at(load(j), name=keys)),
                 store(j, sub(load(j), num(1))),
             ],
             orelse=[],
@@ -1397,11 +1435,12 @@ class GeneratorMixin:
             test=ast.Compare(left=load(i), ops=[ast.Lt()], comparators=[length(out)]),
             body=[
                 store(cur, at(load(i))),
-                store(cur_key, at(load(i), name=keys)),
+                store(cur_key,
+                      at(load(i), name=keys) if once else call_key(load(cur))),
                 store(j, sub(load(i), num(1))),
                 shift,
                 move(add(load(j), num(1)), load(cur), out),
-                move(add(load(j), num(1)), load(cur_key), keys),
+                *move_key(add(load(j), num(1)), load(cur_key)),
                 store(i, add(load(i), num(1))),
             ],
             orelse=[],
@@ -1420,14 +1459,10 @@ class GeneratorMixin:
         prefix = []
         if bind_key:
             prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
-        prefix += [
-            store(out, whole_slice),
-            store(keys, ast.List(elts=[], ctx=ast.Load())),
-            store(i, num(0)),
-            fill_keys,
-            store(i, num(1)),
-            outer,
-        ]
+        prefix.append(store(out, whole_slice))
+        if once:
+            prefix += [store(keys, ast.List(elts=[], ctx=ast.Load())), store(i, num(0)), fill_keys]
+        prefix += [store(i, num(1)), outer]
 
         result = load(out)
         for node in prefix + [result]:
