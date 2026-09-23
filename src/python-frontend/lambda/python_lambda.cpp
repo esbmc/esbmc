@@ -6,6 +6,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
+#include <python-frontend/json_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_code.h>
@@ -388,11 +389,180 @@ bool binds_list_literal(const nlohmann::json &scope, const std::string &name)
       target->value("id", "") != name)
       continue;
 
-    if (!stmt.contains("value") || stmt["value"].value("_type", "") != "List")
+    // A bare annotation (`cars: list`) is an AnnAssign whose value is JSON
+    // null; reading _type off it throws.
+    if (
+      !stmt.contains("value") || !stmt["value"].is_object() ||
+      stmt["value"].value("_type", "") != "List")
       return false;
     found = true;
   }
   return found;
+}
+
+/// True when @p node stores to (or deletes) @p name anywhere inside it.
+bool stores_name(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      if (stores_name(child, name))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (
+    node.value("_type", "") == "Name" && node.value("id", "") == name &&
+    node.contains("ctx") && node["ctx"].is_object())
+  {
+    const std::string ctx = node["ctx"].value("_type", "");
+    if (ctx == "Store" || ctx == "Del")
+      return true;
+  }
+
+  for (const auto &child : node.items())
+    if (stores_name(child.value(), name))
+      return true;
+
+  return false;
+}
+
+/// True when @p name is also bound somewhere this scan cannot read: a loop
+/// target, a with-item, a walrus, a del. Answering from the assignments alone
+/// would ignore those bindings.
+bool bound_opaquely(const nlohmann::json &node, const std::string &name)
+{
+  static const std::set<std::string> opaque_kinds = {
+    "For", "AsyncFor", "With", "AsyncWith", "NamedExpr", "Delete"};
+
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      if (bound_opaquely(child, name))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (opaque_kinds.count(node.value("_type", "")) && stores_name(node, name))
+    return true;
+
+  for (const auto &child : node.items())
+    if (bound_opaquely(child.value(), name))
+      return true;
+
+  return false;
+}
+
+/// Every value assigned to @p name in @p scope. Callers require the bindings to
+/// agree rather than demanding a single one: rebinding a name to the same thing
+/// is ordinary Python and says as much about its type as binding it once.
+std::vector<const nlohmann::json *>
+assigned_values(const nlohmann::json &scope, const std::string &name)
+{
+  std::vector<const nlohmann::json *> values;
+  for (const auto &stmt : scope)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string kind = stmt.value("_type", "");
+    const nlohmann::json *target = nullptr;
+    if (
+      kind == "Assign" && stmt.contains("targets") &&
+      stmt["targets"].is_array() && stmt["targets"].size() == 1)
+      target = &stmt["targets"][0];
+    else if (kind == "AnnAssign" && stmt.contains("target"))
+      target = &stmt["target"];
+
+    // A bare annotation (`a: Car`) is an AnnAssign carrying a JSON null, which
+    // binds nothing -- and which throws if read as an object.
+    if (
+      target == nullptr || !target->is_object() ||
+      target->value("id", "") != name || !stmt.contains("value") ||
+      !stmt["value"].is_object())
+      continue;
+
+    values.push_back(&stmt["value"]);
+  }
+  return values;
+}
+
+/// The class @p elt is an instance of, as the AST states it. @p hop allows one
+/// step through a name binding, for the `a = Car(); xs = [a]` spelling; the
+/// recursive call disallows it, so this cannot chain or cycle.
+std::optional<typet> element_class_type(
+  const nlohmann::json &elt,
+  const nlohmann::json &scope,
+  const nlohmann::json &ast,
+  bool hop)
+{
+  const std::string kind = elt.value("_type", "");
+
+  if (kind == "Name")
+  {
+    const std::string bound_name = elt.value("id", "");
+    if (!hop || bound_name.empty() || bound_opaquely(scope, bound_name))
+      return std::nullopt;
+
+    std::optional<typet> agreed;
+    for (const nlohmann::json *bound : assigned_values(scope, bound_name))
+    {
+      const std::optional<typet> one =
+        element_class_type(*bound, scope, ast, false);
+      if (!one || (agreed && *agreed != *one))
+        return std::nullopt;
+      agreed = one;
+    }
+    return agreed;
+  }
+
+  if (kind != "Call" || !elt.contains("func") || !elt["func"].is_object())
+    return std::nullopt;
+
+  const std::string class_name = elt["func"].value("id", "");
+  if (class_name.empty() || !json_utils::is_class(class_name, ast))
+    return std::nullopt;
+
+  return gen_pointer_type(symbol_typet("tag-" + class_name));
+}
+
+/// The class a list literal's @p index element is an instance of, read from the
+/// AST. The registry is filled in conversion order, so a lambda bound before
+/// the list it is called with finds no element id there; the literal does not
+/// move (#7745). An id is also absent when the recorded type came from an
+/// annotation rather than a concrete element, so this runs then too -- in both
+/// cases the old code answered nothing at all. Only class instances are
+/// answered; every other element kind keeps the registry's verdict.
+std::optional<typet> literal_element_class_type(
+  const nlohmann::json &scope,
+  const std::string &name,
+  size_t index,
+  const nlohmann::json &ast)
+{
+  if (bound_opaquely(scope, name))
+    return std::nullopt;
+
+  std::optional<typet> agreed;
+  for (const nlohmann::json *bound : assigned_values(scope, name))
+  {
+    if (
+      bound->value("_type", "") != "List" || !bound->contains("elts") ||
+      !(*bound)["elts"].is_array() || index >= (*bound)["elts"].size())
+      return std::nullopt;
+
+    const std::optional<typet> one =
+      element_class_type((*bound)["elts"][index], scope, ast, true);
+    if (!one || (agreed && *agreed != *one))
+      return std::nullopt;
+    agreed = one;
+  }
+  return agreed;
 }
 
 // The element type a `name[k]` argument selects, or nothing when it cannot be
@@ -405,7 +575,8 @@ std::optional<typet> subscript_element_type(
   const nlohmann::json &scope,
   const std::string &prefix,
   const typet &list_type,
-  const element_type_registry &elem_types)
+  const element_type_registry &elem_types,
+  const nlohmann::json &ast)
 {
   if (
     arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
@@ -429,7 +600,7 @@ std::optional<typet> subscript_element_type(
   // element_type() clamps an out-of-range index to element 0, so the recorded
   // element id is what says the index names a real element.
   if (elem_types.element_id(list_id, index).empty())
-    return std::nullopt;
+    return literal_element_class_type(scope, base_name, index, ast);
 
   const typet elem = elem_types.element_type(list_id, index);
   if (elem == typet() || elem == empty_typet() || elem == list_type)
@@ -477,7 +648,8 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
         *scope,
         prefix,
         type_handler_.get_list_type(),
-        converter_.get_element_type_registry());
+        converter_.get_element_type_registry(),
+        converter_.ast());
 
       // Every call has to agree: one disagreeing call means the single frozen
       // signature cannot serve them all, so leave the parameter as it was.

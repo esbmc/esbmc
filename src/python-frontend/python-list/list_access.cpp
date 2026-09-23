@@ -7,66 +7,6 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
-namespace
-{
-// Structural equality of two AST JSON nodes, ignoring source-location keys
-// (lineno/col_offset/...). Two textually distinct occurrences of the same
-// expression — e.g. the `l[i+1:]` on each side of `l[i+1:] = reversed(l[i+1:])`
-// — differ only in their location fields, so a raw `==` would wrongly report
-// them as different. Used to prove the read-slice and write-slice are the same
-// before collapsing the reverse-in-place idiom.
-bool ast_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto is_loc_key = [&](const std::string &k) {
-    for (const char *lk : loc_keys)
-      if (k == lk)
-        return true;
-    return false;
-  };
-
-  if (a.type() != b.type())
-    return false;
-
-  if (a.is_object())
-  {
-    // Compare the non-location keys of both objects symmetrically.
-    for (auto it = a.begin(); it != a.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (
-        !b.contains(it.key()) ||
-        !ast_equal_ignoring_location(it.value(), b[it.key()]))
-        return false;
-    }
-    for (auto it = b.begin(); it != b.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (!a.contains(it.key()))
-        return false;
-    }
-    return true;
-  }
-
-  if (a.is_array())
-  {
-    if (a.size() != b.size())
-      return false;
-    for (size_t i = 0; i < a.size(); ++i)
-      if (!ast_equal_ignoring_location(a[i], b[i]))
-        return false;
-    return true;
-  }
-
-  return a == b;
-}
-} // namespace
-
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
@@ -3039,7 +2979,7 @@ void python_list::handle_slice_assignment(
       list_value_["value"].value("_type", "") == "Name" &&
       arg["value"].value("id", "") == list_value_["value"].value("id", "") &&
       // Same slice bounds (ignoring source locations).
-      ast_equal_ignoring_location(arg["slice"], slice_node);
+      json_utils::ast_equal_ignoring_location(arg["slice"], slice_node);
 
     if (arg_is_same_slice)
     {
