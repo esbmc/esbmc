@@ -3128,6 +3128,31 @@ bool solidity_convertert::get_contract_member_call_expr(
   const auto &func_call_json = find_last_parent(src_ast_json["nodes"], expr);
   assert(!func_call_json.empty());
 
+  // `c.f{value: v}(args)` parses as
+  //     FunctionCall( FunctionCallOptions( MemberAccess(c.f) ), args )
+  // so `func_call_json` above -- the MemberAccess's IMMEDIATE parent -- is the
+  // FunctionCallOptions node. That node carries `names`/`options` but NO
+  // `arguments`; the actual arguments hang off the enclosing FunctionCall.
+  // get_non_library_function_call() binds arguments only when its `caller`
+  // node contains "arguments", so handing it the options node silently falls
+  // back to assign_param_nondet() and the callee then runs with completely
+  // unconstrained parameters (measured: after `c.one{value:5}(7)`, all three
+  // of `x == 7`, `x != 7` and `x != 5` were refutable in the callee).
+  // Resolve the argument-carrying node separately and use it ONLY for
+  // argument binding: `func_call_json` itself must stay the immediate parent,
+  // because the function-reference identity test below compares
+  // `func_call_json["expression"]["id"]` against this MemberAccess -- stepping
+  // it over the options node makes that test fail, the call is lowered to an
+  // opaque function pointer and the callee body is never executed at all
+  // (measured: `assert(false)` inside the callee became unreachable).
+  // Same skip as get_bound_low_level_call().
+  const nlohmann::json *_args_call_p = &func_call_json;
+  if (
+    func_call_json.contains("nodeType") &&
+    func_call_json["nodeType"] == "FunctionCallOptions")
+    _args_call_p = &find_last_parent(src_ast_json["nodes"], func_call_json);
+  const nlohmann::json &args_call_json = *_args_call_p;
+
   auto callee_expr_json = expr;
   const nlohmann::json &caller_expr_json = callee_expr_json["expression"];
   assert(callee_expr_json.contains("referencedDeclaration"));
@@ -3802,7 +3827,7 @@ bool solidity_convertert::get_contract_member_call_expr(
     if (get_func_decl_ref(member_decl_ref, comp))
       return true;
 
-    if (get_non_library_function_call(member_decl_ref, func_call_json, call))
+    if (get_non_library_function_call(member_decl_ref, args_call_json, call))
       return true;
     call.arguments().at(0) = base;
 

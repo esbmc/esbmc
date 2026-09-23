@@ -806,6 +806,21 @@ bool solidity_convertert::get_new_mapping_index_access(
     func_type = pointer_typet(empty_typet());
   }
 
+  // A STRUCT value must be reached through a POINTER, not copied out by value.
+  // `map_generic_get` hands back a COPY of the slot, so the frontend lowered
+  //     Acc[k].b = x;   ->   aux = map_<S>_get(&Acc,k); aux.b = x;
+  // i.e. the field write landed in a temporary and was LOST, and every read came
+  // back as the zero default -- measured with a fixed key, so it was not a key
+  // mismatch: `mapping(K=>uint)` and a plain scalar both round-trip a cross-contract
+  // write, `mapping(K=>Struct)` did not. `map_fixed_arr_get` is the existing
+  // lazily-allocating, pointer-returning helper (it treats the payload as an opaque
+  // byte slab, so it is value-type agnostic); routing STRUCT through it makes reads
+  // and writes hit the SAME slot.
+  const bool struct_by_ref =
+    (val_flg == "generic" && val_sol_type == SolidityGrammar::SolType::STRUCT);
+  if (struct_by_ref)
+    val_flg = "fixed_arr";
+
   // construct func call
   std::string func_name;
   if (is_mapping_set)
@@ -966,6 +981,15 @@ bool solidity_convertert::get_new_mapping_index_access(
 
     new_expr = symbol_expr(added_sym);
   }
+  else if (struct_by_ref)
+  {
+    // (struct S *)map_fixed_arr_get(&m, k, sizeof(S)) dereferenced, so the caller's
+    // `.field` access is an LVALUE into the stored slot.
+    typet sptr = gen_pointer_type(value_t);
+    solidity_gen_typecast(ns, call, sptr);
+    new_expr = dereference_exprt(call, value_t);
+    new_expr.location() = location;
+  }
   else if (val_flg == "fixed_arr")
   {
     /* map_fixed_arr_get returns a void* to the N-element slab. Cast
@@ -1028,6 +1052,45 @@ void solidity_convertert::get_mapping_struct_function(
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   code_typet func_t;
   func_t.return_type() = struct_t;
+
+  // PARAMETERS (the doc comment above always described this shape:
+  //   struct A map_A_get(struct mapping_t *m, uint256_t k)
+  // ) -- previously the helper was declared with NO arguments and its body
+  // embedded `gen_call`, i.e. the FIRST call site's argument EXPRESSIONS
+  // (`&this->c->Acc`, `this->$address`).  Inside a free function those have no
+  // `this`, so the body was unresolvable and symex pruned every path through a
+  // `mapping(K => Struct)` public getter (measured: `assert(false)` right after
+  // such a read is UNREACHABLE, while the same probe on `mapping(K => uint)`
+  // reports it FAILED).  The helper is also CACHED per struct name, so a second
+  // call site would have silently read the first site's mapping.  Declare real
+  // parameters and build the body from them.
+  std::vector<std::string> param_ids;
+  param_ids.reserve(gen_call.arguments().size());
+  for (size_t i = 0; i < gen_call.arguments().size(); ++i)
+  {
+    std::string pname = "_arg" + std::to_string(i);
+    std::string pid = func_id + "@" + pname;
+    symbolt ps;
+    get_default_symbol(
+      ps,
+      debug_modulename,
+      gen_call.arguments()[i].type(),
+      pname,
+      pid,
+      gen_call.location());
+    ps.lvalue = true;
+    ps.is_parameter = true;
+    ps.file_local = true;
+    move_symbol_to_context(ps);
+
+    code_typet::argumentt param;
+    param.type() = gen_call.arguments()[i].type();
+    param.cmt_base_name(pname);
+    param.cmt_identifier(pid);
+    func_t.arguments().push_back(param);
+    param_ids.push_back(pid);
+  }
+
   symbolt sym;
   get_default_symbol(
     sym, debug_modulename, func_t, func_name, func_id, gen_call.location());
@@ -1052,8 +1115,16 @@ void solidity_convertert::get_mapping_struct_function(
   aux_sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(aux_sym);
   code_declt decl(symbol_expr(added_sym));
-  // for typcast
+  // for typcast -- call map_generic_get on the PARAMETERS, not on the call
+  // site's expressions (see the parameter block above).
   side_effect_expr_function_callt temp_call = gen_call;
+  for (size_t i = 0; i < temp_call.arguments().size() && i < param_ids.size();
+       ++i)
+  {
+    const symbolt *ps = context.find_symbol(param_ids[i]);
+    assert(ps != nullptr);
+    temp_call.arguments()[i] = symbol_expr(*ps);
+  }
   solidity_gen_typecast(ns, temp_call, aux_type);
   added_sym.value = temp_call;
   decl.operands().push_back(temp_call);

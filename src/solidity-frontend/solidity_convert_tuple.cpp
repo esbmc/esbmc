@@ -626,9 +626,34 @@ bool solidity_convertert::construct_tuple_assigments(
     return false;
   }
 
+  // A struct-typed tuple RHS can arrive as an UNRESOLVED symbol type (`tag-struct C.Holder`)
+  // rather than an inlined struct_typet -- this is what solc's synthesised public getter for a
+  // `mapping(K => Struct)` state variable produces, e.g. `(uint a, uint b) = c.Acc(k);`.
+  // `is_struct()` is false on the symbol type itself, so follow it through the namespace before
+  // deciding, and keep the resolved type so the component lookup below sees the real struct.
+  {
+    const typet &followed = ns.follow(new_rhs.type());
+    if (followed.is_struct())
+      new_rhs.type() = followed;
+    else if (
+      new_rhs.id() == "dereference" && new_rhs.operands().size() == 1 &&
+      new_rhs.op0().type().id() == "pointer")
+    {
+      // A `mapping(K => Struct)` slot now arrives as
+      // `*(struct S *)map_fixed_arr_get(...)`; the dereference can reach here
+      // carrying a nil type, so recover the struct from the pointer's subtype.
+      const typet sub = ns.follow(new_rhs.op0().type().subtype());
+      if (sub.is_struct())
+        new_rhs.type() = sub;
+    }
+  }
   if (!new_rhs.type().is_struct())
   {
-    log_error("expecting struct type for tuple RHS, got {}", new_rhs);
+    log_error(
+      "expecting struct type for tuple RHS, got id={} type_id={} followed_id={}",
+      new_rhs.id().as_string(),
+      new_rhs.type().id().as_string(),
+      ns.follow(new_rhs.type()).id().as_string());
     return true;
   }
 
@@ -673,8 +698,21 @@ bool solidity_convertert::construct_tuple_assigments(
     }
 
     exprt rop;
-    if (get_tuple_member_call(new_rhs.identifier(), comp, rop))
-      return true;
+    if (new_rhs.id() == "symbol")
+    {
+      if (get_tuple_member_call(new_rhs.identifier(), comp, rop))
+        return true;
+    }
+    else
+    {
+      // The RHS is not a named tuple instance but an lvalue EXPRESSION -- this is
+      // what solc's synthesised getter for `mapping(K => Struct)` lowers to now
+      // that such a mapping is reached BY REFERENCE
+      // (`*(struct S *)map_fixed_arr_get(&m, k, sizeof(S))`, see
+      // solidity_convert_mapping.cpp). Take the component straight off it.
+      rop = member_exprt(new_rhs, comp.get("name"), comp.type());
+      rop.location() = new_rhs.location();
+    }
 
     // Nested tuple: LHS operand is a code_blockt (inner tuple),
     // RHS component is a tuple struct — recursively unpack.
