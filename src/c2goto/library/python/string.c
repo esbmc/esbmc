@@ -1451,6 +1451,67 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python repr() of a str: quoted with ' unless the text holds ' and no ",
+// with \\, the quote, \t \n \r escaped and other control bytes as \xNN.
+// Which non-ASCII characters CPython escapes depends on the Unicode database,
+// so a byte above 0x7F leaves the result unconstrained (#7559).
+char *__python_str_repr(const char *s)
+{
+__ESBMC_HIDE:;
+  size_t len = strlen(s);
+  _Bool has_single = 0, has_double = 0, ascii = 1;
+  for (size_t i = 0; i < len; i++)
+  {
+    unsigned char c = (unsigned char)s[i];
+    if (c == '\'')
+      has_single = 1;
+    else if (c == '"')
+      has_double = 1;
+    else if (c > 0x7F)
+      ascii = 0;
+  }
+
+  // No escape takes more than 4 output bytes per input byte.
+  size_t cap = 4 * len + 3;
+  char *out = __ESBMC_alloca(cap);
+  if (!ascii)
+  {
+    out[cap - 1] = '\0';
+    return out;
+  }
+
+  const char quote = has_single && !has_double ? '"' : '\'';
+  const char *hex = "0123456789abcdef";
+  size_t j = 0;
+  out[j++] = quote;
+  for (size_t i = 0; i < len; i++)
+  {
+    unsigned char c = (unsigned char)s[i];
+    if (c == (unsigned char)quote || c == '\\')
+    {
+      out[j++] = '\\';
+      out[j++] = (char)c;
+    }
+    else if (c == '\t' || c == '\n' || c == '\r')
+    {
+      out[j++] = '\\';
+      out[j++] = c == '\t' ? 't' : c == '\n' ? 'n' : 'r';
+    }
+    else if (c < 0x20 || c == 0x7F)
+    {
+      out[j++] = '\\';
+      out[j++] = 'x';
+      out[j++] = hex[c >> 4];
+      out[j++] = hex[c & 0xF];
+    }
+    else
+      out[j++] = (char)c;
+  }
+  out[j++] = quote;
+  out[j] = '\0';
+  return out;
+}
+
 // Python ord() - the code point of the first character of `s`, decoded from
 // the UTF-8 that __python_chr produces. Byte-wise slicing can leave a lead
 // byte without its continuation bytes, so decoding stops at the first byte

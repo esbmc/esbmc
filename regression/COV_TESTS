@@ -1787,3 +1787,6 @@ regression/python/github_7745_direct
 regression/esbmc-cpp/cpp/github_7643_record_definition
 regression/esbmc-cpp/cpp/github_7643_nested_base
 regression/esbmc-cpp/cpp/github_7643_friend_base
+regression/python/github_7542_from_bytes_module_const
+regression/python/github_7542_from_bytes_module_const_fail
+regression/python/github_7542_from_bytes_shadowed_const

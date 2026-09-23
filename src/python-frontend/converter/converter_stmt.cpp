@@ -7041,8 +7041,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   nlohmann::json call_node;
   bool is_wrapped_in_unary = false;
 
-  // Check for function call wrapped in UnaryOp (e.g., "not func()")
-  if (test_type == "UnaryOp" && ast_node["test"].contains("operand"))
+  // Check for function call wrapped in `not` (e.g., "not func()"). Only `not`
+  // is re-applied below; -, ~ and + over a call take the general expression
+  // path, which dropped here used to leave the condition as the bare call.
+  if (
+    test_type == "UnaryOp" && ast_node["test"].contains("operand") &&
+    ast_node["test"]["op"]["_type"] == "Not")
   {
     auto operand_type = ast_node["test"]["operand"]["_type"].get<std::string>();
     if (operand_type == "Call")
@@ -7313,14 +7317,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       if (!is_wrapped_in_unary)
         return base_expr;
 
-      auto op = ast_node["test"]["op"]["_type"].get<std::string>();
-      if (op == "Not")
-      {
-        exprt unary_expr("not", bool_type());
-        unary_expr.copy_to_operands(base_expr);
-        return unary_expr;
-      }
-      return base_expr;
+      exprt unary_expr("not", bool_type());
+      unary_expr.copy_to_operands(base_expr);
+      return unary_expr;
     };
 
     // Get the function call expression with special handling
