@@ -638,7 +638,9 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
   promoted on the safe program.
 - Not pinned by a test: a withheld proof keeping its claim, and a throwing
   base case leaving its round incomplete. Both need a phase to end in
-  `P_ERROR` or an exception, which no regression input forces.
+  `P_ERROR` or an exception -- an `--smtlib` solver dying mid-base-case,
+  caught as `external_process_died` in `do_bmc` -- which no regression input
+  forces.
 - The partial-report note now describes the closing round only: a skip at an
   earlier k whose claims a later base case solved no longer prints it.
 - Residuals:
