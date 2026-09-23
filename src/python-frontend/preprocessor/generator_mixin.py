@@ -1205,18 +1205,25 @@ class GeneratorMixin:
             if isinstance(n, ast.Import) or (isinstance(n, ast.ImportFrom)
                                              and n.module != "typing"):
                 return frozenset()
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                bound.add(n.name)
-                if isinstance(n, ast.ClassDef):
-                    dunders.update(m.name for m in n.body if isinstance(m, ast.FunctionDef))
-            elif isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
-                bound.add(n.id)
-            elif isinstance(n, ast.arg):
-                bound.add(n.arg)
-            elif isinstance(n, ast.Global):
-                bound.update(n.names)
+            bound.update(cls._names_bound_by(n))
+            if isinstance(n, ast.ClassDef):
+                dunders.update(m.name for m in n.body if isinstance(m, ast.FunctionDef))
         return frozenset(name for name, dunder in cls._BUILTIN_KEY_DUNDERS.items()
                          if name not in bound and dunder not in dunders)
+
+    @staticmethod
+    def _names_bound_by(node):
+        """The names @p node itself binds: a def or class, a Store/Del name, a
+        parameter, or a ``global`` declaration."""
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return (node.name, )
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            return (node.id, )
+        if isinstance(node, ast.arg):
+            return (node.arg, )
+        if isinstance(node, ast.Global):
+            return tuple(node.names)
+        return ()
 
     @staticmethod
     def _binds_key(key_value):
