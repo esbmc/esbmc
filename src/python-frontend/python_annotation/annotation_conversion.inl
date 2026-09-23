@@ -1951,7 +1951,7 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
 template <class Json>
 std::string python_annotation<Json>::method_return_type(
   const Json &member,
-  const std::string &method_name)
+  const std::string &class_name)
 {
   if (member.contains("returns") && !member["returns"].is_null())
   {
@@ -1963,17 +1963,18 @@ std::string python_annotation<Json>::method_return_type(
       ret.contains("value") && ret["value"].contains("id"))
       return ret["value"]["id"].template get<std::string>();
   }
-  std::string inferred = infer_method_return_type(member, method_name);
+  std::string inferred = infer_method_return_type(member, class_name);
   return inferred.empty() ? "Any" : inferred;
 }
 
 template <class Json>
 std::string python_annotation<Json>::infer_method_return_type(
   const Json &member,
-  const std::string &method_name)
+  const std::string &class_name)
 {
+  const std::string method_name = member["name"].template get<std::string>();
   const std::string saved_ctx = current_func_name_context_;
-  current_func_name_context_ = method_name;
+  current_func_name_context_ = class_name + "@F@" + method_name;
   std::string inferred =
     infer_from_return_statements(member["body"], method_name);
   current_func_name_context_ = saved_ctx;
@@ -2153,7 +2154,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         {
           if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
             continue;
-          return method_return_type(member, attr_name);
+          return method_return_type(member, base_name);
         }
       }
     }
@@ -2182,7 +2183,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       {
         if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
           continue;
-        return method_return_type(member, attr_name);
+        return method_return_type(member, cls);
       }
       // Not defined in this class — continue up the first base, as super() does.
       cls.clear();
@@ -2483,7 +2484,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               if (
                 method["_type"] == "FunctionDef" &&
                 method["name"] == method_name)
-                return method_return_type(method, method_name);
+                return method_return_type(method, current_type);
             }
           }
           // Chain resolved but method not in final class
@@ -2533,7 +2534,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type =
-            infer_method_return_type(member, method_name);
+            infer_method_return_type(member, obj);
           if (!inferred_type.empty())
             return inferred_type;
         }
@@ -4694,8 +4695,8 @@ void python_annotation<Json>::annotate_function(Json &function_element)
   // Build hierarchical path ONLY if we're not inside a class
   if (!current_class_name_.empty())
   {
-    // We're inside a class - do NOT accumulate hierarchical context
-    current_func_name_context_ = func_name;
+    // Scope a method by its class so same-named methods stay distinct
+    current_func_name_context_ = current_class_name_ + "@F@" + func_name;
   }
   else if (!saved_func_name_context.empty())
   {

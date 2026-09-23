@@ -508,7 +508,8 @@ inline std::vector<std::string> split_function_path(const std::string &function)
 }
 
 // Find a function in AST by hierarchical path
-// Example: ["foo", "bar"] finds nested function bar() inside foo()
+// Example: ["foo", "bar"] finds nested function bar() inside foo(), and
+// ["Cls", "m"] finds method m() of class Cls
 template <typename JsonType>
 JsonType
 find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
@@ -536,6 +537,10 @@ find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
         if (elem.contains("body") && elem["body"].is_array())
           return search_recursive(elem["body"], depth + 1);
       }
+      else if (
+        elem["_type"] == "ClassDef" && elem["name"] == target_name &&
+        depth + 1 < path.size())
+        return search_recursive(elem["body"], depth + 1);
     }
     return JsonType();
   };
