@@ -212,6 +212,23 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       return true;
     }
 
+  // The forked k-induction processes each keep their own property table, and
+  // the one that concludes the run reports its base-case bound as PASSED
+  // (D4 of docs/roadmap/multi-property-strategy-plan.md). The other flags
+  // listed turn --multi-property on. --termination runs sequentially instead.
+  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
+    for (const char *incompatible :
+         {"multi-property",
+          "multi-fail-fast",
+          "all-witnesses",
+          "parallel-solving"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--k-induction-parallel cannot be combined with --{}", incompatible);
+        return true;
+      }
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).

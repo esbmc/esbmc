@@ -496,9 +496,10 @@ int esbmc_parseoptionst::do_bmc_strategy(
         is_base_case_violated(options, goto_functions, k_step).is_true();
       if (violated && !is_coverage)
       {
-        report_k_step_property_table(
-          options, goto_functions, namespacet(context));
-        return 1;
+        any_violation_found = true;
+        options.set_option("kind-violation-found", true);
+        if (!options.get_bool_option("multi-property"))
+          return 1;
       }
       // A coverage run has no verdict to falsify, so nothing would ever stop
       // the escalation: without this it re-solves every goal at each bound and
