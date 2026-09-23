@@ -1783,6 +1783,22 @@ void solidity_convertert::convert_type_expr(
 
       exprt c_ins;
       std::string _cname = dest_type.get("#sol_contract").as_string();
+      // A library is converted in round 1, before any contract/interface
+      // struct type exists (round 2). `IFoo(addr)` inside a library body then
+      // referenced tag-IFoo before it was registered, and the implicit
+      // typecast that follows ns.follow()ed the missing symbol: SIGSEGV in
+      // irept::read (perennial Product: PayoffDefinitionLib._providerContract
+      // `IContractPayoffProvider(address(bytes20(...)))`; minimal: a library
+      // `function f(address a) internal pure returns (I) { return I(a); }`).
+      // Convert that contract on demand; get_contract_definition saves and
+      // restores the current conversion context for exactly this re-entry.
+      if (
+        !_cname.empty() && context.find_symbol(prefix + _cname) == nullptr &&
+        get_contract_definition(_cname))
+      {
+        log_error("failed to convert contract {} referenced by a cast", _cname);
+        abort();
+      }
       get_static_contract_instance_ref(_cname, c_ins);
 
       // Propagate the cast address into the singleton's $address member
