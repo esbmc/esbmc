@@ -509,7 +509,7 @@ inline std::vector<std::string> split_function_path(const std::string &function)
 
 // Find a function in AST by hierarchical path
 // Example: ["foo", "bar"] finds nested function bar() inside foo(), and
-// ["Cls", "m"] finds method m() of class Cls
+// ["Cls@C@m"] finds method m() of class Cls
 template <typename JsonType>
 JsonType
 find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
@@ -523,9 +523,22 @@ find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
     if (depth >= path.size())
       return JsonType();
 
-    const std::string &target_name = path[depth];
+    // The annotation pass names a method "Cls@C@m"; search m in class Cls.
+    std::string target_name = path[depth];
+    const JsonType *scope = &parent_body;
+    if (const size_t sep = target_name.find("@C@"); sep != std::string::npos)
+    {
+      const std::string class_name = target_name.substr(0, sep);
+      target_name.erase(0, sep + 3);
+      scope = nullptr;
+      for (const auto &elem : parent_body)
+        if (elem["_type"] == "ClassDef" && elem["name"] == class_name)
+          scope = &elem["body"];
+      if (scope == nullptr)
+        return JsonType();
+    }
 
-    for (const auto &elem : parent_body)
+    for (const auto &elem : *scope)
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == target_name)
       {
@@ -537,10 +550,6 @@ find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
         if (elem.contains("body") && elem["body"].is_array())
           return search_recursive(elem["body"], depth + 1);
       }
-      else if (
-        elem["_type"] == "ClassDef" && elem["name"] == target_name &&
-        depth + 1 < path.size())
-        return search_recursive(elem["body"], depth + 1);
     }
     return JsonType();
   };

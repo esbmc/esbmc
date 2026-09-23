@@ -12,7 +12,6 @@ class ClassContextMixin:
         inits_before = len(self._pending_method_default_inits)
 
         node = self.expand_dataclass(node)
-        self._bind_classmethod_constructors(node)
         self._collect_class_attr_annotations(node)
         self._record_exit_suppresses_all(node)
         self._record_class_with_exit(node)
@@ -30,51 +29,124 @@ class ClassContextMixin:
         return node
 
     @staticmethod
-    def _classmethod_receiver(member):
-        """Name of a @classmethod's first parameter, or None."""
-        if not isinstance(member, ast.FunctionDef):
-            return None
-        if not any(
-                isinstance(d, ast.Name) and d.id == "classmethod" for d in member.decorator_list):
-            return None
-        positional = member.args.posonlyargs + member.args.args
-        return positional[0].arg if positional else None
+    def _cls_constructor_calls(member):
+        """The `cls(...)` calls of a @classmethod whose `cls` is never rebound, else []."""
+        decorators = member.decorator_list if isinstance(member, ast.FunctionDef) else []
+        if not (len(decorators) == 1 and isinstance(decorators[0], ast.Name)
+                and decorators[0].id == "classmethod"):
+            return []
+        params = member.args.posonlyargs + member.args.args
+        if not params or params[0].arg != "cls":
+            return []
+        named = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler,
+                 ast.MatchAs, ast.MatchStar)
+        calls = []
+        for n in ast.walk(member):
+            if ((isinstance(n, ast.arg) and n.arg == "cls" and n is not params[0]) or
+                (isinstance(n, ast.Name) and n.id == "cls" and not isinstance(n.ctx, ast.Load))
+                    or (isinstance(n, named) and n.name == "cls")
+                    or (isinstance(n, ast.alias) and (n.asname or n.name) == "cls")
+                    or (isinstance(n, (ast.Global, ast.Nonlocal)) and "cls" in n.names)):
+                return []
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "cls":
+                calls.append(n)
+        return calls
 
-    def _bind_classmethod_constructors(self, class_node):
-        """Rewrite `cls(...)` inside a @classmethod to a call of the class it runs on.
+    def _rebind_cls_calls(self, method, class_name):
+        for call in self._cls_constructor_calls(method):
+            call.func = ast.copy_location(ast.Name(id=class_name, ctx=ast.Load()), call.func)
 
-        A subclass that inherits such a method without overriding it gets its
-        own copy bound to the subclass, so `Sub.make()` constructs a `Sub`.
+    @staticmethod
+    def _class_ancestry(classes, node):
+        """`node` and its single-inheritance ancestors in `classes`, nearest first."""
+        chain = []
+        while node is not None and node not in chain:
+            chain.append(node)
+            base = node.bases[0] if len(node.bases) == 1 else None
+            node = classes.get(base.id) if isinstance(base, ast.Name) else None
+        return chain
+
+    @staticmethod
+    def _class_defines(node, name):
+        for stmt in node.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == name:
+                return True
+            if isinstance(stmt, ast.Assign):
+                targets = stmt.targets
+            else:
+                targets = [getattr(stmt, "target", None)]
+            if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+                return True
+        return False
+
+    def _method_owner(self, classes, node, name):
+        """The nearest class in `node`'s ancestry that defines `name`, or None."""
+        return next(
+            (a for a in self._class_ancestry(classes, node) if self._class_defines(a, name)), None)
+
+    def _unbindable_classes(self, classes):
+        """Classes reached through multiple inheritance or a metaclass keyword."""
+        unsafe = set()
+        for node in classes.values():
+            if len(node.bases) > 1 or node.keywords:
+                for base in node.bases:
+                    if isinstance(base, ast.Name) and base.id in classes:
+                        unsafe.update(a.name
+                                      for a in self._class_ancestry(classes, classes[base.id]))
+        return unsafe
+
+    @staticmethod
+    def _indirect_attributes(module, classes):
+        """Attribute names used anywhere other than as a direct `Class.name(...)` call."""
+        direct = {
+            id(n.func)
+            for n in ast.walk(module)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and isinstance(n.func.value, ast.Name) and n.func.value.id in classes
+        }
+        return {
+            n.attr
+            for n in ast.walk(module) if isinstance(n, ast.Attribute) and id(n) not in direct
+        }
+
+    def _bind_classmethod_constructors(self, module):
+        """Rewrite `cls(...)` in a @classmethod to the class the method runs on.
+
+        Only in the entry module, and only when that class is known statically: every
+        reference to the method is a direct `Class.method(...)` call and the classes
+        involved use single inheritance. A subclass inheriting the method gets its own
+        copy. Anything else keeps `cls(...)`, which the converter rejects.
         """
-        if not hasattr(self, "_cls_constructing_methods"):
-            self._cls_constructing_methods = {}
+        if not self.is_entry_module:
+            return
+        classes = {}
+        for stmt in module.body:
+            if isinstance(stmt, ast.ClassDef):
+                if stmt.name in classes:
+                    return
+                classes[stmt.name] = stmt
 
-        own = {m.name for m in class_node.body if isinstance(m, ast.FunctionDef)}
-        templates = {}
-        for base in class_node.bases:
-            if isinstance(base, ast.Name):
-                for name, method in self._cls_constructing_methods.get(base.id, {}).items():
-                    if name not in own and name not in templates:
-                        templates[name] = method
-                        class_node.body.append(copy.deepcopy(method))
-
-        for member in class_node.body:
-            receiver = self._classmethod_receiver(member)
-            if receiver is None:
+        unsafe = self._unbindable_classes(classes)
+        indirect = self._indirect_attributes(module, classes)
+        for owner in classes.values():
+            if owner.name in unsafe:
                 continue
-            calls = [
-                n for n in ast.walk(member) if isinstance(n, ast.Call)
-                and isinstance(n.func, ast.Name) and n.func.id == receiver
-            ]
-            if not calls:
-                continue
-            templates.setdefault(member.name, copy.deepcopy(member))
-            for call in calls:
-                call.func = ast.copy_location(ast.Name(id=class_node.name, ctx=ast.Load()),
-                                              call.func)
-
-        if templates:
-            self._cls_constructing_methods[class_node.name] = templates
+            for member in list(owner.body):
+                if not self._cls_constructor_calls(member) or member.name in indirect:
+                    continue
+                heirs = [
+                    c for c in classes.values()
+                    if c is not owner and self._method_owner(classes, c, member.name) is owner
+                ]
+                args = member.args
+                if heirs and (args.defaults or any(d is not None for d in args.kw_defaults)):
+                    continue
+                template = copy.deepcopy(member)
+                self._rebind_cls_calls(member, owner.name)
+                for heir in heirs:
+                    method = copy.deepcopy(template)
+                    self._rebind_cls_calls(method, heir.name)
+                    heir.body.append(method)
 
     def _record_exit_suppresses_all(self, class_node):
         """Cache classes whose __exit__ unconditionally returns True."""

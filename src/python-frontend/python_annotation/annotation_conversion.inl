@@ -1974,7 +1974,7 @@ std::string python_annotation<Json>::infer_method_return_type(
 {
   const std::string method_name = member["name"].template get<std::string>();
   const std::string saved_ctx = current_func_name_context_;
-  current_func_name_context_ = class_name + "@F@" + method_name;
+  current_func_name_context_ = class_name + "@C@" + method_name;
   std::string inferred =
     infer_from_return_statements(member["body"], method_name);
   current_func_name_context_ = saved_ctx;
@@ -4692,16 +4692,15 @@ void python_annotation<Json>::annotate_function(Json &function_element)
   const std::string &func_name =
     function_element["name"].template get<std::string>();
 
-  // Build hierarchical path ONLY if we're not inside a class
-  if (!current_class_name_.empty())
+  if (!saved_func_name_context.empty())
   {
-    // Scope a method by its class so same-named methods stay distinct
-    current_func_name_context_ = current_class_name_ + "@F@" + func_name;
-  }
-  else if (!saved_func_name_context.empty())
-  {
-    // Nested function outside a class - accumulate context
+    // Nested function, including one inside a method - accumulate context
     current_func_name_context_ = saved_func_name_context + "@F@" + func_name;
+  }
+  else if (!current_class_name_.empty())
+  {
+    // Method: scope it by its class so same-named methods stay distinct
+    current_func_name_context_ = current_class_name_ + "@C@" + func_name;
   }
   else
   {
@@ -4814,6 +4813,7 @@ void python_annotation<Json>::annotate_class(Json &class_element)
   std::string saved_context = current_func_name_context_;
 
   current_class_name_ = class_element["name"].template get<std::string>();
+  current_func_name_context_.clear();
 
   for (Json &class_member : class_element["body"])
   {
