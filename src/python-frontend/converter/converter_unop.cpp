@@ -9,6 +9,22 @@
 #include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
 
+// The type of a numeric unary node: the operand's exact type (keeping its
+// metadata) where the operator preserves it, else @p fallback. The fallback is
+// current_element_type, the enclosing context's -- bool inside an assert.
+static typet unary_numeric_type(
+  const std::string &op,
+  const typet &operand_type,
+  const typet &fallback)
+{
+  const bool integral = type_utils::is_integer_type(operand_type);
+  if ((op == "USub" || op == "UAdd") && (integral || operand_type.is_floatbv()))
+    return operand_type;
+  if (op == "Invert" && integral)
+    return operand_type;
+  return fallback;
+}
+
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
@@ -27,6 +43,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
+  convert_function_call_to_side_effect(unary_sub);
 
   // A tagged operand needs runtime dispatch.
   if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
@@ -53,19 +70,9 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return unknown_truth;
   }
 
-  // Use operand's exact type to preserve metadata
-  if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())
-  {
-    std::string op = element["op"]["_type"].get<std::string>();
-    if (op == "USub" || op == "UAdd") // Unary minus/plus
-      if (
-        unary_sub.type().is_floatbv() ||
-        type_utils::is_integer_type(unary_sub.type()))
-        type = unary_sub.type();
-  }
-
   // Handle 'not' operator on dictionary types: convert to emptiness check
   std::string op = element["op"]["_type"].get<std::string>();
+  type = unary_numeric_type(op, unary_sub.type(), type);
   if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
   {
     if (!current_block)

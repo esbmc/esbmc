@@ -1767,6 +1767,10 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// A call statement nested in an expression is invisible to goto-convert's
+  /// side-effect removal, so it would reach the solver unevaluated.
+  static void convert_function_call_to_side_effect(exprt &expr);
+
   /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
