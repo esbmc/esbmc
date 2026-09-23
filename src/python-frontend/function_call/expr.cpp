@@ -4097,11 +4097,8 @@ function_call_expr::get_dispatch_table()
          if (is_complex_type(value_expr.type()))
            return handle_complex_to_str();
          // Types without a repr model keep the general-call fallback: a clean
-         // error, never a wrong fold. A float's repr is its str().
-         auto &strings = converter_.get_string_handler();
-         if (value_expr.type().is_floatbv())
-           return strings.convert_to_string(value_expr);
-         exprt repr = strings.build_repr(
+         // error, never a wrong fold.
+         exprt repr = converter_.get_string_handler().build_repr(
            value_expr, converter_.get_location_from_decl(call_));
          if (repr.is_not_nil())
            return repr;

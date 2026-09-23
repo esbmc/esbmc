@@ -6,6 +6,8 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
+#include <algorithm>
+#include <charconv>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -558,12 +560,12 @@ string_handler::fstring_repr_of_constant(const nlohmann::json &operand)
 
 exprt string_handler::build_repr(const exprt &value, const locationt &location)
 {
-  // A char is an integer type, and float_to_str is not exact (-0.0, 1e16):
-  // neither may take the str() path.
+  // A char is an integer type but not a number. A float's repr is its str(),
+  // which __python_float_to_str renders only where it is exact.
   const typet &type = value.type();
-  if (type_utils::is_char_type(type) || type.is_floatbv())
+  if (type_utils::is_char_type(type))
     return nil_exprt();
-  if (type.is_bool() || type_utils::is_integer_type(type))
+  if (type.is_bool() || type_utils::is_integer_type(type) || type.is_floatbv())
     return convert_to_string(value);
   if (!type_utils::is_string_type(type))
     return nil_exprt();
@@ -791,34 +793,41 @@ std::string string_handler::float_to_string(
 
 std::string string_handler::cpython_float_str(double d)
 {
-  // A whole value below 1e16 renders as its integer digits plus ".0"
-  // (str(1.0) == "1.0", str(1000000.0) == "1000000.0"); %g would drop the ".0".
-  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
-  {
-    std::string s = std::to_string(static_cast<long long>(d));
-    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
-      s.insert(s.begin(), '-');
-    return s + ".0";
-  }
+  if (std::isnan(d))
+    return "nan";
+  if (std::isinf(d))
+    return d < 0 ? "-inf" : "inf";
 
-  // Every other value (and nan/inf) renders with the fewest significant digits
-  // that read back as the same double, which is exactly how CPython's repr
-  // chooses its digits. %g picks fixed vs. exponential on CPython's rule too:
-  // exponential iff the decimal exponent is < -4 or >= the significant-digit
-  // count, which agrees with CPython's 1e16 cut-over because a non-whole float
-  // always needs more significant digits than its exponent. snprintf/strtod
-  // honour the host FP rounding mode; pin FE_TONEAREST so the fold matches
-  // CPython regardless of the host's mode.
-  const round_to_nearest_guard guard;
-  char buf[40];
-  for (int precision = 1; precision < 17; ++precision)
+  // to_chars emits the shortest digits that read back as d, the digits
+  // CPython's repr chooses, as d.ddde<exp>. Lay them out as CPython does:
+  // scientific iff the exponent is < -4 or >= 16, with a sign and at least
+  // two exponent digits; fixed notation otherwise, keeping a ".0".
+  char buf[64];
+  const std::to_chars_result r = std::to_chars(
+    buf, buf + sizeof(buf), std::fabs(d), std::chars_format::scientific);
+  const std::string sci(buf, r.ptr);
+  const std::size_t e_pos = sci.find('e');
+  std::string digits = sci.substr(0, e_pos);
+  digits.erase(std::remove(digits.begin(), digits.end(), '.'), digits.end());
+  const int exp = std::stoi(sci.substr(e_pos + 1));
+
+  std::string out = std::signbit(d) ? "-" : "";
+  if (exp < -4 || exp >= 16)
   {
-    std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
-    if (std::strtod(buf, nullptr) == d)
-      return buf;
+    out += digits.substr(0, 1);
+    if (digits.size() > 1)
+      out += "." + digits.substr(1);
+    const int mag = std::abs(exp);
+    out += std::string("e") + (exp < 0 ? "-" : "+") + (mag < 10 ? "0" : "") +
+           std::to_string(mag);
   }
-  std::snprintf(buf, sizeof(buf), "%.17g", d);
-  return buf;
+  else if (exp < 0)
+    out += "0." + std::string(-exp - 1, '0') + digits;
+  else if (digits.size() <= static_cast<std::size_t>(exp) + 1)
+    out += digits + std::string(exp + 1 - digits.size(), '0') + ".0";
+  else
+    out += digits.substr(0, exp + 1) + "." + digits.substr(exp + 1);
+  return out;
 }
 
 // Parse the leading [[fill]align][0][width] portion of a Python format

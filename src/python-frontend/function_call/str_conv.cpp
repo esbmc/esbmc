@@ -825,11 +825,8 @@ exprt function_call_expr::handle_ascii() const
   exprt value_expr = converter_.get_expr(arg);
   if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
   {
-    auto &strings = converter_.get_string_handler();
-    if (value_expr.type().is_floatbv())
-      return strings.convert_to_string(value_expr);
-    exprt repr =
-      strings.build_repr(value_expr, converter_.get_location_from_decl(call_));
+    exprt repr = converter_.get_string_handler().build_repr(
+      value_expr, converter_.get_location_from_decl(call_));
     if (repr.is_not_nil())
       return repr;
   }
