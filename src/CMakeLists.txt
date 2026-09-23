@@ -32,6 +32,7 @@ add_subdirectory(big-int)
 add_subdirectory(solvers)
 add_subdirectory(clang-cpp-frontend)
 add_subdirectory(goto-symex)
+add_subdirectory(transition-system)
 add_subdirectory(esbmc)
 
 add_subdirectory(goto2c)

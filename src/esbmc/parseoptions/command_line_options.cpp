@@ -837,5 +837,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // built into this ESBMC binary, before spending time parsing the program.
   check_solver_availability(options);
 
+  if (cmdline.isset("ts-check"))
+    options.set_option("k-induction", true);
+
   config.options = options;
 }

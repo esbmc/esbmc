@@ -537,6 +537,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"termination",
      NULL,
      "Incremental loop unwinding assertion verification"}}},
+  {"Transition system (experimental)",
+   {{"ts-check",
+     NULL,
+     "Extract the main loop as a transition system, print one TS-CHECK line "
+     "saying whether it is one, and stop"},
+    {"ts-dump", NULL, "With --ts-check, also print the transition system"}}},
   {"k-induction",
    {{"base-case", NULL, "Check the base case"},
     {"forward-condition", NULL, "Check the forward condition"},

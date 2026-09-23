@@ -62,6 +62,7 @@ add_library(esbmc-driver
     parseoptions/k_induction.cpp
     parseoptions/process_goto_program.cpp
     parseoptions/property_monitors.cpp
+    parseoptions/ts_strategy.cpp
     bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
 target_include_directories(esbmc-driver
     PUBLIC ${CMAKE_BINARY_DIR}/src
@@ -72,7 +73,7 @@ target_link_libraries(esbmc-driver PUBLIC
                             ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
-                            clangcfrontend clangcppfrontend symex langapi
+                            clangcfrontend clangcppfrontend symex langapi transition-system-extraction
                             solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 
