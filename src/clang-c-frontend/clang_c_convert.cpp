@@ -306,6 +306,24 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+/* The decl a RecordType carries need not be the defining one; resolve to the
+ * definition so a caller does not register a record that stays incomplete
+ * (#7643). Hand-rolled: getDefinitionOrSelf() is LLVM >= 21. */
+static const clang::RecordDecl &defining_decl(const clang::RecordDecl &rd)
+{
+  if (!rd.isCompleteDefinition())
+    if (const clang::RecordDecl *def = rd.getDefinition())
+      return *def;
+  return rd;
+}
+
+/* A record symbol carrying the placeholder put in the context before its
+ * fields are converted, under either spelling. */
+static bool holds_incomplete_record(const typet &t)
+{
+  return t.incomplete() || t.id() == "incomplete_struct";
+}
+
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   if (rd.isInterface())
@@ -378,9 +396,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * which is why the id is tested as well as the flag (de9158daeb); it
    * terminates because every non-re-entrant arrival inserts its symbol
    * first. */
-  if (
-    !sym->get_type().incomplete() &&
-    sym->get_type().id() != "incomplete_struct")
+  if (!holds_incomplete_record(sym->get_type()))
     return false;
 
   clang::RecordDecl *rd_def = rd.getDefinition();
@@ -405,7 +421,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * incomplete-type symbol with the now-complete type definition, in place.
    * The order of definitions in the context matters — this type must be
    * defined after any of the types it is composed of — so move it to the
-   * back of the insertion order afterwards.
+   * back of the insertion order afterwards. Since #7643 a record reached
+   * through a pointer field is converted eagerly, so a record composed of it
+   * can precede it; goto2c re-sorts compound types (goto2c_preprocess.cpp).
    *
    * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
    * through field types into other records, and any of those recursions may
@@ -415,6 +433,13 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
+
+  /* That recursion can also re-enter this very record and complete it (#2323).
+   * Completing it again would run the method pass a second time and add the
+   * vtable variable symbol twice, which aborts conversion (#7643). */
+  if (!holds_incomplete_record(sym->get_type()))
+    return false;
+
   sym->set_type(t);
   sym = context.reorder_symbol_to_back(id);
 
@@ -1236,8 +1261,10 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Record:
   {
-    const clang::RecordDecl &rd =
-      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
+    /* From the definition: this arm converts a record only while no symbol
+     * exists for it yet, so one registered incomplete here stays that way. */
+    const clang::RecordDecl &rd = defining_decl(
+      *(static_cast<const clang::RecordType &>(the_type)).getDecl());
 
     std::string id, name;
     get_decl_name(rd, name, id);

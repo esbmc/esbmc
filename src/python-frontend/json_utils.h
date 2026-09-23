@@ -163,6 +163,42 @@ unsigned count_function_scope_classes(
   return count;
 }
 
+/// Source lines of every ClassDef named @p class_name under @p node that the
+/// converter registers: at any scope except directly inside a class body.
+template <typename JsonType>
+void collect_class_definition_lines(
+  const JsonType &node,
+  const std::string &class_name,
+  std::vector<int> &lines)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_class_definition_lines(child, class_name, lines);
+    return;
+  }
+
+  if (!node.is_object())
+    return;
+
+  const bool is_class_def = node.value("_type", "") == "ClassDef";
+  if (is_class_def && node.value("name", "") == class_name)
+    lines.push_back(node.value("lineno", 0));
+
+  for (const auto &child : node.items())
+  {
+    // A class nested directly in a class body is never registered.
+    if (is_class_def && child.key() == "body")
+    {
+      for (const auto &stmt : child.value())
+        if (stmt.value("_type", "") != "ClassDef")
+          collect_class_definition_lines(stmt, class_name, lines);
+      continue;
+    }
+    collect_class_definition_lines(child.value(), class_name, lines);
+  }
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {

@@ -1330,7 +1330,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         continue;
       }
 
-      exprt arg_expr = get_expr(kw["value"]);
+      exprt arg_expr = function_call_expr::fold_from_bytes_byteorder(
+        get_expr(kw["value"]),
+        kw["value"],
+        *func_symbol,
+        params,
+        it->second,
+        *ast_json);
 
       // Convert array to pointer to match parameter type
       const typet &param_type = params[it->second].type();

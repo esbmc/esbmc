@@ -22,6 +22,21 @@ class locationt;
 class function_call_expr
 {
 public:
+  /**
+   * Folds a CPython byteorder string bound to params[param_idx] of the
+   * int.from_bytes model, whose parameter is a bool, and leaves every other
+   * argument unchanged.
+   * Throws unless the argument is the constant "big" or "little": a literal,
+   * or a name `module` binds exactly once, at top level, to a literal.
+   */
+  static exprt fold_from_bytes_byteorder(
+    exprt arg,
+    const nlohmann::json &node,
+    const symbolt &func_symbol,
+    const code_typet::argumentst &params,
+    std::size_t param_idx,
+    const nlohmann::json &module);
+
   function_call_expr(
     const symbol_id &function_id,
     const nlohmann::json &call,
