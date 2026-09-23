@@ -556,9 +556,37 @@ string_handler::fstring_repr_of_constant(const nlohmann::json &operand)
   return needs_escape ? std::string() : "'" + text + "'";
 }
 
+exprt string_handler::build_repr(const exprt &value, const locationt &location)
+{
+  // A char is an integer type, and float_to_str is not exact (-0.0, 1e16):
+  // neither may take the str() path.
+  const typet &type = value.type();
+  if (type_utils::is_char_type(type) || type.is_floatbv())
+    return nil_exprt();
+  if (type.is_bool() || type_utils::is_integer_type(type))
+    return convert_to_string(value);
+  if (!type_utils::is_string_type(type))
+    return nil_exprt();
+
+  symbolt *repr_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_repr");
+  if (!repr_symbol)
+    throw std::runtime_error(
+      "__python_str_repr function not found in symbol table");
+
+  exprt string_copy = value;
+  exprt str_addr =
+    get_array_base_address(ensure_null_terminated_string(string_copy));
+  exprt repr_call =
+    build_call_expr(*repr_symbol, pointer_typet(char_type()), {str_addr});
+  repr_call.location() = location;
+  return repr_call;
+}
+
 exprt string_handler::build_fstring_conversion(
   const nlohmann::json &value,
   int conversion,
+  const exprt &operand,
   const locationt &location)
 {
   // !r and !a render repr(); fold the spellings whose repr is exactly the
@@ -569,6 +597,12 @@ exprt string_handler::build_fstring_conversion(
 
   if (repr.empty())
   {
+    if (reprs)
+    {
+      exprt runtime_repr = build_repr(operand, location);
+      if (runtime_repr.is_not_nil())
+        return runtime_repr;
+    }
     log_warning(
       "f-string conversion '!{}' is not modelled: using a nondet string",
       static_cast<char>(conversion));
@@ -1343,6 +1377,30 @@ exprt string_handler::convert_to_string(const exprt &expr)
   return make_char_array_expr(chars, string_type);
 }
 
+exprt string_handler::format_fstring_part(const nlohmann::json &value)
+{
+  exprt expr = converter_.get_expr(value["value"]);
+  const bool has_spec =
+    value.contains("format_spec") && !value["format_spec"].is_null();
+
+  // A !r/!a conversion changes the rendered text ("{s!r}" quotes). A format
+  // spec then pads the converted text, which is not modelled: a sound nondet
+  // string. !s renders the same text as the default.
+  const int conversion =
+    (value.contains("conversion") && value["conversion"].is_number())
+      ? value["conversion"].get<int>()
+      : -1;
+  if (conversion != -1 && conversion != 's')
+    return has_spec ? build_nondet_string_fallback(expr.location())
+                    : build_fstring_conversion(
+                        value, conversion, expr, expr.location());
+
+  if (has_spec)
+    return apply_format_specification(
+      expr, process_format_spec(value["format_spec"]));
+  return convert_to_string(expr);
+}
+
 exprt string_handler::get_fstring_expr(const nlohmann::json &element)
 {
   if (!element.contains("values") || element["values"].empty())
@@ -1370,31 +1428,7 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
         part_expr = converter_.get_literal(value);
       }
       else if (value["_type"] == "FormattedValue")
-      {
-        // Expression to be formatted
-        exprt expr = converter_.get_expr(value["value"]);
-
-        // A !r/!a conversion changes the rendered text ("{s!r}" quotes);
-        // rendering the unconverted value would be a wrong value that can
-        // satisfy a false assertion. Not modelled — use a sound nondet
-        // string. !s renders the same text as the default.
-        int conversion =
-          (value.contains("conversion") && value["conversion"].is_number())
-            ? value["conversion"].get<int>()
-            : -1;
-        if (conversion != -1 && conversion != 's')
-          part_expr =
-            build_fstring_conversion(value, conversion, expr.location());
-        // Handle format specification if present
-        else if (
-          value.contains("format_spec") && !value["format_spec"].is_null())
-        {
-          std::string format = process_format_spec(value["format_spec"]);
-          part_expr = apply_format_specification(expr, format);
-        }
-        else
-          part_expr = convert_to_string(expr);
-      }
+        part_expr = format_fstring_part(value);
       else
       {
         // Other expression types
