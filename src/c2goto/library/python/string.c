@@ -1451,6 +1451,35 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python ord() - the code point of the first character of `s`, decoded from
+// the UTF-8 that __python_chr produces. Byte-wise slicing can leave a lead
+// byte without its continuation bytes, so decoding stops at the first byte
+// that is not one; the NUL terminator never is, which keeps reads in bounds.
+int __python_ord(const char *s)
+{
+__ESBMC_HIDE:;
+  const unsigned char *u = (const unsigned char *)s;
+  if (u[0] < 0xC0)
+    return u[0];
+
+  // Unrolled rather than looped, so a small --unwind cannot cut it short.
+  const int len = u[0] < 0xE0 ? 2 : u[0] < 0xF0 ? 3 : 4;
+  int cp = u[0] & (0x7F >> len);
+  if ((u[1] & 0xC0) != 0x80)
+    return u[0];
+  cp = (cp << 6) | (u[1] & 0x3F);
+  if (len == 2)
+    return cp;
+  if ((u[2] & 0xC0) != 0x80)
+    return u[0];
+  cp = (cp << 6) | (u[2] & 0x3F);
+  if (len == 3)
+    return cp;
+  if ((u[3] & 0xC0) != 0x80)
+    return u[0];
+  return (cp << 6) | (u[3] & 0x3F);
+}
+
 // Python string concatenation - combines two strings
 char *__python_str_concat(const char *s1, const char *s2)
 {
@@ -1831,12 +1860,7 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-// Python float -> str. Approximates CPython's str(float) for typical cases:
-// integral value -> "X.0", finite non-integral -> shortest "fixed" form with
-// trailing zeros stripped, special values -> "nan"/"inf"/"-inf".
-// The fixed-precision printout used here matches the existing
-// handle_float_to_str() compile-time path (std::to_string + trailing zeros
-// stripped).
+// Python float -> str: CPython's repr, exact where it is rendered at all.
 char *__python_float_to_str(double v)
 {
 __ESBMC_HIDE:;
@@ -1852,14 +1876,12 @@ __ESBMC_HIDE:;
   }
 
   size_t pos = 0;
-  if (v < 0.0)
+  if (__builtin_signbit(v))
   {
     buffer[pos++] = '-';
     v = -v;
   }
 
-  // Infinity check: any value larger than the largest representable double
-  // after negation is infinite.
   if (v > 1.7976931348623157e+308)
   {
     buffer[pos++] = 'i';
@@ -1869,87 +1891,63 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
-  // Values >= ULLONG_MAX (~1.8e19) cannot be safely cast to unsigned long long
-  // (out-of-range float-to-integer conversion is undefined behaviour in C).
-  // Emit a fixed-point approximation using pure floating-point arithmetic so
-  // the cast below always has a value in [0, ULLONG_MAX).
-  // 1.8446744073709551616e19 is the next double above ULLONG_MAX.
-  if (v >= 1.8446744073709552e19)
+  // CPython prints the shortest string that reads back as v. Only two shapes
+  // are rendered, each provably that string; anything else (scientific
+  // notation, more than 6 fractional digits) is left unconstrained.
+  // An integral v below 2**53 prints all its digits: a shorter decimal would
+  // be a different, exactly representable integer.
+  unsigned long long ip;
+  unsigned long long frac_digits;
+  if (v < 9007199254740992.0 && v == (double)(unsigned long long)v)
   {
-    // Print the integer part digit-by-digit via powers of 10 encoded as double.
-    // We emit at most 20 significant digits then append ".0".
-    // Use a two-pass approach: determine the order of magnitude, then extract
-    // digits top-down using only double arithmetic.
-    double scale = 1.0;
-    // Find the highest power of 10 <= v (at most 10^308).
-    double tmp = v;
-    while (tmp >= 10.0)
-    {
-      tmp /= 10.0;
-      scale *= 10.0;
-    }
-    // tmp is now in [1,10); emit digits
-    size_t digit_count = 0;
-    while (scale >= 1.0 && digit_count < 20)
-    {
-      int d = (int)tmp;
-      if (d < 0)
-        d = 0;
-      if (d > 9)
-        d = 9;
-      buffer[pos++] = (char)('0' + d);
-      tmp = (tmp - (double)d) * 10.0;
-      scale /= 10.0;
-      digit_count++;
-    }
-    // Always append ".0" to match the "X.0" style for integral values.
-    buffer[pos++] = '.';
-    buffer[pos++] = '0';
-    buffer[pos] = '\0';
-    return buffer;
+    ip = (unsigned long long)v;
+    frac_digits = 0;
   }
+  // Below 2**32 half an ulp is under 5e-7, so at most one decimal with 6 or
+  // fewer fractional digits reads back as v, and it is the shortest. The
+  // read-back test is exact: ip * 10**6 + F stays below 2**53 and IEEE
+  // division rounds correctly, exactly as float() parses the string.
+  else if (v >= 1e-4 && v < 4294967296.0)
+  {
+    ip = (unsigned long long)v;
+    // A rounding carry to 10**6 leaves an integer, which fails the check.
+    frac_digits = (unsigned long long)((v - (double)ip) * 1000000.0 + 0.5);
+    if ((double)(ip * 1000000 + frac_digits) / 1000000.0 != v)
+      goto unrendered;
+  }
+  else
+    goto unrendered;
 
-  // Integer part: split off the whole-number portion. Cast is safe because
-  // v has been bounded above to be < ULLONG_MAX.
-  unsigned long long ip = (unsigned long long)v;
-  double frac = v - (double)ip;
-
-  // Write integer digits right-to-left into a 20-byte scratch.
   char digits[20];
   size_t n = 0;
-  if (ip == 0)
-    digits[n++] = '0';
-  while (ip > 0)
+  do
   {
-    digits[n++] = (char)('0' + (ip % 10));
+    digits[n++] = (char)('0' + ip % 10);
     ip /= 10;
-  }
+  } while (ip > 0);
   while (n > 0)
     buffer[pos++] = digits[--n];
 
   buffer[pos++] = '.';
-
-  // Fractional part: emit up to 6 digits (matches std::to_string default).
-  size_t frac_start = pos;
-  size_t i = 0;
-  while (i < 6)
+  if (frac_digits == 0)
+    buffer[pos++] = '0';
+  else
   {
-    frac *= 10.0;
-    int digit = (int)frac;
-    if (digit < 0)
-      digit = 0;
-    if (digit > 9)
-      digit = 9;
-    buffer[pos++] = (char)('0' + digit);
-    frac -= (double)digit;
-    i++;
+    unsigned long long scale = 100000;
+    while (frac_digits > 0)
+    {
+      buffer[pos++] = (char)('0' + frac_digits / scale);
+      frac_digits %= scale;
+      scale /= 10;
+    }
   }
-
-  // Strip trailing zeros from the fractional digits, but keep at least one
-  // digit so the result reads like "X.0" rather than "X.".
-  while (pos > frac_start + 1 && buffer[pos - 1] == '0')
-    pos--;
-
   buffer[pos] = '\0';
+  return buffer;
+
+unrendered:
+  // Any string CPython could print: none is shorter than "0.0" or longer than
+  // the 24 characters of "-1.7976931348623157e+308".
+  __ESBMC_assume(buffer[0] != '\0' && buffer[1] != '\0' && buffer[2] != '\0');
+  buffer[24] = '\0';
   return buffer;
 }

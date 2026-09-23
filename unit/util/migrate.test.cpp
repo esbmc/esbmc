@@ -1200,6 +1200,36 @@ TEST_CASE("migrate_type_back leaves a look-alike member unflagged", "[migrate]")
   REQUIRE_FALSE(comps[1].get_is_padding());
 }
 
+// clang_cpp_maint::adjust_init reads `#constructor` in final(), after the IREP2
+// adjust pass writes bodies back, so the marker has to survive the round trip.
+// `sideeffect2t::constructor` is unreflected, so operator== ignores it and
+// require_expr_roundtrip above cannot see it: assert on it in both directions.
+TEST_CASE("migrate preserves the constructor marker", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const typet legacy_int = migrate_type_back(get_int_type(32));
+
+  side_effect_expr_function_callt call;
+  call.type() = empty_typet();
+  call.function() = symbol_exprt("C::C", migrate_type_back(make_func_type()));
+  call.arguments().push_back(symbol_exprt("obj", legacy_int));
+  call.set("constructor", true);
+
+  expr2tc m;
+  migrate_expr(call, m);
+  REQUIRE(is_sideeffect2t(m));
+  REQUIRE(to_sideeffect2t(m).constructor);
+  REQUIRE(migrate_expr_back(m).get_bool("constructor"));
+
+  side_effect_expr_function_callt plain = call;
+  plain.remove("constructor");
+  expr2tc mp;
+  migrate_expr(plain, mp);
+  REQUIRE(is_sideeffect2t(mp));
+  REQUIRE_FALSE(to_sideeffect2t(mp).constructor);
+  REQUIRE_FALSE(migrate_expr_back(mp).get_bool("constructor"));
+}
+
 // What migrate_expr makes of a C++ symbol id, which contains characters
 // sym_name_to_symbol's renaming parser also uses. A clang USR is full of '#',
 // and '&' appears in the mangling of a reference parameter, so a name that was
@@ -1228,5 +1258,274 @@ TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
     REQUIRE(is_symbol2t(e));
     INFO("thename = " << to_symbol2t(e).thename);
     REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
+  }
+}
+
+// A literal's `#cformat` is how the source wrote it, and c_expr2string prefers
+// it over deriving the text from the type -- so losing it re-renders every
+// printed constant (docs/roadmap/frontends-to-irep2.md §63). The field is
+// unreflected, so this also pins that two constants differing only in spelling
+// stay equal.
+TEST_CASE("a constant keeps its source spelling across the seam", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("an integer's spelling survives the round trip")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+    c.cformat("0xFF");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_int2t(e));
+    REQUIRE(to_constant_int2t(e).cformat == irep_idt("0xFF"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0xFF"));
+  }
+
+  SECTION("a float's spelling survives the round trip")
+  {
+    ieee_floatt f;
+    f.spec = ieee_float_spect::single_precision();
+    f.from_double(0.1);
+    exprt c = f.to_expr();
+    c.cformat("0.1f");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_floatbv2t(e));
+    REQUIRE(to_constant_floatbv2t(e).cformat == irep_idt("0.1f"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0.1f"));
+  }
+
+  SECTION("no spelling means no key, not an empty one")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(to_constant_int2t(e).cformat.empty());
+    // An empty `#cformat` would make c_expr2string print nothing at all rather
+    // than derive the text, so the key must be absent (§46's lesson).
+    REQUIRE(migrate_expr_back(e).find(irept::a_cformat).is_nil());
+  }
+
+  SECTION("the spelling is no part of a constant's identity")
+  {
+    constant_exprt hex(unsignedbv_typet(32));
+    hex.set_value(integer2binary(BigInt(255), 32));
+    hex.cformat("0xFF");
+    constant_exprt dec(unsignedbv_typet(32));
+    dec.set_value(integer2binary(BigInt(255), 32));
+    dec.cformat("255");
+
+    expr2tc a, b;
+    migrate_expr(hex, a);
+    migrate_expr(dec, b);
+    REQUIRE(a == b);
+    REQUIRE(a->crc() == b->crc());
+  }
+}
+
+// back_sideeffect used to write `#type` and `#size` unconditionally, so a side
+// effect that had neither came back carrying `#type: empty` and `#size: nil`.
+// Comments are invisible to irept::operator==, so nothing compared unequal --
+// but every printed symbol table and goto program showed them
+// (docs/roadmap/scope-clang-c-irep2.md §155).
+TEST_CASE("a nondet side effect gains no empty comment keys", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_size).is_nil());
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// side_effect_function_call2tc stores get_empty_type() as its alloctype because
+// that is what round-trips, so guarding the `#type` write on nil alone still
+// invents the key for every call -- which is why §155's guard moved nothing
+// (docs/roadmap/scope-clang-c-irep2.md §157.1).
+TEST_CASE("a call side effect gains no #type key", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    symbol2tc(get_uint32_type(), "c:@F@f"),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// `const` on a pointee is `#constant` on the pointed-to type, and c_expr2string
+// prints it -- so losing it across the seam re-renders every cast through a
+// const pointer (docs/roadmap/scope-clang-c-irep2.md §158).
+TEST_CASE("a const-qualified integer keeps its qualifier", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("the qualifier survives the round trip")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+
+    type2tc t = migrate_type(q);
+    REQUIRE(is_unsignedbv_type(t));
+    REQUIRE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).cmt_constant());
+  }
+
+  SECTION("an unqualified integer gains no key")
+  {
+    type2tc t = migrate_type(unsignedbv_typet(8));
+    REQUIRE_FALSE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).find(irept::a_cmt_constant).is_nil());
+  }
+
+  SECTION("the qualifier is no part of the type's identity")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+    REQUIRE(migrate_type(q) == migrate_type(unsignedbv_typet(8)));
+    REQUIRE(migrate_type(q)->crc() == migrate_type(unsignedbv_typet(8))->crc());
+  }
+}
+
+// A code-typed member names a method, which is no part of a struct_type2t, so
+// member2t's component assertion has nothing to check it against. In-tree
+// sources are by-name and covered by the `symbol_id` disjunct; a *resolved*
+// source is what the clang-c local value write produces
+// (docs/roadmap/frontends-to-irep2.md §76).
+TEST_CASE("migrating a member access naming a method keeps it", "[migrate]")
+{
+  use_test_ns();
+
+  struct_typet st;
+  st.tag("slice");
+  st.components().push_back(
+    struct_typet::componentt("slice::_start", "_start", int_type()));
+
+  code_typet mt;
+  mt.return_type() = int_type();
+  mt.arguments().push_back(code_typet::argumentt(pointer_typet(st)));
+  st.methods().push_back(struct_typet::componentt("slice::size", "size", mt));
+
+  symbolt obj;
+  obj.id = obj.name = "sl";
+  obj.set_type(st);
+  obj.lvalue = true;
+  test_context().add(obj);
+
+  expr2tc out;
+  migrate_expr(member_exprt(symbol_exprt("sl", st), "slice::size", mt), out);
+
+  REQUIRE(is_member2t(out));
+  REQUIRE(to_member2t(out).member == irep_idt("slice::size"));
+  REQUIRE(is_code_type(to_member2t(out).type));
+  // The source is resolved, which is what makes the lookup applicable at all.
+  REQUIRE(is_struct_type(to_member2t(out).source_value->type));
+  // And the method is genuinely absent from it: the assertion is relaxed, not
+  // satisfied by the seam having started to carry methods().
+  REQUIRE_FALSE(struct_union_get_component_number(
+                  to_member2t(out).source_value->type, "slice::size")
+                  .has_value());
+}
+
+// The two Solidity delegate-shadow sites that store a zero return value now
+// build it with the IREP2 gen_zero over a migrated type, where they built a
+// legacy zero and let the setter migrate it. Those are different functions, so
+// this pins that they agree on the types reaching those sites. The sites are
+// verification-inert -- the GOTO takes the value from the code_declt operand on
+// the next line -- so no regression test can bite, and this is the pin
+// (docs/roadmap/scope-solidity-irep2.md §16.1).
+TEST_CASE(
+  "the two gen_zero overloads agree on Solidity return types",
+  "[migrate]")
+{
+  use_test_ns();
+
+  auto agree = [](const typet &t) {
+    const type2tc t2 = migrate_type(t);
+    expr2tc via_legacy;
+    migrate_expr(gen_zero(t, true), via_legacy);
+    const expr2tc via_irep2 = gen_zero(t2, true);
+    INFO("type kind id = " << get_type_id(t2));
+    REQUIRE(via_irep2 == via_legacy);
+  };
+
+  // uint256 and address: every corpus test reaching those sites returns one of
+  // these, `address` being an unsignedbv(160) carrying #sol_type.
+  agree(unsignedbv_typet(256));
+  agree(unsignedbv_typet(160));
+  agree(bool_typet());
+  agree(signedbv_typet(32));
+
+  SECTION("a Solidity string is a pointer, and agrees too")
+  {
+    agree(pointer_typet(signed_char_type()));
+  }
+}
+
+// `#cpp_type` is the source language's own spelling of a type. Unreflected --
+// two bitvectors of a width are the same type however spelled -- but a
+// consumer reads it back: python_converter::get_python_type_category tells a
+// 1-char string element from an 8-bit int by it, so dropping it at the seam
+// folds a char comparison to false (docs/roadmap/scope-python-irep2.md §9).
+TEST_CASE("a type keeps its source spelling", "[migrate]")
+{
+  SECTION("the spelling round-trips on the three kinds that carry one")
+  {
+    signedbv_typet c(8);
+    c.cpp_type("char");
+    REQUIRE(to_signedbv_type(migrate_type(c)).cpp_type == irep_idt("char"));
+    REQUIRE(migrate_type_back(migrate_type(c)).cpp_type() == irep_idt("char"));
+
+    unsignedbv_typet u(64);
+    u.cpp_type("unsigned_long");
+    REQUIRE(
+      migrate_type_back(migrate_type(u)).cpp_type() ==
+      irep_idt("unsigned_long"));
+
+    floatbv_typet d;
+    d.set_f(52);
+    d.set_width(64);
+    d.cpp_type("double");
+    REQUIRE(
+      migrate_type_back(migrate_type(d)).cpp_type() == irep_idt("double"));
+  }
+
+  SECTION("an unspelled type gains no key")
+  {
+    // `#cpp_type` is a comment field, so writing it empty inserts a key the
+    // printer then reads -- the §158 hazard, three times over by now.
+    const typet back = migrate_type_back(migrate_type(signedbv_typet(8)));
+    REQUIRE(back.find(irept::a_cpp_type).is_nil());
+    // full_eq, not ==: `operator==` skips comments, so it cannot see a leaked
+    // `#cpp_type` and asserting on it would be a tautology (§78's lesson).
+    REQUIRE(full_eq(back, signedbv_typet(8)));
+  }
+
+  SECTION("the spelling is no part of the type's identity")
+  {
+    signedbv_typet spelled(8);
+    spelled.cpp_type("char");
+    REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
+    REQUIRE(
+      migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
   }
 }

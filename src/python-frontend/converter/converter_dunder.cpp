@@ -286,7 +286,7 @@ void python_converter::retype_placeholder_to_class(
   if (
     is_user_class_pointer(new_type) && existing_is_safe_placeholder &&
     existing != new_type)
-    sym.set_type(new_type);
+    sym.set_type(migrate_type(new_type));
 }
 
 exprt python_converter::dispatch_dunder_operator(

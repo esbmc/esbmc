@@ -1965,7 +1965,7 @@ void goto_convertt::generate_ifthenelse(
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&
     true_case.instructions.front().labels.empty() &&
-    true_case.instructions.back().labels.empty())
+    is_no_op(true_case, std::prev(true_case.instructions.end())))
   {
     expr2tc g;
     migrate_expr(boolean_negate(guard), g);

@@ -191,6 +191,7 @@ void smt_solver_baset::push_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -250,6 +251,7 @@ void smt_solver_baset::pop_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
@@ -268,6 +270,10 @@ void smt_solver_baset::pop_ctx()
     });
     it = entries.empty() ? uf_ackermann_history.erase(it) : std::next(it);
   }
+
+  std::erase_if(ptr_flatten_history, [this](const ptr_flatten_entry &e) {
+    return e.level >= ctx_level;
+  });
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -3131,12 +3137,12 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
-  assert(is_array_type(expr->type));
   smt_astt src, update;
-  const array_type2t &arrtype = to_array_type(expr->type);
+  // A vector is encoded as an array too (convert_sort).
+  const type2tc &subtype = array_or_vector_subtype(expr->type);
 
   // Workaround for bools-in-arrays.
-  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
+  if (is_bool_type(subtype) && !array_api->supports_bools_in_arrays)
   {
     expr2tc cast = typecast2tc(get_uint_type(1), update_val);
     update = convert_ast(cast);
@@ -3291,6 +3297,7 @@ void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
@@ -3578,6 +3585,17 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 }
 
 expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
+{
+  auto cached = get_ast_cache.find(a);
+  if (cached != get_ast_cache.end() && cached->second.first == type)
+    return cached->second.second;
+
+  expr2tc res = get_by_ast_uncached(type, a);
+  get_ast_cache[a] = {type, res};
+  return res;
+}
+
+expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
 {
   switch (type->type_id)
   {

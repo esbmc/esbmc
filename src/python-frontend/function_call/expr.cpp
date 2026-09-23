@@ -4581,14 +4581,23 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
 
   reject_numpy_sort_write_through_view(receiver_node);
 
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+    {
+      if (kw.value("arg", std::string()) == "kind")
+        validate_numpy_sort_kind_keyword_value(kw["value"], "ndarray.sort");
+      else if (kw.value("arg", std::string()) == "stable")
+        validate_numpy_stable_bool_keyword_value(kw["value"], "ndarray.sort");
+    }
+
   // One positional argument (the axis) is accepted; extra positional args
-  // and keywords besides axis= are rejected ahead of the shape check so a
-  // 2-D receiver called with an unsupported argument reports the argument
-  // error, matching argsort()/searchsorted()'s own validation order in this
-  // file.
+  // and keywords besides axis=/kind=/stable= are rejected ahead of the shape
+  // check so a 2-D receiver called with an unsupported argument reports the
+  // argument error, matching argsort()/searchsorted()'s own validation
+  // order in this file.
   if (
-    call_["args"].size() > 1 ||
-    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
+    call_["args"].size() > 1 || numpy_reducer_has_unsupported_keywords_besides(
+                                  call_, {"axis", "kind", "stable"}))
     throw std::runtime_error(
       "TypeError: numpy.ndarray.sort() does not support kind or order "
       "arguments yet");
@@ -6091,7 +6100,7 @@ size_t function_call_expr::bind_call_receiver(
           if (
             symbolt *s = converter_.symbol_table().find_symbol(
               converter_.current_lhs->identifier()))
-            s->set_type(class_ptr);
+            s->set_type(migrate_type(class_ptr));
       }
       if (converter_.current_lhs->type().is_pointer())
       {
@@ -6297,6 +6306,121 @@ exprt function_call_expr::coerce_tagged_argument(
     "yet supported");
 }
 
+// Whether `node` itself binds `name`, other than as a Store/Del Name.
+static std::size_t binds_by_field(
+  const nlohmann::json &node,
+  const std::string &kind,
+  const std::string &name)
+{
+  static const std::map<std::string, std::string> name_field = {
+    {"arg", "arg"},
+    {"FunctionDef", "name"},
+    {"AsyncFunctionDef", "name"},
+    {"ClassDef", "name"},
+    {"ExceptHandler", "name"},
+    {"MatchAs", "name"},
+    {"MatchStar", "name"},
+    {"Global", "names"},
+    {"Nonlocal", "names"}};
+  const auto it = name_field.find(kind);
+  if (it == name_field.end() || !node.contains(it->second))
+    return 0;
+  const nlohmann::json &field = node[it->second];
+  return field.is_array() ? std::count(field.begin(), field.end(), name)
+                          : field == name;
+}
+
+// Counts every construct under `node` that binds `name`, in any scope: a
+// Store/Del Name (assignment, walrus, loop and with targets), a
+// global/nonlocal declaration, a parameter, a def/class, an import alias.
+static std::size_t
+count_name_bindings(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = 0;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "Name")
+      n += node.value("id", "") == name &&
+           node["ctx"].value("_type", "") != "Load";
+    else if (kind == "alias")
+      n += (node["asname"].is_null() ? node["name"] : node["asname"]) == name;
+    else
+      n += binds_by_field(node, kind, name);
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_bindings(child, name);
+  return n;
+}
+
+static std::optional<std::string> string_literal(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "Constant" && node["value"].is_string())
+    return node["value"].get<std::string>();
+  return std::nullopt;
+}
+
+// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+static const nlohmann::json *
+top_level_value(const nlohmann::json &module, const std::string &name)
+{
+  auto binds = [&](const nlohmann::json &target) {
+    return target.value("_type", "") == "Name" && target["id"] == name;
+  };
+  for (const auto &stmt : module["body"])
+  {
+    const std::string type = stmt.value("_type", "");
+    if (
+      type == "Assign" && stmt["targets"].size() == 1 &&
+      binds(stmt["targets"][0]))
+      return &stmt["value"];
+    if (
+      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
+      return &stmt["value"];
+  }
+  return nullptr;
+}
+
+// The string a byteorder argument denotes: a literal, or a module-level name
+// bound exactly once, to a literal. Any other binding of the name (`global`,
+// walrus, a shadowing local) makes its value flow-dependent, so it is refused.
+static std::optional<std::string>
+constant_byteorder(const nlohmann::json &node, const nlohmann::json &module)
+{
+  if (node.value("_type", "") != "Name")
+    return string_literal(node);
+
+  const std::string name = node["id"].get<std::string>();
+  if (count_name_bindings(module, name) != 1)
+    return std::nullopt;
+  const nlohmann::json *value = top_level_value(module, name);
+  return value ? string_literal(*value) : std::nullopt;
+}
+
+// Keyed on the resolved callee so an aliased call folds too (#7945).
+exprt function_call_expr::fold_from_bytes_byteorder(
+  exprt arg,
+  const nlohmann::json &node,
+  const symbolt &func_symbol,
+  const code_typet::argumentst &params,
+  std::size_t param_idx,
+  const nlohmann::json &module)
+{
+  if (
+    param_idx >= params.size() ||
+    params[param_idx].get_base_name() != "byteorder" ||
+    !boost::algorithm::ends_with(
+      func_symbol.id.as_string(), "@C@int@F@from_bytes"))
+    return arg;
+
+  const std::optional<std::string> byteorder = constant_byteorder(node, module);
+  if (byteorder != "big" && byteorder != "little")
+    throw std::runtime_error(
+      "int.from_bytes() byteorder must be the constant 'big' or 'little'");
+  return *byteorder == "big" ? exprt(true_exprt()) : exprt(false_exprt());
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -6487,6 +6611,9 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
     }
+
+    arg = fold_from_bytes_byteorder(
+      arg, arg_node, *func_symbol, params, param_idx, converter_.ast());
 
     if (
       (function_id_.get_function() == "__ESBMC_get_object_size" ||

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--little-endian
+^VERIFICATION SUCCESSFUL$

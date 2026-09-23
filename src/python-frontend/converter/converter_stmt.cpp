@@ -923,6 +923,36 @@ bool is_imported_numpy_module_alias(
   return false;
 }
 
+// Converts a scalar RHS whose kind differs from the LHS's, returning whether
+// it did; both must run before Case 6, whose width alignment retypes the RHS
+// in place.
+// Case 5 (P19): a real RHS into a complex LHS is promoted. A complex struct is
+// 128-bit and a float 64-bit, so width alignment would otherwise corrupt the
+// float by assigning it the struct type. Handles z = 1.0, z = n, z = True.
+// Case 5b: a bool into an int or float LHS is a value conversion; retyped,
+// the constant `true` is read as a number and aborts in binary2integer.
+static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
+{
+  const typet rhs_type = rhs.type();
+  // is_bool() must be explicit since is_integer_type() excludes bool.
+  const bool is_real = rhs_type.is_floatbv() ||
+                       type_utils::is_integer_type(rhs_type) ||
+                       rhs_type.is_bool();
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  {
+    rhs = promote_to_complex(rhs);
+    return true;
+  }
+  if (
+    rhs_type.is_bool() &&
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  {
+    rhs = typecast_exprt(rhs, lhs_type);
+    return true;
+  }
+  return false;
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -1039,19 +1069,9 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
-  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
-  // while a scalar float is 64-bit, so width alignment would otherwise fire
-  // first and corrupt the float by assigning struct type to it.
-  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
-  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
-  else if (
-    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
-    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
-     rhs_type.is_bool()))
-  {
-    rhs = promote_to_complex(rhs);
-  }
+  // Cases 5 and 5b: see convert_scalar_rhs.
+  else if (convert_scalar_rhs(lhs_type, rhs))
+    return;
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
@@ -1237,7 +1257,7 @@ void python_converter::handle_assignment_type_adjustments(
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     return;
   }
 
@@ -1251,7 +1271,7 @@ void python_converter::handle_assignment_type_adjustments(
     rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
     lhs.type() = rhs.type();
   }
 
@@ -1271,10 +1291,12 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type
+      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
+      // drops #python_aggregate, which `in` dispatches on
+      // (docs/roadmap/scope-python-irep2.md §10.4).
       lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
-      lhs_symbol->set_value(rhs);
+      lhs_symbol->set_value(migrate_expr(rhs));
     }
   }
   else if (lhs_symbol)
@@ -1309,7 +1331,7 @@ void python_converter::handle_assignment_type_adjustments(
         // misread. Any is not a constraint, so adopt the rhs type. Only on
         // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
         // (1, 2)`) must not retype uses already emitted at the old type.
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
@@ -1325,7 +1347,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = typecast_exprt(rhs, lhs.type());
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->set_value(rhs);
+        lhs_symbol->set_value(migrate_expr(rhs));
       return;
     }
     // Handle string-to-string variable assignments
@@ -1337,7 +1359,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs_symbol->get_value().type().is_array())
       {
         rhs = rhs_symbol->get_value();
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1399,7 +1421,7 @@ void python_converter::handle_assignment_type_adjustments(
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
           {
-            lhs_symbol->set_type(rhs.type());
+            python_expr::set_symbol_type(*lhs_symbol, rhs.type());
             lhs.type() = rhs.type();
           }
         }
@@ -1417,7 +1439,7 @@ void python_converter::handle_assignment_type_adjustments(
       else
       {
         // Adjust pointer_type() to pointer_typet(empty_typet())
-        lhs_symbol->set_type(rhs.type());
+        lhs_symbol->set_type(migrate_type(rhs.type()));
         lhs.type() = rhs.type();
       }
     }
@@ -1445,10 +1467,13 @@ void python_converter::handle_assignment_type_adjustments(
       !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
         !tuple_handler_->is_tuple_type(rhs.type())))
     {
-      lhs_symbol->set_type(rhs.type());
+      lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
     }
 
+    // Legacy: migrate_expr turns a class-object value (`x = int`) into an empty
+    // array constant, and isinstance folds on it
+    // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
       lhs_symbol->set_value(rhs);
   }

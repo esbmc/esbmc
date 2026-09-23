@@ -220,6 +220,37 @@ bool convert_call_arguments(const type2tc &callee, std::vector<expr2tc> &args)
   return changed;
 }
 
+/// A pointer target assigned a bare array value: the array->pointer decay at
+/// the assignment seam.
+bool assigns_array_to_pointer(const expr2tc &expr)
+{
+  return is_code_assign2t(expr) &&
+         is_pointer_type(to_code_assign2t(expr).target->type) &&
+         is_array_type(to_code_assign2t(expr).source->type);
+}
+
+/// A declaration whose initialiser is an array while its own type is not.
+bool declares_scalar_from_array(const expr2tc &expr)
+{
+  if (!is_code_decl2t(expr))
+    return false;
+
+  const code_decl2t &d = to_code_decl2t(expr);
+  return !is_nil_expr(d.init) && is_array_type(d.init->type) &&
+         !is_array_type(expr->type);
+}
+
+/// Convert such a declaration's initialiser to the declared type, rebuilding
+/// the (immutable) declaration only when the conversion changed it.
+void decay_scalar_decl_init(expr2tc &expr, const namespacet &ns)
+{
+  const code_decl2t &d = to_code_decl2t(expr);
+  expr2tc init = d.init;
+  c_implicit_typecast(init, expr->type, ns);
+  if (init != d.init)
+    expr = code_decl2tc(expr->type, d.value, init, d.location);
+}
+
 } // namespace
 
 // clang_c_adjust::adjust_float_arith rewrites +,-,*,/ over a float type to
@@ -577,10 +608,7 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr =
       address_of2tc(elem, index2tc(elem, a.ptr_obj, gen_zero(index_type2())));
   }
-  else if (
-    is_code_assign2t(expr) &&
-    is_pointer_type(to_code_assign2t(expr).target->type) &&
-    is_array_type(to_code_assign2t(expr).source->type))
+  else if (assigns_array_to_pointer(expr))
   {
     // Array→pointer decay at the assignment seam: a `char*` target assigned a
     // bare array value (a Python string literal, e.g. `word = ""` where `""` is
@@ -599,6 +627,19 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc decayed =
       address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
+  }
+  else if (declares_scalar_from_array(expr))
+  {
+    // A declaration whose initialiser is an array but whose type is not: a
+    // Python list element is stored as a pointer-sized integer, so appending a
+    // string literal declares `unsigned long v = "…"`. Legacy lowers it to
+    // `(unsigned long)&arr[0]` -- the array→pointer decay of
+    // c_typecastt::do_typecast, then the integer conversion -- and left as a
+    // bare array the declaration and its value reach the solver with different
+    // sorts, which bitwuzla rejects as "terms with mismatching sort"
+    // (docs/roadmap/scope-python-irep2.md §1). This is clang_c_adjust_irep2's
+    // adjust_decl_init narrowed to the one shape the Python converter builds.
+    decay_scalar_decl_init(expr, ns);
   }
   else if (
     is_code_assign2t(expr) &&
@@ -1048,8 +1089,13 @@ void python_adjust::derive_exception_ids_rec(
   // "void_ptr". The trailing never-empty fallback mirrors legacy's — callers
   // (remove_exceptions) dereference front(), so an unknown shape must yield
   // a synthetic id that simply never matches a real throw, not an empty
-  // list. (Legacy also appends a `#cpp_type` id when present; that attribute
-  // does not survive migration and Python types never carry it.)
+  // list. (Legacy also appends a `#cpp_type` id when present. That attribute
+  // does now survive migration on the bitvector and floatbv kinds, and Python
+  // types do carry it -- a string subscript is tagged "char" -- so this list
+  // can omit an id clang_cpp_exception_id includes. Deliberate: a python
+  // exception is matched by its class, not by a scalar's spelling, and nothing
+  // raises a bare char. Revisit if that changes. See
+  // docs/roadmap/scope-python-irep2.md §10.)
   if (is_pointer_type(type))
   {
     const type2tc &sub = to_pointer_type(type).subtype;

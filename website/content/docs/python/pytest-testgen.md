@@ -323,7 +323,7 @@ even when those branches are correlated. `--k-path-coverage` instruments one
 witness per *combination* of the previous `N − 1` branch directions and the
 current direction, so the generated pytest suite exercises bounded-path
 combinations rather than only branch parity. See
-[Coverage > K-Path Coverage](../coverage#k-path-coverage) for the underlying
+[Coverage > K-Path Coverage](/docs/coverage#k-path-coverage) for the underlying
 metric.
 
 ```python
