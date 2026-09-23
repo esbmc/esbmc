@@ -923,6 +923,36 @@ bool is_imported_numpy_module_alias(
   return false;
 }
 
+// Converts a scalar RHS whose kind differs from the LHS's, returning whether
+// it did; both must run before Case 6, whose width alignment retypes the RHS
+// in place.
+// Case 5 (P19): a real RHS into a complex LHS is promoted. A complex struct is
+// 128-bit and a float 64-bit, so width alignment would otherwise corrupt the
+// float by assigning it the struct type. Handles z = 1.0, z = n, z = True.
+// Case 5b: a bool into an int or float LHS is a value conversion; retyped,
+// the constant `true` is read as a number and aborts in binary2integer.
+static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
+{
+  const typet rhs_type = rhs.type();
+  // is_bool() must be explicit since is_integer_type() excludes bool.
+  const bool is_real = rhs_type.is_floatbv() ||
+                       type_utils::is_integer_type(rhs_type) ||
+                       rhs_type.is_bool();
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  {
+    rhs = promote_to_complex(rhs);
+    return true;
+  }
+  if (
+    rhs_type.is_bool() &&
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  {
+    rhs = typecast_exprt(rhs, lhs_type);
+    return true;
+  }
+  return false;
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -1039,28 +1069,9 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
-  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
-  // while a scalar float is 64-bit, so width alignment would otherwise fire
-  // first and corrupt the float by assigning struct type to it.
-  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
-  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
-  else if (
-    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
-    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
-     rhs_type.is_bool()))
-  {
-    rhs = promote_to_complex(rhs);
-  }
-  // Case 5b: a bool into a numeric variable is a value conversion. Case 6
-  // would retype it in place, reading the constant `true` as an int or float
-  // bit pattern and aborting in binary2integer.
-  else if (
-    rhs_type.is_bool() &&
-    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
-  {
-    rhs = typecast_exprt(rhs, lhs_type);
-  }
+  // Cases 5 and 5b: see convert_scalar_rhs.
+  else if (convert_scalar_rhs(lhs_type, rhs))
+    return;
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
