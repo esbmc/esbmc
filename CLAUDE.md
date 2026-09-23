@@ -388,6 +388,19 @@ time:
 3. **Medium**: Code quality, API consistency, documentation gaps
 4. **Low**: Minor style if matching surrounding code
 
+**Report format.** List only blocking problems (Critical/High, or a
+Medium/Low that breaks a stated project rule). Do not list passing checks,
+matching-style nits, or praise. For each blocking problem, give:
+
+- **File**: path
+- **Line**: line number (or range)
+- **Reason**: the specific rule or property violated, not a restatement of the
+  diff
+- **Failure demonstration**: a concrete input, trace, or command showing the
+  problem manifesting — a counterexample, a sanitizer diagnostic, a failing
+  test, or the exact GOTO/SMT behaviour that goes wrong. A claim with no
+  failure demonstration is not a blocking finding.
+
 ## Source Architecture
 
 Key directories under `src/`:
@@ -468,6 +481,18 @@ the state at each step. Track field assignments in structs (e.g., `PyObject`'s
 **5. Hypothesis tests** — Property-based tests in `unit/python-frontend/` test
 ESBMC's models against CPython. Run with:
 `uv run python -m pytest unit/python-frontend/ -v`
+
+**6. Mark an inconclusive root cause as unconfirmed** — Bisecting, hypothesis
+testing, and trace analysis narrow the search space but do not always isolate
+the defect. Do not state a root cause as fact unless it was actually isolated:
+reproduced with the fix reverted, pinned to a specific instruction via
+`--goto-functions-only`, or confirmed by a hypothesis test that fails without
+it and passes with it. If the investigation stops short of that, say
+"unconfirmed" or "root cause not isolated" rather than asserting a cause, and
+list exactly what was checked — which variants were bisected, which hypotheses
+were tested and how, which trace fields were inspected — so the next person
+resumes from where the investigation stopped instead of re-covering the same
+ground.
 
 ## SV-COMP Benchmarking
 
