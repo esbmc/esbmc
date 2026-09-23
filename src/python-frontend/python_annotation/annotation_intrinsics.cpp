@@ -48,9 +48,9 @@ const std::map<std::string, std::string> &builtin_functions()
     {"delattr", "NoneType"},
     {"callable", "bool"},
     {"id", "int"},
-    // The real builtin hash() returns int, but ESBMC's Python frontend
-    // always redirects a bare hash(...) call to the consensus model
-    // (models/consensus.py), which returns bytes -- see is_consensus_func.
+    // Fallback for a hash(...) call site this table can't see the argument
+    // of (e.g. `f = hash`). Callers that do have the argument check it first
+    // and use "int" unless it's bytes-typed -- see is_generic_hash_call.
     {"hash", "bytes"},
     {"repr", "str"},
     {"ascii", "str"},

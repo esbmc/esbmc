@@ -882,6 +882,14 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       if (json_utils::is_class(class_name, ast_))
         return class_name;
 
+      // hash() returns bytes only for the consensus spec's own
+      // hash(data: bytes); on any other argument it is the real builtin,
+      // which returns int (see is_generic_hash_call in function_call/expr.cpp).
+      if (
+        func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
+        get_argument_type(arg["args"][0]) != "bytes")
+        return "int";
+
       // Check built-in functions first
       auto it = builtin_functions().find(func_name);
       if (it != builtin_functions().end())
@@ -3223,6 +3231,18 @@ void python_annotation<Json>::collect_return_types(
         return_val["func"]["_type"] == "Name")
       {
         const std::string &called_func = return_val["func"]["id"];
+
+        // hash() returns bytes only for the consensus spec's own
+        // hash(data: bytes); get_function_return_type has no access to this
+        // call's arguments, so check them here first (mirrors get_argument_type).
+        if (
+          called_func == "hash" && return_val.contains("args") &&
+          !return_val["args"].empty() &&
+          get_argument_type(return_val["args"][0]) != "bytes")
+        {
+          types.insert("int");
+          continue;
+        }
 
         // Try to get the return type of the called function
         try
