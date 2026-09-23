@@ -184,6 +184,11 @@ prepare_platform_config() {
         log "Configuring static Ubuntu build"
       fi
 
+      # GCC 14 is the modules baseline; see the TODO in CMakeLists.txt.
+      if [[ ${#COMPILER_ENV[@]} -eq 0 && -z "${CC:-}${CXX:-}" ]]; then
+        COMPILER_ENV=(CC=gcc-14 CXX=g++-14)
+      fi
+
       BASE_ARGS+=("-DBUILD_STATIC=$STATIC")
       SOLVER_FLAGS+=("-DENABLE_Z3=ON" "-DENABLE_CVC5=On")
 
@@ -252,6 +257,7 @@ collect_ubuntu_packages() {
     libboost-filesystem-dev
     libmpfr-dev
     ninja-build
+    ccache
     python3-setuptools
     libncurses-dev
     python3-pip
@@ -270,6 +276,10 @@ collect_ubuntu_packages() {
     # <cassert> and friends, which only libstdc++-dev provides.
     log "Skipping g++-multilib on aarch64; installing g++ for libstdc++ headers"
     UBUNTU_PACKAGES+=(g++)
+  fi
+
+  if [[ "${COMPILER_ENV[*]}" == *g++-14* ]]; then
+    UBUNTU_PACKAGES+=(g++-14)
   fi
 
   if [[ "$COVERAGE" == "ON" ]]; then
@@ -299,6 +309,7 @@ collect_macos_formulae() {
     csmith
     boost
     ninja
+    ccache
     python@3.12
     automake
     bison
@@ -583,7 +594,7 @@ Commands:
 Default behavior (when no command is given): deps build install
 
 Needs to be executed from the top-level directory of ESBMC's source tree.
-Supported environments are: Ubuntu-22.04 and macOS.
+Supported environments are: Ubuntu-24.04 and macOS. Elsewhere, set CC and CXX.
 USAGE
 }
 

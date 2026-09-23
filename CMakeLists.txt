@@ -29,8 +29,8 @@ set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 22)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# TODO: adopt C++20 modules once the CI baseline moves to GCC 14+/CMake 3.28+
-# and ccache can cache module compilations (it cannot as of 4.12).
+# TODO: adopt C++20 modules once cmake_minimum_required reaches 3.28 and ccache
+# can cache module compilations (it cannot as of 4.14).
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Adds custom modules from ESBMC and default Options
