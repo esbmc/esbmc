@@ -388,18 +388,21 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     return expr;
 
   // A character from string indexing is an 8-bit int tagged #cpp_type==char.
-  // V.3: build the char->int cast in IREP2, back-migrating once (mirrors the
+  // It is one UTF-8 byte, read unsigned: sign-extending made ord() negative
+  // (#7552). A non-ASCII character still yields its lead byte, not its code
+  // point, since indexing is byte-wise.
+  // V.3: build the cast in IREP2, back-migrating once (mirrors the
   // build_typecast helper; typecast2t round-trips byte-identically).
   if (type_utils::is_char_type(expr.type()))
   {
     expr2tc expr2;
     migrate_expr(expr, expr2);
-    return migrate_expr_back(typecast2tc(migrate_type(int_type()), expr2));
+    return migrate_expr_back(typecast2tc(
+      migrate_type(int_type()), typecast2tc(get_uint8_type(), expr2)));
   }
 
-  // chr() folds a code point into a constant char array of its UTF-8 bytes.
-  // The runtime path below reads only the first, sign-extended, so
-  // ord(chr(200)) came back as -61 (#7552).
+  // chr() folds a code point into a constant char array of its UTF-8 bytes;
+  // folding it here spares the runtime decode below.
   if (auto code_point = folded_char_array_codepoint(expr))
     return build_ord_constant(arg, *code_point);
 

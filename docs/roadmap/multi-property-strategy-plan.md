@@ -331,13 +331,18 @@ Under a k-step strategy each claim moves through one lifecycle, keyed by its
 `--show-claims`), not the per-equation index:
 
 ```
-Unknown ──base case SAT at k──▶ Failed(k)          final
-Unknown ──forward condition UNSAT at k──▶ Passed   final (bounded exhaustively)
-Unknown ──inductive step UNSAT at k──▶ Passed      final (proved)
-Unknown ──max-k reached──▶ Unknown                 reported as such
+NotChecked ──base case SAT at k──▶ Failed(k)          final
+NotChecked ──forward condition UNSAT at k──▶ Passed   final (bounded exhaustively)
+NotChecked ──inductive step UNSAT at k──▶ Passed      final (proved)
+NotChecked ──max-k reached──▶ printed as UNKNOWN      reported as such
 ```
 
-- A base-case UNSAT records `Unknown`, never `Passed`. It means "not violated
+- A base-case UNSAT records nothing, never `Passed` — and not `Unknown`
+  either: the store's dominance order (below) ranks `Unknown` above `Passed`,
+  so an `Unknown` recorded at k could never be overwritten by the proof a
+  later forward condition or inductive step finds. The claim stays
+  `NotChecked` until a final outcome, and a row still `NotChecked` when the
+  run ends is printed as UNKNOWN. It means "not violated
   within k", and `multi_property_check` records `Passed` for it today
   (`bmc.cpp:3154`, which does not read the `bs` already in scope at `:2892`).
   That line is what puts the PASSED rows in D4's final table and in D2's
@@ -357,8 +362,10 @@ Unknown ──max-k reached──▶ Unknown                 reported as such
 
 `property_verdictt` (`property_verdict.h`) already has all four states,
 ordered `NotChecked < Passed < Unknown < Failed`, so a later, weaker outcome for
-a claim cannot overwrite a stronger one. Most of W3 is routing the k-step
-strategies into that store rather than adding a new mechanism.
+a claim cannot overwrite a stronger one. That order is why a bounded base-case
+result must leave the row `NotChecked` rather than record `Unknown` (above).
+Most of W3 is routing the k-step strategies into that store rather than
+adding a new mechanism.
 
 ---
 
@@ -478,17 +485,55 @@ starts `L: __ESBMC_assert(0, "v");` then gets its later `assert(i < 500)`
 "proved" by the inductive step under `--k-induction --multi-property`. Fix in
 the walk, with the same predicate as W2. Test pair on that program.
 
-### W3 — one table with stable ids (D2, D5, #1361)
+### W3a — claims that share a position (D5) — done
 
-- Key the skip set (`bmc.cpp:3013`) and the verdict store (`bmc.cpp:3155`, and
-  the single-run sites at `:252-317`) on the program claim id instead of
-  `claim_cstr`. Both, or D5 survives in whichever is left:
-  `--keep-verified-claims` shows the store collapsing the rows on its own even
-  when the skip is suppressed. This removes D5 and
-  the `//! This algo is unsound` comment together. A k-step run's labels then
-  match the first table's (`main.assertion.2` stays `main.assertion.2`).
-- Record each k step's per-claim outcomes into `property_verdicts` under that
-  id. Print the table once from `conclude()` / the exhausted-k exit.
+- `property_key` is the one key the verdict store and the skip set use. When a
+  claim is its instruction's own assertion (the description is the
+  instruction's comment), the key also names that instruction, so the two
+  bound checks of `a[i] + a[j]` are two rows and
+  one's violation no longer skips the other. Rows that still read the same
+  print their condition: `[(signed long int)i < 4]`.
+- The key does not change when the `ASSERT` becomes a `SKIP`.
+  `clear_verified_claims_in_goto` does that in place once a claim is violated,
+  clearing the guard, and a later instance of the claim -- another unrolled
+  copy, or another interleaving under `--smt-during-symex` -- must key the same
+  way. The instruction is named by its node, not its `location_number`:
+  `--bidirectional` inserts an `ASSERT` mid-run and renumbers the program. The
+  condition shown in a row is captured while the `ASSERT` is intact and
+  rendered only for rows that collide and differ, so the default mode pays no
+  `from_expr` per assertion.
+- Residuals: `__ESBMC_assert(c, "")` gets the description `assertion <c>`,
+  which is not its instruction's (empty) comment, so two such assertions at
+  one position still share a row. Under `--parallel-solving`, reading a
+  claim's guard races with another thread's `make_skip`; `claim_slicer`
+  already did so before W3a.
+- A dereference check raised while evaluating an assertion keeps description
+  and position: the instruction is not that claim's assertion.
+- Coverage goals keep the old key, which their reports print verbatim.
+- **Tests.** `d5.c` under plain BMC, single-property BMC and `--k-induction`
+  gives `i < 4` PASSED (or NOT CHECKED) and `j < 4` FAILED, pinned with the
+  summary line so a duplicate row fails the test; its twin with both indices
+  bounded is SUCCESSFUL with two PASSED rows. `condition_coverage_goal_key`
+  pins a coverage goal line; `multi_property_same_position_asserts_loop` keys
+  instances off a `SKIP`, and `same_position_assert_bidirectional` survives a
+  renumbering. The three `synth_loop_invariant_calleeinv*` tests
+  now show each synthesised clause as its own row.
+
+### D9 — two claims symex raises at one instruction share a row
+
+`return *p + *r;` with only `r` possibly NULL prints one
+`null-pointer-dereference` row, FAILED: the `*p` check, which holds, has no row
+of its own, and the same goes for the out-of-bounds and alignment pairs. Such
+claims are raised during symbolic execution at an instruction that is not their
+own assertion, so neither the instruction nor its guard tells them apart, and
+the SSA step carries no un-renamed condition that would. Fixing it needs an
+identity recorded where symex raises the claim. Plain BMC is affected. Open.
+
+### W3b — one table across k steps (D2, #1361)
+
+- Record each k step's per-claim outcomes into `property_verdicts` under
+  `property_key`, following §4's lifecycle. Print the table once from
+  `conclude()` / the exhausted-k exit (#7913).
 - Suppress interim PASSED rows and interim `VERIFICATION SUCCESSFUL` under a
   k-step strategy.
 - **Interface change.** This changes what ESBMC prints. Check it against
@@ -498,8 +543,7 @@ the walk, with the same predicate as W2. Test pair on that program.
 - **Tests (pair).** `i1361.c --k-induction --multi-property`: exactly one
   table, `main.assertion.1 ... line 6` and `main.assertion.2 ... line 8` both
   FAILED, no `VERIFICATION SUCCESSFUL` anywhere. `vac2_safe.c` under the same
-  flags: one table, both claims PASSED, `VERIFICATION SUCCESSFUL` once. `d5.c --multi-property`: two rows,
-  `a[i]` PASSED and `a[j]` FAILED, under plain BMC and `--k-induction`.
+  flags: one table, both claims PASSED, `VERIFICATION SUCCESSFUL` once.
 - Close #1361 with its program as the `github_1361` CORE test.
 - Labels: `needs-svcomp-run`.
 
