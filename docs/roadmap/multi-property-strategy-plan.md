@@ -29,8 +29,8 @@ their own handling of it, and every one of them differs:
 |---|---|---|
 | `--unwind N` (± `--interval-analysis`, `--parallel-solving`, `--smt-during-symex`) | Every violated claim reported, one table, verdict matches — except that claims sharing a comment and a location share a row (D5) | Yes, per row |
 | `--k-induction`, `--incremental-bmc` (± `--interval-analysis`) | Every violated claim reported, one table at the end with stable ids, verdict matches — except D5 | Yes, per row (W1, W2, W3b) |
-| `--falsification` | Reports the violations it reaches; a claim it never settles is UNKNOWN, not PASSED (W3b). It leaves the k loop at the first violation, so a claim violated at a larger k stays UNKNOWN and its table prints after that phase's verdict (D4) | Failed rows only |
-| `--k-induction-parallel` | Stops at the first violation and prints PASSED for claims violated at a larger k (D2, D4, D5) | Failed rows only |
+| `--falsification` | Escalates past a violation and reports every violation it reaches by `--max-k-step`, one table at the end; a claim it never settles is UNKNOWN, not PASSED (W3b, W4). It proves nothing, so it runs to `--max-k-step` | Failed rows only |
+| `--k-induction-parallel` | Rejects the combination with an error (W4) | n/a |
 | `--falsify-context-bound` | Rejects the combination with an error (`bmc_strategy.cpp:608-622`) | n/a |
 
 `--loop-invariant` runs the same k-step loop (`driver.cpp:297-300`), so W1, W2
@@ -670,14 +670,25 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
   `--max-k-step 3`, before `x != 3` is reached, so it still pins the bounded
   row as UNKNOWN rather than PASSED.
 - `--k-induction-parallel` rejects `--multi-property` in
-  `incompatible_flags` (`driver.cpp`), and also the flags that turn it on:
-  `--multi-fail-fast`, `--all-witnesses` and `--parallel-solving`. Each
-  printed the same PASSED row on `vac2.c`. The parallel driver forks before it
+  `incompatible_flags` (`driver.cpp`), and also the flags that turn it on,
+  `--all-witnesses` and `--parallel-solving`. Each printed the same PASSED
+  row on `vac2.c`. The parallel driver forks before it
   parses options, so the check reads the command line. `--termination` is
   exempt because it runs the sequential driver.
   `esbmc-unix/multi_property_kinduction_parallel_reject` pins the error, and
   `..._reject_scope` pins that `vac2.c --k-induction-parallel` alone still
-  ends `VERIFICATION FAILED`.
+  ends `VERIFICATION FAILED`; `termination/k_induction_parallel_multi_property`
+  pins the `--termination` exemption.
+- `falsification_stops_at_first_violation` pins that without
+  `--multi-property` the run still stops at k = 1.
+- Escalation has no stop but `--max-k-step`: with `--unlimited-k-steps` a
+  buggy program now runs as long as a safe one always did. Stopping once every
+  row is FAILED is unsound, since rows are seeded per equation and a larger k
+  can raise claims no earlier k did. `--multi-fail-fast` limits each base case,
+  not the run, as under `--incremental-bmc` and `--k-induction`
+  (`multi_property_kinduction_fail_fast`).
+- Not done: the follow-up issue for merging per-claim verdicts under
+  `--k-induction-parallel` (§7.3).
 - The SV-COMP wrapper's `falsi` strategy does not pass `--multi-property`
   (`esbmc-wrapper.py:359`), so its runs take the unchanged path.
 
