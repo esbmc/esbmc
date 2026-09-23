@@ -1,7 +1,8 @@
 /* github #7896: 1 + 2^-10 is representable in binary16 and differs from 1.
- * At 9 significand bits it rounds back to 1 and this fails, so this is what
- * pins the significand from below. --fp2bv lowers to bit-vectors, so the
- * solver never sees an FP sort it could reject instead of answering. */
+ * At 9 significand bits it rounds back to 1 and this fails. Under --floatbv a
+ * wrong significand usually makes Bitwuzla reject the sort instead, so this
+ * copy is the erroring control; github_7896_frac_lo_fp2bv is the arithmetic
+ * one. */
 #include <assert.h>
 
 _Float16 nondet_h(void);

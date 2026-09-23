@@ -1,5 +1,7 @@
 /* github #7896: binary16 has 10 significand bits, so the gap above 1 is
- * 2^-10 and 1 + 2^-11 rounds back to 1. Pins the significand from above. */
+ * 2^-10 and 1 + 2^-11 rounds back to 1. Pins the significand from above.
+ * --fp2bv lowers to bit-vectors, so the solver never sees an FP sort it could
+ * reject instead of answering. */
 #include <assert.h>
 
 _Float16 nondet_h(void);
