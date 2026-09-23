@@ -398,8 +398,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     expr2tc expr2;
     migrate_expr(expr, expr2);
     return migrate_expr_back(typecast2tc(
-      migrate_type(int_type()),
-      typecast2tc(get_uint8_type(), expr2)));
+      migrate_type(int_type()), typecast2tc(get_uint8_type(), expr2)));
   }
 
   // chr() folds a code point into a constant char array of its UTF-8 bytes;
