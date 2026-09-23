@@ -48,6 +48,7 @@ function(mangle output_c dir)
     file(GLOB inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${dir}/${MANGLE_WILDCARD} ${MANGLE_UNPARSED_ARGUMENTS})
   else()
     set(inputs ${MANGLE_UNPARSED_ARGUMENTS})
+    list(JOIN ", " inputs single_file_desc)
     set(single_file_desc "${inputs} in ${dir}")
   endif()
 

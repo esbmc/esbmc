@@ -14,10 +14,11 @@ add_subdirectory(smt)
 
 
 add_library(solve solve.cpp smt/simplification_equivalence.cpp)
-target_link_libraries(solve PUBLIC esbmc_common smt PRIVATE smttuple smtfp fmt::fmt)
+target_link_libraries(solve PUBLIC smt PRIVATE smttuple smtfp fmt::fmt)
 target_include_directories(solve
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
 add_library(solvers INTERFACE)

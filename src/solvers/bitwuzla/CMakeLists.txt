@@ -64,7 +64,7 @@ if(ENABLE_BITWUZLA)
   endif()
 
   if(NOT Bitwuzla_FOUND)
-    message(FATAL_ERROR "Could not find Bitwuzla in '${Bitwuzla_DIR}'")
+    message(ERROR "Could not find Bitwuzla in '${Bitwuzla_DIR}'")
   endif()
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
@@ -75,8 +75,9 @@ if(ENABLE_BITWUZLA)
 
     add_library(solverbitw bitwuzla_conv.cpp)
     target_include_directories(solverbitw
+            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solverbitw PUBLIC esbmc_common fmt::fmt PkgConfig::Bitwuzla)
+    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 
