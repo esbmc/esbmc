@@ -1,6 +1,6 @@
 // A pointer rebuilt from memset bytes matches no flattened pointer, so it is
 // the address-space reconstruction. --smt-symex-guard solves the branch in a
-// pushed context; popping it must not drop that fallback.
+// pushed context; popping it must leave that reconstruction in place.
 #include <assert.h>
 #include <string.h>
 

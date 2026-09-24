@@ -167,6 +167,9 @@ smt_astt smt_solver_baset::encode_pointer_repr(
   const type2tc &to_type)
 {
   smt_astt address = convert_ast(typecast2tc(to_type, ptr));
+  /* A pointer rebuilt from bits already carries where those bits came from. */
+  if (is_symbol2t(ptr) && ptr_flow.count(to_symbol2t(ptr).get_symbol_name()))
+    return address;
   smt_astt pointer = convert_ast(ptr);
   flattened.emplace(
     bitcast2tc(to_type, ptr),
@@ -184,36 +187,15 @@ void smt_solver_baset::record_flattened_pointer(
     pointer,
     step_guard ? step_guard : mk_smt_bool(true),
     ctx_level,
-    flatten_count++,
-    cur_step};
-  step_sources.insert(flat.id);
+    flatten_count++};
+  step_flattens.insert(flat.id);
 
   for (const ptr_flatten_entry &prev : ptr_flatten_history)
     assert_ast(mk_implies(
       mk_and(mk_and(flat.guard, prev.guard), mk_eq(address, prev.address)),
       pointer->eq(this, prev.pointer)));
-  for (const ptr_decode_entry &rebuilt : ptr_decode_history)
-    if (may_read(rebuilt, flat))
-      define_rebuilt_pointer(rebuilt, flat);
 
   ptr_flatten_history.push_back(flat);
-}
-
-void smt_solver_baset::define_rebuilt_pointer(
-  const ptr_decode_entry &rebuilt,
-  const ptr_flatten_entry &flat)
-{
-  assert_ast(mk_implies(
-    mk_and(flat.guard, mk_eq(rebuilt.address, flat.address)),
-    rebuilt.pointer->eq(this, flat.pointer)));
-}
-
-bool smt_solver_baset::may_read(
-  const ptr_decode_entry &rebuilt,
-  const ptr_flatten_entry &flat)
-{
-  return (flat.step != 0 && flat.step == rebuilt.step) ||
-         rebuilt.sources.count(flat.id);
 }
 
 void smt_solver_baset::begin_step(
@@ -221,8 +203,8 @@ void smt_solver_baset::begin_step(
   const expr2tc &cond,
   const expr2tc &assigned)
 {
-  cur_step = ++step_count;
   step_sources.clear();
+  step_flattens.clear();
 
   /* A bitcast converted in an earlier step is a cache hit here, so
    * encode_pointer_repr() does not run; it is re-recorded under this step's
@@ -258,11 +240,12 @@ void smt_solver_baset::begin_step(
 
 void smt_solver_baset::end_step()
 {
+  step_sources.insert(step_flattens.begin(), step_flattens.end());
   if (!step_assigned.empty() && !step_sources.empty())
     ptr_flow[step_assigned] = step_sources;
-  cur_step = 0;
   step_guard = nullptr;
   step_sources.clear();
+  step_flattens.clear();
   step_assigned.clear();
 }
 
@@ -271,40 +254,12 @@ smt_astt smt_solver_baset::decode_pointer_repr(
   const type2tc &to_type)
 {
   smt_astt address = convert_ast(repr);
-  smt_astt fallback = convert_ast(typecast2tc(to_type, repr));
-  ptr_decode_entry rebuilt{
-    address,
-    mk_fresh(fallback->sort, "pointer_repr::"),
-    fallback,
-    ctx_level,
-    std::nullopt,
-    cur_step,
-    step_sources};
-
-  for (const ptr_flatten_entry &prev : ptr_flatten_history)
-    if (may_read(rebuilt, prev))
-      define_rebuilt_pointer(rebuilt, prev);
-
-  ptr_decode_history.push_back(rebuilt);
-  return rebuilt.pointer;
-}
-
-void smt_solver_baset::fall_back_rebuilt_pointers()
-{
-  for (ptr_decode_entry &rebuilt : ptr_decode_history)
-  {
-    if (rebuilt.fallback_level)
-      continue;
-    smt_astt unmatched = mk_smt_bool(true);
-    for (const ptr_flatten_entry &flat : ptr_flatten_history)
-      if (may_read(rebuilt, flat))
-        unmatched = mk_and(
-          unmatched,
-          mk_not(mk_and(flat.guard, mk_eq(rebuilt.address, flat.address))));
-    assert_ast(
-      mk_implies(unmatched, rebuilt.pointer->eq(this, rebuilt.fallback)));
-    rebuilt.fallback_level = ctx_level;
-  }
+  smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
+  for (const ptr_flatten_entry &flat : ptr_flatten_history)
+    if (step_sources.count(flat.id))
+      pointer = flat.pointer->ite(
+        this, mk_and(flat.guard, mk_eq(address, flat.address)), pointer);
+  return pointer;
 }
 
 /** The pointer leg of convert_bitcast. Null when neither side is a pointer

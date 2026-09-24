@@ -1118,48 +1118,21 @@ public:
     smt_astt guard;
     unsigned int level;
     size_t id;
-    /** The SSA step it was flattened in, 0 outside one. */
-    size_t step;
   };
-  /** Every flattened pointer in this context. Like uf_ackermann_history, it
-   *  and the decode history below are pruned on pop_ctx. */
+  /** Every flattened pointer in this context. Pruned on pop_ctx like
+   *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
   /** Each flattening bitcast converted so far, for steps that hit it in the
    *  conversion cache. */
   std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
   void record_flattened_pointer(smt_astt address, smt_astt pointer);
 
-  /** A pointer rebuilt from its representation. Its fallback needs every
-   *  flatten, so pre_solve() asserts it, at fallback_level. */
-  struct ptr_decode_entry
-  {
-    smt_astt address;
-    smt_astt pointer;
-    smt_astt fallback;
-    unsigned int level;
-    std::optional<unsigned int> fallback_level;
-    /** The SSA step it was rebuilt in, 0 outside one, and the flattens whose
-     *  bits that step's operands can hold. */
-    size_t step;
-    std::set<size_t> sources;
-  };
-  std::vector<ptr_decode_entry> ptr_decode_history;
-  void define_rebuilt_pointer(
-    const ptr_decode_entry &rebuilt,
-    const ptr_flatten_entry &flat);
-  void fall_back_rebuilt_pointers();
-  /** Whether @p flat's bits can reach @p rebuilt: SSA order is data-flow
-   *  order, so a rebuild reads only flattens in its own step or flowing into
-   *  its step's operands. */
-  static bool
-  may_read(const ptr_decode_entry &rebuilt, const ptr_flatten_entry &flat);
-
-  /** The SSA step being converted: its number (0 outside one), guard, the
-   *  flattens its operands may hold, and the symbol it assigns. */
-  size_t step_count = 0;
-  size_t cur_step = 0;
+  /** The SSA step being converted: its guard, the flattens its operands may
+   *  hold (all a rebuild in it reads), those it makes, and the symbol it
+   *  assigns. Null and empty outside a step. */
   smt_astt step_guard = nullptr;
   std::set<size_t> step_sources;
+  std::set<size_t> step_flattens;
   std::string step_assigned;
   size_t flatten_count = 0;
   /** The flattens each SSA symbol's value may hold. */
