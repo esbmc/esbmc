@@ -696,18 +696,30 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
   return std::nullopt;
 }
 
-// Retype `expr` to `target`. Relabeling (not casting) a floatbv expr onto a
-// non-floatbv target keeps its ieee_* expr id while its type says non-float,
-// so a later simplify_floatbv_2ops assert aborts -- hits `%` over a symbolic
-// `**` exponent (kept double via libm) reaching bool()/a consensus-type
-// cast. Typecast in that case; a plain relabel is fine otherwise, matching
-// every other builtin/consensus-type cast here.
-static exprt retype_or_typecast(exprt expr, const typet &target)
+// Convert `expr` to `target`. Relabelling a scalar instead leaves an
+// operation whose type tag disagrees with its operands: a floatbv keeps its
+// ieee_* id and aborts simplify_floatbv_2ops, and bool(~k) became a
+// bool-typed bitnot over an int that the solver rejects. A call is stored with
+// its own return type first, so the cast applies to its value in any context.
+// Other types are relabelled as before.
+exprt function_call_expr::retype_or_typecast(exprt expr, const typet &target)
+  const
 {
-  if (expr.type().is_floatbv() && !target.is_floatbv())
-    return build_typecast(expr, target);
-  expr.type() = target;
-  return expr;
+  auto is_scalar = [](const typet &t) {
+    return t.is_bool() || t.is_signedbv() || t.is_unsignedbv() ||
+           t.is_floatbv();
+  };
+  if (
+    expr.type() == target || !(expr.type().is_floatbv() ||
+                               (is_scalar(expr.type()) && is_scalar(target))))
+  {
+    expr.type() = target;
+    return expr;
+  }
+  if (expr.is_function_call())
+    expr = converter_.store_call_result(
+      expr, converter_.get_location_from_decl(call_), "cast");
+  return build_typecast(expr, target);
 }
 
 exprt function_call_expr::build_constant_from_arg() const
