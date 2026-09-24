@@ -1,6 +1,6 @@
 # Plan — `--multi-property` under the k-step strategies
 
-**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b and W3c landed.
+**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage done.
 **Origin:** Discussion
 [#7900](https://github.com/esbmc/esbmc/discussions/7900), *"Current state of
 --multi-property support"*: is `--multi-property` orthogonal to the analysis
@@ -29,8 +29,8 @@ their own handling of it, and every one of them differs:
 |---|---|---|
 | `--unwind N` (± `--interval-analysis`, `--parallel-solving`, `--smt-during-symex`) | Every violated claim reported, one table, verdict matches — except that claims sharing a comment and a location share a row (D5) | Yes, per row |
 | `--k-induction`, `--incremental-bmc` (± `--interval-analysis`) | Every violated claim reported, one table at the end with stable ids, verdict matches — except D5 | Yes, per row (W1, W2, W3b) |
-| `--falsification` | Reports the violations it reaches; a claim it never settles is UNKNOWN, not PASSED (W3b). It leaves the k loop at the first violation, so a claim violated at a larger k stays UNKNOWN and its table prints after that phase's verdict (D4) | Failed rows only |
-| `--k-induction-parallel` | Stops at the first violation and prints PASSED for claims violated at a larger k (D2, D4, D5) | Failed rows only |
+| `--falsification` | Escalates past a violation and reports every violation it reaches by `--max-k-step`, one table at the end; a claim it never settles is UNKNOWN, not PASSED (W3b, W4). It proves nothing, so it runs to `--max-k-step` | Failed rows only |
+| `--k-induction-parallel` | Rejects the combination with an error (W4) | n/a |
 | `--falsify-context-bound` | Rejects the combination with an error (`bmc_strategy.cpp:608-622`) | n/a |
 
 `--loop-invariant` runs the same k-step loop (`driver.cpp:297-300`), so W1, W2
@@ -659,37 +659,65 @@ identity recorded where symex raises the claim. Plain BMC is affected. Open.
     solved in SSA order, which is what puts the skipped instances after the
     violated one.
 
-### W4 — falsification and parallel k-induction (D4)
+### W4 — falsification and parallel k-induction (D4) — done
 
-- `--falsification`: when `--multi-property` is set, continue escalating past
-  a violation, as the incremental-bmc branch does, and end through
-  `conclude()`. Small change. Pair of tests on `vac2.c`: `--falsification
-  --multi-property --max-k-step 10` must list `assertion x != 3` FAILED, and
-  `vac2_safe.c` under the same flags must stay `^VERIFICATION UNKNOWN$`, exit 0
-  — `--falsification` has no forward condition and so proves nothing; the twin
-  pins that escalating past a violation does not set `any_violation_found` on a
-  clean run. §4's base-case rule landed in W3b, so the escalating run no
-  longer prints the k = 1 PASSED row.
-- `--k-induction-parallel`: merging per-claim verdicts across forked processes
-  is a separate design. For now, reject the combination with a
-  `log_error`, as `--falsify-context-bound` does (`bmc_strategy.cpp:608-622`),
-  and open a follow-up issue. An error is better than a run that reports half
-  the violations and presents that as the full answer.
-- **Tests (pair) for the rejection**, modelled on
-  `regression/esbmc-unix/github_6831_falsify_prepass_reject`: one pinning
-  `^ERROR: --k-induction-parallel cannot be combined with --multi-property$` on
-  `vac2.c`, and one pinning that `vac2.c --k-induction-parallel --max-k-step 10`
-  without the flag still ends `^VERIFICATION FAILED$`, so the rejection is
-  scoped to the combination.
-- Labels: `needs-svcomp-run`. `esbmc-wrapper.py:359` selects `--falsification`
-  for the `falsi` strategy, so this changes a strategy SV-COMP runs.
+- `--falsification` with `--multi-property` records a violation and keeps
+  escalating, as `--incremental-bmc` does, and ends through `conclude()`
+  after the one table. `multi_property_falsification` pins `x != 3` FAILED on
+  `vac2.c`; `multi_property_falsification_safe` pins that `vac2_safe.c` stays
+  `VERIFICATION UNKNOWN`, so escalating does not set `any_violation_found` on
+  a clean run. `multi_property_bounded_base_case_row` now stops at
+  `--max-k-step 3`, before `x != 3` is reached, so it still pins the bounded
+  row as UNKNOWN rather than PASSED.
+- `--k-induction-parallel` rejects `--multi-property` in
+  `incompatible_flags` (`driver.cpp`), and also the flags that turn it on,
+  `--all-witnesses` and `--parallel-solving`. Each printed the same PASSED
+  row on `vac2.c`. The parallel driver forks before it
+  parses options, so the check reads the command line. `--termination` is
+  exempt because it runs the sequential driver.
+  `esbmc-unix/multi_property_kinduction_parallel_reject` pins the error, and
+  `..._reject_scope` pins that `vac2.c --k-induction-parallel` alone still
+  ends `VERIFICATION FAILED`; `termination/k_induction_parallel_multi_property`
+  pins the `--termination` exemption.
+- `falsification_stops_at_first_violation` pins that without
+  `--multi-property` the run still stops at k = 1.
+- Escalation has no stop but `--max-k-step`: with `--unlimited-k-steps` a
+  buggy program now runs as long as a safe one always did. Stopping once every
+  row is FAILED is unsound, since rows are seeded per equation and a larger k
+  can raise claims no earlier k did. `--multi-fail-fast` limits each base case,
+  not the run, as under `--incremental-bmc` and `--k-induction`
+  (`multi_property_kinduction_fail_fast`).
+- Merging per-claim verdicts under `--k-induction-parallel` is #7968
+  (§7.3).
+- The SV-COMP wrapper's `falsi` strategy does not pass `--multi-property`
+  (`esbmc-wrapper.py:359`), so its runs take the unchanged path.
 
-### W5 — re-triage
+### W5 — re-triage — done
 
-Re-run the reproducers of #1599, #2075 and #7503 on the W1–W4 build. Close
-each one that passes with a `github_<N>` test. Check the KNOWNBUG suite for
-multi-property entries in the same pass. File D6 separately, after checking
-it against existing issues and KNOWNBUG tests.
+Re-ran the reproducers of #1599, #1902, #2075 and #7503 on the W4 build
+(`cb39ed84de`). None of the open ones is a multi-property defect:
+
+- **#1902** passes: `--k-induction --multi-property` ends at k = 2 through the
+  forward condition, `VERIFICATION FAILED`. Pinned by `github_1902` and
+  `github_1902_safe`. `--keep-verified-claims` brings the symptom back.
+- **#1599** still aborts in `array_convt::execute_array_joining_ite`
+  (Bitwuzla, Boolector; Z3 completes). Without `--multi-property` the run
+  stops at the scanf `assert(0)` that `--overflow` emits before it reaches the
+  crashing claim. Delete that scanf call and the plain run aborts too. It is a
+  solver-encoding defect, as the issue's 2024 comment already found.
+- **#2075**: both traces are valid witnesses. Forcing `valve == 1` gives a
+  trace that omits iteration 1's `valve = 2`. That is the slicer, and plain
+  BMC does it without `--multi-property` or `--branch-coverage`; `--no-slice`
+  prints the state.
+- **#7503** is live: a claim guarded by `i == 5` in a two-iteration loop is in
+  `--show-claims` but missing from the table under plain BMC, `--multi-property`
+  and `--incremental-bmc`. `--k-induction` lists it.
+
+KNOWNBUG: `loop-invariants/6-invariant_in_wrong_place` and
+`7-not_conjunct_invariant` still pass as KNOWNBUG and give the same verdict
+without `--multi-property`. `goto-coverage/github_1720_6` is a coverage count.
+D6 still aborts, and no issue or KNOWNBUG test covers it. Its assert predates
+#7587.
 
 ### W6 — documentation
 
