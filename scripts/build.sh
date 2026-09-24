@@ -46,6 +46,7 @@ COMPILER_ENV=()
 
 STATIC=""
 COVERAGE=OFF
+LINKER=""
 # ESBMC uses Clang-18 APIs (e.g. isExplicitObjectMemberFunction); 18 is the
 # minimum supported toolchain on every platform (mirrors
 # MIN_SUPPORTED_LLVM_VERSION_MAJOR in CMakeLists.txt).
@@ -280,6 +281,10 @@ collect_ubuntu_packages() {
 
   if [[ "${COMPILER_ENV[*]}" == *g++-14* ]]; then
     UBUNTU_PACKAGES+=(g++-14)
+  fi
+
+  if [[ "$LINKER" == mold || "$LINKER" == lld ]]; then
+    UBUNTU_PACKAGES+=("$LINKER")
   fi
 
   if [[ "$COVERAGE" == "ON" ]]; then
@@ -582,6 +587,7 @@ Options [defaults]:
   -B ON|OFF  enable/disable esbmc bundled libc [ON]
   -x ON|OFF  enable/disable esbmc cheri [OFF]
   -k ON|OFF  enable/disable coverage instrumentation (GCC/Clang --coverage) [OFF]
+  -l LINKER  auto, mold, lld, gold or default (see ESBMC_LINKER) [auto]
 
 Commands:
   fetch-deps         fetch dependency metadata and source archives [internal]
@@ -599,7 +605,7 @@ USAGE
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
+while getopts "hb:s:e:r:dS:c:CB:x:k:l:" flag; do
   case "$flag" in
     h)
       usage
@@ -648,6 +654,10 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
     B)
       require_on_off "-B" "$OPTARG"
       BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
+      ;;
+    l)
+      LINKER="$OPTARG"
+      BASE_ARGS+=("-DESBMC_LINKER=${OPTARG}")
       ;;
     k)
       require_on_off "-k" "$OPTARG"

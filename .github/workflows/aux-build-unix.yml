@@ -28,6 +28,11 @@ on:
         required: false
         default: false
         type: boolean
+      linker:
+        description: "ESBMC_LINKER passed to build.sh; auto keeps the probe"
+        required: false
+        default: auto
+        type: string
 
 jobs:
   build:
@@ -53,7 +58,7 @@ jobs:
         restore-keys: ${{ env.CCACHE_KEY }}-
 
     - name: Build ESBMC
-      run: ./scripts/build.sh ${{ inputs.build-flags }}
+      run: ./scripts/build.sh ${{ inputs.build-flags }} ${{ inputs.linker != 'auto' && format('-l {0}', inputs.linker) || '' }}
 
     # Zeroed before saving, so the next restore reports only its own build.
     - name: Show ccache statistics
