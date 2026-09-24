@@ -23,8 +23,43 @@ public:
 
   exprt get() override;
 
+  // The construction site's own entry point (function_call_builder::build):
+  // applies try_hoist_call_arg_for_view_method ahead of get() the same way
+  // get() itself used to, but from outside the class so the check's own
+  // decision point is attributed to this small new function instead of
+  // inflating get()'s already far-over-threshold decision count (see
+  // numpy_call_expr.cpp for the full rationale).
+  static exprt build_result(
+    const symbol_id &function_id,
+    const nlohmann::json &call,
+    python_converter &converter);
+
 private:
   exprt create_expr_from_call();
+
+  // transpose()/flatten()/ravel() over a raw Call argument (e.g.
+  // `np.eye(3).transpose()`, rewritten to `np.transpose(np.eye(3))`):
+  // hoists it into a temp so the rest of get() sees the already-correct
+  // Name case. nullopt (not this shape, or hoisting declined) when get()'s
+  // normal dispatch should run unchanged. See numpy_call_expr.cpp for the
+  // full rationale.
+  std::optional<exprt>
+  try_hoist_call_arg_for_view_method(const std::string &function);
+
+  // A dispatch whose result shape the static annotator cannot model (e.g.
+  // ravel()/flatten(), always 1-D of size = product of the input's dims)
+  // reaches an assignment target still carrying the annotator's guess --
+  // typically Any/void* -- instead of the concrete type just computed.
+  // Retyping the target in place here, the same fixup transpose's own
+  // dispatch applies inline (try_transpose_name_arg), is what makes an
+  // assignment store the array value directly instead of decaying it to a
+  // pointer to match the stale declared type; every subsequent subscript on
+  // it would otherwise resolve as a symbolic NONDET rather than the actual
+  // element. A separate function (not inlined into get()'s own flatten/
+  // ravel branch) so this decision point is attributed here instead of
+  // adding to get()'s already far-over-threshold count.
+  static exprt
+  retype_current_lhs_and_return(python_converter &converter, exprt value);
 
   // np.arange(...) with constant, small arguments materialized to a literal
   // list, falling back to the operational model for genuinely non-constant

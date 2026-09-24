@@ -7511,9 +7511,107 @@ typet numpy_call_expr::resolve_like_element_type(const typet &base_type)
   return elem_type;
 }
 
+// transpose()/flatten()/ravel() (and `.T`, rewritten to
+// np.transpose(...) ahead of here) only resolve a first argument that is a
+// List or a Name (e.g. `x.transpose()` rewritten to `np.transpose(x)`),
+// never a raw Call -- `np.eye(3).transpose()` (rewritten to
+// `np.transpose(np.eye(3))`) falls through every dispatch below into a
+// generic runtime-call fallback that either errors confusingly or silently
+// produces a wrong NONDET result instead of the correct one (a soundness
+// gap, not just a missing feature).
+//
+// The primary fix is a pure AST rewrite: materialize_numpy_constructor_array
+// turns the raw constructor call into the same literal List node a Name
+// bound to it would resolve to, so the rest of get() sees the
+// already-correct List/Name case uniformly. Being a pure expression-level
+// transform (no statement emitted, no side effect), it behaves identically
+// whether this is the discarded type-probe pass or the real conversion --
+// unlike hoisting into a temp, which needs a live current_block and would
+// otherwise leave the probe's inferred type wrong (see
+// hoist_call_argument_into_temp's own doc).
+//
+// materialize_numpy_constructor_array only understands a direct numpy
+// constructor call; a raw Call to a user function (e.g. `make().T`) falls
+// back to hoisting into a temp, exactly the mechanism
+// hoist_call_argument_into_temp already uses for searchsorted's own
+// local-array-return case.
+//
+// Called from build_result, ahead of get() and outside the class, so this
+// check's own decision point doesn't add to get()'s own (already far over
+// threshold) decision count. nullopt (not this shape, or hoisting declined
+// -- e.g. a discarded type-probe pass over a user-function call) leaves
+// get()'s normal dispatch unchanged.
+std::optional<exprt>
+numpy_call_expr::try_hoist_call_arg_for_view_method(const std::string &function)
+{
+  if (
+    call_["args"].empty() ||
+    call_["args"][0].value("_type", std::string()) != "Call" ||
+    (function != "transpose" && function != "flatten" && function != "ravel"))
+    return std::nullopt;
+
+  const nlohmann::json &arg_call = call_["args"][0];
+
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(arg_call, converter_.ast()))
+  {
+    nlohmann::json rewritten_call = call_;
+    rewritten_call["args"][0] = std::move(*materialized);
+    numpy_call_expr nested(function_id_, rewritten_call, converter_);
+    return nested.get();
+  }
+
+  std::optional<nlohmann::json> hoisted =
+    hoist_call_argument_into_temp(arg_call);
+  if (!hoisted)
+  {
+    // Discarded type-probe pass (or no current block to emit into):
+    // hoisting would evaluate the argument an extra time -- see
+    // safe_to_emit_side_effecting_statement. Declining here (rather than a
+    // scalar placeholder) lets the enclosing assign's own Call-probe branch
+    // raise its usual "cannot resolve" diagnostic instead of silently
+    // mistyping the LHS as a scalar; the real pass (in_rhs_type_probe_
+    // false, which retries with hoisting allowed) still converts correctly
+    // whenever this shape reaches a live statement context.
+    return std::nullopt;
+  }
+
+  nlohmann::json rewritten_call = call_;
+  rewritten_call["args"][0] = std::move(*hoisted);
+  numpy_call_expr nested(function_id_, rewritten_call, converter_);
+  return nested.get();
+}
+
+exprt numpy_call_expr::retype_current_lhs_and_return(
+  python_converter &converter,
+  exprt value)
+{
+  if (converter.current_lhs)
+  {
+    converter.current_lhs->type() = value.type();
+    converter.update_symbol(*converter.current_lhs);
+  }
+  return value;
+}
+
+exprt numpy_call_expr::build_result(
+  const symbol_id &function_id,
+  const nlohmann::json &call,
+  python_converter &converter)
+{
+  numpy_call_expr instance(function_id, call, converter);
+  if (
+    std::optional<exprt> hoisted =
+      instance.try_hoist_call_arg_for_view_method(function_id.get_function()))
+    return *hoisted;
+  return instance.get();
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
+
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
   reject_symbolic_transpose_axes(function, call_);
   reject_unsupported_transpose_axes_rank(function);
@@ -8832,7 +8930,8 @@ exprt numpy_call_expr::get()
     result["elts"] = nlohmann::json::array();
     for (const auto &elem : flat)
       result["elts"].push_back(elem);
-    return converter_.get_expr(result);
+    return retype_current_lhs_and_return(
+      converter_, converter_.get_expr(result));
   }
 
   if (

@@ -1977,9 +1977,25 @@ python_converter::classify_numpy_method_call(
     method_base.value("_type", "") == "Name" && method_base.contains("id")
       ? method_base["id"].get<std::string>()
       : std::string();
+
+  // `np.eye(3).transpose()`: the receiver is itself a raw Call (a
+  // constructor, or a user function returning an array), not a Name bound
+  // to an already-tracked numpy array -- method_base_is_tracked_numpy_array
+  // can't recognise it at all. Scoped to transpose/flatten/ravel, the same
+  // three methods numpy_call_expr::try_hoist_call_arg_for_view_method
+  // resolves a raw Call argument for once rewritten to np.<method>(<call>);
+  // every other dispatch-rewrite method has no such handling for a raw
+  // Call argument yet.
+  static const std::set<std::string> view_methods_over_raw_call = {
+    "transpose", "flatten", "ravel"};
+  const bool receiver_is_raw_call_view_method =
+    method_base.value("_type", "") == "Call" &&
+    view_methods_over_raw_call.count(method_name) != 0;
+
   const bool receiver_is_rewritable =
     !method_base_is_imported_module(method_base_name) &&
-    method_base_is_tracked_numpy_array(method_base_name);
+    (method_base_is_tracked_numpy_array(method_base_name) ||
+     receiver_is_raw_call_view_method);
 
   // transpose()/reshape()/ravel() are view-like (see is_numpy_view_copy_expr,
   // which handles them separately); flatten()/sum()/mean()/min()/max()/
@@ -4465,9 +4481,14 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     // If the expression is itself invalid — e.g. accessing a non-existent
     // attribute — get_expr will raise the correct, precise error at the
     // point of access rather than the misleading "Type undefined" later.
+    // Probed through rewrite_assign_rhs_node the same way the real
+    // conversion further down is, so a `.T` on a non-Name base (already
+    // rewritten to `np.transpose(...)` there) doesn't fail this probe on
+    // the original, unrewritten Attribute node before the real pass ever
+    // runs.
     is_converting_rhs = true;
     in_rhs_type_probe_ = true;
-    exprt rhs_expr = get_expr(ast_node["value"]);
+    exprt rhs_expr = get_expr(rewrite_assign_rhs_node(ast_node)["value"]);
     in_rhs_type_probe_ = false;
     is_converting_rhs = false;
 
