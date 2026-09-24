@@ -19,6 +19,7 @@ add_library(smt
 
 target_link_libraries(smt
   PUBLIC esbmc_common fmt::fmt
+  PRIVATE prop
 )
 
 # smttuple and smtfp include smt headers directly; declare the dep so the

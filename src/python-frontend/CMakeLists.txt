@@ -87,7 +87,8 @@ target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_BINARY_DIR}/src/python-frontend
 )
 
-target_link_libraries(pythonfrontend PUBLIC esbmc_common nlohmann_json::nlohmann_json PRIVATE fmt::fmt bigint)
+target_link_libraries(pythonfrontend PUBLIC esbmc_common nlohmann_json::nlohmann_json
+  PRIVATE fmt::fmt bigint clangcfrontend_stuff clangcppfrontend)
 
 add_executable(python2goto python2goto.cpp)
 target_include_directories(python2goto
