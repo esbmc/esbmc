@@ -2190,6 +2190,12 @@ bool python_converter::is_basic_numpy_view_subscript_escape(
   if (!root_is_numpy_view_source)
     return false;
 
+  const exprt probe = probe_expr(node);
+  return !contains_cpp_throw(probe) && probe.type().is_array();
+}
+
+exprt python_converter::probe_expr(const nlohmann::json &node)
+{
   code_blockt scratch_block;
   code_blockt *saved_block = current_block;
   exprt *saved_lhs = current_lhs;
@@ -2208,7 +2214,7 @@ bool python_converter::is_basic_numpy_view_subscript_escape(
   }
   current_block = saved_block;
   current_lhs = saved_lhs;
-  return !contains_cpp_throw(probe) && probe.type().is_array();
+  return probe;
 }
 
 bool python_converter::contains_tracked_numpy_view_object(
