@@ -2322,9 +2322,6 @@ materialize_arange(const nlohmann::json &args)
   return materialize_arange_ex(args).list;
 }
 
-// The structural/receiver checks materialize_numpy_constructor_array() needs
-// before it can even ask which constructor it's looking at, split out so
-// that function's own decision count stays small.
 // Defined further down (dtype parsing/casting lives next to get_dtype());
 // forward-declared here so materialize_numpy_constructor_array can apply a
 // dtype= keyword instead of just tolerating its absence.
@@ -2335,8 +2332,7 @@ static nlohmann::json cast_numpy_literal_to_dtype(
 
 // A single `dtype=` keyword is the only one materialize_numpy_constructor_
 // array() understands; anything else (an unrecognized keyword, or more than
-// one) still declines. Split out of is_recognized_numpy_constructor_call_shape
-// to keep that function's own decision count down.
+// one) still declines.
 static bool is_only_dtype_keyword(const nlohmann::json &call_node)
 {
   if (!call_node.contains("keywords") || call_node["keywords"].empty())
@@ -2346,6 +2342,9 @@ static bool is_only_dtype_keyword(const nlohmann::json &call_node)
          keywords[0].value("arg", std::string()) == "dtype";
 }
 
+// The structural/receiver checks materialize_numpy_constructor_array() needs
+// before it can even ask which constructor it's looking at, split out so
+// that function's own decision count stays small.
 static bool is_recognized_numpy_constructor_call_shape(
   const nlohmann::json &call_node,
   const nlohmann::json &ast_json)
@@ -7050,7 +7049,8 @@ static nlohmann::json build_hoist_temp_name_node(
 // execute once and the temp's numpy array metadata is registered exactly
 // like any other local-array-return assignment (see
 // get_function_definition's local-array-return handling). Returns a Name
-// node resolve_searchsorted_array_via_descriptor can then treat like any
+// node the caller (resolve_searchsorted_array_via_descriptor,
+// try_hoist_call_arg_for_view_method) can then treat like any
 // variable-bound array; nullopt when there is no current block to emit
 // into (e.g. converting outside statement context).
 std::optional<nlohmann::json>
@@ -7058,7 +7058,7 @@ numpy_call_expr::hoist_call_argument_into_temp(const nlohmann::json &call_node)
 {
   static int counter = 0;
   const std::string temp_id =
-    "__np_searchsorted_arg$" + std::to_string(++counter);
+    "__np_hoisted_call_arg$" + std::to_string(++counter);
 
   nlohmann::json synthetic;
   synthetic["_type"] = "Assign";
@@ -7245,8 +7245,7 @@ exprt numpy_call_expr::handle_searchsorted_call_over_descriptor(
 // enclosing assignment's own type inference before the real pass
 // (in_rhs_type_probe_ false) ever runs. A same-shaped placeholder is all
 // the probe needs; nullopt (not a probe-blocked user-function-call case)
-// leaves handle_searchsorted_call's normal resolution unchanged. Split out
-// to keep that function's own decision count down.
+// leaves handle_searchsorted_call's normal resolution unchanged.
 std::optional<exprt> numpy_call_expr::try_searchsorted_probe_placeholder()
 {
   if (
@@ -7264,8 +7263,7 @@ std::optional<exprt> numpy_call_expr::try_searchsorted_probe_placeholder()
 // The AST-literal resolution only (row/col view, or the literal-array-input
 // fallback), declining (nullopt) rather than throwing so
 // handle_searchsorted_call can try the descriptor fallback first and only
-// surface this path's own diagnostic if that also declines. Split out to
-// keep handle_searchsorted_call's own decision count down.
+// surface this path's own diagnostic if that also declines.
 std::optional<nlohmann::json>
 numpy_call_expr::try_resolve_searchsorted_literal_array(
   const std::string &function)
@@ -7376,8 +7374,7 @@ nlohmann::json numpy_call_expr::resolve_searchsorted_space(
 // handle_searchsorted_call's final step over an AST-literal `search_space`:
 // a vector value (an index per element) or a scalar value (a single
 // index), mirroring handle_searchsorted_call_over_descriptor's own
-// vector-or-scalar dispatch for the descriptor-resolved path. Split out to
-// keep handle_searchsorted_call's own decision count down.
+// vector-or-scalar dispatch for the descriptor-resolved path.
 exprt numpy_call_expr::handle_searchsorted_call_over_literal(
   nlohmann::json search_space,
   bool right)
