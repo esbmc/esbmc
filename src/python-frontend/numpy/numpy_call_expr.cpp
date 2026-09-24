@@ -7163,6 +7163,15 @@ numpy_call_expr::resolve_searchsorted_sorted_values_via_descriptor(
   if (!values)
     return std::nullopt;
 
+  // Matches the cap sort()/argsort() themselves enforce on the same
+  // conversion-time-unrolled comparison network (bubble_sort_numpy_paired);
+  // without it a large fixed-shape array here would unroll an unbounded
+  // quadratic number of comparison expressions.
+  if (values->size() > max_numpy_sort_elements)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() sorter supports arrays up to " +
+      std::to_string(max_numpy_sort_elements) + " elements");
+
   std::vector<exprt> sorted_values = *values;
   bubble_sort_numpy_paired(sorted_values, nullptr);
   return sorted_values;
