@@ -7016,6 +7016,176 @@ static std::optional<nlohmann::json> resolve_searchsorted_value_vector(
   return result;
 }
 
+// A `<id> = <ast>`-shaped Name node, sharing `ast`'s own source-location
+// fields (several conversion paths key off lineno/col_offset for
+// diagnostics). Split out of hoist_call_argument_into_temp so its Store and
+// Load occurrences of the same temp share this one builder.
+static nlohmann::json build_hoist_temp_name_node(
+  const nlohmann::json &loc_source,
+  const std::string &id,
+  const char *ctx)
+{
+  nlohmann::json node;
+  node["_type"] = "Name";
+  node["id"] = id;
+  node["ctx"] = {{"_type", ctx}};
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (loc_source.contains(key))
+      node[key] = loc_source[key];
+  return node;
+}
+
+// Evaluates `call_node` (a call to a user function) exactly once by
+// synthesizing `<temp> = call_node` and converting it through the normal
+// assignment pipeline (get_var_assign, via
+// python_converter::emit_statement_into_current_block) -- the same
+// mechanism a real `tmp = make()` statement goes through, so side effects
+// execute once and the temp's numpy array metadata is registered exactly
+// like any other local-array-return assignment (see
+// get_function_definition's local-array-return handling). Returns a Name
+// node resolve_searchsorted_array_via_descriptor can then treat like any
+// variable-bound array; nullopt when there is no current block to emit
+// into (e.g. converting outside statement context).
+std::optional<nlohmann::json>
+numpy_call_expr::hoist_call_argument_into_temp(const nlohmann::json &call_node)
+{
+  static int counter = 0;
+  const std::string temp_id =
+    "__np_searchsorted_arg$" + std::to_string(++counter);
+
+  nlohmann::json synthetic;
+  synthetic["_type"] = "Assign";
+  synthetic["targets"] = nlohmann::json::array(
+    {build_hoist_temp_name_node(call_node, temp_id, "Store")});
+  synthetic["value"] = call_node;
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (call_node.contains(key))
+      synthetic[key] = call_node[key];
+
+  if (!converter_.emit_statement_into_current_block(synthetic))
+    return std::nullopt;
+
+  return build_hoist_temp_name_node(call_node, temp_id, "Load");
+}
+
+// True for a plain call to a user-defined function (`make(...)`), as
+// opposed to a numpy module/method call (`np.array(...)`, `a.argsort()`) --
+// the only shape hoist_call_argument_into_temp is meant to hoist. A numpy
+// call has its own, already-tested resolution paths
+// (materialize_numpy_constructor_array and friends); hoisting it too would
+// just add an unnecessary temp assignment around already-working cases.
+static bool is_user_function_call(const nlohmann::json &node)
+{
+  return node.value("_type", std::string()) == "Call" &&
+         node.contains("func") && node["func"].is_object() &&
+         node["func"].value("_type", std::string()) == "Name";
+}
+
+// Resolves `raw_arg` -- a Name already bound to a concrete numpy array, or a
+// call to a user function returning one (direct, or via a local variable) --
+// through the same descriptor-materialization path sort()/argsort() already
+// use for a Name (build_numpy_descriptor_materialized_elements), instead of
+// searchsorted's own AST-literal-tracing-only resolution. A Call is hoisted
+// into a temporary first (see hoist_call_argument_into_temp) so the same
+// Name-based materialization applies uniformly afterwards. Declines
+// (nullopt) for anything build_numpy_descriptor_materialized_elements
+// itself declines, or a non-1-D shape.
+//
+// Unlike the AST-literal path, these elements are index expressions into
+// the array's own symbol (not JSON literals), even when that array was
+// built from a literal constructor -- so handle_searchsorted_call's
+// position computation over this path stays entirely at the exprt level
+// (build_searchsorted_position_expr), the same style
+// build_numpy_sort_or_argsort_result's bubble sort already uses, rather
+// than trying to read a compile-time value back out of them.
+std::optional<std::vector<exprt>>
+numpy_call_expr::resolve_searchsorted_array_via_descriptor(
+  const nlohmann::json &raw_arg)
+{
+  nlohmann::json name_node;
+  if (raw_arg.value("_type", std::string()) == "Name")
+    name_node = raw_arg;
+  else if (is_user_function_call(raw_arg))
+  {
+    std::optional<nlohmann::json> hoisted =
+      hoist_call_argument_into_temp(raw_arg);
+    if (!hoisted)
+      return std::nullopt;
+    name_node = std::move(*hoisted);
+  }
+  else
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    name_node,
+    "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
+  if (!materialized || materialized->first.size() != 1)
+    return std::nullopt;
+
+  return materialized->second;
+}
+
+// Computes numpy.searchsorted()'s insertion index of `target` into `values`
+// (assumed sorted; unlike the AST-literal path, sortedness isn't statically
+// checked here since these elements are index expressions, not JSON
+// literals) as an exprt: the count of elements satisfying <=/< target
+// (right/left) -- built via if_exprt/binary_relation_exprt the same way
+// build_numpy_sort_or_argsort_result's bubble sort computes its own
+// comparisons, so this works uniformly whether `values`/`target` are
+// concrete or symbolic, unlike a compile-time numeric extraction.
+static exprt build_searchsorted_position_expr(
+  python_converter &converter,
+  const std::vector<exprt> &values,
+  const exprt &target,
+  bool right)
+{
+  auto make_index = [&](int64_t i) {
+    nlohmann::json node{{"_type", "Constant"}, {"value", i}, {"kind", nullptr}};
+    return converter.get_expr(node);
+  };
+
+  exprt count = make_index(0);
+  for (const exprt &value : values)
+  {
+    const bool same_type = value.type() == target.type();
+    exprt lhs = same_type ? value : numpy_cast_to_double(value);
+    exprt rhs = same_type ? target : numpy_cast_to_double(target);
+    binary_relation_exprt satisfied(lhs, right ? "<=" : "<", rhs);
+    exprt inc = if_exprt(satisfied, make_index(1), make_index(0));
+    count = python_expr::build_add(count, inc, count.type());
+  }
+  return count;
+}
+
+exprt numpy_call_expr::handle_searchsorted_call_over_descriptor(
+  std::vector<exprt> values,
+  bool right)
+{
+  const nlohmann::json &value_arg = call_["args"][1];
+  if (
+    std::optional<nlohmann::json> vector_values =
+      resolve_searchsorted_value_vector(value_arg, converter_))
+  {
+    std::vector<exprt> positions;
+    positions.reserve((*vector_values)["elts"].size());
+    for (const nlohmann::json &value_node : (*vector_values)["elts"])
+      positions.push_back(build_searchsorted_position_expr(
+        converter_, values, converter_.get_expr(value_node), right));
+    // build_1d_numpy_array_value reads elems.front(); an empty `v` (e.g.
+    // np.searchsorted(a, [])) has no element to take a type from, so build
+    // the (empty) integer-index list the same way the AST-literal path's
+    // own empty-values case already does.
+    if (positions.empty())
+      return converter_.get_expr(make_integer_list({}));
+    return build_1d_numpy_array_value(positions, type_handler_);
+  }
+
+  return build_searchsorted_position_expr(
+    converter_, values, converter_.get_expr(value_arg), right);
+}
+
 exprt numpy_call_expr::handle_searchsorted_call()
 {
   const std::string &function = function_id_.get_function();
@@ -7040,9 +7210,53 @@ exprt numpy_call_expr::handle_searchsorted_call()
       ? call_["args"][0].value("id", std::string())
       : std::string();
 
+  // A user function call as the array argument only resolves through
+  // hoist_call_argument_into_temp, which refuses to emit its temp
+  // assignment during a discarded type-probe pass (would otherwise
+  // evaluate the call an extra time -- see
+  // safe_to_emit_side_effecting_statement). The AST-literal fallback below
+  // cannot resolve a user function call at all, so without this check the
+  // probe would throw and abort the enclosing assignment's own type
+  // inference before the real pass (in_rhs_type_probe_ false) ever runs.
+  // A same-shaped placeholder is all the probe needs.
+  if (
+    sorter_node == nullptr && is_user_function_call(call_["args"][0]) &&
+    !converter_.safe_to_emit_side_effecting_statement())
+  {
+    exprt placeholder = converter_.get_expr(nlohmann::json{
+      {"_type", "Constant"}, {"value", int64_t{0}}, {"kind", nullptr}});
+    if (resolve_searchsorted_value_vector(call_["args"][1], converter_))
+      return build_1d_numpy_array_value({placeholder}, type_handler_);
+    return placeholder;
+  }
+
+  // The AST-literal path is tried first and, whenever it can resolve the
+  // array, wins outright -- it already validates things the descriptor path
+  // does not attempt (the array is actually sorted, the search value is a
+  // literal), so a Name it can already follow (e.g. `a = np.array([...])`)
+  // must keep going through it rather than being silently picked up by the
+  // newer, less validated path below. The descriptor path (a Name already
+  // bound to a concrete numpy array via a route the AST can't trace, or a
+  // local-array-return function call) is only a fallback for what the
+  // AST-literal path itself declines on -- and, like it, sorter= isn't
+  // supported over this path yet (it would need an exprt-level stable-sort
+  // permutation, not just a comparison network).
   nlohmann::json arr_arg = call_["args"][0];
-  if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
-    arr_arg = resolve_literal_numpy_array_input(arr_arg, function, false);
+  try
+  {
+    if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
+      arr_arg = resolve_literal_numpy_array_input(arr_arg, function, false);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (sorter_node == nullptr)
+      if (
+        std::optional<std::vector<exprt>> descriptor_values =
+          resolve_searchsorted_array_via_descriptor(call_["args"][0]))
+        return handle_searchsorted_call_over_descriptor(
+          std::move(*descriptor_values), right);
+    throw;
+  }
 
   std::vector<std::size_t> shape;
   if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)

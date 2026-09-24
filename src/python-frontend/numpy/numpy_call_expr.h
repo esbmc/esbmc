@@ -173,6 +173,32 @@ private:
     const std::string &function_name,
     bool inline_only = false);
 
+  // Resolves `raw_arg` -- a Name already bound to a concrete numpy array, or
+  // a call to a user function returning one (direct, or via a local
+  // variable) -- through the same descriptor-materialization path
+  // sort()/argsort() already use for a Name, instead of searchsorted's own
+  // AST-literal-tracing-only resolution. See numpy_call_expr.cpp for the
+  // full rationale.
+  std::optional<std::vector<exprt>>
+  resolve_searchsorted_array_via_descriptor(const nlohmann::json &raw_arg);
+
+  // Evaluates `call_node` (a call to a user function) exactly once by
+  // synthesizing `<temp> = call_node` and converting it through the normal
+  // assignment pipeline, so side effects execute once and the temp's numpy
+  // array metadata is registered like any other local-array-return
+  // assignment. Returns a Name node referencing the temp; nullopt when
+  // there is no current block to emit into.
+  std::optional<nlohmann::json>
+  hoist_call_argument_into_temp(const nlohmann::json &call_node);
+
+  // handle_searchsorted_call's dispatch once its array argument resolved via
+  // resolve_searchsorted_array_via_descriptor (no sorter= given -- see that
+  // function). Split out to keep handle_searchsorted_call's own decision
+  // count down.
+  exprt handle_searchsorted_call_over_descriptor(
+    std::vector<exprt> values,
+    bool right);
+
   // np.sum(identity(x))/np.argmin(identity(x)): a reducer's argument reaches
   // get() as a raw Call node when it is itself a nested call, never through
   // function_call_expr's own dispatch (where try_fold_identity_array_return
