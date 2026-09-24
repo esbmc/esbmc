@@ -260,34 +260,28 @@ private:
   // A same-shaped placeholder for handle_searchsorted_call's array argument
   // when it is a user function call reached during a discarded type-probe
   // pass (hoisting would evaluate it an extra time); nullopt otherwise. See
-  // numpy_call_expr.cpp for the full rationale. Split out to keep
-  // handle_searchsorted_call's own decision count down.
+  // numpy_call_expr.cpp for the full rationale.
   std::optional<exprt> try_searchsorted_probe_placeholder();
 
   // The AST-literal resolution only, declining (nullopt) rather than
-  // throwing. See numpy_call_expr.cpp for the full rationale. Split out to
-  // keep handle_searchsorted_call's own decision count down.
+  // throwing. See numpy_call_expr.cpp for the full rationale.
   std::optional<nlohmann::json>
   try_resolve_searchsorted_literal_array(const std::string &function);
 
   // resolve_searchsorted_array_via_descriptor plus the dispatch to
   // handle_searchsorted_call_over_descriptor, as a single nullopt-on-decline
-  // step. Split out to keep handle_searchsorted_call's own decision count
-  // down.
+  // step.
   std::optional<exprt> try_searchsorted_call_over_descriptor(bool right);
 
   // Validates `arr_arg`'s shape and applies `sorter_node`/sortedness,
   // returning the space handle_searchsorted_call_over_literal searches. See
-  // numpy_call_expr.cpp for the full rationale. Split out to keep
-  // handle_searchsorted_call's own decision count down.
+  // numpy_call_expr.cpp for the full rationale.
   nlohmann::json resolve_searchsorted_space(
     nlohmann::json arr_arg,
     const nlohmann::json *sorter_node,
     const std::string &array_name);
 
-  // handle_searchsorted_call's final step over an AST-literal
-  // `search_space`. Split out to keep handle_searchsorted_call's own
-  // decision count down.
+  // handle_searchsorted_call's final step over an AST-literal `search_space`.
   exprt handle_searchsorted_call_over_literal(
     nlohmann::json search_space,
     bool right);
