@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-09-19.
+**Updated:** 2026-09-24.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -26,8 +26,8 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Category | Missing items |
 |---|---|
-| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) and broad constructor parity. |
-| Sorting / searching | `np.sort`/`np.argsort`/`np.searchsorted` and the `a.sort()`/`a.argsort()` method forms accept concrete ndarray *variables* (including ones returned by a pure user function, direct or via a local variable), row/column views (`a[i]`, `a[:, j]` — both axes, including through `np.searchsorted`), and 2-D arrays with an `axis` argument, positional or `axis=` keyword (never both). **Closed this cycle:** `numpy.searchsorted()` now accepts a vector of values (`np.searchsorted(a, [2, 6])`, a literal list/tuple or a `Name` bound to one) in addition to a scalar, returning an index per value — see `numpy_searchsorted_vector_values_success`, `numpy_searchsorted_tuple_values_success`, `numpy_searchsorted_sorter_vector_values_success`, and their edge/fail pairs; and a `sorter=` argument (positional or keyword, a literal index array or `np.argsort(a)`/`a.argsort()` computed directly), validated as a genuine permutation of the input's own index range and letting an otherwise-unsorted array be searched — see `numpy_searchsorted_sorter_success`, `ndarray_searchsorted_sorter_success`, `numpy_searchsorted_positional_sorter_success`, and the shape/oob/permutation/symbolic fail pairs. `kind='stable'`/`kind='mergesort'`/`kind=None` (and, for the ndarray method forms, `stable=True`) are now accepted no-ops on `np.sort`/`np.argsort`/`a.sort()`/`a.argsort()`, since the shared conversion-time bubble sort is already stable — any other `kind` still rejects explicitly with a diagnostic naming the supported values — see `numpy_sort_stable_kind_success`, `numpy_argsort_stable_kind_success`, `ndarray_sort_stable_kind_edge`, `ndarray_argsort_stable_kw_edge`, `numpy_sort_mergesort_alias_edge`, `numpy_sort_unknown_kind_fail`. Still missing: `searchsorted` on a genuine 2-D array (as opposed to a 1-D row/column view of one), and symbolic arrays. **Newly discovered gap:** unlike `sort`/`argsort` (which resolve a function-returned array via the same descriptor-materialization path a plain variable uses), `numpy.searchsorted()`'s array argument is resolved by tracing the AST back to a literal `np.array(...)`/constructor call; a variable bound to a function that returns its array through a local variable (`def make(): a = np.zeros(3); return a`) is not something that resolver follows, so `np.searchsorted(make(), ...)` still rejects even after binding the result to a name first — see `array_return_local_then_searchsorted_edge` (`KNOWNBUG`). |
+| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) still reject explicitly; broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. **Closed this cycle:** a `dtype=` keyword (a builtin `int`/`float`/`bool` or a numpy alias like `np.int32`) on `zeros`/`ones`/`full`/`eye`/`identity`/`linspace`/`arange` used to make every consumer that re-derives the constructor from its call node (`transpose`, `flatten`, `ravel`, `sort`, `argsort`, `searchsorted`, and an inline-call reducer argument) decline outright with a generic "unsupported keywords" diagnostic, even though the same `dtype=` already worked on a plain `x = np.zeros(..., dtype=...)` assignment; the shared re-derivation (`materialize_numpy_constructor_array`) now accepts a lone `dtype=` keyword and normalizes/casts elements through the same validated path the assignment case uses, still rejecting `object`/complex/non-literal dtype and any other keyword explicitly — see `transpose_constructor_dtype_*`, `flatten_constructor_dtype_zeros_success`, `ravel_constructor_dtype_eye_edge`, `sort_constructor_dtype_full_success`, `argsort_constructor_dtype_full_success`, `searchsorted_constructor_dtype_full_success`, `sum_constructor_dtype_zeros_success`, `mean_constructor_dtype_eye_success`, and the `constructor_dtype_object_fail`/`complex_fail`/`nonliteral_fail` protective pins. `np.zeros_like`/`np.ones_like`/`np.full_like` now accept a `dtype=` override the same way real numpy does (the result casts to the given dtype instead of inheriting the base array's) — see `zeros_like_dtype_override_success`, `ones_like_dtype_override_bool_edge`, `full_like_dtype_override_success`, `like_creation_dtype_object_fail`. **Newly discovered, out of scope for this cycle:** chaining a transpose/flatten method directly onto a constructor call with no intermediate variable (`np.eye(3).transpose()`, `np.zeros((2,2)).flatten()`, `np.zeros((2,3)).T`) produces a wrong `NONDET` result instead of a diagnostic — pre-existing and unrelated to `dtype=` (reproduces identically without it); binding the constructor to a variable first works. `.size` on an `eye`/`full`/`identity`/`linspace`-backed array (`np.zeros((2,3)).size` works, but the `full`/`eye` family does not) crashes the backend (`ERROR: Unexpected type in int/ptr typecast`) instead of rejecting cleanly — also pre-existing and unrelated to `dtype=`. Neither is pinned by a regression yet. |
+| Sorting / searching | `np.sort`/`np.argsort`/`np.searchsorted` and the `a.sort()`/`a.argsort()` method forms accept concrete ndarray *variables* (including ones returned by a pure user function, direct or via a local variable), row/column views (`a[i]`, `a[:, j]` — both axes, including through `np.searchsorted`), and 2-D arrays with an `axis` argument, positional or `axis=` keyword (never both). `numpy.searchsorted()` accepts a vector of values (`np.searchsorted(a, [2, 6])`, a literal list/tuple or a `Name` bound to one) in addition to a scalar, returning an index per value; and a `sorter=` argument (positional or keyword, a literal index array or `np.argsort(a)`/`a.argsort()` computed directly) over an AST-literal array, validated as a genuine permutation of the input's own index range and letting an otherwise-unsorted array be searched. `kind='stable'`/`kind='mergesort'`/`kind=None` (and, for the ndarray method forms, `stable=True`) are accepted no-ops on `np.sort`/`np.argsort`/`a.sort()`/`a.argsort()`, since the shared conversion-time bubble sort is already stable — any other `kind` still rejects explicitly with a diagnostic naming the supported values. **Closed this cycle:** `numpy.searchsorted()`'s array argument now also resolves through the same descriptor-materialization path `sort`/`argsort` already use for a `Name` — a variable bound to a function that returns its array through a local variable (`def make(): a = np.zeros(3); return a`), or a direct call to one (`np.searchsorted(make(), ...)`, evaluated exactly once even under a discarded LHS-type-inference probe pass), now resolves and computes the position via an exprt-level comparison count (the same style `sort`/`argsort`'s bubble sort uses for its own comparisons), rather than trying to read a compile-time literal back out of it — see `array_return_local_then_searchsorted_direct_success`, `_vector_success`, `_wrong_result_fail`, and the promoted `array_return_local_then_searchsorted_edge`. Still missing: `searchsorted` on a genuine 2-D array (as opposed to a 1-D row/column view of one), symbolic arrays, and — **newly discovered, out of scope for this cycle** — `sorter=` combined with a descriptor-resolved array (the sorter mechanism still needs a literal `arr_arg` to validate/apply against; an exprt-level stable-sort permutation would be needed to lift that) — see `array_return_local_then_searchsorted_sorter_edge` (`KNOWNBUG`). |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
@@ -127,14 +127,22 @@ backlog, in priority order:
 2. **Symbolic and broader multi-axis slicing** — support cases beyond the
    literal/fixed-shape recuts.
 3. **`numpy.searchsorted()`'s remaining gaps** — a genuine 2-D array input
-   (as opposed to a row/column view), symbolic arrays, and resolving a
-   function-returned array the way `sort`/`argsort` already do (currently
-   `array_return_local_then_searchsorted_edge`, a `KNOWNBUG`).
-4. **Advanced dtype and constructor parity** — structured/object/custom dtype
-   policy, diagnostics, and propagation.
-5. **Random and iteration depth** — probability/replacement `choice`, extra
+   (as opposed to a row/column view), symbolic arrays, and `sorter=` over a
+   descriptor-resolved array (currently
+   `array_return_local_then_searchsorted_sorter_edge`, a `KNOWNBUG`).
+4. **Chained method call on a bare constructor without a variable**
+   (`np.eye(3).transpose()`, `np.zeros((2,2)).flatten()`,
+   `np.zeros((2,3)).T`) — produces a wrong `NONDET` result instead of a
+   diagnostic; not yet pinned by a regression. Unrelated to `dtype=`.
+5. **`.size` on an `eye`/`full`/`identity`/`linspace`-backed array** crashes
+   the backend instead of rejecting cleanly; not yet pinned by a regression.
+   Unrelated to `dtype=`.
+6. **Advanced dtype and constructor parity** — structured/object/custom dtype
+   policy, diagnostics, and propagation (constructor `dtype=` for the
+   already-supported builtin/numpy-alias dtypes is closed — see above).
+7. **Random and iteration depth** — probability/replacement `choice`, extra
    distributions, and advanced `nditer`.
-6. **Linear algebra breadth** — larger matrices, symbolic entries, and more
+8. **Linear algebra breadth** — larger matrices, symbolic entries, and more
    faithful `norm`/`eig`/`svd`.
 
 ---
@@ -149,18 +157,22 @@ distinct designs are sized accordingly instead of assumed to be one PR each.
    fixed-shape descriptor model to higher ranks, symbolic axes/bounds/shapes,
    and broader non-literal stride combinations.
 2. **`numpy.searchsorted()`'s remaining gaps** (~1 PR) — a genuine 2-D array
-   input, symbolic arrays, and resolving a function-returned array the same
-   way `sort`/`argsort` already do (stable-kind, sorter, and vector-value
-   forms over concrete arrays and row/column views are now implemented).
-3. **Advanced dtype and constructors** (~2 PRs) — dtype policy
+   input, symbolic arrays, and `sorter=` over a descriptor-resolved array
+   (scalar/vector local-array-return resolution is now implemented).
+3. **Chained-constructor-call and `.size` fixes** (~1 PR) — the
+   `np.eye(3).transpose()`-without-a-variable gap and the `eye`/`full`-family
+   `.size` crash, both newly discovered this cycle and both pre-existing
+   (unrelated to `dtype=`).
+4. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
-   diagnostics/propagation.
-4. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
+   diagnostics/propagation (builtin/numpy-alias `dtype=` materialization is
+   now closed).
+5. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
    separate from advanced `nditer`.
-5. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
+6. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
    separate from fuller `eig`/`svd`/`norm`.
 
-**Total to close every item in this file: ~9 PRs.**
+**Total to close every item in this file: ~10 PRs.**
 
 ---
 
