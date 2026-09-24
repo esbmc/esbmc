@@ -3911,9 +3911,15 @@ make_numpy_typed_constant(const scalar_value &value, const std::string &dtype)
         "TypeError: casting complex literals to integer dtype is not "
         "supported");
     }
+    // NumPy's float->int dtype cast truncates toward zero (the same
+    // semantics astype() already gets via a genuine IREP2 typecast_exprt in
+    // function_call_expr::handle_numpy_astype -- see astype_float_to_int_
+    // success, which pins 2.5 -> 2 and -1.9 -> -1). A rounding function
+    // here would silently diverge from that (found in review: 1.5 -> 2
+    // instead of 1).
     return {
       {"_type", "Constant"},
-      {"value", static_cast<int64_t>(std::llround(value.value.real()))}};
+      {"value", static_cast<int64_t>(std::trunc(value.value.real()))}};
   }
 
   if (is_numpy_float_dtype(normalized))
