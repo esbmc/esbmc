@@ -2017,8 +2017,26 @@ python_converter::classify_numpy_method_call(
   // diagnostic rather than falling through to the pre-existing generic
   // runtime-call fallback, which silently produced a wrong NONDET value
   // for this shape (see numpy_call_expr.cpp for the full rationale).
+  //
+  // sum/max/min/mean and friends are not numpy-exclusive names: `Foo()` is
+  // syntactically the same Call shape as a plain function call, so without
+  // this guard `Foo().sum()` (a user class defining its own `sum` method)
+  // would be rewritten to `np.sum(Foo())` and never reach `Foo.sum`
+  // (issue caught in review). Excluding a call whose callee names a known
+  // class keeps the exact ambiguous case out while still allowing a plain
+  // function call (`make().sum()`) through -- get()'s own dispatch still
+  // declines/throws for a call that materialize/hoist can't resolve to a
+  // concrete array either way, so this is a precision improvement, not a
+  // soundness requirement on its own.
+  const bool receiver_is_call_to_known_class =
+    method_base.value("_type", "") == "Call" && method_base.contains("func") &&
+    method_base["func"].is_object() &&
+    method_base["func"].value("_type", std::string()) == "Name" &&
+    json_utils::is_class(
+      method_base["func"].value("id", std::string()), *ast_json);
   const bool receiver_is_raw_call_view_method =
     method_base.value("_type", "") == "Call" &&
+    !receiver_is_call_to_known_class &&
     dispatch_rewrite_methods.count(method_name) != 0;
 
   const bool receiver_is_rewritable =
