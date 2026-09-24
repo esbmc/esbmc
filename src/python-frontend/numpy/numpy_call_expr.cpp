@@ -7841,6 +7841,8 @@ exprt numpy_call_expr::get()
           fill_kwarg = kw["value"];
           continue;
         }
+        if (arg == "dtype")
+          continue;
         throw std::runtime_error(
           "TypeError: numpy." + function + "() keyword '" + arg +
           "' is not supported");
@@ -7871,7 +7873,23 @@ exprt numpy_call_expr::get()
     std::vector<long long> dims(shape.begin(), shape.end());
     validate_ndarray_shape(dims);
 
-    typet elem_type = get_array_scalar_type(base_type);
+    // dtype= overrides the base array's own element type (real numpy:
+    // np.zeros_like(base, dtype=X) casts, it does not require X == base's
+    // dtype); validated/normalized the same way the top-level constructor
+    // dtype= path already is, so an unsupported dtype rejects with the same
+    // diagnostic (ADR-NP principle 3).
+    const std::string like_dtype = get_dtype();
+    typet elem_type;
+    if (like_dtype.empty())
+      elem_type = get_array_scalar_type(base_type);
+    else if (is_numpy_complex_dtype(like_dtype))
+      throw std::runtime_error(
+        "TypeError: complex dtype is not supported in NumPy constructors yet");
+    else
+    {
+      get_dtype_size();
+      elem_type = get_typet_from_dtype();
+    }
     if (is_complex_type(elem_type))
       throw std::runtime_error(
         "TypeError: complex dtype is not supported in NumPy constructors yet");
