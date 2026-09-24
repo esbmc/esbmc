@@ -22,18 +22,20 @@ disabled block is superseded; and R29 — found by M9's own access-shape census 
 is a **new High-severity false SUCCESSFUL**, partly fixed, with its residual
 traced out of this subsystem into `src/pointer-analysis`.
 
-**Still open:** R29's two bare-struct-member shapes and the pre-existing
-R16/R19–R27 rows §9.2 records individually. R6 got its witness and its fix
-(#6785); A6.4, carried since M6, is discharged by the run-order invariant the
-engine now checks in release.
+**Still open:** the rows §9.2 records individually as not fixed, and the
+residuals named in the R38, R44 and R52 rows. R29's two bare-struct-member
+shapes, listed here until 2026-09-24, were closed on 2026-08-12 (§15 M9 (R29
+residual)). R6 got its witness and its fix (#6785); A6.4, carried since M6, is
+discharged by the run-order invariant the engine now checks in release.
 
-**Self-verification, re-measured 2026-09-06 (§15 M9 (self-verification
-re-measure)).** ESBMC can now parse its own headers: `renaming.h` emits zero
-errors and G1–G11 are all closed. It cannot yet *convert* them — the blocker
-moved one stage downstream to **G12**/**G13** (§13.2). A weaker Tier B′ than
-WI-4 asks for does work today: `util/irep/irep.h` converts and drives the real
-`irep_idt`. §14 items 1(a) and 8 are correspondingly re-stated; the answer to
-"can ESBMC verify goto-symex" is still no, for a different and smaller reason.
+**Self-verification, re-measured 2026-09-24 (§15 M9 (G14, R53)).** G12 and G13
+are fixed, and `irep2_type.h` and `renaming.h` convert. They then exposed
+**G14**, a symex abort caused by a frontend naming collision that also gave a
+false SUCCESSFUL on ordinary C++ (**R53**, fixed). Both headers now reach
+`VERIFICATION SUCCESSFUL` with an empty `main`. That covers only their static
+initialisers. The open question is now whether a driver that calls into
+`renaming::level1t` verifies (§13.6 WI-4), and `goto_symex_state.h` still fails
+to parse.
 
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
@@ -745,6 +747,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R51** | **Medium (no verdict, default configuration)** — R50's named residual, closed the same day, §15 M9 (R51); **FIXED**, same entry | **A bound stored three dimensions deep never folds.** `int a[2][2][2]; a[1][1][1] = 4;` looped to `a[1][1][1]` never terminates, while the 2-D spelling R50 fixed proves in 0.4 s. R50 left the propagation gate bounded at two dimensions because lifting it aborted every solver: a read out of a *nested* row roots its select chain at a row-valued `with`, and `convert_ast` has no term for one. The gate was the only producer, so the gap was latent — the hang was not. | the three-column mutation matrix, §15 M9 (R51); `lower_flattened_row_select` at `smt_solver.cpp:2825`; `array_may_propagate` at `goto_symex_state.cpp:126`; `regression/esbmc/nested_array_{3d_loop_bound,3d_outer_read,3d_middle_read,3d_row_pointer,3d_phi_merge,3d_row_memcpy,4d_outer_read}{,_fail}` | **H-C2** | **Fixed**, encoder first and gate second, as R50's sequence required. `lower_flattened_row_select` becomes `push_row_read`, which pushes a subscript through a row's own structure at every level rather than only the outermost: select-over-store for a `with`, distribution over an `ite`, and the inner read first when the row is itself read out of a deeper one. The last arm fires only when the chain roots at a row, so no 2-D read reaches it -- measured; the `ite` recognition does widen the entry gate for 2-D too, which can only replace an abort. With no row left unencodable the gate's dimension clause goes entirely — four dimensions decide as readily as three — and R42's 256-element cap is the only bound left. R50's own fix to `expand_row_stores` turns out to need no change: the reads it names lower through the same arms. |
 | **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED at two dimensions**, §15 M9 (R50); deeper nesting is the open residual | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. The second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program, and so does a `memcpy` between two rows. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,row_alias,row_phi_merge,row_via_pointer,row_memcpy,plane_memcpy,vla_row}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. The gate relaxes to **two** dimensions only: past that, a nested row's leaves are a two-level index chain that `decompose_select_chain` flattens straight past the enclosing `with`, and the same programs abort. **One residual stays open** — the 3-D bound. `expand_row_stores`' element enumeration is quadratic but **is** bounded by R42's cap, at 65,408 stores and 0.67 s, §15 M9 (R50 residual); the belief that the `memcpy` layer bypasses the cap was wrong. A third consequence, **R52**, surfaced while gating the 3-D fix: the propagated chain this row creates is a DAG, and three walks over it were unmemoised. |
 | **R52** | **Medium (no verdict, `--no-simplify`)** — found while gating R51's fix, §15 M9 (R52); **FIXED**, same entry | **A propagated multi-dimensional array is walked as a tree, and it is a DAG.** Each store references the chain twice — once as the `with` source, once inside the `index` of the row it updates — so a walk that does not memoise visits paths exponential in the store count. `int a[8][8]` with 32 element writes under `--no-simplify` does not terminate: 131 s and 18.4 GB and still climbing, against 0.27 s and 84 MB once memoised. The default configuration is unaffected, because the simplifier folds the chain before any of these walks see it. R50's fix is what creates the shape, so this row is its consequence and not a pre-existing defect; R51 only widens which programs reach it. | a store-count ladder against three binaries, §15 M9 (R52); `get_original_name` at `renaming.cpp:347`, `pre_register_addresses` at `symex_target_equation.cpp:30`, `get_value_set_rec` at `value_set.cpp:603`; `regression/esbmc/nested_array_no_simplify_scale{,_fail}` | **H-C2** | Fixed by memoising all three walks. `get_original_name` caches **shared nodes only** — caching every node holds the original alive, which forces `irep_container::detach()` to clone even an unshared one and breaks the in-place rewrite `goto_symex_statet::assignment` relies on. A depth cap is **not** the fix: 2-D at 64 stores and 3-D at 256 stores both exhaust memory, so the wall is the store count, not the nesting. The fourth walk, `migrate_expr_back`, is memoised too, §15 M9 (R52 residual). **One residual stays open**, and it is no longer a walk: the text `--ssa-trace` and `--show-vcc` print is itself exponential in the store count, because the format expands a DAG into a tree. |
+| **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_make_tuple` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. **Residual**: a non-type argument the USR also spells as nothing and that prints without `::*` — `template<auto P>` at `(int A::*)nullptr` and `(long B::*)nullptr`, and the plain-pointer analogue — still collides. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -1130,6 +1133,13 @@ It is also the cheapest to close.
 > |---|---|---|---|
 > | **G12** | An `InitListExpr` shape the converter's fallback arm does not accept, somewhere in `irep2_type.h`'s own body | `irep2/irep2_type.h` | `assert(init_stmt.getNumInits() == 1)` aborts the binary |
 > | **G13** | `__atomic_test_and_set` and `__atomic_clear` are unhandled `AtomicExpr` kinds | `util/symtab/symbol.h`, via boost's spinlock | `ERROR: Unknown Atomic expression` → `CONVERSION ERROR` |
+>
+> **G12 and G13 are fixed (G12 by #7702, #7801 and #7938; G13 by #7658), and the blocker moved into
+> symex as G14, 2026-09-24.** `irep2/irep2_type.h` and `goto-symex/state/renaming.h`
+> (the header moved in the `goto-symex/` split) then converted and aborted in
+> `symex_assign_member` on `assert_type_compat_for_with` (`irep2_expr.cpp:333`).
+> The cause was a frontend naming collision, **R53**; with it fixed both headers
+> reach `VERIFICATION SUCCESSFUL`. See §15 M9 (G14, R53).
 >
 > **G13 is not C++-specific and has nothing to do with the union it was first
 > attributed to.** `clang_c_convert.cpp:4620-4700` handles 21 `AO__atomic_*`
@@ -8526,6 +8536,80 @@ cost one `grep`.
 | `__complex__ int c = {1, 2};` | default | abort, same line |
 | `__complex__ int c = {1};` | default | `VERIFICATION SUCCESSFUL` |
 | four `make_tuple` variants above | `--std c++23` | `VERIFICATION SUCCESSFUL` |
+
+### M9 (G14, R53) — 2026-09-24, the self-verification blocker was a false SUCCESSFUL
+
+G12 and G13 are closed on master (G12 by #7702, #7801 and #7938; G13 by #7658): `util/symtab/symbol.h`
+verifies, and `irep2/irep2_type.h` and `goto-symex/state/renaming.h` convert.
+Both then aborted during symex, which is new: `symex_assign_member` built a
+`with2t` whose value type did not match the member, and
+`assert_type_compat_for_with` (`irep2_expr.cpp:333`) fired. Recorded as **G14**.
+
+**Reduction.** The ten local headers `irep2_type.h` reaches were inlined into
+one 144,899-byte TU, leaving the library includes alone so ESBMC's own C++
+models still resolve them. C-Reduce took that to 210 bytes. The predicate
+required no `PARSING ERROR`, `Starting Bounded Model Checking`, and the exact
+assertion text. It returned non-zero on `int main(){return 0;}`. Two classes,
+each with `static constexpr auto c = std::make_tuple(&X::m)`, one member `int`
+and one `std::vector<int>`: one class alone, two `int` members, or two vector
+members all verify.
+
+**Cause.** The GOTO dump has a single `make_tuple`
+(`c:@N@std@F@make_tuple<#p1 >#&&S0_#`) typed for the vector instantiation, and
+both calls reach it. Clang's USR spells a member-pointer template argument as
+nothing, so the two specialisations share an id. The abort is where the
+collision happens to surface. The same collision gives wrong verdicts without
+an abort:
+
+| Program | Before | After | Native |
+|---|---|---|---|
+| `get<T>` returns `traits<T>::v`; assert `get(&A::b) == 1`, `get(&B::e) == 2` | `FAILED` | `SUCCESSFUL` | passes |
+| same, first assertion `== 2` | **`SUCCESSFUL`** (Bitwuzla, Z3) | `FAILED` | aborts |
+| `W<T>::get()` over the same traits, `W<int A::*>`, `W<long B::*>` | `FAILED` | `SUCCESSFUL` | passes |
+| same, first assertion `== 2` | **`SUCCESSFUL`** | `FAILED` | aborts |
+| the 210-byte G14 reproducer, `--std c++23` | abort | `SUCCESSFUL` | — |
+
+**R53, fixed.** `member_pointer_usr_suffix` walks the declaration's contexts,
+printing the template arguments of every function, class and variable
+specialisation on the way and the canonical type of every function, and
+appends that text to a USR-derived id when it contains `::*`. The function
+type is needed because review found the same collision on plain overloads,
+`int f(int A::*)` and `int f(long B::*)`, both `c:@F@f# #`, and on function
+templates overloaded only by such a parameter. Ids with no member pointer are
+byte-identical, so the change reaches only programs the collision already
+broke. Records needed nothing: their ids come from `getFullyQualifiedName`,
+which spells the type. Redeclarations spelled through an alias, an out-of-line
+member of a specialisation, and an `extern template` followed by an explicit
+instantiation each still produce one symbol, because the stored arguments are
+canonical. Seven tests pin it, each mutation-checked against the unfixed
+binary: `regression/esbmc-cpp/cpp/member_pointer_template_arg{,_fail}`,
+`member_pointer_class_template_arg{,_fail}`, `member_pointer_overload{,_fail}`
+and `member_pointer_make_tuple` (the G14 reproducer).
+
+**Residual.** A non-type template argument that the USR spells as nothing and
+that prints without `::*` still collides: `template<auto P>` instantiated at
+`(int A::*)nullptr` and `(long B::*)nullptr` is `c:@F@g<#>#` for both and
+reports a false SUCCESSFUL. The plain-pointer analogue does the same, so this
+is a wider USR gap than member pointers. A C++20 class-type non-type argument
+makes ESBMC exit with `Unable to generate the USR`; that is separate and
+pre-existing.
+
+**Self-verification after the fix.**
+
+Invocation for every row: `--std c++23 --unwind 1 -Isrc -Ibuild/src
+-Isrc/util -Isrc/util/lib` plus the directory holding `immer`, `fmt` and
+`nlohmann` (`-I/opt/homebrew/include` on macOS).
+
+| Driver (`#include` + empty `main`) | Invocation | Verdict |
+|---|---|---|
+| `util/symtab/symbol.h` | as above | `SUCCESSFUL` (G13 closed) |
+| `irep2/irep2_type.h` | same | `SUCCESSFUL` (G14 closed) |
+| `goto-symex/state/renaming.h` | same | `SUCCESSFUL` (G14 closed) |
+| `goto-symex/state/goto_symex_state.h` | same | `PARSING ERROR`, not yet triaged |
+
+An empty `main` exercises only the headers' static initialisers. The next step
+is the one §13.6 WI-4 asks for: drive `renaming::level1t` from `main` and
+mutation-check an assertion on it.
 
 ---
 
