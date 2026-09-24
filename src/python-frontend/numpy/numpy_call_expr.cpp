@@ -4010,6 +4010,15 @@ static nlohmann::json cast_numpy_linspace_literal_to_dtype(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
 }
 
+static nlohmann::json
+make_numpy_linspace_constant(double value, const std::string &dtype)
+{
+  nlohmann::json out;
+  out["_type"] = "Constant";
+  out["value"] = is_numpy_integer_dtype(dtype) ? std::floor(value) : value;
+  return out;
+}
+
 bool numpy_call_expr::is_math_function() const
 {
   const std::string &function = function_id_.get_function();
@@ -8414,19 +8423,14 @@ exprt numpy_call_expr::get()
       if (num == 0)
         return to_list_expr(make_list({}));
       const std::string dtype = get_dtype();
-      const bool integer_dtype = is_numpy_integer_dtype(dtype);
-      auto make_linspace_constant = [integer_dtype,
-                                     &make_constant](double value) {
-        return make_constant(integer_dtype ? std::floor(value) : value);
-      };
       if (num == 1)
-        return to_list_expr(
-          apply_constructor_dtype(make_list({make_linspace_constant(start)})));
+        return to_list_expr(apply_constructor_dtype(
+          make_list({make_numpy_linspace_constant(start, dtype)})));
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<nlohmann::json> elts;
       for (std::size_t i = 0; i < num; ++i)
-        elts.push_back(
-          make_linspace_constant(start + (step * static_cast<double>(i))));
+        elts.push_back(make_numpy_linspace_constant(
+          start + (step * static_cast<double>(i)), dtype));
       return to_list_expr(apply_constructor_dtype(make_list(elts)));
     }
   }
