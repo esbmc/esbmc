@@ -2145,18 +2145,23 @@ size_t bmct::barren_interleaving_budget() const
   return value;
 }
 
+/// A k-step strategy clears the store once, before its first phase, and
+/// starts a round at each base case.
+static void prepare_property_verdicts(const optionst &options)
+{
+  if (reports_multi_property_verdict(options))
+    goto_functionst::property_verdicts.clear();
+  else if (is_bounded_round(options))
+    goto_functionst::property_verdicts.begin_round();
+}
+
 smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
 
   const bool multi_property = options.get_bool_option("multi-property");
-  // A k-step strategy clears the store once, before its first phase, and
-  // starts a round at each base case.
-  if (reports_multi_property_verdict(options))
-    goto_functionst::property_verdicts.clear();
-  else if (is_bounded_round(options))
-    goto_functionst::property_verdicts.begin_round();
+  prepare_property_verdicts(options);
   report_incomplete = false;
 
   if (options.get_bool_option("schedule"))
@@ -2994,6 +2999,8 @@ smt_resultt bmct::multi_property_check(
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
   const bool withhold_proofs = withholds_proofs(options);
+  const bool clears_proved_claims =
+    !is_keep_verified && !bs && !withhold_proofs;
 
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
@@ -3050,6 +3057,7 @@ smt_resultt bmct::multi_property_check(
                        &fc,
                        &is,
                        &withhold_proofs,
+                       &clears_proved_claims,
                        &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found. A coverage run has
     // to identify the claim first: only instrumented probes count towards the
@@ -3156,7 +3164,7 @@ smt_resultt bmct::multi_property_check(
       // or a warm k-induction / --incremental-bmc run keeps re-symexing the
       // claims a cold one had already dropped -- the opposite of the point
       // (esbmc/esbmc#7143). Same guard as the P_UNSATISFIABLE arm below.
-      if (!is_keep_verified && !bs && !withhold_proofs)
+      if (clears_proved_claims)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
         clear_verified_claims_in_goto(claim, is_goto_cov);
@@ -3565,7 +3573,7 @@ smt_resultt bmct::multi_property_check(
       // when we find a property proven correct in
       // either forward condition or inductive step; a claim whose proof is
       // withheld stays for the next base case to solve.
-      if (!is_keep_verified && !bs && !withhold_proofs)
+      if (clears_proved_claims)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
         clear_verified_claims_in_goto(claim, is_goto_cov);
