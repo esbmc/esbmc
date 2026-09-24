@@ -172,8 +172,7 @@ member_pointer_usr_suffix(const clang::Decl &decl, const clang::ASTContext &ctx)
   std::string args;
   llvm::raw_string_ostream os(args);
   const clang::PrintingPolicy policy = ctx.getPrintingPolicy();
-  for (const clang::Decl *d = &decl;
-       !llvm::isa<clang::TranslationUnitDecl>(d);
+  for (const clang::Decl *d = &decl; !llvm::isa<clang::TranslationUnitDecl>(d);
        d = clang::Decl::castFromDeclContext(d->getDeclContext()))
   {
     if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
