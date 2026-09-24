@@ -2326,7 +2326,11 @@ materialize_arange(const nlohmann::json &args)
 // forward-declared here so materialize_numpy_constructor_array can apply a
 // dtype= keyword instead of just tolerating its absence.
 static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node);
+static bool is_numpy_integer_dtype(const std::string &dtype);
 static nlohmann::json cast_numpy_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype);
+static nlohmann::json cast_numpy_linspace_literal_to_dtype(
   const nlohmann::json &node,
   const std::string &dtype);
 
@@ -2404,6 +2408,8 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
     if (kw.value("arg", std::string()) != "dtype")
       continue;
     const std::string dtype = extract_numpy_dtype_name(kw["value"]);
+    if (ctor == "linspace")
+      return cast_numpy_linspace_literal_to_dtype(*materialized, dtype);
     return cast_numpy_literal_to_dtype(*materialized, dtype);
   }
 
@@ -3966,6 +3972,39 @@ static nlohmann::json cast_numpy_literal_to_dtype(
   scalar_value value;
   if (try_extract_scalar_constant(node, value))
     return make_numpy_typed_constant(value, dtype);
+
+  throw std::runtime_error(
+    "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+}
+
+static nlohmann::json cast_numpy_linspace_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype)
+{
+  if (!is_numpy_integer_dtype(dtype))
+    return cast_numpy_literal_to_dtype(node, dtype);
+
+  if (!node.is_object() || !node.contains("_type"))
+  {
+    throw std::runtime_error(
+      "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+  }
+
+  const std::string node_type = node["_type"].get<std::string>();
+  if ((node_type == "List" || node_type == "Tuple") && node.contains("elts"))
+  {
+    nlohmann::json casted = node;
+    casted["elts"] = nlohmann::json::array();
+    for (const auto &elt : node["elts"])
+      casted["elts"].push_back(
+        cast_numpy_linspace_literal_to_dtype(elt, dtype));
+    return casted;
+  }
+
+  scalar_value value;
+  if (try_extract_scalar_constant(node, value))
+    return make_numpy_typed_constant(
+      make_real_scalar(std::floor(value.value.real())), dtype);
 
   throw std::runtime_error(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
@@ -8374,13 +8413,20 @@ exprt numpy_call_expr::get()
         num = get_arg(2)["value"].get<std::size_t>();
       if (num == 0)
         return to_list_expr(make_list({}));
+      const std::string dtype = get_dtype();
+      const bool integer_dtype = is_numpy_integer_dtype(dtype);
+      auto make_linspace_constant = [integer_dtype,
+                                     &make_constant](double value) {
+        return make_constant(integer_dtype ? std::floor(value) : value);
+      };
       if (num == 1)
         return to_list_expr(
-          apply_constructor_dtype(make_list({make_constant(start)})));
+          apply_constructor_dtype(make_list({make_linspace_constant(start)})));
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<nlohmann::json> elts;
       for (std::size_t i = 0; i < num; ++i)
-        elts.push_back(make_constant(start + (step * static_cast<double>(i))));
+        elts.push_back(
+          make_linspace_constant(start + (step * static_cast<double>(i))));
       return to_list_expr(apply_constructor_dtype(make_list(elts)));
     }
   }
