@@ -1095,7 +1095,7 @@ private:
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
-  bool module_scope_rhs_needs_type_probe(const nlohmann::json &value);
+  bool module_scope_rhs_needs_type_probe(const nlohmann::json &ast_node);
 
   /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
   /// declares it in `target_block` when it is a local, and records the
