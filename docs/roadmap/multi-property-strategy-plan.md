@@ -1,6 +1,6 @@
 # Plan — `--multi-property` under the k-step strategies
 
-**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage done.
+**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage and W6 done.
 **Origin:** Discussion
 [#7900](https://github.com/esbmc/esbmc/discussions/7900), *"Current state of
 --multi-property support"*: is `--multi-property` orthogonal to the analysis
@@ -10,7 +10,7 @@ mode, and which modes can its results be trusted under? Related open issues:
 [#1599](https://github.com/esbmc/esbmc/issues/1599),
 [#2075](https://github.com/esbmc/esbmc/issues/2075),
 [#7503](https://github.com/esbmc/esbmc/issues/7503).
-**Last updated:** 2026-09-23.
+**Last updated:** 2026-09-24.
 
 **Measurement environment.** aarch64 macOS, ESBMC 8.5.0 built from master
 `25b71af213`, default solver (Bitwuzla 0.9.1). Every result below is a verdict
@@ -298,8 +298,9 @@ Assertion failed: (loop_head->is_goto()), function havoc_slot,
 file goto_k_induction.cpp, line 181.
 ```
 
-Reproduces without `--multi-property`, so it is out of this plan's scope. It is
-listed so that a matrix run in W6 does not attribute it to the flag. The
+Reproduces without `--multi-property`, so it is out of this plan's scope; filed
+as [#7971](https://github.com/esbmc/esbmc/issues/7971). It is listed so that a
+matrix run in W6 does not attribute it to the flag. The
 comment at `driver.cpp:196` records the same assert for
 `--loop-invariant-check` + `--termination`. With interval analysis, a
 `while (1)` loop whose head is an `ASSERT` hits it by another route.
@@ -716,15 +717,29 @@ Re-ran the reproducers of #1599, #1902, #2075 and #7503 on the W4 build
 KNOWNBUG: `loop-invariants/6-invariant_in_wrong_place` and
 `7-not_conjunct_invariant` still pass as KNOWNBUG and give the same verdict
 without `--multi-property`. `goto-coverage/github_1720_6` is a coverage count.
-D6 still aborts, and no issue or KNOWNBUG test covers it. Its assert predates
-#7587.
+D6 still aborts; filed as #7971. Its assert predates #7587.
 
-### W6 — documentation
+### W6 — documentation and strategy matrix — done
 
-Add a `--multi-property` section to the website documentation with the §1
-table as it stands after W4. Also add a matrix test that runs §2's reproducers
-under every strategy in §1 and pins each verdict, so that the next strategy
-added cannot silently diverge.
+- The website's *Multiple Property Verification* section
+  (`website/content/docs/usage.md`) gains a table of what each strategy reports
+  per property, matching §1.
+- `regression/multi-property-matrix` runs `i1361.c`, `vac2.c`, `vac2_safe.c`
+  and `vac3.c` from §2, and `mixed.c` (`vac2_safe.c` with `assert(x != 3)`, so
+  one claim is proved and one violated), under `--unwind`, `--k-induction`,
+  `--incremental-bmc` and `--falsification`, and `vac2.c` under the two
+  rejecting strategies. Each of the 22 cells pins every table row, the summary
+  and the verdict. A k-step run prints `VERIFICATION FAILED` after every
+  counterexample, so the k-step cells also exclude `VERIFICATION UNKNOWN`, which
+  is what D1 ended with. The sources sit at the suite root and each cell names
+  one with `../`.
+- Against the v8.5 release binary (before W1), 14 cells fail: the 12 k-step
+  cells over a buggy program, `vac2_safe_falsification` and the
+  `--k-induction-parallel` rejection. The other eight pass there too: the five
+  `--unwind` cells, the two proofs of `vac2_safe.c` and the
+  `--falsify-context-bound` rejection. W1-W4 changed none of them.
+- `d5.c` is not in the matrix: its one row is the D5 residual, and a CORE cell
+  would pin the wrong answer.
 
 ---
 
