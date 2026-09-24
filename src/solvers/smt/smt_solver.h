@@ -10,6 +10,7 @@
 #include <mutex>
 #include <set>
 #include <utility>
+#include <unordered_map>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
@@ -840,12 +841,10 @@ public:
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
-   *  and rebuild it from one. Both record the pointer so that later flattened
-   *  pointers are tied to it; see the comment on the definitions in
+   *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */
   smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
   smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
-  void record_flattened_pointer(smt_astt address, smt_astt pointer);
   /** True when @p ptr_type's representation occupies @p bv_type exactly, so
    *  the bits read back are the bits that were written. */
   bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
@@ -1108,18 +1107,68 @@ public:
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter = 0;
 
-  /** One pointer flattened to, or rebuilt from, its machine representation by
-   *  a bitcast. See convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  /** One pointer flattened to its machine representation by a bitcast. See
+   *  convert_bitcast()'s helpers in smt_bitcast.cpp. */
   struct ptr_flatten_entry
   {
     smt_astt address;
     smt_astt pointer;
+    /** The flattening step's guard: an unexecuted step can flatten any
+     *  pointer. */
+    smt_astt guard;
     unsigned int level;
+    size_t id;
+    /** The SSA step it was flattened in, 0 outside one. */
+    size_t step;
   };
-  /** Every such pointer in this context, tied pairwise so that two flattened
-   *  pointers sharing an address are the same pointer. Pruned on pop_ctx like
-   *  uf_ackermann_history, whose asts have the same lifetime. */
+  /** Every flattened pointer in this context. Like uf_ackermann_history, it
+   *  and the decode history below are pruned on pop_ctx. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** Each flattening bitcast converted so far, for steps that hit it in the
+   *  conversion cache. */
+  std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  void record_flattened_pointer(smt_astt address, smt_astt pointer);
+
+  /** A pointer rebuilt from its representation. Its fallback needs every
+   *  flatten, so pre_solve() asserts it, at fallback_level. */
+  struct ptr_decode_entry
+  {
+    smt_astt address;
+    smt_astt pointer;
+    smt_astt fallback;
+    unsigned int level;
+    std::optional<unsigned int> fallback_level;
+    /** The SSA step it was rebuilt in, 0 outside one, and the flattens whose
+     *  bits that step's operands can hold. */
+    size_t step;
+    std::set<size_t> sources;
+  };
+  std::vector<ptr_decode_entry> ptr_decode_history;
+  void define_rebuilt_pointer(
+    const ptr_decode_entry &rebuilt,
+    const ptr_flatten_entry &flat);
+  void fall_back_rebuilt_pointers();
+  /** Whether @p flat's bits can reach @p rebuilt: SSA order is data-flow
+   *  order, so a rebuild reads only flattens in its own step or flowing into
+   *  its step's operands. */
+  static bool
+  may_read(const ptr_decode_entry &rebuilt, const ptr_flatten_entry &flat);
+
+  /** The SSA step being converted: its number (0 outside one), guard, the
+   *  flattens its operands may hold, and the symbol it assigns. */
+  size_t step_count = 0;
+  size_t cur_step = 0;
+  smt_astt step_guard = nullptr;
+  std::set<size_t> step_sources;
+  std::string step_assigned;
+  size_t flatten_count = 0;
+  /** The flattens each SSA symbol's value may hold. */
+  std::unordered_map<std::string, std::set<size_t>> ptr_flow;
+  void begin_step(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const expr2tc &assigned);
+  void end_step();
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier

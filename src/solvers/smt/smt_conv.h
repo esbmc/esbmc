@@ -71,6 +71,13 @@ public:
    *  remainder compositionally exactly when its operands are also
    *  divided somewhere in the formula. */
   void note_division_operands(const expr2tc &expr);
+  /** Bracket the conversion of one SSA step: its guard, its condition, and
+   *  the symbol it assigns (nil when it assigns none). */
+  void begin_step(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const expr2tc &assigned);
+  void end_step();
 
   /** Convert and dump an expression in SMT format (--ssa-smt-trace). */
   void dump_expr(const expr2tc &expr);

@@ -126,7 +126,8 @@ void convert_internal_step(
     log_status("{}", oss.str());
   }
 
-  smt_conv.convert_ast(step.guard);
+  smt_conv.begin_step(
+    step.guard, step.cond, step.is_assignment() ? step.lhs : expr2tc());
 
   if (step.is_assume() || step.is_assert() || step.is_branching())
   {
@@ -167,6 +168,7 @@ void convert_internal_step(
   {
     assert(0 && "Unexpected SSA step type in conversion");
   }
+  smt_conv.end_step();
 
   if (step.is_assert())
   {

@@ -274,6 +274,14 @@ void smt_solver_baset::pop_ctx()
   std::erase_if(ptr_flatten_history, [this](const ptr_flatten_entry &e) {
     return e.level >= ctx_level;
   });
+  std::erase_if(ptr_decode_history, [this](const ptr_decode_entry &e) {
+    return e.level >= ctx_level;
+  });
+  for (ptr_decode_entry &e : ptr_decode_history)
+    if (e.fallback_level >= ctx_level)
+      e.fallback_level.reset();
+  std::erase_if(
+    flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -3299,6 +3307,7 @@ void smt_solver_baset::pre_solve()
   l_get_cache.clear();
   get_ast_cache.clear();
 
+  fall_back_rebuilt_pointers();
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.

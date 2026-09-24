@@ -1,5 +1,6 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/expr/type_byte_size.h>
+#include <functional>
 
 /**
  * Constructs the tree-like concatenation of expressions from a sequence.
@@ -135,11 +136,15 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
  *
  * The address has to stay the representation -- a program can memset pointer
  * storage or store a literal into it, and reading that back must still mean
- * what the bits say (regression/esbmc/memset_pointer). So keep it, and record
- * every pointer a bitcast flattens or rebuilds. Tying those pairwise, so two
- * flattened pointers sharing an address are the same pointer, is what lets the
- * round trip prove anything; it constrains only pointers that reach a bitcast,
- * and leaves every address-space constraint alone.
+ * what the bits say (regression/esbmc/memset_pointer). So keep it and record
+ * every pointer a bitcast flattens.
+ *
+ * Flattened pointers sharing an address are tied: two values with the same
+ * object representation compare equal (C17 6.2.6.1p4). A rebuilt pointer is
+ * not tied but defined: it is the flattened pointer its bits came from, or the
+ * address-space reconstruction when none matches. Tying the reconstruction
+ * instead pins it to the live object at that address and makes a NULL-based
+ * pointer unsatisfiable (#7965).
  *
  * Only bitcast takes this path. A typecast keeps plain C integer-to-pointer
  * semantics, where the address really is all the program has. */
@@ -157,34 +162,149 @@ bool smt_solver_baset::pointer_repr_applies(
   return ptr_type->get_width() == bv_type->get_width();
 }
 
-/** Tie @p pointer to @p address, and to every pointer flattened before it. */
-void smt_solver_baset::record_flattened_pointer(
-  smt_astt address,
-  smt_astt pointer)
-{
-  for (const ptr_flatten_entry &prev : ptr_flatten_history)
-    assert_ast(mk_implies(
-      mk_eq(address, prev.address), pointer->eq(this, prev.pointer)));
-
-  ptr_flatten_history.push_back({address, pointer, ctx_level});
-}
-
 smt_astt smt_solver_baset::encode_pointer_repr(
   const expr2tc &ptr,
   const type2tc &to_type)
 {
   smt_astt address = convert_ast(typecast2tc(to_type, ptr));
-  record_flattened_pointer(address, convert_ast(ptr));
+  smt_astt pointer = convert_ast(ptr);
+  flattened.emplace(
+    bitcast2tc(to_type, ptr),
+    ptr_flatten_entry{address, pointer, nullptr, ctx_level});
+  record_flattened_pointer(address, pointer);
   return address;
+}
+
+void smt_solver_baset::record_flattened_pointer(
+  smt_astt address,
+  smt_astt pointer)
+{
+  const ptr_flatten_entry flat{
+    address,
+    pointer,
+    step_guard ? step_guard : mk_smt_bool(true),
+    ctx_level,
+    flatten_count++,
+    cur_step};
+  step_sources.insert(flat.id);
+
+  for (const ptr_flatten_entry &prev : ptr_flatten_history)
+    assert_ast(mk_implies(
+      mk_and(mk_and(flat.guard, prev.guard), mk_eq(address, prev.address)),
+      pointer->eq(this, prev.pointer)));
+  for (const ptr_decode_entry &rebuilt : ptr_decode_history)
+    if (may_read(rebuilt, flat))
+      define_rebuilt_pointer(rebuilt, flat);
+
+  ptr_flatten_history.push_back(flat);
+}
+
+void smt_solver_baset::define_rebuilt_pointer(
+  const ptr_decode_entry &rebuilt,
+  const ptr_flatten_entry &flat)
+{
+  assert_ast(mk_implies(
+    mk_and(flat.guard, mk_eq(rebuilt.address, flat.address)),
+    rebuilt.pointer->eq(this, flat.pointer)));
+}
+
+bool smt_solver_baset::may_read(
+  const ptr_decode_entry &rebuilt,
+  const ptr_flatten_entry &flat)
+{
+  return (flat.step != 0 && flat.step == rebuilt.step) ||
+         rebuilt.sources.count(flat.id);
+}
+
+void smt_solver_baset::begin_step(
+  const expr2tc &guard,
+  const expr2tc &cond,
+  const expr2tc &assigned)
+{
+  cur_step = ++step_count;
+  step_sources.clear();
+
+  /* A bitcast converted in an earlier step is a cache hit here, so
+   * encode_pointer_repr() does not run; it is re-recorded under this step's
+   * guard below. The walk is memoised: SSA steps are DAGs (#7474). */
+  std::vector<ptr_flatten_entry> reused;
+  if (!ptr_flow.empty() || !flattened.empty())
+  {
+    std::unordered_set<const expr2t *> seen;
+    std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+      if (!e || !seen.insert(e.get()).second)
+        return;
+      if (is_symbol2t(e))
+      {
+        auto it = ptr_flow.find(to_symbol2t(e).get_symbol_name());
+        if (it != ptr_flow.end())
+          step_sources.insert(it->second.begin(), it->second.end());
+      }
+      else if (auto it = flattened.find(e); it != flattened.end())
+        reused.push_back(it->second);
+      e->foreach_operand(walk);
+    };
+    walk(guard);
+    walk(cond);
+  }
+
+  step_guard = convert_ast(guard);
+  for (const ptr_flatten_entry &flat : reused)
+    record_flattened_pointer(flat.address, flat.pointer);
+  step_assigned = !is_nil_expr(assigned) && is_symbol2t(assigned)
+                    ? to_symbol2t(assigned).get_symbol_name()
+                    : "";
+}
+
+void smt_solver_baset::end_step()
+{
+  if (!step_assigned.empty() && !step_sources.empty())
+    ptr_flow[step_assigned] = step_sources;
+  cur_step = 0;
+  step_guard = nullptr;
+  step_sources.clear();
+  step_assigned.clear();
 }
 
 smt_astt smt_solver_baset::decode_pointer_repr(
   const expr2tc &repr,
   const type2tc &to_type)
 {
-  smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
-  record_flattened_pointer(convert_ast(repr), pointer);
-  return pointer;
+  smt_astt address = convert_ast(repr);
+  smt_astt fallback = convert_ast(typecast2tc(to_type, repr));
+  ptr_decode_entry rebuilt{
+    address,
+    mk_fresh(fallback->sort, "pointer_repr::"),
+    fallback,
+    ctx_level,
+    std::nullopt,
+    cur_step,
+    step_sources};
+
+  for (const ptr_flatten_entry &prev : ptr_flatten_history)
+    if (may_read(rebuilt, prev))
+      define_rebuilt_pointer(rebuilt, prev);
+
+  ptr_decode_history.push_back(rebuilt);
+  return rebuilt.pointer;
+}
+
+void smt_solver_baset::fall_back_rebuilt_pointers()
+{
+  for (ptr_decode_entry &rebuilt : ptr_decode_history)
+  {
+    if (rebuilt.fallback_level)
+      continue;
+    smt_astt unmatched = mk_smt_bool(true);
+    for (const ptr_flatten_entry &flat : ptr_flatten_history)
+      if (may_read(rebuilt, flat))
+        unmatched = mk_and(
+          unmatched,
+          mk_not(mk_and(flat.guard, mk_eq(rebuilt.address, flat.address))));
+    assert_ast(
+      mk_implies(unmatched, rebuilt.pointer->eq(this, rebuilt.fallback)));
+    rebuilt.fallback_level = ctx_level;
+  }
 }
 
 /** The pointer leg of convert_bitcast. Null when neither side is a pointer

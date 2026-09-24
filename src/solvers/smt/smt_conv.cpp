@@ -68,6 +68,19 @@ void smt_convt::note_division_operands(const expr2tc &expr)
   solver_impl->note_division_operands(expr);
 }
 
+void smt_convt::begin_step(
+  const expr2tc &guard,
+  const expr2tc &cond,
+  const expr2tc &assigned)
+{
+  solver_impl->begin_step(guard, cond, assigned);
+}
+
+void smt_convt::end_step()
+{
+  solver_impl->end_step();
+}
+
 void smt_convt::convert_ast(const expr2tc &expr)
 {
   // Discard the handle: callers only need the expression encoded into the
