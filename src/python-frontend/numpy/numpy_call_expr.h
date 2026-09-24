@@ -222,6 +222,20 @@ private:
   std::optional<std::vector<exprt>>
   resolve_searchsorted_array_via_descriptor(const nlohmann::json &raw_arg);
 
+  // sorter=argsort(<the same array>) over a descriptor-resolved array: an
+  // exprt-level stable-sort gather (bubble_sort_numpy_paired) over
+  // resolve_searchsorted_array_via_descriptor's elements, since they are
+  // index expressions into a local array and almost never compile-time
+  // constant the way a genuine AST literal's elements would be. nullopt for
+  // anything else (a different array's argsort, a literal index array, an
+  // array the descriptor path itself can't resolve). See numpy_call_expr.cpp
+  // for the full rationale.
+  std::optional<std::vector<exprt>>
+  resolve_searchsorted_sorted_values_via_descriptor(
+    const nlohmann::json &raw_arg,
+    const nlohmann::json &sorter_node,
+    const std::string &array_name);
+
   // Evaluates `call_node` (a call to a user function) exactly once by
   // synthesizing `<temp> = call_node` and converting it through the normal
   // assignment pipeline, so side effects execute once and the temp's numpy

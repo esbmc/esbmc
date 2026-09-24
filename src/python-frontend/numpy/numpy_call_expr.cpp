@@ -7127,6 +7127,41 @@ numpy_call_expr::resolve_searchsorted_array_via_descriptor(
   return materialized->second;
 }
 
+// sorter=argsort(<the same array>) over a descriptor-resolved array
+// (resolve_searchsorted_array_via_descriptor -- elements are index
+// expressions into a local array, not JSON literals, so they are almost
+// never is_constant() and can't be re-extracted as compile-time indices).
+// bubble_sort_numpy_paired already builds a stable sort as an if_exprt
+// chain over arbitrary elements, concrete or symbolic alike (the same
+// mechanism numpy.sort()/argsort() themselves use); sorting a copy of
+// `values` with it computes exactly the array searchsorted(a, v,
+// sorter=argsort(a)) searches (a[sorter]), without needing the permutation
+// indices at all. Scoped to argsort() of the same array -- the only sound,
+// tested use of sorter=argsort(...) the AST-literal path (resolve_
+// searchsorted_sorter) supports either -- so an unrelated array's argsort or
+// a literal index array here still falls through to the caller's own
+// "cannot resolve" diagnostic instead of being silently accepted.
+std::optional<std::vector<exprt>>
+numpy_call_expr::resolve_searchsorted_sorted_values_via_descriptor(
+  const nlohmann::json &raw_arg,
+  const nlohmann::json &sorter_node,
+  const std::string &array_name)
+{
+  if (
+    !is_argsort_call(sorter_node) ||
+    !argsort_call_targets_array(sorter_node, array_name, converter_.ast()))
+    return std::nullopt;
+
+  std::optional<std::vector<exprt>> values =
+    resolve_searchsorted_array_via_descriptor(raw_arg);
+  if (!values)
+    return std::nullopt;
+
+  std::vector<exprt> sorted_values = *values;
+  bubble_sort_numpy_paired(sorted_values, nullptr);
+  return sorted_values;
+}
+
 // Computes numpy.searchsorted()'s insertion index of `target` into `values`
 // (assumed sorted; unlike the AST-literal path, sortedness isn't statically
 // checked here since these elements are index expressions, not JSON
@@ -7349,9 +7384,7 @@ exprt numpy_call_expr::handle_searchsorted_call()
   // newer, less validated path below. The descriptor path (a Name already
   // bound to a concrete numpy array via a route the AST can't trace, or a
   // local-array-return function call) is only a fallback for what the
-  // AST-literal path itself declines on -- and, like it, sorter= isn't
-  // supported over this path yet (it would need an exprt-level stable-sort
-  // permutation, not just a comparison network).
+  // AST-literal path itself declines on.
   std::optional<nlohmann::json> literal_arg =
     try_resolve_searchsorted_literal_array(function);
 
@@ -7360,6 +7393,21 @@ exprt numpy_call_expr::handle_searchsorted_call()
       std::optional<exprt> result =
         try_searchsorted_call_over_descriptor(right))
       return *result;
+
+  // sorter=argsort(<the same array>) over a descriptor-resolved array: an
+  // exprt-level stable-sort gather, since these elements (index expressions
+  // into a local array) are almost never compile-time constants the way a
+  // genuine AST literal's would be. See
+  // resolve_searchsorted_sorted_values_via_descriptor for the full
+  // rationale; nullopt (not this shape) leaves the diagnostic below
+  // unchanged.
+  if (!literal_arg && sorter_node != nullptr)
+    if (
+      std::optional<std::vector<exprt>> sorted_values =
+        resolve_searchsorted_sorted_values_via_descriptor(
+          call_["args"][0], *sorter_node, array_name))
+      return handle_searchsorted_call_over_descriptor(
+        std::move(*sorted_values), right);
 
   if (!literal_arg)
     resolve_literal_numpy_array_input(call_["args"][0], function, false);
