@@ -280,7 +280,18 @@ public:
   {
     if (!current_block || !safe_to_emit_side_effecting_statement())
       return false;
+    // get_var_assign always leaves current_lhs pointing at its own target
+    // (or null) when it returns, clobbering whatever an enclosing
+    // assignment's own RHS conversion had it pointing at -- e.g. a call
+    // argument hoisted into a temp mid-conversion (hoist_call_argument_
+    // into_temp) would otherwise silently erase the outer assignment's
+    // ability to retype its own target from the freshly computed RHS
+    // (retype_current_lhs_and_return and friends), leaving a stale
+    // static-annotator guess in place. Save and restore around the nested
+    // statement so it only ever affects its own target.
+    exprt *outer_lhs = current_lhs;
     get_var_assign(ast_node, *current_block);
+    current_lhs = outer_lhs;
     return true;
   }
 

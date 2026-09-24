@@ -1978,25 +1978,6 @@ python_converter::classify_numpy_method_call(
       ? method_base["id"].get<std::string>()
       : std::string();
 
-  // `np.eye(3).transpose()`: the receiver is itself a raw Call (a
-  // constructor, or a user function returning an array), not a Name bound
-  // to an already-tracked numpy array -- method_base_is_tracked_numpy_array
-  // can't recognise it at all. Scoped to transpose/flatten/ravel, the same
-  // three methods numpy_call_expr::try_hoist_call_arg_for_view_method
-  // resolves a raw Call argument for once rewritten to np.<method>(<call>);
-  // every other dispatch-rewrite method has no such handling for a raw
-  // Call argument yet.
-  static const std::set<std::string> view_methods_over_raw_call = {
-    "transpose", "flatten", "ravel"};
-  const bool receiver_is_raw_call_view_method =
-    method_base.value("_type", "") == "Call" &&
-    view_methods_over_raw_call.count(method_name) != 0;
-
-  const bool receiver_is_rewritable =
-    !method_base_is_imported_module(method_base_name) &&
-    (method_base_is_tracked_numpy_array(method_base_name) ||
-     receiver_is_raw_call_view_method);
-
   // transpose()/reshape()/ravel() are view-like (see is_numpy_view_copy_expr,
   // which handles them separately); flatten()/sum()/mean()/min()/max()/
   // prod()/std()/var() are not, but the method form still needs the same
@@ -2019,6 +2000,32 @@ python_converter::classify_numpy_method_call(
     "argmax",
     "argsort",
     "searchsorted"};
+
+  // `np.eye(3).transpose()`: the receiver is itself a raw Call (a
+  // constructor, or a user function returning an array), not a Name bound
+  // to an already-tracked numpy array -- method_base_is_tracked_numpy_array
+  // can't recognise it at all. Every dispatch-rewrite method above is
+  // eligible for the rewrite itself: numpy_call_expr::
+  // try_hoist_call_arg_for_view_method either resolves the raw Call
+  // argument (transpose/flatten/ravel/sum/mean/min/max/argsort/
+  // searchsorted, whose Name-argument dispatch resolves through descriptor
+  // materialization and so also sees a temp that exists only in the GOTO
+  // IR), or -- for the rest, whose Name-argument dispatch walks the
+  // *source* AST instead (reshape's own resolve_numpy_var, prod/std/var/
+  // argmin/argmax's literal-only fallback, diagonal's pointer-view
+  // construction, none of which can see such a temp) -- raises a clean
+  // diagnostic rather than falling through to the pre-existing generic
+  // runtime-call fallback, which silently produced a wrong NONDET value
+  // for this shape (see numpy_call_expr.cpp for the full rationale).
+  const bool receiver_is_raw_call_view_method =
+    method_base.value("_type", "") == "Call" &&
+    dispatch_rewrite_methods.count(method_name) != 0;
+
+  const bool receiver_is_rewritable =
+    !method_base_is_imported_module(method_base_name) &&
+    (method_base_is_tracked_numpy_array(method_base_name) ||
+     receiver_is_raw_call_view_method);
+
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
   const bool supported_copy_method =

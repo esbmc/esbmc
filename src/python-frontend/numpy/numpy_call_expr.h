@@ -37,12 +37,16 @@ public:
 private:
   exprt create_expr_from_call();
 
-  // transpose()/flatten()/ravel() over a raw Call argument (e.g.
-  // `np.eye(3).transpose()`, rewritten to `np.transpose(np.eye(3))`):
-  // hoists it into a temp so the rest of get() sees the already-correct
-  // Name case. nullopt (not this shape, or hoisting declined) when get()'s
-  // normal dispatch should run unchanged. See numpy_call_expr.cpp for the
-  // full rationale.
+  // transpose()/flatten()/ravel() and every other descriptor-materialized
+  // dispatch (sum/mean/min/max/argsort/searchsorted) over a raw Call
+  // argument (e.g. `np.eye(3).transpose()`, rewritten to
+  // `np.transpose(np.eye(3))`): hoists it into a temp so the rest of get()
+  // sees the already-correct Name case. nullopt (not this shape, or
+  // hoisting declined) when get()'s normal dispatch should run unchanged.
+  // See numpy_call_expr.cpp for the full rationale, including which methods
+  // had to stay excluded (their own Name-argument resolution walks the
+  // source AST rather than the descriptor map, so it can't see a temp that
+  // exists only in the GOTO IR).
   std::optional<exprt>
   try_hoist_call_arg_for_view_method(const std::string &function);
 

@@ -7559,14 +7559,16 @@ typet numpy_call_expr::resolve_like_element_type(const typet &base_type)
   return elem_type;
 }
 
-// transpose()/flatten()/ravel() (and `.T`, rewritten to
-// np.transpose(...) ahead of here) only resolve a first argument that is a
-// List or a Name (e.g. `x.transpose()` rewritten to `np.transpose(x)`),
-// never a raw Call -- `np.eye(3).transpose()` (rewritten to
-// `np.transpose(np.eye(3))`) falls through every dispatch below into a
-// generic runtime-call fallback that either errors confusingly or silently
-// produces a wrong NONDET result instead of the correct one (a soundness
-// gap, not just a missing feature).
+// transpose()/flatten()/ravel() (and `.T`, rewritten to np.transpose(...)
+// ahead of here), and every other method classify_numpy_method_call's
+// dispatch_rewrite_methods rewrites (sum/mean/min/max/prod/std/var/
+// diagonal/argmin/argmax/argsort/searchsorted/reshape), only resolve a
+// first argument that is a List or a Name (e.g. `x.transpose()` rewritten
+// to `np.transpose(x)`), never a raw Call -- `np.eye(3).transpose()`
+// (rewritten to `np.transpose(np.eye(3))`) falls through every dispatch
+// below into a generic runtime-call fallback that either errors confusingly
+// or silently produces a wrong NONDET result instead of the correct one (a
+// soundness gap, not just a missing feature).
 //
 // The primary fix is a pure AST rewrite: materialize_numpy_constructor_array
 // turns the raw constructor call into the same literal List node a Name
@@ -7584,22 +7586,67 @@ typet numpy_call_expr::resolve_like_element_type(const typet &base_type)
 // hoist_call_argument_into_temp already uses for searchsorted's own
 // local-array-return case.
 //
+// transpose/flatten/ravel are checked unconditionally -- np.transpose(f())
+// module-form already resolved a raw Call argument correctly before this
+// fix existed, so there is nothing to protect there. Every other method has
+// no such standalone handling, so it is gated on the `_numpy_method_form`
+// marker classify_numpy_method_call's rewrite stamps: only a call that
+// reached here via the `.method()` rewrite carries it, so a genuine
+// module-form call (`np.sum(f())`, already correctly handled by that
+// dispatch's own inline-call resolution) is never affected. Among those,
+// only sum/mean/min/max/argsort/searchsorted resolve a hoisted temp
+// correctly (their Name-argument dispatch goes through descriptor
+// materialization, which reads the GOTO-IR-side shape map the temp is
+// registered in); reshape/prod/std/var/argmin/argmax/diagonal instead
+// re-walk the *source* AST or a pointer-view map that a temp hoisted at
+// conversion time can never appear in, so they raise a clean diagnostic
+// instead (still a gap, but never a silently wrong NONDET result again).
+//
 // Called from build_result, ahead of get() and outside the class, so this
 // check's own decision point doesn't add to get()'s own (already far over
-// threshold) decision count. nullopt (not this shape, or hoisting declined
-// -- e.g. a discarded type-probe pass over a user-function call) leaves
-// get()'s normal dispatch unchanged.
+// threshold) decision count. nullopt (not this shape) leaves get()'s
+// normal dispatch unchanged; throws for the method-form-only-unsupported
+// case above.
 std::optional<exprt>
 numpy_call_expr::try_hoist_call_arg_for_view_method(const std::string &function)
 {
   if (
     call_["args"].empty() ||
-    call_["args"][0].value("_type", std::string()) != "Call" ||
-    (function != "transpose" && function != "flatten" && function != "ravel"))
+    call_["args"][0].value("_type", std::string()) != "Call")
+    return std::nullopt;
+
+  static const std::set<std::string> always_allowed_functions = {
+    "transpose", "flatten", "ravel"};
+  // Every other dispatch_rewrite_methods name reaches here only via
+  // classify_numpy_method_call's `.method()` rewrite (the `_numpy_method_
+  // form` marker it stamps) -- a genuine module-form call (`np.sum(f())`)
+  // is already handled correctly by that dispatch's own inline-call
+  // resolution and must not be touched.
+  const bool is_method_form = always_allowed_functions.count(function) != 0 ||
+                              call_.value("_numpy_method_form", false);
+  if (!is_method_form)
     return std::nullopt;
 
   const nlohmann::json &arg_call = call_["args"][0];
 
+  // materialize_numpy_constructor_array is a pure, side-effect-free AST
+  // rewrite that works uniformly for every dispatch (it produces the same
+  // literal List a Name bound to the constructor would resolve to, which
+  // every dispatch below -- including the ones excluded from the hoist
+  // fallback further down -- already handles correctly for a Name/List
+  // argument); try it first regardless of which function this is.
+  //
+  // Not every dispatch this reaches (sum/mean/min/max/argsort's own
+  // descriptor-materialized path in particular) retypes the assignment
+  // target the way transpose/flatten/ravel already do (see
+  // retype_current_lhs_and_return's own doc) -- their Name-argument case
+  // was previously only ever reached for an already-correctly-typed
+  // tracked array or parameter, never a fresh assignment target still
+  // carrying the static annotator's stale Any/pointer guess for this
+  // chained-call shape. Applying it uniformly here, at the one call site
+  // every widened method funnels through, is idempotent for the methods
+  // that already retype internally and closes the gap for the ones that
+  // do not.
   if (
     std::optional<nlohmann::json> materialized =
       materialize_numpy_constructor_array(arg_call, converter_.ast()))
@@ -7607,7 +7654,36 @@ numpy_call_expr::try_hoist_call_arg_for_view_method(const std::string &function)
     nlohmann::json rewritten_call = call_;
     rewritten_call["args"][0] = std::move(*materialized);
     numpy_call_expr nested(function_id_, rewritten_call, converter_);
-    return nested.get();
+    return retype_current_lhs_and_return(converter_, nested.get());
+  }
+
+  // materialize declined (an unrecognized constructor like np.array, a
+  // non-constant fill, or a genuine user function call): only the methods
+  // whose Name-argument dispatch resolves through descriptor
+  // materialization (build_numpy_descriptor_materialized_elements /
+  // try_reduce_descriptor_call), not an AST-only find_var_decl lookup,
+  // correctly see a temp hoisted at conversion time.
+  static const std::set<std::string> method_form_only_functions = {
+    "sum", "mean", "min", "max", "argsort", "searchsorted"};
+  if (
+    always_allowed_functions.count(function) == 0 &&
+    method_form_only_functions.count(function) == 0)
+  {
+    // Every other dispatch_rewrite_methods name (reshape, prod/std/var,
+    // argmin/argmax, diagonal) resolves its Name argument by re-walking
+    // the *source* AST (resolve_numpy_var/find_var_decl) or, for
+    // diagonal, building a pointer view keyed off tracked shape metadata
+    // -- neither can see a temp hoisted at conversion time, which exists
+    // only in the GOTO IR. Rather than falling through silently to the
+    // generic runtime-call fallback (which produced a wrong NONDET result
+    // for this exact shape), reject with a diagnostic naming the gap
+    // explicitly (ADR-NP principle 3): still incomplete, but never
+    // silently wrong.
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() chained directly on a constructor call with no intermediate "
+      "variable is not supported yet; assign the constructor's result to "
+      "a variable first");
   }
 
   std::optional<nlohmann::json> hoisted =
@@ -7628,7 +7704,7 @@ numpy_call_expr::try_hoist_call_arg_for_view_method(const std::string &function)
   nlohmann::json rewritten_call = call_;
   rewritten_call["args"][0] = std::move(*hoisted);
   numpy_call_expr nested(function_id_, rewritten_call, converter_);
-  return nested.get();
+  return retype_current_lhs_and_return(converter_, nested.get());
 }
 
 exprt numpy_call_expr::retype_current_lhs_and_return(
