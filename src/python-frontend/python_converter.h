@@ -1815,6 +1815,9 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  exprt
+  build_emptiness_check(const exprt &value, const nlohmann::json &element);
+
   /// A call statement nested in an expression is invisible to goto-convert's
   /// side-effect removal, so it would reach the solver unevaluated.
   static void convert_function_call_to_side_effect(exprt &expr);
