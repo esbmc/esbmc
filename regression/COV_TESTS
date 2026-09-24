@@ -1775,6 +1775,12 @@ regression/esbmc/github_7855-two-slots
 regression/esbmc/github_7855-two-slots_fail
 regression/esbmc/github_7855-tie-hides-deref
 regression/esbmc/github_7855-tie-hides-deref_pass
+regression/esbmc/github_7965
+regression/esbmc/github_7965_fail
+regression/esbmc/pointer_repr_cache_reuse
+regression/esbmc/pointer_repr_cache_reuse_fail
+regression/esbmc/pointer_repr_branch_store
+regression/esbmc/pointer_repr_branch_store_fail
 regression/esbmc/multi_property_same_position_asserts
 regression/esbmc/same_position_asserts_single_property
 regression/esbmc/multi_property_same_position_asserts_kinduction

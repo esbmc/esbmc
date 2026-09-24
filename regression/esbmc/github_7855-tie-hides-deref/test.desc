@@ -1,5 +1,5 @@
-KNOWNBUG
+CORE
 main.c
---64 --incremental-bmc
+--64 --incremental-bmc --multi-property
 ^VERIFICATION FAILED$
-^  FAILED +\[main\.null-pointer-dereference\.\d+\] +line +\d+ +dereference failure: NULL pointer$
+^  FAILED +\[follow\.null-pointer-dereference\.\d+\] +line +28 +dereference failure: NULL pointer$
