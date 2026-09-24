@@ -6533,9 +6533,11 @@ void python_converter::get_var_assign(
       // `const array_typet& = lhs.type()` constructed a throwaway array (with
       // a nil size) rather than reinterpreting the real type; it asserted
       // nothing meaningful and is removed.
-      // migrate_type turns nil into empty and cannot carry a dyn-sized array
-      // (docs/roadmap/scope-python-irep2.md §10.4).
-      if (rhs.type().is_nil() || python_expr::contains_dyn_array(rhs.type()))
+      // migrate_type turns nil into empty, and cannot carry a dyn-sized array
+      // or #python_aggregate (docs/roadmap/scope-python-irep2.md §10.4).
+      if (
+        rhs.type().is_nil() || python_expr::contains_dyn_array(rhs.type()) ||
+        is_python_internal_aggregate(rhs.type()))
         lhs_symbol->set_type(rhs.type());
       else
         lhs_symbol->set_type(migrate_type(rhs.type()));

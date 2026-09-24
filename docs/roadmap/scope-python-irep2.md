@@ -701,8 +701,11 @@ pass review silently.
 `get_var_assign` (an array target retyped by a different rhs) and `get_compound_assign`
 (`s += "..."` on a char array) now store the type IREP2-side. The `get_var_assign` arm keeps a legacy
 fallback for a nil rhs type, which `migrate_type` would turn into `empty`
-(`regression/python/string-symbolic-7`, a FUTURE test, is the only one that reaches it), and for a
-dyn-sized array, as §10.4 does.
+(`regression/python/string-symbolic-7`, a FUTURE test, is the only one that reaches it), for a
+dyn-sized array, and for a Python aggregate, whose `#python_aggregate` the seam drops as §10.4 found.
+The corpus below never sends a tuple through this arm, so the aggregate case was missed by the sweep
+and caught in review: `s = "ab"; s = (1, 2); 1 in s` stopped at `Unsupported expression for 'in'`.
+`regression/python/str_rebound_to_tuple_in{,_fail}` pin it; both fail without the check.
 
 Evidence, against master `dae0885ed3`: over the 6 697 tests under `python/`, `numpy/`, `humaneval/`
 and `python-intensive/`, `--goto-functions-only` and `--symbol-table-only` are byte-identical to the
