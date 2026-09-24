@@ -1771,6 +1771,10 @@ regression/k-induction/entry_jump_past_failed_assert_single_property
 regression/k-induction/multi_property_entry_jump_past_failed_assert_pass
 regression/floats/github_7896
 regression/smtlib/github_7929
+regression/esbmc/github_7855-two-slots
+regression/esbmc/github_7855-two-slots_fail
+regression/esbmc/github_7855-tie-hides-deref
+regression/esbmc/github_7855-tie-hides-deref_pass
 regression/esbmc/multi_property_same_position_asserts
 regression/esbmc/same_position_asserts_single_property
 regression/esbmc/multi_property_same_position_asserts_kinduction
