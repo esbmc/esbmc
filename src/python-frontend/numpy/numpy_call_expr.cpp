@@ -7615,6 +7615,19 @@ typet numpy_call_expr::resolve_like_element_type(const typet &base_type)
   return elem_type;
 }
 
+// full()/eye()/identity()/linspace()'s dtype= keyword (unlike np.array()'s
+// own dispatch just below in get(), which already applies it via
+// cast_numpy_literal_to_dtype) reached here without ever being read: the
+// constructed list was returned as-is, so `np.full((1,), 3.7, dtype=int)`
+// kept the literal 3.7 instead of truncating to 3 (found in review). Cast
+// the finished literal list once, right before conversion, the same way
+// np.array() already does.
+nlohmann::json numpy_call_expr::apply_constructor_dtype(nlohmann::json node)
+{
+  const std::string dtype = get_dtype();
+  return dtype.empty() ? node : cast_numpy_literal_to_dtype(node, dtype);
+}
+
 // transpose()/flatten()/ravel() (and `.T`, rewritten to np.transpose(...)
 // ahead of here), and every other method classify_numpy_method_call's
 // dispatch_rewrite_methods rewrites (sum/mean/min/max/prod/std/var/
@@ -8317,7 +8330,7 @@ exprt numpy_call_expr::get()
         std::vector<nlohmann::json> elts;
         for (std::size_t i = 0; i < dims[0]; ++i)
           elts.push_back(fill);
-        return to_list_expr(make_list(elts));
+        return to_list_expr(apply_constructor_dtype(make_list(elts)));
       }
       if (dims.size() == 2)
       {
@@ -8329,7 +8342,7 @@ exprt numpy_call_expr::get()
             row.push_back(fill);
           rows.push_back(make_list(row));
         }
-        return to_list_expr(make_list(rows));
+        return to_list_expr(apply_constructor_dtype(make_list(rows)));
       }
       throw std::runtime_error(
         "TypeError: numpy.full() currently supports up to 2D shapes");
@@ -8349,7 +8362,7 @@ exprt numpy_call_expr::get()
           row.push_back(make_constant(i == j ? 1 : 0));
         out_rows.push_back(make_list(row));
       }
-      return to_list_expr(make_list(out_rows));
+      return to_list_expr(apply_constructor_dtype(make_list(out_rows)));
     }
 
     if (function == "linspace")
@@ -8362,12 +8375,13 @@ exprt numpy_call_expr::get()
       if (num == 0)
         return to_list_expr(make_list({}));
       if (num == 1)
-        return to_list_expr(make_list({make_constant(start)}));
+        return to_list_expr(
+          apply_constructor_dtype(make_list({make_constant(start)})));
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<nlohmann::json> elts;
       for (std::size_t i = 0; i < num; ++i)
         elts.push_back(make_constant(start + (step * static_cast<double>(i))));
-      return to_list_expr(make_list(elts));
+      return to_list_expr(apply_constructor_dtype(make_list(elts)));
     }
   }
 

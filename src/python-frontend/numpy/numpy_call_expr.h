@@ -84,6 +84,13 @@ private:
   // from growing further.
   typet resolve_like_element_type(const typet &base_type);
 
+  // full()/eye()/identity()/linspace()'s literal list, cast to a dtype=
+  // keyword the same way np.array()'s own dispatch already does
+  // (cast_numpy_literal_to_dtype); a no-op when dtype= is absent. Split out
+  // of get() to keep that function's own decision count from growing
+  // further.
+  nlohmann::json apply_constructor_dtype(nlohmann::json node);
+
   // Looks up a keyword argument by name in the call's "keywords" array (e.g.
   // offset=/axis1=/dtype=), or nullptr if absent. Shared by every 2-D-only
   // view/reduction dispatch (diagonal/trace/fill_diagonal) that rejects
