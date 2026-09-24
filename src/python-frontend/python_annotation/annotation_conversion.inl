@@ -2950,6 +2950,24 @@ InferResult python_annotation<Json>::infer_type(
       Json temp_stmt = {{"value", operand}};
       inferred_type = get_type_from_binary_expr(temp_stmt, body);
     }
+    else
+    {
+      // Any other operand, e.g. -c.speed in a sort key (#7745): infer the
+      // operand (an unknown one leaves the assignment to the converter), then
+      // the operator's result. `not` is always a bool, and a numeric operator
+      // promotes a bool to int.
+      const Json operand_stmt = {
+        {"_type", "Assign"}, {"value", operand}, {"lineno", current_line_}};
+      std::string operand_inferred;
+      const InferResult operand_result =
+        infer_type(operand_stmt, body, operand_inferred);
+      if (operand_result != InferResult::OK)
+        return operand_result;
+      if (stmt["value"]["op"]["_type"] == "Not")
+        inferred_type = "bool";
+      else
+        inferred_type = operand_inferred == "bool" ? "int" : operand_inferred;
+    }
   }
 
   // Get type from RHS variable
