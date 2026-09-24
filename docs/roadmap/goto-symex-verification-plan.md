@@ -745,6 +745,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R51** | **Medium (no verdict, default configuration)** — R50's named residual, closed the same day, §15 M9 (R51); **FIXED**, same entry | **A bound stored three dimensions deep never folds.** `int a[2][2][2]; a[1][1][1] = 4;` looped to `a[1][1][1]` never terminates, while the 2-D spelling R50 fixed proves in 0.4 s. R50 left the propagation gate bounded at two dimensions because lifting it aborted every solver: a read out of a *nested* row roots its select chain at a row-valued `with`, and `convert_ast` has no term for one. The gate was the only producer, so the gap was latent — the hang was not. | the three-column mutation matrix, §15 M9 (R51); `lower_flattened_row_select` at `smt_solver.cpp:2825`; `array_may_propagate` at `goto_symex_state.cpp:126`; `regression/esbmc/nested_array_{3d_loop_bound,3d_outer_read,3d_middle_read,3d_row_pointer,3d_phi_merge,3d_row_memcpy,4d_outer_read}{,_fail}` | **H-C2** | **Fixed**, encoder first and gate second, as R50's sequence required. `lower_flattened_row_select` becomes `push_row_read`, which pushes a subscript through a row's own structure at every level rather than only the outermost: select-over-store for a `with`, distribution over an `ite`, and the inner read first when the row is itself read out of a deeper one. The last arm fires only when the chain roots at a row, so no 2-D read reaches it -- measured; the `ite` recognition does widen the entry gate for 2-D too, which can only replace an abort. With no row left unencodable the gate's dimension clause goes entirely — four dimensions decide as readily as three — and R42's 256-element cap is the only bound left. R50's own fix to `expand_row_stores` turns out to need no change: the reads it names lower through the same arms. |
 | **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED at two dimensions**, §15 M9 (R50); deeper nesting is the open residual | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. The second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program, and so does a `memcpy` between two rows. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,row_alias,row_phi_merge,row_via_pointer,row_memcpy,plane_memcpy,vla_row}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. The gate relaxes to **two** dimensions only: past that, a nested row's leaves are a two-level index chain that `decompose_select_chain` flattens straight past the enclosing `with`, and the same programs abort. **One residual stays open** — the 3-D bound. `expand_row_stores`' element enumeration is quadratic but **is** bounded by R42's cap, at 65,408 stores and 0.67 s, §15 M9 (R50 residual); the belief that the `memcpy` layer bypasses the cap was wrong. A third consequence, **R52**, surfaced while gating the 3-D fix: the propagated chain this row creates is a DAG, and three walks over it were unmemoised. |
 | **R52** | **Medium (no verdict, `--no-simplify`)** — found while gating R51's fix, §15 M9 (R52); **FIXED**, same entry | **A propagated multi-dimensional array is walked as a tree, and it is a DAG.** Each store references the chain twice — once as the `with` source, once inside the `index` of the row it updates — so a walk that does not memoise visits paths exponential in the store count. `int a[8][8]` with 32 element writes under `--no-simplify` does not terminate: 131 s and 18.4 GB and still climbing, against 0.27 s and 84 MB once memoised. The default configuration is unaffected, because the simplifier folds the chain before any of these walks see it. R50's fix is what creates the shape, so this row is its consequence and not a pre-existing defect; R51 only widens which programs reach it. | a store-count ladder against three binaries, §15 M9 (R52); `get_original_name` at `renaming.cpp:347`, `pre_register_addresses` at `symex_target_equation.cpp:30`, `get_value_set_rec` at `value_set.cpp:603`; `regression/esbmc/nested_array_no_simplify_scale{,_fail}` | **H-C2** | Fixed by memoising all three walks. `get_original_name` caches **shared nodes only** — caching every node holds the original alive, which forces `irep_container::detach()` to clone even an unshared one and breaks the in-place rewrite `goto_symex_statet::assignment` relies on. A depth cap is **not** the fix: 2-D at 64 stores and 3-D at 256 stores both exhaust memory, so the wall is the store count, not the nesting. The fourth walk, `migrate_expr_back`, is memoised too, §15 M9 (R52 residual). **One residual stays open**, and it is no longer a walk: the text `--ssa-trace` and `--show-vcc` print is itself exponential in the store count, because the format expands a DAG into a tree. |
+| **R54** | **High (false SUCCESSFUL, default configuration, C and C++)** — found while chasing G18, §15 M9 (R54); **FIXED**, same entry | **Same-named local classes share one record.** A named record takes its id from `getFullyQualifiedName`, which omits the enclosing function, so `struct S` in `f` and `struct S` in `g` are one `tag-struct S`, and the second definition is read through the first's layout. In C, two local `struct S` with their members in opposite orders make `*(int *)&s = 7; return s.a;` return 7 in both functions, and a program that aborts natively reports **SUCCESSFUL** under Bitwuzla and Z3. Other layouts abort in `assert_type_compat_for_with` (`irep2_expr.cpp:333`) or `member2t`. A class template specialised on such a class, `Box<S>`, collides the same way. | `clang_c_convertert::get_decl_name`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/local_struct_same_tag{,_fail}`, `regression/esbmc-cpp/cpp/local_{class,enum}_template_arg{,_fail}` | — | **Fixed**: a local record's name gains its enclosing function's id and the definition's line, column and, inside a macro, spelling offset. A record that is, or is a member of, a class template specialisation gains the ids of the function-local declarations among its arguments: records, enums and declaration arguments, through packs, pointers, references, arrays, function types and nested specialisations. The suffix is identifier-shaped for goto2c. **Residuals**: member-pointer arguments; locals of blocks and captured regions; two same-named *variables* in one macro expansion, whose clang USRs share the expansion location. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -8526,6 +8527,75 @@ cost one `grep`.
 | `__complex__ int c = {1, 2};` | default | abort, same line |
 | `__complex__ int c = {1};` | default | `VERIFICATION SUCCESSFUL` |
 | four `make_tuple` variants above | `--std c++23` | `VERIFICATION SUCCESSFUL` |
+
+### M9 (R54) — 2026-09-24, a census of colliding ids, and a C false SUCCESSFUL it found
+
+G18's single-state counterexample suggested another naming collision, since
+G14 had been one. The census was instrumentation, not inference: a temporary
+hook in `clang_cpp_convertert::get_decl_name` recorded each id with the
+canonical declaration that produced it and printed every id reached by two
+different canonical declarations. On `#include <irep2/irep2_utils.h>`, the
+smallest header that reproduces G18, and after R53, it reported field and
+parameter names, which are component names and not symbols, and two record
+collisions: `tag-struct FMT_COMPILE_STRING`, the local struct fmt's
+`FMT_STRING` macro defines at every use, and `fmt::fstring<FMT_COMPILE_STRING,
+...>`, a specialisation over it.
+
+**The collision reproduces in six lines of C.** Two functions, each with a local
+`struct S`, share `tag-struct S`. With the members in opposite orders, a
+program that aborts natively reports `VERIFICATION SUCCESSFUL` under Bitwuzla
+and Z3. With different member types, symex aborts in
+`assert_type_compat_for_with`, the G14 assertion.
+
+| Program | Before | After | Native |
+|---|---|---|---|
+| C, `struct S { int a; int b; }` in `f`, `{ int b; int a; }` in `g`, `*(int *)&s = 7; return s.a;` both | **`SUCCESSFUL`** | `FAILED` | aborts |
+| C, `struct S { long a; }` in `f`, `{ char a; }` in `g` | abort | `SUCCESSFUL` | passes |
+| C++, `Box<S>` over each function's local `S` | abort | `SUCCESSFUL` | passes |
+| C++, same, one assertion wrong | abort | `FAILED` | aborts |
+| C++, local class in `h<char>` and `h<long>` | `SUCCESSFUL` | `SUCCESSFUL` | passes |
+
+The last row already worked: the specialisation's USR separated the two.
+**R54 is fixed** in `clang_c_convertert::get_decl_name`. A named local record
+is qualified by its enclosing function's id and its definition's line and
+column, plus the spelling offset when a macro expanded it. The definition's
+location keeps a forward declaration on the same id. The location separates
+blocks of one function, the spelling offset separates blocks from one macro
+expansion, and the function id separates instantiations of a function
+template. A record that is, or is a member of, a class template specialisation
+is qualified by the ids of the function-local declarations among its
+arguments: records, enums and declaration arguments, reached through packs,
+pointers, references, arrays, function types and nested specialisations. The
+suffix is identifier-shaped, because goto2c prints the name as a C tag and
+`reformat_class_name` splits on `:`. Disabling the specialisation arm brings
+the `Box<S>` abort back. The first version of that walk looped on reference
+types, because `getPointeeOrArrayElementType` does not unwrap them, and the
+converter hung in `Converting`.
+
+Code review found four of those shapes collided under the first version of
+the fix, and each is now separated: macro-expanded blocks (a false
+SUCCESSFUL), local-enum and declaration arguments, members of a specialisation,
+and forward declarations.
+
+**Residuals, measured.** Member-pointer template arguments are not walked,
+because the member-pointer class accessor changed across the LLVM versions
+ESBMC builds with. Locals of blocks and captured regions have no enclosing
+`FunctionDecl`. Two same-named **variables** in one macro expansion still
+collide, because clang's USR for a local variable is its expansion offset:
+`{ struct S {...} s; } { struct S {...} s; }` from one macro now gets two
+records but one `c:p3.c@259@F@main@s`, and still reports a false SUCCESSFUL.
+That is a variable-naming defect, not a record one, and is left for its own
+change.
+
+**G18 is not caused by either collision.** With both removed, and the census
+reporting nothing else, `irep2_utils.h` still fails on the same `fetch_sub`
+claim. The slicer and the unsliced formula still disagree: with Z3, the sliced
+run reports `FAILED` and `--no-slice` reports `SUCCESSFUL`. With Bitwuzla,
+`--no-slice` aborts on a tuple-sort mismatch (`smt_tuple_node_ast.cpp:142`),
+or on an array-store width mismatch (`bitwuzla_conv.cpp:475`) under
+`--tuple-sym-flattener`. So the unsliced formula is ill-typed, and neither
+verdict can be trusted until the type error is found. G18 stays open, now as a
+slicer-versus-no-slice divergence on an ill-typed formula (the H-C1 oracle).
 
 ---
 
