@@ -1,6 +1,7 @@
 import numpy as np
 
-a = np.full((2, 2), 7, dtype=int).transpose()
+base = np.full((2, 2), 7, dtype=int)
+a = base.transpose()
 
 assert a[0][0] == 7
 assert a[0][1] == 7

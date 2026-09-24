@@ -1,6 +1,7 @@
 import numpy as np
 
-a = np.zeros((2, 3), dtype=int).T
+base = np.zeros((2, 3), dtype=int)
+a = base.T
 
 assert a.shape[0] == 3
 assert a.shape[1] == 2

@@ -1,6 +1,7 @@
 import numpy as np
 
-a = np.zeros((2, 2), dtype=int).flatten()
+base = np.zeros((2, 2), dtype=int)
+a = base.flatten()
 
 assert a[0] == 0
 assert a[1] == 0

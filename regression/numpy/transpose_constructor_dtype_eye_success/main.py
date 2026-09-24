@@ -1,6 +1,7 @@
 import numpy as np
 
-a = np.eye(3, dtype=int).transpose()
+base = np.eye(3, dtype=int)
+a = base.transpose()
 
 assert a[0][0] == 1
 assert a[1][1] == 1
