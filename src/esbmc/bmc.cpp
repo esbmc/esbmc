@@ -3923,6 +3923,22 @@ void report_k_step_property_table(
     print_partial_report_note();
 }
 
+static void print_solver_timing(
+  const std::string &solver,
+  double total_time_ms,
+  size_t decided)
+{
+  if (solver.empty() || decided == 0)
+    return;
+
+  std::ostringstream timing_oss;
+  timing_oss << "Solver: " << solver << " • Decision procedure total time: "
+             << time2string(total_time_ms) << "s"
+             << " • Avg: " << time2string(total_time_ms / decided)
+             << "s/property";
+  log_result("{}", timing_oss.str());
+}
+
 void bmct::report_property_verdicts(smt_resultt res) const
 {
   // See report_result: a filtering round's per-property table describes a
@@ -3988,17 +4004,7 @@ void bmct::report_property_verdicts(smt_resultt res) const
   // the properties that reached a verdict, not over the whole table: the
   // never-checked ones cost the solver nothing and would dilute it.
   const size_t decided = counts.passed + counts.failed + counts.unknown;
-  if (!solver_stats.name.empty() && decided > 0)
-  {
-    std::ostringstream timing_oss;
-    timing_oss << "Solver: " << solver_stats.name
-               << " • Decision procedure total time: "
-               << time2string(solver_stats.total_time_ms) << "s"
-               << " • Avg: "
-               << time2string(solver_stats.total_time_ms / decided)
-               << "s/property";
-    log_result("{}", timing_oss.str());
-  }
+  print_solver_timing(solver_stats.name, solver_stats.total_time_ms, decided);
 
   // The phase that prints a k-step run's table need not be the phase that
   // stopped short, so the store carries that across phases too.
