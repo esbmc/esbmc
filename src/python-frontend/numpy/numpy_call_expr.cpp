@@ -2325,6 +2325,27 @@ materialize_arange(const nlohmann::json &args)
 // The structural/receiver checks materialize_numpy_constructor_array() needs
 // before it can even ask which constructor it's looking at, split out so
 // that function's own decision count stays small.
+// Defined further down (dtype parsing/casting lives next to get_dtype());
+// forward-declared here so materialize_numpy_constructor_array can apply a
+// dtype= keyword instead of just tolerating its absence.
+static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node);
+static nlohmann::json cast_numpy_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype);
+
+// A single `dtype=` keyword is the only one materialize_numpy_constructor_
+// array() understands; anything else (an unrecognized keyword, or more than
+// one) still declines. Split out of is_recognized_numpy_constructor_call_shape
+// to keep that function's own decision count down.
+static bool is_only_dtype_keyword(const nlohmann::json &call_node)
+{
+  if (!call_node.contains("keywords") || call_node["keywords"].empty())
+    return true;
+  const auto &keywords = call_node["keywords"];
+  return keywords.size() == 1 &&
+         keywords[0].value("arg", std::string()) == "dtype";
+}
+
 static bool is_recognized_numpy_constructor_call_shape(
   const nlohmann::json &call_node,
   const nlohmann::json &ast_json)
@@ -2342,7 +2363,7 @@ static bool is_recognized_numpy_constructor_call_shape(
       ast_json, call_node["func"]["value"].value("id", std::string())))
     return false;
 
-  if (call_node.contains("keywords") && !call_node["keywords"].empty())
+  if (!is_only_dtype_keyword(call_node))
     return false;
 
   return call_node.contains("args") && call_node["args"].is_array();
@@ -2358,18 +2379,36 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   const std::string ctor = call_node["func"]["attr"].get<std::string>();
   const auto &args = call_node["args"];
 
+  std::optional<nlohmann::json> materialized;
   if (ctor == "zeros" || ctor == "ones")
-    return materialize_zeros_ones(ctor, args);
-  if (ctor == "full")
-    return materialize_full(args);
-  if (ctor == "eye" || ctor == "identity")
-    return materialize_eye_identity(ctor, args);
-  if (ctor == "linspace")
-    return materialize_linspace(args);
-  if (ctor == "arange")
-    return materialize_arange(args);
+    materialized = materialize_zeros_ones(ctor, args);
+  else if (ctor == "full")
+    materialized = materialize_full(args);
+  else if (ctor == "eye" || ctor == "identity")
+    materialized = materialize_eye_identity(ctor, args);
+  else if (ctor == "linspace")
+    materialized = materialize_linspace(args);
+  else if (ctor == "arange")
+    materialized = materialize_arange(args);
 
-  return std::nullopt;
+  if (!materialized)
+    return std::nullopt;
+
+  // dtype= normalizes/validates and casts every element the same way the
+  // top-level `x = np.<ctor>(..., dtype=...)` assignment path already does
+  // (cast_numpy_literal_to_dtype/get_dtype()), so a materialized re-reading
+  // of this constructor call agrees with what actually got assigned --
+  // explicitly rejecting object/complex/non-literal dtype rather than
+  // silently misreading it (ADR-NP principle 3).
+  for (const auto &kw : call_node.value("keywords", nlohmann::json::array()))
+  {
+    if (kw.value("arg", std::string()) != "dtype")
+      continue;
+    const std::string dtype = extract_numpy_dtype_name(kw["value"]);
+    return cast_numpy_literal_to_dtype(*materialized, dtype);
+  }
+
+  return materialized;
 }
 
 // True when call_node's attribute name is one materialize_numpy_constructor_
@@ -6562,11 +6601,21 @@ nlohmann::json numpy_call_expr::resolve_literal_numpy_array_input(
   arr_arg = try_inline_pure_call_arg(arr_arg);
 
   auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-  if (!literal_arg.has_value())
-    throw std::runtime_error(
-      "TypeError: numpy." + function_name + "() currently supports only " +
-      (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
-  return std::move(*literal_arg);
+  if (literal_arg.has_value())
+    return std::move(*literal_arg);
+
+  // get_literal_numpy_array_arg only reads a raw List or a literal
+  // np.array(<list>) call; a shape-based constructor (zeros/ones/full/eye/
+  // identity/linspace/arange), with or without a dtype= keyword, needs the
+  // same reconstruction transpose's Name-branch and reducers already use.
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(arr_arg, converter_.ast()))
+    return std::move(*materialized);
+
+  throw std::runtime_error(
+    "TypeError: numpy." + function_name + "() currently supports only " +
+    (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
 }
 
 nlohmann::json
