@@ -29,28 +29,38 @@ class ClassContextMixin:
         return node
 
     @staticmethod
-    def _cls_constructor_calls(member):
+    def _names_bound_by(node):
+        """The names a single AST node binds in its scope."""
+        if isinstance(node, ast.arg):
+            return [node.arg]
+        if isinstance(node, ast.Name):
+            return [] if isinstance(node.ctx, ast.Load) else [node.id]
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler,
+                             ast.MatchAs, ast.MatchStar)):
+            return [node.name]
+        if isinstance(node, ast.alias):
+            return [node.asname or node.name.split(".")[0]]
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            return node.names
+        return []
+
+    def _binds_name(self, tree, name, skip=None):
+        """Whether any node in `tree` other than `skip` binds `name`."""
+        return any(n is not skip and name in self._names_bound_by(n) for n in ast.walk(tree))
+
+    def _cls_constructor_calls(self, member):
         """The `cls(...)` calls of a @classmethod whose `cls` is never rebound, else []."""
         decorators = member.decorator_list if isinstance(member, ast.FunctionDef) else []
         if not (len(decorators) == 1 and isinstance(decorators[0], ast.Name)
                 and decorators[0].id == "classmethod"):
             return []
         params = member.args.posonlyargs + member.args.args
-        if not params or params[0].arg != "cls":
+        if not params or params[0].arg != "cls" or self._binds_name(member, "cls", params[0]):
             return []
-        named = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler,
-                 ast.MatchAs, ast.MatchStar)
-        calls = []
-        for n in ast.walk(member):
-            if ((isinstance(n, ast.arg) and n.arg == "cls" and n is not params[0]) or
-                (isinstance(n, ast.Name) and n.id == "cls" and not isinstance(n.ctx, ast.Load))
-                    or (isinstance(n, named) and n.name == "cls")
-                    or (isinstance(n, ast.alias) and (n.asname or n.name) == "cls")
-                    or (isinstance(n, (ast.Global, ast.Nonlocal)) and "cls" in n.names)):
-                return []
-            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "cls":
-                calls.append(n)
-        return calls
+        return [
+            n for n in ast.walk(member)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "cls"
+        ]
 
     def _rebind_cls_calls(self, method, class_name):
         for call in self._cls_constructor_calls(method):
@@ -109,6 +119,31 @@ class ClassContextMixin:
             for n in ast.walk(module) if isinstance(n, ast.Attribute) and id(n) not in direct
         }
 
+    @staticmethod
+    def _top_level_classes(module):
+        """Top-level classes by name, or None when a name is defined twice."""
+        classes = {}
+        for stmt in module.body:
+            if isinstance(stmt, ast.ClassDef):
+                if stmt.name in classes:
+                    return None
+                classes[stmt.name] = stmt
+        return classes
+
+    def _classmethod_heirs(self, classes, owner, name):
+        """Classes other than `owner` whose `name` resolves to `owner`'s method."""
+        return [
+            c for c in classes.values()
+            if c is not owner and self._method_owner(classes, c, name) is owner
+        ]
+
+    def _can_bind(self, member, targets):
+        """Whether `member` can be bound to each class in `targets`, copying it if needed."""
+        args = member.args
+        if len(targets) > 1 and (args.defaults or any(d is not None for d in args.kw_defaults)):
+            return False
+        return not any(self._binds_name(member, t.name) for t in targets)
+
     def _bind_classmethod_constructors(self, module):
         """Rewrite `cls(...)` in a @classmethod to the class the method runs on.
 
@@ -117,15 +152,9 @@ class ClassContextMixin:
         involved use single inheritance. A subclass inheriting the method gets its own
         copy. Anything else keeps `cls(...)`, which the converter rejects.
         """
-        if not self.is_entry_module:
+        classes = self._top_level_classes(module)
+        if not self.is_entry_module or classes is None:
             return
-        classes = {}
-        for stmt in module.body:
-            if isinstance(stmt, ast.ClassDef):
-                if stmt.name in classes:
-                    return
-                classes[stmt.name] = stmt
-
         unsafe = self._unbindable_classes(classes)
         indirect = self._indirect_attributes(module, classes)
         for owner in classes.values():
@@ -134,12 +163,8 @@ class ClassContextMixin:
             for member in list(owner.body):
                 if not self._cls_constructor_calls(member) or member.name in indirect:
                     continue
-                heirs = [
-                    c for c in classes.values()
-                    if c is not owner and self._method_owner(classes, c, member.name) is owner
-                ]
-                args = member.args
-                if heirs and (args.defaults or any(d is not None for d in args.kw_defaults)):
+                heirs = self._classmethod_heirs(classes, owner, member.name)
+                if not self._can_bind(member, [owner] + heirs):
                     continue
                 template = copy.deepcopy(member)
                 self._rebind_cls_calls(member, owner.name)
