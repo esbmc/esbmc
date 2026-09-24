@@ -290,8 +290,16 @@ public:
     // static-annotator guess in place. Save and restore around the nested
     // statement so it only ever affects its own target.
     exprt *outer_lhs = current_lhs;
+    bool outer_is_converting_rhs = is_converting_rhs;
+    bool outer_is_converting_lhs = is_converting_lhs;
+    const nlohmann::json *outer_store_target = lhs_store_target_;
+    typet outer_element_type = current_element_type;
     get_var_assign(ast_node, *current_block);
     current_lhs = outer_lhs;
+    is_converting_rhs = outer_is_converting_rhs;
+    is_converting_lhs = outer_is_converting_lhs;
+    lhs_store_target_ = outer_store_target;
+    current_element_type = outer_element_type;
     return true;
   }
 
