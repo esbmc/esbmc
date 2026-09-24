@@ -7274,10 +7274,42 @@ numpy_call_expr::try_resolve_searchsorted_literal_array(
   }
 }
 
+// `values[i] <= values[i+1]` for every adjacent pair, cast to a common type
+// the same way build_searchsorted_position_expr's own comparisons are, so
+// mixed int/float elements compare correctly.
+static exprt build_is_sorted_expr(const std::vector<exprt> &values)
+{
+  exprt result = true_exprt();
+  for (std::size_t i = 0; i + 1 < values.size(); ++i)
+  {
+    const bool same_type = values[i].type() == values[i + 1].type();
+    exprt lhs = same_type ? values[i] : numpy_cast_to_double(values[i]);
+    exprt rhs = same_type ? values[i + 1] : numpy_cast_to_double(values[i + 1]);
+    exprt cmp = binary_relation_exprt(lhs, "<=", rhs);
+    result = i == 0 ? cmp : and_exprt(result, cmp);
+  }
+  return result;
+}
+
 // resolve_searchsorted_array_via_descriptor plus the dispatch to
 // handle_searchsorted_call_over_descriptor, as a single nullopt-on-decline
-// step. Split out to keep handle_searchsorted_call's own decision count
-// down.
+// step.
+//
+// Unlike the AST-literal path (resolve_searchsorted_space's is_sorted_
+// numeric_list check), these elements are index expressions, not JSON
+// literals, so sortedness can't be validated at conversion time (see
+// resolve_searchsorted_array_via_descriptor's own doc). Silently computing
+// build_searchsorted_position_expr's result over an actually-unsorted array
+// returns a value that doesn't match numpy.searchsorted()'s own binary
+// search (soundness gap caught in review: `np.searchsorted(make(), v)`
+// over an unsorted local-array-return used to give a wrong-looking index
+// that could pass a user assertion it shouldn't). Emitting the same check
+// as a runtime ASSERT instead moves the validation to where it *can* be
+// decided -- symbolic execution, once the array's concrete values are
+// known -- so an unsorted array is still caught, just as a violated
+// property instead of a conversion-time diagnostic. Skipped during a
+// discarded type-probe pass, matching every other side-effecting emission
+// in this file.
 std::optional<exprt>
 numpy_call_expr::try_searchsorted_call_over_descriptor(bool right)
 {
@@ -7285,6 +7317,18 @@ numpy_call_expr::try_searchsorted_call_over_descriptor(bool right)
     resolve_searchsorted_array_via_descriptor(call_["args"][0]);
   if (!descriptor_values)
     return std::nullopt;
+
+  if (
+    descriptor_values->size() > 1 &&
+    converter_.safe_to_emit_side_effecting_statement())
+  {
+    code_assertt sorted_assert(build_is_sorted_expr(*descriptor_values));
+    sorted_assert.location() = converter_.get_location_from_decl(call_);
+    sorted_assert.location().comment(
+      "numpy.searchsorted() requires the input array to be sorted");
+    converter_.add_instruction(sorted_assert);
+  }
+
   return handle_searchsorted_call_over_descriptor(
     std::move(*descriptor_values), right);
 }
