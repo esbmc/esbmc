@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --smt-during-symex --smt-symex-guard
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +assertion q != 0$
