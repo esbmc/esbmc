@@ -5367,8 +5367,8 @@ void clang_c_convertert::get_decl_name(
      * so same-named local classes in two functions, two blocks, or two
      * instantiations of one function template shared a single record. The
      * definition's location keeps a forward declaration on the same id, and
-     * the spelling offset separates blocks from one macro expansion, as for
-     * lambdas above (#7530). */
+     * the raw encoding of a macro location, unique per expanded token,
+     * separates blocks from one macro expansion, nested ones included. */
     const auto *fn = llvm::dyn_cast_or_null<clang::FunctionDecl>(
       rd.getParentFunctionOrMethod());
     if (fn && !rd.getCanonicalDecl()->getNameAsString().empty())
@@ -5381,9 +5381,8 @@ void clang_c_convertert::get_decl_name(
       get_location_from_decl(at, location_begin);
       std::string suffix = fn_id + "_" + location_begin.line().as_string() +
                            "_" + location_begin.column().as_string();
-      if (at.getLocation().isMacroID() && sm)
-        suffix += "_m" + std::to_string(sm->getFileOffset(
-                           sm->getSpellingLoc(at.getLocation())));
+      if (at.getLocation().isMacroID())
+        suffix += "_m" + std::to_string(at.getLocation().getRawEncoding());
       name += "_at_" + identifier_suffix(suffix);
     }
 
