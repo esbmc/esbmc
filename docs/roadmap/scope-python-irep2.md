@@ -742,3 +742,17 @@ built as an ordinary string literal, `x = int; y = "int"; assert x != y` fails a
 proved (`regression/python/class_object_not_equal_str{,_fail}` flip, measured). So step 3 is the
 larger change -- a distinct class-object type, which also removes §14.1's false alarm -- and steps
 1-2 (PR #7991) are what let it proceed reader by reader.
+
+### 14.4 How far a class-object type reaches (2026-09-25)
+
+Census: a temporary marker at the two builders (`converter_expr.cpp:1281` builtin, `:1718` class),
+run under `--goto-functions-only` over the 6 697 Python tests. 344 build at least one class-object
+constant -- 313 in `python/`, 29 in `humaneval/`, 2 in `python-intensive/` -- against about 30 that use a
+class as a value on purpose (`github_3520_*`, `github_5936*`, `github_7549*`, the `isinstance_*` and
+`class_object_*` pairs).
+
+Most of the rest are incidental: a subscripted annotation converts its type arguments as expressions
+(`List[Tuple[int, int]]`, `Callable[[int], int]`, `Sequence[int] | None`), and an alias
+(`MyInt = int`) builds one before the constructor is resolved. So a distinct class-object type is not
+mainly a change to the ~30 deliberate uses; the first step is to stop annotations building value
+expressions at all, which shrinks the reach to the uses that mean it. That is the order to take.
