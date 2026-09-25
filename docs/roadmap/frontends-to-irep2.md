@@ -4580,3 +4580,9 @@ symbol's `set_value(c)` with a constant *argument* still does.
 What the 31 are, by §11 of `scope-python-irep2.md` and this file's §57: the funcdef type writes
 (six of which PR #7888 converts), the program-entry and function bodies that must stay legacy, and
 the assignment writes blocked on markers the seam does not carry.
+
+A second over-count of the same kind: `gen_zero`, `gen_one` and `gen_nondet` have a legacy and an IREP2
+overload, so the script counted every call. It now resolves them by their first argument, as it already
+does for a bare name. That removes `jimple-language.cpp:109` (`gen_zero(t, true)` over a
+`const type2tc &t`), which `scope-jimple-irep2.md` §35.2 had already found IREP2 by inspection, so the
+script now agrees jimple meets B-2: jimple B-2* 1 -> 0, total 101 -> 100.
