@@ -2588,3 +2588,19 @@ constructor called without its object from one called with it; no probe reaches 
 `esbmc-cpp/{cpp,try_catch}` 1 333 of 1 339 pass, and the six failures (`github_7433*`, `ch8_5`) are the
 exception-type spelling pins another branch updates; the rest of `esbmc-cpp` (1 927) passes apart from
 seven tests at the 120 s cap that take the same time on the base binary.
+
+## 13. The last write: `need_vptr_init` is a one-shot pending flag (2026-09-25)
+
+After §12 clang-cpp's B-2* is 1: `clang_cpp_convert.cpp`'s `fd_symb->set_value(v)` that only sets
+`#need_vptr_init` on a ctor/dtor body. Its value is the class's "has a vptr component" -- the converter
+already falls back to reading `is_vtptr` off the class symbol, "exactly as the adjuster does" -- so the
+fact itself is derivable in `gen_vptr_initializations`.
+
+The flag carries a second meaning, though. `gen_vptr_initializations` clears it once it has inserted
+the assignments and stores the body IREP2-side, so a later pass over the same symbol inserts nothing.
+A derived condition is true every time it is asked. Deleting the write therefore needs somewhere else
+to record "done" -- or a proof that `adjust_symbol` runs once per symbol, which the multi-TU fallback
+above suggests is not something to assume. Converting the write instead needs the body migrated at
+conversion time, which `scope-python-irep2.md` §6.1's rule forbids until every symbol it names exists.
+
+So the write stays until one of those is settled; neither is a mechanical change.
