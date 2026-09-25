@@ -110,7 +110,8 @@ public:
     const irep_idt &_name,
     bool _packed = false,
     const std::vector<irep_idt> &memb_base_names = {},
-    const BigInt &_alignment = 0)
+    const BigInt &_alignment = 0,
+    const irep_idt &_python_aggregate = irep_idt())
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
@@ -118,7 +119,8 @@ public:
       member_base_names(memb_base_names),
       name(_name),
       packed(_packed),
-      alignment(_alignment)
+      alignment(_alignment),
+      python_aggregate(_python_aggregate)
   {
     assert(
       memb_base_names.empty() || memb_base_names.size() == _members.size());
@@ -147,17 +149,25 @@ public:
   /// change than this repair.
   BigInt alignment;
 
+  /// The Python model-aggregate kind ("tuple", "dict", "optional") that
+  /// `#python_aggregate` records; empty for any other struct. Unreflected, like
+  /// `alignment`: the tag already names the type. Carried because `in` and
+  /// membership dispatch read it, and a user class may share a tuple's tag
+  /// prefix (docs/roadmap/scope-python-irep2.md §10.4).
+  irep_idt python_aggregate;
+
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,
     &struct_type2t::member_names,
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
-  /// Covers the two deliberately unreflected members: `member_base_names` (a
-  /// member's spelling is no part of the struct's identity) and `alignment`
-  /// (two records differing only in `alignas` must still compare equal).
+  /// Covers the three deliberately unreflected members: `member_base_names` (a
+  /// member's spelling is no part of the struct's identity), `alignment` (two
+  /// records differing only in `alignas` must still compare equal) and
+  /// `python_aggregate`.
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>) + sizeof(BigInt);
+    sizeof(std::vector<irep_idt>) + sizeof(BigInt) + sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
