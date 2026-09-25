@@ -335,6 +335,9 @@ void clang_cpp_convertert::get_decl_name(
     return;
   }
 
+  if (get_mangled_id(nd, id))
+    return;
+
   // Otherwise, abort
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
