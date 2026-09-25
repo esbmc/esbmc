@@ -304,6 +304,19 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
+{
+  // A string literal's chars are operands; a class object has none. A
+  // variable's symbol value is only one of its assignments, so it cannot
+  // decide this.
+  if (obj_expr.is_constant() && !obj_expr.operands().empty())
+    return false_exprt();
+
+  exprt unknown("sideeffect", bool_type());
+  unknown.statement("nondet");
+  return unknown;
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -476,7 +489,8 @@ exprt function_call_expr::handle_isinstance() const
       if (
         (obj_type.is_array() && obj_type.subtype() == char_type()) ||
         (obj_type.is_pointer() && obj_type.subtype() == char_type()))
-        return true_exprt();
+        return type_name == "type" ? isinstance_str_as_type(obj_expr)
+                                   : true_exprt();
     }
 
     exprt t;
