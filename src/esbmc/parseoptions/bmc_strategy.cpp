@@ -213,6 +213,17 @@ static void adopt_one_property_table(optionst &options, bool is_coverage)
   goto_functionst::property_verdicts.clear();
 }
 
+/// Records a base case's violation. The run ends there unless
+/// --multi-property keeps it looking for the claims violated at a larger k.
+static bool ends_at_violation(optionst &options, bool &any_violation_found)
+{
+  any_violation_found = true;
+  // Suppresses report_result's VERIFICATION SUCCESSFUL at the later k steps
+  // that find no new violation.
+  options.set_option("kind-violation-found", true);
+  return !options.get_bool_option("multi-property");
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -303,19 +314,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      bool is_bcv =
+      const bool is_bcv =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv)
-      {
-        any_violation_found = true;
-        // Suppress spurious VERIFICATION SUCCESSFUL from report_result at
-        // subsequent k steps where no new violations are found.
-        options.set_option("kind-violation-found", true);
-      }
-
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
+      if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
       // if the property is proven violated in the bs, it's unnecessary to further run fw and is
@@ -462,17 +463,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      bool is_bcv =
+      const bool is_bcv =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv)
-      {
-        any_violation_found = true;
-        options.set_option("kind-violation-found", true);
-      }
-
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
+      if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
       if (
@@ -494,12 +487,10 @@ int esbmc_parseoptionst::do_bmc_strategy(
     {
       const bool violated =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (violated && !is_coverage)
-      {
-        report_k_step_property_table(
-          options, goto_functions, namespacet(context));
+      if (
+        violated && !is_coverage &&
+        ends_at_violation(options, any_violation_found))
         return 1;
-      }
       // A coverage run has no verdict to falsify, so nothing would ever stop
       // the escalation: without this it re-solves every goal at each bound and
       // prints one [Coverage] block per k step. One pass is what falsification

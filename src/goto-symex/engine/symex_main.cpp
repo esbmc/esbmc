@@ -149,16 +149,10 @@ void goto_symext::record_property_verdict(
   property_verdictt verdict,
   const std::string &note)
 {
-  // A base case of a k-step strategy discharges a claim only within k: the
-  // simplifier saw the paths this unwinding reached and no others, so the
-  // discharge is bounded exactly as the solver's UNSAT there is. The claim
-  // keeps its row and stays undecided until the forward condition or the
-  // inductive step settles it (§4 of
-  // docs/roadmap/multi-property-strategy-plan.md).
-  if (
-    verdict == property_verdictt::Passed &&
-    options.get_bool_option("k-step-property-table") &&
-    options.get_bool_option("base-case"))
+  // The simplifier's discharge is withheld exactly where the solver's UNSAT
+  // is: it saw the paths this unwinding reached and no others. The claim keeps
+  // its row and stays undecided.
+  if (verdict == property_verdictt::Passed && withholds_proofs(options))
     verdict = property_verdictt::NotChecked;
 
   const goto_programt::instructiont &pc = *cur_state->source.pc;
@@ -523,6 +517,16 @@ void goto_symext::symex_assume()
   propagate_assume_equality(cond);
 }
 
+std::string goto_symext::assertion_message(
+  const namespacet &ns,
+  const goto_programt::instructiont &i)
+{
+  const std::string comment = i.location.comment().as_string();
+  if (!comment.empty())
+    return comment;
+  return "assertion " + from_expr(ns, "", migrate_expr_back(i.guard));
+}
+
 void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
@@ -535,12 +539,7 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  std::string msg = cur_state->source.pc->location.comment().as_string();
-  if (msg == "")
-  {
-    exprt guard = migrate_expr_back(instruction.guard);
-    msg = "assertion " + from_expr(ns, "", guard);
-  }
+  const std::string msg = assertion_message(ns, instruction);
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
