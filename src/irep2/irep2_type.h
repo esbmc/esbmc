@@ -110,7 +110,8 @@ public:
     const irep_idt &_name,
     bool _packed = false,
     const std::vector<irep_idt> &memb_base_names = {},
-    const BigInt &_alignment = 0)
+    const BigInt &_alignment = 0,
+    const irep_idt &_python_aggregate = irep_idt())
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
@@ -118,7 +119,8 @@ public:
       member_base_names(memb_base_names),
       name(_name),
       packed(_packed),
-      alignment(_alignment)
+      alignment(_alignment),
+      python_aggregate(_python_aggregate)
   {
     assert(
       memb_base_names.empty() || memb_base_names.size() == _members.size());
@@ -147,17 +149,25 @@ public:
   /// change than this repair.
   BigInt alignment;
 
+  /// The Python model-aggregate kind ("tuple", "dict", "optional") that
+  /// `#python_aggregate` records; empty for any other struct. Unreflected, like
+  /// `alignment`: the tag already names the type. Carried because `in` and
+  /// membership dispatch read it, and a user class may share a tuple's tag
+  /// prefix (docs/roadmap/scope-python-irep2.md §10.4).
+  irep_idt python_aggregate;
+
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,
     &struct_type2t::member_names,
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
-  /// Covers the two deliberately unreflected members: `member_base_names` (a
-  /// member's spelling is no part of the struct's identity) and `alignment`
-  /// (two records differing only in `alignas` must still compare equal).
+  /// Covers the three deliberately unreflected members: `member_base_names` (a
+  /// member's spelling is no part of the struct's identity), `alignment` (two
+  /// records differing only in `alignas` must still compare equal) and
+  /// `python_aggregate`.
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>) + sizeof(BigInt);
+    sizeof(std::vector<irep_idt>) + sizeof(BigInt) + sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -313,16 +323,19 @@ public:
     const type2tc &ret,
     const std::vector<irep_idt> &names,
     bool e,
-    const std::vector<irep_idt> &base_names = {})
+    const std::vector<irep_idt> &base_names = {},
+    const std::vector<expr2tc> &defaults = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
       argument_names(names),
       argument_base_names(base_names),
+      argument_defaults(defaults),
       ellipsis(e)
   {
     assert(args.size() == names.size());
     assert(base_names.empty() || base_names.size() == args.size());
+    assert(defaults.empty() || defaults.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
   unsigned int get_width() const;
@@ -337,6 +350,11 @@ public:
   /// clang_cpp_convert_vft.cpp's thunk argument loop does
   /// (docs/roadmap/frontends-to-irep2.md §44).
   std::vector<irep_idt> argument_base_names;
+  /// The arguments' `#default_value`s, null where an argument has none, and
+  /// empty when none has one. Unreflected: a default is no part of the
+  /// function's type. Carried because Python call lowering fills a missing
+  /// argument from it (converter_funcall.cpp, function_call/expr.cpp).
+  std::vector<expr2tc> argument_defaults;
   bool ellipsis;
 
   static constexpr auto fields = std::make_tuple(
@@ -345,7 +363,7 @@ public:
     &code_type2t::argument_names,
     &code_type2t::ellipsis);
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>);
+    sizeof(std::vector<irep_idt>) + sizeof(std::vector<expr2tc>);
   static std::string field_names[esbmct::num_type_fields];
 };
 

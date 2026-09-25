@@ -29,6 +29,17 @@ on:
             required: false
             default: false
             type: boolean
+        linker:
+            description: "Linker for Linux/macOS builds (ESBMC_LINKER); auto keeps the probe"
+            required: false
+            default: auto
+            type: choice
+            options:
+              - auto
+              - default
+              - mold
+              - lld
+              - gold
     workflow_call:
       inputs:
         operating-system:
@@ -53,6 +64,11 @@ on:
             required: false
             default: false
             type: boolean
+        linker:
+            description: "Linker for Linux/macOS builds (ESBMC_LINKER); auto keeps the probe"
+            required: false
+            default: auto
+            type: string
 
 jobs:
   validate-platform:
@@ -88,6 +104,7 @@ jobs:
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
       canon-names: ${{ inputs.canon-names }}
+      linker: ${{ inputs.linker }}
 
   build-windows:
     needs: validate-platform
