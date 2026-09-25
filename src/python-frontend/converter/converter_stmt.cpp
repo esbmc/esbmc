@@ -1291,10 +1291,8 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
-      // drops #python_aggregate, which `in` dispatches on
-      // (docs/roadmap/scope-python-irep2.md §10.4).
-      lhs_symbol->set_type(rhs.type());
+      // Update symbol type from empty to concrete tuple type.
+      lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
       lhs_symbol->set_value(migrate_expr(rhs));
     }
