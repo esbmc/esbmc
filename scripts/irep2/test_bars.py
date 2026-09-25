@@ -17,15 +17,7 @@ _spec.loader.exec_module(bars)
 
 def count(source):
     """(raw, refined) B-2 writes in one translation unit's text."""
-    clean = bars.strip_noise(source)
-    names = set(bars.IREP2_DECL.findall(clean)) | set(bars.IREP2_NODE.findall(clean))
-    raw = refined = 0
-    for _, line in bars.statements(clean):
-        for m in bars.WRITE.finditer(line):
-            raw += 1
-            if not bars.is_irep2(bars.argument_of(line, m.start()), names):
-                refined += 1
-    return raw, refined
+    return bars.count_b2("t.cpp", bars.strip_noise(source))
 
 
 def write_lines(source):
@@ -71,6 +63,18 @@ class TestRefinement(unittest.TestCase):
 
     def test_a_helper_with_a_legacy_namesake_still_counts(self):
         self.assertEqual(count("sym.set_value(gen_zero(t, true));"), (1, 1))
+
+    def test_a_helper_with_a_legacy_namesake_over_an_irep2_type_does_not_count(self):
+        self.assertEqual(
+            count("void f(const type2tc &t, int n) { sym.set_value(gen_zero(t, true)); }"), (1, 0))
+
+    def test_a_constant_bit_string_does_not_count(self):
+        self.assertEqual(
+            count("constant_exprt c(size_type());\n"
+                  "c.set_value(integer2binary(h, 64));"), (1, 0))
+
+    def test_a_symbol_value_still_counts(self):
+        self.assertEqual(count("constant_exprt c(t); sym.set_value(c);"), (1, 1))
 
     def test_write_split_over_lines_sees_its_argument(self):
         self.assertEqual(count("sym.set_type(\n  array_type2tc(s, n, false));"), (1, 0))
