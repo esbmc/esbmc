@@ -1,0 +1,9 @@
+CORE
+../mixed.c
+--multi-property --unwind 12
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion x == n$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+11\s+assertion x != 3$
+^\*\* 1 of 2 properties failed, 1 passed$
+^VERIFICATION FAILED$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION UNKNOWN)[\s\S]*\Z
