@@ -1975,9 +1975,6 @@ python_converter::classify_numpy_method_call(
     method_base.value("_type", "") == "Name" && method_base.contains("id")
       ? method_base["id"].get<std::string>()
       : std::string();
-  const bool receiver_is_rewritable =
-    !method_base_is_imported_module(method_base_name) &&
-    method_base_is_tracked_numpy_array(method_base_name);
 
   // transpose()/reshape()/ravel() are view-like (see is_numpy_view_copy_expr,
   // which handles them separately); flatten()/sum()/mean()/min()/max()/
@@ -2001,6 +1998,50 @@ python_converter::classify_numpy_method_call(
     "argmax",
     "argsort",
     "searchsorted"};
+
+  // `np.eye(3).transpose()`: the receiver is itself a raw Call (a
+  // constructor, or a user function returning an array), not a Name bound
+  // to an already-tracked numpy array -- method_base_is_tracked_numpy_array
+  // can't recognise it at all. Every dispatch-rewrite method above is
+  // eligible for the rewrite itself: numpy_call_expr::
+  // try_hoist_call_arg_for_view_method either resolves the raw Call
+  // argument (transpose/flatten/ravel/sum/mean/min/max/argsort/
+  // searchsorted, whose Name-argument dispatch resolves through descriptor
+  // materialization and so also sees a temp that exists only in the GOTO
+  // IR), or -- for the rest, whose Name-argument dispatch walks the
+  // *source* AST instead (reshape's own resolve_numpy_var, prod/std/var/
+  // argmin/argmax's literal-only fallback, diagonal's pointer-view
+  // construction, none of which can see such a temp) -- raises a clean
+  // diagnostic rather than falling through to the pre-existing generic
+  // runtime-call fallback, which silently produced a wrong NONDET value
+  // for this shape (see numpy_call_expr.cpp for the full rationale).
+  //
+  // sum/max/min/mean and friends are not numpy-exclusive names: `Foo()` is
+  // syntactically the same Call shape as a plain function call, so without
+  // this guard `Foo().sum()` (a user class defining its own `sum` method)
+  // would be rewritten to `np.sum(Foo())` and never reach `Foo.sum`
+  // (issue caught in review). Excluding a call whose callee names a known
+  // class keeps the exact ambiguous case out while still allowing a plain
+  // function call (`make().sum()`) through -- get()'s own dispatch still
+  // declines/throws for a call that materialize/hoist can't resolve to a
+  // concrete array either way, so this is a precision improvement, not a
+  // soundness requirement on its own.
+  const bool receiver_is_call_to_known_class =
+    method_base.value("_type", "") == "Call" && method_base.contains("func") &&
+    method_base["func"].is_object() &&
+    method_base["func"].value("_type", std::string()) == "Name" &&
+    json_utils::is_class(
+      method_base["func"].value("id", std::string()), *ast_json);
+  const bool receiver_is_raw_call_view_method =
+    method_base.value("_type", "") == "Call" &&
+    !receiver_is_call_to_known_class &&
+    dispatch_rewrite_methods.count(method_name) != 0;
+
+  const bool receiver_is_rewritable =
+    !method_base_is_imported_module(method_base_name) &&
+    (method_base_is_tracked_numpy_array(method_base_name) ||
+     receiver_is_raw_call_view_method);
+
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
   const bool supported_copy_method =
@@ -2188,6 +2229,12 @@ bool python_converter::is_basic_numpy_view_subscript_escape(
   if (!root_is_numpy_view_source)
     return false;
 
+  const exprt probe = probe_expr(node);
+  return !contains_cpp_throw(probe) && probe.type().is_array();
+}
+
+exprt python_converter::probe_expr(const nlohmann::json &node)
+{
   code_blockt scratch_block;
   code_blockt *saved_block = current_block;
   exprt *saved_lhs = current_lhs;
@@ -2206,7 +2253,7 @@ bool python_converter::is_basic_numpy_view_subscript_escape(
   }
   current_block = saved_block;
   current_lhs = saved_lhs;
-  return !contains_cpp_throw(probe) && probe.type().is_array();
+  return probe;
 }
 
 bool python_converter::contains_tracked_numpy_view_object(
@@ -4463,9 +4510,14 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     // If the expression is itself invalid — e.g. accessing a non-existent
     // attribute — get_expr will raise the correct, precise error at the
     // point of access rather than the misleading "Type undefined" later.
+    // Probed through rewrite_assign_rhs_node the same way the real
+    // conversion further down is, so a `.T` on a non-Name base (already
+    // rewritten to `np.transpose(...)` there) doesn't fail this probe on
+    // the original, unrewritten Attribute node before the real pass ever
+    // runs.
     is_converting_rhs = true;
     in_rhs_type_probe_ = true;
-    exprt rhs_expr = get_expr(ast_node["value"]);
+    exprt rhs_expr = get_expr(rewrite_assign_rhs_node(ast_node)["value"]);
     in_rhs_type_probe_ = false;
     is_converting_rhs = false;
 
@@ -4666,7 +4718,7 @@ void python_converter::handle_function_call_rhs(
     is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
   {
     lhs.type() = rhs.type();
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
   }
 
   // Set return destination
@@ -6531,7 +6583,7 @@ void python_converter::get_var_assign(
       // `const array_typet& = lhs.type()` constructed a throwaway array (with
       // a nil size) rather than reinterpreting the real type; it asserted
       // nothing meaningful and is removed.
-      lhs_symbol->set_type(rhs.type());
+      python_expr::set_symbol_type_if_carried(*lhs_symbol, rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
@@ -6866,7 +6918,7 @@ void python_converter::get_compound_assign(
       if (symbol)
       {
         // Update the symbol's type to pointer if concatenated returns pointer
-        symbol->set_type(concatenated.type());
+        symbol->set_type(migrate_type(concatenated.type()));
 
         // Update LHS to be a symbol with the new type
         lhs = symbol_exprt(symbol->id, symbol->get_type());

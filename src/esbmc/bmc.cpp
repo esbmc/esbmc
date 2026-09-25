@@ -131,20 +131,20 @@ static bool reports_multi_property_verdict(const optionst &options)
          !strategy_owns_property_table(options);
 }
 
-/// Record what a solver's UNSAT earned \p property. Only a proof is bounded by
-/// k: at a bounded round it is withheld and the claim stays undecided. A
-/// vacuous discharge is not a proof but a diagnosis of the path, which a
-/// bounded round establishes as well as a conclusive one, so it is recorded
-/// either way -- and it has to be, since a k-step run reports the vacuity
-/// nowhere else.
+/// Record what a solver's UNSAT earned \p property. Only a proof needs backing:
+/// where withholds_proofs() says the phase cannot make one, the claim stays
+/// undecided. A vacuous discharge is not a proof but a diagnosis of the path,
+/// which a bounded round establishes as well as a conclusive one, so it is
+/// recorded either way -- and it has to be, since a k-step run reports the
+/// vacuity nowhere else.
 static void record_discharge(
-  bool bounded_round,
+  bool withhold_proofs,
   const std::string &property,
   property_verdictt verdict,
   const property_locationt &loc,
   const std::string &note = "")
 {
-  if (bounded_round && verdict == property_verdictt::Passed)
+  if (withhold_proofs && verdict == property_verdictt::Passed)
     return;
 
   goto_functionst::property_verdicts.record(property, verdict, loc, note);
@@ -181,13 +181,9 @@ phase_left_properties_undecided(bool report_incomplete, smt_resultt res)
   return report_incomplete || res == P_ERROR || res == P_SMTLIB;
 }
 
-/// Whether this round discharges a claim only within the current k. A base
-/// case of a k-step strategy does: "not violated within k" is not a proof, and
-/// recording one would put a bounded result in the run's table as a verdict.
-/// Recording Unknown instead would be worse, since it outranks the proof a
-/// later forward condition or inductive step finds (§4 of
-/// docs/roadmap/multi-property-strategy-plan.md), so such a claim stays
-/// NotChecked.
+/// Whether this phase is a k-step strategy's base case, which opens and
+/// completes a round and discharges a claim only within the current k
+/// (withholds_proofs()).
 static bool is_bounded_round(const optionst &options)
 {
   return options.get_bool_option("base-case") &&
@@ -832,17 +828,17 @@ void bmct::clear_verified_claims_in_goto(
       if (!instr.is_assert())
         continue;
 
-      bool loc_match = (instr.location.as_string() == claim.claim_loc);
-      bool expr_match = false;
+      // Only the instruction's own assertion: --loop-invariant copies a loop
+      // body, and a check symex raises while evaluating an assertion's guard
+      // shares its instruction, so neither may skip it on its own verdict.
+      const bool match =
+        is_goto_cov
+          ? instr.location.as_string() == claim.claim_loc &&
+              instr.location.comment().as_string() == claim.claim_msg
+          : &instr == claim.claim_instruction &&
+              goto_symext::assertion_message(ns, instr) == claim.claim_comment;
 
-      std::string guard_str = from_expr(ns, "", instr.guard);
-
-      if (is_goto_cov)
-        expr_match = (instr.location.comment().as_string() == claim.claim_msg);
-      else
-        expr_match = (guard_str == claim.claim_msg);
-
-      if (loc_match && expr_match)
+      if (match)
       {
         instr.make_skip();
       }
@@ -2082,13 +2078,12 @@ smt_resultt bmct::start_bmc()
   if (!options.get_bool_option("multi-property"))
     report_trace(res, *eq);
 
-  // Properties this phase skipped stay skipped for the run: a k-step strategy
-  // promotes across phases, and the forward condition must not turn what a
-  // truncated base case never solved into a proof. A phase that died before
-  // its per-claim loop, or only emitted a formula, skipped all of them and
-  // never sets report_incomplete, so read its result too.
+  // A phase that died before its per-claim loop, or only emitted a formula,
+  // skipped every property and never sets report_incomplete.
   if (phase_left_properties_undecided(report_incomplete, res))
     goto_functionst::property_verdicts.note_incomplete();
+  else if (is_bounded_round(options))
+    goto_functionst::property_verdicts.complete_round();
 
   // A single monolithic UNSAT refutes the disjunction of every claim's
   // violation, so on a genuinely conclusive run each claim holds. Anything
@@ -2150,16 +2145,23 @@ size_t bmct::barren_interleaving_budget() const
   return value;
 }
 
+/// A k-step strategy clears the store once, before its first phase, and
+/// starts a round at each base case.
+static void prepare_property_verdicts(const optionst &options)
+{
+  if (reports_multi_property_verdict(options))
+    goto_functionst::property_verdicts.clear();
+  else if (is_bounded_round(options))
+    goto_functionst::property_verdicts.begin_round();
+}
+
 smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
 
   const bool multi_property = options.get_bool_option("multi-property");
-  // A k-step strategy clears the store once, before its first phase: its
-  // phases accumulate into one table rather than print one each.
-  if (reports_multi_property_verdict(options))
-    goto_functionst::property_verdicts.clear();
+  prepare_property_verdicts(options);
   report_incomplete = false;
 
   if (options.get_bool_option("schedule"))
@@ -2996,7 +2998,9 @@ smt_resultt bmct::multi_property_check(
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
-  const bool bounded_round = is_bounded_round(options);
+  const bool withhold_proofs = withholds_proofs(options);
+  const bool clears_proved_claims =
+    !is_keep_verified && !bs && !withhold_proofs;
 
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
@@ -3052,7 +3056,8 @@ smt_resultt bmct::multi_property_check(
                        &bs,
                        &fc,
                        &is,
-                       &bounded_round,
+                       &withhold_proofs,
+                       &clears_proved_claims,
                        &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found. A coverage run has
     // to identify the claim first: only instrumented probes count towards the
@@ -3150,13 +3155,16 @@ smt_resultt bmct::multi_property_check(
           cached_proof))
     {
       record_discharge(
-        bounded_round, claim.claim_key, property_verdictt::Passed, claim_ploc);
+        withhold_proofs,
+        claim.claim_key,
+        property_verdictt::Passed,
+        claim_ploc);
 
       // A reused proof has to leave the run in the state a fresh one would,
       // or a warm k-induction / --incremental-bmc run keeps re-symexing the
       // claims a cold one had already dropped -- the opposite of the point
       // (esbmc/esbmc#7143). Same guard as the P_UNSATISFIABLE arm below.
-      if (!is_keep_verified && !bs)
+      if (clears_proved_claims)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
         clear_verified_claims_in_goto(claim, is_goto_cov);
@@ -3257,7 +3265,7 @@ smt_resultt bmct::multi_property_check(
     {
       if (solver_result == P_UNSATISFIABLE)
         record_discharge(
-          bounded_round,
+          withhold_proofs,
           claim.claim_key,
           is_vacuous ? property_verdictt::Unknown : property_verdictt::Passed,
           claim_ploc,
@@ -3563,8 +3571,9 @@ smt_resultt bmct::multi_property_check(
     else if (solver_result == P_UNSATISFIABLE)
       // for kind && incr: remove verified claims
       // when we find a property proven correct in
-      // either forward condition or inductive step
-      if (!is_keep_verified && !bs)
+      // either forward condition or inductive step; a claim whose proof is
+      // withheld stays for the next base case to solve.
+      if (clears_proved_claims)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
         clear_verified_claims_in_goto(claim, is_goto_cov);

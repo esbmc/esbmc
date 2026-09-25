@@ -1,0 +1,7 @@
+CORE
+main.c
+--falsification --multi-property --max-k-step 10
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+9\s+assertion n != 7$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+12\s+assertion x != 3$
+^\*\* 2 of 2 properties failed$
+^VERIFICATION FAILED$
