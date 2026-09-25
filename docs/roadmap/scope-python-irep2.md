@@ -718,6 +718,70 @@ reach the three writes; all 96 pass.
 The "array to pointer decay" write in `handle_assignment_type_adjustments` stays legacy: no test in
 the four suites reaches it, so converting it would add a line nothing covers. Python B-2* 52 -> 50.
 
+## 14. The class-object value write, and why it is a reader problem (2026-09-25)
+
+§10.4's third legacy write -- the trailing `lhs_symbol->set_value(rhs)` in
+`handle_assignment_type_adjustments` -- stays legacy because a class object used as a value (`x = int`,
+`x = C`) is a char-array `constant_exprt` with the class name in `value` and no operands
+(`converter_expr.cpp:1281` for a builtin type, `:1718` for a class), and `migrate_expr` turns that
+into `{ }`. Converting the write is not blocked on the seam, though: the shape itself is the defect.
+
+### 14.1 The shape collides with `str`
+
+A class object and a string share `char[N]`, told apart only by whether the constant has operands.
+That collision was a live false proof: `isinstance(<any str>, type)` folded to true, so
+`x = "int"; assert isinstance(x, type)` was proved (PR #7989, which also fixes the tuple form of the
+same check). After #7989 a str-typed operand that is neither a literal nor a known class object is
+nondeterministic -- sound, but `def f(s: str): assert not isinstance(s, type)` is a false alarm, and it
+stays one until the two are distinguishable.
+
+### 14.2 Who reads the value
+
+Three readers ask one question -- does this variable hold a class object, and which -- and all answer
+it from the symbol's legacy value:
+
+| reader | what it reads |
+|---|---|
+| `function_call/builtins.cpp` `handle_isinstance`, early block | `to_constant_expr(sym.get_value()).get_value()` |
+| `converter_compare.cpp` `resolve_type_identifier` (`type(x) is T`, `x is int`) | the same, plus `type(x)`'s own constant |
+| `string_handler::extract_string_from_array_operands` | `value` when a char constant has no operands |
+
+A symbol's value is one of its assignments, chosen by conversion order, so this is also a
+flow-insensitive read; it has not produced a wrong answer in #7989's reassignment probes, but it is
+not a sound way to answer a flow-sensitive question either.
+
+### 14.3 Plan
+
+Of §57.3's three answers, the third fits: move the fact out of the value.
+
+1. Record `symbol id -> class name` in the converter when an assignment's rhs is a class object, the
+   way `scope-solidity-irep2.md` §10 keys Solidity facts by symbol id.
+2. Point the three readers at it.
+3. Give the class object a representation IREP2 carries and that stays distinct from `str`, then
+   convert the trailing write.
+
+Step 3 cannot reuse the string model. The operand-less shape is also what keeps `int != "int"`:
+built as an ordinary string literal, `x = int; y = "int"; assert x != y` fails and its negation is
+proved (`regression/python/class_object_not_equal_str{,_fail}` flip, measured). So step 3 is the
+larger change -- a distinct class-object type, which also removes §14.1's false alarm -- and steps
+1-2 (PR #7991) are what let it proceed reader by reader.
+
+### 14.4 How far a class-object type reaches (2026-09-25)
+
+Census: a temporary marker at the two builders (`converter_expr.cpp:1281` builtin, `:1718` class),
+run under `--goto-functions-only` over the 6 697 Python tests. 344 build at least one class-object
+constant -- 313 in `python/`, 29 in `humaneval/`, 2 in `python-intensive/`.
+
+Most are incidental. A backtrace from the builder in
+`list_tuple_elem_annotation` lands in `get_return_statements` inside an imported module: the
+`typing` operational model's `TypeVar` stub is `return object` (`models/typing.py:7`), so every
+program that imports `typing` builds one class-object constant while converting the model, whatever
+its own annotations say. 238 of the 344 import `typing`, and 234 of those build exactly one; the
+annotations themselves build none.
+
+That leaves 110 tests where a class object comes from the program: 106 that do not import `typing`
+and 4 that build more than one. A distinct class-object type has to serve those; the `TypeVar` stub
+needs only a body that is not a class object.
 ## 13. An argument's default crosses the seam (2026-09-25)
 
 §11.3 named `#default_value` first among the candidates for what a `code_typet` round trip loses, and
