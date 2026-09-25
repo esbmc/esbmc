@@ -738,12 +738,6 @@ set(_slow_regression_tests
     # against the 120s cap and timed out on the DebugOpt Linux runner in
     # #7073 CI -- a comment-only change that cannot reach its code path.
     "regression/esbmc/github_4634"
-    # nn-tanh_5_unsafe is a single float query. It pinned --boolector, which
-    # camada does not carry, so it now runs on the default backend: ~400s
-    # locally, and over the 120s cap on aarch64, where the whole
-    # floats-regression suite runs ~3x slower while the rest matches x86 to
-    # within 5% (#7308). The 2x budget keeps the armv8 leg green.
-    "regression/floats-regression/nn-tanh_5_unsafe"
     "regression/consensus/get_subtree_index"
     "regression/consensus/compute_shuffled_index"
 )
@@ -790,7 +784,6 @@ set(_very_slow_regression_tests
     # not help -- bit-blasting this one is slower still, timing out even at 3x.
     "regression/esbmc/github_1352"
     "regression/esbmc/github_1352-32bit"
-    "regression/esbmc/github_1352-fail-32bit"
     # problem1_fail was FUTURE for scalability (#4932); it converges now, at
     # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
     # above is ~70s locally against ~248s with assertions on, and that ratio
@@ -823,6 +816,33 @@ foreach(_t IN LISTS _very_slow_regression_tests)
         set_tests_properties(${_t} PROPERTIES
           TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW}
           ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_VERY_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+        )
+    endif()
+endforeach()
+
+# Bitwuzla is far slower than boolector on a bit-vector query of this shape.
+# Handing the same 3MB QF_BV file straight to each solver binary -- no ESBMC,
+# no floating-point theory -- boolector answers sat in 9s and bitwuzla in
+# 269s. The tests below pinned --boolector, which camada does not carry, so
+# they now take minutes on a query that used to take seconds, and neither the
+# 2x nor the 3x tier fits: both timed out exactly at their cap in CI (240.18s
+# and 360.28s). --fp2bv does not help; it is slower still, because the cost is
+# in the bit-vector search rather than the encoding.
+math(EXPR ESBMC_REGRESS_TIMEOUT_BITWUZLA_BV "${ESBMC_REGRESS_TIMEOUT} * 6")
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_BITWUZLA_BV
+     "${ESBMC_REGRESS_TIMEOUT_BITWUZLA_BV} + 30")
+set(_bitwuzla_bv_regression_tests
+    # ~190s locally; the floats-regression suite runs ~3x slower on aarch64
+    # while the rest matches x86 to within 5% (#7308), so size for ~600s.
+    "regression/floats-regression/nn-tanh_5_unsafe"
+    # ~525s locally, against 511s for the same query on master.
+    "regression/esbmc/github_1352-fail-32bit"
+)
+foreach(_t IN LISTS _bitwuzla_bv_regression_tests)
+    if(TEST ${_t})
+        set_tests_properties(${_t} PROPERTIES
+          TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_BITWUZLA_BV}
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_BITWUZLA_BV};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
         )
     endif()
 endforeach()
