@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line 11\s+every node holds 1$

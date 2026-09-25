@@ -512,21 +512,12 @@ public:
 
   /** Ensure a record exists for the given entry, without changing an
    *  existing one. The persistent map's values are immutable, so a mutation
-   *  is a read-modify-set via get_object_map()/update_object_map(). */
+   *  is a read-modify-set via update_object_map(). */
   void touch_entry(const entryt &e)
   {
     irep_idt key = entry_key(e);
     if (values.find(key) == nullptr)
       values.set(key, e);
-  }
-
-  /** Read the object map recorded for the given name+suffix, or an
-   *  empty map when there is no record. */
-  object_mapt
-  get_object_map(const std::string &id, const std::string &suffix) const
-  {
-    const entryt *e = values.find(entry_key(entryt(id, suffix)));
-    return e ? e->object_map : object_mapt{};
   }
 
   /** Overwrite (merge=false) or union-into (merge=true) the object map
