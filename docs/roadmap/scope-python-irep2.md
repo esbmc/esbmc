@@ -734,11 +734,11 @@ Of §57.3's three answers, the third fits: move the fact out of the value.
 1. Record `symbol id -> class name` in the converter when an assignment's rhs is a class object, the
    way `scope-solidity-irep2.md` §10 keys Solidity facts by symbol id.
 2. Point the three readers at it.
-3. Build the class-object constant as an ordinary string constant (with operands) -- nothing reads
-   `value` any more -- and convert the trailing write, which then round-trips.
+3. Give the class object a representation IREP2 carries and that stays distinct from `str`, then
+   convert the trailing write.
 
-Step 3 is the IREP2 change; steps 1-2 are what make it safe, and each is measurable on its own with
-the corpus A/B `frontends-to-irep2.md` §21.3 describes, plus the `isinstance`/`is` tests (170 of them
-use `isinstance`). A distinct class-object type would also separate it from `str` and remove §14.1's
-false alarm; that is a larger change to what the frontend builds, and is not needed for the write to
-move.
+Step 3 cannot reuse the string model. The operand-less shape is also what keeps `int != "int"`:
+built as an ordinary string literal, `x = int; y = "int"; assert x != y` fails and its negation is
+proved (`regression/python/class_object_not_equal_str{,_fail}` flip, measured). So step 3 is the
+larger change -- a distinct class-object type, which also removes §14.1's false alarm -- and steps
+1-2 (PR #7991) are what let it proceed reader by reader.
