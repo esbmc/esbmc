@@ -199,11 +199,7 @@ void smt_solver_baset::record_flattened_pointer(
   ptr_flatten_history.push_back(flat);
 }
 
-void smt_solver_baset::begin_step(
-  const expr2tc &guard,
-  const expr2tc &cond,
-  const expr2tc &lhs,
-  const expr2tc &rhs)
+void smt_solver_baset::begin_step(const expr2tc &guard, const expr2tc &cond)
 {
   step_sources.clear();
   step_flattens.clear();
@@ -236,11 +232,14 @@ void smt_solver_baset::begin_step(
   step_guard = convert_ast(guard);
   for (const ptr_flatten_entry &flat : reused)
     record_flattened_pointer(flat.address, flat.pointer);
-  step_assigned = is_nil_expr(lhs) ? "" : to_symbol2t(lhs).get_symbol_name();
-  step_overwritten =
-    !is_nil_expr(rhs) && is_pointer_type(rhs) && is_byte_update2t(rhs)
-      ? to_byte_update2t(rhs).source_value
-      : expr2tc();
+}
+
+void smt_solver_baset::note_assignment(const expr2tc &lhs, const expr2tc &rhs)
+{
+  step_assigned = to_symbol2t(lhs).get_symbol_name();
+  step_overwritten = is_pointer_type(rhs) && is_byte_update2t(rhs)
+                       ? to_byte_update2t(rhs).source_value
+                       : expr2tc();
 }
 
 void smt_solver_baset::end_step()

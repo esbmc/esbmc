@@ -1140,11 +1140,8 @@ public:
    *  was recorded at. */
   std::unordered_map<std::string, std::pair<unsigned int, std::set<size_t>>>
     ptr_flow;
-  void begin_step(
-    const expr2tc &guard,
-    const expr2tc &cond,
-    const expr2tc &lhs,
-    const expr2tc &rhs);
+  void begin_step(const expr2tc &guard, const expr2tc &cond);
+  void note_assignment(const expr2tc &lhs, const expr2tc &rhs);
   void end_step();
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.

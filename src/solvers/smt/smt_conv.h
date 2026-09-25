@@ -71,14 +71,11 @@ public:
    *  remainder compositionally exactly when its operands are also
    *  divided somewhere in the formula. */
   void note_division_operands(const expr2tc &expr);
-  /** Bracket the conversion of one SSA step: its guard, its condition, and
-   *  the assignment it makes (both nil when it makes none). Every step must
-   *  be bracketed; a bitcast converted outside one is read by no rebuild. */
-  void begin_step(
-    const expr2tc &guard,
-    const expr2tc &cond,
-    const expr2tc &lhs,
-    const expr2tc &rhs);
+  /** Bracket the conversion of one SSA step by its guard and condition, and
+   *  name the assignment it makes, if any. Every step must be bracketed; a
+   *  bitcast converted outside one is read by no rebuild. */
+  void begin_step(const expr2tc &guard, const expr2tc &cond);
+  void note_assignment(const expr2tc &lhs, const expr2tc &rhs);
   void end_step();
 
   /** Convert and dump an expression in SMT format (--ssa-smt-trace). */
