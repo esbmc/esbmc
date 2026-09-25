@@ -696,18 +696,64 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
   return std::nullopt;
 }
 
-// Retype `expr` to `target`. Relabeling (not casting) a floatbv expr onto a
-// non-floatbv target keeps its ieee_* expr id while its type says non-float,
-// so a later simplify_floatbv_2ops assert aborts -- hits `%` over a symbolic
-// `**` exponent (kept double via libm) reaching bool()/a consensus-type
-// cast. Typecast in that case; a plain relabel is fine otherwise, matching
-// every other builtin/consensus-type cast here.
-static exprt retype_or_typecast(exprt expr, const typet &target)
+// Convert `expr` to `target`. Relabelling a scalar instead leaves an
+// operation whose type tag disagrees with its operands: a floatbv keeps its
+// ieee_* id and aborts simplify_floatbv_2ops, and bool(~k) became a
+// bool-typed bitnot over an int that the solver rejects. A call is stored with
+// its own return type first, so the cast applies to its value in any context.
+// Other types are relabelled as before.
+exprt function_call_expr::retype_or_typecast(exprt expr, const typet &target)
+  const
 {
-  if (expr.type().is_floatbv() && !target.is_floatbv())
-    return build_typecast(expr, target);
-  expr.type() = target;
-  return expr;
+  auto is_scalar = [](const typet &t) {
+    return t.is_bool() || t.is_signedbv() || t.is_unsignedbv() ||
+           t.is_floatbv();
+  };
+  if (
+    expr.type() == target || !(expr.type().is_floatbv() ||
+                               (is_scalar(expr.type()) && is_scalar(target))))
+  {
+    expr.type() = target;
+    return expr;
+  }
+  if (expr.is_function_call())
+    expr = converter_.store_call_result(
+      expr, converter_.get_location_from_decl(call_), "cast");
+  return build_typecast(expr, target);
+}
+
+exprt function_call_expr::handle_bool_call(
+  const nlohmann::json &arg,
+  size_t arg_size) const
+{
+  exprt value_expr = converter_.get_expr(arg);
+  if (value_expr.is_nil())
+    return value_expr;
+  if (value_expr.statement() == "cpp-throw")
+    return value_expr;
+
+  // A custom object defining __bool__ decides its own truthiness; otherwise
+  // the value's own type (numeric/pointer) is cast to bool below.
+  exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+    "bool", value_expr, converter_.get_location_from_decl(call_));
+  if (!dunder_result.is_nil())
+    return dunder_result;
+
+  if (is_complex_type(value_expr.type()))
+    return complex_to_bool_expr(value_expr);
+
+  // A container is true when non-empty; relabelling its pointer as a bool
+  // leaves a term the solver rejects. A str keeps the path below: strlen stops
+  // at an embedded NUL, which bool("\x00") must not.
+  if (!type_utils::is_string_type(value_expr.type()))
+  {
+    const exprt is_empty = converter_.build_emptiness_check(value_expr, call_);
+    if (is_empty.is_not_nil())
+      return not_exprt(is_empty);
+  }
+
+  const typet bool_t = type_handler_.get_typet("bool", arg_size);
+  return retype_or_typecast(value_expr, bool_t);
 }
 
 exprt function_call_expr::build_constant_from_arg() const
@@ -1196,26 +1242,7 @@ exprt function_call_expr::build_constant_from_arg() const
     return handle_abs(arg);
 
   else if (func_name == "bool")
-  {
-    exprt value_expr = converter_.get_expr(arg);
-    if (value_expr.is_nil())
-      return value_expr;
-    if (value_expr.statement() == "cpp-throw")
-      return value_expr;
-
-    // A custom object defining __bool__ decides its own truthiness; otherwise
-    // the value's own type (numeric/pointer) is cast to bool below.
-    exprt dunder_result = converter_.dispatch_unary_dunder_operator(
-      "bool", value_expr, converter_.get_location_from_decl(call_));
-    if (!dunder_result.is_nil())
-      return dunder_result;
-
-    if (is_complex_type(value_expr.type()))
-      return complex_to_bool_expr(value_expr);
-
-    const typet bool_t = type_handler_.get_typet(func_name, arg_size);
-    return retype_or_typecast(value_expr, bool_t);
-  }
+    return handle_bool_call(arg, arg_size);
 
   else if (func_name == "str")
   {

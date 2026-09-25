@@ -1951,7 +1951,7 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
 template <class Json>
 std::string python_annotation<Json>::method_return_type(
   const Json &member,
-  const std::string &method_name)
+  const std::string &class_name)
 {
   if (member.contains("returns") && !member["returns"].is_null())
   {
@@ -1963,9 +1963,22 @@ std::string python_annotation<Json>::method_return_type(
       ret.contains("value") && ret["value"].contains("id"))
       return ret["value"]["id"].template get<std::string>();
   }
+  std::string inferred = infer_method_return_type(member, class_name);
+  return inferred.empty() ? "Any" : inferred;
+}
+
+template <class Json>
+std::string python_annotation<Json>::infer_method_return_type(
+  const Json &member,
+  const std::string &class_name)
+{
+  const std::string method_name = member["name"].template get<std::string>();
+  const std::string saved_ctx = current_func_name_context_;
+  current_func_name_context_ = class_name + "@C@" + method_name;
   std::string inferred =
     infer_from_return_statements(member["body"], method_name);
-  return inferred.empty() ? "Any" : inferred;
+  current_func_name_context_ = saved_ctx;
+  return inferred;
 }
 
 template <class Json>
@@ -2141,7 +2154,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         {
           if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
             continue;
-          return method_return_type(member, attr_name);
+          return method_return_type(member, base_name);
         }
       }
     }
@@ -2170,7 +2183,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       {
         if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
           continue;
-        return method_return_type(member, attr_name);
+        return method_return_type(member, cls);
       }
       // Not defined in this class — continue up the first base, as super() does.
       cls.clear();
@@ -2471,22 +2484,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               if (
                 method["_type"] == "FunctionDef" &&
                 method["name"] == method_name)
-              {
-                if (method.contains("returns") && !method["returns"].is_null())
-                {
-                  const auto &ret = method["returns"];
-                  if (ret.contains("id"))
-                    return ret["id"].template get<std::string>();
-                  if (
-                    ret.contains("_type") && ret["_type"] == "Subscript" &&
-                    ret.contains("value") && ret["value"].contains("id"))
-                    return ret["value"]["id"].template get<std::string>();
-                }
-                // Infer return type from return statements when no annotation
-                std::string inferred =
-                  infer_from_return_statements(method["body"], method_name);
-                return inferred.empty() ? "Any" : inferred;
-              }
+                return method_return_type(method, current_type);
             }
           }
           // Chain resolved but method not in final class
@@ -2536,7 +2534,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type =
-            infer_from_return_statements(member["body"], method_name);
+            infer_method_return_type(member, obj);
           if (!inferred_type.empty())
             return inferred_type;
         }
@@ -2949,6 +2947,24 @@ InferResult python_annotation<Json>::infer_type(
       // Handle unary operations on binary expressions like -a ** b
       Json temp_stmt = {{"value", operand}};
       inferred_type = get_type_from_binary_expr(temp_stmt, body);
+    }
+    else
+    {
+      // Any other operand, e.g. -c.speed in a sort key (#7745): infer the
+      // operand (an unknown one leaves the assignment to the converter), then
+      // the operator's result. `not` is always a bool, and a numeric operator
+      // promotes a bool to int.
+      const Json operand_stmt = {
+        {"_type", "Assign"}, {"value", operand}, {"lineno", current_line_}};
+      std::string operand_inferred;
+      const InferResult operand_result =
+        infer_type(operand_stmt, body, operand_inferred);
+      if (operand_result != InferResult::OK)
+        return operand_result;
+      if (stmt["value"]["op"]["_type"] == "Not")
+        inferred_type = "bool";
+      else
+        inferred_type = operand_inferred == "bool" ? "int" : operand_inferred;
     }
   }
 
@@ -4676,16 +4692,15 @@ void python_annotation<Json>::annotate_function(Json &function_element)
   const std::string &func_name =
     function_element["name"].template get<std::string>();
 
-  // Build hierarchical path ONLY if we're not inside a class
-  if (!current_class_name_.empty())
+  if (!saved_func_name_context.empty())
   {
-    // We're inside a class - do NOT accumulate hierarchical context
-    current_func_name_context_ = func_name;
-  }
-  else if (!saved_func_name_context.empty())
-  {
-    // Nested function outside a class - accumulate context
+    // Nested function, including one inside a method - accumulate context
     current_func_name_context_ = saved_func_name_context + "@F@" + func_name;
+  }
+  else if (!current_class_name_.empty())
+  {
+    // Method: scope it by its class so same-named methods stay distinct
+    current_func_name_context_ = current_class_name_ + "@C@" + func_name;
   }
   else
   {
@@ -4798,6 +4813,7 @@ void python_annotation<Json>::annotate_class(Json &class_element)
   std::string saved_context = current_func_name_context_;
 
   current_class_name_ = class_element["name"].template get<std::string>();
+  current_func_name_context_.clear();
 
   for (Json &class_member : class_element["body"])
   {

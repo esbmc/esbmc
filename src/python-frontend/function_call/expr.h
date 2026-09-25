@@ -797,6 +797,8 @@ private:
    */
   std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
 
+  exprt handle_bool_call(const nlohmann::json &arg, size_t arg_size) const;
+
   /**
    * Folds sum() over a numeric tuple into a chain of additions.
    *
@@ -866,6 +868,9 @@ private:
    * an already-tagged argument through, boxes a concrete numeric/string
    * scalar into a tagged-object temporary, or throws otherwise.
    */
+  /// Converts a bool()/int()/numeric-constructor argument to @p target.
+  exprt retype_or_typecast(exprt expr, const typet &target) const;
+
   exprt coerce_tagged_argument(
     exprt arg,
     const typet &param_type,
