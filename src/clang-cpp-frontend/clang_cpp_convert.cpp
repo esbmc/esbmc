@@ -3211,7 +3211,7 @@ bool clang_cpp_convertert::annotate_class_method(
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if (fd_symb)
     {
-      fd_symb->set_type(component_type);
+      fd_symb->set_type(migrate_type(component_type));
       /*
        * We indicate the need for vptr initializations in the ctor/dtor;
        * they are added in the adjuster.

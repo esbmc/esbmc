@@ -2550,3 +2550,32 @@ With the carry disabled while the writes were IREP2-side, ten `regression/esbmc-
 failed (e.g. `exception_spec_dynamic_violation_fail`); `unit/util/migrate.test.cpp` pins the round
 trip, the unresolved case, that no specification adds no key, and that a specification is no part of
 the type's identity.
+
+## 12. The ctor/dtor marker crosses the seam (2026-09-25)
+
+`frontends-to-irep2.md` §50.2 found the ctor/dtor function-type write blocked on the pseudo return
+type: `migrate_type` maps `"constructor"` and `"destructor"` to `empty`, and vptr initialisation tests
+for exactly those ids. §11 hit the same wall from the exception-specification side.
+
+`code_type2t` now carries the marker (`return_marker`) and `#implicit_union_copy_move_constructor`
+(`implicit_union_copy_move`) as unreflected fields, and `migrate_type_back` restores the pseudo return
+type from them. With it, three writes store IREP2: `clang_cpp_convert.cpp`'s ctor/dtor
+`fd_symb->set_type` (§50.2's 254 failures of 1 061) and §11's two exception-specification writes.
+clang-cpp B-2* 4 -> 1; the last is `need_vptr_init` on the value.
+
+Two further things the carry exposed, each measured:
+
+- **An unresolved dynamic specification must cross too.** The converter's write runs before
+  `finalize_exception_specification`, so a `throw(T...)` spec still holds `exception_spec_decl`.
+  Dropping it made `X() throw() { throw 5; }` potentially throwing, a false proof in
+  `try_catch/try-catch_decl_10_bug`. `exception_decl` now carries the declared types, and finalize
+  resolves them after the round trip.
+- **A constructor call that already passes its object.** In the IREP2 adjust pass a declined VLA
+  construction keeps its initialiser, a constructor call whose first argument is the object.
+  `goto_sideeffects` lowered every call to a `"constructor"`-typed callee by adding a temporary `this`,
+  which it only ever saw once the marker survived; it now adds one only when the call is short of the
+  constructor's parameters (`cpp/irep2_array_vla_construction` failed without it).
+
+`esbmc-cpp/{cpp,try_catch}` 1 333 of 1 339 pass, and the six failures (`github_7433*`, `ch8_5`) are the
+exception-type spelling pins another branch updates; the rest of `esbmc-cpp` (1 927) passes apart from
+seven tests at the 120 s cap that take the same time on the base binary.

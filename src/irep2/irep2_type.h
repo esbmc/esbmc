@@ -316,7 +316,10 @@ public:
     const std::vector<irep_idt> &base_names = {},
     const std::vector<expr2tc> &defaults = {},
     const irep_idt &exc_kind = irep_idt(),
-    const std::vector<irep_idt> &exc_types = {})
+    const std::vector<irep_idt> &exc_types = {},
+    const irep_idt &ret_marker = irep_idt(),
+    bool implicit_union_copy_move = false,
+    const std::vector<type2tc> &exc_decl = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
@@ -324,8 +327,11 @@ public:
       argument_base_names(base_names),
       argument_defaults(defaults),
       exception_types(exc_types),
+      exception_decl(exc_decl),
       exception_kind(exc_kind),
-      ellipsis(e)
+      return_marker(ret_marker),
+      ellipsis(e),
+      implicit_union_copy_move(implicit_union_copy_move)
   {
     assert(args.size() == names.size());
     assert(base_names.empty() || base_names.size() == args.size());
@@ -355,8 +361,18 @@ public:
   /// signatures differing only here still compare equal. Carried because
   /// goto_convert_functions decodes it from the function symbol's type.
   std::vector<irep_idt> exception_types;
+  /// A dynamic specification's declared types before
+  /// finalize_exception_specification resolves them to `exception_types`.
+  std::vector<type2tc> exception_decl;
   irep_idt exception_kind;
+  /// A C++ constructor's or destructor's pseudo return type ("constructor" /
+  /// "destructor"), which ret_type models as empty; and whether it is an
+  /// implicit copy/move constructor of a union. Unreflected, like the fields
+  /// above. Carried because vptr initialisation and the union copy/move
+  /// synthesis read them (docs/roadmap/frontends-to-irep2.md §50.2).
+  irep_idt return_marker;
   bool ellipsis;
+  bool implicit_union_copy_move;
 
   static constexpr auto fields = std::make_tuple(
     &code_type2t::arguments,
@@ -365,7 +381,7 @@ public:
     &code_type2t::ellipsis);
   static constexpr std::size_t excluded_field_bytes =
     2 * sizeof(std::vector<irep_idt>) + sizeof(std::vector<expr2tc>) +
-    sizeof(irep_idt);
+    sizeof(std::vector<type2tc>) + 2 * sizeof(irep_idt) + sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 
