@@ -6,6 +6,7 @@
 #include <util/irep/std_types.h>
 #include <util/irep/std_code.h>
 #include <util/expr/expr_util.h>
+#include <util/lang/python_types.h>
 
 namespace python_expr
 {
@@ -31,6 +32,14 @@ void set_symbol_type(symbolt &sym, const typet &t)
   // drops #cpp_type (the `bytes` tag). Always use the legacy overload so the
   // exact type, tag included, is what a later read sees.
   sym.set_type(t);
+}
+
+void set_symbol_type_if_carried(symbolt &sym, const typet &t)
+{
+  if (t.is_nil() || contains_dyn_array(t) || is_python_internal_aggregate(t))
+    sym.set_type(t);
+  else
+    sym.set_type(migrate_type(t));
 }
 
 exprt build_symbol(const symbolt &sym)
