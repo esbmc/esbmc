@@ -216,7 +216,7 @@ smt_astt smt_solver_baset::convert_bitcast_to_fp(
 
   // Converting from struct/array to fp, we simply convert it to bv and use
   // the bv to fp method to do the job for us
-  if (is_struct_type(new_from) || is_array_type(new_from))
+  if (is_struct_type(new_from) || is_array_type(new_from) || is_pointer_type(new_from))
     new_from = flatten_to_bitvector(new_from);
 
   // When int_encoding is true, integer types are represented as integers
