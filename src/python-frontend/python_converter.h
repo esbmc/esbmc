@@ -386,6 +386,15 @@ public:
     return in_contract_clause_;
   }
 
+  /// The class a variable was last assigned as a value (`x = int`), or null.
+  /// Kept here rather than read back from the symbol's value, which the IREP2
+  /// seam cannot carry in this shape (docs/roadmap/scope-python-irep2.md §14).
+  const std::string *class_object_name(const irep_idt &id) const
+  {
+    auto it = class_object_names_.find(id);
+    return it == class_object_names_.end() ? nullptr : &it->second;
+  }
+
 private:
   friend class complex_handler;
   friend class function_call_expr;
@@ -1165,6 +1174,8 @@ private:
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
     codet &target_block);
+
+  void set_assigned_value(symbolt &symbol, const exprt &rhs);
 
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
@@ -2181,6 +2192,7 @@ private:
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
+  std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
   // A pointer-backed numpy view's logical shape (ADR-NP-003 etapa 2 scalar

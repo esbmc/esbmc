@@ -1206,7 +1206,13 @@ void python_adjust::adjust_type(type2tc &type)
     adjust_type(ret);
     changed |= ret != ret_before;
     if (changed)
-      type = code_type2tc(args, ret, ct.argument_names, ct.ellipsis);
+      type = code_type2tc(
+        args,
+        ret,
+        ct.argument_names,
+        ct.ellipsis,
+        ct.argument_base_names,
+        ct.argument_defaults);
     return;
   }
 

@@ -323,16 +323,19 @@ public:
     const type2tc &ret,
     const std::vector<irep_idt> &names,
     bool e,
-    const std::vector<irep_idt> &base_names = {})
+    const std::vector<irep_idt> &base_names = {},
+    const std::vector<expr2tc> &defaults = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
       argument_names(names),
       argument_base_names(base_names),
+      argument_defaults(defaults),
       ellipsis(e)
   {
     assert(args.size() == names.size());
     assert(base_names.empty() || base_names.size() == args.size());
+    assert(defaults.empty() || defaults.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
   unsigned int get_width() const;
@@ -347,6 +350,11 @@ public:
   /// clang_cpp_convert_vft.cpp's thunk argument loop does
   /// (docs/roadmap/frontends-to-irep2.md §44).
   std::vector<irep_idt> argument_base_names;
+  /// The arguments' `#default_value`s, null where an argument has none, and
+  /// empty when none has one. Unreflected: a default is no part of the
+  /// function's type. Carried because Python call lowering fills a missing
+  /// argument from it (converter_funcall.cpp, function_call/expr.cpp).
+  std::vector<expr2tc> argument_defaults;
   bool ellipsis;
 
   static constexpr auto fields = std::make_tuple(
@@ -355,7 +363,7 @@ public:
     &code_type2t::argument_names,
     &code_type2t::ellipsis);
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>);
+    sizeof(std::vector<irep_idt>) + sizeof(std::vector<expr2tc>);
   static std::string field_names[esbmct::num_type_fields];
 };
 

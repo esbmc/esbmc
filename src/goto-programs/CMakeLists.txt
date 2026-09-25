@@ -1,7 +1,3 @@
-if(ENABLE_PYTHON_FRONTEND)
-  add_definitions(-DPYTHON_FRONTEND)
-endif()
-
 add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   goto_sideeffects.cpp goto_program.cpp goto_check.cpp goto_inline.cpp
   remove_no_op.cpp goto_convert_functions.cpp remove_unreachable.cpp
@@ -19,7 +15,7 @@ if(ENABLE_GOTO_CONTRACTOR)
     include(SetupIbex)
     add_library(gotocontractor goto_contractor.cpp)
     target_include_directories(gotocontractor PUBLIC ${IBEX_INCLUDE_DIRS} ${IBEX_INCLUDE_DIRS}/ibex ${IBEX_INCLUDE_DIRS}/ibex/3rd)
-    target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms PkgConfig::IBEX)
+    target_link_libraries(gotocontractor PUBLIC esbmc_common algorithms gotoprograms PkgConfig::IBEX)
 endif()
 
 add_subdirectory(abstract-interpretation)
@@ -30,12 +26,5 @@ target_link_libraries(gotoalgorithms PUBLIC algorithms gotoprograms PRIVATE abst
 if(ENABLE_GOTO_CONTRACTOR)
     target_link_libraries(gotocontractor PRIVATE abstract-interpretation)
 endif()
-target_include_directories(gotoprograms
-    PRIVATE ${Boost_INCLUDE_DIRS}
-)
-target_include_directories(gotoalgorithms
-    PRIVATE ${Boost_INCLUDE_DIRS}
-)
-target_compile_definitions(gotoprograms PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
-
-target_link_libraries(gotoprograms PUBLIC pointeranalysis PRIVATE bigint usr_utils langapi)
+target_link_libraries(gotoprograms PUBLIC esbmc_common pointeranalysis PRIVATE bigint usr_utils langapi)
+target_link_libraries(gotoalgorithms PUBLIC esbmc_common)
