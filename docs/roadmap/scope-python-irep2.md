@@ -717,3 +717,25 @@ reach the three writes; all 96 pass.
 
 The "array to pointer decay" write in `handle_assignment_type_adjustments` stays legacy: no test in
 the four suites reaches it, so converting it would add a line nothing covers. Python B-2* 52 -> 50.
+
+## 13. An argument's default crosses the seam (2026-09-25)
+
+§11.3 named `#default_value` first among the candidates for what a `code_typet` round trip loses, and
+`python_lambda.cpp`'s return-type write stays legacy for exactly that reason. `code_type2t` now carries
+the defaults as an unreflected `std::vector<expr2tc>` (null where an argument has none, empty when none
+has one), both ways in `migrate_type`. The readers are right: `converter_funcall.cpp` and
+`function_call/expr.cpp` fill a missing call argument from it.
+
+The carry does not change a verdict or a dump on master: over the 6 697 Python tests,
+`--symbol-table-only` and `--goto-functions-only` match the base, because call lowering has read every
+default before any function type with one is stored IREP2-side. (`--symbol-table-only` does not print
+`#default_value`, so that comparison cannot see the field itself; the unit test does.) What it unblocks needs PR #7888 as well: that PR's `set_function_type` stores a function type
+IREP2-side only when the round trip is exact, and a default was one of the things making it inexact.
+The lambda writes (`python_lambda.cpp:57`, `:1098`) and `upgrade_param_type_from_default`'s
+function-pointer arm are next once both land.
+
+`python_adjust`'s code-type arm now rebuilds a padded signature from all of its fields rather than four,
+so the unreflected ones -- the defaults and §44's base names -- survive it. (Copying the node instead
+would keep the unpadded node's cached CRC.)
+`unit/util/migrate.test.cpp` pins the round trip, that no default adds no key, and that a default is no
+part of the type's identity; the first fails with the back-write removed.
