@@ -2322,6 +2322,30 @@ materialize_arange(const nlohmann::json &args)
   return materialize_arange_ex(args).list;
 }
 
+// Defined further down (dtype parsing/casting lives next to get_dtype());
+// forward-declared here so materialize_numpy_constructor_array can apply a
+// dtype= keyword instead of just tolerating its absence.
+static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node);
+static bool is_numpy_integer_dtype(const std::string &dtype);
+static nlohmann::json cast_numpy_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype);
+static nlohmann::json cast_numpy_linspace_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype);
+
+// A single `dtype=` keyword is the only one materialize_numpy_constructor_
+// array() understands; anything else (an unrecognized keyword, or more than
+// one) still declines.
+static bool is_only_dtype_keyword(const nlohmann::json &call_node)
+{
+  if (!call_node.contains("keywords") || call_node["keywords"].empty())
+    return true;
+  const auto &keywords = call_node["keywords"];
+  return keywords.size() == 1 &&
+         keywords[0].value("arg", std::string()) == "dtype";
+}
+
 // The structural/receiver checks materialize_numpy_constructor_array() needs
 // before it can even ask which constructor it's looking at, split out so
 // that function's own decision count stays small.
@@ -2342,7 +2366,7 @@ static bool is_recognized_numpy_constructor_call_shape(
       ast_json, call_node["func"]["value"].value("id", std::string())))
     return false;
 
-  if (call_node.contains("keywords") && !call_node["keywords"].empty())
+  if (!is_only_dtype_keyword(call_node))
     return false;
 
   return call_node.contains("args") && call_node["args"].is_array();
@@ -2358,18 +2382,38 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   const std::string ctor = call_node["func"]["attr"].get<std::string>();
   const auto &args = call_node["args"];
 
+  std::optional<nlohmann::json> materialized;
   if (ctor == "zeros" || ctor == "ones")
-    return materialize_zeros_ones(ctor, args);
-  if (ctor == "full")
-    return materialize_full(args);
-  if (ctor == "eye" || ctor == "identity")
-    return materialize_eye_identity(ctor, args);
-  if (ctor == "linspace")
-    return materialize_linspace(args);
-  if (ctor == "arange")
-    return materialize_arange(args);
+    materialized = materialize_zeros_ones(ctor, args);
+  else if (ctor == "full")
+    materialized = materialize_full(args);
+  else if (ctor == "eye" || ctor == "identity")
+    materialized = materialize_eye_identity(ctor, args);
+  else if (ctor == "linspace")
+    materialized = materialize_linspace(args);
+  else if (ctor == "arange")
+    materialized = materialize_arange(args);
 
-  return std::nullopt;
+  if (!materialized)
+    return std::nullopt;
+
+  // dtype= normalizes/validates and casts every element the same way the
+  // top-level `x = np.<ctor>(..., dtype=...)` assignment path already does
+  // (cast_numpy_literal_to_dtype/get_dtype()), so a materialized re-reading
+  // of this constructor call agrees with what actually got assigned --
+  // explicitly rejecting object/complex/non-literal dtype rather than
+  // silently misreading it (ADR-NP principle 3).
+  for (const auto &kw : call_node.value("keywords", nlohmann::json::array()))
+  {
+    if (kw.value("arg", std::string()) != "dtype")
+      continue;
+    const std::string dtype = extract_numpy_dtype_name(kw["value"]);
+    if (ctor == "linspace")
+      return cast_numpy_linspace_literal_to_dtype(*materialized, dtype);
+    return cast_numpy_literal_to_dtype(*materialized, dtype);
+  }
+
+  return materialized;
 }
 
 // True when call_node's attribute name is one materialize_numpy_constructor_
@@ -3872,9 +3916,15 @@ make_numpy_typed_constant(const scalar_value &value, const std::string &dtype)
         "TypeError: casting complex literals to integer dtype is not "
         "supported");
     }
+    // NumPy's float->int dtype cast truncates toward zero (the same
+    // semantics astype() already gets via a genuine IREP2 typecast_exprt in
+    // function_call_expr::handle_numpy_astype -- see astype_float_to_int_
+    // success, which pins 2.5 -> 2 and -1.9 -> -1). A rounding function
+    // here would silently diverge from that (found in review: 1.5 -> 2
+    // instead of 1).
     return {
       {"_type", "Constant"},
-      {"value", static_cast<int64_t>(std::llround(value.value.real()))}};
+      {"value", static_cast<int64_t>(std::trunc(value.value.real()))}};
   }
 
   if (is_numpy_float_dtype(normalized))
@@ -3925,6 +3975,48 @@ static nlohmann::json cast_numpy_literal_to_dtype(
 
   throw std::runtime_error(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+}
+
+static nlohmann::json cast_numpy_linspace_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype)
+{
+  if (!is_numpy_integer_dtype(dtype))
+    return cast_numpy_literal_to_dtype(node, dtype);
+
+  if (!node.is_object() || !node.contains("_type"))
+  {
+    throw std::runtime_error(
+      "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+  }
+
+  const std::string node_type = node["_type"].get<std::string>();
+  if ((node_type == "List" || node_type == "Tuple") && node.contains("elts"))
+  {
+    nlohmann::json casted = node;
+    casted["elts"] = nlohmann::json::array();
+    for (const auto &elt : node["elts"])
+      casted["elts"].push_back(
+        cast_numpy_linspace_literal_to_dtype(elt, dtype));
+    return casted;
+  }
+
+  scalar_value value;
+  if (try_extract_scalar_constant(node, value))
+    return make_numpy_typed_constant(
+      make_real_scalar(std::floor(value.value.real())), dtype);
+
+  throw std::runtime_error(
+    "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+}
+
+static nlohmann::json
+make_numpy_linspace_constant(double value, const std::string &dtype)
+{
+  nlohmann::json out;
+  out["_type"] = "Constant";
+  out["value"] = is_numpy_integer_dtype(dtype) ? std::floor(value) : value;
+  return out;
 }
 
 bool numpy_call_expr::is_math_function() const
@@ -6562,11 +6654,21 @@ nlohmann::json numpy_call_expr::resolve_literal_numpy_array_input(
   arr_arg = try_inline_pure_call_arg(arr_arg);
 
   auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-  if (!literal_arg.has_value())
-    throw std::runtime_error(
-      "TypeError: numpy." + function_name + "() currently supports only " +
-      (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
-  return std::move(*literal_arg);
+  if (literal_arg.has_value())
+    return std::move(*literal_arg);
+
+  // get_literal_numpy_array_arg only reads a raw List or a literal
+  // np.array(<list>) call; a shape-based constructor (zeros/ones/full/eye/
+  // identity/linspace/arange), with or without a dtype= keyword, needs the
+  // same reconstruction transpose's Name-branch and reducers already use.
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(arr_arg, converter_.ast()))
+    return std::move(*materialized);
+
+  throw std::runtime_error(
+    "TypeError: numpy." + function_name + "() currently supports only " +
+    (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
 }
 
 nlohmann::json
@@ -6967,6 +7069,389 @@ static std::optional<nlohmann::json> resolve_searchsorted_value_vector(
   return result;
 }
 
+// A `<id> = <ast>`-shaped Name node, sharing `ast`'s own source-location
+// fields (several conversion paths key off lineno/col_offset for
+// diagnostics). Split out of hoist_call_argument_into_temp so its Store and
+// Load occurrences of the same temp share this one builder.
+static nlohmann::json build_hoist_temp_name_node(
+  const nlohmann::json &loc_source,
+  const std::string &id,
+  const char *ctx)
+{
+  nlohmann::json node;
+  node["_type"] = "Name";
+  node["id"] = id;
+  node["ctx"] = {{"_type", ctx}};
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (loc_source.contains(key))
+      node[key] = loc_source[key];
+  return node;
+}
+
+// Evaluates `call_node` (a call to a user function) exactly once by
+// synthesizing `<temp> = call_node` and converting it through the normal
+// assignment pipeline (get_var_assign, via
+// python_converter::emit_statement_into_current_block) -- the same
+// mechanism a real `tmp = make()` statement goes through, so side effects
+// execute once and the temp's numpy array metadata is registered exactly
+// like any other local-array-return assignment (see
+// get_function_definition's local-array-return handling). Returns a Name
+// node the caller (resolve_searchsorted_array_via_descriptor,
+// try_hoist_call_arg_for_view_method) can then treat like any
+// variable-bound array; nullopt when there is no current block to emit
+// into (e.g. converting outside statement context).
+std::optional<nlohmann::json>
+numpy_call_expr::hoist_call_argument_into_temp(const nlohmann::json &call_node)
+{
+  static int counter = 0;
+  const std::string temp_id =
+    "__np_hoisted_call_arg$" + std::to_string(++counter);
+
+  nlohmann::json synthetic;
+  synthetic["_type"] = "Assign";
+  synthetic["targets"] = nlohmann::json::array(
+    {build_hoist_temp_name_node(call_node, temp_id, "Store")});
+  synthetic["value"] = call_node;
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (call_node.contains(key))
+      synthetic[key] = call_node[key];
+
+  if (!converter_.emit_statement_into_current_block(synthetic))
+    return std::nullopt;
+
+  return build_hoist_temp_name_node(call_node, temp_id, "Load");
+}
+
+// True for a plain call to a user-defined function (`make(...)`), as
+// opposed to a numpy module/method call (`np.array(...)`, `a.argsort()`) --
+// the only shape hoist_call_argument_into_temp is meant to hoist. A numpy
+// call has its own, already-tested resolution paths
+// (materialize_numpy_constructor_array and friends); hoisting it too would
+// just add an unnecessary temp assignment around already-working cases.
+static bool is_user_function_call(const nlohmann::json &node)
+{
+  return node.value("_type", std::string()) == "Call" &&
+         node.contains("func") && node["func"].is_object() &&
+         node["func"].value("_type", std::string()) == "Name";
+}
+
+// Resolves `raw_arg` -- a Name already bound to a concrete numpy array, or a
+// call to a user function returning one (direct, or via a local variable) --
+// through the same descriptor-materialization path sort()/argsort() already
+// use for a Name (build_numpy_descriptor_materialized_elements), instead of
+// searchsorted's own AST-literal-tracing-only resolution. A Call is hoisted
+// into a temporary first (see hoist_call_argument_into_temp) so the same
+// Name-based materialization applies uniformly afterwards. Declines
+// (nullopt) for anything build_numpy_descriptor_materialized_elements
+// itself declines, or a non-1-D shape.
+//
+// Unlike the AST-literal path, these elements are index expressions into
+// the array's own symbol (not JSON literals), even when that array was
+// built from a literal constructor -- so handle_searchsorted_call's
+// position computation over this path stays entirely at the exprt level
+// (build_searchsorted_position_expr), the same style
+// build_numpy_sort_or_argsort_result's bubble sort already uses, rather
+// than trying to read a compile-time value back out of them.
+std::optional<std::vector<exprt>>
+numpy_call_expr::resolve_searchsorted_array_via_descriptor(
+  const nlohmann::json &raw_arg)
+{
+  nlohmann::json name_node;
+  if (raw_arg.value("_type", std::string()) == "Name")
+    name_node = raw_arg;
+  else if (is_user_function_call(raw_arg))
+  {
+    std::optional<nlohmann::json> hoisted =
+      hoist_call_argument_into_temp(raw_arg);
+    if (!hoisted)
+      return std::nullopt;
+    name_node = std::move(*hoisted);
+  }
+  else
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    name_node,
+    "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
+  if (!materialized || materialized->first.size() != 1)
+    return std::nullopt;
+
+  return materialized->second;
+}
+
+// sorter=argsort(<the same array>) over a descriptor-resolved array
+// (resolve_searchsorted_array_via_descriptor -- elements are index
+// expressions into a local array, not JSON literals, so they are almost
+// never is_constant() and can't be re-extracted as compile-time indices).
+// bubble_sort_numpy_paired already builds a stable sort as an if_exprt
+// chain over arbitrary elements, concrete or symbolic alike (the same
+// mechanism numpy.sort()/argsort() themselves use); sorting a copy of
+// `values` with it computes exactly the array searchsorted(a, v,
+// sorter=argsort(a)) searches (a[sorter]), without needing the permutation
+// indices at all. Scoped to argsort() of the same array -- the only sound,
+// tested use of sorter=argsort(...) the AST-literal path (resolve_
+// searchsorted_sorter) supports either -- so an unrelated array's argsort or
+// a literal index array here still falls through to the caller's own
+// "cannot resolve" diagnostic instead of being silently accepted.
+std::optional<std::vector<exprt>>
+numpy_call_expr::resolve_searchsorted_sorted_values_via_descriptor(
+  const nlohmann::json &raw_arg,
+  const nlohmann::json &sorter_node,
+  const std::string &array_name)
+{
+  if (
+    !is_argsort_call(sorter_node) ||
+    !argsort_call_targets_array(sorter_node, array_name, converter_.ast()))
+    return std::nullopt;
+
+  std::optional<std::vector<exprt>> values =
+    resolve_searchsorted_array_via_descriptor(raw_arg);
+  if (!values)
+    return std::nullopt;
+
+  // Matches the cap sort()/argsort() themselves enforce on the same
+  // conversion-time-unrolled comparison network (bubble_sort_numpy_paired);
+  // without it a large fixed-shape array here would unroll an unbounded
+  // quadratic number of comparison expressions.
+  if (values->size() > max_numpy_sort_elements)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() sorter supports arrays up to " +
+      std::to_string(max_numpy_sort_elements) + " elements");
+
+  std::vector<exprt> sorted_values = *values;
+  bubble_sort_numpy_paired(sorted_values, nullptr);
+  return sorted_values;
+}
+
+// Computes numpy.searchsorted()'s insertion index of `target` into `values`
+// (assumed sorted; unlike the AST-literal path, sortedness isn't statically
+// checked here since these elements are index expressions, not JSON
+// literals) as an exprt: the count of elements satisfying <=/< target
+// (right/left) -- built via if_exprt/binary_relation_exprt the same way
+// build_numpy_sort_or_argsort_result's bubble sort computes its own
+// comparisons, so this works uniformly whether `values`/`target` are
+// concrete or symbolic, unlike a compile-time numeric extraction.
+static exprt build_searchsorted_position_expr(
+  python_converter &converter,
+  const std::vector<exprt> &values,
+  const exprt &target,
+  bool right)
+{
+  auto make_index = [&](int64_t i) {
+    nlohmann::json node{{"_type", "Constant"}, {"value", i}, {"kind", nullptr}};
+    return converter.get_expr(node);
+  };
+
+  exprt count = make_index(0);
+  for (const exprt &value : values)
+  {
+    const bool same_type = value.type() == target.type();
+    exprt lhs = same_type ? value : numpy_cast_to_double(value);
+    exprt rhs = same_type ? target : numpy_cast_to_double(target);
+    binary_relation_exprt satisfied(lhs, right ? "<=" : "<", rhs);
+    exprt inc = if_exprt(satisfied, make_index(1), make_index(0));
+    count = python_expr::build_add(count, inc, count.type());
+  }
+  return count;
+}
+
+exprt numpy_call_expr::handle_searchsorted_call_over_descriptor(
+  std::vector<exprt> values,
+  bool right)
+{
+  const nlohmann::json &value_arg = call_["args"][1];
+  if (
+    std::optional<nlohmann::json> vector_values =
+      resolve_searchsorted_value_vector(value_arg, converter_))
+  {
+    std::vector<exprt> positions;
+    positions.reserve((*vector_values)["elts"].size());
+    for (const nlohmann::json &value_node : (*vector_values)["elts"])
+      positions.push_back(build_searchsorted_position_expr(
+        converter_, values, converter_.get_expr(value_node), right));
+    // build_1d_numpy_array_value reads elems.front(); an empty `v` (e.g.
+    // np.searchsorted(a, [])) has no element to take a type from, so build
+    // the (empty) integer-index list the same way the AST-literal path's
+    // own empty-values case already does.
+    if (positions.empty())
+      return converter_.get_expr(make_integer_list({}));
+    return build_1d_numpy_array_value(positions, type_handler_);
+  }
+
+  return build_searchsorted_position_expr(
+    converter_, values, converter_.get_expr(value_arg), right);
+}
+
+// A user function call as the array argument only resolves through
+// hoist_call_argument_into_temp, which refuses to emit its temp assignment
+// during a discarded type-probe pass (would otherwise evaluate the call an
+// extra time -- see safe_to_emit_side_effecting_statement). The AST-literal
+// fallback handle_searchsorted_call falls to next cannot resolve a user
+// function call at all, so without this a probe would throw and abort the
+// enclosing assignment's own type inference before the real pass
+// (in_rhs_type_probe_ false) ever runs. A same-shaped placeholder is all
+// the probe needs; nullopt (not a probe-blocked user-function-call case)
+// leaves handle_searchsorted_call's normal resolution unchanged.
+std::optional<exprt> numpy_call_expr::try_searchsorted_probe_placeholder()
+{
+  if (
+    !is_user_function_call(call_["args"][0]) ||
+    converter_.safe_to_emit_side_effecting_statement())
+    return std::nullopt;
+
+  exprt placeholder = converter_.get_expr(nlohmann::json{
+    {"_type", "Constant"}, {"value", int64_t{0}}, {"kind", nullptr}});
+  if (resolve_searchsorted_value_vector(call_["args"][1], converter_))
+    return build_1d_numpy_array_value({placeholder}, type_handler_);
+  return placeholder;
+}
+
+// The AST-literal resolution only (row/col view, or the literal-array-input
+// fallback), declining (nullopt) rather than throwing so
+// handle_searchsorted_call can try the descriptor fallback first and only
+// surface this path's own diagnostic if that also declines.
+std::optional<nlohmann::json>
+numpy_call_expr::try_resolve_searchsorted_literal_array(
+  const std::string &function)
+{
+  nlohmann::json arr_arg = call_["args"][0];
+  try
+  {
+    if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
+      arr_arg = resolve_literal_numpy_array_input(arr_arg, function, false);
+    return arr_arg;
+  }
+  catch (const std::runtime_error &)
+  {
+    return std::nullopt;
+  }
+}
+
+// `values[i] <= values[i+1]` for every adjacent pair, cast to a common type
+// the same way build_searchsorted_position_expr's own comparisons are, so
+// mixed int/float elements compare correctly.
+static exprt build_is_sorted_expr(const std::vector<exprt> &values)
+{
+  exprt result = true_exprt();
+  for (std::size_t i = 0; i + 1 < values.size(); ++i)
+  {
+    const bool same_type = values[i].type() == values[i + 1].type();
+    exprt lhs = same_type ? values[i] : numpy_cast_to_double(values[i]);
+    exprt rhs = same_type ? values[i + 1] : numpy_cast_to_double(values[i + 1]);
+    exprt cmp = binary_relation_exprt(lhs, "<=", rhs);
+    result = i == 0 ? cmp : and_exprt(result, cmp);
+  }
+  return result;
+}
+
+// resolve_searchsorted_array_via_descriptor plus the dispatch to
+// handle_searchsorted_call_over_descriptor, as a single nullopt-on-decline
+// step.
+//
+// Unlike the AST-literal path (resolve_searchsorted_space's is_sorted_
+// numeric_list check), these elements are index expressions, not JSON
+// literals, so sortedness can't be validated at conversion time (see
+// resolve_searchsorted_array_via_descriptor's own doc). Silently computing
+// build_searchsorted_position_expr's result over an actually-unsorted array
+// returns a value that doesn't match numpy.searchsorted()'s own binary
+// search (soundness gap caught in review: `np.searchsorted(make(), v)`
+// over an unsorted local-array-return used to give a wrong-looking index
+// that could pass a user assertion it shouldn't). Emitting the same check
+// as a runtime ASSERT instead moves the validation to where it *can* be
+// decided -- symbolic execution, once the array's concrete values are
+// known -- so an unsorted array is still caught, just as a violated
+// property instead of a conversion-time diagnostic. Skipped during a
+// discarded type-probe pass, matching every other side-effecting emission
+// in this file.
+std::optional<exprt>
+numpy_call_expr::try_searchsorted_call_over_descriptor(bool right)
+{
+  std::optional<std::vector<exprt>> descriptor_values =
+    resolve_searchsorted_array_via_descriptor(call_["args"][0]);
+  if (!descriptor_values)
+    return std::nullopt;
+
+  if (
+    descriptor_values->size() > 1 &&
+    converter_.safe_to_emit_side_effecting_statement())
+  {
+    code_assertt sorted_assert(build_is_sorted_expr(*descriptor_values));
+    sorted_assert.location() = converter_.get_location_from_decl(call_);
+    sorted_assert.location().comment(
+      "numpy.searchsorted() requires the input array to be sorted");
+    converter_.add_instruction(sorted_assert);
+  }
+
+  return handle_searchsorted_call_over_descriptor(
+    std::move(*descriptor_values), right);
+}
+
+// Validates `arr_arg`'s shape (1-D) and, applying `sorter_node` if given
+// (validating it against `array_name`) or otherwise the array's own
+// sortedness, returns the space handle_searchsorted_call_over_literal
+// actually searches. Split out of handle_searchsorted_call to keep that
+// function's own decision count down.
+nlohmann::json numpy_call_expr::resolve_searchsorted_space(
+  nlohmann::json arr_arg,
+  const nlohmann::json *sorter_node,
+  const std::string &array_name)
+{
+  std::vector<std::size_t> shape;
+  if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
+
+  if (sorter_node != nullptr)
+    return apply_searchsorted_sorter(
+      arr_arg,
+      resolve_searchsorted_sorter(
+        *sorter_node, arr_arg, array_name, converter_));
+
+  if (!is_sorted_numeric_list(
+        arr_arg,
+        "TypeError: numpy.searchsorted() array must contain finite "
+        "numeric values"))
+    throw std::runtime_error(
+      "ValueError: numpy.searchsorted() requires the input array to be "
+      "sorted");
+  return arr_arg;
+}
+
+// handle_searchsorted_call's final step over an AST-literal `search_space`:
+// a vector value (an index per element) or a scalar value (a single
+// index), mirroring handle_searchsorted_call_over_descriptor's own
+// vector-or-scalar dispatch for the descriptor-resolved path.
+exprt numpy_call_expr::handle_searchsorted_call_over_literal(
+  nlohmann::json search_space,
+  bool right)
+{
+  const nlohmann::json &value_arg = call_["args"][1];
+  if (
+    std::optional<nlohmann::json> values =
+      resolve_searchsorted_value_vector(value_arg, converter_))
+  {
+    std::vector<std::size_t> indices;
+    indices.reserve((*values)["elts"].size());
+    for (const nlohmann::json &value : (*values)["elts"])
+    {
+      numeric_to_key(
+        value, "TypeError: numpy.searchsorted() requires a literal value");
+      indices.push_back(searchsorted_position(search_space, value, right));
+    }
+    return converter_.get_expr(make_integer_list(indices));
+  }
+
+  numeric_to_key(
+    value_arg, "TypeError: numpy.searchsorted() requires a literal value");
+  nlohmann::json position;
+  position["_type"] = "Constant";
+  position["value"] =
+    static_cast<int64_t>(searchsorted_position(search_space, value_arg, right));
+  return converter_.get_expr(position);
+}
+
 exprt numpy_call_expr::handle_searchsorted_call()
 {
   const std::string &function = function_id_.get_function();
@@ -6991,52 +7476,49 @@ exprt numpy_call_expr::handle_searchsorted_call()
       ? call_["args"][0].value("id", std::string())
       : std::string();
 
-  nlohmann::json arr_arg = call_["args"][0];
-  if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
-    arr_arg = resolve_literal_numpy_array_input(arr_arg, function, false);
+  if (sorter_node == nullptr)
+    if (std::optional<exprt> placeholder = try_searchsorted_probe_placeholder())
+      return *placeholder;
 
-  std::vector<std::size_t> shape;
-  if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
-    throw std::runtime_error(
-      "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
+  // The AST-literal path is tried first and, whenever it can resolve the
+  // array, wins outright -- it already validates things the descriptor path
+  // does not attempt (the array is actually sorted, the search value is a
+  // literal), so a Name it can already follow (e.g. `a = np.array([...])`)
+  // must keep going through it rather than being silently picked up by the
+  // newer, less validated path below. The descriptor path (a Name already
+  // bound to a concrete numpy array via a route the AST can't trace, or a
+  // local-array-return function call) is only a fallback for what the
+  // AST-literal path itself declines on.
+  std::optional<nlohmann::json> literal_arg =
+    try_resolve_searchsorted_literal_array(function);
 
-  nlohmann::json search_space = arr_arg;
-  if (sorter_node != nullptr)
-    search_space = apply_searchsorted_sorter(
-      arr_arg,
-      resolve_searchsorted_sorter(
-        *sorter_node, arr_arg, array_name, converter_));
-  else if (!is_sorted_numeric_list(
-             arr_arg,
-             "TypeError: numpy.searchsorted() array must contain finite "
-             "numeric values"))
-    throw std::runtime_error(
-      "ValueError: numpy.searchsorted() requires the input array to be "
-      "sorted");
+  if (!literal_arg && sorter_node == nullptr)
+    if (
+      std::optional<exprt> result =
+        try_searchsorted_call_over_descriptor(right))
+      return *result;
 
-  const nlohmann::json &value_arg = call_["args"][1];
-  if (
-    std::optional<nlohmann::json> values =
-      resolve_searchsorted_value_vector(value_arg, converter_))
-  {
-    std::vector<std::size_t> indices;
-    indices.reserve((*values)["elts"].size());
-    for (const nlohmann::json &value : (*values)["elts"])
-    {
-      numeric_to_key(
-        value, "TypeError: numpy.searchsorted() requires a literal value");
-      indices.push_back(searchsorted_position(search_space, value, right));
-    }
-    return converter_.get_expr(make_integer_list(indices));
-  }
+  // sorter=argsort(<the same array>) over a descriptor-resolved array: an
+  // exprt-level stable-sort gather, since these elements (index expressions
+  // into a local array) are almost never compile-time constants the way a
+  // genuine AST literal's would be. See
+  // resolve_searchsorted_sorted_values_via_descriptor for the full
+  // rationale; nullopt (not this shape) leaves the diagnostic below
+  // unchanged.
+  if (!literal_arg && sorter_node != nullptr)
+    if (
+      std::optional<std::vector<exprt>> sorted_values =
+        resolve_searchsorted_sorted_values_via_descriptor(
+          call_["args"][0], *sorter_node, array_name))
+      return handle_searchsorted_call_over_descriptor(
+        std::move(*sorted_values), right);
 
-  numeric_to_key(
-    value_arg, "TypeError: numpy.searchsorted() requires a literal value");
-  nlohmann::json position;
-  position["_type"] = "Constant";
-  position["value"] =
-    static_cast<int64_t>(searchsorted_position(search_space, value_arg, right));
-  return converter_.get_expr(position);
+  if (!literal_arg)
+    resolve_literal_numpy_array_input(call_["args"][0], function, false);
+
+  nlohmann::json search_space = resolve_searchsorted_space(
+    std::move(*literal_arg), sorter_node, array_name);
+  return handle_searchsorted_call_over_literal(std::move(search_space), right);
 }
 
 void numpy_call_expr::parse_sort_axis_and_keywords(
@@ -7153,9 +7635,224 @@ exprt numpy_call_expr::handle_sort_call()
   return converter_.get_expr(make_sorted_numeric_list(std::move(elements)));
 }
 
+// `*_like`'s element type: `dtype=` overrides the base array's own element
+// type (real numpy: np.zeros_like(base, dtype=X) casts, it does not require
+// X == base's dtype), validated/normalized the same way the top-level
+// constructor dtype= path already is, so an unsupported dtype rejects with
+// the same diagnostic (ADR-NP principle 3). Split out of get() to keep that
+// function's own decision count from growing further.
+typet numpy_call_expr::resolve_like_element_type(const typet &base_type)
+{
+  const std::string like_dtype = get_dtype();
+  if (is_numpy_complex_dtype(like_dtype))
+    throw std::runtime_error(
+      "TypeError: complex dtype is not supported in NumPy constructors yet");
+
+  typet elem_type;
+  if (like_dtype.empty())
+    elem_type = get_array_scalar_type(base_type);
+  else
+  {
+    get_dtype_size();
+    elem_type = get_typet_from_dtype();
+  }
+
+  if (is_complex_type(elem_type))
+    throw std::runtime_error(
+      "TypeError: complex dtype is not supported in NumPy constructors yet");
+  return elem_type;
+}
+
+// full()/eye()/identity()/linspace()'s dtype= keyword (unlike np.array()'s
+// own dispatch just below in get(), which already applies it via
+// cast_numpy_literal_to_dtype) reached here without ever being read: the
+// constructed list was returned as-is, so `np.full((1,), 3.7, dtype=int)`
+// kept the literal 3.7 instead of truncating to 3 (found in review). Cast
+// the finished literal list once, right before conversion, the same way
+// np.array() already does.
+nlohmann::json numpy_call_expr::apply_constructor_dtype(nlohmann::json node)
+{
+  const std::string dtype = get_dtype();
+  return dtype.empty() ? node : cast_numpy_literal_to_dtype(node, dtype);
+}
+
+// transpose()/flatten()/ravel() (and `.T`, rewritten to np.transpose(...)
+// ahead of here), and every other method classify_numpy_method_call's
+// dispatch_rewrite_methods rewrites (sum/mean/min/max/prod/std/var/
+// diagonal/argmin/argmax/argsort/searchsorted/reshape), only resolve a
+// first argument that is a List or a Name (e.g. `x.transpose()` rewritten
+// to `np.transpose(x)`), never a raw Call -- `np.eye(3).transpose()`
+// (rewritten to `np.transpose(np.eye(3))`) falls through every dispatch
+// below into a generic runtime-call fallback that either errors confusingly
+// or silently produces a wrong NONDET result instead of the correct one (a
+// soundness gap, not just a missing feature).
+//
+// The primary fix is a pure AST rewrite: materialize_numpy_constructor_array
+// turns the raw constructor call into the same literal List node a Name
+// bound to it would resolve to, so the rest of get() sees the
+// already-correct List/Name case uniformly. Being a pure expression-level
+// transform (no statement emitted, no side effect), it behaves identically
+// whether this is the discarded type-probe pass or the real conversion --
+// unlike hoisting into a temp, which needs a live current_block and would
+// otherwise leave the probe's inferred type wrong (see
+// hoist_call_argument_into_temp's own doc).
+//
+// materialize_numpy_constructor_array only understands a direct numpy
+// constructor call; a raw Call to a user function (e.g. `make().T`) falls
+// back to hoisting into a temp, exactly the mechanism
+// hoist_call_argument_into_temp already uses for searchsorted's own
+// local-array-return case.
+//
+// transpose/flatten/ravel are checked unconditionally -- np.transpose(f())
+// module-form already resolved a raw Call argument correctly before this
+// fix existed, so there is nothing to protect there. Every other method has
+// no such standalone handling, so it is gated on the `_numpy_method_form`
+// marker classify_numpy_method_call's rewrite stamps: only a call that
+// reached here via the `.method()` rewrite carries it, so a genuine
+// module-form call (`np.sum(f())`, already correctly handled by that
+// dispatch's own inline-call resolution) is never affected. Among those,
+// only sum/mean/min/max/argsort/searchsorted resolve a hoisted temp
+// correctly (their Name-argument dispatch goes through descriptor
+// materialization, which reads the GOTO-IR-side shape map the temp is
+// registered in); reshape/prod/std/var/argmin/argmax/diagonal instead
+// re-walk the *source* AST or a pointer-view map that a temp hoisted at
+// conversion time can never appear in, so they raise a clean diagnostic
+// instead (still a gap, but never a silently wrong NONDET result again).
+//
+// Called from build_result, ahead of get() and outside the class, so this
+// check's own decision point doesn't add to get()'s own (already far over
+// threshold) decision count. nullopt (not this shape) leaves get()'s
+// normal dispatch unchanged; throws for the method-form-only-unsupported
+// case above.
+std::optional<exprt>
+numpy_call_expr::try_hoist_call_arg_for_view_method(const std::string &function)
+{
+  if (
+    call_["args"].empty() ||
+    call_["args"][0].value("_type", std::string()) != "Call")
+    return std::nullopt;
+
+  static const std::set<std::string> always_allowed_functions = {
+    "transpose", "flatten", "ravel"};
+  // Every other dispatch_rewrite_methods name reaches here only via
+  // classify_numpy_method_call's `.method()` rewrite (the `_numpy_method_
+  // form` marker it stamps) -- a genuine module-form call (`np.sum(f())`)
+  // is already handled correctly by that dispatch's own inline-call
+  // resolution and must not be touched.
+  const bool is_method_form = always_allowed_functions.count(function) != 0 ||
+                              call_.value("_numpy_method_form", false);
+  if (!is_method_form)
+    return std::nullopt;
+
+  const nlohmann::json &arg_call = call_["args"][0];
+
+  // materialize_numpy_constructor_array is a pure, side-effect-free AST
+  // rewrite that works uniformly for every dispatch (it produces the same
+  // literal List a Name bound to the constructor would resolve to, which
+  // every dispatch below -- including the ones excluded from the hoist
+  // fallback further down -- already handles correctly for a Name/List
+  // argument); try it first regardless of which function this is.
+  //
+  // Not every dispatch this reaches (sum/mean/min/max/argsort's own
+  // descriptor-materialized path in particular) retypes the assignment
+  // target the way transpose/flatten/ravel already do (see
+  // retype_current_lhs_and_return's own doc) -- their Name-argument case
+  // was previously only ever reached for an already-correctly-typed
+  // tracked array or parameter, never a fresh assignment target still
+  // carrying the static annotator's stale Any/pointer guess for this
+  // chained-call shape. Applying it uniformly here, at the one call site
+  // every widened method funnels through, is idempotent for the methods
+  // that already retype internally and closes the gap for the ones that
+  // do not.
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(arg_call, converter_.ast()))
+  {
+    nlohmann::json rewritten_call = call_;
+    rewritten_call["args"][0] = std::move(*materialized);
+    numpy_call_expr nested(function_id_, rewritten_call, converter_);
+    return retype_current_lhs_and_return(converter_, nested.get());
+  }
+
+  // materialize declined (an unrecognized constructor like np.array, a
+  // non-constant fill, or a genuine user function call): only the methods
+  // whose Name-argument dispatch resolves through descriptor
+  // materialization (build_numpy_descriptor_materialized_elements /
+  // try_reduce_descriptor_call), not an AST-only find_var_decl lookup,
+  // correctly see a temp hoisted at conversion time.
+  static const std::set<std::string> method_form_only_functions = {
+    "sum", "mean", "min", "max", "argsort", "searchsorted"};
+  if (
+    always_allowed_functions.count(function) == 0 &&
+    method_form_only_functions.count(function) == 0)
+  {
+    // Every other dispatch_rewrite_methods name (reshape, prod/std/var,
+    // argmin/argmax, diagonal) resolves its Name argument by re-walking
+    // the *source* AST (resolve_numpy_var/find_var_decl) or, for
+    // diagonal, building a pointer view keyed off tracked shape metadata
+    // -- neither can see a temp hoisted at conversion time, which exists
+    // only in the GOTO IR. Rather than falling through silently to the
+    // generic runtime-call fallback (which produced a wrong NONDET result
+    // for this exact shape), reject with a diagnostic naming the gap
+    // explicitly (ADR-NP principle 3): still incomplete, but never
+    // silently wrong.
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() chained directly on a constructor call with no intermediate "
+      "variable is not supported yet; assign the constructor's result to "
+      "a variable first");
+  }
+
+  std::optional<nlohmann::json> hoisted =
+    hoist_call_argument_into_temp(arg_call);
+  if (!hoisted)
+  {
+    // Discarded type-probe pass (or no current block to emit into):
+    // hoisting would evaluate the argument an extra time -- see
+    // safe_to_emit_side_effecting_statement. Declining here (rather than a
+    // scalar placeholder) lets the enclosing assign's own Call-probe branch
+    // raise its usual "cannot resolve" diagnostic instead of silently
+    // mistyping the LHS as a scalar; the real pass (in_rhs_type_probe_
+    // false, which retries with hoisting allowed) still converts correctly
+    // whenever this shape reaches a live statement context.
+    return std::nullopt;
+  }
+
+  nlohmann::json rewritten_call = call_;
+  rewritten_call["args"][0] = std::move(*hoisted);
+  numpy_call_expr nested(function_id_, rewritten_call, converter_);
+  return retype_current_lhs_and_return(converter_, nested.get());
+}
+
+exprt numpy_call_expr::retype_current_lhs_and_return(
+  python_converter &converter,
+  exprt value)
+{
+  if (converter.current_lhs)
+  {
+    converter.current_lhs->type() = value.type();
+    converter.update_symbol(*converter.current_lhs);
+  }
+  return value;
+}
+
+exprt numpy_call_expr::build_result(
+  const symbol_id &function_id,
+  const nlohmann::json &call,
+  python_converter &converter)
+{
+  numpy_call_expr instance(function_id, call, converter);
+  if (
+    std::optional<exprt> hoisted =
+      instance.try_hoist_call_arg_for_view_method(function_id.get_function()))
+    return *hoisted;
+  return instance.get();
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
+
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
   reject_symbolic_transpose_axes(function, call_);
   reject_unsupported_transpose_axes_rank(function);
@@ -7681,7 +8378,7 @@ exprt numpy_call_expr::get()
         std::vector<nlohmann::json> elts;
         for (std::size_t i = 0; i < dims[0]; ++i)
           elts.push_back(fill);
-        return to_list_expr(make_list(elts));
+        return to_list_expr(apply_constructor_dtype(make_list(elts)));
       }
       if (dims.size() == 2)
       {
@@ -7693,7 +8390,7 @@ exprt numpy_call_expr::get()
             row.push_back(fill);
           rows.push_back(make_list(row));
         }
-        return to_list_expr(make_list(rows));
+        return to_list_expr(apply_constructor_dtype(make_list(rows)));
       }
       throw std::runtime_error(
         "TypeError: numpy.full() currently supports up to 2D shapes");
@@ -7713,7 +8410,7 @@ exprt numpy_call_expr::get()
           row.push_back(make_constant(i == j ? 1 : 0));
         out_rows.push_back(make_list(row));
       }
-      return to_list_expr(make_list(out_rows));
+      return to_list_expr(apply_constructor_dtype(make_list(out_rows)));
     }
 
     if (function == "linspace")
@@ -7725,13 +8422,16 @@ exprt numpy_call_expr::get()
         num = get_arg(2)["value"].get<std::size_t>();
       if (num == 0)
         return to_list_expr(make_list({}));
+      const std::string dtype = get_dtype();
       if (num == 1)
-        return to_list_expr(make_list({make_constant(start)}));
+        return to_list_expr(apply_constructor_dtype(
+          make_list({make_numpy_linspace_constant(start, dtype)})));
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<nlohmann::json> elts;
       for (std::size_t i = 0; i < num; ++i)
-        elts.push_back(make_constant(start + (step * static_cast<double>(i))));
-      return to_list_expr(make_list(elts));
+        elts.push_back(make_numpy_linspace_constant(
+          start + (step * static_cast<double>(i)), dtype));
+      return to_list_expr(apply_constructor_dtype(make_list(elts)));
     }
   }
 
@@ -7792,6 +8492,8 @@ exprt numpy_call_expr::get()
           fill_kwarg = kw["value"];
           continue;
         }
+        if (arg == "dtype")
+          continue;
         throw std::runtime_error(
           "TypeError: numpy." + function + "() keyword '" + arg +
           "' is not supported");
@@ -7822,10 +8524,7 @@ exprt numpy_call_expr::get()
     std::vector<long long> dims(shape.begin(), shape.end());
     validate_ndarray_shape(dims);
 
-    typet elem_type = get_array_scalar_type(base_type);
-    if (is_complex_type(elem_type))
-      throw std::runtime_error(
-        "TypeError: complex dtype is not supported in NumPy constructors yet");
+    typet elem_type = resolve_like_element_type(base_type);
 
     exprt expr;
     if (function == "empty_like")
@@ -8475,7 +9174,8 @@ exprt numpy_call_expr::get()
     result["elts"] = nlohmann::json::array();
     for (const auto &elem : flat)
       result["elts"].push_back(elem);
-    return converter_.get_expr(result);
+    return retype_current_lhs_and_return(
+      converter_, converter_.get_expr(result));
   }
 
   if (

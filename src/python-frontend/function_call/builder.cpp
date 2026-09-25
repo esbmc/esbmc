@@ -1545,8 +1545,7 @@ exprt function_call_builder::build() const
       function_id.set_filename("");
     }
 
-    numpy_call_expr numpy_call(function_id, call_, converter_);
-    return numpy_call.get();
+    return numpy_call_expr::build_result(function_id, call_, converter_);
   }
 
   const bool saved = converter_.enter_contract_clause(
