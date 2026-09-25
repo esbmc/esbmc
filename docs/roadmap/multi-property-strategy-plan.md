@@ -1,7 +1,6 @@
 # Plan — `--multi-property` under the k-step strategies
 
-**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage and W6 done.
-**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage done.
+**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage and W6 done; §7 question 2 resolved.
 **Origin:** Discussion
 [#7900](https://github.com/esbmc/esbmc/discussions/7900), *"Current state of
 --multi-property support"*: is `--multi-property` orthogonal to the analysis
@@ -12,7 +11,6 @@ mode, and which modes can its results be trusted under? Related open issues:
 [#2075](https://github.com/esbmc/esbmc/issues/2075),
 [#7503](https://github.com/esbmc/esbmc/issues/7503).
 **Last updated:** 2026-09-24.
-**Last updated:** 2026-09-23.
 
 **Measurement environment.** aarch64 macOS, ESBMC 8.5.0 built from master
 `25b71af213`, default solver (Bitwuzla 0.9.1). Every result below is a verdict
@@ -742,15 +740,6 @@ D6 still aborts; filed as #7971. Its assert predates #7587.
   `--falsify-context-bound` rejection. W1-W4 changed none of them.
 - `d5.c` is not in the matrix: its one row is the D5 residual, and a CORE cell
   would pin the wrong answer.
-D6 still aborts, and no issue or KNOWNBUG test covers it. Its assert predates
-#7587.
-
-### W6 — documentation
-
-Add a `--multi-property` section to the website documentation with the §1
-table as it stands after W4. Also add a matrix test that runs §2's reproducers
-under every strategy in §1 and pins each verdict, so that the next strategy
-added cannot silently diverge.
 
 ---
 
@@ -796,8 +785,15 @@ waved through.
    claims together. A claim that is inductive on its own can fail to be proved
    because a non-inductive sibling shares the step. Per-claim inductive steps
    (as `diagnose_unknown_properties` already runs at the last k) would give
-   more `Passed` rows but multiply solver calls. This is not a correctness
-   defect, so it is out of scope unless measurement shows a large difference.
+   more `Passed` rows but multiply solver calls. Resolved by measurement: that
+   last-k pass already turns such a claim into `Passed`, so the final table
+   loses no row. In `k-induction/multi_property_inductive_sibling_unknown`,
+   `x > 0` is proved alone at k = 2, every joint step up to `--max-k-step`
+   fails on `y != 3`, and the diagnostic pass reports `x > 0` PASSED; with
+   that pass disabled the row is UNKNOWN. What remains is cost, not rows: the
+   run keeps paying for joint steps up to `--max-k-step` before it concludes.
+   In `_failed`, the pair's other half, the violated sibling is retired and an
+   ordinary step proves `x > 0`.
 3. **Parallel k-induction.** Whether to implement per-claim merging after W4's
    rejection depends on whether anyone asks for it.
 
