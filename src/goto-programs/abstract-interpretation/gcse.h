@@ -110,6 +110,10 @@ protected:
   /// Remove every expression from available_expressions that depends on symbol `sym`
   void havoc_symbol(const irep_idt &sym);
 
+  /// havoc_symbol every variable a store to `lhs` may write, over-approximating
+  /// for shapes such as `c ? x : y`
+  void havoc_written_symbols(const expr2tc &lhs);
+
   // Helper function to check whether `src` depends on `taint`
   bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
   // Helper function to check whether `src` depends on symbol `sym`
@@ -164,6 +168,12 @@ protected:
   expr2tc obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const;
   void replace_max_sub_expr(
     expr2tc &e,
+    const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
+    const goto_programt::const_targett &to,
+    std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const;
+  /// Like replace_max_sub_expr, but only in the value operands of an lvalue
+  void replace_in_lvalue(
+    expr2tc &lhs,
     const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
     const goto_programt::const_targett &to,
     std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const;

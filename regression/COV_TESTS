@@ -1796,3 +1796,10 @@ regression/k-induction/github_7964_safe
 regression/k-induction/github_7964_list
 regression/k-induction/github_7964_list_safe
 regression/k-induction/github_7964_leave_entry
+regression/esbmc/github_7992
+regression/esbmc/gcse_typecast_lvalue_kill
+regression/esbmc/gcse_index_alias_direct
+regression/esbmc/gcse_union_member_alias
+regression/esbmc/gcse_lvalue_value_operands
+regression/esbmc-cpp/cpp/gcse_ite_target
+regression/esbmc/gcse_deref_store_kill

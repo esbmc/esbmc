@@ -246,10 +246,36 @@ static void collect_dereferences(const expr2tc &e, std::vector<expr2tc> &dest)
     [&dest](const expr2tc &op) { collect_dereferences(op, dest); });
 }
 
+void cse_domaint::havoc_written_symbols(const expr2tc &lhs)
+{
+  // Stores through a pointer are resolved by the points-to analysis.
+  if (is_dereference2t(lhs))
+    return;
+
+  if (is_symbol2t(lhs))
+  {
+    havoc_symbol(to_symbol2t(lhs).thename);
+    return;
+  }
+
+  if (is_index2t(lhs))
+  {
+    havoc_written_symbols(to_index2t(lhs).source_value);
+    return;
+  }
+
+  lhs->foreach_operand(
+    [this](const expr2tc &op) { havoc_written_symbols(op); });
+}
+
 void cse_domaint::havoc_expr(
   const expr2tc &target,
   const goto_programt::const_targett &i_it)
 {
+  // `a[i] = v` also writes `a[j]` when i == j, and `(int)b = v` writes `b`:
+  // an exact match on the target misses both (#7992).
+  havoc_written_symbols(target);
+
   if (vsa != nullptr)
   {
     // A store through `p->f` or `(*p)[i]` writes whatever `p` points to, but
@@ -364,6 +390,36 @@ void goto_cse::replace_max_sub_expr(
     });
 }
 
+void goto_cse::replace_in_lvalue(
+  expr2tc &lhs,
+  const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
+  const goto_programt::const_targett &to,
+  std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const
+{
+  if (is_dereference2t(lhs))
+  {
+    replace_max_sub_expr(
+      to_dereference2t(lhs).value, expr2symbol, to, matched_expressions);
+    return;
+  }
+
+  if (is_index2t(lhs))
+  {
+    replace_in_lvalue(
+      to_index2t(lhs).source_value, expr2symbol, to, matched_expressions);
+    replace_max_sub_expr(
+      to_index2t(lhs).index, expr2symbol, to, matched_expressions);
+    return;
+  }
+
+  // Any other node (symbol, member, typecast, ...) names the storage being
+  // written, so replacing it with a CSE symbol would drop the store (#7992).
+  lhs->Foreach_operand(
+    [this, &expr2symbol, &to, &matched_expressions](expr2tc &op) {
+      replace_in_lvalue(op, expr2symbol, to, matched_expressions);
+    });
+}
+
 bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
@@ -474,7 +530,7 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
         expr2symbol,
         it,
         matched_pre_expressions);
-      replace_max_sub_expr(
+      replace_in_lvalue(
         to_code_assign2t(it->code).target,
         expr2symbol,
         it,
