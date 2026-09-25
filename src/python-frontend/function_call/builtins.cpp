@@ -304,13 +304,26 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+// Whether a class object is an instance of isinstance's second argument: only
+// `type` and `object` admit one, alone or in a tuple.
+static bool admits_class_object(const nlohmann::json &type_arg)
+{
+  auto admits = [](const nlohmann::json &node) {
+    return node["_type"] == "Name" &&
+           (node["id"] == "type" || node["id"] == "object");
+  };
+  if (type_arg["_type"] != "Tuple")
+    return admits(type_arg);
+  const auto &elts = type_arg["elts"];
+  return std::any_of(elts.begin(), elts.end(), admits);
+}
+
 exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
 {
-  // A string literal's chars are operands; a class object has none. A
-  // variable's symbol value is only one of its assignments, so it cannot
-  // decide this.
-  if (obj_expr.is_constant() && !obj_expr.operands().empty())
-    return false_exprt();
+  // A class object is a char-array constant with no operands; a string
+  // literal's chars are operands.
+  if (obj_expr.is_constant())
+    return gen_boolean(obj_expr.operands().empty());
 
   exprt unknown("sideeffect", bool_type());
   unknown.statement("nondet");
@@ -352,19 +365,7 @@ exprt function_call_expr::handle_isinstance() const
       std::string value_str = const_val.get_value().as_string();
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
-      {
-        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
-          const std::string node_type = node["_type"];
-          if (node_type == "Name")
-            return node["id"];
-          return "";
-        };
-        std::string type_name = extract_type_name(type_arg);
-        if (type_name == "type")
-          return true_exprt();
-        else
-          return false_exprt();
-      }
+        return gen_boolean(admits_class_object(type_arg));
     }
   }
 
