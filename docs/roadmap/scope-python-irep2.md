@@ -624,7 +624,8 @@ trailing set_value      a class used as a value is a char-array constant_exprt w
                         github_3520_{3_fail,4,5,7_fail,8,9}, github_7549{,_fail}
 ```
 
-The tuple arm and the trailing value write go back to legacy. The str/list arm keeps the IREP2 write and
+The tuple arm and the trailing value write go back to legacy. (The tuple arm has since landed:
+`frontends-to-irep2.md` §82 carries `#python_aggregate`.) The str/list arm keeps the IREP2 write and
 falls back only for a dynamically-sized array, through `python_expr::contains_dyn_array`, the guard the
 expression builders already use for this hazard. It has to stay converted because it is the arm
 `val = "hello"[0]` takes: with the carry mutated out of `migrate_type`, `github_4715_cpp_type_char{,_fail}`

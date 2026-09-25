@@ -74,9 +74,8 @@ exprt python_converter::wrap_in_optional(
   // once. Both members are already-built value exprs (a bool literal and either
   // the wrapped value or a zero of the field type), so a constant_struct2t over
   // the migrated operands round-trips exactly through migrate. Re-attach the
-  // full struct type afterwards: migrate_type drops the frontend-only
-  // #python_aggregate_kind="optional" marker that later dispatch reads with no
-  // tag fallback -- mirroring build_shape_tuple_expr / get_tuple_expr.
+  // full struct type: the seam drops the components' `access`
+  // (build_optional_type), which is part of the type's identity.
   expr2tc value_member;
   migrate_expr(
     is_none ? gen_zero(struct_type.components()[1].type()) : value,
