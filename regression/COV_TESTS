@@ -1791,3 +1791,8 @@ regression/esbmc-cpp/cpp/github_7643_friend_base
 regression/python/github_7542_from_bytes_module_const
 regression/python/github_7542_from_bytes_module_const_fail
 regression/python/github_7542_from_bytes_shadowed_const
+regression/k-induction/github_7964
+regression/k-induction/github_7964_safe
+regression/k-induction/github_7964_list
+regression/k-induction/github_7964_list_safe
+regression/k-induction/github_7964_leave_entry

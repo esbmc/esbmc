@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction-parallel --multi-property --max-k-step 10
+^ERROR: --k-induction-parallel cannot be combined with --multi-property$

@@ -361,7 +361,15 @@ ios::streampos istream::tellg()
 
 namespace std
 {
-istream &ws(istream &is);
+istream &ws(istream &is)
+{
+  return is;
+}
+
+inline istream &operator>>(istream &is, istream &(*manip)(istream &))
+{
+  return manip(is);
+}
 }
 
 #endif

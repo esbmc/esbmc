@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: truthiness of a tuple that is not a literal is not yet supported$

@@ -1,6 +1,7 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -23,6 +24,156 @@ static typet unary_numeric_type(
   if (op == "Invert" && integral)
     return operand_type;
   return fallback;
+}
+
+// The emptiness test behind Python truthiness (`not x`, and `bool(x)`
+// negated) for a dict, str, list or tuple literal, or nil for any other value.
+// A dict or list needs a statement context: its size is read into a temporary.
+exprt python_converter::build_emptiness_check(
+  const exprt &value,
+  const nlohmann::json &element)
+{
+  typet list_type = type_handler_.get_list_type();
+
+  // A tuple literal's length is its type's. A tuple variable keeps its first
+  // binding's type when rebound (x = (1,); x = ()), so its length is unknown.
+  if (tuple_handler_->is_tuple_type(value.type()))
+  {
+    if (!value.is_constant())
+      throw std::runtime_error(
+        "truthiness of a tuple that is not a literal is not yet supported");
+    return value.operands().empty() ? exprt(true_exprt())
+                                    : exprt(false_exprt());
+  }
+
+  if (dict_handler_->is_dict_type(value.type()))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "Dictionary truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+
+    // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
+    // member_exprt); `value` is dict-typed (is_dict_type ⇒ struct), so the
+    // member2t source precondition holds.
+    expr2tc dict2;
+    migrate_expr(value, dict2);
+    exprt keys_member =
+      migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for dict truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$dict_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(dict.keys)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    size_call.arguments().push_back(keys_member);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty dict is truthy for 'not'). Phase 4.4:
+    // build the returned comparison in IREP2 and lower once at the return. The
+    // size_decl/size_call statements above stay legacy — their operands feed
+    // legacy code_*t shells, so moving them in isolation buys nothing (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
+  }
+
+  // A string is empty when strlen(a) == 0.
+  // In Python, a non-empty string is truthy; only "" is falsy.
+  if (type_utils::is_string_type(value.type()))
+  {
+    locationt location = get_location_from_decl(element);
+    const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
+    if (!strlen_sym)
+      throw std::runtime_error("strlen not found for string truthiness check");
+
+    // Phase 4.4 (first wiring): build the `strlen(base) == 0` result in IREP2
+    // internally via the Phase 4.2 helpers, lowering to legacy `exprt` at a
+    // single seam (the `return`). The call argument comes back from the string
+    // handler as a legacy `exprt`, so migrate it forward; the whole subtree is
+    // then IREP2 until the one back-migration. This is statement-free, so no
+    // legacy `codet` shell is involved (P1 untouched).
+    const type2tc size_t2 = migrate_type(size_type());
+    expr2tc base2;
+    migrate_expr(string_handler_.get_array_base_address(value), base2);
+
+    expr2tc strlen_call2 = side_effect_function_call2tc(
+      size_t2, symbol_expr2tc(*strlen_sym), {base2});
+
+    expr2tc is_empty2 = equality2tc(strlen_call2, gen_zero(size_t2));
+
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
+  }
+
+  // A list is empty when __ESBMC_list_size(list) == 0.
+  if (
+    value.type() == list_type ||
+    (value.type().is_pointer() && value.type().subtype() == list_type))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "List truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for list truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$list_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(list)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    // Pass address if not already a pointer
+    if (value.type().is_pointer())
+      size_call.arguments().push_back(value);
+    else
+      size_call.arguments().push_back(address_of_exprt(value));
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true
+    // when empty). Phase 4.4: build in IREP2, lower once at the return; the
+    // size_decl/size_call statements above stay legacy (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
+  }
+
+  return nil_exprt();
 }
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
@@ -70,137 +221,13 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return unknown_truth;
   }
 
-  // Handle 'not' operator on dictionary types: convert to emptiness check
   std::string op = element["op"]["_type"].get<std::string>();
   type = unary_numeric_type(op, unary_sub.type(), type);
-  if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
+  if (op == "Not")
   {
-    if (!current_block)
-      throw std::runtime_error(
-        "Dictionary truthiness check requires a statement context");
-
-    locationt location = get_location_from_decl(element);
-    typet list_type = type_handler_.get_list_type();
-
-    // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
-    // member_exprt); `unary_sub` is dict-typed (is_dict_type ⇒ struct), so the
-    // member2t source precondition holds.
-    expr2tc dict2;
-    migrate_expr(unary_sub, dict2);
-    exprt keys_member =
-      migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
-
-    // Find __ESBMC_list_size function
-    const symbolt *size_func =
-      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-    if (!size_func)
-      throw std::runtime_error(
-        "__ESBMC_list_size not found for dict truthiness check");
-
-    // Create temporary variable to store the size result
-    symbolt &size_result = create_tmp_symbol(
-      element, "$dict_size$", size_type(), gen_zero(size_type()));
-    code_declt size_decl(symbol_expr(size_result));
-    size_decl.location() = location;
-    current_block->copy_to_operands(size_decl);
-
-    // Call __ESBMC_list_size(dict.keys)
-    code_function_callt size_call;
-    size_call.function() = symbol_expr(*size_func);
-    size_call.lhs() = symbol_expr(size_result);
-    size_call.arguments().push_back(keys_member);
-    size_call.type() = size_type();
-    size_call.location() = location;
-    current_block->copy_to_operands(size_call);
-
-    // Return comparison: size == 0 (empty dict is truthy for 'not'). Phase 4.4:
-    // build the returned comparison in IREP2 and lower once at the return. The
-    // size_decl/size_call statements above stay legacy — their operands feed
-    // legacy code_*t shells, so moving them in isolation buys nothing (P1).
-    expr2tc is_empty2 = equality2tc(
-      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
-    exprt is_empty = migrate_expr_back(is_empty2);
-    is_empty.location() = location;
-    return is_empty;
-  }
-
-  // Handle 'not' operator on string types: convert to strlen(a) == 0.
-  // In Python, a non-empty string is truthy; only "" is falsy.
-  if (op == "Not" && type_utils::is_string_type(unary_sub.type()))
-  {
-    locationt location = get_location_from_decl(element);
-    const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
-    if (!strlen_sym)
-      throw std::runtime_error("strlen not found for string truthiness check");
-
-    // Phase 4.4 (first wiring): build the `strlen(base) == 0` result in IREP2
-    // internally via the Phase 4.2 helpers, lowering to legacy `exprt` at a
-    // single seam (the `return`). The call argument comes back from the string
-    // handler as a legacy `exprt`, so migrate it forward; the whole subtree is
-    // then IREP2 until the one back-migration. This is statement-free, so no
-    // legacy `codet` shell is involved (P1 untouched).
-    const type2tc size_t2 = migrate_type(size_type());
-    expr2tc base2;
-    migrate_expr(string_handler_.get_array_base_address(unary_sub), base2);
-
-    expr2tc strlen_call2 = side_effect_function_call2tc(
-      size_t2, symbol_expr2tc(*strlen_sym), {base2});
-
-    expr2tc is_empty2 = equality2tc(strlen_call2, gen_zero(size_t2));
-
-    exprt is_empty = migrate_expr_back(is_empty2);
-    is_empty.location() = location;
-    return is_empty;
-  }
-
-  // Handle 'not' operator on list types: convert to emptiness check
-  typet list_type = type_handler_.get_list_type();
-  if (
-    op == "Not" && (unary_sub.type() == list_type ||
-                    (unary_sub.type().is_pointer() &&
-                     unary_sub.type().subtype() == list_type)))
-  {
-    if (!current_block)
-      throw std::runtime_error(
-        "List truthiness check requires a statement context");
-
-    locationt location = get_location_from_decl(element);
-
-    // Find __ESBMC_list_size function
-    const symbolt *size_func =
-      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-    if (!size_func)
-      throw std::runtime_error(
-        "__ESBMC_list_size not found for list truthiness check");
-
-    // Create temporary variable to store the size result
-    symbolt &size_result = create_tmp_symbol(
-      element, "$list_size$", size_type(), gen_zero(size_type()));
-    code_declt size_decl(symbol_expr(size_result));
-    size_decl.location() = location;
-    current_block->copy_to_operands(size_decl);
-
-    // Call __ESBMC_list_size(list)
-    code_function_callt size_call;
-    size_call.function() = symbol_expr(*size_func);
-    size_call.lhs() = symbol_expr(size_result);
-    // Pass address if not already a pointer
-    if (unary_sub.type().is_pointer())
-      size_call.arguments().push_back(unary_sub);
-    else
-      size_call.arguments().push_back(address_of_exprt(unary_sub));
-    size_call.type() = size_type();
-    size_call.location() = location;
-    current_block->copy_to_operands(size_call);
-
-    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true
-    // when empty). Phase 4.4: build in IREP2, lower once at the return; the
-    // size_decl/size_call statements above stay legacy (P1).
-    expr2tc is_empty2 = equality2tc(
-      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
-    exprt is_empty = migrate_expr_back(is_empty2);
-    is_empty.location() = location;
-    return is_empty;
+    exprt is_empty = build_emptiness_check(unary_sub, element);
+    if (is_empty.is_not_nil())
+      return is_empty;
   }
 
   {

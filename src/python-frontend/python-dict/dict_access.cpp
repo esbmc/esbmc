@@ -164,6 +164,35 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt obj_value =
     build_member(deref_obj, "value", pointer_typet(empty_typet()));
 
+  // A tagged value is already a PyObject header, unlike other values whose
+  // item->value points at a nested payload. resolved_type can't be trusted
+  // here: it comes from static inference, which misses dynamic typing.
+  {
+    const std::string dict_id = dict_expr.is_symbol()
+                                  ? dict_expr.identifier().as_string()
+                                  : std::string();
+    const std::string vals_id =
+      dict_id.empty() ? std::string() : get_internal_list_id(dict_id, false);
+    if (!vals_id.empty())
+    {
+      const element_type_registry::entries *entries =
+        converter_.get_element_type_registry().find(
+          vals_id, type_slot::dict_value_types);
+      if (
+        entries && !entries->empty() &&
+        std::all_of(
+          entries->begin(),
+          entries->end(),
+          [this](const element_type_registry::entry &e) {
+            return type_handler_.is_tagged_scalar_type(e.second);
+          }))
+        // element_type was resolved to the struct above; is_tagged_scalar_type
+        // matches on the symbol_typet identity instead.
+        return build_dereference(
+          build_symbol(obj_var), type_handler_.get_tagged_object_type());
+    }
+  }
+
   // Handle dict types
   if (!resolved_type.is_nil() && is_dict_type(resolved_type))
   {

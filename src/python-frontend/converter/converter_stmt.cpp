@@ -5543,14 +5543,32 @@ void python_converter::propagate_list_type_info(
 /// the scalar path built a member over the tagged struct, aborting in member2t.
 /// The same assignment inside a function already worked. A `for` over a list of
 /// tagged scalars hits this too: the preprocessor unrolls it into exactly such
-/// a chain of tagged-name copies.
+/// a chain of tagged-name copies. An inferred annotation on a dict subscript
+/// (`y = d[k]`) needs the same check: it's a guess, and the dict's value may
+/// be tagged anyway. Narrowed to dict subscripts specifically, since probing
+/// any other inferred-annotation RHS here re-evaluates it outside its normal
+/// guarded path (e.g. a list subscript's bounds check).
 bool python_converter::module_scope_rhs_needs_type_probe(
-  const nlohmann::json &value)
+  const nlohmann::json &ast_node)
 {
   if (!current_func_name_.empty())
     return false;
   if (type_handler_.is_tagged_scalar_type(current_element_type))
     return true;
+  const nlohmann::json &value = ast_node["value"];
+  if (
+    ast_node.value("_inferred_annotation", false) && value.is_object() &&
+    value.value("_type", "") == "Subscript" && value.contains("value") &&
+    value["value"].value("_type", "") == "Name" &&
+    value["value"].contains("id"))
+  {
+    symbol_id base_sid = create_symbol_id();
+    base_sid.set_object(value["value"]["id"].get<std::string>());
+    const symbolt *base_sym = symbol_table_.find_symbol(base_sid.to_string());
+    if (
+      base_sym && dict_handler_->is_dict_type(ns.follow(base_sym->get_type())))
+      return true;
+  }
   return value.is_object() && value.value("_type", "") == "Name" &&
          value.contains("id") &&
          dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
@@ -5860,7 +5878,7 @@ void python_converter::get_var_assign(
     if (
       (sid.to_string().find("@F") != std::string::npos &&
        sid.to_string().find("@C") == std::string::npos) ||
-      module_scope_rhs_needs_type_probe(ast_node["value"]))
+      module_scope_rhs_needs_type_probe(ast_node))
     {
       is_right = true;
       if (!ast_node["value"].is_null())

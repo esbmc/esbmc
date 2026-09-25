@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant --multi-property --multi-fail-fast 1 --max-k-step 2
+^VERIFICATION SUCCESSFUL$
+^\s+PASSED\s+\[main\.assertion\.3\]\s+line\s+14\s+assertion n != 7$
+^\s+PASSED\s+\[main\.assertion\.4\]\s+line\s+14\s+assertion n != 7$

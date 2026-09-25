@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.array-bounds-violated\.1\]\s+line 9\s+dereference failure: array bounds violated$

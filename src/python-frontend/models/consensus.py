@@ -8,5 +8,9 @@
 # Stubs used for consensus specification verification
 
 
-def hash(data: bytes) -> int:
-    return 42
+def hash(data: bytes) -> bytes:
+    # Real SHA-256 over a symbolic `data` is intractable for the solver
+    # (64 rounds of bit rotation/addition per call). This gives the real
+    # Bytes32 shape instead: 32 independent nondet bytes, with no claim of
+    # determinism or any relation to `data`.
+    return nondet_bytes(32)

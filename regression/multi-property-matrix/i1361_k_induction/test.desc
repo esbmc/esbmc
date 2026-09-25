@@ -1,0 +1,10 @@
+CORE
+../i1361.c
+--k-induction --multi-property --max-k-step 12
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+5\s+assertion 2 == 3$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+6\s+assertion 1 == 2$
+^\*\* 2 of 2 properties failed$
+^VERIFICATION FAILED$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z
+\A(?![\s\S]*PASSED)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION UNKNOWN)[\s\S]*\Z
