@@ -88,7 +88,7 @@ git push --tags
 > [!IMPORTANT]
 >
 > Pushing a `v*` tag automatically triggers the
-> [Release](https://github.com/esbmc/esbmc/actions/workflows/release.yml)
+> [Release](https://github.com/esbmc/esbmc/actions/workflows/ci-release.yml)
 > workflow ("Upload Release Asset"). It builds every platform and creates a
 > **draft** GitHub release named after the tag (e.g. `ESBMC v8.1`), with the
 > canonical `esbmc-linux.zip`, `esbmc-linux-armv8.zip`, `esbmc-windows.zip`,

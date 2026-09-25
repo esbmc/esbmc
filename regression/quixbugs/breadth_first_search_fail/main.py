@@ -1,3 +1,7 @@
+# Kept KNOWNBUG, not THOROUGH (#7686 moved it there on pre-fix timing).
+# With this PR's genexp-lowering fix, extend() gets a real list, so the
+# while-True traversal genuinely runs the graph, and Bitwuzla's memory
+# keeps growing during solving until the kernel OOM-kills esbmc.
 class Node:
     def __init__(
         self,

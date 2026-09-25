@@ -104,7 +104,7 @@ bool solidity_convertert::add_implicit_constructor(
   get_function_this_pointer_param(
     contract_name, id, debug_modulename, location_begin, type);
 
-  sym.set_type(type);
+  sym.set_type(migrate_type(type));
   return false;
 }
 
@@ -473,7 +473,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         "\t@@@ initializing symbol {} in the constructor",
         comp.name().as_string());
 
-      bool is_state = get_sol_state_var(comp.type());
+      bool is_state = get_sol_state_var(comp.identifier());
       if (!is_state)
       {
         // auxiliary local variable we created

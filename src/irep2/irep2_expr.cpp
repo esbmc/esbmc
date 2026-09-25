@@ -547,15 +547,53 @@ expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
 
 // address_of2t passes both gates but means the *pointee* type by the type2tc
 // its primary constructor takes, building the pointer itself; the generic
-// rebuild would wrap new_type a second time. pointer_type2t::carry_provenance
-// is re-defaulted to false, as it is at every other address_of2t construction
-// (migrate.cpp), and no with_type caller derives a provenance-carrying type.
+// rebuild would wrap new_type a second time. ref_kind is forwarded, since a
+// reference destination's address-of has to keep the spelling or do_typecast
+// sees a type mismatch and adds a cast the irept copy does not.
+// pointer_type2t::carry_provenance is still re-defaulted to false, as it is at
+// every other address_of2t construction (migrate.cpp), and no with_type caller
+// derives a provenance-carrying type.
 template <>
 expr2tc
 rebuild_with_type<address_of2t>(const address_of2t &k, const type2tc &new_type)
 {
   return address_of2tc(
-    to_pointer_type(new_type).subtype, k.ptr_obj, k.implicit);
+    to_pointer_type(new_type).subtype,
+    k.ptr_obj,
+    k.implicit,
+    to_pointer_type(new_type).ref_kind);
+}
+
+// sideeffect2t carries `constructor` outside `fields` (see irep2_expr.h), so
+// the generic rebuild would drop it and a constructor call would stop reading
+// as one in clang_cpp_maint::adjust_init. Forwarded here for the same reason
+// address_of2t forwards ref_kind.
+template <>
+expr2tc
+rebuild_with_type<sideeffect2t>(const sideeffect2t &k, const type2tc &new_type)
+{
+  return sideeffect2tc(
+    new_type,
+    k.operand,
+    k.size,
+    k.arguments,
+    k.alloctype,
+    k.kind,
+    k.location,
+    k.constructor);
+}
+
+// sideeffect_assign2t carries `member_init` outside `fields` for the same
+// reason (irep2_expr.h), and the generic rebuild would drop it -- turning a
+// member initialiser into an ordinary assignment, which is the distinction the
+// C++ pass reads to leave a reference binding alone.
+template <>
+expr2tc rebuild_with_type<sideeffect_assign2t>(
+  const sideeffect_assign2t &k,
+  const type2tc &new_type)
+{
+  return sideeffect_assign2tc(
+    new_type, k.op, k.lhs, k.rhs, k.location, k.member_init);
 }
 
 [[noreturn]] void with_type_unsupported(const expr2t &e)
@@ -723,7 +761,7 @@ std::string constant_vector2t::field_names[esbmct::num_type_fields] =
 std::string symbol2t::field_names[esbmct::num_type_fields] =
   {"name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names[esbmct::num_type_fields] =
-  {"from", "rounding_mode", "", "", "", ""};
+  {"from", "rounding_mode", "derived_to_base", "base_to_derived", "", ""};
 std::string bitcast2t::field_names[esbmct::num_type_fields] =
   {"from", "", "", "", ""};
 std::string nearbyint2t::field_names[esbmct::num_type_fields] =
@@ -899,7 +937,7 @@ std::string code_assert2t::field_names[esbmct::num_type_fields] =
 std::string code_assume2t::field_names[esbmct::num_type_fields] =
   {"guard", "", "", "", ""};
 std::string sideeffect_assign2t::field_names[esbmct::num_type_fields] =
-  {"op", "lhs", "rhs", "", ""};
+  {"op", "lhs", "rhs", "member_init", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =

@@ -679,12 +679,16 @@ expr2tc dereferencet::dereference(
   if (!known_exhaustive)
     value = make_failed_symbol(type);
 
+  // Where p can land: every target build_reference_to() produced a guard for.
+  expr2tc resolved = gen_false_expr();
+
   for (const expr2tc &target : points_to_set)
   {
     expr2tc new_value, pointer_guard;
 
     new_value = build_reference_to(
       target, mode, src, type, guard, lexical_offset, pointer_guard);
+    resolved = or2tc(resolved, pointer_guard);
 
     if (is_nil_expr(new_value))
       continue;
@@ -706,6 +710,9 @@ expr2tc dereferencet::dereference(
     else
       value = if2tc(type, pointer_guard, new_value, value);
   }
+
+  if (!known_exhaustive && (is_write(mode) || is_free(mode)))
+    deref_invalid_ptr(src, guard, mode, resolved);
 
   if (is_internal(mode))
   {
@@ -828,10 +835,13 @@ void dereferencet::check_pointer_alignment(
   if (mode.unaligned)
     return;
 
-  // Only check alignment for scalar read/write operations (excluding code and pointer types)
+  // Only check alignment for scalar and vector read/write operations (excluding
+  // code and pointer types). A vector's lanes are only checked at their own
+  // width (#7907).
   if (
-    !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||
-    is_code_type(type) || is_pointer_type(type))
+    !(is_read(mode) || is_write(mode)) ||
+    !(is_scalar_type(type) || is_vector_type(type)) || is_code_type(type) ||
+    is_pointer_type(type))
   {
     return;
   }
@@ -844,7 +854,10 @@ void dereferencet::check_pointer_alignment(
 
   expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
   simplify(ptr_offset_bits);
-  check_alignment(access_size_bits, ptr_offset_bits, guard);
+  /* The object is not known here -- build_reference_to() has yet to unpack the
+   * descriptor -- so this pre-check keeps assuming the base carries the width.
+   * The object-aware sites below make the claim that actually bites. */
+  check_alignment(access_size_bits, ptr_offset_bits, guard, expr2tc());
 }
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
@@ -899,7 +912,7 @@ expr2tc dereferencet::build_reference_to(
     type2tc nullptrtype = pointer_type2tc(type);
     expr2tc null_ptr = symbol2tc(nullptrtype, "NULL");
 
-    expr2tc pointer_guard = same_object2tc(deref_expr, null_ptr);
+    pointer_guard = same_object2tc(deref_expr, null_ptr);
 
     guard2tc tmp_guard(guard);
     tmp_guard.add(pointer_guard);
@@ -1027,15 +1040,39 @@ expr2tc dereferencet::build_reference_to(
 void dereferencet::deref_invalid_ptr(
   const expr2tc &deref_expr,
   const guard2tc &guard,
-  modet mode)
+  modet mode,
+  const expr2tc &resolved)
 {
   if (is_internal(mode))
     // The caller just wants a list of references -- ensuring that the correct
     // assertions fire is a problem for something or someone else
     return;
 
+  // Per-target call: dereference() checks WRITE and FREE once, after the loop.
+  if (is_nil_expr(resolved) && (is_write(mode) || is_free(mode)))
+    return;
+
   // constraint that it actually is an invalid pointer
   expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
+
+  /* obj(p) can be a real object outside the value set: invalid_pointer passes
+   * it, and symex models no write or free there. */
+  if (!is_nil_expr(resolved))
+  {
+    expr2tc unmodelled = not2tc(resolved);
+    if (is_free(mode))
+    {
+      // valid_object is the alloc bit, so this also passes an alloca block.
+      type2tc offs_type = get_int_type(config.ansi_c.address_width);
+      unmodelled = and2tc(
+        unmodelled,
+        or2tc(
+          not2tc(valid_object2tc(deref_expr)),
+          notequal2tc(
+            pointer_offset2tc(offs_type, deref_expr), gen_zero(offs_type))));
+    }
+    invalid_pointer_expr = or2tc(invalid_pointer_expr, unmodelled);
+  }
 
   expr2tc validity_test;
   std::string foo;
@@ -1101,7 +1138,8 @@ enum target_flags
  * - s: scalar
  * - S: struct
  * - U: union
- * - A: array or string
+ * - A: array or string; as a source, also a vector
+ * - V: vector, as a destination
  * - c: code
  *
  *   src | dst | off | method                                         | note
@@ -1110,6 +1148,7 @@ enum target_flags
  *    *  |  c  |  *  | <none>                                         |
  *  -----+-----+-----+------------------------------------------------+---------
  *    *  |  A  |  *  | <unsupported>: "Can't construct rvalue ref..." |
+ *    *  |  V  |  *  | construct_vector_ref                           | rec
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  s  |  c  | construct_from_const_offset                    | st
  *    S  |  s  |  c  | construct_from_const_struct_offset             | rec
@@ -1142,6 +1181,41 @@ enum target_flags
  *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  */
 
+/// Which row of build_reference_rec's table the destination type selects.
+static int dst_flag_of(const type2tc &type)
+{
+  if (is_struct_type(type))
+    return flag_dst_struct;
+  if (is_union_type(type))
+    return flag_dst_union;
+  if (is_scalar_type(type))
+    return flag_dst_scalar;
+  if (is_array_type(type))
+  {
+    log_error(
+      "Can't construct rvalue reference to array type during dereference\n"
+      "(It isn't allowed by C anyway)\n");
+    abort();
+  }
+  log_error("Unrecognized dest type during dereference\n{}", *type);
+  abort();
+}
+
+/// Which column the source value selects.
+static int src_flag_of(const expr2tc &value)
+{
+  if (is_struct_type(value))
+    return flag_src_struct;
+  if (is_union_type(value))
+    return flag_src_union;
+  if (is_scalar_type(value))
+    return flag_src_scalar;
+  if (is_array_or_vector_type(value))
+    return flag_src_array;
+  log_error("Unrecognized src type during dereference\n{}", *value->type);
+  abort();
+}
+
 void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
@@ -1165,45 +1239,29 @@ void dereferencet::build_reference_rec(
   // no-op, so return any value of the target type (issue #723).
   if (type_byte_size_bits(type) == 0)
   {
-    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
+    // Still not gen_zero for a member-less union: it now answers with a
+    // zero-member constant_union2t, and everything downstream of here assumes
+    // a union constant has exactly one initialiser (constant_union2t in
+    // irep2_expr.h, and the assert in build_reference_rec's constant_union2t
+    // arm). A nondet symbol of the target type is a zero-width value nothing
+    // reads, and keeps that invariant intact.
     value = (is_union_type(type) && to_union_type(type).members.empty())
               ? make_failed_symbol(type)
               : gen_zero(type);
     return;
   }
 
-  if (is_struct_type(type))
-    flags |= flag_dst_struct;
-  else if (is_union_type(type))
-    flags |= flag_dst_union;
-  else if (is_scalar_type(type))
-    flags |= flag_dst_scalar;
-  else if (is_array_type(type))
+  /* A vector destination is a value, not an array of lanes to be indexed:
+   * construct_vector_ref answers it whole or lane by lane, so it needs no row
+   * in the table below (#7907). */
+  if (is_vector_type(type))
   {
-    log_error(
-      "Can't construct rvalue reference to array type during dereference\n"
-      "(It isn't allowed by C anyway)\n");
-    abort();
-  }
-  else
-  {
-    log_error("Unrecognized dest type during dereference\n{}", *type);
-    abort();
+    construct_vector_ref(value, offset, type, guard, mode, alignment);
+    return;
   }
 
-  if (is_struct_type(value))
-    flags |= flag_src_struct;
-  else if (is_union_type(value))
-    flags |= flag_src_union;
-  else if (is_scalar_type(value))
-    flags |= flag_src_scalar;
-  else if (is_array_type(value))
-    flags |= flag_src_array;
-  else
-  {
-    log_error("Unrecognized src type during dereference\n{}", *value->type);
-    abort();
-  }
+  flags |= dst_flag_of(type);
+  flags |= src_flag_of(value);
 
   // Consider the myriad of reference construction cases here
   switch (flags)
@@ -1372,12 +1430,11 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
-  assert(is_array_type(value));
+  assert(is_array_or_vector_type(value));
 
-  const array_type2t arr_type = to_array_type(value->type);
-  type2tc arr_subtype = arr_type.subtype;
+  type2tc arr_subtype = array_or_vector_subtype(value->type);
 
-  if (is_array_type(arr_subtype))
+  if (is_array_or_vector_type(arr_subtype))
   {
     construct_from_multidir_array(value, offset, type, guard, alignment, mode);
     return;
@@ -1461,14 +1518,15 @@ void dereferencet::construct_from_array(
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard);
+    check_alignment(deref_size, std::move(mod), guard, value);
 
   if (!overflows_boundaries)
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
-    if (arr_type.array_size && arr_type.array_size->type != div->type)
-      div = typecast2tc(arr_type.array_size->type, div);
+    const expr2tc &arr_size = array_or_vector_size(value->type);
+    if (arr_size && arr_size->type != div->type)
+      div = typecast2tc(arr_size->type, div);
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
   }
@@ -1504,6 +1562,62 @@ void dereferencet::construct_from_array(
       extract_bits_from_byte_array(
         value, offset_bits, type_byte_size_bits(type).to_uint64()));
   }
+}
+
+/* Unlike an array, a vector is a value, read and written whole. Unless the
+ * object already is one of this type, each lane is a scalar access at its own
+ * offset, so every object shape the scalar paths handle is handled here, and a
+ * write goes through the lanes too (#7907). */
+void dereferencet::construct_vector_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  if (
+    is_constant_int2t(offset) && to_constant_int2t(offset).value == 0 &&
+    dereference_type_compare(value, type))
+    return;
+
+  // An element of an array of such vectors, when the pointer's alignment
+  // puts it on one, as a SIMD loop over the array has it.
+  const BigInt vec_bits = type_byte_size_bits(type);
+  if (
+    is_array_type(value) && to_array_type(value->type).subtype == type &&
+    alignment >= vec_bits)
+  {
+    expr2tc elem =
+      div2tc(offset->type, offset, gen_long(offset->type, vec_bits));
+    value = index2tc(type, value, typecast2tc(index_type2(), elem));
+    return;
+  }
+
+  const vector_type2t &vec_type = to_vector_type(type);
+  const BigInt lane_bits = type_byte_size_bits(vec_type.subtype);
+  // Each lane sits at a multiple of its power-of-two width from the start.
+  const unsigned long lane_alignment =
+    std::min<unsigned long>(alignment, lane_bits.to_uint64());
+
+  const uint64_t num_lanes =
+    to_constant_int2t(vec_type.array_size).value.to_uint64();
+  std::vector<expr2tc> lanes;
+  lanes.reserve(num_lanes);
+  for (uint64_t i = 0; i < num_lanes; i++)
+  {
+    expr2tc lane = value;
+    expr2tc lane_offset = add2tc(
+      offset->type, offset, constant_int2tc(offset->type, lane_bits * i));
+    simplify(lane_offset);
+    build_reference_rec(
+      lane, lane_offset, vec_type.subtype, guard, mode, lane_alignment);
+    // As for a scalar access there: a free value, and a write goes nowhere.
+    lanes.push_back(
+      is_nil_expr(lane) ? make_failed_symbol(vec_type.subtype) : lane);
+  }
+
+  value = constant_vector2tc(type, std::move(lanes));
 }
 
 void dereferencet::construct_from_const_offset(
@@ -1589,14 +1703,17 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (m_size == 0)
     {
-      // This field has no size: it's most likely a struct that has no members.
-      // Just skip over it: we can never correctly build a reference to a field
-      // in that struct, because there are no fields. The next field in the
+      // This field has no size: either a struct with no members, or an array
+      // with no elements -- a flexible array member (C17 6.7.2.1p18) or a GNU
+      // `[0]` member (#5393). Just skip over it: we can never correctly build a
+      // reference to a field in it, because it has none. The next field in the
       // current struct lies at the same offset and is probably what the pointer
-      // is supposed to point at.
+      // is supposed to point at; a flexible array member is the struct's last,
+      // so the loop then falls out and the access is reported out of bounds,
+      // which is what it is.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
+      assert(is_struct_type(it) || is_union_type(it) || is_array_type(it));
       assert(!is_struct_type(type));
       i++;
       continue;
@@ -1891,15 +2008,17 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
 {
   const constant_int2t &intref = to_constant_int2t(offset);
 
-  assert(is_array_type(value->type));
-  const type2tc &base_subtype = get_base_array_subtype(value->type);
+  assert(is_array_or_vector_type(value));
 
   // All in all: we don't care what's being accessed at this level, unless
   // this struct is being constructed out of a byte array. If that's
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduces us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
-  if (!is_byte_type(base_subtype))
+  // A vector of bytes takes that handler too: it stitches the bytes itself.
+  if (
+    is_vector_type(value->type) ||
+    !is_byte_type(get_base_array_subtype(value->type)))
   {
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
@@ -2270,10 +2389,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         expr2tc target = value; // The byte array;
 
         simplify(array_offset);
-        if (is_array_type(target_type))
-          construct_from_array(target, array_offset, target_type, tmp, mode);
-        else
-          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        construct_struct_member_from_byte_array(
+          target, array_offset, target_type, tmp, mode);
         fields.push_back(target);
 
         // Update dynamic offset into array
@@ -2305,6 +2422,22 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     return;
   }
+}
+
+void dereferencet::construct_struct_member_from_byte_array(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (is_array_type(type) && type_byte_size_bits(type) == 0)
+    value = gen_zero(type);
+  else if (is_array_type(type))
+    construct_from_array(value, offset, type, guard, mode);
+  else
+    build_reference_rec(value, offset, type, guard, mode);
 }
 
 /**************************** Dereference utilities ***************************/
@@ -2349,7 +2482,14 @@ std::vector<expr2tc> dereferencet::extract_bytes(
   unsigned int num_bytes,
   const expr2tc &offset) const
 {
-  assert(num_bytes != 0);
+  /* A zero-width object has no bytes to extract, and the stitching below reads
+   * bytes[num_bytes - 1] -- an out-of-bounds access in ESBMC itself rather than
+   * a verdict. Callers must build zero-width values without stitching. */
+  if (num_bytes == 0)
+  {
+    log_error("dereference: cannot read a zero-width object");
+    abort();
+  }
 
   std::vector<expr2tc> bytes;
   bytes.reserve(num_bytes);
@@ -2412,6 +2552,8 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes,
   const std::vector<expr2tc> &bytes)
 {
+  /* Every caller sources `bytes` from extract_bytes(), which refuses a
+   * zero-width read before we get here. */
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
@@ -2466,11 +2608,15 @@ expr2tc dereferencet::stitch_together_from_byte_array(
       return byte_array;
   }
 
+  BigInt num_bits = type_byte_size_bits(type);
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (num_bits == 0)
+    return gen_zero(type);
+
   expr2tc offset_bytes =
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
   simplify(offset_bytes);
 
-  BigInt num_bits = type_byte_size_bits(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);
@@ -2495,7 +2641,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 // allocation "symex_dynamic::...". Heap allocations (malloc/calloc/realloc) use
 // that bare prefix; alloca, which lives on the stack, carries the extra
 // "alloca::" infix (see symex_mem() in
-// goto-symex/builtin_functions/memory_alloc.cpp).
+// goto-symex/engine/builtin_functions/memory_alloc.cpp).
 static bool is_symex_dynamic_object(const std::string &id)
 {
   return has_prefix(id, "symex_dynamic::");
@@ -2842,13 +2988,42 @@ void dereferencet::check_data_obj_access(
    * manner (e.g. for __attribute__((packed)) structures),
    * check that the access being made is aligned. */
   if (is_scalar_type(type) && !mode.unaligned)
-    check_alignment(access_sz, std::move(offset), guard);
+    check_alignment(access_sz, std::move(offset), guard, value);
+}
+
+BigInt dereferencet::object_base_alignment(const expr2tc &object) const
+{
+  /* The base carries the guarantee, so a member or element has to be resolved
+   * back to the object it lives in before its alignment means anything. */
+  const expr2tc &base = get_base_object(object);
+
+  /* The legacy typet, not migrate_type_back(): `max_field_alignment` is an
+   * irep attribute that does not survive migration, and without it a
+   * `#pragma pack(n)` record reads as naturally aligned. */
+  const symbolt *sym =
+    is_symbol2t(base) ? ns.lookup(to_symbol2t(base).thename) : nullptr;
+  const typet type = sym ? sym->get_type() : migrate_type_back(base->type);
+
+  expr2tc size;
+  try
+  {
+    size = type_byte_size_expr(base->type, &ns);
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    /* Same stand-in convert_identifier_pointer() uses for an unknown extent,
+     * so both models keep answering from one number. */
+    size = gen_ulong(0x10000);
+  }
+
+  return ::object_base_alignment(type, size, ns);
 }
 
 void dereferencet::check_alignment(
   BigInt minwidth,
   const expr2tc &offset_bits,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &object)
 {
   if (options.get_bool_option("no-align-check"))
     return;
@@ -2866,10 +3041,30 @@ void dereferencet::check_alignment(
 
   // Perform conversion to bytes here
   minwidth = minwidth / 8;
-  expr2tc offset = typecast2tc(
+  expr2tc addr = typecast2tc(
     size_type2(),
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8)));
-  simplify(offset);
+  simplify(addr);
+
+  /* The offset is only half the address. Reading it alone assumes the object's
+   * base already carries the access width, which the address-space model
+   * guarantees for every object but the ones that decline alignment -- `packed`
+   * and `#pragma pack(n)`, whose base it deliberately leaves free. For those,
+   * decide the claim on the whole address, so a program that constrains its own
+   * object still discharges it (#6951, #7707).
+   *
+   * A width that is not a power of two -- `long double` under --32 -- has no
+   * meaningful mask either way, so leave it on the offset path it was already
+   * on rather than report against a base no object could satisfy. */
+  if (
+    !is_nil_expr(object) && is_power_of_two(minwidth) &&
+    object_base_alignment(object) < minwidth)
+  {
+    expr2tc base = typecast2tc(
+      size_type2(), address_of2tc(pointer_type2tc(object->type), object));
+    addr = add2tc(size_type2(), base, addr);
+    simplify(addr);
+  }
 
   expr2tc mask_expr = gen_ulong(minwidth - 1);
   expr2tc neq;
@@ -2877,12 +3072,12 @@ void dereferencet::check_alignment(
   if (options.get_bool_option("int-encoding"))
   {
     expr2tc align = gen_ulong(minwidth);
-    expr2tc moded = modulus2tc(align->type, offset, align);
+    expr2tc moded = modulus2tc(align->type, addr, align);
     neq = notequal2tc(moded, gen_zero(moded->type));
   }
   else
   {
-    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, offset);
+    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, addr);
     neq = notequal2tc(anded, gen_zero(anded->type));
   }
 

@@ -4,12 +4,12 @@
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
 #include <goto-programs/property_verdict.h>
-#include <goto-symex/slice.h>
-#include <goto-symex/reachability_tree.h>
-#include <goto-symex/symex_target_equation.h>
-#include <goto-symex/witnesses.h>
-#include <goto-symex/pytest.h>
-#include <goto-symex/ctest.h>
+#include <goto-symex/equation/slice.h>
+#include <goto-symex/scheduler/reachability_tree.h>
+#include <goto-symex/equation/symex_target_equation.h>
+#include <goto-symex/witness/witnesses.h>
+#include <goto-symex/testgen/pytest.h>
+#include <goto-symex/testgen/ctest.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
@@ -85,6 +85,12 @@ protected:
   // whether the path to each kept claim is reachable. UNSAT means the
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
+
+  /// Whether the kept claim can hold at all on a feasible path.
+  smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
+
+  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
 
   // Set by the vacuity probe when at least one kept claim discharged
   // vacuously; consulted by report_result to map the final verdict from
@@ -207,15 +213,6 @@ private:
   /// silent, leaving the report to the phase that does.
   void report_property_verdicts(smt_resultt res) const;
 
-  /// Print the property table, grouped by file and function.
-  void print_property_rows(
-    const std::vector<struct property_rowt> &rows,
-    const struct property_countst &counts) const;
-
-  /// Print the "** N of M properties failed, ..." line.
-  void
-  print_property_summary(size_t total, const struct property_countst &) const;
-
   /// Render the verdict table as coverage goals rather than properties.
   void report_coverage_goal_verdicts(
     const std::map<std::string, property_resultt> &verdicts) const;
@@ -231,7 +228,8 @@ private:
   void record_satisfiable_claim(
     const claim_slicer &claim,
     const property_locationt &loc,
-    bool inductive_step);
+    bool inductive_step,
+    symex_target_equationt &local_eq);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself
@@ -260,6 +258,11 @@ private:
   /// assumed away rather than checked. Read by report_success(), which is
   /// otherwise the only place a user learns the run proved anything.
   bool saw_bounded_loop_truncation = false;
+
+  /// Whether this phase's UNSAT may be reported as a proof of the program: no
+  /// claim discharged vacuously, the LTL monitor instrumented, and, under a
+  /// k-step strategy, every row of the run's table Passed.
+  bool proves_the_program() const;
 
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the
@@ -296,6 +299,16 @@ private:
   /// Atomic because multi_property_check sets it from parallel job threads.
   std::atomic<bool> report_incomplete{false};
 };
+
+/// Print the property table a k-step strategy accumulated across its phases,
+/// once, where the strategy concludes without a phase of its own having
+/// reported (the k steps ran out). Rows the run never decided print as
+/// UNKNOWN: every base case checked them, none settled them. A no-op on a run
+/// that keeps a table per phase.
+void report_k_step_property_table(
+  const optionst &options,
+  const goto_functionst &goto_functions,
+  const namespacet &ns);
 
 void report_coverage(
   const optionst &options,

@@ -40,6 +40,7 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class ValueDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
@@ -228,6 +229,11 @@ protected:
    * member-expression lowering, and ctor member-initialiser-list lowering. */
   bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
 
+  /* If `vd` is a flexible array member, give its array type `t` size zero:
+   * C17 6.7.2.1p18 sizes the struct as if the member were omitted. Every site
+   * that lowers a field's type must agree, or members and components differ. */
+  void size_flexible_array_member(const clang::ValueDecl &vd, typet &t);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_base_flattened_inits(
@@ -240,6 +246,14 @@ protected:
 
   bool
   get_binary_operator_expr(const clang::BinaryOperator &binop, exprt &new_expr);
+
+  void get_vector_comparison(
+    const clang::BinaryOperator &binop,
+    irep_idt relation,
+    exprt lhs,
+    exprt rhs,
+    const typet &type,
+    exprt &new_expr);
 
   bool get_compound_assign_expr(
     const clang::CompoundAssignOperator &compop,
@@ -267,6 +281,10 @@ protected:
 
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
+
+  /// Report an initializer list none of get_expr's arms models, with its type
+  /// and source location. Always returns true (conversion failed).
+  bool report_unsupported_init_list(const clang::InitListExpr &init_stmt);
 
   void
   get_final_location_from_stmt(const clang::Stmt &stmt, locationt &location);

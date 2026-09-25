@@ -159,6 +159,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     typet t;
     if (get_type(fd.getType(), t))
       return true;
+    size_flexible_array_member(fd, t);
 
     std::string id, name;
     get_decl_name(fd, name, id);
@@ -305,6 +306,24 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+/* The decl a RecordType carries need not be the defining one; resolve to the
+ * definition so a caller does not register a record that stays incomplete
+ * (#7643). Hand-rolled: getDefinitionOrSelf() is LLVM >= 21. */
+static const clang::RecordDecl &defining_decl(const clang::RecordDecl &rd)
+{
+  if (!rd.isCompleteDefinition())
+    if (const clang::RecordDecl *def = rd.getDefinition())
+      return *def;
+  return rd;
+}
+
+/* A record symbol carrying the placeholder put in the context before its
+ * fields are converted, under either spelling. */
+static bool holds_incomplete_record(const typet &t)
+{
+  return t.incomplete() || t.id() == "incomplete_struct";
+}
+
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   if (rd.isInterface())
@@ -368,19 +387,17 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (!rd.isCompleteDefinition())
     return false;
 
-  /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
-   * infinite recursion if the type we're defining refers to itself
-   * (via pointers): it either is already being defined (up the stack somewhere)
-   * or it's already a complete struct or union in the context. */
-  if (
-    !sym->get_type().incomplete() &&
-    sym->get_type().id() != "incomplete_struct")
+  /* Convert only while the symbol still holds the incomplete type put there
+   * above. A record whose conversion is in progress can be re-entered -- a
+   * field of X reaches Y and Y's base is X (#2323,
+   * regression/esbmc-cpp/bug_fixes/github_2323_2) -- because get_base_map
+   * (clang_cpp_convert.cpp:3390) is not gated on find_symbol the way
+   * get_type's Record arm is. That arrival must fall through rather than bail,
+   * which is why the id is tested as well as the flag (de9158daeb); it
+   * terminates because every non-re-entrant arrival inserts its symbol
+   * first. */
+  if (!holds_incomplete_record(sym->get_type()))
     return false;
-  {
-    typet t = sym->get_type();
-    t.remove(irept::a_incomplete);
-    sym->set_type(std::move(t));
-  }
 
   clang::RecordDecl *rd_def = rd.getDefinition();
   assert(rd_def);
@@ -404,7 +421,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * incomplete-type symbol with the now-complete type definition, in place.
    * The order of definitions in the context matters — this type must be
    * defined after any of the types it is composed of — so move it to the
-   * back of the insertion order afterwards.
+   * back of the insertion order afterwards. Since #7643 a record reached
+   * through a pointer field is converted eagerly, so a record composed of it
+   * can precede it; goto2c re-sorts compound types (goto2c_preprocess.cpp).
    *
    * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
    * through field types into other records, and any of those recursions may
@@ -414,6 +433,13 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
+
+  /* That recursion can also re-enter this very record and complete it (#2323).
+   * Completing it again would run the method pass a second time and add the
+   * vtable variable symbol twice, which aborts conversion (#7643). */
+  if (!holds_incomplete_record(sym->get_type()))
+    return false;
+
   sym->set_type(t);
   sym = context.reorder_symbol_to_back(id);
 
@@ -823,6 +849,42 @@ static exprt label_address(std::size_t index)
     integer2binary(id, bv_width(size_type())), integer2string(id), size_type());
 }
 
+/// Reinterpret \p expr's object representation as \p type, where a typecast
+/// would convert its value.
+static void make_bitcast(exprt &expr, const typet &type)
+{
+  if (expr.type() == type)
+    return;
+
+  exprt bc("bitcast", type);
+  bc.copy_to_operands(expr);
+  expr.swap(bc);
+}
+
+/// Whether clang's CK_BitCast from \p from to \p to reinterprets the bits of
+/// a vector as another vector or scalar of its size (#7905), rather than
+/// converting a pointer. An operand ESBMC does not model -- a header's call to
+/// a builtin it lacks -- keeps the typecast path.
+static bool is_vector_bit_cast(const typet &from, const typet &to)
+{
+  auto carries_bits = [](const typet &t) {
+    return t.is_vector() || t.id() == typet::t_signedbv ||
+           t.id() == typet::t_unsignedbv || t.id() == typet::t_floatbv ||
+           t.id() == typet::t_fixedbv;
+  };
+  return (from.is_vector() || to.is_vector()) && carries_bits(from) &&
+         carries_bits(to);
+}
+
+static void
+convert_bit_cast(const namespacet &ns, exprt &expr, const typet &type)
+{
+  if (is_vector_bit_cast(ns.follow(expr.type()), ns.follow(type)))
+    make_bitcast(expr, type);
+  else
+    gen_typecast(ns, expr, type);
+}
+
 void clang_c_convertert::collect_address_taken_labels(const clang::Stmt &body)
 {
   address_taken_labels.clear();
@@ -1199,8 +1261,10 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Record:
   {
-    const clang::RecordDecl &rd =
-      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
+    /* From the definition: this arm converts a record only while no symbol
+     * exists for it yet, so one registered incomplete here stays that way. */
+    const clang::RecordDecl &rd = defining_decl(
+      *(static_cast<const clang::RecordType &>(the_type)).getDecl());
 
     std::string id, name;
     get_decl_name(rd, name, id);
@@ -1423,26 +1487,11 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 #undef BITINT_TAG
 #undef BITINT_TYPE
 
+  // NOTE: some bitshift operations with 'clang::Type::ExtVector' vectors are
+  // parsed as this
+  //   e.g vsi << 2 becomes ExtVector
+  //       vsi << vsi2 becomes Vector
   case clang::Type::ExtVector:
-  {
-    // NOTE: some bitshift operations with 'clang::Type::ExtVector' vectors are parsed as this
-    //   e.g vsi << 2 becomes ExtVector
-    //       vsi << vsi2 becomes Vector
-    const clang::ExtVectorType &vec =
-      static_cast<const clang::ExtVectorType &>(the_type);
-
-    typet the_type;
-    if (get_type(vec.getElementType(), the_type))
-      return true;
-
-    new_type = vector_typet(
-      the_type,
-      constant_exprt(
-        integer2binary(vec.getNumElements(), bv_width(int_type())),
-        integer2string(vec.getNumElements()),
-        int_type()));
-    break;
-  }
   case clang::Type::Vector:
   {
     const clang::VectorType &vec =
@@ -1458,6 +1507,13 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
         integer2binary(vec.getNumElements(), bv_width(int_type())),
         integer2string(vec.getNumElements()),
         int_type()));
+    // A vector is aligned to its size up to a per-target cap, which
+    // alignment() cannot derive from the lanes.
+    new_type.set(
+      "alignment",
+      constant_exprt(
+        BigInt(ASTContext->getTypeAlignInChars(&vec).getQuantity()),
+        size_type()));
     break;
   }
 
@@ -1589,6 +1645,11 @@ bool clang_c_convertert::get_builtin_type(
   case clang::BuiltinType::Half:
     new_type = half_float_type();
     c_type = "_Float16";
+    break;
+
+  case clang::BuiltinType::BFloat16:
+    new_type = bfloat16_type();
+    c_type = "__bf16";
     break;
 
   case clang::BuiltinType::Float:
@@ -1735,7 +1796,13 @@ bool clang_c_convertert::get_builtin_type(
     new_type = SVE_VEC(unsignedbv_typet(8), 64);
     c_type = "__clang_svuint8x4_t";
     break;
-#if LLVM_VERSION_MAJOR >= 19
+#if LLVM_VERSION_MAJOR >= 20
+  /* Storage-only in clang: no arithmetic and no conversions are accepted on
+   * it, so the width is all a model needs. */
+  case clang::BuiltinType::MFloat8:
+    new_type = unsignedbv_typet(8);
+    c_type = "__mfp8";
+    break;
   case clang::BuiltinType::SveMFloat8:
     new_type = SVE_VEC(unsignedbv_typet(8), 16);
     c_type = "__SVMfloat8_t";
@@ -1823,19 +1890,19 @@ bool clang_c_convertert::get_builtin_type(
     break;
 
   case clang::BuiltinType::SveBFloat16:
-    new_type = SVE_VEC(half_float_type(), 8);
+    new_type = SVE_VEC(bfloat16_type(), 8);
     c_type = "__SVBfloat16_t";
     break;
   case clang::BuiltinType::SveBFloat16x2:
-    new_type = SVE_VEC(half_float_type(), 16);
+    new_type = SVE_VEC(bfloat16_type(), 16);
     c_type = "__clang_svbfloat16x2_t";
     break;
   case clang::BuiltinType::SveBFloat16x3:
-    new_type = SVE_VEC(half_float_type(), 24);
+    new_type = SVE_VEC(bfloat16_type(), 24);
     c_type = "__clang_svbfloat16x3_t";
     break;
   case clang::BuiltinType::SveBFloat16x4:
-    new_type = SVE_VEC(half_float_type(), 32);
+    new_type = SVE_VEC(bfloat16_type(), 32);
     c_type = "__clang_svbfloat16x4_t";
     break;
 
@@ -1894,16 +1961,6 @@ bool clang_c_convertert::get_builtin_type(
 
 #undef SVE_VEC
 
-  // Unsupported extensions (optional don't care)
-  case clang::BuiltinType::BFloat16:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-    {
-      new_type = half_float_type();
-      c_type = "_Float16";
-      break;
-    }
-    [[fallthrough]];
-
   default:
   {
     std::ostringstream oss;
@@ -1936,6 +1993,14 @@ bool clang_c_convertert::wrap_bitfield_type_if_needed(
     return true;
   t.swap(bitfield_type);
   return false;
+}
+
+void clang_c_convertert::size_flexible_array_member(
+  const clang::ValueDecl &vd,
+  typet &t)
+{
+  if (llvm::isa<clang::FieldDecl>(vd) && vd.getType()->isIncompleteArrayType())
+    to_array_type(t).size() = gen_zero(size_type());
 }
 
 bool clang_c_convertert::get_bitfield_type(
@@ -2074,6 +2139,28 @@ bool clang_c_convertert::get_base_flattened_inits(
     flat.push_back(std::move(val));
   }
   return false;
+}
+
+/// Report an initializer list none of get_expr's arms models. Reported and not
+/// asserted: an assertion aborts the process, leaving the user without a
+/// diagnostic, a source location or a verdict (#7643).
+bool clang_c_convertert::report_unsupported_init_list(
+  const clang::InitListExpr &init_stmt)
+{
+  locationt location;
+  get_start_location_from_stmt(init_stmt, location);
+
+  std::ostringstream oss;
+  llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
+  ross << "Conversion of unsupported initializer list of type \""
+       << init_stmt.getType().getAsString() << "\" with "
+       << init_stmt.getNumInits() << " initializer(s) at "
+       << location.as_string() << "\n";
+  init_stmt.dump(ross, *ASTContext);
+  ross.flush();
+  log_error("{}", oss.str());
+  return true;
 }
 
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -2731,7 +2818,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     assert(t.return_type().is_vector());
-    fake_call.type() = t;
+    fake_call.type() = t.return_type();
 
     exprt e;
     if (get_expr(*convertVector.getSrcExpr(), e))
@@ -2759,7 +2846,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     assert(t.return_type().is_vector());
-    fake_call.type() = t;
+    fake_call.type() = t.return_type();
 
     for (unsigned j = 0; j < shuffle.getNumSubExprs(); j++)
     {
@@ -2855,8 +2942,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             init_union_field->getName().str());
       }
     }
-    else if (
-      init_stmt.getNumInits() == 0 && init_stmt.getType()->isScalarType())
+    else if (t.id() == typet::t_complex && init_stmt.getNumInits() == 2)
+    {
+      // Clang extension: `_Complex T z = {re, im}`; excess parts are dropped.
+      const typet &elem_type = to_complex_type(t).base_type();
+      inits = struct_exprt(t);
+      for (unsigned int i = 0; i < 2; ++i)
+      {
+        exprt part;
+        if (get_expr(*init_stmt.getInit(i), part))
+          return true;
+        gen_typecast(ns, part, elem_type);
+        inits.copy_to_operands(part);
+      }
+    }
+    else if (init_stmt.getNumInits() == 0)
     {
       /* We have a list initializer with no elements.
        * So per https://en.cppreference.com/w/cpp/language/list_initialization
@@ -2868,14 +2968,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
        * > - Otherwise, the object is zero-initialized.
        * So we just zero-initialize the object.
        */
+      /* The rule is the type's, not the scalar types' alone, but gen_zero
+       * answers nil for a type it cannot build a value of (an incomplete
+       * struct, as `std::hash<std::thread::id>` stays in #7643). */
       inits = gen_zero(t);
+      if (inits.is_nil())
+        return report_unsupported_init_list(init_stmt);
     }
-    else
+    else if (init_stmt.getNumInits() == 1)
     {
-      assert(init_stmt.getNumInits() == 1);
       if (get_expr(*init_stmt.getInit(0), inits))
         return true;
     }
+    else
+      return report_unsupported_init_list(init_stmt);
 
     new_expr = inits;
     break;
@@ -3792,12 +3898,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // into the float value 4.29e9 rather than the IEEE-NaN whose bits match
     // the input.  Use the irep1 "bitcast" node, which migrates to bitcast2tc
     // and is handled by symex as a byte-level reinterpret.  See #4191.
-    if (new_expr.type() != t)
-    {
-      exprt bc("bitcast", t);
-      bc.copy_to_operands(new_expr);
-      new_expr.swap(bc);
-    }
+    make_bitcast(new_expr, t);
     break;
   }
 
@@ -3994,7 +4095,9 @@ bool clang_c_convertert::get_cast_expr(
       }
       if (ptr_mode)
       {
-        dereference_exprt deref(cur, cur.type().subtype());
+        // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+        // pointer, not the pointee.
+        dereference_exprt deref(cur, cur.type());
         member_exprt m(deref, comp, base_t);
         cur = address_of_exprt(m);
       }
@@ -4073,13 +4176,16 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_FloatingCast:
 
   case clang::CK_ToVoid:
-  case clang::CK_BitCast:
   case clang::CK_LValueToRValue:
-  case clang::CK_LValueBitCast:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
     gen_typecast(ns, expr, type);
+    break;
+
+  case clang::CK_BitCast:
+  case clang::CK_LValueBitCast:
+    convert_bit_cast(ns, expr, type);
     break;
 
   // Member-pointer casts. ESBMC stores data-member pointers as plain pointers
@@ -4442,8 +4548,88 @@ bool clang_c_convertert::get_binary_operator_expr(
   }
   }
 
+  if (binop.getType()->isVectorType() && binop.isComparisonOp())
+  {
+    get_vector_comparison(binop, new_expr.id(), lhs, rhs, t, new_expr);
+    return false;
+  }
+
   new_expr.copy_to_operands(lhs, rhs);
   return false;
+}
+
+// Clang types a vector comparison as a vector of lane masks: all ones where the
+// relation holds, zero elsewhere (#7897). Relations are boolean, so compare
+// lane by lane. A lane reads its operand again, so anything but a symbol or a
+// constant is first assigned to a temporary, declared in the enclosing block
+// like a compound literal: replicating a call would evaluate it once per lane
+// (also for a `pure` callee, which clang reports as side-effect free), and
+// replicating a dereference puts an index over it that the dereference
+// machinery rejects.
+void clang_c_convertert::get_vector_comparison(
+  const clang::BinaryOperator &binop,
+  irep_idt relation,
+  exprt lhs,
+  exprt rhs,
+  const typet &type,
+  exprt &new_expr)
+{
+  locationt location;
+  get_start_location_from_stmt(binop, location);
+
+  std::vector<exprt> bindings;
+  auto bind = [&](exprt &op) {
+    if (op.is_symbol() || op.is_constant())
+      return;
+    const std::string path = location.file().as_string();
+    symbolt &tmp = anon_symbol.new_symbol(
+      context,
+      op.type(),
+      path + ":" + location.get_line().as_string() + "$vector-cmp$");
+    get_default_symbol(
+      tmp,
+      get_modulename_from_path(path),
+      op.type(),
+      tmp.name,
+      tmp.id,
+      location);
+    tmp.static_lifetime = !current_block;
+    tmp.file_local = true;
+    if (current_block)
+      current_block->copy_to_operands(code_declt(symbol_expr(tmp)));
+
+    side_effect_exprt assign("assign", op.type());
+    assign.copy_to_operands(symbol_expr(tmp), op);
+    bindings.push_back(assign);
+    op = symbol_expr(tmp);
+  };
+  bind(lhs);
+  bind(rhs);
+
+  auto lane = [](const exprt &op, const exprt &i) {
+    return op.type().is_vector() ? index_exprt(op, i, op.type().subtype()) : op;
+  };
+
+  const typet &mask_type = type.subtype();
+  // A true lane is all ones, which for a _Bool lane is 1: from_integer(-1) has
+  // no bool representation and yields nil.
+  const exprt set = mask_type.is_bool() ? static_cast<exprt>(true_exprt())
+                                        : from_integer(-1, mask_type);
+  new_expr = gen_zero(type);
+  for (size_t i = 0; i < new_expr.operands().size(); i++)
+  {
+    const exprt index = from_integer(i, index_type());
+    exprt holds(relation, bool_type());
+    holds.copy_to_operands(lane(lhs, index), lane(rhs, index));
+    new_expr.operands()[i] = if_exprt(holds, set, gen_zero(mask_type));
+  }
+
+  for (auto it = bindings.rbegin(); it != bindings.rend(); ++it)
+  {
+    exprt comma("comma", type);
+    comma.copy_to_operands(*it, new_expr);
+    new_expr.swap(comma);
+  }
 }
 
 bool clang_c_convertert::get_compound_assign_expr(
@@ -4554,6 +4740,23 @@ bool clang_c_convertert::get_compound_assign_expr(
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
+}
+
+// A load has nothing to write, and test_and_set/clear name the byte they write
+// (a nonzero "set" value, and 0) rather than taking it as an operand, so these
+// four carry only the pointer and the memory order.
+static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
+{
+  switch (op)
+  {
+  case clang::AtomicExpr::AO__c11_atomic_load:
+  case clang::AtomicExpr::AO__atomic_load_n:
+  case clang::AtomicExpr::AO__atomic_test_and_set:
+  case clang::AtomicExpr::AO__atomic_clear:
+    return false;
+  default:
+    return true;
+  }
 }
 
 bool clang_c_convertert::get_atomic_expr(
@@ -4697,6 +4900,14 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+  case clang::AtomicExpr::AO__atomic_test_and_set:
+    name = "__atomic_test_and_set";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_clear:
+    name = "__atomic_clear";
+    break;
+
   default:
     log_error("Unknown Atomic expression");
     std::ostringstream oss;
@@ -4716,9 +4927,7 @@ bool clang_c_convertert::get_atomic_expr(
   fake_call.arguments().push_back(ptr);
 
   // Val1
-  if (
-    atm.getOp() != clang::AtomicExpr::AO__c11_atomic_load &&
-    atm.getOp() != clang::AtomicExpr::AO__atomic_load_n)
+  if (atomic_has_value_operand(atm.getOp()))
   {
     exprt val1;
     if (get_expr(*atm.getVal1(), val1))
@@ -4780,6 +4989,7 @@ bool clang_c_convertert::get_member_expr(
   typet comp_type;
   if (get_type(*memb.getMemberDecl()->getType(), comp_type))
     return true;
+  size_flexible_array_member(*memb.getMemberDecl(), comp_type);
 
   if (const auto *bitfield = memb.getSourceBitField())
   {
@@ -4919,13 +5129,48 @@ void clang_c_convertert::get_decl_name(
        * symex assigns a nondet return and the verdict is silently wrong
        * (esbmc/esbmc#6969). Qualify with the enclosing specialisation, which
        * is what clang's own USRs for the closure's methods already carry. */
-      const auto *parent =
-        llvm::dyn_cast_or_null<clang::FunctionDecl>(rd.getDeclContext());
-      if (parent && parent->getTemplateSpecializationArgs())
+      /* The same collision arises one level out: a lambda in a member function
+       * of a *class* template is a distinct type per instantiation, but the
+       * member carries no specialisation args -- the class does (#7528). A
+       * nested lambda adds a third shape: its context is the enclosing
+       * lambda's operator(), which carries none either (#7529). So walk out
+       * until a specialised context is found rather than testing only the
+       * immediate parent. */
+      const clang::FunctionDecl *qualifier = nullptr;
+      for (const clang::DeclContext *dc = rd.getDeclContext(); dc;
+           dc = dc->getParent())
+      {
+        const auto *fn = llvm::dyn_cast<clang::FunctionDecl>(dc);
+        if (!fn)
+          continue;
+        const auto *method = llvm::dyn_cast<clang::CXXMethodDecl>(fn);
+        if (
+          fn->getTemplateSpecializationArgs() ||
+          (method && llvm::isa<clang::ClassTemplateSpecializationDecl>(
+                       method->getParent())))
+        {
+          qualifier = fn;
+          break;
+        }
+      }
+
+      if (qualifier)
       {
         std::string parent_name, parent_id;
-        get_decl_name(*parent, parent_name, parent_id);
+        get_decl_name(*qualifier, parent_name, parent_id);
         name += "_" + parent_id;
+      }
+
+      /* Everything a macro expands reports the expansion location, so two
+       * lambdas in one macro body share a file, line and column and the second
+       * reuses the first's record (esbmc/esbmc#7530). Their spelling locations
+       * inside the macro body differ, so add that offset. Clang's lambda
+       * mangling number does not help: it is 0 for both. */
+      const clang::SourceLocation dloc = rd.getLocation();
+      if (dloc.isMacroID() && sm)
+      {
+        const clang::SourceLocation spelling = sm->getSpellingLoc(dloc);
+        name += "_m" + std::to_string(sm->getFileOffset(spelling));
       }
 
       std::replace(name.begin(), name.end(), '.', '_');

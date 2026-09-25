@@ -17,11 +17,12 @@ class jimple_identity : public jimple_statement
 {
 public:
   virtual void from_json(const json &j) override;
-  virtual std::string to_string() const override;
+
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+  virtual std::string to_string() const override;
 
   std::string local_name;
   std::string at_identifier;
@@ -38,10 +39,6 @@ class jimple_invoke : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_code2t(
     contextt &ctx,
@@ -71,11 +68,6 @@ public:
  */
 class jimple_return : public jimple_statement
 {
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -98,10 +90,6 @@ class jimple_label : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_code2t(
     contextt &ctx,
@@ -123,10 +111,6 @@ class jimple_goto : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_code2t(
     contextt &ctx,
@@ -145,11 +129,6 @@ public:
 class jimple_assignment : public jimple_statement
 {
 public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -167,13 +146,14 @@ public:
 // For debug
 class jimple_assertion : public jimple_statement
 {
+  /// Parse-only: no `statement` enumerator maps to this class, so the body
+  /// dispatcher can never build one and there is no production path to lower.
+  /// The only construction site is unit/jimple-frontend/jimple_ast.test.cpp,
+  /// which exercises from_json alone (docs/roadmap/scope-jimple-irep2.md §46).
 public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
+
 
   std::string variable;
   std::string value;
@@ -187,10 +167,6 @@ public:
 class jimple_if : public jimple_statement
 {
 public:
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
@@ -211,10 +187,11 @@ public:
  */
 class jimple_throw : public jimple_statement
 {
-  virtual exprt to_exprt(
+  virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
-    const std::string &function_name) const override;
+    const std::string &function_name,
+    const locationt &loc) const override;
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 

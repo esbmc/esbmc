@@ -753,7 +753,10 @@ sexpr smtlib_convt::get_value(smt_astt a) const
   return respval;
 }
 
-static BigInt interp_numeric(const sexpr &respval, bool is_signed)
+/* The magnitude a model literal denotes. Both bitvector literal forms stand
+ * for nat2bv[m](n), a natural number (SMT-LIB FixedSizeBitVectors theory), so
+ * the sign is not theirs to carry -- get_bv() recovers it from the sort. */
+static BigInt interp_numeric(const sexpr &respval)
 {
   yytokentype tok = static_cast<yytokentype>(respval.token);
   switch (tok)
@@ -763,7 +766,7 @@ static BigInt interp_numeric(const sexpr &respval, bool is_signed)
   case TOK_HEXNUM:
     return string2integer(respval.data.substr(2), 16);
   case TOK_BINNUM:
-    return binary2integer(respval.data.substr(2), is_signed);
+    return binary2integer(respval.data.substr(2), false);
   default:
     log_error(
       "interpreting S-expr of token type {} as an integer",
@@ -774,12 +777,14 @@ static BigInt interp_numeric(const sexpr &respval, bool is_signed)
 
 BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 {
-  sexpr respval = get_value(a);
+  BigInt m = interp_numeric(get_value(a));
+  if (!is_signed)
+    return m;
 
-  // Attempt to read an integer.
-  BigInt m = interp_numeric(respval, is_signed);
-
-  return m;
+  /* Reinterpret at the sort's width, not the literal's: a solver that states a
+   * wider or narrower one than it was asked for would otherwise change the
+   * value rather than be caught (#7929). */
+  return binary2integer(integer2binary(m, a->sort->get_data_width()), true);
 }
 
 expr2tc
@@ -886,7 +891,7 @@ tvt smtlib_convt::l_get(smt_astt a)
   }
 
   /* Boolector sometimes returns #b0 or #b1 for Bool-sorted constants */
-  BigInt m = interp_numeric(second, false);
+  BigInt m = interp_numeric(second);
   if (m == 0)
     return tvt(false);
   if (m == 1)
@@ -903,7 +908,17 @@ tvt smtlib_convt::get_bool(smt_astt a)
 const std::string smtlib_convt::solver_text()
 {
   if (emit_proc)
-    return "'" + options.get_option("smtlib-solver-prog") + "'";
+  {
+    // A short label; the full command is at log_debug in oneshot_process.cpp.
+    std::string prog = options.get_option("smtlib-solver-prog");
+    size_t sp = prog.find(' ');
+    std::string first_tok =
+      (sp == std::string::npos) ? prog : prog.substr(0, sp);
+    size_t slash = first_tok.find_last_of('/');
+    std::string base =
+      (slash == std::string::npos) ? first_tok : first_tok.substr(slash + 1);
+    return base.empty() ? prog : base;
+  }
 
   if (emit_opt_output)
     return "Text output";

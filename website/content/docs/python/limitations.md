@@ -9,8 +9,8 @@ weight: 4
 
 - `for` loops support direct iteration over `range()`, lists, strings (including the result of a `str(...)` call, e.g. `for digit in str(n)`), tuples, and generators (functions using `yield` and generator expressions).
 - `for ... else` and `while ... else` are supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop).
-- List, set, dictionary, and generator comprehensions are supported. Dictionary comprehensions populate a real dict (see [Supported Features — Dictionaries](./supported-features#dictionaries)); the iterable must be a `range(...)`, a list of tuples, or a `d.items()` view (with an optional `if` filter). Comprehensions over other iterables (e.g. another dict comprehension or an arbitrary generator) may not be handled.
-- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys works for **local dict literals** and for **unannotated parameter dicts** with scalar or integer-tuple keys (recovered from the call sites); so do the deferred form `for edge in d:` followed by `u, v = edge`, and iteration over `sorted(d)`. Passing a custom `key=` to `sorted` disables that path, and string-tuple-keyed parameter dicts are still not handled ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
+- List, set, dictionary, and generator comprehensions are supported. Dictionary comprehensions populate a real dict (see [Supported Features — Dictionaries](/docs/python/supported-features#dictionaries)); the iterable must be a `range(...)`, a list of tuples, or a `d.items()` view (with an optional `if` filter). Comprehensions over other iterables (e.g. another dict comprehension or an arbitrary generator) may not be handled.
+- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](/docs/python/supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys works for **local dict literals** and for **unannotated parameter dicts** with scalar or integer-tuple keys (recovered from the call sites); so do the deferred form `for edge in d:` followed by `u, v = edge`, and iteration over `sorted(d)`. Passing a custom `key=` to `sorted` disables that path, and string-tuple-keyed parameter dicts are still not handled ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
 
 ## Lists
 
@@ -22,7 +22,7 @@ weight: 4
 
 ## Sets
 
-- The supported set methods are `.issubset()`, `.issuperset()`, `.symmetric_difference()`, `.update()`, `.union()`, `.intersection()`, and `.difference()` (see [Supported Features — Sets](./supported-features#sets)). The `.union()`/`.intersection()`/`.difference()` methods take exactly one argument (the zero-arg and variadic forms produce a clean error). Other named methods (`.add()`, `.remove()`, `.discard()`, `.isdisjoint()`, etc.) are not supported; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
+- The supported set methods are `.issubset()`, `.issuperset()`, `.symmetric_difference()`, `.update()`, `.union()`, `.intersection()`, and `.difference()` (see [Supported Features — Sets](/docs/python/supported-features#sets)). The `.union()`/`.intersection()`/`.difference()` methods take exactly one argument (the zero-arg and variadic forms produce a clean error). Other named methods (`.add()`, `.remove()`, `.discard()`, `.isdisjoint()`, etc.) are not supported; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
 
 ## Dictionaries
 
@@ -45,7 +45,7 @@ weight: 4
 
 ## Walrus Operator
 
-- The walrus operator `:=` is supported only where the target is evaluated exactly once: `if`/`elif` conditions, standalone assignment expressions, and comprehension filters (see [Supported Features](./supported-features#basic-constructs)).
+- The walrus operator `:=` is supported only where the target is evaluated exactly once: `if`/`elif` conditions, standalone assignment expressions, and comprehension filters (see [Supported Features](/docs/python/supported-features#basic-constructs)).
 - Use inside a boolean (`and`/`or`) operand is refused: `ERROR: Walrus operator ':=' in a boolean (and/or) operand is not supported`.
 - Use in a `while`-loop condition is refused: `ERROR: Walrus operator ':=' in a while-loop condition is not supported`.
 
@@ -65,18 +65,20 @@ weight: 4
 
 ## Strings
 
-- Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](./supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
+- Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](/docs/python/supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
 - `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
 - `splitlines()` on a non-constant receiver returns an empty list.
 
 ## Dynamic Typing
 
 A variable whose type diverges across an `if`/`else` is carried as a tagged
-value (see [Supported Features — Dynamic Typing](./supported-features#dynamic-typing)),
+value (see [Supported Features — Dynamic Typing](/docs/python/supported-features#dynamic-typing)),
 within these bounds:
 
 - A tag holds one of `bool`, `int`, `float` or `str`. `isinstance` against an aggregate or a user class is therefore answered `False`, not consulted.
-- Arithmetic (`+`, `-`, `*`, `/`) is supported against a **literal** operand, and `+`, `-` and `/` between two tagged operands; `+` additionally concatenates strings. A non-numeric operand raises `TypeError`.
+- Arithmetic (`+`, `-`, `*`, `/`) is supported against a **literal** operand, and `+`, `-` and `/` between two tagged operands; `+` additionally concatenates strings. A non-numeric operand raises `TypeError`. The compound forms `+=`, `-=`, `/=` desugar to the same dispatch, and unary `-x` is supported; any other compound operator is refused cleanly rather than crashing.
+- A tagged scalar can be **passed as a function argument**: an unannotated parameter is promoted to the tagged type when a call site feeds it a branch-divergent variable, and a concrete numeric or string argument is boxed into one. Indirect calls and list elements, where no parameter type is known, are still refused.
+- A tagged scalar can be **stored in a list** and read back. The push and insert paths use a bounded copy, because a tagged scalar's size can be symbolic after a branch join and the generic `memcpy`-based copy never finishes unwinding over it.
 - Ordered comparisons (`<`, `<=`, `>`, `>=`) work against a literal and between two tagged operands, raising `TypeError` on a type mismatch. `==` treats `bool` and `int` as the same type, so `True == 1`.
 - Divergence is detected across an `if`/`elif`/`else` chain only when every branch assigns the name; a chain with a branch that leaves it unassigned is not tagged.
 - `x is None` is folded only against a literal `None`. A computed operand is not folded, since that would drop its side effects.
@@ -84,7 +86,8 @@ within these bounds:
 
 ## Union and Any Types
 
-- Union types are resolved to the widest type among their members (`float > int > bool`) at verification time; true union semantics are not maintained.
+- A union whose members are **all scalars** is resolved to the widest of them (`float > int > bool`) at verification time; true union semantics are not maintained.
+- A union **mixing a scalar with a container** — `int | list[int]`, in the PEP 604, `typing.Union`, chained, keyword and module-qualified spellings — is opaque rather than narrowed to one member. Narrowing it to the scalar folded a comparison against the returned list to false and its negation to true, proving a property that is false ([#7872](https://github.com/esbmc/esbmc/issues/7872)); on a parameter it also made `--strict-types` reject a valid list argument ([#7876](https://github.com/esbmc/esbmc/issues/7876)). An argument whose type the annotation does not name is still rejected. A union containing `None` keeps its existing typing.
 - Union types containing types beyond basic primitives (`int`, `float`, `bool`) may default to pointer types.
 - Type narrowing based on runtime type checks within Union-typed functions is not tracked.
 - `Any` type inference only supports primitive return types (`int`, `float`, `bool`) and expressions evaluating to those types; string return values are not supported and will produce an error.
@@ -103,6 +106,7 @@ within these bounds:
 - Functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, `randrange()`, `choice()`, `shuffle()`, `sample()`, and `seed()` are not yet supported.
 - `random.shuffle(lst)` is an under-approximation that leaves the list untouched.
 - `random.sample(population, k)` is an under-approximation that returns the first `k` elements of `population` rather than `k` distinct nondeterministic indices.
+- `random.choice()` and `random.sample()` dispatch on the sequence type, so a `str`, a tuple, or a list of floats or strings no longer runs the int-list model and reports a dereference failure. Three shapes are still unresolved and report an unsupported sequence rather than a bogus claim: `from random import choice` (the callee is not resolved to the model where the dispatch runs), keyword-argument calls, and `sample` over a tuple ([#7673](https://github.com/esbmc/esbmc/issues/7673)).
 - `random.seed(a)` is a no-op; the model is stateless, so seeding cannot make subsequent calls deterministic.
 
 ## Collections Module
@@ -134,12 +138,13 @@ within these bounds:
 
 ## NumPy Module
 
-- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Higher-dimensional arrays are rejected explicitly; full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
+- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. 1-D and 2-D shapes are supported; arrays of higher rank are rejected explicitly, and full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
+- Sorting and searching (`np.sort`, `np.argsort`, `np.searchsorted`, and the `a.sort()` / `a.argsort()` method forms) accept concrete ndarray variables, row and column views (`a[i]`, `a[:, j]`), and 2-D arrays with an `axis` argument given positionally or as `axis=` — not both. Each row or column is sorted independently by a conversion-time sorting network capped at `max_numpy_sort_elements`. Still missing: stable-kind variants, the sorter and vector-value forms of `searchsorted`, `searchsorted` on a genuine 2-D array as opposed to a 1-D view of one, and symbolic arrays.
 - Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
-- Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
+- Only the NumPy functions listed in [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy) have executable support.
 - The reductions (`sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax`), comparison/logical ufuncs (`greater`/`less`/`equal`/`logical_*`/`where`), and constructors (`arange`/`full`/`eye`/`identity`/`linspace`) are constant-folded over list-backed (1D/2D) inputs and constant shapes; runtime-constructed inputs and higher-rank shapes are rejected with deterministic frontend errors.
 - `np.arange()` materialises its result at conversion time, so its arguments must be constant — a name bound to a literal is resolved first, but a function parameter is rejected with `TypeError: numpy.arange() currently supports constant numeric inputs only` rather than routed through the operational model's while loop, which did not terminate in practice. A range past 10000 elements is declined for the same reason, and `step=0` raises `ValueError`.
-- A returned array keeps its metadata only for the shapes listed under [Supported Features — NumPy](./supported-features#numpy-module-numpy). An unannotated **2-D array parameter** is typed as flat 1-D inside the callee's own body, so `numpy.transpose`'s "1-D is a no-op" fallback can return it unchanged where caller-side inlining does not mask it — the one shape here that yields a wrong value rather than an explicit rejection. An unannotated function that builds an array through a local before returning it, and a captured list mutated without a `global` declaration, are pinned as `KNOWNBUG`.
+- A returned array keeps its metadata only for the shapes listed under [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy). A **2-D array parameter** now keeps its full shape through the C-ABI row-pointer decay, so `.shape`, `.ndim`, `.size` and `numpy.transpose` / `.T` / `.transpose()` read it rather than the decayed 1-D type — this was the one shape here that produced a silently wrong array value rather than an explicit rejection, and it is now a `CORE` regression test rather than a `KNOWNBUG` ([#7722](https://github.com/esbmc/esbmc/pull/7722)). Two gaps remain pinned as `KNOWNBUG`, both of which surface as an explicit wrong verdict: an unannotated function that builds an array through a local before returning it, and a captured list mutated without a `global` declaration. A parameter with a genuinely symbolic shape is rejected, but through a generic `AttributeError` on the first metadata access rather than a purpose-built diagnostic.
 - A view onto the base array needs literal bounds and a fixed-shape 1-D or 2-D source: 1-D slices (any step, including reversed), 2-D row and column views, `np.diagonal`, `np.ravel` and `a.flat[i]` alias the buffer; a symbolic bound or index, or a 3-D source, still produces an independent copy. `np.diagonal` is read-only, and a diagonal used inline (`np.diagonal(a)[i]`) rather than bound to a name is declined. `np.fill_diagonal` requires a value whose length matches the diagonal exactly.
 - `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.arccos` rejects runtime 2D arrays; `np.fmod` rejects `np.array(...)`-wrapped operands (`Unsupported operation: numpy.fmod on array operands`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
 - `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
@@ -184,13 +189,13 @@ within these bounds:
   - `target` defined after the caller in source order
   - `from threading import *`
 - **`Thread` subclassing is supported** (see [Supported Features](/docs/python/supported-features#thread-subclassing)), with these shapes refused at parse time: multiple inheritance, a class below module scope, a missing `run`, an overridden `start`, a non-bare `super().__init__()`, a class defined after its constructing function, instance reassignment, binding by anything other than a simple assignment, construction inside a loop, and assignment to a `global`/`nonlocal` name from a function.
-- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. The `queue` module now has a single-threaded model (`queue.Queue`/`LifoQueue`; see [Supported Features — Queue](./supported-features#queue-module-queue)), but its blocking `put()`/`get()` semantics are not modelled, so it does not provide thread synchronisation.
+- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. The `queue` module now has a single-threaded model (`queue.Queue`/`LifoQueue`; see [Supported Features — Queue](/docs/python/supported-features#queue-module-queue)), but its blocking `put()`/`get()` semantics are not modelled, so it does not provide thread synchronisation.
 - **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 
 ## Unittest Module
 
 - The model covers the assertion vocabulary listed under
-  [Supported Features — Unittest](./supported-features#unittest-module-unittest);
+  [Supported Features — Unittest](/docs/python/supported-features#unittest-module-unittest);
   `assertRaises`, `assertAlmostEqual`, the `subTest` context manager and the
   class-level `setUpClass` / `tearDownClass` hooks are not modelled.
 - `unittest.main()` runs the tests *discovered in the file being verified*.
@@ -201,3 +206,5 @@ within these bounds:
 ## Module System
 
 - Built-in variable support is limited to `__name__` and `__file__`; `__doc__`, `__package__`, and other built-ins are not yet supported.
+- A module CPython imports but that ESBMC has no AST for — a builtin such as `sys`, or a stdlib file the resolver filters out such as `json` — is skipped rather than aborting the run with a raw temp path. `sys` has a data-only model. A function-scope import of an absent module verifies clean, matching module scope ([#7674](https://github.com/esbmc/esbmc/issues/7674)).
+- A module that fails to compile is reported as `module-parse-failed` and one whose body raises as `module-import-failed`, instead of escaping as a CPython traceback with no verdict. A rejection from the preprocessor is reported as the frontend's located `ERROR:` diagnostic with exit 4; anything raised outside the preprocessor keeps its traceback, so a real parser crash is still visible.

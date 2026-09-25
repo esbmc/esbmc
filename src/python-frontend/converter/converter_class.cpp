@@ -51,8 +51,8 @@ exprt python_converter::make_enum_member_struct_expr(
     symbolt str_sym;
     str_sym.id = str_id;
     str_sym.name = "_name_" + member_name;
-    str_sym.set_type(str_val.type());
-    str_sym.set_value(str_val);
+    str_sym.set_type(migrate_type(str_val.type()));
+    str_sym.set_value(migrate_expr(str_val));
     str_sym.static_lifetime = true;
     str_sym.is_extern = false;
     str_sym.file_local = true;
@@ -904,5 +904,30 @@ void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
 {
+  // A class symbol is keyed by name alone, with no enclosing-scope component,
+  // so definitions of a name at module, function or method scope share one
+  // symbol: the later registrations are dropped and their constructors are
+  // never run, proving the wrong value (#7541). #6765 already makes is_class
+  // decline such a name; declining does not prevent the collision, so refuse
+  // the program rather than answer it wrongly.
+  const std::string &class_name = class_node["name"].get<std::string>();
+  if (ast_json)
+  {
+    std::vector<int> lines;
+    json_utils::collect_class_definition_lines(
+      (*ast_json)["body"], class_name, lines);
+    if (lines.size() > 1)
+    {
+      std::ostringstream oss;
+      oss << "class '" << class_name << "' is defined " << lines.size()
+          << " times (lines";
+      for (int line : lines)
+        oss << ' ' << line;
+      oss << "); ESBMC keys a class symbol by name alone, so the definitions "
+             "would share one symbol. Rename all but one.";
+      throw std::runtime_error(oss.str());
+    }
+  }
+
   python_class_builder(*this, class_node).build(target_block);
 }

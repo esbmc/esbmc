@@ -9,6 +9,10 @@
 // false: typecast successfull, expr modified
 // true:  typecast failed
 
+/// Take the address of an object bound to a reference; see c_typecast.cpp for
+/// why a conditional takes it per arm and why `rk` matters.
+void take_reference_address(expr2tc &expr, pointer_ref_kindt rk);
+
 bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type);
 
 bool check_c_implicit_typecast(
@@ -121,6 +125,20 @@ protected:
     const typet &dest_type);
 
   virtual void implicit_typecast_followed(
+    expr2tc &expr,
+    const type2tc &src_type,
+    const type2tc &dest_type);
+
+  // Arms of the IREP2 implicit_typecast_followed, split out to keep it under
+  // the complexity gate. convert_reference returns true when a reference arm
+  // applied (the caller still runs the tail); convert_to_pointer returns true
+  // when the conversion is complete.
+  bool convert_reference(
+    expr2tc &expr,
+    const type2tc &src_type,
+    const type2tc &dest_type);
+
+  bool convert_to_pointer(
     expr2tc &expr,
     const type2tc &src_type,
     const type2tc &dest_type);

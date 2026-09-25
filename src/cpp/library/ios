@@ -1,6 +1,7 @@
 #ifndef STL_IOS
 #define STL_IOS
 
+#include "iosfwd"
 #include "streambuf"
 #include "definitions.h"
 #include "cstdio"
@@ -159,10 +160,10 @@ public:
 class ios : public ios_base
 {
 public:
-  typedef int streampos;
-  typedef int streamoff;
+  typedef std::streampos streampos;
+  typedef std::streamoff streamoff;
 
-  /* [ios.overview]. pos_type/off_type follow the model's int stream positions
+  /* [ios.overview]. pos_type/off_type follow the model's stream positions
    * (istream::tellg, ostream::tellp) rather than the traits' size_t/ptrdiff_t. */
   typedef char char_type;
   typedef char_traits<char> traits_type;

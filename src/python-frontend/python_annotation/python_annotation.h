@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
@@ -78,7 +79,8 @@ public:
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>
       &param_types,
-    const std::set<std::string> &top_level_funcs);
+    const std::set<std::string> &top_level_funcs,
+    std::set<std::pair<std::string, size_t>> &dynamically_typed_params);
   void add_type_annotation();
   void add_type_annotation(const std::string &func_name);
 
@@ -156,6 +158,20 @@ private:
   std::string get_type_from_ifexp(const Json &ifexp_node, const Json &body);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
+  // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
+  // is one of the array-shape constructors whose numpy.py signature is a
+  // generic `list[float]` the converter later replaces with a concrete
+  // array type. Scopes infer_type's Attribute-Call branch decline to
+  // exactly the calls that can hit the array_return_local_* gap.
+  bool is_numpy_array_ctor_call(const Json &call_value) const;
+  // True when the function currently being annotated (current_func) returns
+  // `name` directly as its own trailing statement -- `return name`, or
+  // identically through both arms of a trailing if/else. Mirrors
+  // get_function_definition's local_var_numpy_array_return on the converter
+  // side, at the granularity infer_type's decline needs (it only has to
+  // know whether the name being assigned right now is the one at risk, not
+  // reconstruct the whole pattern).
+  bool current_func_returns_name_directly(const std::string &name) const;
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast);
   std::string infer_lambda_return_type(const Json &lambda_elem) const;

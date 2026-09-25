@@ -315,6 +315,9 @@ public:
    *  model rather than materialising the whole array. Nullopt where the
    *  case falls through to get()'s generic tail. */
   std::optional<expr2tc> get_index_value(const expr2tc &expr, expr2tc &res);
+  /** get_index_value(), returning the element it read from the model, if any,
+   *  rather than leaving it in @p res for get()'s generic tail. */
+  std::optional<expr2tc> get_index(const expr2tc &expr, expr2tc &res);
 
   virtual expr2tc get(const expr2tc &expr);
 
@@ -829,6 +832,23 @@ public:
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
+  /** The pointer, floating-point and struct legs of convert_bitcast, split
+   *  out so the dispatcher stays readable. Each returns null when it does not
+   *  apply. */
+  smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt
+  convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  /** Flatten a pointer to the machine representation a bitcast reinterprets,
+   *  and rebuild it from one. Both record the pointer so that later flattened
+   *  pointers are tied to it; see the comment on the definitions in
+   *  smt_bitcast.cpp. */
+  smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
+  smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
+  void record_flattened_pointer(smt_astt address, smt_astt pointer);
+  /** True when @p ptr_type's representation occupies @p bv_type exactly, so
+   *  the bits read back are the bits that were written. */
+  bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
   /** Record every division's operand pair in @p expr, recursively.
@@ -1030,6 +1050,13 @@ public:
    *  by the boolean smt_ast pointer (solver ASTs are hash-consed, so
    *  identical pointer ⇒ identical term ⇒ identical model value). */
   std::unordered_map<smt_astt, tvt> l_get_cache;
+  /** Model-value cache for get_by_ast(), on the same terms and with the same
+   *  invalidation as l_get_cache. The pointer key is safe because pop_ctx
+   *  clears this map before deleting any smt_ast, so an address cannot be
+   *  reused while an entry for it survives. The stored type gates reuse
+   *  rather than keying it: the same bit-vector reads differently as signed
+   *  or unsigned. */
+  std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -1080,6 +1107,19 @@ public:
     uf_ackermann_history;
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter = 0;
+
+  /** One pointer flattened to, or rebuilt from, its machine representation by
+   *  a bitcast. See convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  struct ptr_flatten_entry
+  {
+    smt_astt address;
+    smt_astt pointer;
+    unsigned int level;
+  };
+  /** Every such pointer in this context, tied pairwise so that two flattened
+   *  pointers sharing an address are the same pointer. Pruned on pop_ctx like
+   *  uf_ackermann_history, whose asts have the same lifetime. */
+  std::vector<ptr_flatten_entry> ptr_flatten_history;
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
@@ -1140,6 +1180,8 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
+
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);

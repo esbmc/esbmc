@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto-functions-only
+^\s+ASSERT \(_Bool\)c // v$
+\A(?![\s\S]*ASSERT 0 // v)[\s\S]*\Z

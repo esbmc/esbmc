@@ -1,0 +1,134 @@
+#ifndef ESBMC_CHARCONV
+#define ESBMC_CHARCONV
+
+#include "system_error"
+#include "type_traits"
+
+#if __cplusplus >= 201703L
+
+// [charconv.syn], integral overloads only. The floating-point overloads are
+// deliberately absent rather than approximated: shortest-round-trip formatting
+// is what std::to_chars is for, and an approximation of it would return wrong
+// digits silently. Naming one stays the compile error it already is.
+
+namespace std
+{
+
+struct to_chars_result
+{
+  char *ptr;
+  errc ec;
+};
+
+struct from_chars_result
+{
+  const char *ptr;
+  errc ec;
+};
+
+template <class T>
+to_chars_result to_chars(char *first, char *last, T value, int base = 10)
+{
+  if (base < 2 || base > 36)
+    return to_chars_result{last, errc::invalid_argument};
+
+  // Magnitude in unsigned arithmetic: negating the most negative value in its
+  // own signed type is undefined, so convert first and subtract from zero.
+  const bool negative = is_signed<T>::value && value < T(0);
+  unsigned long long magnitude =
+    negative ? 0ull - static_cast<unsigned long long>(value)
+             : static_cast<unsigned long long>(value);
+
+  char digits[64];
+  int count = 0;
+  if (magnitude == 0)
+    digits[count++] = '0';
+  while (magnitude > 0)
+  {
+    const unsigned d =
+      static_cast<unsigned>(magnitude % static_cast<unsigned>(base));
+    digits[count++] =
+      static_cast<char>(d < 10 ? ('0' + d) : ('a' + (d - 10)));
+    magnitude /= static_cast<unsigned>(base);
+  }
+
+  const long total = count + (negative ? 1 : 0);
+  if (last - first < total)
+    return to_chars_result{last, errc::value_too_large};
+
+  char *out = first;
+  if (negative)
+    *out++ = '-';
+  while (count > 0)
+    *out++ = digits[--count];
+
+  return to_chars_result{out, errc()};
+}
+
+template <class T>
+from_chars_result
+from_chars(const char *first, const char *last, T &value, int base = 10)
+{
+  if (base < 2 || base > 36)
+    return from_chars_result{first, errc::invalid_argument};
+
+  const char *p = first;
+  bool negative = false;
+  if (is_signed<T>::value && p != last && *p == '-')
+  {
+    negative = true;
+    ++p;
+  }
+
+  const unsigned long long limit = ~0ull;
+  unsigned long long acc = 0;
+  bool overflow = false;
+  bool any = false;
+
+  while (p != last)
+  {
+    const char c = *p;
+    unsigned d;
+    if (c >= '0' && c <= '9')
+      d = static_cast<unsigned>(c - '0');
+    else if (c >= 'a' && c <= 'z')
+      d = static_cast<unsigned>(c - 'a') + 10;
+    else if (c >= 'A' && c <= 'Z')
+      d = static_cast<unsigned>(c - 'A') + 10;
+    else
+      break;
+    if (d >= static_cast<unsigned>(base))
+      break;
+
+    if (acc > (limit - d) / static_cast<unsigned>(base))
+      overflow = true;
+    else
+      acc = acc * static_cast<unsigned>(base) + d;
+    any = true;
+    ++p;
+  }
+
+  if (!any)
+    return from_chars_result{first, errc::invalid_argument};
+
+  // [charconv.from.chars]/1: on out-of-range the value is untouched and ptr
+  // still points past the digits that were consumed.
+  if (overflow)
+    return from_chars_result{p, errc::result_out_of_range};
+
+  const T converted = negative ? static_cast<T>(0ull - acc)
+                               : static_cast<T>(acc);
+  if (static_cast<unsigned long long>(
+        negative ? 0ull - static_cast<unsigned long long>(converted)
+                 : static_cast<unsigned long long>(converted)) != acc)
+    return from_chars_result{p, errc::result_out_of_range};
+
+  value = converted;
+  return from_chars_result{p, errc()};
+}
+
+} // namespace std
+
+#endif // __cplusplus >= 201703L
+
+#endif

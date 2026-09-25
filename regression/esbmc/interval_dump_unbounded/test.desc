@@ -1,0 +1,7 @@
+CORE
+main.c
+--interval-analysis --interval-analysis-dump
+^VERIFICATION SUCCESSFUL$
+^200000 <= c:.*@main@i$
+^300000 <= c:.*@main@k$
+^c:.*@main@m <= -400000$

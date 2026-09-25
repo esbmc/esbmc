@@ -454,7 +454,8 @@ private:
   void deref_invalid_ptr(
     const expr2tc &deref_expr,
     const guard2tc &guard,
-    modet mode);
+    modet mode,
+    const expr2tc &resolved = expr2tc());
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
@@ -498,10 +499,18 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** \p object is the object being accessed, or nil where the caller does not
+   *  know it yet -- then the base is assumed to carry the access width, as it
+   *  does for everything but a type that declines alignment. */
   void check_alignment(
     BigInt minwidth,
     const expr2tc &offset,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &object);
+  /** The alignment the address-space model guarantees the base of \p object's
+   *  object, i.e. the assumption check_alignment() is entitled to make about
+   *  everything below the offset it checks. */
+  BigInt object_base_alignment(const expr2tc &object) const;
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);
@@ -576,6 +585,12 @@ private:
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_member_from_byte_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_from_array(
     expr2tc &value,
     const expr2tc &offset,
@@ -583,6 +598,13 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  void construct_vector_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
   class quantifier_scopet;
 
   /** Variables bound by quantifiers enclosing the expression currently being

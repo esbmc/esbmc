@@ -22,6 +22,7 @@
 #include <util/symtab/namespace.h>
 #include <util/irep/migrate.h>
 #include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
 #include <util/arith/arith_tools.h>
 #include <irep2/irep2_utils.h>
 
@@ -95,10 +96,12 @@ static void require_arith_result(
 // get_c_type ranks an operand against config.ansi_c, which is zero-initialised
 // bar int_128_width. Pin a model in main() rather than at namespace scope:
 // `config` lives in another translation unit, so a static initialiser here
-// would race its constructor.
+// would race its constructor. set_data_model leaves the byte order alone, and
+// constant_string2t::to_array asserts on NO_ENDIANESS.
 int main(int argc, char *argv[])
 {
   config.ansi_c.set_data_model(configt::LP64);
+  config.ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
   return Catch::Session().run(argc, argv);
 }
 
@@ -404,6 +407,122 @@ static void require_overloads_agree(
   expr2tc legacy_migrated;
   migrate_expr(legacy, legacy_migrated);
   REQUIRE(legacy_migrated == native);
+}
+
+// A function's parameter names are not part of its type: C11 6.7.6.3p15 asks
+// only for compatible return types and agreeing parameter type lists. But
+// code_type2t reflects argument_names, so two types C calls the same compare
+// unequal as IREP2 nodes, and the expr2tc copy of convert_to_pointer inserted a
+// cast where the irept copy inserts none -- visible as a hop-off divergence on
+// `int (*p)(int) = (int (*)(int))g;` (scope-clang-c-irep2.md §144).
+static code_typet one_arg_code(const irep_idt &param_identifier)
+{
+  code_typet t;
+  t.return_type() = int_type();
+  code_typet::argumentt arg(int_type());
+  if (!param_identifier.empty())
+  {
+    arg.cmt_base_name("x");
+    arg.set_identifier(param_identifier);
+  }
+  t.arguments().push_back(arg);
+  return t;
+}
+
+// The conversion *result*, swept. The admission matrices above ask whether a
+// conversion is permitted; §144's defect was that both copies permitted one and
+// then disagreed on whether to wrap it, which no matrix here covered. This
+// sweeps require_overloads_agree over the same scalar table plus the pointer,
+// array and function-pointer shapes -- 576 pairs.
+//
+// `c_enum` is excluded, and the reason is a property of the seam rather than of
+// either copy: migrate_type maps it to signedbv (C99 6.7.2.2.3, migrate.cpp),
+// so an enum destination *is* `int` on the IREP2 side. Every question involving
+// one is therefore asked of a different type on the two sides -- measured as 11
+// disagreements, all of them enum rows: `int -> c_enum` inserts a cast on the
+// legacy side and none on the IREP2 side, and `double -> c_enum` is refused
+// there and admitted here. Comparing them would pin the collapse, not the
+// copies.
+TEST_CASE(
+  "conversion parity: the two copies agree over the C-shaped matrix",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  auto table = scalar_types();
+  const typet int_ptr = pointer_typet(int_type());
+  array_typet arr;
+  arr.subtype() = int_type();
+  arr.size() = from_integer(4, index_type());
+  table.emplace_back("int*", int_ptr);
+  table.emplace_back("void*", pointer_typet(empty_typet()));
+  table.emplace_back("char*", pointer_typet(char_type()));
+  table.emplace_back("int**", pointer_typet(int_ptr));
+  table.emplace_back("int[4]", arr);
+  table.emplace_back("int(*)(int x)", pointer_typet(one_arg_code("g::x")));
+  table.emplace_back("int(*)(int)", pointer_typet(one_arg_code(irep_idt())));
+
+  for (const auto &[src_name, src] : table)
+    for (const auto &[dest_name, dest] : table)
+    {
+      INFO("src: " + src_name + " dest: " + dest_name);
+      require_overloads_agree(ns, symbol_exprt("s", src), dest);
+    }
+}
+
+TEST_CASE(
+  "both c_implicit_typecast overloads agree on function pointers",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  const code_typet named = one_arg_code("g::x");
+  const code_typet unnamed = one_arg_code(irep_idt());
+
+  // The two spellings really do differ as IREP2 nodes, in argument_names only.
+  const type2tc named2 = migrate_type(named);
+  const type2tc unnamed2 = migrate_type(unnamed);
+  REQUIRE(named2 != unnamed2);
+  REQUIRE(to_code_type(named2).arguments == to_code_type(unnamed2).arguments);
+  REQUIRE(to_code_type(named2).ret_type == to_code_type(unnamed2).ret_type);
+  REQUIRE(
+    to_code_type(named2).argument_names !=
+    to_code_type(unnamed2).argument_names);
+
+  symbolt g;
+  g.id = "c:@F@g";
+  g.name = "g";
+  g.mode = "C";
+  g.set_type(named);
+  ctx.add(g);
+
+  const symbolt &gs = *ctx.find_symbol("c:@F@g");
+  symbol_exprt g_expr(gs.id, gs.get_type());
+  const exprt addr = address_of_exprt(g_expr);
+
+  // Assigning it to a pointer spelled without the parameter name, and to one
+  // spelled with it: neither is a conversion, so neither copy may add a cast.
+  require_overloads_agree(ns, addr, pointer_typet(unnamed));
+  require_overloads_agree(ns, addr, pointer_typet(named));
+
+  // A genuine difference in the signature is a conversion, and the two copies
+  // must still agree on it.
+  code_typet two_args = unnamed;
+  two_args.arguments().push_back(code_typet::argumentt(int_type()));
+  require_overloads_agree(ns, addr, pointer_typet(two_args));
+
+  code_typet other_return = unnamed;
+  other_return.return_type() = double_type();
+  require_overloads_agree(ns, addr, pointer_typet(other_return));
+
+  code_typet variadic = unnamed;
+  variadic.make_ellipsis();
+  require_overloads_agree(ns, addr, pointer_typet(variadic));
+
+  // And to void*, which is the conversion C does allow here.
+  require_overloads_agree(ns, addr, pointer_typet(empty_typet()));
 }
 
 TEST_CASE(
@@ -712,5 +831,114 @@ TEST_CASE(
   SECTION("fixedbv symbol converts to int")
   {
     require_overloads_agree(ns, symbol_exprt("f", float_type()), int_type());
+  }
+}
+
+// The irept copy has these arms and the expr2tc one did not.
+TEST_CASE(
+  "both implicit_typecast_followed copies agree on the reference arms",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  pointer_typet int_ref(int_type());
+  int_ref.set("#reference", true);
+
+  SECTION("a non-reference source to a reference destination takes its address")
+  {
+    require_overloads_agree(ns, symbol_exprt("a", int_type()), int_ref);
+  }
+
+  SECTION("a reference source to a non-reference destination dereferences")
+  {
+    require_overloads_agree(ns, symbol_exprt("r", int_ref), int_type());
+  }
+
+  // The one shape the two copies cannot agree on, and irept is the wrong side.
+  // take_reference_address there spells every result `#reference`, which is
+  // invisible to it because operator== skips comment attributes; migrated, that
+  // is an lvalue reference even when the destination is `T&&`. ref_kind is a
+  // real field, so the IREP2 copy keeps the destination's own spelling. Both
+  // take the address and neither adds a cast -- only the spelling differs, so
+  // this pins the shape rather than byte equality.
+  SECTION("an rvalue reference destination keeps its own spelling")
+  {
+    migrate_lookupt lookup(ns);
+    pointer_typet int_rref(int_type());
+    int_rref.set("#rvalue_reference", true);
+
+    expr2tc native;
+    migrate_expr(symbol_exprt("a", int_type()), native);
+    REQUIRE_FALSE(c_implicit_typecast(native, migrate_type(int_rref), ns));
+    REQUIRE(is_address_of2t(native));
+    REQUIRE(
+      to_pointer_type(native->type).ref_kind == pointer_ref_kindt::RVALUE);
+  }
+
+  // [expr.cond]: a conditional over lvalues is an lvalue, so the address is
+  // taken per arm.
+  SECTION("a conditional takes the address of each arm")
+  {
+    exprt cond = symbol_exprt("c", bool_type());
+    if_exprt pick(
+      cond, symbol_exprt("a", int_type()), symbol_exprt("b", int_type()));
+    pick.type() = int_type();
+    require_overloads_agree(ns, pick, int_ref);
+  }
+
+  // The agreement assertion alone would pass if both copies regressed
+  // together; pin the shape the arm is for.
+  SECTION("the address-of carries the destination's reference spelling")
+  {
+    migrate_lookupt lookup(ns);
+    expr2tc native;
+    migrate_expr(symbol_exprt("a", int_type()), native);
+    REQUIRE_FALSE(c_implicit_typecast(native, migrate_type(int_ref), ns));
+    REQUIRE(is_address_of2t(native));
+    REQUIRE(
+      to_pointer_type(native->type).ref_kind == pointer_ref_kindt::LVALUE);
+  }
+}
+
+// The C++-shaped arms of implicit_typecast_followed
+// (docs/roadmap/scope-clang-cpp-irep2.md §2). These are Phase 7 pre-flight:
+// the irept copy has them and the expr2tc copy does not, so each section here
+// fails until the corresponding arm is ported.
+TEST_CASE(
+  "both implicit_typecast_followed copies agree on the C++ arms",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  struct_typet base;
+  base.tag("Base");
+  struct_union_typet::componentt field;
+  field.set_name("x");
+  field.pretty_name("x");
+  field.type() = int_type();
+  base.components().push_back(field);
+
+  SECTION("a struct source to a pointer destination takes its address")
+  {
+    require_overloads_agree(ns, symbol_exprt("obj", base), pointer_typet(base));
+  }
+
+  SECTION("a union source to a pointer destination takes its address")
+  {
+    union_typet u;
+    u.tag("U");
+    u.components().push_back(field);
+    require_overloads_agree(ns, symbol_exprt("obj", u), pointer_typet(u));
+  }
+
+  SECTION("a string constant to an array destination becomes an array")
+  {
+    const typet char_array =
+      array_typet(char_type(), from_integer(3, size_type()));
+    string_constantt str("ab");
+    str.type() = char_array;
+    require_overloads_agree(ns, str, char_array);
   }
 }

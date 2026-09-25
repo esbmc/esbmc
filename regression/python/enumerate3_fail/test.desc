@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 1
-^TypeError\: enumerate\(\) missing required argument 'iterable' \(pos 1\)$
+^ERROR: .*enumerate\(\) missing required argument 'iterable' \(pos 1\)$

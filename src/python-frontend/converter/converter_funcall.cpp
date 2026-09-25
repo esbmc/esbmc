@@ -764,12 +764,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // return the keys member as a placeholder — same size as the dict,
           // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
           // Full (key, value) tuple semantics are not modelled.
-          return migrate_expr_back(
+          exprt items_view = migrate_expr_back(
             member2tc(migrate_type(list_type), dict2, "keys"));
+          items_view.set(PYTHON_ITEMS_VIEW_ATTR, true);
+          return items_view;
         }
-        // Return the keys or values member directly
-        return migrate_expr_back(
+        exprt view = migrate_expr_back(
           member2tc(migrate_type(list_type), dict2, method_name));
+        if (method_name == "keys")
+          view.set(PYTHON_KEYS_VIEW_ATTR, true);
+        return view;
       }
     }
   }
@@ -922,7 +926,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     call.type() = ret_type;
     if (element.contains("args"))
       for (const auto &arg : element["args"])
-        call.arguments().push_back(get_expr(arg));
+      {
+        exprt arg_expr = get_expr(arg);
+        // No parameter types to check against here, so refuse cleanly.
+        if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+          dynamic_type_handler_.refuse_tagged_argument();
+        call.arguments().push_back(arg_expr);
+      }
 
     return call;
   }
@@ -997,6 +1007,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         for (const auto &arg_element : element["args"])
         {
           exprt arg_expr = get_expr(arg_element);
+          // The pointer target only carries a return type, no parameter
+          // types, so refuse cleanly instead of passing a mistyped arg.
+          if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+            dynamic_type_handler_.refuse_tagged_argument();
           // A function name used as an argument decays to a function pointer.
           if (arg_expr.type().is_code() && arg_expr.is_symbol())
             arg_expr = address_of_exprt(arg_expr);
@@ -1316,7 +1330,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         continue;
       }
 
-      exprt arg_expr = get_expr(kw["value"]);
+      exprt arg_expr = function_call_expr::fold_from_bytes_byteorder(
+        get_expr(kw["value"]),
+        kw["value"],
+        *func_symbol,
+        params,
+        it->second,
+        *ast_json);
 
       // Convert array to pointer to match parameter type
       const typet &param_type = params[it->second].type();
@@ -1595,8 +1615,12 @@ exprt python_converter::materialize_list_function_call(
 
   const code_function_callt &call = to_code_function_call(to_code(expr));
 
-  // Only handle list-returning functions
-  if (call.type() != type_handler_.get_list_type())
+  // Only handle list-returning functions and array-value-returning functions
+  // (e.g. bytes): both need a bound temporary before they can be indexed or
+  // sliced, since a code_function_callt embedded directly as an index/slice
+  // operand is a statement, not a value (#4807's list case; bytes hits the
+  // same gap when a `-> bytes` call is indexed inline, e.g. `f()[0:8]`).
+  if (call.type() != type_handler_.get_list_type() && !call.type().is_array())
     return expr;
 
   locationt location = get_location_from_decl(element);

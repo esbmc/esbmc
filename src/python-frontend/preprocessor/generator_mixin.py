@@ -159,7 +159,11 @@ class GeneratorMixin:
         """
         for generator in node.generators:
             if getattr(generator, "is_async", False):
-                raise NotImplementedError("Async list comprehensions are not supported")
+                err = NotImplementedError("Async list comprehensions are not supported")
+                # Consumed by parser.main to locate the rejection in the user's
+                # file; the raising frame is inside ESBMC (#7547).
+                err.esbmc_location = (self.module_name, node.lineno, node.col_offset)
+                raise err
 
         node = self._rename_shadowing_targets(node)
 
@@ -1137,8 +1141,8 @@ class GeneratorMixin:
     def _is_scannable_key(key_value):
         """True for the key shapes a scan lowering can emit.
 
-        A single-parameter lambda is bound to a temporary and called; a plain
-        name is called directly (binding one yields a symbol the callee
+        A single-parameter lambda is inlined, or bound to a temporary and called
+        when _inlinable_key_lambda declines it; a plain name is called directly (binding one yields a symbol the callee
         resolution does not accept). Of the bound methods only ``__getitem__``
         qualifies, because it is emitted as a subscript -- a scan's own
         statements are not re-visited, so any other would be a call nothing gets
@@ -1159,6 +1163,8 @@ class GeneratorMixin:
         visit_Call would never reach it and the frontend would raise
         AttributeError on the method spelling.
         """
+        if GeneratorMixin._inlinable_key_lambda(key_value):
+            return GeneratorMixin._inline_key_lambda(key_value, arg_expr)
         if bind_name is not None:
             return ast.Call(func=ast.Name(id=bind_name, ctx=ast.Load()),
                             args=[arg_expr],
@@ -1168,6 +1174,76 @@ class GeneratorMixin:
                                  slice=arg_expr,
                                  ctx=ast.Load())
         return ast.Call(func=copy.deepcopy(key_value), args=[arg_expr], keywords=[])
+
+    @staticmethod
+    def _inlinable_key_lambda(key_value):
+        """A ``lambda x: body`` a scan applies by substituting its argument, a
+        pure read, for ``x``. Bound and called instead, its parameter is typed
+        before the scan's temporaries exist and defaults to double (#7745).
+        """
+        if not isinstance(key_value, ast.Lambda):
+            return False
+        args = key_value.args
+        if len(args.args) != 1 or any((args.posonlyargs, args.kwonlyargs, args.vararg, args.kwarg,
+                                       args.defaults, args.kw_defaults)):
+            return False
+        rebinding = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
+                     ast.NamedExpr)
+        return not any(isinstance(node, rebinding) for node in ast.walk(key_value.body))
+
+    # Builtin keys and the dunder each dispatches to on a user class.
+    _BUILTIN_KEY_DUNDERS = {"len": "__len__", "abs": "__abs__"}
+
+    @classmethod
+    def _scan_unobservable_builtin_keys(cls, module_node):
+        """Builtin keys a scan may re-apply: unbound in the module, and no class
+        it can see defines their dunder, so a call has no side effect. A module
+        importing anything but ``typing`` may receive such a class, and is
+        excluded outright."""
+        bound, dunders = set(), set()
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Import) or (isinstance(n, ast.ImportFrom)
+                                             and n.module != "typing"):
+                return frozenset()
+            bound.update(cls._names_bound_by(n))
+            if isinstance(n, ast.ClassDef):
+                dunders.update(m.name for m in n.body if isinstance(m, ast.FunctionDef))
+        return frozenset(name for name, dunder in cls._BUILTIN_KEY_DUNDERS.items()
+                         if name not in bound and dunder not in dunders)
+
+    @staticmethod
+    def _names_bound_by(node):
+        """The names @p node itself binds: a def or class, a Store/Del name, a
+        parameter, or a ``global`` declaration."""
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return (node.name, )
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            return (node.id, )
+        if isinstance(node, ast.arg):
+            return (node.arg, )
+        if isinstance(node, ast.Global):
+            return tuple(node.names)
+        return ()
+
+    @staticmethod
+    def _binds_key(key_value):
+        """Whether a scan binds its key lambda to a name before applying it."""
+        return isinstance(key_value,
+                          ast.Lambda) and not GeneratorMixin._inlinable_key_lambda(key_value)
+
+    @staticmethod
+    def _inline_key_lambda(key_value, arg_expr):
+        """The body of @p key_value with its parameter replaced by @p arg_expr."""
+        param = key_value.args.args[0].arg
+
+        class _Substitute(ast.NodeTransformer):
+
+            def visit_Name(self, node):
+                if node.id == param and isinstance(node.ctx, ast.Load):
+                    return ast.copy_location(copy.deepcopy(arg_expr), node)
+                return node
+
+        return _Substitute().visit(copy.deepcopy(key_value.body))
 
     @staticmethod
     def _single_key_keyword(call_node):
@@ -1273,9 +1349,14 @@ class GeneratorMixin:
         when the shape does not apply.
 
         Insertion sort with a strict ``>`` is stable, as CPython's sort is. The
-        working list is copied with a full slice rather than ``list(iterable)``,
-        which aliases its argument -- sorting through the alias would mutate the
-        caller's list, and ``sorted`` must not.
+        key is applied once per element, in order, into a parallel list the sort
+        moves with the elements: CPython calls it exactly that way, and an impure
+        key re-applied in the shift loop was observable. A builtin key whose call
+        has no side effect is re-applied instead, since the second list costs the
+        solver several times the sort itself (humaneval_149). The working list is
+        copied with a full slice rather than ``list(iterable)``, which aliases
+        its argument -- sorting through the alias would mutate the caller's
+        list, and ``sorted`` must not.
         """
         key_kw = self._scan_key_argument(call_node, ("sorted", ))
         if key_kw is None or not self._is_scan_supported(call_node.args[0], key_kw.value):
@@ -1289,6 +1370,7 @@ class GeneratorMixin:
         j = f"ESBMC_srtj_{n}"
         cur = f"ESBMC_srtc_{n}"
         cur_key = f"ESBMC_srtck_{n}"
+        keys = f"ESBMC_srtk_{n}"
 
         def store(name, value):
             return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
@@ -1305,10 +1387,10 @@ class GeneratorMixin:
         def sub(left, right):
             return ast.BinOp(left=left, op=ast.Sub(), right=right)
 
-        def at(index_expr, ctx=None):
-            return ast.Subscript(value=load(out), slice=index_expr, ctx=ctx or ast.Load())
+        def at(index_expr, ctx=None, name=out):
+            return ast.Subscript(value=load(name), slice=index_expr, ctx=ctx or ast.Load())
 
-        bind_key = isinstance(key_kw.value, ast.Lambda)
+        bind_key = self._binds_key(key_kw.value)
 
         def call_key(arg_expr):
             return self._scan_key_call(key_kw.value, key_fn if bind_key else None, arg_expr)
@@ -1316,16 +1398,41 @@ class GeneratorMixin:
         def length(name):
             return ast.Call(func=ast.Name(id="len", ctx=ast.Load()), args=[load(name)], keywords=[])
 
+        once = not (isinstance(key_kw.value, ast.Name)
+                    and key_kw.value.id in self._unobservable_builtin_keys)
+
+        def key_at(index_expr):
+            return at(index_expr, name=keys) if once else call_key(at(index_expr))
+
+        def move(dst_index, src_value, name):
+            return ast.Assign(targets=[at(dst_index, ast.Store(), name)], value=src_value)
+
+        def move_key(dst_index, src_value):
+            return [move(dst_index, src_value, keys)] if once else []
+
+        fill_keys = ast.While(
+            test=ast.Compare(left=load(i), ops=[ast.Lt()], comparators=[length(out)]),
+            body=[
+                ast.Expr(value=ast.Call(func=ast.Attribute(
+                    value=load(keys), attr="append", ctx=ast.Load()),
+                                        args=[call_key(at(load(i)))],
+                                        keywords=[])),
+                store(i, add(load(i), num(1))),
+            ],
+            orelse=[],
+        )
+
         shift = ast.While(
             test=ast.BoolOp(op=ast.And(),
                             values=[
                                 ast.Compare(left=load(j), ops=[ast.GtE()], comparators=[num(0)]),
-                                ast.Compare(left=call_key(at(load(j))),
+                                ast.Compare(left=key_at(load(j)),
                                             ops=[ast.Gt()],
                                             comparators=[load(cur_key)]),
                             ]),
             body=[
-                ast.Assign(targets=[at(add(load(j), num(1)), ast.Store())], value=at(load(j))),
+                move(add(load(j), num(1)), at(load(j)), out),
+                *move_key(add(load(j), num(1)), at(load(j), name=keys)),
                 store(j, sub(load(j), num(1))),
             ],
             orelse=[],
@@ -1335,10 +1442,12 @@ class GeneratorMixin:
             test=ast.Compare(left=load(i), ops=[ast.Lt()], comparators=[length(out)]),
             body=[
                 store(cur, at(load(i))),
-                store(cur_key, call_key(load(cur))),
+                store(cur_key,
+                      at(load(i), name=keys) if once else call_key(load(cur))),
                 store(j, sub(load(i), num(1))),
                 shift,
-                ast.Assign(targets=[at(add(load(j), num(1)), ast.Store())], value=load(cur)),
+                move(add(load(j), num(1)), load(cur), out),
+                *move_key(add(load(j), num(1)), load(cur_key)),
                 store(i, add(load(i), num(1))),
             ],
             orelse=[],
@@ -1357,7 +1466,10 @@ class GeneratorMixin:
         prefix = []
         if bind_key:
             prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
-        prefix += [store(out, whole_slice), store(i, num(1)), outer]
+        prefix.append(store(out, whole_slice))
+        if once:
+            prefix += [store(keys, ast.List(elts=[], ctx=ast.Load())), store(i, num(0)), fill_keys]
+        prefix += [store(i, num(1)), outer]
 
         result = load(out)
         for node in prefix + [result]:
@@ -1377,9 +1489,10 @@ class GeneratorMixin:
         Ties keep the first occurrence, matching CPython. An empty iterable
         raises IndexError here where CPython raises ValueError.
         """
-        # A lambda has to be bound to a name first (an inline lambda argument is
-        # not resolved as a callee); a plain name is called directly, since a
-        # function alias assignment does not produce a callable symbol.
+        # A lambda _binds_key declines to inline is bound to a name first (an
+        # inline lambda argument is not resolved as a callee); a plain name is
+        # called directly, since a function alias assignment does not produce a
+        # callable symbol.
         key_kw = self._scan_key_argument(call_node, ("min", "max"))
         if key_kw is None:
             return None
@@ -1400,7 +1513,7 @@ class GeneratorMixin:
         def load(name):
             return ast.Name(id=name, ctx=ast.Load())
 
-        bind_key = isinstance(key_kw.value, ast.Lambda)
+        bind_key = self._binds_key(key_kw.value)
 
         def call_key(arg_name):
             return self._scan_key_call(key_kw.value, key_fn if bind_key else None, load(arg_name))

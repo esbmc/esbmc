@@ -113,8 +113,56 @@ TEST_CASE("with_type rebuilds an address-of from the pointee", "[core][irep2]")
     address_of2tc(u32, obj, true)->with_type(pointer_type2tc(u64));
   REQUIRE(to_address_of2t(sugar).implicit);
 
+  // ref_kind is forwarded, not re-defaulted: a reference destination's
+  // address-of has to keep the spelling or do_typecast adds a cast the irept
+  // copy does not produce (c_typecast.cpp).
+  expr2tc ref = address_of2tc(u32, obj)->with_type(
+    pointer_type2tc(u32, false, pointer_ref_kindt::LVALUE));
+  REQUIRE(to_pointer_type(ref->type).ref_kind == pointer_ref_kindt::LVALUE);
+
   // The rebuild reads new_type as a pointer; a non-pointer is a caller bug.
   REQUIRE_THROWS_AS(address_of2tc(u32, obj)->with_type(u64), irep2_cast_error);
+}
+
+// Both side-effect kinds carry a flag outside `fields` -- sideeffect2t's
+// `constructor` and sideeffect_assign2t's `member_init` -- so each needs a
+// rebuild specialization: the generic path reconstructs from `fields` alone and
+// would drop the flag, and listing it there instead makes field order stop
+// matching the constructor's parameter order, which sends every with_type on
+// the kind to the abort above (docs/roadmap/scope-clang-cpp-irep2.md §7.2).
+TEST_CASE("with_type keeps a side effect's unreflected flag", "[core][irep2]")
+{
+  config.ansi_c.word_size = 32;
+
+  const type2tc u32 = get_uint_type(32);
+  const type2tc u64 = get_uint_type(64);
+  const expr2tc lhs = symbol2tc(u32, "x");
+  const expr2tc rhs = symbol2tc(u32, "y");
+
+  const expr2tc init = sideeffect_assign2tc(
+    u32, "assign", lhs, rhs, locationt(), /*member_init=*/true);
+  const expr2tc retyped_init = init->with_type(u64);
+  REQUIRE(is_sideeffect_assign2t(retyped_init));
+  REQUIRE(retyped_init->type == u64);
+  REQUIRE(to_sideeffect_assign2t(retyped_init).member_init);
+
+  const expr2tc plain =
+    sideeffect_assign2tc(u32, "assign", lhs, rhs)->with_type(u64);
+  REQUIRE_FALSE(to_sideeffect_assign2t(plain).member_init);
+
+  const expr2tc ctor = sideeffect2tc(
+    u32,
+    symbol2tc(u32, "C::C"),
+    expr2tc(),
+    std::vector<expr2tc>{lhs},
+    get_empty_type(),
+    sideeffect2t::allockind::function_call,
+    locationt(),
+    /*constructor=*/true);
+  const expr2tc retyped_ctor = ctor->with_type(u64);
+  REQUIRE(is_sideeffect2t(retyped_ctor));
+  REQUIRE(retyped_ctor->type == u64);
+  REQUIRE(to_sideeffect2t(retyped_ctor).constructor);
 }
 
 #if !defined(_WIN32)

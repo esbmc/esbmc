@@ -189,6 +189,14 @@ protected:
   void convert_block(const codet &code, goto_programt &dest);
   void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void convert_decl_initializer(
+    const exprt &var,
+    exprt &initializer,
+    const codet &new_code,
+    const symbolt &s,
+    goto_programt &dest);
+  void schedule_array_element_destructors(const exprt &base, const typet &type);
+
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
@@ -466,6 +474,15 @@ protected:
   void
   emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
 
+  // Lower a value-discarding `&&` / `||` as a statement; false when the caller
+  // should fall back to rewrite_short_circuit_as_ternary.
+  bool lower_discarded_short_circuit(
+    exprt &expr,
+    goto_programt &dest,
+    bool result_is_used);
+
+  void rewrite_short_circuit_as_ternary(exprt &expr);
+
   // The same four hooks differ only in arity and in which argument carries the
   // failing expression; `expr_arg` names the latter.
   void do_assert_fail(
@@ -533,6 +550,11 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest,
     const std::string &bs_name);
+  void do_operator_new(
+    const exprt &lhs,
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
   void do_mem(
     bool is_malloc,
     const exprt &lhs,

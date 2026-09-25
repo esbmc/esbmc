@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-induction --multi-property --check-vacuity --max-k-step 8
+^VERIFICATION SUCCESSFUL$
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+9\s+assertion x == n$
+^\*\* 0 of 1 properties failed, 1 passed$

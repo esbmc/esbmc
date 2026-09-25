@@ -554,6 +554,17 @@ symbol_id function_call_builder::build_function_id() const
     // Map Python loop invariant name to ESBMC internal name
     if (func_name == kLoopInvariant)
       func_name = kEsbmcLoopInvariant;
+
+    // `Alias = bytes` resolves fine as an annotation but not as a call
+    // target; without this it crashes calling the alias as a function.
+    if (
+      !type_utils::is_builtin_type(func_name) &&
+      !json_utils::is_class(func_name, ast))
+    {
+      const std::string resolved = th.resolve_builtin_alias(func_name);
+      if (!resolved.empty())
+        func_name = resolved;
+    }
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
@@ -566,8 +577,9 @@ symbol_id function_call_builder::build_function_id() const
       /* Handle nested attribute chains (e.g., self.f.foo(), a.b.c.method())
        *
        * When calling a method through an attribute chain, we need to determine
-       * the class type of the intermediate object. For example, in self.f.foo(),
-       * we need to know that 'f' has type Foo to correctly resolve Foo.foo().
+       * the class type of the intermediate object. For example, in
+       * self.f.foo(), we need to know that 'f' has type Foo to correctly
+       * resolve Foo.foo().
        *
        * Strategy: Recursively walk the attribute chain from left to right,
        * resolving each component's type by looking up struct members in the
@@ -681,11 +693,12 @@ symbol_id function_call_builder::build_function_id() const
       {
         // Type resolution failed. module_path_candidate was built as a
         // side-effect of resolve_attr_type; check whether it names a module
-        // that is directly registered (e.g., "pkg.mod4" for pkg.mod4.MyClass()).
-        // We require get_imported_module_path() to be non-empty rather than
-        // just is_imported_module(), because is_imported_module() can return
-        // true based solely on a JSON file existing (is_module fallback), even
-        // for submodules like "os.path" that are registered under their stem
+        // that is directly registered (e.g., "pkg.mod4" for
+        // pkg.mod4.MyClass()). We require get_imported_module_path() to be
+        // non-empty rather than just is_imported_module(), because
+        // is_imported_module() can return true based solely on a JSON file
+        // existing (is_module fallback), even for submodules like "os.path"
+        // that are registered under their stem
         // ("path") rather than their dotted name. If the dotted name has no
         // direct path mapping, fall back to the last attribute component
         // (e.g., "path" for os.path.exists()) which IS in imported_modules.
@@ -705,12 +718,15 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (func_json["value"]["_type"] == "BinOp")
     {
-      std::string lhs_type = th.get_operand_type(func_json["value"]["left"]);
-      std::string rhs_type = th.get_operand_type(func_json["value"]["right"]);
-
-      assert(lhs_type == rhs_type);
-
-      obj_name = lhs_type;
+      // Mixed-type operands (e.g. a tagged int subclass mixed with a plain
+      // int literal) are valid Python. get_operand_type already resolves a
+      // BinOp node gracefully, falling back to whichever side is non-empty.
+      obj_name = th.get_operand_type(func_json["value"]);
+      // CPython's default int arithmetic always returns a plain `int`,
+      // even with a subclass operand; none of the consensus int-subclasses
+      // override an arithmetic dunder.
+      if (type_utils::is_consensus_type(obj_name))
+        obj_name = "int";
     }
     else if (func_json["value"]["_type"] == "Call")
     {
@@ -1184,8 +1200,8 @@ exprt function_call_builder::build() const
 
     // len() of a tuple-typed expression (e.g. an inline str.partition() result
     // that is not bound to a Name, so the __ESBMC_len_tuple routing above never
-    // fires) is the number of components. Without this the call falls through to
-    // strlen() and reports the wrong length (#5114).
+    // fires) is the number of components. Without this the call falls through
+    // to strlen() and reports the wrong length (#5114).
     if (arg_expr.type().id() == "struct")
     {
       const struct_typet &struct_type = to_struct_type(arg_expr.type());
@@ -1257,7 +1273,8 @@ exprt function_call_builder::build() const
     return build_call(list_get_size_func, size_type(), {keys_member});
   }
 
-  // Special handling for assume calls: convert to code_assume instead of function call
+  // Special handling for assume calls: convert to code_assume instead of
+  // function call
   if (is_assume_call(function_id))
   {
     if (call_["args"].empty())
@@ -1434,12 +1451,12 @@ exprt function_call_builder::build() const
     }
   }
 
-  // __pyt_init_tid / __pyt_join / __pyt_terminate / __ESBMC_pylock_block_and_check:
-  // C-side bookkeeping helpers for the Python threading lowering (defined
-  // in pthread_lib.c, pulled into the GOTO program via the python_c_models
-  // whitelist in cprover_library.cpp). Register the matching C-style
-  // symbol id so the call resolves to the linked body rather than a
-  // freshly-created Python-frontend symbol with no implementation.
+  // __pyt_init_tid / __pyt_join / __pyt_terminate /
+  // __ESBMC_pylock_block_and_check: C-side bookkeeping helpers for the Python
+  // threading lowering (defined in pthread_lib.c, pulled into the GOTO program
+  // via the python_c_models whitelist in cprover_library.cpp). Register the
+  // matching C-style symbol id so the call resolves to the linked body rather
+  // than a freshly-created Python-frontend symbol with no implementation.
   {
     const std::string &func_name = function_id.get_function();
     const bool is_init_tid = func_name == kPytInitTid;

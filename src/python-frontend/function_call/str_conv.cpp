@@ -334,6 +334,26 @@ exprt function_call_expr::build_ord_constant(
   return expr;
 }
 
+std::optional<int>
+function_call_expr::folded_char_array_codepoint(const exprt &e) const
+{
+  // Reuse the walk the Name path uses. The char-subtype test keeps bytes out:
+  // those are long_long_int arrays, and admitting them would turn
+  // ord(b"\xc3") into an error rather than 195.
+  if (
+    !e.is_constant() || !e.type().is_array() ||
+    e.type().subtype() != char_type() || !e.has_operands())
+    return std::nullopt;
+
+  symbolt folded;
+  folded.set_value(migrate_expr(e));
+  auto text = extract_string_from_symbol(&folded);
+  if (!text || text->empty())
+    return std::nullopt;
+
+  return decode_utf8_codepoint(*text);
+}
+
 exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 {
   // Fast path: constant string literal. Folding also handles multi-byte UTF-8
@@ -368,14 +388,23 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     return expr;
 
   // A character from string indexing is an 8-bit int tagged #cpp_type==char.
-  // V.3: build the char->int cast in IREP2, back-migrating once (mirrors the
+  // It is one UTF-8 byte, read unsigned: sign-extending made ord() negative
+  // (#7552). A non-ASCII character still yields its lead byte, not its code
+  // point, since indexing is byte-wise.
+  // V.3: build the cast in IREP2, back-migrating once (mirrors the
   // build_typecast helper; typecast2t round-trips byte-identically).
   if (type_utils::is_char_type(expr.type()))
   {
     expr2tc expr2;
     migrate_expr(expr, expr2);
-    return migrate_expr_back(typecast2tc(migrate_type(int_type()), expr2));
+    return migrate_expr_back(typecast2tc(
+      migrate_type(int_type()), typecast2tc(get_uint8_type(), expr2)));
   }
+
+  // chr() folds a code point into a constant char array of its UTF-8 bytes;
+  // folding it here spares the runtime decode below.
+  if (auto code_point = folded_char_array_codepoint(expr))
+    return build_ord_constant(arg, *code_point);
 
   // A runtime string: return the code point of its first character.
   if (type_utils::is_string_type(expr.type()))
@@ -791,14 +820,15 @@ exprt function_call_expr::handle_ascii() const
     return converter_.get_string_builder().build_string_literal(out);
   }
 
-  // Non-string argument: ascii(x) == repr(x), which for numbers and bools is
-  // identical to str(x). Reuse the existing str conversion machinery.
+  // A runtime value: ascii(x) == repr(x) for a number, a bool and an ASCII
+  // str; __python_str_repr leaves a non-ASCII str unconstrained.
   exprt value_expr = converter_.get_expr(arg);
   if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
   {
-    const typet &vt = value_expr.type();
-    if (vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv())
-      return converter_.get_string_handler().convert_to_string(value_expr);
+    exprt repr = converter_.get_string_handler().build_repr(
+      value_expr, converter_.get_location_from_decl(call_));
+    if (repr.is_not_nil())
+      return repr;
   }
   return converter_.get_exception_handler().gen_exception_raise(
     "TypeError", "ascii() argument type not supported");
@@ -1158,13 +1188,13 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
     const exprt &cond = val.operands()[0];
 
     symbolt true_sym;
-    true_sym.set_value(val.operands()[1]);
-    true_sym.set_type(true_sym.get_value().type());
+    true_sym.set_value(migrate_expr(val.operands()[1]));
+    true_sym.set_type(migrate_type(true_sym.get_value().type()));
     auto true_text = extract_string_from_symbol(&true_sym);
 
     symbolt false_sym;
-    false_sym.set_value(val.operands()[2]);
-    false_sym.set_type(false_sym.get_value().type());
+    false_sym.set_value(migrate_expr(val.operands()[2]));
+    false_sym.set_type(migrate_type(false_sym.get_value().type()));
     auto false_text = extract_string_from_symbol(&false_sym);
 
     if (cond.is_true())

@@ -248,6 +248,57 @@ exprt function_call_expr::build_nondet_call() const
     return make_complex(nondet_real, nondet_imag);
   }
 
+  if (type == "bytes")
+  {
+    // nondet_bytes(n): a fixed-length bytes value, each byte an independent
+    // symbolic value in [0, 255]. No relation is claimed between two bytes
+    // or between two calls -- a placeholder shape for "give me real bytes
+    // here", not a hash/crypto model. See hash() in models/consensus.py.
+    if (
+      call_["args"].empty() ||
+      call_["args"][0].value("_type", "") != "Constant" ||
+      !call_["args"][0].contains("value") ||
+      !call_["args"][0]["value"].is_number_integer())
+      throw std::runtime_error(
+        "nondet_bytes(n) requires a constant integer length");
+
+    const long long length = call_["args"][0]["value"].get<long long>();
+    if (length < 0)
+      throw std::runtime_error("ValueError: negative count");
+
+    const typet bytes_type = type_handler_.get_typet("bytes", length);
+    const typet &element_type = bytes_type.subtype();
+
+    symbolt &nondet_bytes_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_bytes$", bytes_type, exprt());
+
+    code_declt decl(build_symbol(nondet_bytes_symbol));
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+
+    exprt nondet_value("sideeffect", bytes_type);
+    nondet_value.statement("nondet");
+    code_assignt nondet_assign(build_symbol(nondet_bytes_symbol), nondet_value);
+    nondet_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(nondet_assign);
+
+    for (long long i = 0; i < length; ++i)
+    {
+      exprt elem = build_index(
+        build_symbol(nondet_bytes_symbol), from_integer(i, size_type()));
+
+      exprt ge0(">=", bool_type());
+      ge0.copy_to_operands(elem, from_integer(0, element_type));
+      converter_.add_instruction(code_assumet(ge0));
+
+      exprt le255("<=", bool_type());
+      le255.copy_to_operands(elem, from_integer(255, element_type));
+      converter_.add_instruction(code_assumet(le255));
+    }
+
+    return build_symbol(nondet_bytes_symbol);
+  }
+
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
   rhs.statement("nondet");
   return rhs;
@@ -1280,13 +1331,13 @@ exprt function_call_expr::handle_complex() const
             const exprt &cond = sym_val.operands()[0];
 
             symbolt true_sym;
-            true_sym.set_value(sym_val.operands()[1]);
-            true_sym.set_type(true_sym.get_value().type());
+            true_sym.set_value(migrate_expr(sym_val.operands()[1]));
+            true_sym.set_type(migrate_type(true_sym.get_value().type()));
             auto true_text = extract_string_from_symbol(&true_sym);
 
             symbolt false_sym;
-            false_sym.set_value(sym_val.operands()[2]);
-            false_sym.set_type(false_sym.get_value().type());
+            false_sym.set_value(migrate_expr(sym_val.operands()[2]));
+            false_sym.set_type(migrate_type(false_sym.get_value().type()));
             auto false_text = extract_string_from_symbol(&false_sym);
 
             auto parse_complex_text =

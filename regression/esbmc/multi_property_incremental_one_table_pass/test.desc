@@ -1,0 +1,8 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 10
+^VERIFICATION SUCCESSFUL$
+^No bug has been found in the base case$
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+12\s+assertion x == n$
+^\s+PASSED\s+\[main\.assertion\.2\]\s+line\s+13\s+assertion x < 5$
+^\*\* 0 of 2 properties failed, 2 passed$
