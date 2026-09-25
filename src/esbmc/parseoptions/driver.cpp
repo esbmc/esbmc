@@ -122,6 +122,41 @@ static bool k_induction_parallel_conflicts(const cmdlinet &cmdline)
   return false;
 }
 
+/// --houdini-loop-invariants owns the outer loop too: it re-derives the
+/// program once per filtering round from a pristine copy and applies the
+/// loop-invariant schema itself. Combining it with another driver is not
+/// merely redundant -- goto_k_induction has already havoc'd the loops by the
+/// time the strategy runs, and layering the schema on that produced a
+/// *wrong* verdict: regression/k-induction/trex02_bug, a program with a real
+/// bug, reported VERIFICATION SUCCESSFUL under --k-induction
+/// --houdini-loop-invariants while reporting FAILED under either alone.
+/// The invariant-source flags are listed for a different reason: this flag
+/// supplies the invariants itself, so passing another source silently does
+/// nothing.
+static bool houdini_conflicts(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("houdini-loop-invariants"))
+    return false;
+
+  for (const char *incompatible :
+       {"termination",
+        "incremental-bmc",
+        "falsification",
+        "k-induction",
+        "k-induction-parallel",
+        "loop-invariant",
+        "loop-invariant-check",
+        "synthesise-loop-invariants",
+        "incremental-context-bound"})
+    if (cmdline.isset(incompatible))
+    {
+      log_error(
+        "--houdini-loop-invariants cannot be combined with --{}", incompatible);
+      return true;
+    }
+  return false;
+}
+
 /// The flag combinations that cannot produce a sound report, rejected
 /// before any work is done. Kept out of doit() so every combination check
 /// reads in one place.
@@ -236,35 +271,8 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   if (k_induction_parallel_conflicts(cmdline))
     return true;
 
-  // --houdini-loop-invariants owns the outer loop too: it re-derives the
-  // program once per filtering round from a pristine copy and applies the
-  // loop-invariant schema itself. Combining it with another driver is not
-  // merely redundant -- goto_k_induction has already havoc'd the loops by the
-  // time the strategy runs, and layering the schema on that produced a
-  // *wrong* verdict: regression/k-induction/trex02_bug, a program with a real
-  // bug, reported VERIFICATION SUCCESSFUL under --k-induction
-  // --houdini-loop-invariants while reporting FAILED under either alone.
-  // The invariant-source flags are listed for a different reason: this flag
-  // supplies the invariants itself, so passing another source silently does
-  // nothing.
-  if (cmdline.isset("houdini-loop-invariants"))
-    for (const char *incompatible :
-         {"termination",
-          "incremental-bmc",
-          "falsification",
-          "k-induction",
-          "k-induction-parallel",
-          "loop-invariant",
-          "loop-invariant-check",
-          "synthesise-loop-invariants",
-          "incremental-context-bound"})
-      if (cmdline.isset(incompatible))
-      {
-        log_error(
-          "--houdini-loop-invariants cannot be combined with --{}",
-          incompatible);
-        return true;
-      }
+  if (houdini_conflicts(cmdline))
+    return true;
 
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
