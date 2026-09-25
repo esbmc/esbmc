@@ -386,9 +386,12 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
     return nil_exprt();
 
   const nlohmann::json &arg = element["args"][0];
+  const locationt location = get_location_from_decl(element);
   if (has_dunder_method(arg, "__len__"))
-    return get_expr(
-      build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
+    return checked_len_result(
+      get_expr(
+        build_dunder_call(arg, "__len__", nlohmann::json::array(), element)),
+      location);
 
   // Without a __len__ the builtin path measures the struct with strlen and
   // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
@@ -397,7 +400,133 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
     return get_exception_handler().gen_exception_raise(
       "TypeError", "object of type '" + cls + "' has no len()");
 
+  return get_len_on_list_element(arg, location);
+}
+
+// len(xs[i]): the AST names no class, but the element's converted type does
+// (#7966). That type is the list's static element type, and the list model
+// tags every object element alike, so the runtime class is known only when
+// the program defines a single class; with several, len() is refused rather
+// than dispatched to a possibly wrong __len__. The converted element appears
+// twice below, so an argument whose conversion could call anything is refused
+// as well.
+exprt python_converter::get_len_on_list_element(
+  const nlohmann::json &arg,
+  const locationt &location)
+{
+  if (arg.value("_type", "") != "Subscript")
+    return nil_exprt();
+  const exprt probed = probe_expr(arg);
+  if (
+    (!is_user_class_pointer(probed.type()) &&
+     !is_user_class_struct_type(probed.type())) ||
+    list_element_type_id(probed).is_nil())
+    return nil_exprt();
+
+  if (!is_pure_read(arg) || count_user_classes() != 1)
+    throw std::runtime_error(
+      "len() of a list element is not modelled when the program defines "
+      "several classes or the index is not a plain read");
+
+  exprt object = get_expr(arg);
+  code_assertt same_class(equality_exprt(
+    list_element_type_id(object),
+    type_handler_.tagged_scalar_type_id(object.type())));
+  same_class.location() = location;
+  same_class.location().user_provided(true);
+  same_class.location().comment(
+    "len() of a list element that is not a class instance is not modelled");
+  current_block->copy_to_operands(same_class);
+
+  const exprt dunder = dispatch_unary_dunder_operator("len", object, location);
+  if (dunder.is_nil())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "object of type '" + class_name_of(object.type()) + "' has no len()");
+  return checked_len_result(dunder, location);
+}
+
+// Classes the program can instantiate: every ClassDef in a user module, at
+// any scope and whether converted yet or not, and every class an operational
+// model has registered.
+std::size_t python_converter::count_user_classes()
+{
+  std::size_t count = json_utils::count_class_defs(*entry_ast_);
+  if (extra_asts_)
+    for (const nlohmann::json &ast : *extra_asts_)
+      count += json_utils::count_class_defs(ast);
+  for (const auto &module : module_ast_pool_)
+    count += json_utils::count_class_defs(module.second);
+
+  std::size_t registered = 0;
+  symbol_table_.foreach_operand([&](const symbolt &sym) {
+    if (
+      sym.id.as_string().rfind("tag-", 0) == 0 &&
+      is_user_class_struct_type(sym.get_type()))
+      ++registered;
+  });
+  return std::max(count, registered);
+}
+
+// The element's `type_id`, read off the PyObject its converted value unwraps
+// (`*(C **)obj->value`), or nil when the expression is not such a read.
+exprt python_converter::list_element_type_id(const exprt &value)
+{
+  if (value.id() == "member" && value.get("component_name") == "value")
+    return member_exprt(value.op0(), "type_id", size_type());
+  for (const exprt &op : value.operands())
+  {
+    exprt found = list_element_type_id(op);
+    if (found.is_not_nil())
+      return found;
+  }
   return nil_exprt();
+}
+
+// CPython's len() rejects a negative __len__ result with ValueError.
+exprt python_converter::checked_len_result(
+  const exprt &len_call,
+  const locationt &location)
+{
+  // Stored once: the guard and the caller both read it.
+  symbolt tmp =
+    create_return_temp_variable(len_call.type(), location, "__len__");
+  symbol_table_.add(tmp);
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  current_block->copy_to_operands(decl);
+  exprt call = len_call;
+  convert_function_call_to_side_effect(call);
+  code_assignt store(result, call);
+  store.location() = location;
+  current_block->copy_to_operands(store);
+  code_ifthenelset guard;
+  guard.cond() = binary_relation_exprt(result, "<", gen_zero(result.type()));
+  codet raise("expression");
+  raise.copy_to_operands(get_exception_handler().gen_exception_raise(
+    "ValueError", "__len__() should return >= 0"));
+  guard.then_case() = raise;
+  guard.location() = location;
+  current_block->copy_to_operands(guard);
+  return result;
+}
+
+// A name, constant, negated constant, or attribute/subscript chain over them:
+// converting one emits reads and no calls of its own.
+bool python_converter::is_pure_read(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Name" || kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return node["op"].value("_type", "") == "USub" &&
+           node["operand"].value("_type", "") == "Constant";
+  if (kind == "Attribute")
+    return is_pure_read(node["value"]);
+  if (kind == "Subscript")
+    return is_pure_read(node["value"]) && is_pure_read(node["slice"]);
+  return false;
 }
 
 // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
