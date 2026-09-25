@@ -386,6 +386,7 @@ static type2tc migrate_type0(const typet &type)
       ellipsis = true;
 
     std::vector<irep_idt> arg_base_names;
+    std::vector<expr2tc> arg_defaults;
     const code_typet::argumentst &old_args = ref.arguments();
     for (const auto &old_arg : old_args)
     {
@@ -393,6 +394,11 @@ static type2tc migrate_type0(const typet &type)
       args.push_back(tmp);
       arg_names.push_back(old_arg.get_identifier());
       arg_base_names.push_back(old_arg.cmt_base_name());
+      if (old_arg.has_default_value())
+      {
+        arg_defaults.resize(old_args.size());
+        migrate_expr(old_arg.default_value(), arg_defaults[args.size() - 1]);
+      }
     }
 
     // Don't migrate return type if it's a symbol. There are a variety of C++
@@ -407,7 +413,8 @@ static type2tc migrate_type0(const typet &type)
       ret_type = migrate_type(static_cast<const typet &>(type.return_type()));
     }
 
-    return code_type2tc(args, ret_type, arg_names, ellipsis, arg_base_names);
+    return code_type2tc(
+      args, ret_type, arg_names, ellipsis, arg_base_names, arg_defaults);
   }
 
   if (type.id() == "cpp-name")
@@ -3230,6 +3237,9 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       // than by migrate_type (§44).
       if (i < ref2.argument_base_names.size())
         args.back().cmt_base_name(ref2.argument_base_names[i]);
+      if (i < ref2.argument_defaults.size() && ref2.argument_defaults[i])
+        args.back().default_value() =
+          migrate_expr_back(ref2.argument_defaults[i]);
       i++;
     }
 

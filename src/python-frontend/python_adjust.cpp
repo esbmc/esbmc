@@ -1192,21 +1192,19 @@ void python_adjust::adjust_type(type2tc &type)
     // base_type_eq rejects a padded argument against an unpadded parameter
     // ("argument type mismatch: got struct, expected struct"). Inert on a
     // signature that carries only scalars.
-    const code_type2t &ct = to_code_type(type);
-    std::vector<type2tc> args = ct.arguments;
-    type2tc ret = ct.ret_type;
+    code_type2t ct = to_code_type(type);
     bool changed = false;
-    for (type2tc &a : args)
+    for (type2tc &a : ct.arguments)
     {
       const type2tc before = a;
       adjust_type(a);
       changed |= a != before;
     }
-    const type2tc ret_before = ret;
-    adjust_type(ret);
-    changed |= ret != ret_before;
+    const type2tc ret_before = ct.ret_type;
+    adjust_type(ct.ret_type);
+    changed |= ct.ret_type != ret_before;
     if (changed)
-      type = code_type2tc(args, ret, ct.argument_names, ct.ellipsis);
+      type = code_type2tc(ct);
     return;
   }
 
