@@ -624,7 +624,8 @@ trailing set_value      a class used as a value is a char-array constant_exprt w
                         github_3520_{3_fail,4,5,7_fail,8,9}, github_7549{,_fail}
 ```
 
-The tuple arm and the trailing value write go back to legacy. The str/list arm keeps the IREP2 write and
+The tuple arm and the trailing value write go back to legacy. (The tuple arm has since landed:
+`frontends-to-irep2.md` §82 carries `#python_aggregate`.) The str/list arm keeps the IREP2 write and
 falls back only for a dynamically-sized array, through `python_expr::contains_dyn_array`, the guard the
 expression builders already use for this hazard. It has to stay converted because it is the arm
 `val = "hello"[0]` takes: with the carry mutated out of `migrate_type`, `github_4715_cpp_type_char{,_fail}`
@@ -694,3 +695,111 @@ loss, and the next step is the three experiments above rather than another conve
 So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
 `val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
 pass review silently.
+
+## 12. Three assignment type writes outside §10's eleven (2026-09-24)
+
+`handle_function_call_rhs` (a class-pointer result retyping a class-typed target),
+`get_var_assign` (an array target retyped by a different rhs) and `get_compound_assign`
+(`s += "..."` on a char array) now store the type IREP2-side. The `get_var_assign` arm keeps a legacy
+fallback for a nil rhs type, which `migrate_type` would turn into `empty`
+(`regression/python/string-symbolic-7`, a FUTURE test, is the only one that reaches it), for a
+dyn-sized array, and for a Python aggregate, whose `#python_aggregate` the seam drops as §10.4 found.
+The corpus below never sends a tuple through this arm, so the aggregate case was missed by the sweep
+and caught in review: `s = "ab"; s = (1, 2); 1 in s` stopped at `Unsupported expression for 'in'`.
+`regression/python/str_rebound_to_tuple_in{,_fail}` pin it; both fail without the check.
+
+Evidence, against master `dae0885ed3`: over the 6 697 tests under `python/`, `numpy/`, `humaneval/`
+and `python-intensive/`, `--goto-functions-only` and `--symbol-table-only` are byte-identical to the
+base binary after `frontends-to-irep2.md` §21.3's normalisations plus one more -- a `/tmp/` path
+stored as a char-array value (`{ 47, 116, 109, 112, 47, ... }`) -- except `callable_class_field`, a
+KNOWNBUG abort whose message names the binary. A temporary marker census shows 7, 48 and 41 tests
+reach the three writes; all 96 pass.
+
+The "array to pointer decay" write in `handle_assignment_type_adjustments` stays legacy: no test in
+the four suites reaches it, so converting it would add a line nothing covers. Python B-2* 52 -> 50.
+
+## 14. The class-object value write, and why it is a reader problem (2026-09-25)
+
+§10.4's third legacy write -- the trailing `lhs_symbol->set_value(rhs)` in
+`handle_assignment_type_adjustments` -- stays legacy because a class object used as a value (`x = int`,
+`x = C`) is a char-array `constant_exprt` with the class name in `value` and no operands
+(`converter_expr.cpp:1281` for a builtin type, `:1718` for a class), and `migrate_expr` turns that
+into `{ }`. Converting the write is not blocked on the seam, though: the shape itself is the defect.
+
+### 14.1 The shape collides with `str`
+
+A class object and a string share `char[N]`, told apart only by whether the constant has operands.
+That collision was a live false proof: `isinstance(<any str>, type)` folded to true, so
+`x = "int"; assert isinstance(x, type)` was proved (PR #7989, which also fixes the tuple form of the
+same check). After #7989 a str-typed operand that is neither a literal nor a known class object is
+nondeterministic -- sound, but `def f(s: str): assert not isinstance(s, type)` is a false alarm, and it
+stays one until the two are distinguishable.
+
+### 14.2 Who reads the value
+
+Three readers ask one question -- does this variable hold a class object, and which -- and all answer
+it from the symbol's legacy value:
+
+| reader | what it reads |
+|---|---|
+| `function_call/builtins.cpp` `handle_isinstance`, early block | `to_constant_expr(sym.get_value()).get_value()` |
+| `converter_compare.cpp` `resolve_type_identifier` (`type(x) is T`, `x is int`) | the same, plus `type(x)`'s own constant |
+| `string_handler::extract_string_from_array_operands` | `value` when a char constant has no operands |
+
+A symbol's value is one of its assignments, chosen by conversion order, so this is also a
+flow-insensitive read; it has not produced a wrong answer in #7989's reassignment probes, but it is
+not a sound way to answer a flow-sensitive question either.
+
+### 14.3 Plan
+
+Of §57.3's three answers, the third fits: move the fact out of the value.
+
+1. Record `symbol id -> class name` in the converter when an assignment's rhs is a class object, the
+   way `scope-solidity-irep2.md` §10 keys Solidity facts by symbol id.
+2. Point the three readers at it.
+3. Give the class object a representation IREP2 carries and that stays distinct from `str`, then
+   convert the trailing write.
+
+Step 3 cannot reuse the string model. The operand-less shape is also what keeps `int != "int"`:
+built as an ordinary string literal, `x = int; y = "int"; assert x != y` fails and its negation is
+proved (`regression/python/class_object_not_equal_str{,_fail}` flip, measured). So step 3 is the
+larger change -- a distinct class-object type, which also removes §14.1's false alarm -- and steps
+1-2 (PR #7991) are what let it proceed reader by reader.
+
+### 14.4 How far a class-object type reaches (2026-09-25)
+
+Census: a temporary marker at the two builders (`converter_expr.cpp:1281` builtin, `:1718` class),
+run under `--goto-functions-only` over the 6 697 Python tests. 344 build at least one class-object
+constant -- 313 in `python/`, 29 in `humaneval/`, 2 in `python-intensive/`.
+
+Most are incidental. A backtrace from the builder in
+`list_tuple_elem_annotation` lands in `get_return_statements` inside an imported module: the
+`typing` operational model's `TypeVar` stub is `return object` (`models/typing.py:7`), so every
+program that imports `typing` builds one class-object constant while converting the model, whatever
+its own annotations say. 238 of the 344 import `typing`, and 234 of those build exactly one; the
+annotations themselves build none.
+
+That leaves 110 tests where a class object comes from the program: 106 that do not import `typing`
+and 4 that build more than one. A distinct class-object type has to serve those; the `TypeVar` stub
+needs only a body that is not a class object.
+## 13. An argument's default crosses the seam (2026-09-25)
+
+§11.3 named `#default_value` first among the candidates for what a `code_typet` round trip loses, and
+`python_lambda.cpp`'s return-type write stays legacy for exactly that reason. `code_type2t` now carries
+the defaults as an unreflected `std::vector<expr2tc>` (null where an argument has none, empty when none
+has one), both ways in `migrate_type`. The readers are right: `converter_funcall.cpp` and
+`function_call/expr.cpp` fill a missing call argument from it.
+
+The carry does not change a verdict or a dump on master: over the 6 697 Python tests,
+`--symbol-table-only` and `--goto-functions-only` match the base, because call lowering has read every
+default before any function type with one is stored IREP2-side. (`--symbol-table-only` does not print
+`#default_value`, so that comparison cannot see the field itself; the unit test does.) What it unblocks needs PR #7888 as well: that PR's `set_function_type` stores a function type
+IREP2-side only when the round trip is exact, and a default was one of the things making it inexact.
+The lambda writes (`python_lambda.cpp:57`, `:1098`) and `upgrade_param_type_from_default`'s
+function-pointer arm are next once both land.
+
+`python_adjust`'s code-type arm now rebuilds a padded signature from all of its fields rather than four,
+so the unreflected ones -- the defaults and §44's base names -- survive it. (Copying the node instead
+would keep the unpadded node's cached CRC.)
+`unit/util/migrate.test.cpp` pins the round trip, that no default adds no key, and that a default is no
+part of the type's identity; the first fails with the back-write removed.

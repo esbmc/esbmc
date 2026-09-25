@@ -79,22 +79,23 @@ private:
   exprt build_temporary_receiver(const nlohmann::json &ctor_call) const;
 
   /*
-  * Check if the current function call is to math.comb() function
-  * Returns true if this is a call to math.comb
-  */
+   * Check if the current function call is to math.comb() function
+   * Returns true if this is a call to math.comb
+   */
   bool is_math_comb_call() const;
 
   /*
-  * Handles math.comb() function calls with type checking.
-  * Validates that both arguments are integers (not floats).
-  * Returns TypeError exception if arguments are not integers.
-  * Otherwise delegates to the comb implementation function.
-  */
+   * Handles math.comb() function calls with type checking.
+   * Validates that both arguments are integers (not floats).
+   * Returns TypeError exception if arguments are not integers.
+   * Otherwise delegates to the comb implementation function.
+   */
   exprt handle_math_comb() const;
 
   /*
    * Validates that function call arguments match expected parameter types.
-   * Returns TypeError exception if type mismatch is detected, nil_exprt otherwise.
+   * Returns TypeError exception if type mismatch is detected, nil_exprt
+   * otherwise.
    */
   exprt check_argument_types(
     const symbolt *func_symbol,
@@ -126,6 +127,14 @@ private:
   bool is_nondet_call() const;
 
   bool is_introspection_call() const;
+
+  /// True for a bare `hash(x)` whose argument is not bytes-typed, i.e. not
+  /// the consensus spec's own `hash(data: bytes) -> Bytes32`.
+  bool is_generic_hash_call() const;
+
+  /// An opaque nondet int, standing in for Python's real hash() on a
+  /// non-bytes argument.
+  exprt handle_generic_hash();
 
   bool is_input_call() const;
 
@@ -270,6 +279,10 @@ private:
 
   exprt handle_isinstance() const;
 
+  /// isinstance(obj, type) for a str-typed `obj` that is not a known class
+  /// object: a type object and a string share the char-array model.
+  exprt isinstance_str_as_type(const exprt &obj_expr) const;
+
   exprt handle_hasattr() const;
 
   /*
@@ -399,9 +412,10 @@ private:
   exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
 
   /*
-   * Handles abs() function calls by computing the absolute value of the argument.
-   * The argument can be an integer, a floating-point number, or an object implementing
-   * the __abs__() method. The function returns an expression representing the absolute value.
+   * Handles abs() function calls by computing the absolute value of the
+   * argument. The argument can be an integer, a floating-point number, or an
+   * object implementing the __abs__() method. The function returns an
+   * expression representing the absolute value.
    */
   exprt handle_abs(nlohmann::json &arg) const;
 
@@ -428,12 +442,11 @@ private:
   bool is_min_max_call() const;
 
   /*
-   * Handles min() or max() function calls by generating conditional expressions.
-   * Accepts a single iterable/tuple argument or two or more positional
-   * arguments, building a comparison chain.
-   * For min(a, b), generates: a < b ? a : b
-   * For max(a, b), generates: a > b ? a : b
-   * Performs type compatibility checking with automatic int-to-float promotion.
+   * Handles min() or max() function calls by generating conditional
+   * expressions. Accepts a single iterable/tuple argument or two or more
+   * positional arguments, building a comparison chain. For min(a, b),
+   * generates: a < b ? a : b For max(a, b), generates: a > b ? a : b Performs
+   * type compatibility checking with automatic int-to-float promotion.
    */
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
@@ -447,9 +460,9 @@ private:
   exprt handle_dict_method() const;
 
   // True when the Name receiver positively resolves to a non-dict object type
-  // (a class instance, identified by a struct tag other than "__python_dict__").
-  // Used to stop dict-named methods (get/pop/keys/...) from shadowing a class's
-  // own same-named method (e.g. queue.Queue.get()).
+  // (a class instance, identified by a struct tag other than
+  // "__python_dict__"). Used to stop dict-named methods (get/pop/keys/...) from
+  // shadowing a class's own same-named method (e.g. queue.Queue.get()).
   bool receiver_is_non_dict_object() const;
 
   // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
@@ -486,15 +499,17 @@ private:
   exprt handle_numpy_astype() const;
 
   /*
-   * Check if the current function call is to a regular expression module function
-   * Returns true if the function is match, search, or fullmatch from the re module
+   * Check if the current function call is to a regular expression module
+   * function Returns true if the function is match, search, or fullmatch from
+   * the re module
    */
   bool is_re_module_call() const;
 
   /*
    * Validate arguments for regular expression module functions
-   * Checks that pattern and string arguments are string types (array or pointer to char)
-   * Returns TypeError exception if validation fails, nil_exprt if validation passes
+   * Checks that pattern and string arguments are string types (array or pointer
+   * to char) Returns TypeError exception if validation fails, nil_exprt if
+   * validation passes
    */
   exprt validate_re_module_args() const;
 
@@ -580,9 +595,9 @@ private:
   // --- get_dispatch_table() decomposition helpers ---
   // The dispatch table pairs a predicate with a handler for each special
   // function shape. The predicates and handlers below were lifted verbatim out
-  // of the inline lambdas in get_dispatch_table() so that the table itself reads
-  // as a flat list of {predicate, handler, name} entries. Extraction is purely
-  // mechanical: each helper is invoked from the same one-line lambda it
+  // of the inline lambdas in get_dispatch_table() so that the table itself
+  // reads as a flat list of {predicate, handler, name} entries. Extraction is
+  // purely mechanical: each helper is invoked from the same one-line lambda it
   // replaced, so the predicates are still evaluated lazily and in the same
   // order, and each handler still runs only when its predicate matched.
   // Predicates only read state, so they are const; handlers may append to the
@@ -626,8 +641,9 @@ private:
 
   /*
    * sorted() fast-path: a single-arg sorted() over a concrete int/tuple list is
-   * materialized in the frontend, avoiding the runtime list sort/equality model.
-   * Honours reverse=<constant bool>; returns nullopt for any other shape.
+   * materialized in the frontend, avoiding the runtime list sort/equality
+   * model. Honours reverse=<constant bool>; returns nullopt for any other
+   * shape.
    */
   std::optional<exprt> try_fold_sorted();
   std::optional<exprt> try_materialize_numpy_tolist();
@@ -785,6 +801,8 @@ private:
    */
   std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
 
+  exprt handle_bool_call(const nlohmann::json &arg, size_t arg_size) const;
+
   /**
    * Folds sum() over a numeric tuple into a chain of additions.
    *
@@ -854,6 +872,9 @@ private:
    * an already-tagged argument through, boxes a concrete numeric/string
    * scalar into a tagged-object temporary, or throws otherwise.
    */
+  /// Converts a bool()/int()/numeric-constructor argument to @p target.
+  exprt retype_or_typecast(exprt expr, const typet &target) const;
+
   exprt coerce_tagged_argument(
     exprt arg,
     const typet &param_type,

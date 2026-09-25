@@ -1719,6 +1719,44 @@ bool python_converter::handle_none_check_setup(
   return is_none_check;
 }
 
+exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
+{
+  const typet &lhs_type = lhs.type();
+  const typet &rhs_type = rhs.type();
+  if (lhs_type.subtype() != rhs_type.subtype())
+    return nil_exprt();
+
+  const exprt &lhs_size_expr = to_array_type(lhs_type).size();
+  const exprt &rhs_size_expr = to_array_type(rhs_type).size();
+  if (!lhs_size_expr.is_constant() || !rhs_size_expr.is_constant())
+    return nil_exprt();
+
+  const BigInt lhs_size_big =
+    binary2integer(to_constant_expr(lhs_size_expr).value().c_str(), true);
+  const BigInt rhs_size_big =
+    binary2integer(to_constant_expr(rhs_size_expr).value().c_str(), true);
+  if (lhs_size_big < 0 || rhs_size_big < 0)
+    return nil_exprt();
+
+  const long long lhs_size = lhs_size_big.to_int64();
+  const long long rhs_size = rhs_size_big.to_int64();
+  const typet &elem_type = lhs_type.subtype();
+  typet result_type = type_handler_.build_array(elem_type, lhs_size + rhs_size);
+  // Tag the result `bytes` too, so a chained concatenation (`a + b + c`) keeps
+  // recognising its left operand as bytes on the second `+`.
+  type_utils::set_cpp_type(result_type, "bytes");
+
+  exprt result("array", result_type);
+  for (long long i = 0; i < lhs_size; ++i)
+    result.copy_to_operands(
+      python_expr::build_index(lhs, from_integer(i, size_type())));
+  for (long long i = 0; i < rhs_size; ++i)
+    result.copy_to_operands(
+      python_expr::build_index(rhs, from_integer(i, size_type())));
+
+  return result;
+}
+
 exprt python_converter::handle_array_operations(
   const std::string &op,
   exprt &lhs,
@@ -1743,6 +1781,18 @@ exprt python_converter::handle_array_operations(
       throw std::runtime_error(msg.str());
     }
     return nil_exprt();
+  }
+
+  // `bytes + bytes` is concatenation (bytes.__add__). Route it here early,
+  // since bytes and a numpy array share the same underlying
+  // `array of long_long_int_type` representation.
+  if (
+    op == "Add" && type_utils::is_bytes_array(lhs.type()) &&
+    type_utils::is_bytes_array(rhs.type()))
+  {
+    exprt concatenated = build_bytes_concat(lhs, rhs);
+    if (!concatenated.is_nil())
+      return concatenated;
   }
 
   // Check for zero-length array comparisons
@@ -2014,10 +2064,7 @@ exprt python_converter::handle_tuple_operations(
 
     // V.3: build the concatenated tuple value in IREP2. Each component is the
     // exact round-trip of a member_exprt over the migrated operand; the struct
-    // literal is assembled via constant_struct2tc and back-migrated once, then
-    // the full struct type is re-attached -- migrate_type drops the frontend-only
-    // aggregate-kind marker the `in`/membership/subscript dispatch reads with no
-    // tag fallback (mirrors tuple_handler::get_tuple_expr).
+    // literal is assembled via constant_struct2tc and back-migrated once.
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
@@ -2030,7 +2077,6 @@ exprt python_converter::handle_tuple_operations(
 
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -2078,7 +2124,6 @@ exprt python_converter::handle_tuple_operations(
 
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);

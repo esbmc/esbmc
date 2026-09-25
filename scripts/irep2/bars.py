@@ -59,8 +59,15 @@ BASE_NAME = re.compile(r"[.\[(>-]")
 # IREP2 builders whose names do not end in `2t`/`2tc`. Only the ones with no
 # legacy namesake: `gen_zero`, `gen_one` and `gen_nondet` are declared for both
 # `typet` and `type2tc` (util/expr/expr_util.h, irep2/irep2_utils.h), so their
-# spelling cannot say which was called and they keep counting.
+# spelling cannot say which was called; OVERLOADED_HELPER decides them.
 IREP2_HELPER = re.compile(r"^(?:gen_true_expr|gen_false_expr|gen_long|gen_ulong)\s*\(")
+# The overloaded helpers resolve by their first argument, so they are IREP2 when
+# that argument is a name the file declares IREP2.
+OVERLOADED_HELPER = re.compile(r"^(?:gen_zero|gen_one|gen_nondet)\s*\(\s*([A-Za-z_]\w*)\s*[,)]")
+# `constant_exprt::set_value` sets a literal's bit string; it is not a symbol-table
+# write, and the constant it builds is B-1's business.
+CONSTANT_DECL = re.compile(r"\bconstant_exprt\s+([A-Za-z_]\w*)\s*[;({=]")
+RECEIVER = re.compile(r"([A-Za-z_]\w*)\s*$")
 
 
 def strip_noise(text):
@@ -135,6 +142,9 @@ def is_irep2(arg, irep2_names):
     """Whether the argument of a symbol-table write is already IREP2."""
     if IREP2_ARG.search(arg) or IREP2_CALL.match(arg) or IREP2_HELPER.match(arg):
         return True
+    overloaded = OVERLOADED_HELPER.match(arg)
+    if overloaded:
+        return overloaded.group(1) in irep2_names
     return BASE_NAME.split(arg)[0] in irep2_names
 
 
@@ -142,11 +152,13 @@ def count_b2(path, clean, listing=None):
     """B-2 writes in one cleaned file: raw, and those not already IREP2."""
     raw = refined = 0
     irep2_names = set(IREP2_DECL.findall(clean)) | set(IREP2_NODE.findall(clean))
+    constants = set(CONSTANT_DECL.findall(clean))
     for lines, line in statements(clean):
         for m in WRITE.finditer(line):
             raw += 1
             arg = argument_of(line, m.start())
-            if is_irep2(arg, irep2_names):
+            receiver = RECEIVER.search(line[:m.start()])
+            if is_irep2(arg, irep2_names) or (receiver and receiver.group(1) in constants):
                 continue
             refined += 1
             if listing is not None:
@@ -187,7 +199,8 @@ def main():
     print("         roadmap's historical figures are.")
     print(" B-1     occurrences, which is what the bar's wording describes.")
     print(" *       refined: comments and string literals excluded from B-1; writes")
-    print("         whose argument is already IREP2 excluded from B-2.")
+    print("         whose argument is already IREP2, and constant_exprt bit strings,")
+    print("         excluded from B-2.")
     if listing is not None:
         print("\nB-2* sites:")
         for row in listing:

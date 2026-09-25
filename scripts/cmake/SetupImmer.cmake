@@ -12,15 +12,12 @@
 
 if(DOWNLOAD_DEPENDENCIES)
    include(FetchContent)
+   # Header-only
    fetchcontent_declare(immer
       GIT_REPOSITORY https://github.com/arximboldi/immer.git
-      GIT_TAG v0.9.1)
-   # Header-only: populate without configuring immer's own CMake (which would
-   # pull in its tests/benchmarks/examples).
-   fetchcontent_getproperties(immer)
-   if(NOT immer_POPULATED)
-      fetchcontent_populate(immer)
-   endif()
+      GIT_TAG v0.9.1
+      SOURCE_SUBDIR do-not-configure-immer)
+   fetchcontent_makeavailable(immer)
    add_library(immer INTERFACE)
    target_include_directories(immer SYSTEM INTERFACE ${immer_SOURCE_DIR})
    message(STATUS "[immer] using downloaded immer (header-only)")

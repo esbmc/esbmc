@@ -57,10 +57,7 @@ static exprt build_shape_tuple_expr(
     converter.get_tuple_handler().create_tuple_struct_type(element_types);
   // V.3: build the tuple value in IREP2, back-migrating once. The operands are
   // already-built int_type() dimension exprs, so a constant_struct2t over them
-  // round-trips exactly through migrate. Re-attach the full struct type
-  // afterwards: migrate_type drops the frontend-only #python_aggregate_kind
-  // marker that the in/membership dispatch reads (python_aggregate_kind) with no
-  // tag fallback — mirroring tuple_handler::get_tuple_expr.
+  // round-trips exactly through migrate.
   std::vector<expr2tc> members;
   members.reserve(dims.size());
   for (const exprt &d : dims)
@@ -71,7 +68,6 @@ static exprt build_shape_tuple_expr(
   }
   exprt tuple_expr =
     migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
-  tuple_expr.type() = tuple_type;
   return tuple_expr;
 }
 

@@ -1,10 +1,10 @@
 // Linked-list traversal where the inductive step can only prove the
 // assertion if `p`'s pre-havoc points-to set survives the IS havoc.
 // Two loops: a build-loop that may grow the list, and a check-loop
-// that walks it.  Before the symex-side pointer-invariant rewrite,
-// IS k=3 returned SAT (the deref-time encoding fell back to
-// `invalid_object` for the walking `p`, making the assert violable).
-// With the rewrite, IS k=3 proves it.
+// that walks it.  KNOWNBUG since #7964: the inductive step used to keep
+// `p` inside its loop-entry objects, which proved this but also proved
+// real bugs once `p` leaves them.  A sound proof needs the loop-head
+// fixpoint of `p`'s points-to set rather than the loop-entry one.
 #include <stdlib.h>
 extern int __VERIFIER_nondet_int(void);
 
@@ -31,9 +31,8 @@ int main() {
   }
 
   // Check: every node along the chain rooted at `a` has h == 1. The
-  // walk's IS havocs of `p` would otherwise lose the chain's identity
-  // and admit a model where p->h != 1; the pre-havoc value-set
-  // restore prevents that.
+  // walk's IS havocs of `p` lose the chain's identity and admit a model
+  // where p->h != 1.
   List p = a;
   while (p) {
     if (p->h != 1)
