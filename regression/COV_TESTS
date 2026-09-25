@@ -1803,3 +1803,11 @@ regression/esbmc/gcse_union_member_alias
 regression/esbmc/gcse_lvalue_value_operands
 regression/esbmc-cpp/cpp/gcse_ite_target
 regression/esbmc/gcse_deref_store_kill
+regression/esbmc/gcse_pointer_alias_kill
+regression/esbmc/gcse_goto_guard_stale
+regression/esbmc/gcse_call_ret_stale
+regression/esbmc/gcse_subexpr_stale
+regression/esbmc/gcse_callee_recompute_stale
+regression/esbmc/gcse_heap_alias_kill
+regression/esbmc/gcse_nested_deref_read
+regression/esbmc/gcse_field_pointer_store

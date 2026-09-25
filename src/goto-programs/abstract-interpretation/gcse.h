@@ -110,10 +110,6 @@ protected:
   /// Remove every expression from available_expressions that depends on symbol `sym`
   void havoc_symbol(const irep_idt &sym);
 
-  /// havoc_symbol every variable a store to `lhs` may write, over-approximating
-  /// for shapes such as `c ? x : y`
-  void havoc_written_symbols(const expr2tc &lhs);
-
   // Helper function to check whether `src` depends on `taint`
   bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
   // Helper function to check whether `src` depends on symbol `sym`
