@@ -748,6 +748,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED at two dimensions**, §15 M9 (R50); deeper nesting is the open residual | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. The second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program, and so does a `memcpy` between two rows. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,row_alias,row_phi_merge,row_via_pointer,row_memcpy,plane_memcpy,vla_row}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. The gate relaxes to **two** dimensions only: past that, a nested row's leaves are a two-level index chain that `decompose_select_chain` flattens straight past the enclosing `with`, and the same programs abort. **One residual stays open** — the 3-D bound. `expand_row_stores`' element enumeration is quadratic but **is** bounded by R42's cap, at 65,408 stores and 0.67 s, §15 M9 (R50 residual); the belief that the `memcpy` layer bypasses the cap was wrong. A third consequence, **R52**, surfaced while gating the 3-D fix: the propagated chain this row creates is a DAG, and three walks over it were unmemoised. |
 | **R52** | **Medium (no verdict, `--no-simplify`)** — found while gating R51's fix, §15 M9 (R52); **FIXED**, same entry | **A propagated multi-dimensional array is walked as a tree, and it is a DAG.** Each store references the chain twice — once as the `with` source, once inside the `index` of the row it updates — so a walk that does not memoise visits paths exponential in the store count. `int a[8][8]` with 32 element writes under `--no-simplify` does not terminate: 131 s and 18.4 GB and still climbing, against 0.27 s and 84 MB once memoised. The default configuration is unaffected, because the simplifier folds the chain before any of these walks see it. R50's fix is what creates the shape, so this row is its consequence and not a pre-existing defect; R51 only widens which programs reach it. | a store-count ladder against three binaries, §15 M9 (R52); `get_original_name` at `renaming.cpp:347`, `pre_register_addresses` at `symex_target_equation.cpp:30`, `get_value_set_rec` at `value_set.cpp:603`; `regression/esbmc/nested_array_no_simplify_scale{,_fail}` | **H-C2** | Fixed by memoising all three walks. `get_original_name` caches **shared nodes only** — caching every node holds the original alive, which forces `irep_container::detach()` to clone even an unshared one and breaks the in-place rewrite `goto_symex_statet::assignment` relies on. A depth cap is **not** the fix: 2-D at 64 stores and 3-D at 256 stores both exhaust memory, so the wall is the store count, not the nesting. The fourth walk, `migrate_expr_back`, is memoised too, §15 M9 (R52 residual). **One residual stays open**, and it is no longer a walk: the text `--ssa-trace` and `--show-vcc` print is itself exponential in the store count, because the format expands a DAG into a tree. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
+| **R55** | **High (false SUCCESSFUL, default configuration, C++)** — the root cause of G18, found by reducing it, §15 M9 (G18, R55); **FIXED**, same entry | **A function-local static's dynamic initializer ran before `main`.** `get_var` hoisted every static initializer into `static_lifetime_init`, which is right for C, where it is a constant expression, and wrong for C++, where it runs on the first pass through the declaration ([stmt.dcl]/3). `int bump() { return ++g; } void n() { static int c = bump(); }` never calls `n`, yet `assert(g == 1)` in `main` reports **SUCCESSFUL**; calling `n` twice made correct programs FAILED, and a class-typed static was constructed before `main` from whatever its arguments held then. | `clang_c_convertert::get_var`, `src/clang-c-frontend/clang_c_convert.cpp`; `goto_convertt::convert_decl`; `regression/esbmc-cpp/cpp/static_local_*` | — | **Fixed**: such a static is zero-initialised, the frontend adds an `<id>$init_guard` symbol, and `convert_decl` lowers the declaration to `atomic { if (!guard) { init; guard = 1; } }`, constructing in place through `convert_decl_initializer`. **Residuals**: arrays keep the hoisted form; `--clang-cpp-irep2-adjust-only` keeps it too; exit-time destructors of statics are not modelled, before or after. |
 | **R57** | **Medium (no verdict, C++20)** — found by review of R53's fix, §15 M9 (R57); **FIXED**, same entry | **A class-type template argument aborts the frontend.** `template <S s> int g() { return s.x; }` used as `g<S{1}>()` exits with `ERROR: Unable to generate the USR`: clang's USR generator gives up on the specialisation, on its constructors and parameters, and on the template parameter object `S{1}` names. The object has no declaration ESBMC converts, so a reference to it had no symbol either. | `clang_c_convertert::get_decl_name`, `clang_cpp_convertert::get_decl_name`, `get_decl_ref`; `regression/esbmc-cpp/cpp/class_nttp_{param_object,class_template}{,_fail}` | — | **Fixed**: when the USR fails, the id falls back to the Itanium mangled name (complete-object variants for constructors and destructors; a parameter is named after its function), and the parameter object gets a static symbol valued by its `APValue` on first reference ([temp.param]/8). |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
@@ -8614,6 +8615,65 @@ Invocation for every row: `--std c++23 --unwind 1 -Isrc -Ibuild/src
 An empty `main` exercises only the headers' static initialisers. The next step
 is the one §13.6 WI-4 asks for: drive `renaming::level1t` from `main` and
 mutation-check an assertion on it.
+### M9 (G18, R55) — 2026-09-25, the self-verification violation was a hoisted initializer
+
+G18 was `dereference failure: invalid pointer` in the atomic model's
+`fetch_sub`, on an empty `main` that includes `irep2/irep2_utils.h`, with the
+sliced and unsliced runs disagreeing. Two id collisions found on the way, R53
+and R54, were real but not the cause: removing both left G18 unchanged.
+
+**Reduction.** A divergence predicate kept the reduction honest. The sliced
+`--z3` run had to fail on `fetch_sub` with `invalid pointer`, and the
+`--no-slice` run had to succeed. A genuine program defect would fail both, so
+C-Reduce could not converge on one. The ESBMC-tree headers were inlined with a
+guard-aware inliner (13,498 lines), and C-Reduce took that to 35 lines. The
+reduced program runs clean under ASan and UBSan. In it, a function-local
+`static h c = constant_bool2tc(false);` sits in a function nothing calls, and
+its initializer destroys a temporary whose pointer comes from a function with
+no body. `--goto-functions-only` shows `c=constant_bool2tc(0)` in
+`__ESBMC_main`, before `main`.
+
+**R55.** `get_var` hoists every static initializer into `static_lifetime_init`.
+Its own comment gives the reason: in C the initializer is a constant
+expression, so running it early "makes no difference". C++ runs a dynamic
+initializer the first time control passes the declaration ([stmt.dcl]/3), so
+the hoist is wrong in both directions:
+
+| Program | Before | After | Native |
+|---|---|---|---|
+| `static int c = bump();` in a function never called, `assert(g == 1)` | **`SUCCESSFUL`** | `FAILED` | aborts |
+| the same, `n()` called twice, `g` checked before and after | `FAILED` | `SUCCESSFUL` | passes |
+| `static T t(x)`, constructor counted, called with 3 then 9 | `FAILED` | `SUCCESSFUL` | passes |
+| an initializer that throws on its first call and is retried | `FAILED` | `SUCCESSFUL` | passes |
+| `static S s(gs)`, trivially copyable, `gs` changed before the call | `FAILED` | `SUCCESSFUL` | passes |
+| G18's 35-line reproducer | `FAILED` | `SUCCESSFUL` | passes |
+
+**Fixed.** A C++ function-local static whose initializer is not a constant
+initializer, and which is not an array, is left zero-initialised. The frontend
+adds a static `bool` `<id>$init_guard`, copying `is_thread_local`, and
+`convert_decl` lowers the declaration to
+`atomic { if (!guard) { init; guard = 1; } }`. The guard's presence in the
+symbol table is the marker, because a `#` flag on the declaration does not
+survive the IREP2 round trip in `goto_convert_functions`. The initializer goes
+through `convert_decl_initializer`, so a constructor builds the static in
+place.
+
+**Review changed the design.** The first version lowered the guard in the
+adjust pass as `x = init`. That builds a temporary, copies it, and destroys it,
+which produced a new false SUCCESSFUL (a destructor counter read 1 where native
+C++ reads 0). It also aborted on a trivially copyable struct whose declaration
+carried no initializer operand. It also missed `thread_local`, and it
+initialised twice under concurrent first calls. Moving the lowering to
+`convert_decl` and wrapping it in an atomic section fixed all four. Pulling
+the static arm out of `get_var` into `get_static_var_init` keeps the
+complexity gate passing.
+
+**Residuals.** Static local arrays keep the hoisted form. So does
+`--clang-cpp-irep2-adjust-only`, whose adjuster does not carry the guard;
+`has_dynamic_local_init` checks the option so that path is unchanged. ESBMC
+models no exit-time destructors for statics, before or after this change. The
+k-induction step havocs the guard and the static independently, which can turn
+a SUCCESSFUL into UNKNOWN; it cannot hide a bug.
 
 ### M9 (R57) — 2026-09-25, the abort a class-type template argument causes
 

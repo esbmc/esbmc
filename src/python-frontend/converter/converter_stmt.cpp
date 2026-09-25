@@ -1291,10 +1291,8 @@ void python_converter::handle_assignment_type_adjustments(
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty to concrete tuple type. Legacy: IREP2
-      // drops #python_aggregate, which `in` dispatches on
-      // (docs/roadmap/scope-python-irep2.md §10.4).
-      lhs_symbol->set_type(rhs.type());
+      // Update symbol type from empty to concrete tuple type.
+      lhs_symbol->set_type(migrate_type(rhs.type()));
       lhs.type() = rhs.type();
       lhs_symbol->set_value(migrate_expr(rhs));
     }
@@ -1475,8 +1473,19 @@ void python_converter::handle_assignment_type_adjustments(
     // array constant, and isinstance folds on it
     // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
-      lhs_symbol->set_value(rhs);
+      set_assigned_value(*lhs_symbol, rhs);
   }
+}
+
+void python_converter::set_assigned_value(symbolt &symbol, const exprt &rhs)
+{
+  symbol.set_value(rhs);
+  // A class object is a char-array constant with its name in `value` and no
+  // operands.
+  if (rhs.is_constant() && rhs.operands().empty() && rhs.type().is_array())
+    class_object_names_[symbol.id] = rhs.get_string("value");
+  else
+    class_object_names_.erase(symbol.id);
 }
 
 void python_converter::handle_array_unpacking(

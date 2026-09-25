@@ -4,6 +4,7 @@
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
@@ -107,6 +108,24 @@ static struct_union_typet::componentst migrate_components_back(
   return comps;
 }
 
+static code_typet::argumentst migrate_arguments_back(const code_type2t &ref2)
+{
+  code_typet::argumentst args;
+  for (std::size_t i = 0; i < ref2.arguments.size(); i++)
+  {
+    args.emplace_back(migrate_type_back(ref2.arguments[i]));
+    args.back().set_identifier(ref2.argument_names[i]);
+    // Unreflected, so it may be absent on a type built by a frontend rather
+    // than by migrate_type (§44).
+    if (i < ref2.argument_base_names.size())
+      args.back().cmt_base_name(ref2.argument_base_names[i]);
+    if (i < ref2.argument_defaults.size() && ref2.argument_defaults[i])
+      args.back().default_value() =
+        migrate_expr_back(ref2.argument_defaults[i]);
+  }
+  return args;
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -199,6 +218,19 @@ static bool migrates_to_empty(const typet &type)
   return type.id().as_string().empty() || type.id() == "nil" ||
          type.id() == "ellipsis" || type.id() == typet::t_ptrmem ||
          type.id() == "destructor" || type.id() == "constructor";
+}
+
+static std::vector<expr2tc>
+migrate_arg_defaults(const code_typet::argumentst &old_args)
+{
+  std::vector<expr2tc> defaults;
+  for (std::size_t i = 0; i < old_args.size(); i++)
+    if (old_args[i].has_default_value())
+    {
+      defaults.resize(old_args.size());
+      migrate_expr(old_args[i].default_value(), defaults[i]);
+    }
+  return defaults;
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -325,7 +357,8 @@ static type2tc migrate_type0(const typet &type)
       name,
       packed,
       base_names,
-      explicit_alignment(type));
+      explicit_alignment(type),
+      python_aggregate_kind(type));
   }
 
   if (type.id() == typet::t_union)
@@ -407,7 +440,13 @@ static type2tc migrate_type0(const typet &type)
       ret_type = migrate_type(static_cast<const typet &>(type.return_type()));
     }
 
-    return code_type2tc(args, ret_type, arg_names, ellipsis, arg_base_names);
+    return code_type2tc(
+      args,
+      ret_type,
+      arg_names,
+      ellipsis,
+      arg_base_names,
+      migrate_arg_defaults(old_args));
   }
 
   if (type.id() == "cpp-name")
@@ -3200,6 +3239,8 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       thetype.set("packed", true);
     if (ref2.alignment != 0)
       thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
+    if (!ref2.python_aggregate.empty())
+      set_python_aggregate_kind(thetype, ref2.python_aggregate);
     return thetype;
   }
   case type2t::union_id:
@@ -3220,20 +3261,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
 
     assert(ref2.arguments.size() == ref2.argument_names.size());
 
-    code_typet::argumentst args;
-    unsigned int i = 0;
-    for (auto const &it : ref2.arguments)
-    {
-      args.emplace_back(migrate_type_back(it));
-      args.back().set_identifier(ref2.argument_names[i]);
-      // Unreflected, so it may be absent on a type built by a frontend rather
-      // than by migrate_type (§44).
-      if (i < ref2.argument_base_names.size())
-        args.back().cmt_base_name(ref2.argument_base_names[i]);
-      i++;
-    }
-
-    code.arguments() = args;
+    code.arguments() = migrate_arguments_back(ref2);
     code.return_type() = ret_type;
 
     if (ref2.ellipsis)
