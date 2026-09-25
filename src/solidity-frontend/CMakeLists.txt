@@ -23,10 +23,9 @@ add_library(solidityfrontend_stuff
 target_include_directories(solidityfrontend_stuff
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CLANG_INCLUDE_DIRS}
-    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(solidityfrontend_stuff gotoprograms nlohmann_json::nlohmann_json clangcfrontend_stuff)
+target_link_libraries(solidityfrontend_stuff PUBLIC esbmc_common gotoprograms nlohmann_json::nlohmann_json clangcfrontend_stuff)
 
 add_library(solidityfrontend INTERFACE)
 target_link_libraries(solidityfrontend INTERFACE solidityfrontend_stuff)

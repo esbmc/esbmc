@@ -18,21 +18,65 @@ on:
         required: false
         default: false
         type: boolean
+      upload:
+        description: "Upload ./release under its flag-qualified artifact name"
+        required: false
+        default: true
+        type: boolean
+      save-cache:
+        description: "Save the ccache for later runs to restore"
+        required: false
+        default: false
+        type: boolean
+      linker:
+        description: "ESBMC_LINKER passed to build.sh; auto keeps the probe"
+        required: false
+        default: auto
+        type: string
 
 jobs:
   build:
     name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      # Runner images are rebuilt weekly; mtime would invalidate every entry.
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 1.5G
+      # Without these every target reusing util_esbmc's PCH is uncacheable.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      CCACHE_KEY: ccache-${{ inputs.operating-system }}-${{ inputs.build-flags }}
     steps:
     - uses: actions/checkout@v6
 
+    - name: Restore ccache
+      uses: actions/cache/restore@v6
+      with:
+        path: .cache/ccache
+        key: ${{ env.CCACHE_KEY }}-${{ github.sha }}
+        restore-keys: ${{ env.CCACHE_KEY }}-
+
     - name: Build ESBMC
-      run: ./scripts/build.sh ${{ inputs.build-flags }}
+      run: ./scripts/build.sh ${{ inputs.build-flags }} ${{ inputs.linker != 'auto' && format('-l {0}', inputs.linker) || '' }}
+
+    # Zeroed before saving, so the next restore reports only its own build.
+    - name: Show ccache statistics
+      run: |
+        ccache --show-stats
+        ccache --zero-stats
+
+    - name: Save ccache
+      if: ${{ inputs.save-cache }}
+      uses: actions/cache/save@v6
+      with:
+        path: .cache/ccache
+        key: ${{ env.CCACHE_KEY }}-${{ github.sha }}
 
     # Default: upload the raw ./release folder under the flag-qualified name that
     # downstream jobs (benchexec, sv-comp, witness-validation) download verbatim.
     - name: Upload build artifact
-      if: ${{ !inputs.canon-names }}
+      if: ${{ inputs.upload && !inputs.canon-names }}
       uses: actions/upload-artifact@v7
       with:
         name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
