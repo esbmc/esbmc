@@ -7629,6 +7629,64 @@ exprt numpy_call_expr::handle_searchsorted_call_over_literal(
     converter_, searchsorted_position(search_space, value_arg, right));
 }
 
+std::optional<exprt>
+numpy_call_expr::try_searchsorted_sorter_descriptor_fallback(
+  const nlohmann::json *sorter_node,
+  const std::string &array_name,
+  bool right)
+{
+  if (sorter_node == nullptr)
+    return try_searchsorted_call_over_descriptor(right);
+
+  std::optional<std::vector<exprt>> sorted_values =
+    resolve_searchsorted_sorted_values_via_descriptor(
+      call_["args"][0], *sorter_node, array_name);
+  if (!sorted_values)
+    return std::nullopt;
+
+  return handle_searchsorted_call_over_descriptor(
+    std::move(*sorted_values), right);
+}
+
+exprt numpy_call_expr::finish_searchsorted_call(
+  std::optional<nlohmann::json> literal_arg,
+  const nlohmann::json *sorter_node,
+  const std::string &array_name,
+  bool right)
+{
+  if (!literal_arg)
+  {
+    if (
+      std::optional<exprt> result = try_searchsorted_sorter_descriptor_fallback(
+        sorter_node, array_name, right))
+      return *result;
+
+    resolve_literal_numpy_array_input(
+      call_["args"][0], function_id_.get_function(), false);
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() currently supports only literal "
+      "numpy.array inputs");
+  }
+
+  try
+  {
+    nlohmann::json search_space = resolve_searchsorted_space(
+      std::move(*literal_arg), sorter_node, array_name);
+    return handle_searchsorted_call_over_literal(
+      std::move(search_space), right);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (sorter_node != nullptr)
+      throw;
+    if (
+      std::optional<exprt> result =
+        try_searchsorted_call_over_descriptor(right))
+      return *result;
+    throw;
+  }
+}
+
 exprt numpy_call_expr::handle_searchsorted_call()
 {
   const std::string &function = function_id_.get_function();
@@ -7657,64 +7715,14 @@ exprt numpy_call_expr::handle_searchsorted_call()
     if (std::optional<exprt> placeholder = try_searchsorted_probe_placeholder())
       return *placeholder;
 
-  // The AST-literal path is tried first and, whenever it can resolve the
-  // array, wins outright -- it already validates things the descriptor path
-  // does not attempt (the array is actually sorted, the search value is a
-  // literal), so a Name it can already follow (e.g. `a = np.array([...])`)
-  // must keep going through it rather than being silently picked up by the
-  // newer, less validated path below. The descriptor path (a Name already
-  // bound to a concrete numpy array via a route the AST can't trace, or a
-  // local-array-return function call) is only a fallback for what the
-  // AST-literal path itself declines on.
-  std::optional<nlohmann::json> literal_arg =
-    try_resolve_searchsorted_literal_array(function);
-
-  if (!literal_arg && sorter_node == nullptr)
-    if (
-      std::optional<exprt> result =
-        try_searchsorted_call_over_descriptor(right))
-      return *result;
-
-  // sorter=argsort(<the same array>) over a descriptor-resolved array: an
-  // exprt-level stable-sort gather, since these elements (index expressions
-  // into a local array) are almost never compile-time constants the way a
-  // genuine AST literal's would be. See
-  // resolve_searchsorted_sorted_values_via_descriptor for the full
-  // rationale; nullopt (not this shape) leaves the diagnostic below
-  // unchanged.
-  if (!literal_arg && sorter_node != nullptr)
-    if (
-      std::optional<std::vector<exprt>> sorted_values =
-        resolve_searchsorted_sorted_values_via_descriptor(
-          call_["args"][0], *sorter_node, array_name))
-      return handle_searchsorted_call_over_descriptor(
-        std::move(*sorted_values), right);
-
-  if (literal_arg)
-  {
-    try
-    {
-      nlohmann::json search_space = resolve_searchsorted_space(
-        std::move(*literal_arg), sorter_node, array_name);
-      return handle_searchsorted_call_over_literal(
-        std::move(search_space), right);
-    }
-    catch (const std::runtime_error &)
-    {
-      if (sorter_node != nullptr)
-        throw;
-      if (
-        std::optional<exprt> result =
-          try_searchsorted_call_over_descriptor(right))
-        return *result;
-      throw;
-    }
-  }
-
-  resolve_literal_numpy_array_input(call_["args"][0], function, false);
-  throw std::runtime_error(
-    "TypeError: numpy.searchsorted() currently supports only literal "
-    "numpy.array inputs");
+  // The AST-literal path is tried first and wins whenever it resolves the
+  // array; descriptor resolution is only a fallback for cases the AST cannot
+  // trace, such as local-array-return function calls.
+  return finish_searchsorted_call(
+    try_resolve_searchsorted_literal_array(function),
+    sorter_node,
+    array_name,
+    right);
 }
 
 void numpy_call_expr::parse_sort_axis_and_keywords(
