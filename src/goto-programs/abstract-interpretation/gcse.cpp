@@ -246,10 +246,97 @@ static void collect_dereferences(const expr2tc &e, std::vector<expr2tc> &dest)
     [&dest](const expr2tc &op) { collect_dereferences(op, dest); });
 }
 
+/// The objects a store to `lhs` may write: variables, and the heap objects the
+/// points-to analysis names. `c ? x : y` over-approximates to both arms; stores
+/// through a pointer are resolved with referenced_objects instead.
+static void
+collect_written_objects(const expr2tc &lhs, std::vector<expr2tc> &dest)
+{
+  if (is_dereference2t(lhs))
+    return;
+
+  if (is_symbol2t(lhs) || is_dynamic_object2t(lhs))
+  {
+    dest.push_back(lhs);
+    return;
+  }
+
+  if (is_index2t(lhs))
+  {
+    collect_written_objects(to_index2t(lhs).source_value, dest);
+    return;
+  }
+
+  lhs->foreach_operand(
+    [&dest](const expr2tc &op) { collect_written_objects(op, dest); });
+}
+
+/// Adds the objects `deref` may refer to into `dest`. Returns false when the
+/// points-to analysis cannot name them, i.e. it may refer to anything.
+static bool referenced_objects(
+  const expr2tc &deref,
+  const goto_programt::const_targett &i_it,
+  std::vector<expr2tc> &dest)
+{
+  value_setst::valuest refs;
+  cse_domaint::vsa->get_reference_set(i_it, deref, refs);
+  for (const auto &x : refs)
+  {
+    if (!is_object_descriptor2t(x))
+      return false;
+
+    // Andersen names the target of `&s->v` by the expression `*s` rather than
+    // by the object s points to.
+    const expr2tc &object = to_object_descriptor2t(x).object;
+    std::vector<expr2tc> inner;
+    collect_dereferences(object, inner);
+    if (!inner.empty())
+      return false;
+
+    collect_written_objects(object, dest);
+  }
+  return true;
+}
+
+static bool same_object(const expr2tc &a, const expr2tc &b)
+{
+  if (is_symbol2t(a) && is_symbol2t(b))
+    return to_symbol2t(a).thename == to_symbol2t(b).thename;
+  return a == b;
+}
+
+/// Whether a dereference in `e` may read one of the `written` objects.
+static bool may_read_through_pointer(
+  const expr2tc &e,
+  const std::vector<expr2tc> &written,
+  const goto_programt::const_targett &i_it)
+{
+  std::vector<expr2tc> dereferences;
+  collect_dereferences(e, dereferences);
+
+  for (const expr2tc &deref : dereferences)
+  {
+    std::vector<expr2tc> objects;
+    if (!referenced_objects(deref, i_it, objects))
+      return true;
+
+    for (const expr2tc &object : objects)
+      for (const expr2tc &w : written)
+        if (same_object(object, w))
+          return true;
+  }
+  return false;
+}
+
 void cse_domaint::havoc_expr(
   const expr2tc &target,
   const goto_programt::const_targett &i_it)
 {
+  // `a[i] = v` also writes `a[j]` when i == j, and `(int)b = v` writes `b`:
+  // an exact match on the target misses both (#7992).
+  std::vector<expr2tc> written;
+  collect_written_objects(target, written);
+
   if (vsa != nullptr)
   {
     // A store through `p->f` or `(*p)[i]` writes whatever `p` points to, but
@@ -261,28 +348,29 @@ void cse_domaint::havoc_expr(
 
     for (const expr2tc &deref : dereferences)
     {
-      value_setst::valuest dest;
-      vsa->get_reference_set(i_it, deref, dest);
-      for (const auto &x : dest)
+      // An unnameable target could be any object at all, so nothing stays
+      // available. Keeping the set here would let CSE reuse a value this
+      // store just invalidated.
+      if (!referenced_objects(deref, i_it, written))
       {
-        // An unnameable target (the points-to analysis reports "may point
-        // anywhere") could be any object at all, so nothing stays available.
-        // Keeping the set here would let CSE reuse a value this store just
-        // invalidated.
-        if (!is_object_descriptor2t(x))
-        {
-          available_expressions.clear();
-          return;
-        }
-
-        havoc_expr(to_object_descriptor2t(x).object, i_it);
+        available_expressions.clear();
+        return;
       }
     }
   }
+
+  for (const expr2tc &w : written)
+    if (is_symbol2t(w))
+      havoc_symbol(to_symbol2t(w).thename);
+
+  // `*q + 1` reads x when q may point to x, whether x was written directly or
+  // through another pointer (#7992).
   std::vector<expr2tc> to_remove;
   for (auto x : available_expressions)
   {
-    if (should_remove_expr(target, x))
+    if (
+      should_remove_expr(target, x) ||
+      (vsa != nullptr && may_read_through_pointer(x, written, i_it)))
       to_remove.push_back(x);
   }
   for (auto x : to_remove)
@@ -364,6 +452,36 @@ void goto_cse::replace_max_sub_expr(
     });
 }
 
+void goto_cse::replace_in_lvalue(
+  expr2tc &lhs,
+  const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
+  const goto_programt::const_targett &to,
+  std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const
+{
+  if (is_dereference2t(lhs))
+  {
+    replace_max_sub_expr(
+      to_dereference2t(lhs).value, expr2symbol, to, matched_expressions);
+    return;
+  }
+
+  if (is_index2t(lhs))
+  {
+    replace_in_lvalue(
+      to_index2t(lhs).source_value, expr2symbol, to, matched_expressions);
+    replace_max_sub_expr(
+      to_index2t(lhs).index, expr2symbol, to, matched_expressions);
+    return;
+  }
+
+  // Any other node (symbol, member, typecast, ...) names the storage being
+  // written, so replacing it with a CSE symbol would drop the store (#7992).
+  lhs->Foreach_operand(
+    [this, &expr2symbol, &to, &matched_expressions](expr2tc &op) {
+      replace_in_lvalue(op, expr2symbol, to, matched_expressions);
+    });
+}
+
 bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
@@ -416,6 +534,7 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
   }
 
   std::unordered_set<expr2tc, irep2_hash> initialized;
+  bool after_call = false;
   // 3. Final step, let's initialize the symbols and replace the expressions!
   for (auto it = (F.second.body).instructions.begin();
        it != (F.second.body).instructions.end();
@@ -430,12 +549,23 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
     // However, when changing dereferences we need to them posterior
     // a[i] = &addr; *a[i] = 42 ===> a[i] = &addr; tmp = a[i]; *tmp = 42;
 
-    if (it->is_target())
-    {
-      // This might be a loop or an else statement.
-      // TODO: clear only expressions that are no longer available
+    // `initialized` follows program order, so it says nothing at a join or
+    // after a call. Elsewhere a symbol holds its expression only until the
+    // expression is killed: a guard or a call target may make it available
+    // again without assigning the symbol (#7992).
+    if (it->is_target() || after_call)
       initialized.clear();
+    else
+    {
+      for (auto x = initialized.begin(); x != initialized.end();)
+      {
+        if (state.available_expressions.count(*x))
+          ++x;
+        else
+          x = initialized.erase(x);
+      }
     }
+    after_call = it->is_function_call();
     std::unordered_set<expr2tc, irep2_hash> matched_pre_expressions;
     std::unordered_set<expr2tc, irep2_hash> matched_post_expressions;
     switch (it->type)
@@ -474,7 +604,7 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
         expr2symbol,
         it,
         matched_pre_expressions);
-      replace_max_sub_expr(
+      replace_in_lvalue(
         to_code_assign2t(it->code).target,
         expr2symbol,
         it,
