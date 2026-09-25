@@ -1100,6 +1100,10 @@ typedef basic_string<char> string;
 // enough to parse interfaces taking std::wstring (github #6063); wide-string
 // operations are not modelled.
 typedef basic_string<wchar_t> wstring;
+#if __cplusplus >= 201103L
+typedef basic_string<char16_t> u16string;
+typedef basic_string<char32_t> u32string;
+#endif
 } // namespace std
 
 /* basic_string is complete from here on, so the exception hierarchy -- whose
