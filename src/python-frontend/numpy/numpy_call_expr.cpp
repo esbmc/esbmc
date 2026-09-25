@@ -2103,6 +2103,14 @@ materialize_zeros_ones(const std::string &ctor, const nlohmann::json &args)
 }
 
 static std::optional<nlohmann::json>
+materialize_array(const nlohmann::json &args)
+{
+  if (args.empty())
+    return std::nullopt;
+  return get_literal_numpy_array_arg(args[0]);
+}
+
+static std::optional<nlohmann::json>
 materialize_full(const nlohmann::json &args)
 {
   if (args.size() < 2)
@@ -2383,7 +2391,9 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   const auto &args = call_node["args"];
 
   std::optional<nlohmann::json> materialized;
-  if (ctor == "zeros" || ctor == "ones")
+  if (ctor == "array")
+    materialized = materialize_array(args);
+  else if (ctor == "zeros" || ctor == "ones")
     materialized = materialize_zeros_ones(ctor, args);
   else if (ctor == "full")
     materialized = materialize_full(args);
