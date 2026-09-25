@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-09-24.
+**Updated:** 2026-09-25.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -26,9 +26,9 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Category | Missing items |
 |---|---|
-| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) still reject explicitly; broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. `.size` on `np.eye`, `np.identity`, and `np.full` results currently false-alarms on valid assertions about the array size; `np.linspace(...).size` works. This gap is not yet pinned by a regression. |
-| Sorting / searching | `searchsorted` on a genuine 2-D array (as opposed to a 1-D row/column view of one), symbolic arrays, and a literal (non-`argsort`) `sorter=` index array over a descriptor-resolved array. |
-| Direct constructor chaining | Several methods work directly on supported constructor calls (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, and selected `reshape` cases), but `argmin`, `argmax`, `diagonal`, `prod`, `std`, `var`, and `np.array(...).reshape(...)` still reject with the explicit "assign the constructor's result to a variable first" diagnostic. |
+| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) still reject explicitly; broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. |
+| Sorting / searching | Symbolic array shapes and symbolic `sorter=` operands for `searchsorted` reject explicitly. Genuine 2-D array input is also rejected, matching NumPy's `ValueError: object too deep for desired array`; 1-D row/column views remain supported. |
+| Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
@@ -61,9 +61,9 @@ ESBMC's standard across every frontend (C, C++, Solidity, Java/Kotlin) is
 sound-but-incomplete, not full language/library coverage: whatever falls
 outside the currently supported subset must reject with an explicit
 diagnostic (ADR-NP principle 3) rather than silently return a wrong
-verdict. Most gaps in "Missing indexing / slicing" and "Missing API
-surface" already reject explicitly; the known exception is the constructor
-`.size` false-alarm gap listed above.
+verdict. Gaps in "Missing indexing / slicing" and "Missing API
+surface" should reject explicitly; any known false alarm must be listed as a
+separate gap instead of treated as supported behavior.
 
 This file has **no known open NumPy unsound-success gap**. Remaining NumPy
 items are documented backlog: unsupported cases should reject explicitly,
@@ -82,19 +82,11 @@ backlog, in priority order:
    shapes/axes/bounds, and broader stride combinations.
 2. **Symbolic and broader multi-axis slicing** — support cases beyond the
    literal/fixed-shape recuts.
-3. **`numpy.searchsorted()`'s remaining gaps** — a genuine 2-D array input
-   (as opposed to a row/column view), symbolic arrays, and a literal
-   (non-`argsort`) `sorter=` index array over a descriptor-resolved array.
-4. **`.size` on `eye`/`full`/`identity` results** false-alarms on valid
-   size assertions; not yet pinned by a regression. Unrelated to `dtype=`.
-5. **Direct constructor chaining parity** — close the remaining explicit
-   rejections for `argmin`, `argmax`, `diagonal`, `prod`, `std`, `var`, and
-   `np.array(...).reshape(...)`.
-6. **Advanced dtype and constructor parity** — structured/object/custom dtype
+3. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
-7. **Random and iteration depth** — probability/replacement `choice`, extra
+4. **Random and iteration depth** — probability/replacement `choice`, extra
    distributions, and advanced `nditer`.
-8. **Linear algebra breadth** — larger matrices, symbolic entries, and more
+5. **Linear algebra breadth** — larger matrices, symbolic entries, and more
    faithful `norm`/`eig`/`svd`.
 
 ---
@@ -108,22 +100,15 @@ distinct designs are sized accordingly instead of assumed to be one PR each.
 1. **3-D+ / symbolic view descriptors** (~2 PRs) — extend the rank 1/2
    fixed-shape descriptor model to higher ranks, symbolic axes/bounds/shapes,
    and broader non-literal stride combinations.
-2. **`numpy.searchsorted()`'s remaining gaps** (~1 PR) — a genuine 2-D array
-   input, symbolic arrays, and a literal (non-`argsort`) `sorter=` index
-   array over a descriptor-resolved array.
-3. **`.size` fix** (~1 PR) — the `eye`/`full`/`identity` false-alarm gap,
-   pre-existing and unrelated to `dtype=`.
-4. **Direct constructor chaining parity** (~1 PR) — close the remaining
-   explicit method-chain rejections listed above.
-5. **Advanced dtype and constructors** (~2 PRs) — dtype policy
+2. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.
-6. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
+3. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
    separate from advanced `nditer`.
-7. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
+4. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
    separate from fuller `eig`/`svd`/`norm`.
 
-**Total to close every item in this file: ~10 PRs.**
+**Total to close every item in this file: ~7 PRs.**
 
 ---
 
