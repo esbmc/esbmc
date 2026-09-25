@@ -163,36 +163,59 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
-// clang's USR spells a member-pointer type as nothing, so f<int A::*> and
-// f<long B::*>, the members of W<int A::*> and W<long B::*>, and overloads
-// f(int A::*) and f(long B::*) share one id and the last body converted wins.
+// The types of the nullptr template arguments in @p args, which print as a
+// bare `nullptr` whatever their type.
+static bool print_nullptr_arg_types(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  llvm::raw_ostream &os)
+{
+  bool found = false;
+  for (const clang::TemplateArgument &arg : args)
+    if (arg.getKind() == clang::TemplateArgument::Pack)
+      found |= print_nullptr_arg_types(arg.getPackAsArray(), os);
+    else if (arg.getKind() == clang::TemplateArgument::NullPtr)
+    {
+      os << "(nullptr:" << arg.getNullPtrType().getCanonicalType().getAsString()
+         << ")";
+      found = true;
+    }
+  return found;
+}
+
+// clang's USR spells a member-pointer type and a nullptr template argument as
+// nothing, so f<int A::*> and f<long B::*>, the members of W<int A::*> and
+// W<long B::*>, overloads f(int A::*) and f(long B::*), and g<(int *)nullptr>
+// and g<(long *)nullptr> share one id and the last body converted wins.
 static std::string
-member_pointer_usr_suffix(const clang::Decl &decl, const clang::ASTContext &ctx)
+usr_gap_suffix(const clang::Decl &decl, const clang::ASTContext &ctx)
 {
   std::string args;
   llvm::raw_string_ostream os(args);
   const clang::PrintingPolicy policy = ctx.getPrintingPolicy();
+  bool has_nullptr = false;
+  auto print = [&](llvm::ArrayRef<clang::TemplateArgument> list) {
+    clang::printTemplateArgumentList(os, list, policy);
+    has_nullptr |= print_nullptr_arg_types(list, os);
+  };
   for (const clang::Decl *d = &decl; !llvm::isa<clang::TranslationUnitDecl>(d);
        d = clang::Decl::castFromDeclContext(d->getDeclContext()))
   {
     if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
     {
       if (const auto *targs = fd->getTemplateSpecializationArgs())
-        clang::printTemplateArgumentList(os, targs->asArray(), policy);
+        print(targs->asArray());
       os << "(" << fd->getType().getCanonicalType().getAsString(policy) << ")";
     }
     else if (
       const auto *cs =
         llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(d))
-      clang::printTemplateArgumentList(
-        os, cs->getTemplateArgs().asArray(), policy);
+      print(cs->getTemplateArgs().asArray());
     else if (
       const auto *vs = llvm::dyn_cast<clang::VarTemplateSpecializationDecl>(d))
-      clang::printTemplateArgumentList(
-        os, vs->getTemplateArgs().asArray(), policy);
+      print(vs->getTemplateArgs().asArray());
   }
   os.flush();
-  return args.find("::*") == std::string::npos ? "" : "#" + args;
+  return has_nullptr || args.find("::*") != std::string::npos ? "#" + args : "";
 }
 
 void clang_cpp_convertert::get_decl_name(
@@ -289,7 +312,7 @@ void clang_cpp_convertert::get_decl_name(
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
     if (id.rfind("c:", 0) == 0)
-      id += member_pointer_usr_suffix(nd, *ASTContext);
+      id += usr_gap_suffix(nd, *ASTContext);
     /* A lambda's operator(), __invoke and conversion-operator USRs name the
      * enclosing specialisation but not the closure, so siblings in one
      * instantiation share an id and the last body converted wins (#7499); the
@@ -308,8 +331,7 @@ void clang_cpp_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str() + member_pointer_usr_suffix(nd, *ASTContext) +
-         id_suffix;
+    id = DeclUSR.str().str() + usr_gap_suffix(nd, *ASTContext) + id_suffix;
     return;
   }
 
