@@ -2525,21 +2525,28 @@ What remains for this frontend is therefore not more probing of the adjust pass.
 It is `clang_cpp_convert.cpp` and the 639 legacy type mentions
 (`frontends-to-irep2.md` §43), which the phase list puts last for every frontend.
 
-## 11. The exception specification crosses the seam (2026-09-25)
+## 11. The exception specification crosses the seam, and the ctor/dtor marker still does not (2026-09-25)
 
-`clang_cpp_adjust::adjust_symbol` and `clang_cpp_adjust_irep2::adjust_symbol_type` resolved a
-dynamic exception specification (`throw(T...)`) and then wrote every C++ function type back, legacy,
-because `migrate_type` dropped `exception_spec_kind` and `exception_spec_types` -- and
-`goto_convert_functions` decodes the specification from the symbol's type.
+`clang_cpp_adjust::adjust_symbol` and `clang_cpp_adjust_irep2::adjust_symbol_type` resolve a dynamic
+exception specification (`throw(T...)`) and write the function type back. `migrate_type` dropped
+`exception_spec_kind` and `exception_spec_types`, which `goto_convert_functions` decodes from the
+symbol's type, so those writes had to stay legacy.
 
 `code_type2t` now carries a resolved specification as two unreflected fields, `exception_kind` and
 `exception_types`, both ways in `migrate_type`. An unresolved one (still holding
 `exception_spec_decl`) is not carried: carrying only its kind would read back as `throw()`.
-`finalize_exception_specification` now reports whether it resolved anything, so both writes happen only
-for a `throw(T...)` function -- every other function's type was being rewritten unchanged -- and they
-store the type IREP2-side. clang-cpp B-2* 4 -> 2.
+`finalize_exception_specification` now reports whether it resolved anything, so the write happens only
+for a `throw(T...)` function; every other function's type was being rewritten unchanged.
 
-Removing the back-write fails ten `regression/esbmc-cpp/try_catch/` tests (e.g.
-`exception_spec_dynamic_violation_fail`, `lower-exceptions_throw_spec_fail`); all 172 in that suite
-pass with it. `unit/util/migrate.test.cpp` pins the round trip, that no specification adds no key,
-and that a specification is no part of the type's identity.
+The writes themselves stay legacy, for §57.1's other reason. `migrate_type` turns a constructor's or
+destructor's pseudo return type (`"constructor"` / `"destructor"`) into `empty`, and the vptr
+initialisation reads it right after this write. Stored IREP2-side, a `throw()` constructor lost its
+vptr assignment: `regression/esbmc-cpp/cpp/throw_spec_ctor_dtor_vptr` became a false alarm and its
+`_fail` twin (a destructor that must see the base's virtual, [class.cdtor]/4) a false proof. That pair
+now pins it, and carrying the ctor/dtor marker is what converts these two writes. clang-cpp B-2*
+stays 4.
+
+With the carry disabled while the writes were IREP2-side, ten `regression/esbmc-cpp/try_catch/` tests
+failed (e.g. `exception_spec_dynamic_violation_fail`); `unit/util/migrate.test.cpp` pins the round
+trip, the unresolved case, that no specification adds no key, and that a specification is no part of
+the type's identity.

@@ -1594,6 +1594,16 @@ TEST_CASE("a function type keeps its exception specification", "[migrate]")
       round_trip(f).kind == exception_specificationt::kindt::non_throwing);
   }
 
+  SECTION("an unresolved dynamic specification is not carried")
+  {
+    // Carrying only its kind would read back as throw(), which permits nothing.
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    f.add("exception_spec_decl").get_sub().emplace_back("signedbv");
+    REQUIRE(
+      round_trip(f).kind ==
+      exception_specificationt::kindt::potentially_throwing);
+  }
+
   SECTION("no specification gains no key")
   {
     const typet back = migrate_type_back(migrate_type(f));
