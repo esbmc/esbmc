@@ -5140,6 +5140,38 @@ bool clang_c_convertert::get_mangled_id(
   return true;
 }
 
+/// Several C files are merged into one AST, and every file that includes a
+/// header gets its own copy of an internal-linkage function or variable the
+/// header defines -- the importer does not merge those -- but the USR names
+/// the header, so the copies and their locals shared one symbol. The first
+/// copy keeps its id, so single-file programs are unchanged; each later one
+/// is numbered, and its locals follow it.
+std::string
+clang_c_convertert::header_internal_suffix(const clang::NamedDecl &nd)
+{
+  const clang::DeclContext *fn_ctx = nd.getParentFunctionOrMethod();
+  const auto *owner = fn_ctx ? llvm::dyn_cast<clang::NamedDecl>(
+                                 clang::Decl::castFromDeclContext(fn_ctx))
+                             : &nd;
+  const auto *var = llvm::dyn_cast_or_null<clang::VarDecl>(owner);
+  if (
+    !owner || (!llvm::isa<clang::FunctionDecl>(owner) && !var) ||
+    (var && var->isLocalVarDecl()) || owner->isExternallyVisible())
+    return "";
+
+  clang::SmallString<128> owner_usr;
+  if (clang::index::generateUSRForDecl(owner, owner_usr))
+    return "";
+  std::vector<const clang::Decl *> &copies =
+    internal_copies[owner_usr.str().str()];
+  const clang::Decl *canon = owner->getCanonicalDecl();
+  auto it = std::find(copies.begin(), copies.end(), canon);
+  const std::size_t index = it - copies.begin();
+  if (it == copies.end())
+    copies.push_back(canon);
+  return index == 0 ? "" : "@tu" + std::to_string(index);
+}
+
 void clang_c_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -5328,7 +5360,7 @@ void clang_c_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str();
+    id = DeclUSR.str().str() + header_internal_suffix(nd);
     return;
   }
 
