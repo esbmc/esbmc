@@ -270,6 +270,53 @@ public:
       current_block->copy_to_operands(expr);
   }
 
+  // Converts `ast_node` (an Assign statement) into GOTO and appends it to
+  // current_block, the same way any real source-level assignment is
+  // converted -- for a caller (numpy argument hoisting) that only has
+  // add_instruction's implicit current_block, not a codet& of its own to
+  // pass to get_var_assign directly. False when there is no current block to
+  // emit into (e.g. converting outside statement context).
+  bool emit_statement_into_current_block(const nlohmann::json &ast_node)
+  {
+    if (!current_block || !safe_to_emit_side_effecting_statement())
+      return false;
+    // get_var_assign always leaves current_lhs pointing at its own target
+    // (or null) when it returns, clobbering whatever an enclosing
+    // assignment's own RHS conversion had it pointing at -- e.g. a call
+    // argument hoisted into a temp mid-conversion (hoist_call_argument_
+    // into_temp) would otherwise silently erase the outer assignment's
+    // ability to retype its own target from the freshly computed RHS
+    // (retype_current_lhs_and_return and friends), leaving a stale
+    // static-annotator guess in place. Save and restore around the nested
+    // statement so it only ever affects its own target.
+    exprt *outer_lhs = current_lhs;
+    bool outer_is_converting_rhs = is_converting_rhs;
+    bool outer_is_converting_lhs = is_converting_lhs;
+    const nlohmann::json *outer_store_target = lhs_store_target_;
+    typet outer_element_type = current_element_type;
+    get_var_assign(ast_node, *current_block);
+    current_lhs = outer_lhs;
+    is_converting_rhs = outer_is_converting_rhs;
+    is_converting_lhs = outer_is_converting_lhs;
+    lhs_store_target_ = outer_store_target;
+    current_element_type = outer_element_type;
+    return true;
+  }
+
+  // True where a side-effecting statement (e.g. a hoisted temporary
+  // assignment) is safe to plant into current_block without being evaluated
+  // an extra time or leaking into a specification -- the same guard
+  // needs_zero_division_guard applies before hoisting a side-effecting
+  // divisor: not a lambda body at its definition (operands still unbound),
+  // not the discarded type-probe pass of an assignment RHS (which runs the
+  // real conversion again right after), and not inside a contract clause
+  // (which must not plant a statement into the enclosing block at all).
+  bool safe_to_emit_side_effecting_statement() const
+  {
+    return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+           !in_contract_clause_;
+  }
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
