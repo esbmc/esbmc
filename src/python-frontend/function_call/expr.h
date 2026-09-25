@@ -797,6 +797,8 @@ private:
    */
   std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
 
+  exprt handle_bool_call(const nlohmann::json &arg, size_t arg_size) const;
+
   /**
    * Folds sum() over a numeric tuple into a chain of additions.
    *

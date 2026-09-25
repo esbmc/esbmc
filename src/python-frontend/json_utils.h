@@ -136,6 +136,19 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+/// Counts every ClassDef under @p node, at any depth.
+template <typename JsonType>
+std::size_t count_class_defs(const JsonType &node)
+{
+  std::size_t count = 0;
+  if (node.is_object() && node.value("_type", "") == "ClassDef")
+    ++count;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      count += count_class_defs(child);
+  return count;
+}
+
 /// Counts the ClassDef nodes named @p class_name that sit inside a function
 /// body under @p body. Module-scope definitions are not counted: find_class
 /// already reports those.
