@@ -4720,7 +4720,7 @@ void python_converter::handle_function_call_rhs(
     is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
   {
     lhs.type() = rhs.type();
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
   }
 
   // Set return destination
@@ -6585,7 +6585,7 @@ void python_converter::get_var_assign(
       // `const array_typet& = lhs.type()` constructed a throwaway array (with
       // a nil size) rather than reinterpreting the real type; it asserted
       // nothing meaningful and is removed.
-      lhs_symbol->set_type(rhs.type());
+      python_expr::set_symbol_type_if_carried(*lhs_symbol, rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
@@ -6920,7 +6920,7 @@ void python_converter::get_compound_assign(
       if (symbol)
       {
         // Update the symbol's type to pointer if concatenated returns pointer
-        symbol->set_type(concatenated.type());
+        symbol->set_type(migrate_type(concatenated.type()));
 
         // Update LHS to be a symbol with the new type
         lhs = symbol_exprt(symbol->id, symbol->get_type());
