@@ -747,12 +747,15 @@ larger change -- a distinct class-object type, which also removes §14.1's false
 
 Census: a temporary marker at the two builders (`converter_expr.cpp:1281` builtin, `:1718` class),
 run under `--goto-functions-only` over the 6 697 Python tests. 344 build at least one class-object
-constant -- 313 in `python/`, 29 in `humaneval/`, 2 in `python-intensive/` -- against about 30 that use a
-class as a value on purpose (`github_3520_*`, `github_5936*`, `github_7549*`, the `isinstance_*` and
-`class_object_*` pairs).
+constant -- 313 in `python/`, 29 in `humaneval/`, 2 in `python-intensive/`.
 
-Most of the rest are incidental: a subscripted annotation converts its type arguments as expressions
-(`List[Tuple[int, int]]`, `Callable[[int], int]`, `Sequence[int] | None`), and an alias
-(`MyInt = int`) builds one before the constructor is resolved. So a distinct class-object type is not
-mainly a change to the ~30 deliberate uses; the first step is to stop annotations building value
-expressions at all, which shrinks the reach to the uses that mean it. That is the order to take.
+Most are incidental. A backtrace from the builder in
+`list_tuple_elem_annotation` lands in `get_return_statements` inside an imported module: the
+`typing` operational model's `TypeVar` stub is `return object` (`models/typing.py:7`), so every
+program that imports `typing` builds one class-object constant while converting the model, whatever
+its own annotations say. 238 of the 344 import `typing`, and 234 of those build exactly one; the
+annotations themselves build none.
+
+That leaves 110 tests where a class object comes from the program: 106 that do not import `typing`
+and 4 that build more than one. A distinct class-object type has to serve those; the `TypeVar` stub
+needs only a body that is not a class object.
