@@ -121,9 +121,22 @@ endif()
 # POSIX only -- see the _WIN32 arm of smtlib_convt::smtlib_convt. A linked z3
 # is not enough: the test names the program for a shell to look up.
 if(NOT WIN32)
-    find_program(ESBMC_TEST_Z3_BINARY z3)
+    # Camada downloads a z3 for its own backend; prefer it over a system one so
+    # these tests run in a build that pulled its dependencies in, where nothing
+    # put z3 on PATH. The test names the program for a shell to look up, so the
+    # directory is prepended to PATH for the test's environment below.
+    set(_z3_hints)
+    if(CAMADA_DEPS_DIR)
+        list(APPEND _z3_hints "${CAMADA_DEPS_DIR}/bin")
+    endif()
+    if(CAMADA_DOWNLOAD_DIR)
+        list(APPEND _z3_hints "${CAMADA_DOWNLOAD_DIR}/build/deps/install/bin")
+    endif()
+    find_program(ESBMC_TEST_Z3_BINARY z3 HINTS ${_z3_hints})
     if(ESBMC_TEST_Z3_BINARY)
         list(APPEND ESBMC_TEST_CAPABILITIES z3_binary)
+        get_filename_component(ESBMC_TEST_Z3_DIR "${ESBMC_TEST_Z3_BINARY}"
+                               DIRECTORY)
     endif()
 endif()
 
@@ -186,6 +199,12 @@ function(add_esbmc_regression_test folder modes test)
       TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/${extra_labels}")
+    # --smtlib-solver-prog names a program for a shell to look up, so a z3
+    # found outside the default search path has to reach the test's PATH.
+    if(ESBMC_TEST_Z3_DIR)
+        set_property(TEST ${test_name} APPEND PROPERTY
+          ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${ESBMC_TEST_Z3_DIR}")
+    endif()
 endfunction()
 
 function(add_esbmc_regression folder modes)
