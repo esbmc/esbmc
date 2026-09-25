@@ -136,6 +136,15 @@ protected:
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  bool has_dynamic_local_init(const clang::VarDecl &vd) const;
+  void add_init_guard(const symbolt &var);
+  bool get_static_var_init(
+    const clang::VarDecl &vd,
+    symbolt &symbol,
+    const typet &t,
+    const locationt &location_begin,
+    exprt &new_expr);
+
   std::string header_internal_suffix(const clang::NamedDecl &nd);
   /// Internal-linkage functions and variables sharing a USR, in the order they
   /// were first named; see header_internal_suffix.
