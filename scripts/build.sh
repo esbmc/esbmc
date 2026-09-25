@@ -46,12 +46,12 @@ COMPILER_ENV=()
 
 STATIC=""
 COVERAGE=OFF
-CLANG_VERSION=16
-MIN_MACOS_CLANG_VERSION=17
-
-if [[ "$OS" == "Darwin" ]]; then
-  CLANG_VERSION="$MIN_MACOS_CLANG_VERSION"
-fi
+LINKER=""
+# ESBMC uses Clang-18 APIs (e.g. isExplicitObjectMemberFunction); 18 is the
+# minimum supported toolchain on every platform (mirrors
+# MIN_SUPPORTED_LLVM_VERSION_MAJOR in CMakeLists.txt).
+MIN_CLANG_VERSION=18
+CLANG_VERSION="$MIN_CLANG_VERSION"
 
 GMP_VERSION="6.3.0"
 GMP_TARBALL="gmp-${GMP_VERSION}.tar.xz"
@@ -77,8 +77,8 @@ validate_clang_version() {
     error "invalid clang version '$CLANG_VERSION': expected numeric major version"
   fi
 
-  if [[ "$OS" == "Darwin" ]] && (( CLANG_VERSION < MIN_MACOS_CLANG_VERSION )); then
-    error "macOS requires llvm/clang >= ${MIN_MACOS_CLANG_VERSION}; got $CLANG_VERSION"
+  if (( CLANG_VERSION < MIN_CLANG_VERSION )); then
+    error "ESBMC requires llvm/clang >= ${MIN_CLANG_VERSION}; got $CLANG_VERSION"
   fi
 }
 
@@ -185,6 +185,11 @@ prepare_platform_config() {
         log "Configuring static Ubuntu build"
       fi
 
+      # GCC 14 is the modules baseline; see the TODO in CMakeLists.txt.
+      if [[ ${#COMPILER_ENV[@]} -eq 0 && -z "${CC:-}${CXX:-}" ]]; then
+        COMPILER_ENV=(CC=gcc-14 CXX=g++-14)
+      fi
+
       BASE_ARGS+=("-DBUILD_STATIC=$STATIC")
       SOLVER_FLAGS+=("-DENABLE_Z3=ON" "-DENABLE_CVC5=On")
 
@@ -195,6 +200,11 @@ prepare_platform_config() {
           "-DENABLE_CVC5=Off"
         )
         BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
+        # c2goto stubs sol64 out on ARM64, where clang has no _BitInt > 128
+        # (src/c2goto/CMakeLists.txt), so the frontend would build against an
+        # empty model and every esbmc-solidity test would abort. Off here also
+        # unregisters that suite in regression/CMakeLists.txt.
+        BASE_ARGS+=("-DENABLE_SOLIDITY_FRONTEND=OFF")
       fi
       ;;
 
@@ -202,15 +212,12 @@ prepare_platform_config() {
       if [[ -z "$STATIC" ]]; then
         STATIC=OFF
       fi
-      if [[ "$STATIC" == "ON" ]]; then
-        error "static macOS build is currently not supported"
-      fi
-      log "Configuring macOS build with llvm/clang ${CLANG_VERSION}"
+      log "Configuring macOS build with llvm/clang ${CLANG_VERSION} (static=$STATIC)"
 
       BASE_ARGS+=(
+        "-DBUILD_STATIC=$STATIC"
         "-DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
         "-DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
-        "-DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       )
 
       SOLVER_FLAGS+=("-DENABLE_GOTO_CONTRACTOR=OFF" "-DENABLE_Z3=ON")
@@ -251,6 +258,7 @@ collect_ubuntu_packages() {
     libboost-filesystem-dev
     libmpfr-dev
     ninja-build
+    ccache
     python3-setuptools
     libncurses-dev
     python3-pip
@@ -264,7 +272,19 @@ collect_ubuntu_packages() {
   if [[ "$ARCH" != "aarch64" ]]; then
     UBUNTU_PACKAGES+=(g++-multilib)
   else
-    log "Skipping g++-multilib on aarch64"
+    # No multilib on aarch64, but plain g++ still has to be there: the tests
+    # passing --no-abstracted-cpp-includes reach for the system <cctype>,
+    # <cassert> and friends, which only libstdc++-dev provides.
+    log "Skipping g++-multilib on aarch64; installing g++ for libstdc++ headers"
+    UBUNTU_PACKAGES+=(g++)
+  fi
+
+  if [[ "${COMPILER_ENV[*]}" == *g++-14* ]]; then
+    UBUNTU_PACKAGES+=(g++-14)
+  fi
+
+  if [[ "$LINKER" == mold || "$LINKER" == lld ]]; then
+    UBUNTU_PACKAGES+=("$LINKER")
   fi
 
   if [[ "$COVERAGE" == "ON" ]]; then
@@ -276,6 +296,8 @@ collect_ubuntu_packages() {
       "llvm-$CLANG_VERSION-dev"
       "libclang-$CLANG_VERSION-dev"
       "libclang-cpp${CLANG_VERSION}-dev"
+      # Ships /usr/lib/cmake/clang-N (ClangConfig.cmake); no -dev package has it.
+      "clang-$CLANG_VERSION"
       libz3-dev
     )
   fi
@@ -292,6 +314,7 @@ collect_macos_formulae() {
     csmith
     boost
     ninja
+    ccache
     python@3.12
     automake
     bison
@@ -415,7 +438,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --user meson mypy pyparsing toml tomli pytest hypothesis
+  python3 -m pip install --user --break-system-packages meson mypy pyparsing toml tomli pytest hypothesis
   meson --version
 }
 
@@ -552,16 +575,19 @@ $0 [-OPTS] [deps] [build] [install]
 Options [defaults]:
   -h         display this help message
   -b BTYPE   set cmake build type to BTYPE [RelWithDebInfo]
-  -s STYPE   enable sanitizer STYPE and compile with clang [disabled]
+  -s STYPE   enable sanitizer STYPE (asan/tsan/lsan/msan/ubsan, or the
+             clang spellings address/thread/leak/memory/undefined; comma-
+             separated for several) and compile with clang [disabled]
   -e ON|OFF  enable/disable -Werror [OFF]
   -r ON|OFF  enable/disable 'benchbringup' [OFF]
   -d         enable debug output for this script and c2goto
   -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]
-  -c VERS    use packaged clang-VERS [16 on Linux, >=17 required on macOS]
+  -c VERS    use packaged clang-VERS [default 18; >=18 required on all platforms]
   -C         build an SV-COMP version [disabled]
   -B ON|OFF  enable/disable esbmc bundled libc [ON]
   -x ON|OFF  enable/disable esbmc cheri [OFF]
   -k ON|OFF  enable/disable coverage instrumentation (GCC/Clang --coverage) [OFF]
+  -l LINKER  auto, mold, lld, gold or default (see ESBMC_LINKER) [auto]
 
 Commands:
   fetch-deps         fetch dependency metadata and source archives [internal]
@@ -574,12 +600,12 @@ Commands:
 Default behavior (when no command is given): deps build install
 
 Needs to be executed from the top-level directory of ESBMC's source tree.
-Supported environments are: Ubuntu-22.04 and macOS.
+Supported environments are: Ubuntu-24.04 and macOS. Elsewhere, set CC and CXX.
 USAGE
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
+while getopts "hb:s:e:r:dS:c:CB:x:k:l:" flag; do
   case "$flag" in
     h)
       usage
@@ -589,7 +615,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       BASE_ARGS+=("-DCMAKE_BUILD_TYPE=${OPTARG}")
       ;;
     s)
-      BASE_ARGS+=("-DSANITIZER_TYPE=${OPTARG}")
+      BASE_ARGS+=("-DENABLE_SANITIZERS=${OPTARG}")
       COMPILER_ENV=(CC=clang CXX=clang++)
       ;;
     e)
@@ -628,6 +654,10 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
     B)
       require_on_off "-B" "$OPTARG"
       BASE_ARGS+=("-DESBMC_BUNDLE_LIBC=$OPTARG")
+      ;;
+    l)
+      LINKER="$OPTARG"
+      BASE_ARGS+=("-DESBMC_LINKER=${OPTARG}")
       ;;
     k)
       require_on_off "-k" "$OPTARG"

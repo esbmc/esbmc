@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract no_such_function
+^ERROR: --replace-call-with-contract: cannot use 'no_such_function': no function of that name has a body here$
+\A(?!(.|\n)*VERIFICATION)

@@ -21,13 +21,23 @@ void __ESBMC_set_thread_internal_data(
   struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__lock)
-#define __ESBMC_mutex_count_field(a) ((a).__count)
+#define __ESBMC_mutex_waiters(a) ((a).__count)
 #define __ESBMC_mutex_owner_field(a) ((a).__owner)
+#define __ESBMC_mutex_kind_field(a) ((a).__kind)
+#define __ESBMC_mutex_depth_field(a) ((a).__depth)
+#define __ESBMC_mutexattr_kind(a) ((a).__align)
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
 #define __ESBMC_rwlock_readers(a) ((a)->__readers)
 #define __ESBMC_rwlock_writer(a) ((a)->__writer)
+#define __ESBMC_rwlock_waiters(a) ((a)->__waiters)
+#define __ESBMC_barrier_count(a) ((a)->__count)
+#define __ESBMC_barrier_arrived(a) ((a)->__arrived)
+#define __ESBMC_barrier_generation(a) ((a)->__generation)
+#define __ESBMC_barrier_waiters(a) ((a)->__waiters)
+#define __ESBMC_spin_lock_field(a) ((a)->__lock)
+#define __ESBMC_spin_waiters(a) ((a)->__waiters)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -38,6 +48,10 @@ _Bool __ESBMC_pthread_thread_ended[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_detach[1];
+
+/* Threads currently blocked in pthread_join waiting for thread[i] to end. */
+__attribute__((
+  annotate("__ESBMC_inf_size"))) unsigned int __ESBMC_pthread_join_waiters[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
@@ -51,6 +65,19 @@ static pthread_key_t __ESBMC_next_thread_key = 0;
 unsigned short int __ESBMC_num_total_threads = 0;
 unsigned short int __ESBMC_num_threads_running = 0;
 unsigned short int __ESBMC_blocked_threads_count = 0;
+
+/* Cancels the blocked-count contributions of every thread waiting on one
+ * object. Waiter counts live in user-owned storage, so an uninitialised lock
+ * can feed an arbitrary value in here; clamping to 0 disables deadlock
+ * detection at this instant rather than for the rest of the run. */
+void __ESBMC_release_blocked_threads(unsigned int waiters)
+{
+__ESBMC_HIDE:;
+  __ESBMC_blocked_threads_count =
+    (waiters >= (unsigned int)__ESBMC_blocked_threads_count)
+      ? 0
+      : (unsigned short int)(__ESBMC_blocked_threads_count - waiters);
+}
 
 /* Per-thread cancellation state. All default to 0:
  *   cancel_requested = false
@@ -207,6 +234,8 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
@@ -264,6 +293,8 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
 
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -344,6 +375,7 @@ __ESBMC_HIDE:;
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   if (!ended)
   {
+    __ESBMC_pthread_join_waiters[(int)thread]++;
     __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
     __ESBMC_assert(
@@ -386,15 +418,76 @@ __ESBMC_HIDE:;
 
 /************************* Mutex manipulation routines ************************/
 
+/* Set once a program asks for a mutex kind that has to know who the owner is.
+ * Every access to the owner, depth and kind fields below -- and to the
+ * attribute pointer in pthread_mutex_init -- is short-circuited by this flag,
+ * so a program that never calls pthread_mutexattr_settype keeps the plain
+ * boolean-lock model verbatim. That matters: symex resolves the may-null
+ * attribute pointer whenever pthread_mutex_init reads it, which poisons
+ * MPOR's dependency relation and tripled the interleavings explored on
+ * regression/esbmc-unix/github_6474 (3s -> 25s). */
+static _Bool __ESBMC_mutex_owner_tracking = 0;
+
+int pthread_mutexattr_init(pthread_mutexattr_t *attr)
+{
+__ESBMC_HIDE:;
+  __ESBMC_mutexattr_kind(*attr) = PTHREAD_MUTEX_DEFAULT;
+  return 0;
+}
+
+int pthread_mutexattr_destroy(pthread_mutexattr_t *attr)
+{
+__ESBMC_HIDE:;
+  return 0;
+}
+
+int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int kind)
+{
+__ESBMC_HIDE:;
+  if (
+    kind != PTHREAD_MUTEX_NORMAL && kind != PTHREAD_MUTEX_RECURSIVE &&
+    kind != PTHREAD_MUTEX_ERRORCHECK && kind != PTHREAD_MUTEX_ADAPTIVE_NP)
+    return EINVAL;
+  if (kind == PTHREAD_MUTEX_RECURSIVE || kind == PTHREAD_MUTEX_ERRORCHECK)
+    __ESBMC_mutex_owner_tracking = 1;
+  __ESBMC_mutexattr_kind(*attr) = kind;
+  return 0;
+}
+
+int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *kind)
+{
+__ESBMC_HIDE:;
+  *kind = __ESBMC_mutexattr_kind(*attr);
+  return 0;
+}
+
+/* Reset the state a mutex carries independently of its kind. Shared by
+ * pthread_mutex_init and the lazy PTHREAD_MUTEX_INITIALIZER path, which must
+ * not clobber a kind an earlier pthread_mutex_init recorded. */
+static void __ESBMC_mutex_clear(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_mutex_lock_field(*mutex) = 0;
+  // Re-initialising a contended mutex frees it, so release rather than drop.
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
+  __ESBMC_mutex_owner_field(*mutex) = 0;
+  __ESBMC_mutex_depth_field(*mutex) = 0;
+  __ESBMC_atomic_end();
+}
+
 int pthread_mutex_init(
   pthread_mutex_t *mutex,
   const pthread_mutexattr_t *mutexattr)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_mutex_lock_field(*mutex) = 0;
-  __ESBMC_mutex_count_field(*mutex) = 0;
-  __ESBMC_mutex_owner_field(*mutex) = 0;
+  __ESBMC_mutex_clear(mutex);
+  int kind = PTHREAD_MUTEX_DEFAULT;
+  if (__ESBMC_mutex_owner_tracking && mutexattr)
+    kind = __ESBMC_mutexattr_kind(*mutexattr);
+  __ESBMC_mutex_kind_field(*mutex) = kind;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -406,76 +499,156 @@ __ESBMC_HIDE:;
   // PTHREAD_MUTEX_INITIALIZER
   __ESBMC_atomic_begin();
   if (__ESBMC_mutex_lock_field(*mutex) == 0)
-    pthread_mutex_init(mutex, NULL);
+    __ESBMC_mutex_clear(mutex);
   __ESBMC_atomic_end();
   return 0;
 }
+
+/* Distinguished __ESBMC_mutex_relock result: the calling thread does not
+ * already hold the mutex, so the caller must take its normal path. */
+#define __ESBMC_MUTEX_NOT_HELD_BY_SELF (-1)
+
+/* Outcome of re-locking a mutex the calling thread already holds: 0 once the
+ * nesting depth has been bumped (PTHREAD_MUTEX_RECURSIVE), EDEADLK for
+ * PTHREAD_MUTEX_ERRORCHECK, and __ESBMC_MUTEX_NOT_HELD_BY_SELF otherwise --
+ * a PTHREAD_MUTEX_NORMAL relock really is a self-deadlock, so the caller
+ * models it as ordinary contention. */
+static int __ESBMC_mutex_relock(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:;
+  if (
+    !__ESBMC_mutex_owner_tracking || __ESBMC_mutex_lock_field(*mutex) != 1 ||
+    __ESBMC_mutex_owner_field(*mutex) != (int)__ESBMC_get_thread_id())
+    return __ESBMC_MUTEX_NOT_HELD_BY_SELF;
+
+  int kind = __ESBMC_mutex_kind_field(*mutex);
+  if (kind == PTHREAD_MUTEX_ERRORCHECK)
+    return EDEADLK;
+  if (kind != PTHREAD_MUTEX_RECURSIVE)
+    return __ESBMC_MUTEX_NOT_HELD_BY_SELF;
+
+  __ESBMC_mutex_depth_field(*mutex)++;
+  return 0;
+}
+
+/* Record the acquisition so that a later relock can be attributed. */
+static void __ESBMC_mutex_acquire(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:;
+  __ESBMC_mutex_lock_field(*mutex) = 1;
+  if (__ESBMC_mutex_owner_tracking)
+  {
+    __ESBMC_mutex_owner_field(*mutex) = (int)__ESBMC_get_thread_id();
+    __ESBMC_mutex_depth_field(*mutex) = 1;
+  }
+}
+
+/* Drop one nesting level. Returns whether the mutex is now free, in which
+ * case the caller is responsible for waking the threads blocked on it. */
+static _Bool __ESBMC_mutex_release(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:;
+  if (__ESBMC_mutex_owner_tracking && __ESBMC_mutex_depth_field(*mutex) > 1)
+  {
+    __ESBMC_mutex_depth_field(*mutex)--;
+    return 0;
+  }
+  __ESBMC_mutex_lock_field(*mutex) = 0;
+  return 1;
+}
+
+/* An errorcheck mutex reports EPERM rather than trapping when the caller does
+ * not own it, which includes unlocking a mutex nobody holds. */
+static _Bool __ESBMC_mutex_unlock_denied(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_mutex_owner_tracking &&
+         __ESBMC_mutex_kind_field(*mutex) == PTHREAD_MUTEX_ERRORCHECK &&
+         (__ESBMC_mutex_lock_field(*mutex) != 1 ||
+          __ESBMC_mutex_owner_field(*mutex) != (int)__ESBMC_get_thread_id());
+}
+
+/* Every routine below has exactly one __ESBMC_atomic_end on every path: symex
+ * decrements the atomic-nesting counter for an ATOMIC_END instruction without
+ * consulting the path guard, so returning early out of an atomic block tears
+ * that block down for the paths that did not take the early exit. */
 
 int pthread_mutex_lock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_mutex_initializer(mutex);
-  __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
-  __ESBMC_mutex_lock_field(*mutex) = 1;
+  int nested = __ESBMC_mutex_relock(mutex);
+  _Bool held_by_self = (nested != __ESBMC_MUTEX_NOT_HELD_BY_SELF);
+  if (!held_by_self)
+  {
+    __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
+    __ESBMC_mutex_acquire(mutex);
+  }
   __ESBMC_atomic_end();
-  return 0;
+  return held_by_self ? nested : 0;
 }
 
 int pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
-  pthread_mutex_initializer(mutex);
-  __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
-  __ESBMC_mutex_lock_field(*mutex) = 1;
-  __ESBMC_atomic_end();
-  return 0;
+  return pthread_mutex_lock_noassert(mutex);
 }
 
 int pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_mutex_lock_field(*mutex) = 0;
+  _Bool denied = __ESBMC_mutex_unlock_denied(mutex);
+  if (!denied)
+    __ESBMC_mutex_release(mutex);
   __ESBMC_atomic_end();
-  return 0;
+  return denied ? EPERM : 0;
 }
 
 int pthread_mutex_unlock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  _Bool denied = __ESBMC_mutex_unlock_denied(mutex);
   __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
-  __ESBMC_mutex_lock_field(*mutex) = 0;
+    denied || __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
+  if (!denied)
+    __ESBMC_mutex_release(mutex);
   __ESBMC_atomic_end();
-  return 0;
+  return denied ? EPERM : 0;
 }
 
 int pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  _Bool unlocked = 1;
-
   __ESBMC_atomic_begin();
 
   pthread_mutex_initializer(mutex);
 
-  unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
+  /* Re-locking a mutex we already own is only a deadlock for the default
+     kind; a recursive mutex nests and an errorcheck one reports EDEADLK. */
+  int nested = __ESBMC_mutex_relock(mutex);
+  _Bool held_by_self = (nested != __ESBMC_MUTEX_NOT_HELD_BY_SELF);
 
-  if (unlocked)
+  _Bool unlocked = held_by_self || (__ESBMC_mutex_lock_field(*mutex) == 0);
+
+  if (!held_by_self)
   {
-    __ESBMC_mutex_lock_field(*mutex) = 1;
-  }
-  else
-  {
-    // Deadlock foo
-    __ESBMC_blocked_threads_count++;
-    // No more threads to run -> croak.
-    __ESBMC_assert(
-      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_mutex_lock");
+    if (unlocked)
+    {
+      __ESBMC_mutex_acquire(mutex);
+    }
+    else
+    {
+      // Deadlock foo
+      __ESBMC_mutex_waiters(*mutex)++;
+      __ESBMC_blocked_threads_count++;
+      // No more threads to run -> croak.
+      __ESBMC_assert(
+        __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+        "Deadlocked state in pthread_mutex_lock");
+    }
   }
 
   // Switch away for deadlock detection and so forth...
@@ -484,18 +657,25 @@ __ESBMC_HIDE:;
   // ... but don't allow execution further if it was locked.
   __ESBMC_assume(unlocked);
 
-  return 0;
+  return held_by_self ? nested : 0;
 }
 
 int pthread_mutex_unlock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+  _Bool denied = __ESBMC_mutex_unlock_denied(mutex);
+
   __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
-  __ESBMC_mutex_lock_field(*mutex) = 0;
+    denied || __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
+
+  if (!denied && __ESBMC_mutex_release(mutex))
+  {
+    __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+    __ESBMC_mutex_waiters(*mutex) = 0;
+  }
   __ESBMC_atomic_end();
-  return 0;
+  return denied ? EPERM : 0;
 }
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex)
@@ -503,11 +683,21 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  int res = EBUSY;
+  /* A mutex the caller already owns nests when recursive; otherwise it is
+     busy -- trylock never reports EDEADLK. */
+  int res = __ESBMC_mutex_relock(mutex);
+  if (res != __ESBMC_MUTEX_NOT_HELD_BY_SELF)
+  {
+    if (res != 0)
+      res = EBUSY;
+    goto PTHREAD_MUTEX_TRYLOCK_END;
+  }
+
+  res = EBUSY;
   if (__ESBMC_mutex_lock_field(*mutex) != 0)
     goto PTHREAD_MUTEX_TRYLOCK_END;
 
-  pthread_mutex_lock(mutex);
+  __ESBMC_mutex_acquire(mutex);
   res = 0;
 
 PTHREAD_MUTEX_TRYLOCK_END:
@@ -523,15 +713,13 @@ int pthread_mutex_destroy_check(pthread_mutex_t *mutex)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex) != 0, "attempt to destroy a locked mutex");
-  // Attempting to destroy a locked mutex results in undefined behavior.
-  __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex) == 1, "attempt to destroy a locked mutex");
-  __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex) != -1,
     "attempt to destroy a previously destroyed mutex");
+  // 0 = unlocked, 1 = locked, -1 = destroyed. Destroying a locked mutex is
+  // undefined behaviour; only an initialised, unlocked mutex may be destroyed.
+  __ESBMC_assert(
+    __ESBMC_mutex_lock_field(*mutex) == 0, "attempt to destroy a locked mutex");
 
-  // It shall be safe to destroy an initialized mutex that is unlocked
   __ESBMC_mutex_lock_field(*mutex) = -1;
   __ESBMC_atomic_end();
   return 0;
@@ -542,6 +730,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = -1;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -561,6 +751,8 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_rwlock_readers(lock) = 0;
   __ESBMC_rwlock_writer(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
+  __ESBMC_rwlock_waiters(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -572,6 +764,33 @@ __ESBMC_HIDE:;
   __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
   __ESBMC_rwlock_readers(lock)++;
   __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_rwlock_rdlock_check(pthread_rwlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired = !__ESBMC_rwlock_writer(lock);
+
+  if (acquired)
+  {
+    __ESBMC_rwlock_readers(lock)++;
+  }
+  else
+  {
+    __ESBMC_rwlock_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_rwlock_rdlock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
   return 0;
 }
 
@@ -614,6 +833,14 @@ __ESBMC_HIDE:;
     __ESBMC_rwlock_writer(lock) = 0;
   else if (__ESBMC_rwlock_readers(lock) > 0)
     __ESBMC_rwlock_readers(lock)--;
+
+  /* A reader blocks only behind a writer and a writer excludes readers, so a
+   * fully free lock is exactly when every registered waiter could proceed. */
+  if (!__ESBMC_rwlock_writer(lock) && !__ESBMC_rwlock_readers(lock))
+  {
+    __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
+    __ESBMC_rwlock_waiters(lock) = 0;
+  }
   __ESBMC_atomic_end();
   return 0;
 }
@@ -625,6 +852,203 @@ __ESBMC_HIDE:;
   __ESBMC_assume(
     !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
   __ESBMC_rwlock_writer(lock) = 1;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_rwlock_wrlock_check(pthread_rwlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired =
+    !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock));
+
+  if (acquired)
+  {
+    __ESBMC_rwlock_writer(lock) = 1;
+  }
+  else
+  {
+    __ESBMC_rwlock_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_rwlock_wrlock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
+  return 0;
+}
+
+/************************ barrier mainpulation routines ***********************/
+
+int pthread_barrierattr_init(pthread_barrierattr_t *attr)
+{
+  return 0;
+}
+
+int pthread_barrierattr_destroy(pthread_barrierattr_t *attr)
+{
+  return 0;
+}
+
+int pthread_barrierattr_getpshared(
+  const pthread_barrierattr_t *attr,
+  int *pshared)
+{
+__ESBMC_HIDE:;
+  *pshared = PTHREAD_PROCESS_PRIVATE;
+  return 0;
+}
+
+int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared)
+{
+  return 0;
+}
+
+int pthread_barrier_init(
+  pthread_barrier_t *barrier,
+  const pthread_barrierattr_t *attr,
+  unsigned int count)
+{
+__ESBMC_HIDE:;
+  if (count == 0)
+    return EINVAL;
+
+  __ESBMC_atomic_begin();
+  __ESBMC_barrier_count(barrier) = count;
+  __ESBMC_barrier_arrived(barrier) = 0;
+  __ESBMC_barrier_generation(barrier) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_barrier_waiters(barrier));
+  __ESBMC_barrier_waiters(barrier) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_barrier_destroy(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(
+    __ESBMC_barrier_arrived(barrier) == 0,
+    "attempt to destroy a barrier with waiting threads");
+  __ESBMC_barrier_count(barrier) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_barrier_wait(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  unsigned int generation = __ESBMC_barrier_generation(barrier);
+  int res = 0;
+
+  __ESBMC_barrier_arrived(barrier)++;
+
+  if (__ESBMC_barrier_arrived(barrier) == __ESBMC_barrier_count(barrier))
+  {
+    // Last to arrive: open the barrier and let this round's waiters through.
+    __ESBMC_barrier_arrived(barrier) = 0;
+    __ESBMC_barrier_generation(barrier)++;
+    __ESBMC_release_blocked_threads(__ESBMC_barrier_waiters(barrier));
+    __ESBMC_barrier_waiters(barrier) = 0;
+    res = PTHREAD_BARRIER_SERIAL_THREAD;
+  }
+  else
+  {
+    __ESBMC_barrier_waiters(barrier)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_barrier_wait");
+  }
+
+  __ESBMC_atomic_end();
+
+  // Only schedules in which this thread's round has since completed continue.
+  __ESBMC_assume(__ESBMC_barrier_generation(barrier) != generation);
+
+  return res;
+}
+
+/*********************** spinlock mainpulation routines ***********************/
+
+int pthread_spin_init(pthread_spinlock_t *lock, int pshared)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_spin_lock_field(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
+  __ESBMC_spin_waiters(lock) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_spin_destroy(pthread_spinlock_t *lock)
+{
+  return 0;
+}
+
+int pthread_spin_lock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired = (__ESBMC_spin_lock_field(lock) == 0);
+
+  if (acquired)
+  {
+    __ESBMC_spin_lock_field(lock) = 1;
+  }
+  else
+  {
+    // A spinning thread never yields, so every thread spinning at once is a
+    // deadlock exactly as it is for a blocking mutex.
+    __ESBMC_spin_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_spin_lock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
+  return 0;
+}
+
+int pthread_spin_trylock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  int res = EBUSY;
+  if (__ESBMC_spin_lock_field(lock) == 0)
+  {
+    __ESBMC_spin_lock_field(lock) = 1;
+    res = 0;
+  }
+
+  __ESBMC_atomic_end();
+  return res;
+}
+
+int pthread_spin_unlock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(
+    __ESBMC_spin_lock_field(lock), "must hold spinlock upon unlock");
+  __ESBMC_spin_lock_field(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
+  __ESBMC_spin_waiters(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -683,7 +1107,7 @@ __ESBMC_HIDE:;
     _Bool _cancel = __ESBMC_pthread_cancel_requested[_ctid] &&
                     __ESBMC_pthread_cancelstate[_ctid] == PTHREAD_CANCEL_ENABLE;
     if (_cancel)
-      __ESBMC_mutex_lock_field(*mutex) = 0;
+      __ESBMC_mutex_clear(mutex);
     __ESBMC_atomic_end();
     if (_cancel)
       pthread_exit(PTHREAD_CANCELED);
@@ -695,8 +1119,10 @@ __ESBMC_HIDE:;
       __ESBMC_mutex_lock_field(*mutex),
       "caller must hold pthread mutex lock in pthread_cond_wait");
 
-  // Unlock mutex; register us as waiting on condvar; context switch
-  __ESBMC_mutex_lock_field(*mutex) = 0;
+  // Unlock mutex; register us as waiting on condvar; context switch.
+  // The mutex is dropped outright rather than by one nesting level: waiting
+  // on a recursive mutex is undefined behaviour (POSIX pthread_cond_wait).
+  __ESBMC_mutex_clear(mutex);
   __ESBMC_cond_lock_field(*cond) = 1;
 
   // Technically in the gap below, we are blocked. So mark ourselves thus. If
@@ -707,7 +1133,7 @@ __ESBMC_HIDE:;
   if (assrt)
     __ESBMC_assert(
       __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_mutex_lock");
+      "Deadlocked state in pthread_cond_wait");
 
   __ESBMC_atomic_end();
 
@@ -998,6 +1424,8 @@ __ESBMC_HIDE:;
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
   // ``pthread_trampoline`` additionally assumes
   // ``__ESBMC_blocked_threads_count == 0`` to prune deadlocked
   // schedules from its own path; we deliberately omit that assume
@@ -1018,6 +1446,9 @@ __ESBMC_HIDE:;
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   if (!ended)
   {
+    // Register as a waiter so __pyt_terminate can cancel this bump; without
+    // it the counter saturates and every later block looks like a deadlock.
+    __ESBMC_pthread_join_waiters[(int)thread]++;
     __ESBMC_blocked_threads_count++;
     // Deadlock if every running thread is now blocked.
     __ESBMC_assert(
@@ -1054,4 +1485,18 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
     "Deadlocked state in threading.Lock.acquire");
+}
+
+/* Drains a threading.Lock's waiter count, called from ``Lock.release`` in
+ * ``models/threading_deadlock.py``. Mirrors what ``pthread_mutex_unlock_check``
+ * does with ``__ESBMC_mutex_waiters``: without it the bumps made by
+ * ``__ESBMC_pylock_block_and_check`` accumulate and a later, unrelated block
+ * reads as a deadlock (#6489). Named ``__pyt_*`` rather than ``__ESBMC_*``
+ * because symex intercepts the latter prefix in ``run_intrinsic`` and would
+ * never run this body.
+ */
+void __pyt_lock_release_waiters(unsigned int waiters)
+{
+__ESBMC_HIDE:;
+  __ESBMC_release_blocked_threads(waiters);
 }

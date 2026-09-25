@@ -1,0 +1,5 @@
+THOROUGH
+main.c
+--color always
+^.*CONVERSION ERROR$
+\x1b\[0;1;35mAtomicExpr

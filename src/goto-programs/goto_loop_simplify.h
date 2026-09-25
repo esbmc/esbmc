@@ -2,7 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_LOOP_SIMPLIFY_H_
 
 #include <goto-programs/goto_functions.h>
-#include <util/options.h>
+#include <util/config/options.h>
 
 /// Detect and remove no-op loops at goto-program level, before symex.
 ///

@@ -1,6 +1,6 @@
 CORE
 main.py
 --multi-property
-
-SIZE == .*?9(?:\n.*)*X == 15(?:\n.*)*VERIFICATION FAILED
-
+SIZE == .*?9
+X == 15
+^VERIFICATION FAILED$

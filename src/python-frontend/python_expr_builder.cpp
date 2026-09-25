@@ -1,11 +1,12 @@
 #include <python-frontend/python_expr_builder.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/python_types.h>
 
 namespace python_expr
 {
@@ -23,11 +24,34 @@ bool contains_dyn_array(const typet &t)
   return false;
 }
 
+void set_symbol_type(symbolt &sym, const typet &t)
+{
+  // symbolt::set_type(const typet&) caches t as the legacy type directly; the
+  // type2tc overload stores it as an IREP2 type instead, so a later
+  // sym.get_type() re-derives the legacy type via migrate_type_back, which
+  // drops #cpp_type (the `bytes` tag). Always use the legacy overload so the
+  // exact type, tag included, is what a later read sees.
+  sym.set_type(t);
+}
+
+void set_symbol_type_if_carried(symbolt &sym, const typet &t)
+{
+  if (t.is_nil() || contains_dyn_array(t) || is_python_internal_aggregate(t))
+    sym.set_type(t);
+  else
+    sym.set_type(migrate_type(t));
+}
+
 exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))
     return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
+  exprt result = migrate_expr_back(symbol_expr2tc(sym));
+  // migrate_type drops #cpp_type (e.g. the `bytes` tag on an otherwise-plain
+  // array type). Restore the symbol's declared type exactly, matching
+  // build_typecast below.
+  result.type() = sym.get_type();
+  return result;
 }
 
 exprt build_typecast(const exprt &from, const typet &t)
@@ -37,7 +61,8 @@ exprt build_typecast(const exprt &from, const typet &t)
   expr2tc from2;
   migrate_expr(from, from2);
   exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // migrate_type carries #cpp_type (§10) but not every attribute; restore the
+  // exact target type
   // so legacy typecast_exprt(from, t) is reproduced faithfully.
   result.type() = t;
   return result;
@@ -54,6 +79,13 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+exprt decay_function_to_pointer(const exprt &value)
+{
+  if (!value.type().is_code() || !value.is_symbol())
+    return value;
+  return build_address_of(value);
+}
+
 exprt build_dereference(const exprt &ptr, const typet &t)
 {
   if (contains_dyn_array(t))
@@ -61,7 +93,8 @@ exprt build_dereference(const exprt &ptr, const typet &t)
   expr2tc ptr2;
   migrate_expr(ptr, ptr2);
   exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // migrate_type carries #cpp_type (§10) but not every attribute; restore the
+  // exact target type
   // so legacy dereference_exprt(t)+op0=ptr is reproduced faithfully.
   result.type() = t;
   return result;
@@ -80,7 +113,8 @@ exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
     is_symbol_type(base2->type))
   {
     exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    // migrate_type does not round-trip #cpp_type; restore the exact member type.
+    // migrate_type carries #cpp_type (§10) but not every attribute; restore the
+    // exact member type.
     result.type() = t;
     return result;
   }
@@ -102,7 +136,7 @@ exprt build_deref_member(
 
 // index2t needs an array/vector/symbol source; fall back to the legacy node
 // otherwise (and for dyn-array source/result types -- string indexing relies on
-// the #cpp_type attribute that migrate_type drops, hence result.type() = t).
+// attributes migrate_type drops, hence result.type() = t).
 exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
 {
   if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
@@ -117,6 +151,19 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
     exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
     result.type() = t;
     return result;
+  }
+  // A pointer source (e.g. a numpy-array function parameter, decayed the
+  // same way a C array parameter decays to a pointer to its element type)
+  // indexes like plain C pointer arithmetic: `arr[idx]` is `*(arr + idx)`,
+  // not a direct array index over the pointer itself. Build the `arr + idx`
+  // natively in IREP2: add2t over a pointer lhs is exactly the round-trip of
+  // the legacy plus_exprt whose result type was the pointer type (the pointer
+  // operand short-circuits the mismatched-width consistency check, so no
+  // reconciliation is needed).
+  if (is_pointer_type(arr2->type))
+  {
+    exprt ptr_plus_idx = migrate_expr_back(add2tc(arr2->type, arr2, idx2));
+    return build_dereference(ptr_plus_idx, t);
   }
   return index_exprt(arr, idx, t);
 }
@@ -152,8 +199,8 @@ exprt migrate_binary(const exprt &a, const exprt &b, Make make)
   return migrate_expr_back(make(a2, b2));
 }
 
-// As migrate_binary, for a typed node make(migrate_type(t), a, b). Also restores
-// the exact result type, which migrate_type drops (e.g. #cpp_type).
+// As migrate_binary, for a typed node make(migrate_type(t), a, b). Also
+// restores the exact result type, whose attributes migrate_type may drop.
 template <typename Make>
 exprt migrate_typed_binary(
   const exprt &a,
@@ -233,6 +280,14 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
     });
 }
 
+exprt build_mul(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return mul2tc(ty, x, y);
+    });
+}
+
 exprt build_mod(const exprt &a, const exprt &b, const typet &t)
 {
   return migrate_typed_binary(
@@ -281,7 +336,7 @@ exprt build_if(const exprt &cond, const exprt &then_, const exprt &else_)
   if (then2->type->type_id != else2->type->type_id)
     return if_exprt(cond, then_, else_);
   exprt result = migrate_expr_back(if2tc(then2->type, cond2, then2, else2));
-  // migrate_type drops type attributes (e.g. #cpp_type); restore the exact type.
+  // migrate_type drops some type attributes; restore the exact type.
   result.type() = then_.type();
   return result;
 }

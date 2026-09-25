@@ -2,10 +2,10 @@
 #define CPROVER_GOTO_PROGRAMS_RW_SET
 
 #include <pointer-analysis/value_sets.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
 #include <unordered_set>
 
 class rw_sett

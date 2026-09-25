@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/expr.h>
-#include <util/type.h>
-#include <util/symbol.h>
+#include <util/irep/expr.h>
+#include <util/irep/type.h>
+#include <util/symtab/symbol.h>
 #include <vector>
 
 // Shared IREP2 expression-construction helpers for the Python frontend (V.3).
@@ -16,8 +16,9 @@
 // Two migrate_type round-trip hazards are guarded uniformly:
 //   * a dynamically-sized array type (non-constant size) throws get_width
 //     downstream, so the relevant helpers fall back to the legacy constructor;
-//   * type attributes such as #cpp_type are dropped by migrate_type, so the
-//     member/index/typecast/dereference helpers restore the exact result type
+//   * some type attributes are dropped by migrate_type (#cpp_type itself is
+//     carried since §10), so the member/index/typecast/dereference helpers
+//     restore the exact result type
 //     (result.type() = t) -- load-bearing e.g. to keep a 1-char string element
 //     distinct from an 8-bit int.
 namespace python_expr
@@ -25,6 +26,15 @@ namespace python_expr
 // True iff `t` is, or transitively points to/contains, an array whose size is
 // nil or non-constant (a dyn-sized array that does not survive migrate_type).
 bool contains_dyn_array(const typet &t);
+
+// Store `t` as `sym`'s type IREP2-side, or legacy when `t` holds a
+// dyn-sized array (docs/roadmap/scope-python-irep2.md §10.4).
+void set_symbol_type(symbolt &sym, const typet &t);
+
+// Store `t` as `sym`'s type IREP2-side unless migrate_type would lose it: a
+// nil type, a dyn-sized array or #python_aggregate
+// (docs/roadmap/scope-python-irep2.md §10.4).
+void set_symbol_type_if_carried(symbolt &sym, const typet &t);
 
 // Symbol reference `sym`.
 exprt build_symbol(const symbolt &sym);
@@ -34,6 +44,12 @@ exprt build_typecast(const exprt &from, const typet &t);
 
 // Address-of an lvalue `obj` (symbol/member/index source).
 exprt build_address_of(const exprt &obj);
+
+// A function name used as a value decays to a function pointer, as it already
+// does in call-argument position. Storing the code symbol itself aborts
+// conversion with "got invalid code for function" (#6640). Non-function
+// expressions are returned unchanged.
+exprt decay_function_to_pointer(const exprt &value);
 
 // Dereference `ptr` to a value of type `t`.
 exprt build_dereference(const exprt &ptr, const typet &t);
@@ -96,6 +112,9 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 
 // `a % b : t` over same-width operands (modulus2t asserts width consistency).
 exprt build_mod(const exprt &a, const exprt &b, const typet &t);
+
+// `a * b : t` over same-width operands (mul2t asserts width consistency).
+exprt build_mul(const exprt &a, const exprt &b, const typet &t);
 
 // Equality `a == b` over same-typed operands. migrate lowers a legacy
 // "=" node to equality2tc(migrate(a), migrate(b)), so this is the

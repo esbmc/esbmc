@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract scale
+^  contract ensures$
+^VERIFICATION FAILED$

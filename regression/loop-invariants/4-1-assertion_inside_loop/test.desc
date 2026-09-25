@@ -1,4 +1,5 @@
 CORE
 main.c
 --loop-invariant-check --multi-property
-^VERIFICATION FAILED$
+^WARNING: every violated claim lies downstream of a loop invariant havoc
+^VERIFICATION UNKNOWN$

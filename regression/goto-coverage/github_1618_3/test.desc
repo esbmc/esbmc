@@ -5,4 +5,4 @@ main.c
 ^Reached Assertion Instances: 4
 ^Total Assertion Instances: 4
 ^Assertion Instances Coverage: 100%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

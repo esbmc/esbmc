@@ -1,0 +1,5 @@
+CORE
+main.c
+
+dereference failure: Incorrect alignment when accessing data object
+^VERIFICATION FAILED$

@@ -1,5 +1,4 @@
 import ast
-import copy
 
 
 class AssignmentVisitorsMixin:
@@ -38,10 +37,7 @@ class AssignmentVisitorsMixin:
             var_type = self._extract_type_from_annotation(node.annotation)
             self.known_variable_types[var_name] = var_type
             self.variable_annotations[var_name] = node.annotation
-            if isinstance(node.value, ast.List):
-                self.list_literal_values[var_name] = copy.deepcopy(node.value)
-            else:
-                self.list_literal_values.pop(var_name, None)
+            self._track_literal_binding(var_name, node.value)
 
             if (node.value is not None and isinstance(node.value, ast.Call)
                     and self._is_defaultdict_call(node.value)):
@@ -68,9 +64,9 @@ class AssignmentVisitorsMixin:
 
     def visit_AugAssign(self, node):
         """Lower augmented assignment into simple assignment when needed."""
-        if (isinstance(node.target, ast.Subscript) and isinstance(node.target.value, ast.Name)
-                and node.target.value.id in self.list_literal_values):
+        if isinstance(node.target, ast.Subscript) and isinstance(node.target.value, ast.Name):
             self.list_literal_values.pop(node.target.value.id, None)
+            self.dict_literal_values.pop(node.target.value.id, None)
 
         self._update_assignment_call_origins([node.target], None)
 

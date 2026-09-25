@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --proof-cache proof-store --claim-fingerprint-dump fp.tsv
+^VERIFICATION SUCCESSFUL$
+CHECK_FILE fp.tsv contains UNSAT

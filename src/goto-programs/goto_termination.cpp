@@ -2,9 +2,9 @@
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loops.h>
 #include <irep2/irep2_expr.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_expr.h>
 #include <algorithm>
 #include <functional>
 #include <map>
@@ -733,7 +733,8 @@ void goto_termination(
   // function uniformly. __ESBMC_main is loop-free so this is a no-op
   // there; library helpers (body.hide) DO have loops but those are
   // explicitly skipped in the per-function pass below.
-  goto_k_induction(goto_functions, ns);
+  goto_k_induction(
+    goto_functions, ns, options.get_bool_option("multi-property"));
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
   // that would make IS UNSAT unsound, and insert termination

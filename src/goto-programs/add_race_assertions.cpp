@@ -1,12 +1,16 @@
 #include <goto-programs/add_race_assertions.h>
+#include <functional>
+#include <goto-programs/exception_globals.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
-#include <util/expr_util.h>
-#include <util/migrate.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_guard.h>
-#include <util/prefix.h>
-#include <util/std_expr.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_expr.h>
+#include <util/symtab/symbol_generator.h>
+#include <algorithm>
 #include <map>
 #include <set>
 
@@ -98,15 +102,40 @@ collect_address_taken(const expr2tc &expr, rw_sett::shared_localst &out)
     [&out](const expr2tc &op) { collect_address_taken(op, out); });
 }
 
-// A stack local becomes shared between threads when its address is handed to a
-// newly spawned thread, i.e. passed as an argument to pthread_create. Only such
-// locals need to stay race-eligible when accessed directly by name (issue
-// #4424). Collecting *every* address-taken local instead floods large/CUDA
-// kernels with race guards, and because each guard inserts yield()
-// context-switch points it dilutes context-bounded search and can hide real
-// races. Restrict the escape set to the arguments of pthread_create calls.
+// Root symbol an lvalue denotes, looking through the selectors that do not
+// change which object is written (`s.f` -> s, `a[k]` -> a, `(T)x` -> x). A
+// dereference yields nil: `*p = &x` names no statically-known destination.
+static expr2tc lvalue_root(const expr2tc &e)
+{
+  expr2tc obj = e;
+  while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+  {
+    if (is_member2t(obj))
+      obj = to_member2t(obj).source_value;
+    else if (is_index2t(obj))
+      obj = to_index2t(obj).source_value;
+    else
+      obj = to_typecast2t(obj).from;
+  }
+  return is_symbol2t(obj) ? obj : expr2tc();
+}
+
+// A stack local becomes shared between threads when its address reaches a newly
+// spawned thread. Passing it straight to pthread_create is only the direct
+// case: the address also reaches the thread when it is parked somewhere the
+// thread can read it, either a global or another local that has itself escaped
+// (`g = &i;`, or `p = &i;` with `&p` handed to pthread_create). Both leave the
+// local race-eligible when accessed directly by name, and missing them drops
+// the race entirely.
+//
+// The escape set stays deliberately narrow -- only locals whose address is
+// stored into a global or an already-escaped object. Collecting *every*
+// address-taken local floods large/CUDA kernels with race guards, and because
+// each guard inserts yield() context-switch points it dilutes context-bounded
+// search and can hide real races (issue #4424).
 static void collect_thread_escaped_locals(
   const goto_programt &goto_program,
+  const namespacet &ns,
   rw_sett::shared_localst &out)
 {
   forall_goto_program_instructions (i_it, goto_program)
@@ -122,6 +151,164 @@ static void collect_thread_escaped_locals(
       continue;
     for (const expr2tc &arg : call.operands)
       collect_address_taken(arg, out);
+  }
+
+  /* Propagate through stores until nothing new escapes. Bounded by the number
+   * of symbols, since `out` only ever grows. */
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    forall_goto_program_instructions (i_it, goto_program)
+    {
+      if (!i_it->is_assign())
+        continue;
+      const code_assign2t &a = to_code_assign2t(i_it->code);
+
+      const expr2tc dest = lvalue_root(a.target);
+      if (!is_nil_expr(dest))
+      {
+        const irep_idt &dname = to_symbol2t(dest).thename;
+        const symbolt *dsym = ns.lookup(dname);
+        if (!dsym)
+          continue;
+        if (!dsym->static_lifetime && out.count(dname) == 0)
+          continue;
+      }
+      /* A nil root means the destination is a dereference (`*p = &i`), whose
+       * target we cannot name here. Assume it may be reachable from a thread:
+       * the alternative is to drop the store, which loses the race outright. */
+
+      rw_sett::shared_localst taken;
+      collect_address_taken(a.source, taken);
+      for (const irep_idt &n : taken)
+        if (out.insert(n).second)
+          changed = true;
+    }
+  }
+}
+
+// Does `e` mention symbol `name` as a value (not merely as the object of an
+// address-of)? Used to see a pointer parameter being stored somewhere.
+static bool mentions_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+  bool found = false;
+  e->foreach_operand([&](const expr2tc &op) {
+    if (!found)
+      found = mentions_symbol(op, name);
+  });
+  return found;
+}
+
+// Parameter positions whose incoming pointer a function parks somewhere a
+// thread may reach: stored into a global, through a dereference, or handed on
+// to another function that does the same. `void set_ptr(int *q) { g = q; }`
+// makes position 0 of set_ptr escaping, so `set_ptr(&i)` escapes `i`.
+//
+// Without this a local reaching a thread through a helper keeps its accesses
+// unguarded and the race is lost. Keying on the position rather than on "any
+// address-taken call argument" is what stops this from degenerating into the
+// blanket escape set that floods large kernels (issue #4424).
+using escaping_paramst = std::map<irep_idt, std::set<unsigned>>;
+
+static escaping_paramst compute_escaping_params(
+  const goto_functionst &goto_functions,
+  const namespacet &ns)
+{
+  escaping_paramst esc;
+
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    forall_goto_functions (f_it, goto_functions)
+    {
+      if (!f_it->second.body_available)
+        continue;
+      if (!is_code_type(f_it->second.type))
+        continue;
+      const std::vector<irep_idt> &pnames =
+        to_code_type(f_it->second.type).argument_names;
+
+      for (unsigned i = 0; i < pnames.size(); i++)
+      {
+        if (pnames[i].empty() || esc[f_it->first].count(i))
+          continue;
+
+        bool escapes = false;
+        forall_goto_program_instructions (i_it, f_it->second.body)
+        {
+          if (i_it->is_assign())
+          {
+            const code_assign2t &a = to_code_assign2t(i_it->code);
+            if (!mentions_symbol(a.source, pnames[i]))
+              continue;
+            /* A nil root is a store through a pointer: destination unknown. */
+            const expr2tc dest = lvalue_root(a.target);
+            if (is_nil_expr(dest))
+              escapes = true;
+            else
+            {
+              const symbolt *d = ns.lookup(to_symbol2t(dest).thename);
+              if (d && d->static_lifetime)
+                escapes = true;
+            }
+          }
+          else if (i_it->is_function_call())
+          {
+            const code_function_call2t &c = to_code_function_call2t(i_it->code);
+            if (!is_symbol2t(c.function))
+              continue;
+            auto cit = esc.find(to_symbol2t(c.function).thename);
+            if (cit == esc.end())
+              continue;
+            for (unsigned j = 0; j < c.operands.size(); j++)
+              if (
+                cit->second.count(j) &&
+                mentions_symbol(c.operands[j], pnames[i]))
+                escapes = true;
+          }
+          if (escapes)
+            break;
+        }
+
+        if (escapes)
+        {
+          esc[f_it->first].insert(i);
+          changed = true;
+        }
+      }
+    }
+  }
+  return esc;
+}
+
+// Escape every local whose address is passed at an escaping parameter position.
+static void collect_escapes_through_calls(
+  const goto_functionst &goto_functions,
+  const escaping_paramst &esc,
+  rw_sett::shared_localst &out)
+{
+  forall_goto_functions (f_it, goto_functions)
+  {
+    forall_goto_program_instructions (i_it, f_it->second.body)
+    {
+      if (!i_it->is_function_call())
+        continue;
+      const code_function_call2t &c = to_code_function_call2t(i_it->code);
+      if (!is_symbol2t(c.function))
+        continue;
+      auto cit = esc.find(to_symbol2t(c.function).thename);
+      if (cit == esc.end())
+        continue;
+      for (unsigned j = 0; j < c.operands.size(); j++)
+        if (cit->second.count(j))
+          collect_address_taken(c.operands[j], out);
+    }
   }
 }
 
@@ -182,6 +369,115 @@ static void collect_address_taken_functions(
 // that state. Such helpers stay fully instrumented -- they are over-, never
 // under-approximated -- so no race is hidden; the original false alarm simply
 // persists for that (rare) shape.
+/// Direct callees of @p body, plus every function whose address it takes (a
+/// function pointer may be called from anywhere, so counting it as a callee
+/// only ever over-approximates reachability).
+static void collect_callees(const goto_programt &body, std::set<irep_idt> &out)
+{
+  auto add_address_taken = [&out](const expr2tc &e) {
+    if (is_nil_expr(e))
+      return;
+    std::function<void(const expr2tc &)> rec = [&](const expr2tc &sub) {
+      if (is_nil_expr(sub))
+        return;
+      if (is_address_of2t(sub))
+      {
+        const expr2tc &ptr = to_address_of2t(sub).ptr_obj;
+        if (is_symbol2t(ptr))
+          out.insert(to_symbol2t(ptr).thename);
+      }
+      sub->foreach_operand(rec);
+    };
+    rec(e);
+  };
+
+  forall_goto_program_instructions (i_it, body)
+  {
+    if (i_it->is_function_call())
+    {
+      const code_function_call2t &call = to_code_function_call2t(i_it->code);
+      if (is_symbol2t(call.function))
+        out.insert(to_symbol2t(call.function).thename);
+    }
+    add_address_taken(i_it->code);
+    add_address_taken(i_it->guard);
+  }
+}
+
+static std::set<irep_idt>
+closure(const goto_functionst &goto_functions, const std::set<irep_idt> &seeds)
+{
+  std::set<irep_idt> seen;
+  std::vector<irep_idt> work(seeds.begin(), seeds.end());
+  while (!work.empty())
+  {
+    irep_idt f = work.back();
+    work.pop_back();
+    if (!seen.insert(f).second)
+      continue;
+    auto it = goto_functions.function_map.find(f);
+    if (it == goto_functions.function_map.end() || !it->second.body_available)
+      continue;
+    std::set<irep_idt> callees;
+    collect_callees(it->second.body, callees);
+    for (const irep_idt &c : callees)
+      if (!seen.count(c))
+        work.push_back(c);
+  }
+  return seen;
+}
+
+/// Functions that provably run before any thread exists.
+///
+/// __ESBMC_main performs the program's initialisation and then calls the entry
+/// point; only code reachable from the entry point ever creates a thread. So
+/// everything __ESBMC_main calls *before* its first spawn-reaching callee runs
+/// single-threaded, and those accesses cannot race with anything.
+///
+/// Worth suppressing rather than merely correct to suppress: each instrumented
+/// access costs a yield and two updates of the (infinite) race-flag array, and
+/// the Python frontend's generated `python_init` alone carries ~78 of them
+/// (github #6610). A function that also runs after the entry point is excluded,
+/// so this never hides an access that could race.
+static std::set<irep_idt>
+compute_pre_thread_functions(const goto_functionst &goto_functions)
+{
+  auto entry = goto_functions.function_map.find(goto_functions.main_id());
+  if (
+    entry == goto_functions.function_map.end() || !entry->second.body_available)
+    return {};
+
+  // Callees of __ESBMC_main in program order, split at the first one from
+  // which a thread spawn is reachable -- that is the entry point.
+  std::vector<irep_idt> ordered;
+  forall_goto_program_instructions (i_it, entry->second.body)
+    if (i_it->is_function_call())
+    {
+      const code_function_call2t &call = to_code_function_call2t(i_it->code);
+      if (is_symbol2t(call.function))
+        ordered.push_back(to_symbol2t(call.function).thename);
+    }
+
+  std::set<irep_idt> before, after;
+  bool seen_spawner = false;
+  for (const irep_idt &callee : ordered)
+  {
+    const std::set<irep_idt> reach = closure(goto_functions, {callee});
+    if (!seen_spawner && reach.count("c:@F@__ESBMC_spawn_thread"))
+      seen_spawner = true;
+    (seen_spawner ? after : before).insert(callee);
+  }
+
+  if (!seen_spawner)
+    return {}; // single-threaded program: nothing to gain
+
+  std::set<irep_idt> pre = closure(goto_functions, before);
+  const std::set<irep_idt> post = closure(goto_functions, after);
+  for (const irep_idt &f : post)
+    pre.erase(f);
+  return pre;
+}
+
 static std::set<irep_idt>
 compute_always_atomic_functions(const goto_functionst &goto_functions)
 {
@@ -274,12 +570,105 @@ compute_always_atomic_functions(const goto_functionst &goto_functions)
   return always_atomic;
 }
 
+// Whether a call runs a function body at this instruction; rw_sett uses the
+// same test to read a body-less callee's arguments at the call site.
+static bool call_runs_body(const expr2tc &code, const namespacet &ns)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (!is_symbol2t(call.function))
+    return true;
+  return !ns.lookup(to_symbol2t(call.function).thename)->get_value().is_nil();
+}
+
+static bool has_write(const rw_sett &rw_set)
+{
+  return std::any_of(
+    rw_set.entries.begin(), rw_set.entries.end(), [](const auto &entry) {
+      return entry.second.w;
+    });
+}
+
+// For a call that runs a body, rw_sett records a write only for its `ret`.
+static bool stores_call_result_in_shared(
+  const goto_programt::instructiont &instruction,
+  const rw_sett &rw_set,
+  const namespacet &ns)
+{
+  return instruction.is_function_call() &&
+         call_runs_body(instruction.code, ns) && has_write(rw_set);
+}
+
+// A call that runs a body is emitted after the atomic block, like a return or
+// goto: inside it the callee would run under the atomic lock.
+static bool emitted_after_atomic_block(
+  const goto_programt::instructiont &instruction,
+  const namespacet &ns)
+{
+  return instruction.is_return() || instruction.is_goto() ||
+         (instruction.is_function_call() &&
+          call_runs_body(instruction.code, ns));
+}
+
+// The `IF __ESBMC_exc_thrown GOTO dispatch` that remove_exceptions places
+// behind a call.
+static bool
+is_exception_dispatch(const goto_programt::instructiont &instruction)
+{
+  return instruction.is_goto() && is_symbol2t(instruction.guard) &&
+         to_symbol2t(instruction.guard).thename == exception_globals::thrown_id;
+}
+
+// Rewrite `ret = f(...)` as `DECL tmp; tmp = f(...); ret = tmp; DEAD tmp`.
+// The DECL takes the call's place, so a jump to the call still declares tmp.
+// The store goes after the exception-dispatch guards remove_exceptions puts
+// behind the call: a callee that throws does not assign `ret`.
+static void store_call_result_via_local(
+  contextt &context,
+  goto_programt &goto_program,
+  goto_programt::targett call_it,
+  symbol_generator &tmp_sym)
+{
+  goto_programt::instructiont original;
+  original.swap(*call_it);
+
+  const code_function_call2t &call = to_code_function_call2t(original.code);
+  const type2tc type = call.ret->type;
+  const irep_idt tmp_id = tmp_sym.new_symbol(context, type, "call_result$").id;
+  const expr2tc tmp = symbol2tc(type, tmp_id);
+  const expr2tc store = code_assign2tc(call.ret, tmp);
+  original.code = code_function_call2tc(tmp, call.function, call.operands);
+
+  call_it->type = DECL;
+  call_it->code = code_decl2tc(type, tmp_id);
+  call_it->function = original.function;
+  call_it->location = original.location;
+
+  goto_programt::targett next = std::next(call_it);
+  *goto_program.insert(next) = original;
+  while (next != goto_program.instructions.end() &&
+         is_exception_dispatch(*next))
+    ++next;
+
+  goto_programt::targett t = goto_program.insert(next);
+  t->type = ASSIGN;
+  t->code = store;
+  t->function = original.function;
+  t->location = original.location;
+
+  t = goto_program.insert(next);
+  t->type = DEAD;
+  t->code = code_dead2tc(type, tmp_id);
+  t->function = original.function;
+  t->location = original.location;
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
   w_guardst &w_guards,
   const rw_sett::shared_localst &shared_locals,
-  bool body_is_atomic)
+  bool body_is_atomic,
+  symbol_generator &tmp_sym)
 {
   namespacet ns(context);
 
@@ -362,14 +751,7 @@ void add_race_assertions(
     {
       rw_sett rw_set(ns, i_it, instruction.code, &shared_locals);
 
-      bool has_write = false;
-      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
-      {
-        has_write = true;
-        break;
-      }
-
-      if (has_write)
+      if (has_write(rw_set))
       {
         atomic_region_touched_shared = true;
 
@@ -417,6 +799,15 @@ void add_race_assertions(
 
       if (rw_set.entries.empty())
         continue;
+
+      // Storing a call's result into shared memory is instrumented as a write
+      // of its own, after the call: wrapping the call in the atomic block below
+      // would run the callee under the atomic lock and hide its races.
+      if (stores_call_result_in_shared(instruction, rw_set, ns))
+      {
+        store_call_result_via_local(context, goto_program, i_it, tmp_sym);
+        continue;
+      }
 
       goto_programt::instructiont original_instruction;
       original_instruction.swap(instruction);
@@ -475,7 +866,9 @@ void add_race_assertions(
       // We need to keep all instructions before the return,
       // so when we process the return we need add the
       // original instruction at the end
-      if (!original_instruction.is_return() && !original_instruction.is_goto())
+      const bool original_after_block =
+        emitted_after_atomic_block(original_instruction, ns);
+      if (!original_after_block)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -518,7 +911,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if (original_instruction.is_return() || original_instruction.is_goto())
+      if (original_after_block)
       {
         goto_programt::targett t = goto_program.insert(i_it);
         *t = original_instruction;
@@ -578,13 +971,20 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
+  namespacet ns(context);
   rw_sett::shared_localst shared_locals;
-  collect_thread_escaped_locals(goto_program, shared_locals);
+  collect_thread_escaped_locals(goto_program, ns, shared_locals);
 
   // No call-graph context is available for a single program, so no function
   // can be proven always-atomic; instrument every access normally.
+  symbol_generator tmp_sym("race_check::");
   add_race_assertions(
-    context, goto_program, w_guards, shared_locals, /*body_is_atomic=*/false);
+    context,
+    goto_program,
+    w_guards,
+    shared_locals,
+    /*body_is_atomic=*/false,
+    tmp_sym);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
@@ -593,21 +993,27 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
+  namespacet ns(context);
+  symbol_generator tmp_sym("race_check::");
 
   // An escape analysis must see the whole program: a local declared in one
   // function may have its address taken there and be dereferenced in another
   // thread's entry function. Collect address-taken locals across every body
   // before instrumenting any of them.
   rw_sett::shared_localst shared_locals;
+  collect_escapes_through_calls(
+    goto_functions, compute_escaping_params(goto_functions, ns), shared_locals);
   forall_goto_functions (f_it, goto_functions)
-    collect_thread_escaped_locals(f_it->second.body, shared_locals);
+    collect_thread_escaped_locals(f_it->second.body, ns, shared_locals);
 
   // A function reached only from atomic contexts runs its whole body under the
   // global atomic lock, so its accesses can never race and must be instrumented
   // as atomic (issues #5133-#5135). This is an interprocedural property, so it
   // is computed once over the whole call graph before any body is instrumented.
-  const std::set<irep_idt> always_atomic =
+  std::set<irep_idt> always_atomic =
     compute_always_atomic_functions(goto_functions);
+  for (const irep_idt &f : compute_pre_thread_functions(goto_functions))
+    always_atomic.insert(f);
 
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
@@ -616,7 +1022,8 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
         f_it->second.body,
         w_guards,
         shared_locals,
-        always_atomic.count(f_it->first) > 0);
+        always_atomic.count(f_it->first) > 0,
+        tmp_sym);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

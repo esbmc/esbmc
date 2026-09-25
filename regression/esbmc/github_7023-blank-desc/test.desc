@@ -1,0 +1,7 @@
+CORE
+main.c
+--result-only
+^  PASSED +\[main\.assertion\.1\]  line 5[^\t\n]*$
+^  FAILED +\[main\.assertion\.2\]  line 6  P2$
+^\*\* 1 of 2 properties failed, 1 passed$
+^VERIFICATION FAILED$

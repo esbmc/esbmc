@@ -3,7 +3,7 @@
 // (DECL + ASSIGN + scope-exit DEAD) neither corrupts the declared values nor
 // suppresses bug detection: compute() still leaves g == 12, so the wrong-value
 // assertion is a reachable violation reported as VERIFICATION FAILED under
-// --irep2-native-body.
+// native conversion.
 #include <assert.h>
 
 int g;

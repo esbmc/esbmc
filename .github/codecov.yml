@@ -1,0 +1,13 @@
+coverage:
+  precision: 2
+  round: down
+  range: "50...80"
+
+# Codecov-side exclusions. 
+ignore:
+  - "src/ansi-c/cpp/**"
+  - "src/clang-c-frontend/headers/**"
+  - "src/c2goto/library/libm/musl/**"
+  - "src/lib/toml.hpp"
+  - "build/**"
+  - "**/unit/**"

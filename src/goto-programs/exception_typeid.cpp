@@ -1,8 +1,8 @@
 #include <goto-programs/exception_typeid.h>
 
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/symbol.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
 
 #include <algorithm>
 
@@ -119,4 +119,14 @@ exception_typeidt::concrete_subtype_ids(const irep_idt &caught) const
     if (is_subtype(name, caught))
       ids.insert(id);
   return ids;
+}
+
+std::vector<std::pair<irep_idt, unsigned>>
+exception_typeidt::concrete_subtypes(const irep_idt &caught) const
+{
+  std::vector<std::pair<irep_idt, unsigned>> out;
+  for (const auto &[name, id] : name_to_id)
+    if (is_subtype(name, caught))
+      out.emplace_back(name, id);
+  return out;
 }

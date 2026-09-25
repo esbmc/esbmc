@@ -1,0 +1,4 @@
+CORE
+main.c
+--loop-invariant --base-k-step 0 --max-k-step 2
+^ERROR: Please specify --base-k-step >= 1

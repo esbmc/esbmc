@@ -1,0 +1,4 @@
+CORE
+main.c
+--function array_swap --enforce-contract array_swap
+^VERIFICATION SUCCESSFUL$

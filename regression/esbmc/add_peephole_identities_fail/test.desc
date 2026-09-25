@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^Generated 2 VCC\(s\), 2 remaining after simplification
+^VERIFICATION FAILED$

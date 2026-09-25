@@ -1,0 +1,4 @@
+CORE
+cbmc_fpclassify.goto
+--binary
+^VERIFICATION SUCCESSFUL$

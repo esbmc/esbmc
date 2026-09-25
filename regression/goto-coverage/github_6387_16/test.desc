@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --branch-coverage --unwind 2
+^COVERAGE ANALYSIS INCOMPLETE
+reason: the unwinding bound cut off

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+assertion return_value\$_scale\$[0-9]+ == 999

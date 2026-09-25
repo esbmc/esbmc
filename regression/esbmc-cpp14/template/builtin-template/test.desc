@@ -1,5 +1,6 @@
 CORE
 main.cpp
 --std c++14 --no-abstracted-cpp-includes
+REQUIRES host_cxx_headers
 
 ^VERIFICATION SUCCESSFUL$

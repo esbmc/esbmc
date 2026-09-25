@@ -8,10 +8,10 @@
 #include <goto-programs/abstract-interpretation/interval_template.h>
 #include <goto-programs/abstract-interpretation/wrapped_interval.h>
 #include <boost/serialization/nvp.hpp>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <irep2/irep2_utils.h>
-#include <util/mp_arith.h>
-#include <util/threeval.h>
+#include <util/arith/mp_arith.h>
+#include <util/base/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 #include <variant>
 
@@ -67,8 +67,7 @@ public:
     enable_contraction_for_abstract_states; /// Use contractor for <= operations
   static bool
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
-  static bool
-    enable_real_intervals; /// Enabled wrapped intervals (disables Integers)
+  static bool enable_real_intervals; /// Enable real (floating-point) intervals
   static bool enable_assume_asserts; /// Asserts are propagates as assumptions
   static bool
     enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
@@ -186,6 +185,9 @@ public:
    */
   void assume(const expr2tc &);
 
+  /// Under --interval-analysis-assume-asserts, narrows the state to \p guard.
+  void assume_assertion(const expr2tc &guard, const ai_baset &ai);
+
   /**
    * @brief Updates the interval state based on a single goto-program instruction.
    *
@@ -196,6 +198,14 @@ public:
    * @param from: iterator to the instruction to process
    */
   void process_instruction(goto_programt::const_targett from);
+
+  /** JOIN the if-branch snapshot value with the current (else-branch) domain
+   *  value for lhs.  Both SSA variables for a base name share the same key, so
+   *  by the time phi_function runs only the else-branch value remains; the
+   *  snapshot preserves the if-branch value for the correct HULL computation. */
+  void phi_join_with_snapshot(
+    const expr2tc &lhs,
+    const std::shared_ptr<interval_map> &if_snapshot);
 
   /**
    * @brief Uses the abstract state to simplify a given expression using context-
@@ -242,11 +252,12 @@ protected:
   bool bottom;
 
   /**
-   * @brief Recursively explores an Expression until it reaches a symbol. If the
-   * symbol is a BV, then removes it from the int_map
+   * @brief Recursively explores an Expression until it reaches a symbol, then
+   * removes it from the int_map whatever the symbol's type
    *
    * TODO: There are a lot of expressions that are not supported
-   * TODO: A utility function that recursively extracts all the symbols of an expr would be very useful
+   * TODO: A utility function that recursively extracts all the symbols of an
+   * expr would be very useful
    * @param expr
    */
   void havoc_rec(const expr2tc &expr);

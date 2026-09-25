@@ -1,0 +1,7 @@
+CORE
+main.c
+--generate-ctest-testcase --ctest-output-dir out
+^Generated CTest test case\: test_case\.c$
+^VERIFICATION FAILED$
+SEED_FILE out/CMakeLists.txt
+CHECK_FILE out/CMakeLists.txt contains project\(ESBMCGeneratedTest C\)

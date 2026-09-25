@@ -1,0 +1,4 @@
+CORE
+cbmc_java_mode_print.goto
+--binary --function main --goto-functions-only
+^\s*ASSIGN main::1::x=1;$

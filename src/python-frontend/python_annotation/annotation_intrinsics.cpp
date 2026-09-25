@@ -48,7 +48,10 @@ const std::map<std::string, std::string> &builtin_functions()
     {"delattr", "NoneType"},
     {"callable", "bool"},
     {"id", "int"},
-    {"hash", "int"},
+    // Fallback for a hash(...) call site this table can't see the argument
+    // of (e.g. `f = hash`). Callers that do have the argument check it first
+    // and use "int" unless it's bytes-typed -- see is_generic_hash_call.
+    {"hash", "bytes"},
     {"repr", "str"},
     {"ascii", "str"},
     {"ord", "int"},
@@ -82,6 +85,7 @@ const std::map<std::string, std::string> &builtin_functions()
     {"__pyt_join", "NoneType"},
     {"__pyt_terminate", "NoneType"},
     {"__ESBMC_pylock_block_and_check", "NoneType"},
+    {"__pyt_lock_release_waiters", "NoneType"},
 
     // Execution functions
     {"eval", "Any"},

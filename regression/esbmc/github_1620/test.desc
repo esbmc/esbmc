@@ -1,0 +1,5 @@
+CORE
+main.c
+
+assertion invalid_char_pt != x4
+^VERIFICATION FAILED$

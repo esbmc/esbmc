@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_type_description(
@@ -88,8 +88,8 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::PointerArrayToPtr:
   {
-    // auxiliary type: pointer (FuncToPtr decay)
-    // This part is for FunctionToPointer decay only
+    // auxiliary type: pointer (ArrayToPtr decay)
+    // This part is for ArrayToPointer decay only
     assert(typeIdentifier.find("ArrayToPtr") != std::string::npos);
 
     // Array type descriptor is like:
@@ -436,7 +436,6 @@ bool solidity_convertert::get_type_description(
 
     new_type = pointer_typet(symbol_typet(id));
     set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
-    set_sol_contract(new_type, cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -543,14 +542,14 @@ bool solidity_convertert::get_type_description(
   {
     // do nothing as it won't be used
     new_type = struct_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     set_sol_type(new_type, SolidityGrammar::SolType::TUPLE_RETURNS);
     break;
   }
   case SolidityGrammar::TypeNameT::ErrorTypeName:
   {
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     break;
   }
   case SolidityGrammar::TypeNameT::UserDefinedTypeName:
@@ -571,14 +570,6 @@ bool solidity_convertert::get_type_description(
   //    - Constant
   //    - Volatile
   //    - isRestrict
-
-  // set data location
-  if (typeIdentifier.find("_memory_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "memory");
-  else if (typeIdentifier.find("_storage_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "storage");
-  else if (typeIdentifier.find("_calldata_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "calldata");
 
   return false;
 }
@@ -694,7 +685,7 @@ bool solidity_convertert::get_array_to_pointer_type(
     std::string::npos)
   {
     new_type = unsigned_char_type();
-    new_type.set("#cpp_type", "unsigned_char");
+    new_type.cpp_type("unsigned_char");
   }
   else
   {
@@ -708,8 +699,6 @@ bool solidity_convertert::get_array_to_pointer_type(
   //    - isRestrict
   return false;
 }
-
-// parse a tuple to struct
 
 bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
@@ -851,7 +840,7 @@ bool solidity_convertert::get_elementary_type_name(
   {
     // for int_const type
     new_type = signedbv_typet(256);
-    new_type.set("#cpp_type", "signed_char");
+    new_type.cpp_type("signed_char");
     set_sol_type(new_type, SolidityGrammar::SolType::INT_CONST);
     break;
   }
@@ -863,7 +852,6 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::STRING:
   {
     // cpp: std::string str;
-    // new_type = symbol_typet("tag-std::string");
     new_type = string_t;
     break;
   }
@@ -984,7 +972,7 @@ bool solidity_convertert::get_parameter_list(
   {
     // equivalent to clang's "void"
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     break;
   }
   case SolidityGrammar::ParameterListT::ONE_PARAM:
@@ -1012,7 +1000,7 @@ bool solidity_convertert::get_parameter_list(
     // We will return null because we create the symbols of the struct accordingly
     assert(type_name["parameters"].size() > 1);
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     set_sol_type(new_type, SolidityGrammar::SolType::TUPLE_RETURNS);
     break;
   }
@@ -1025,8 +1013,6 @@ bool solidity_convertert::get_parameter_list(
 
   return false;
 }
-
-// parse the state variable
 
 bool solidity_convertert::get_array_pointer_type(
   const nlohmann::json &decl,
@@ -1163,7 +1149,8 @@ void solidity_convertert::convert_type_expr(
     if (is_byte_type(src_type) && is_byte_type(dest_type))
     {
       // prevent something like
-      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
+      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0,
+      // .anon_pad#3=0 }, this->$dynamic_pool);
       if (src_expr.is_struct())
         src_expr = make_aux_var(src_expr, src_expr.location());
 

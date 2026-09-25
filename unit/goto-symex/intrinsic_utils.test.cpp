@@ -13,9 +13,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <goto-symex/goto_symex.h>
-
-const mode_table_et mode_table[] = {};
+#include <goto-symex/engine/goto_symex.h>
 
 SCENARIO("the memcpy generation can generate valid results", "[symex]")
 {

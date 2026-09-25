@@ -1,0 +1,5 @@
+CORE
+prog.c
+--ltl safety.c -DLTL_PREFIX_BOUND=8
+^Final lowest outcome: LTL_BAD$
+^VERIFICATION FAILED$

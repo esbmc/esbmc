@@ -1,13 +1,14 @@
 #ifndef PYTHON_FRONTEND_STRING_HANDLER_H
 #define PYTHON_FRONTEND_STRING_HANDLER_H
 
-#include <util/expr.h>
-#include <util/std_types.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/context.h>
-#include <util/message.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/context.h>
+#include <util/message/message.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -79,6 +80,28 @@ public:
    * conclude a specific functional result, but we cannot wrongly conclude
    * SAFE either).
    */
+  /// repr() of a constant f-string operand under !r / !a, or empty when the
+  /// spelling is one this does not fold. Only an int's digits and a string
+  /// needing no escape are folded: reproducing CPython's quote choice and
+  /// escaping here would be easy to get subtly wrong (#7559).
+  static std::string fstring_repr_of_constant(const nlohmann::json &operand);
+
+  /// The rendered part for an f-string replacement field carrying a !r / !a
+  /// conversion: the folded repr where possible, else a sound nondet string.
+  exprt build_fstring_conversion(
+    const nlohmann::json &value,
+    int conversion,
+    const exprt &operand,
+    const locationt &location);
+
+  /// repr() of a runtime value, or nil when its type has no model: a number
+  /// or bool renders as str() does, a str through __python_str_repr. For an
+  /// ASCII value this is also ascii().
+  exprt build_repr(const exprt &value, const locationt &location);
+
+  /// The rendered text of one f-string replacement field.
+  exprt format_fstring_part(const nlohmann::json &value);
+
   exprt build_nondet_string_fallback(const locationt &location);
 
   /**
@@ -200,10 +223,8 @@ public:
 
   /**
    * @brief Handle string repetition
-   * @param op multiply operator (Eq, Mult)
    * @param lhs Left operand
    * @param rhs Right operand
-   * @param element JSON element with location info
    * @return Repetition expression
    */
   exprt handle_string_repetition(exprt &lhs, exprt &rhs);
@@ -579,7 +600,7 @@ public:
   handle_string_casefold(const exprt &string_obj, const locationt &location);
 
   /**
-   * @brief Handle str.count() method (constant-only support)
+   * @brief Handle str.count() method (constant fold, else runtime model)
    */
   exprt handle_string_count(
     const exprt &string_obj,
@@ -907,6 +928,21 @@ private:
     const std::string &float_bits,
     std::size_t width,
     int precision);
+
+public:
+  /**
+   * @brief Render a constant double as CPython's str()/repr() would: the
+   *        shortest decimal string that reads back as the same double.
+   *
+   * A whole value below 1e16 gets the "N.0" spelling; every other finite value
+   * (and nan/inf) uses the fewest %g significant digits that round-trip, which
+   * reproduces CPython's shortest repr and its fixed/exponential cut-over. This
+   * is total: it renders every double, so str()/repr() and f-string
+   * interpolation fold to the exact CPython string for inexact values too
+   * (str(0.1 + 0.2) == "0.30000000000000004", str(1e-5) == "1e-05"). The caller
+   * still emits a nondet string for a 32-bit float or a nondet value.
+   */
+  static std::string cpython_float_str(double d);
 };
 
 #endif // PYTHON_FRONTEND_STRING_HANDLER_H

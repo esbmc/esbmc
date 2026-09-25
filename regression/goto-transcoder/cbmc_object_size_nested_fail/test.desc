@@ -1,0 +1,5 @@
+CORE
+cbmc_object_size_nested_fail.goto
+--binary
+^\*\* 1 of 1 properties failed
+^VERIFICATION FAILED$

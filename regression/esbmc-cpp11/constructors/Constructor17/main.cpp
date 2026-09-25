@@ -1,3 +1,5 @@
+#include <cassert>
+
 class C
 {
 public:
@@ -16,7 +18,7 @@ int main(int argc, char *argv[])
 {
   int i = 10;
   int &ref = i;
-  C *pc = new C((char &)ref);
+  C *pc = new C(ref);
   assert(pc->v == 10);
   D d;
   d.r = 10;

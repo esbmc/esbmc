@@ -1,0 +1,6 @@
+CORE
+main.py
+--validate-violation-witness --witness witness.yaml --goto-functions-only
+main\.py line 16 column 13 function f\n\s+DECL signed long int tmp\$1;
+main\.py line 16 column 13 function f\n\s+IF !c THEN GOTO 1
+main\.py line 17 column 4 function f\n\s+DECL signed long int tmp\$2;

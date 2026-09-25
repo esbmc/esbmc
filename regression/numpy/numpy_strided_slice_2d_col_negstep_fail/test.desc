@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: strided column slicing \(a\[:, ::step\]\) currently supports only step=-1 for negative steps

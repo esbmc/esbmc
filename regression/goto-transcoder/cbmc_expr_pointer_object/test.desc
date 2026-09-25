@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_pointer_object.goto
+--binary
+^VERIFICATION SUCCESSFUL$

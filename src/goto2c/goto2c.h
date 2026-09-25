@@ -1,7 +1,7 @@
 #ifndef CPROVER_GOTO2C_H
 #define CPROVER_GOTO2C_H
 
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program.h>
 

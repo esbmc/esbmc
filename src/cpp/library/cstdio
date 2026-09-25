@@ -1,1 +1,47 @@
+#pragma once
+
 #include <stdio.h>
+
+// [cstdio.syn]: <cstdio> declares the C I/O functions in namespace std
+// (github #6063). Mirrors the cstdlib model's approach.
+namespace std
+{
+using ::size_t;
+using ::FILE;
+
+using ::clearerr;
+using ::fclose;
+using ::feof;
+using ::ferror;
+using ::fflush;
+using ::fgetc;
+using ::fgets;
+using ::fopen;
+using ::fprintf;
+using ::fputc;
+using ::fputs;
+using ::fread;
+using ::fscanf;
+using ::fseek;
+using ::ftell;
+using ::fwrite;
+using ::getc;
+using ::getchar;
+using ::printf;
+using ::putc;
+using ::putchar;
+using ::puts;
+using ::remove;
+using ::rename;
+using ::rewind;
+using ::scanf;
+using ::snprintf;
+using ::sprintf;
+using ::sscanf;
+using ::tmpfile;
+using ::tmpnam;
+using ::vfprintf;
+using ::vprintf;
+using ::vsnprintf;
+using ::vsprintf;
+} // namespace std

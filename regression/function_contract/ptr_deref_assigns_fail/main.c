@@ -14,6 +14,7 @@ int g = 0;
 int update(int *p, int val)
 {
   __ESBMC_requires(p != (int *)0);
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(int)));
   __ESBMC_assigns(g);           /* only g is declared */
   __ESBMC_ensures(__ESBMC_return_value == 0);
   g = val;

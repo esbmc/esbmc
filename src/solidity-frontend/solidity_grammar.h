@@ -215,9 +215,7 @@ enum ElementaryTypeNameT
   BYTES31,
   BYTES32,
 
-  // TODO: rule signed-integer-type
   // TODO: rule e
-  // TODO: fixed-bytes
   // TODO: fixed
   // TODO: ufixed
   ElementaryTypeNameTError

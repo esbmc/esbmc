@@ -5,7 +5,7 @@
  *  - generate VFT variable symbols
  *  - generate thunk functions for overriding methods
  */
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -28,12 +28,13 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/expr/string_constant.h>
+#include <util/message/message.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 
 #include <functional>
 #include <optional>
@@ -100,7 +101,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       get_overriden_methods(*md, cxxmethods_overriden);
 
       for (const auto &overriden_md_entry : cxxmethods_overriden)
-        add_thunk_method(cxxrd, overriden_md_entry.second, comp, type);
+        add_thunk_method(overriden_md_entry.second, comp, type);
     }
   }
 
@@ -169,6 +170,50 @@ symbolt *clang_cpp_convertert::check_vtable_type_symbol_existence(
   return context.find_symbol(vt_name);
 }
 
+/* typeid identity is the address of the printed type name, so every spelling of
+ * one type must print identically. Route record types through the record decl
+ * so that sugar (typedefs, elaborated `struct X`) cannot make the same class
+ * print two ways -- which is also what [expr.typeid]/1 requires, the operand's
+ * cv-qualifiers and typedefs being irrelevant. */
+std::string clang_cpp_convertert::rtti_type_name(const clang::QualType &qtype)
+{
+  if (const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl())
+    return rtti_type_name(*rd);
+  return qtype.getUnqualifiedType().getAsString();
+}
+
+std::string clang_cpp_convertert::rtti_type_name(const clang::CXXRecordDecl &rd)
+{
+#if CLANG_VERSION_MAJOR >= 22
+  const clang::QualType qtype = rd.getASTContext().getCanonicalTagType(&rd);
+#else
+  const clang::QualType qtype = rd.getASTContext().getRecordType(&rd);
+#endif
+  // The canonical type prints with the tag keyword ("struct B"); an operand's
+  // sugared type does not. Suppress it so both spellings agree and name() keeps
+  // reading as it did before.
+  clang::PrintingPolicy pp = rd.getASTContext().getPrintingPolicy();
+  pp.SuppressTagKeyword = true;
+  return qtype.getAsString(pp);
+}
+
+irep_idt
+clang_cpp_convertert::rtti_name_component_id(const irep_idt &vtable_type_id)
+{
+  return vtable_type_id.as_string() + "::@rtti_name";
+}
+
+struct_typet::componentt
+clang_cpp_convertert::rtti_name_component(const irep_idt &vtable_type_id)
+{
+  struct_typet::componentt c;
+  c.type() = pointer_typet(char_type());
+  c.set_name(rtti_name_component_id(vtable_type_id));
+  c.set("base_name", "@rtti_name");
+  c.set("pretty_name", "@rtti_name");
+  return c;
+}
+
 symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   const struct_typet::componentt &comp,
   struct_typet &type)
@@ -192,8 +237,13 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   vt_type_symb.mode = mode;
   {
     struct_typet st;
-    st.set("name", vt_type_symb.id);
-    vt_type_symb.set_type(std::move(st));
+    st.tag(vt_type_symb.id);
+    // Every vtable leads with the most-derived type's name, the way a real
+    // Itanium-ABI vtable leads with a type_info pointer. `typeid` on a
+    // polymorphic glvalue reads it through the object's vptr, which is the only
+    // way the dynamic type is available at a use site typed by a base (#6310).
+    st.components().push_back(rtti_name_component(vt_name));
+    vt_type_symb.set_type(migrate_type(st));
   }
   vt_type_symb.is_type = true;
   vt_type_symb.location = comp.location();
@@ -252,33 +302,38 @@ void clang_cpp_convertert::add_vtable_type_entry(
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
-  std::string virtual_name = comp.name().as_string();
-  struct_typet::componentt vt_entry;
-  vt_entry.type() = pointer_typet(comp.type());
-  vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
-  vt_entry.set("base_name", comp.base_name());
   /*
-   * `pretty_name` gets printed in symbol table:
-   *    virtual_table::BLAH@tag-BLAH={ .<pretty_name>=&<virtual_method_base_class> };
-   *    virtual_table::BLAH@tag-BLEH={ .<pretty_name>=&<thunk_to_overriding_method_in_derived_class> };
-   *    virtual_table::BLEH@tag-BLEH={ .<pretty_name>=&<overriding_function_in_derived_class> };
+   * `pretty_name` is what the symbol table prints for an entry, whether it
+   * resolves to a base's method, a thunk, or a derived override:
+   *    virtual_table::BLAH@tag-BLEH={ .<pretty_name>=&<thunk> };
+   * add_vtable_variable_symbols also keys the override switch map on it, since
+   * a component's `virtual_name` is no part of the IREP2 struct type (#4715).
    */
-  vt_entry.set("pretty_name", comp.get("virtual_name"));
-  vt_entry.set("virtual_name", comp.get("virtual_name"));
-  vt_entry.set("access", "public");
-  vt_entry.location() = comp.location();
-  // add an entry to the virtual table
+  const irep_idt entry_pretty_name = comp.get("virtual_name");
+
   assert(vtable_type_symbol);
   {
-    typet t = vtable_type_symbol->get_type();
-    struct_typet &vtable_type = to_struct_type(t);
-    vtable_type.components().push_back(vt_entry);
-    vtable_type_symbol->set_type(std::move(t));
+    const struct_type2t &vt = to_struct_type(vtable_type_symbol->get_type2());
+    // migrate_type gives one base name per component, and every vtable type is
+    // created from it, so the vectors stay in step as entries are appended.
+    assert(vt.member_base_names.size() == vt.members.size());
+
+    std::vector<type2tc> members = vt.members;
+    std::vector<irep_idt> names = vt.member_names;
+    std::vector<irep_idt> pretty_names = vt.member_pretty_names;
+    std::vector<irep_idt> base_names = vt.member_base_names;
+
+    members.push_back(pointer_type2tc(migrate_type(comp.type())));
+    names.push_back(vt_name.as_string() + "::" + comp.name().as_string());
+    pretty_names.push_back(entry_pretty_name);
+    base_names.push_back(comp.base_name());
+
+    vtable_type_symbol->set_type(struct_type2tc(
+      members, names, pretty_names, vt.name, vt.packed, base_names));
   }
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXRecordDecl &derived_rd,
   const clang::CXXMethodDecl &md,
   const struct_typet::componentt &component,
   struct_typet &type)
@@ -317,29 +372,6 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
-  // Compute the byte offset of the base class sub-object within the derived
-  // class. For non-first base classes in multiple inheritance this is non-zero,
-  // and the thunk must subtract it from its Base* this to recover Derived*.
-  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
-  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
-  // incorrectly remain 0. A complete fix requires summing offsets along the
-  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
-  // walk — to be addressed as a follow-up.
-  uint64_t base_offset = 0;
-  const clang::CXXRecordDecl *base_rd = md.getParent();
-  const clang::ASTRecordLayout &layout =
-    ASTContext->getASTRecordLayout(&derived_rd);
-  for (const auto &base_spec : derived_rd.bases())
-  {
-    const clang::CXXRecordDecl *spec_rd =
-      base_spec.getType()->getAsCXXRecordDecl();
-    if (spec_rd == base_rd && !base_spec.isVirtual())
-    {
-      base_offset = layout.getBaseClassOffset(base_rd).getQuantity();
-      break;
-    }
-  }
-
   // Create the thunk method symbol
   symbolt thunk_func_symb;
   thunk_func_symb.id =
@@ -347,7 +379,6 @@ void clang_cpp_convertert::add_thunk_method(
   thunk_func_symb.name = component.base_name();
   thunk_func_symb.mode = mode;
   thunk_func_symb.location = component.location();
-  thunk_func_symb.set_type(component.type());
   thunk_func_symb.module =
     get_modulename_from_path(component.location().file().as_string());
 
@@ -356,23 +387,37 @@ void clang_cpp_convertert::add_thunk_method(
 
   // update the type of `this` argument in thunk
   {
-    typet t = thunk_func_symb.get_type();
+    typet t = component.type();
     update_thunk_this_type(t, base_class_id);
-    thunk_func_symb.set_type(std::move(t));
+    // A code type carries its arguments' base names across the seam, which
+    // add_thunk_method_arguments reads back (frontends-to-irep2.md §44).
+    thunk_func_symb.set_type(migrate_type(t));
   }
 
   // add symbols for arguments of this thunk function
   add_thunk_method_arguments(thunk_func_symb);
 
   // add thunk function body
-  add_thunk_method_body(thunk_func_symb, component, base_offset);
+  add_thunk_method_body(thunk_func_symb, component);
 
   // add thunk function symbol to the symbol table
   symbolt &added_thunk_symbol =
     *context.move_symbol_to_context(thunk_func_symb);
 
+  // The thunk populates a slot in *this base's* vtable, so it must be keyed by
+  // the base method's virtual_name, not the derived method's. These coincide
+  // for single inheritance, but when the derived method overrides the same
+  // signature from several bases (e.g. every derived destructor, or C::f with
+  // A::f and B::f), get_ultimate_overridden_method() cannot pick a unique base
+  // and keys `component` by the derived method itself. Recover the correct key
+  // per overridden base here so each base's slot is actually overridden (#6198).
+  std::string base_virtual_name, base_virtual_id;
+  get_decl_name(
+    *get_ultimate_overridden_method(&md), base_virtual_name, base_virtual_id);
+
   // add thunk function as a `method` in the derived class' type
-  add_thunk_component_to_type(added_thunk_symbol, type, component);
+  add_thunk_component_to_type(
+    added_thunk_symbol, type, component, base_virtual_id);
 }
 
 void clang_cpp_convertert::set_thunk_name(
@@ -422,23 +467,25 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
    * Each argument symbol's id is of the form - "<thunk_func_symbol_ID>::<argument_base_name>"
    */
 
-  typet thunk_type = thunk_func_symb.get_type();
-  code_typet &code_type = to_code_type(thunk_type);
-  code_typet::argumentst &args = code_type.arguments();
-  for (unsigned i = 0; i < args.size(); i++)
+  const code_type2t &code_type = to_code_type(thunk_func_symb.get_type2());
+  // migrate_type gives one base name per argument, and the thunk's type comes
+  // from it (frontends-to-irep2.md §44).
+  assert(code_type.argument_base_names.size() == code_type.arguments.size());
+  std::vector<irep_idt> identifiers = code_type.argument_names;
+
+  for (std::size_t i = 0; i < code_type.arguments.size(); i++)
   {
-    code_typet::argumentt &arg = args[i];
-    irep_idt base_name = arg.get_base_name();
+    const irep_idt &base_name = code_type.argument_base_names[i];
 
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
     arg_symb.name = base_name;
     arg_symb.mode = mode;
     arg_symb.location = thunk_func_symb.location;
-    arg_symb.set_type(arg.type());
+    arg_symb.set_type(code_type.arguments[i]);
 
     // Change argument identifier field to thunk function
-    arg.set("#identifier", arg_symb.id);
+    identifiers[i] = arg_symb.id;
 
     // In a multi-file build the same class — and thus the same thunk — can be
     // converted once per translation unit that sees its definition. The thunk
@@ -461,44 +508,47 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
       abort();
     }
   }
-  thunk_func_symb.set_type(std::move(thunk_type));
+
+  thunk_func_symb.set_type(code_type2tc(
+    code_type.arguments,
+    code_type.ret_type,
+    identifiers,
+    code_type.ellipsis,
+    code_type.argument_base_names));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
   symbolt &thunk_func_symb,
-  const struct_typet::componentt &component,
-  uint64_t base_offset)
+  const struct_typet::componentt &component)
 {
   const code_typet &code_type = to_code_type(thunk_func_symb.get_type());
   const code_typet::argumentst &args = code_type.arguments();
 
-  // Build the adjusted 'this' to pass to the overriding method.
-  // The thunk receives a Base*, but the overriding method expects Derived*.
-  // For non-first base classes, subtract the byte offset of the Base
-  // sub-object within Derived so that the overriding method's 'this' points
-  // to the start of the Derived object, not the Base sub-object.
+  // The thunk receives a Base*, but the overriding method expects Derived*,
+  // so `this` must be re-based off the base subobject. Mark the conversion and
+  // let clang_c_adjust::adjust_base_to_derived take the displacement from the
+  // "@base@" components -- the same layout member access and the base ctor use.
+  // Deriving it from clang's ASTRecordLayout instead put the thunk on a
+  // different object than the rest of the model whenever the two disagree,
+  // which the primary-base rule makes routine: for `D : A, B` with B the only
+  // polymorphic base, clang places B at offset 0 and ESBMC does not (#3894).
   typet derived_ptr_type = to_code_type(component.type()).arguments()[0].type();
   exprt base_this =
     symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
 
-  exprt adjusted_this;
-  if (base_offset > 0)
-  {
-    typet char_ptr = pointer_typet(char_type());
-    typecast_exprt to_char(base_this, char_ptr);
-    minus_exprt sub(to_char, from_integer(base_offset, index_type()));
-    sub.type() = char_ptr;
-    adjusted_this = typecast_exprt(sub, derived_ptr_type);
-  }
-  else
-    adjusted_this = typecast_exprt(base_this, derived_ptr_type);
+  exprt adjusted_this = typecast_exprt(base_this, derived_ptr_type);
+  adjusted_this.set("#base_to_derived", true);
 
+  // Both arms store an IREP2 body, and migrate_expr resolves the called method
+  // and the thunk's own arguments through this thread-local namespace (§53).
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
   if (
     code_type.return_type().id() != "empty" &&
     code_type.return_type().id() != "destructor")
     add_thunk_method_body_return(thunk_func_symb, component, adjusted_this);
   else
     add_thunk_method_body_no_return(thunk_func_symb, component, adjusted_this);
+  migrate_namespace_lookup = old_ns;
 }
 
 void clang_cpp_convertert::add_thunk_method_body_return(
@@ -533,7 +583,9 @@ void clang_cpp_convertert::add_thunk_method_body_return(
   code_returnt code_return;
   code_return.return_value() = expr_call;
 
-  thunk_func_symb.set_value(code_return);
+  expr2tc body;
+  migrate_expr(code_return, body);
+  thunk_func_symb.set_value(body);
 }
 
 void clang_cpp_convertert::add_thunk_method_body_no_return(
@@ -562,17 +614,21 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
       symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
   }
 
-  thunk_func_symb.set_value(code_func);
+  expr2tc body;
+  migrate_expr(code_func, body);
+  thunk_func_symb.set_value(body);
 }
 
 void clang_cpp_convertert::add_thunk_component_to_type(
   const symbolt &thunk_func_symb,
   struct_typet &type,
-  const struct_typet::componentt &comp)
+  const struct_typet::componentt &comp,
+  const irep_idt &virtual_name)
 {
   struct_typet::componentt new_compo = comp;
   new_compo.type() = thunk_func_symb.get_type();
   new_compo.set_name(thunk_func_symb.id);
+  new_compo.set("virtual_name", virtual_name);
   type.methods().push_back(new_compo);
 }
 
@@ -677,23 +733,54 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     vt_symb_var.module =
       get_modulename_from_path(type.location().file().as_string());
     vt_symb_var.location = vt_symb_type->location;
-    vt_symb_var.set_type(symbol_typet(vt_symb_type->id));
+    vt_symb_var.set_type(symbol_type2tc(vt_symb_type->id));
     vt_symb_var.lvalue = true;
     vt_symb_var.static_lifetime = true;
 
     // add vtable variable symbols
     const struct_typet &vt_type = to_struct_type(vt_symb_type->get_type());
     exprt values("struct", symbol_typet(vt_symb_type->id));
+    // Recovered from the name rather than an `is_rtti_name` flag: the name is
+    // exactly what rtti_name_component_id produced from this symbol's own id,
+    // and a flag on a component is no part of the IREP2 struct type (#4715).
+    const irep_idt rtti_name = rtti_name_component_id(vt_symb_type->id);
     for (const auto &compo : vt_type.components())
     {
+      if (compo.get_name() == rtti_name)
+      {
+        // The vtable belongs to the most-derived class cxxrd, whatever base
+        // class' vptr selects it, so this is where the dynamic type is pinned.
+        exprt name = address_of_exprt(string_constantt(rtti_type_name(cxxrd)));
+        gen_typecast(ns, name, compo.type());
+        values.operands().push_back(name);
+        continue;
+      }
+
+      // Every other entry's `pretty_name` is the `virtual_name` the switch map
+      // is keyed on: add_vtable_type_entry sets it from that. The rtti entry is
+      // the one component whose two names differ, and it is handled above.
       std::map<irep_idt, exprt>::const_iterator cit2 =
-        switch_map.find(compo.get("virtual_name").as_string());
-      assert(cit2 != switch_map.end());
+        switch_map.find(compo.pretty_name());
+      if (cit2 == switch_map.end())
+      {
+        log_error(
+          "No virtual table slot for {} in {}",
+          compo.get_name(),
+          vt_symb_type->id);
+        abort();
+      }
       const exprt &value = cit2->second;
       assert(value.type().id() == compo.type().id());
       values.operands().push_back(value);
     }
-    vt_symb_var.set_value(values);
+    // migrate_expr resolves each referenced method or thunk through this
+    // thread-local namespace; point it at the context being built, since the
+    // one language_ui installed does not see it (§53.2).
+    const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+    expr2tc values2;
+    migrate_expr(values, values2);
+    migrate_namespace_lookup = old_ns;
+    vt_symb_var.set_value(values2);
 
     if (context.move(vt_symb_var))
     {
@@ -739,44 +826,6 @@ void clang_cpp_convertert::get_overriden_methods(
     (void)status;
     assert(status.second);
   }
-}
-
-// Compute the byte offset of subobject S inside D. Returns std::nullopt if
-// S isn't reachable from D via non-virtual inheritance (virtual base on the
-// path, or S not a base of D at all): callers fall back to a structural
-// typecast in that case.
-static std::optional<uint64_t> offset_of_subobject(
-  const clang::ASTContext &ctx,
-  const clang::CXXRecordDecl *D,
-  const clang::CXXRecordDecl *S)
-{
-  if (D == S)
-    return 0;
-
-  clang::CXXBasePaths paths(
-    /*FindAmbiguities=*/false,
-    /*RecordPaths=*/true,
-    /*DetectVirtual=*/true);
-  if (!D->isDerivedFrom(S, paths))
-    return std::nullopt;
-  if (paths.getDetectedVirtual() != nullptr)
-    return std::nullopt;
-
-  // Sum base-class offsets along the first recorded path. Multiple paths
-  // can exist under repeated non-virtual inheritance, but they refer to
-  // distinct subobjects; picking the first matches the behaviour of the
-  // previous primary-base walk.
-  uint64_t offset = 0;
-  const clang::CXXRecordDecl *cur = D;
-  for (const clang::CXXBasePathElement &elem : paths.front())
-  {
-    const clang::CXXRecordDecl *base =
-      elem.Base->getType()->getAsCXXRecordDecl();
-    offset +=
-      ctx.getASTRecordLayout(cur).getBaseClassOffset(base).getQuantity();
-    cur = base;
-  }
-  return offset;
 }
 
 void clang_cpp_convertert::pre_register_inherited_vtables(
@@ -966,55 +1015,24 @@ bool clang_cpp_convertert::build_dynamic_cast(
       exprt vt_addr =
         address_of_exprt(symbol_exprt(vt_var_id, vptr_type.subtype()));
 
-      exprt result;
-      if (to_void)
+      // Re-base src off its S subobject onto the start of the runtime type D,
+      // then, for a T* target, onto D's T subobject. Both displacements are
+      // marked and resolved by clang_c_adjust from ESBMC's own layout, which
+      // is what the rest of the model uses; clang's ASTRecordLayout disagrees
+      // with it whenever the primary-base rule moves a polymorphic base to
+      // offset 0 (#3894).
+      exprt to_derived =
+        typecast_exprt(src_pointer, pointer_typet(symbol_typet(D_id)));
+      to_derived.set("#base_to_derived", true);
+
+      exprt result = to_derived;
+      if (!to_void)
       {
-        // (void*)((char*)src - off(S inside D))
-        auto off = offset_of_subobject(*ASTContext, D, S);
-        if (!off)
-          continue;
-        typet char_ptr = pointer_typet(char_type());
-        exprt adj = src_pointer;
-        gen_typecast(ns, adj, char_ptr);
-        if (*off > 0)
-        {
-          adj = minus_exprt(adj, from_integer(*off, index_type()));
-          adj.type() = char_ptr;
-        }
-        gen_typecast(ns, adj, target_type);
-        result = adj;
+        std::string T_id, T_name;
+        get_decl_name(*T, T_name, T_id);
+        result.set("#derived_to_base", T_id);
       }
-      else
-      {
-        // For T* the result must point to the T sub-object inside D:
-        //   result = src + (off(T inside D) - off(S inside D))
-        // When both offsets are zero (single inheritance with S and T
-        // at the start of D) the structural typecast is exact.
-        // Otherwise a per-D byte adjustment is required, which we
-        // don't compute yet — refuse the cast instead of silently
-        // emitting a pointer into the wrong sub-object.
-        auto off_S = offset_of_subobject(*ASTContext, D, S);
-        auto off_T = offset_of_subobject(*ASTContext, D, T);
-        if (!off_S || !off_T)
-        {
-          log_error(
-            "dynamic_cast: virtual base between runtime type `{}` and "
-            "source/target is not supported",
-            D->getNameAsString());
-          abort();
-        }
-        if (*off_S != 0 || *off_T != 0)
-        {
-          log_error(
-            "dynamic_cast: multiple inheritance with non-zero base "
-            "offset in `{}` is not supported",
-            D->getNameAsString());
-          abort();
-        }
-        exprt adj = src_pointer;
-        gen_typecast(ns, adj, target_type);
-        result = adj;
-      }
+      gen_typecast(ns, result, target_type);
       arms.push_back({vt_addr, result});
     }
   }

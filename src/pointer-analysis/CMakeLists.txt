@@ -1,6 +1,2 @@
-add_library(pointeranalysis value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp dereference.cpp show_value_sets.cpp value_set_domain.cpp)
-target_include_directories(pointeranalysis
-    PRIVATE ${Boost_INCLUDE_DIRS}
-)
-target_compile_definitions(pointeranalysis PUBLIC BOOST_ALL_NO_LIB)
-target_link_libraries(pointeranalysis PUBLIC util_esbmc gotoprograms PRIVATE fmt::fmt)
+add_library(pointeranalysis value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp dereference.cpp show_value_sets.cpp value_set_domain.cpp andersen.cpp)
+target_link_libraries(pointeranalysis PUBLIC esbmc_common util_esbmc gotoprograms PRIVATE fmt::fmt)

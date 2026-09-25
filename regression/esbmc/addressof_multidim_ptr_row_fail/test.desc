@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  assertion &pp\[1\]\[2\] == &r0\[2\]$

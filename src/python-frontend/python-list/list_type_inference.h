@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <util/type.h>
+#include <util/irep/type.h>
 
 class type_handler;
 class python_converter;

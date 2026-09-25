@@ -6,7 +6,7 @@
 #endif
 
 // irept Specialization
-#include <util/irep.h>
+#include <util/irep/irep.h>
 template <>
 struct fmt::formatter<irept>
 {

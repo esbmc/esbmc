@@ -1,0 +1,7 @@
+CORE
+main.c
+--smtlib --smt-formula-only --output out.smt2
+^SMT formula written to output file out\.smt2$
+CHECK_FILE out.smt2 contains \(check-sat\)
+CHECK_FILE out.smt2 contains \(assert
+CHECK_FILE out.smt2 absent SMT formula dumped successfully

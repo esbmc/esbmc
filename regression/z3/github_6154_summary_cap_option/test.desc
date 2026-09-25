@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 22 --no-standard-checks --z3 --max-quantifier-summary-nodes 50
+cannot model call to .* on a quantified variable inside __ESBMC_forall/__ESBMC_exists
+reason: summary exceeded 50 expression nodes

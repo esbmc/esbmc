@@ -51,7 +51,7 @@ in order for `esbmc` to be able to reason about programs using library functions
 For this purpose, `final()` links the operational models to the translations of the given sources:
 either a pre-compiled version if the translation parameters match (e.g., `--32 --floatbv`),
 or, as a fallback if no matching pre-compiled version has been bundled,
-the bundled sources of the operational models are extracted to a temporary directory and translated using the Clang frontend.
+the bundled sources of the operational models are translated using the Clang frontend, which reads them straight out of the binary's `.rodata` rather than from disk.
 
 # Updated libc and libm build process: 
 [PR 602](https://github.com/esbmc/esbmc/pull/602) updated the internal libraries build process. The new build process is different from the snapshot version in the previous section. We now bundle the libraries in a way more like the standard C library releases( e.g. [glibc](https://sourceware.org/git/?p=glibc.git) ): Libraries in `src/c2goto/library/` are bundled in `libc` and those in `src/c2goto/library/libm` are bundled in `libm` - this is more like the standard C libraries as pointed by "LIBRARY_PATH", you may want to check `libc.a` and `libm.a` in `/usr/lib/x86_64-linux-gnu/` or something similar. 

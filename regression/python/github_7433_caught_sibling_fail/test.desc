@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^  FAILED       \[escaping\.assertion\.[0-9]+\] +line +12 +uncaught exception: ValueError$

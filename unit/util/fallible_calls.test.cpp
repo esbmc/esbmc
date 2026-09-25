@@ -4,7 +4,7 @@ Module: Unit tests for util/fallible_calls.h
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <util/fallible_calls.h>
+#include <util/lang/fallible_calls.h>
 
 TEST_CASE("find_fallible matches canonical names", "[util][fallible_calls]")
 {

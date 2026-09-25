@@ -1,33 +1,36 @@
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <optional>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_int_overflow.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/python_math.h>
+#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/encoding.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/base/encoding.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
 
 using namespace json_utils;
 
@@ -54,10 +57,7 @@ static exprt build_shape_tuple_expr(
     converter.get_tuple_handler().create_tuple_struct_type(element_types);
   // V.3: build the tuple value in IREP2, back-migrating once. The operands are
   // already-built int_type() dimension exprs, so a constant_struct2t over them
-  // round-trips exactly through migrate. Re-attach the full struct type
-  // afterwards: migrate_type drops the frontend-only #python_aggregate_kind
-  // marker that the in/membership dispatch reads (python_aggregate_kind) with no
-  // tag fallback — mirroring tuple_handler::get_tuple_expr.
+  // round-trips exactly through migrate.
   std::vector<expr2tc> members;
   members.reserve(dims.size());
   for (const exprt &d : dims)
@@ -68,7 +68,6 @@ static exprt build_shape_tuple_expr(
   }
   exprt tuple_expr =
     migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
-  tuple_expr.type() = tuple_type;
   return tuple_expr;
 }
 
@@ -252,37 +251,57 @@ exprt python_converter::make_char_array_expr(
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
+/// The double @p node carries for @p key. A non-finite literal has no JSON
+/// number form, so the parser nulls it and records the spelling under
+/// "<key>_nonfinite" (#7545).
+static double nonfinite_aware_double(
+  const nlohmann::json &node,
+  const std::string &key,
+  double fallback)
+{
+  const auto tag = node.find(key + "_nonfinite");
+  if (tag == node.end())
+    return node.value(key, fallback);
+  return nonfinite_float_from_spelling(tag->get<std::string>())->to_double();
+}
+
+/// The complex constant @p annotated_node denotes, or empty when it is not one.
+/// @p element is the outer node, which is a UnaryOp when the literal is signed.
+static std::optional<exprt> get_complex_literal(
+  const nlohmann::json &element,
+  const nlohmann::json &annotated_node)
+{
+  if (
+    !annotated_node.contains("esbmc_type_annotation") ||
+    annotated_node["esbmc_type_annotation"] != "complex")
+    return std::nullopt;
+
+  double real = nonfinite_aware_double(annotated_node, "real_value", 0.0);
+  double imag = nonfinite_aware_double(annotated_node, "imag_value", 0.0);
+
+  // UnaryOp(USub, Constant(complex)) must preserve the sign.
+  if (
+    element.contains("_type") && element["_type"] == "UnaryOp" &&
+    element.contains("op") && element["op"].contains("_type") &&
+    element["op"]["_type"] == "USub")
+  {
+    real = -real;
+    imag = -imag;
+  }
+
+  return make_complex(
+    from_double(real, double_type()), from_double(imag, double_type()));
+}
+
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   const auto &annotated_node =
     (element["_type"] == "UnaryOp") ? element["operand"] : element;
 
-  // Handle Python complex constants emitted by parser annotations.
-  // This must run before generic string handling because complex constants
+  // Complex constants are checked before generic string handling because they
   // may carry a string-like "value" in the serialized AST.
-  if (
-    annotated_node.contains("esbmc_type_annotation") &&
-    annotated_node["esbmc_type_annotation"] == "complex")
-  {
-    double real = annotated_node.value("real_value", 0.0);
-    double imag = annotated_node.value("imag_value", 0.0);
-
-    // UnaryOp(USub, Constant(complex)) must preserve the sign.
-    if (
-      element.contains("_type") && element["_type"] == "UnaryOp" &&
-      element.contains("op") && element["op"].contains("_type"))
-    {
-      const std::string op_type = element["op"]["_type"].get<std::string>();
-      if (op_type == "USub")
-      {
-        real = -real;
-        imag = -imag;
-      }
-    }
-
-    return make_complex(
-      from_double(real, double_type()), from_double(imag, double_type()));
-  }
+  if (const auto complex_literal = get_complex_literal(element, annotated_node))
+    return *complex_literal;
 
   // Determine the source of the literal's value.
   const auto &value = (element["_type"] == "UnaryOp")
@@ -308,6 +327,13 @@ exprt python_converter::get_literal(const nlohmann::json &element)
       "fixed-width bitvector; arbitrary-precision int support is tracked in "
       "issue #4642.");
   }
+
+  // A non-finite float literal reaches here with a nulled value and a tag
+  // naming the spelling (#7545).
+  if (element.contains("value_nonfinite"))
+    return nonfinite_float_from_spelling(
+             element["value_nonfinite"].get<std::string>())
+      ->to_expr();
 
   // Handle None literals (null values)
   if (value.is_null())
@@ -448,14 +474,705 @@ exprt python_converter::get_named_expr(const nlohmann::json &element)
   exprt *saved_lhs = current_lhs;
   bool saved_rhs = is_converting_rhs;
   bool saved_lhs_flag = is_converting_lhs;
+  const nlohmann::json *saved_store_target = lhs_store_target_;
   typet saved_elem_type = current_element_type;
   get_var_assign(assign, *current_block);
   current_lhs = saved_lhs;
   is_converting_rhs = saved_rhs;
   is_converting_lhs = saved_lhs_flag;
+  lhs_store_target_ = saved_store_target;
   current_element_type = saved_elem_type;
 
   return get_expr(target);
+}
+/// Node kinds whose value an attribute access may be applied to directly, as
+/// opposed to a plain name. Each converts to an object that
+/// resolve_member_on_base can look a member up on.
+static bool is_attribute_base_expression(const nlohmann::json &node_type)
+{
+  return node_type == "Subscript" || node_type == "Call" ||
+         node_type == "BinOp" || node_type == "UnaryOp";
+}
+
+/// The symbol `__ESBMC_return_value` names inside an `__ESBMC_ensures` clause,
+/// or null when the name is something else or the enclosing function returns
+/// nothing. The contracts pass rewrites it to the real return value, so the
+/// frontend only has to give it the enclosing function's return type for the
+/// clause to type-check.
+symbolt *python_converter::contract_return_value_symbol(
+  const std::string &var_name,
+  const nlohmann::json &element)
+{
+  if (var_name != "__ESBMC_return_value" || current_func_name_.empty())
+    return nullptr;
+
+  symbol_id ret_sid = create_symbol_id();
+  symbolt *func_symbol = find_symbol(ret_sid.to_string());
+  // A None-returning function has no value to name, and an empty-typed symbol
+  // crashes the encoder rather than failing here.
+  const typet ret_type = func_symbol && func_symbol->get_type().is_code()
+                           ? to_code_type(func_symbol->get_type()).return_type()
+                           : typet();
+  if (returns_no_value(ret_type))
+    return nullptr;
+
+  ret_sid.set_object(var_name);
+  symbolt ret_symbol = create_symbol(
+    current_python_file,
+    var_name,
+    ret_sid.to_string(),
+    get_location_from_decl(element),
+    ret_type);
+  ret_symbol.lvalue = true;
+  ret_symbol.file_local = true;
+  return add_symbol_and_get_ptr(ret_symbol);
+}
+
+/// The "variable is not defined" diagnostic for a Name that resolved to no
+/// symbol, naming the enclosing function when the reference is inside one.
+static std::string undefined_variable_message(
+  const std::string &var_name,
+  const std::string &func_name,
+  const locationt &location)
+{
+  std::ostringstream error_msg;
+  error_msg << "Variable '" << var_name << "' is not defined";
+  if (!func_name.empty())
+    error_msg << " in function '" << func_name << "'";
+  if (!location.get_line().empty())
+    error_msg << " at line " << location.get_line();
+  error_msg << ".";
+  return error_msg.str();
+}
+
+// v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003 etapa
+// 2, 1-D slice views): its own logical length is tracked separately, since
+// unwrapping the pointer reaches only the scalar element type, not a shape.
+// Views are always rank 1 in this PR's scope.
+std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  const auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
+  if (it == numpy_pointer_view_info_.end())
+    return std::nullopt;
+
+  if (attr_name == "shape")
+    return build_shape_tuple_expr(
+      *this, {from_integer(it->second.length, int_type())});
+  if (attr_name == "ndim")
+    return from_integer(1, int_type());
+  return std::nullopt;
+}
+
+std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  const auto it = numpy_param_shapes_.find(symbol.id.as_string());
+  if (it == numpy_param_shapes_.end())
+    return std::nullopt;
+
+  const std::vector<std::size_t> &shape = it->second;
+
+  if (attr_name == "shape")
+  {
+    std::vector<exprt> dim_exprs;
+    dim_exprs.reserve(shape.size());
+    for (std::size_t dim : shape)
+      dim_exprs.push_back(from_integer(dim, int_type()));
+    return build_shape_tuple_expr(*this, dim_exprs);
+  }
+  if (attr_name == "ndim")
+    return from_integer(shape.size(), int_type());
+  if (attr_name == "size")
+  {
+    std::size_t total = 1;
+    for (std::size_t dim : shape)
+      total *= dim;
+    return from_integer(total, int_type());
+  }
+  return std::nullopt;
+}
+
+// Tries both tracked-shape sources for a `.shape`/`.ndim`/`.size` attribute
+// access: a pointer-view symbol, then a numpy array parameter. One combined
+// check so get_expr's own Attribute dispatch needs a single `if` for both,
+// instead of growing its own decision count by one per source.
+std::optional<exprt> python_converter::try_get_numpy_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  if (
+    std::optional<exprt> view_attr =
+      try_get_numpy_pointer_view_shape_attr(symbol, attr_name))
+    return view_attr;
+  return try_get_numpy_param_shape_attr(symbol, attr_name);
+}
+
+std::optional<exprt> python_converter::resolve_subscript_base(
+  const nlohmann::json &element,
+  exprt &array)
+{
+  // current_lhs being set does not mean this Subscript IS the assignment's
+  // whole RHS -- for `x = a[1:3][0]` the outer Subscript's base is the
+  // inner `a[1:3]`, converted here with current_lhs still == &x. Left
+  // unguarded, the numpy 1-D pointer-view path (list_access.cpp's
+  // try_build_1d_pointer_view) would retype x to a pointer for an
+  // intermediate value that is never itself the bound name. Null
+  // current_lhs for this nested conversion, matching the same
+  // save/null/restore idiom used around other non-RHS sub-conversions
+  // (converter_binop.cpp, list_construction.cpp).
+  exprt *saved_lhs_for_base = current_lhs;
+  current_lhs = nullptr;
+  array = get_expr(element["value"]);
+  current_lhs = saved_lhs_for_base;
+
+  // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
+  // integer returns a cpp-throw side effect), propagate the exception rather
+  // than attempting to index it. Slicing a thrown exception is meaningless
+  // and would build an address_of over a non-array operand, crashing the
+  // converter.
+  if (array.is_nil() || contains_cpp_throw(array))
+    return array;
+
+  // An inline list-returning call used directly as a subscript base --
+  // e.g. sorted(words)[0] -- comes back as a code_function_callt statement.
+  // Indexing it builds __ESBMC_list_size over the call statement, whose
+  // operand type is empty, aborting symex ("got empty, expected pointer").
+  // Materialise the call into a temporary first, mirroring the assigned
+  // path (s = sorted(words); s[0]). See #4807.
+  if (current_block)
+    array =
+      materialize_list_function_call(array, element["value"], *current_block);
+
+  return std::nullopt;
+}
+
+std::optional<exprt> python_converter::try_fold_constant_string_slice(
+  const nlohmann::json &element,
+  const exprt &array)
+{
+  const nlohmann::json &slice = element["slice"];
+  const typet array_type = ns.follow(array.type());
+
+  // A fully-constant string slice (e.g. "abcdef"[5:0:-1]) folds at
+  // conversion time. The runtime string-slice path mishandles a negative
+  // step — wrong content and an unconstrained length — whereas consteval's
+  // slice computation matches CPython. Gate on the converted str type (a
+  // bytes literal decodes to the same Constant JSON as str, and its runtime
+  // slice is a separate concern), so only a genuine constant str slice folds
+  // and anything non-constant falls through to the existing runtime path.
+  if (
+    ast_json && slice.is_object() && slice.value("_type", "") == "Slice" &&
+    type_utils::is_string_type(array_type))
+  {
+    python_consteval slice_evaluator(*ast_json);
+    if (auto folded = slice_evaluator.try_eval_global_expr(element))
+      if (folded->kind == PyConstValue::STRING)
+        return string_builder_->build_string_literal(folded->string_val);
+  }
+  return std::nullopt;
+}
+
+void python_converter::unwrap_subscript_base_types(
+  exprt &array,
+  typet &array_type,
+  typet &array_type_for_dict,
+  bool &array_is_dict_pointer,
+  const nlohmann::json &element)
+{
+  // Unwrap pointer-to-dict so d[key] reaches the dict handler when
+  // d is held by pointer (e.g. dict-of-class-value via the symbol table).
+  array_type_for_dict = array_type;
+  array_is_dict_pointer = false;
+  if (array_type_for_dict.is_pointer())
+  {
+    typet pointed = ns.follow(array_type_for_dict.subtype());
+    if (pointed.is_struct() && dict_handler_->is_dict_type(pointed))
+    {
+      array_type_for_dict = pointed;
+      array_is_dict_pointer = true;
+    }
+  }
+  // Handle tuple subscripting - tuples are structs, not arrays.
+  // Unwrap pointer-to-tuple so key[i] reaches the tuple handler when the
+  // tuple arrives by pointer (e.g. a tuple-of-slices coerced to a pointer
+  // parameter for __getitem__, see GitHub #4539).
+  if (array_type.is_pointer())
+  {
+    typet pointed = ns.follow(array_type.subtype());
+    if (pointed.is_struct() && tuple_handler_->is_tuple_type(pointed))
+    {
+      // V.1k keystone (D): deref of the tuple pointer built in IREP2.
+      // build_dereference restores #cpp_type and falls back to legacy for
+      // dyn-array pointees, so it reproduces the legacy node exactly.
+      array = python_expr::build_dereference(array, pointed);
+      array_type = pointed;
+    }
+  }
+  // Unwrap Optional[tuple] (e.g. `v = d.get(k); v[0]`): subscripting
+  // implies the payload is present (None would be a TypeError), so read
+  // the value field before dispatching to the tuple handler.
+  if (
+    array_type.is_struct() &&
+    to_struct_type(array_type).tag().as_string().starts_with("tag-Optional_"))
+  {
+    exprt unwrapped = unwrap_optional_if_needed(array, element);
+    if (tuple_handler_->is_tuple_type(unwrapped.type()))
+    {
+      array = unwrapped;
+      array_type = unwrapped.type();
+    }
+  }
+}
+
+std::optional<exprt> python_converter::try_dispatch_tuple_subscript(
+  const exprt &array,
+  const typet &array_type,
+  const nlohmann::json &slice,
+  const nlohmann::json &element)
+{
+  if (!tuple_handler_->is_tuple_type(array_type))
+    return std::nullopt;
+  return tuple_handler_->handle_tuple_subscript(array, slice, element);
+}
+
+std::optional<exprt> python_converter::try_dispatch_dict_subscript(
+  exprt &array,
+  const typet &array_type_for_dict,
+  bool array_is_dict_pointer,
+  const nlohmann::json &slice)
+{
+  // Handle dictionary subscript with type inference from annotations
+  if (
+    !array_type_for_dict.is_struct() ||
+    !dict_handler_->is_dict_type(array_type_for_dict))
+    return std::nullopt;
+
+  // Dereference once so the handler operates on the dict struct.
+  if (array_is_dict_pointer)
+  {
+    dereference_exprt deref(array, array_type_for_dict);
+    deref.type() = array_type_for_dict;
+    array = std::move(deref);
+  }
+
+  // Try to resolve the expected return type from the dict's type annotation
+  typet expected_type =
+    dict_handler_->resolve_expected_type_for_dict_subscript(array);
+
+  // Pass the expected type to the dict handler
+  // If empty, the handler will use its default heuristics
+  return dict_handler_->handle_dict_subscript(array, slice, expected_type);
+}
+
+std::optional<exprt> python_converter::try_dispatch_multidim_tuple_axes(
+  const exprt &array,
+  const nlohmann::json &element,
+  const std::vector<nlohmann::json> &idx_nodes)
+{
+  // 2-D slicing: a[:, j] (column select) and a[i, :] (row select,
+  // equivalent to chained a[i][:]). Any other slice/index tuple
+  // combination (partial bounds, both dims sliced, 3+ dims, ...)
+  // stays unsupported.
+  if (
+    idx_nodes.size() == 2 &&
+    is_full_slice_node(idx_nodes[0]) != is_full_slice_node(idx_nodes[1]))
+  {
+    python_list list(*this, element);
+    if (is_full_slice_node(idx_nodes[0]))
+    {
+      // a[:, j] (single-column select) vs a[:, i:j:step] (strided
+      // column slice, e.g. a[:, ::2]) - the column axis being a
+      // `Slice` node rather than a plain index tells them apart.
+      return idx_nodes[1].value("_type", "") == "Slice"
+               ? list.build_strided_column_select(array, idx_nodes[1], element)
+               : list.build_column_select(array, idx_nodes[1], element);
+    }
+
+    exprt current = list.index(array, idx_nodes[0]);
+    if (!contains_cpp_throw(current))
+      current = list.index(current, idx_nodes[1]);
+    return current;
+  }
+
+  // N-D mixed slice/index tuple: one or more bounded slice axes and
+  // fixed-index axes, e.g. `a[:, 0, 0]`, `a[0:2, 0, 0]`, or
+  // `a[:, :, 0]`.
+  std::size_t slice_axis_count = 0;
+  for (std::size_t i = 0; i < idx_nodes.size(); ++i)
+  {
+    if (idx_nodes[i].value("_type", "") != "Slice")
+      continue;
+    ++slice_axis_count;
+  }
+
+  if (slice_axis_count != 0)
+  {
+    python_list list(*this, element);
+    return list.build_mixed_slice_tuple_select(array, idx_nodes, element);
+  }
+
+  throw_numpy_multidim_index_error(*this, element);
+  return std::nullopt; // unreachable: the call above always throws
+}
+
+std::optional<exprt> python_converter::try_dispatch_chained_axis_index(
+  const exprt &array,
+  const nlohmann::json &element,
+  const std::vector<nlohmann::json> &idx_nodes,
+  const typet &list_type)
+{
+  python_list list(*this, element);
+  exprt current = array;
+  for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+  {
+    if (axis > 0)
+    {
+      const typet current_type = ns.follow(current.type());
+      const bool current_is_list_like = current_type.is_array() ||
+                                        current_type.is_pointer() ||
+                                        current_type == list_type;
+      if (!current_is_list_like)
+        throw_numpy_too_many_indices_error(*this, element, idx_nodes.size());
+    }
+
+    current = list.index(current, idx_nodes[axis]);
+    if (contains_cpp_throw(current))
+      break;
+  }
+
+  return current;
+}
+
+bool python_converter::subscript_targets_list_model(
+  const typet &array_type,
+  const typet &list_type) const
+{
+  // A parameter used in an `a[mask]` pattern decays to pointer-to-whole-
+  // array (see register_function_argument), so recognizing it here needs
+  // the same pointer unwrap already used for the dict/tuple cases above.
+  const bool array_is_runtime_list =
+    array_type == list_type ||
+    (array_type.is_pointer() && ns.follow(array_type.subtype()) == list_type);
+  const bool array_is_builtin_array =
+    array_type.is_array() ||
+    (array_type.is_pointer() && ns.follow(array_type.subtype()).is_array());
+  return array_is_runtime_list || array_is_builtin_array;
+}
+
+std::optional<exprt> python_converter::try_dispatch_multidim_tuple_index(
+  const exprt &array,
+  const typet &,
+  const nlohmann::json &slice,
+  const nlohmann::json &element,
+  bool tuple_index_targets_list_model,
+  const typet &list_type)
+{
+  // Multi-dimensional indexing ``a[i, j, k, ...]`` for list/array-backed
+  // models: lower to chained single-axis indexing `a[i][j][k]...`, one
+  // axis at a time. Mixed slice/index tuples (e.g. `a[1:2, 0]`) are not
+  // supported by the chained-list model and are rejected explicitly.
+  if (
+    !tuple_index_targets_list_model || !slice.contains("_type") ||
+    slice["_type"] != "Tuple")
+    return std::nullopt;
+
+  if (
+    !slice.contains("elts") || !slice["elts"].is_array() ||
+    slice["elts"].empty())
+    throw_numpy_multidim_index_error(*this, element);
+
+  std::vector<nlohmann::json> idx_nodes;
+  idx_nodes.reserve(slice["elts"].size());
+  bool has_slice_dim = false;
+  for (const auto &raw_idx : slice["elts"])
+  {
+    const nlohmann::json idx = normalize_bool_index_node(raw_idx);
+    if (idx.contains("_type") && idx["_type"] == "Slice")
+      has_slice_dim = true;
+    idx_nodes.push_back(idx);
+  }
+
+  if (has_slice_dim)
+    return try_dispatch_multidim_tuple_axes(array, element, idx_nodes);
+
+  return try_dispatch_chained_axis_index(array, element, idx_nodes, list_type);
+}
+
+std::optional<exprt> python_converter::try_dispatch_fancy_list_index(
+  const exprt &array,
+  const nlohmann::json &slice,
+  const nlohmann::json &element,
+  bool tuple_index_targets_list_model)
+{
+  // Fancy/integer-array indexing ``a[[0, 2]]``: a literal index list
+  // selects elements by position, resolved and bounds-checked at
+  // conversion time (see python_list::build_fancy_index).
+  if (
+    !tuple_index_targets_list_model || !slice.contains("_type") ||
+    slice["_type"] != "List" || !slice.contains("elts") ||
+    !slice["elts"].is_array())
+    return std::nullopt;
+
+  std::vector<nlohmann::json> idx_elts(
+    slice["elts"].begin(), slice["elts"].end());
+  python_list list(*this, element);
+  return list.build_fancy_index(array, idx_elts, element);
+}
+
+std::optional<exprt>
+python_converter::try_dispatch_fancy_index_via_list_variable(
+  const exprt &array,
+  const nlohmann::json &slice,
+  const nlohmann::json &element)
+{
+  // Fancy indexing through a variable holding a concrete literal
+  // list of integers, e.g. `idx = [0, 2]; a[idx]`. `idx` is a plain
+  // Python list (not a numpy int array), so it reaches here as the
+  // list model's struct type rather than an array_typet. Resolve it
+  // the same way build_bool_mask_row_select resolves a mask
+  // variable: read its sole AST declaration and reuse
+  // build_fancy_index, which already handles a literal list at the
+  // subscript site (`a[[0, 2]]`).
+  const std::string idx_name = slice["id"].get<std::string>();
+  const locationt loc = get_location_from_decl(element);
+
+  auto reject = [&](const std::string &reason) {
+    std::ostringstream msg;
+    msg << "TypeError: fancy indexing through a variable (a[idx]) " << reason;
+    if (!loc.is_nil())
+      msg << " at " << loc.get_file() << ":" << loc.get_line();
+    throw std::runtime_error(msg.str());
+  };
+
+  // find_var_decl returns the first textual assignment in scope,
+  // not necessarily the one reaching this use site; reject any
+  // reassignment rather than risk resolving a stale index list.
+  if (json_utils::has_multiple_assignments_in_scope(
+        idx_name, current_func_name_, *ast_json))
+    reject(
+      "requires an index variable that is assigned exactly once "
+      "(no reassignment) so its literal value can be resolved "
+      "unambiguously");
+
+  const nlohmann::json idx_decl =
+    json_utils::find_var_decl(idx_name, current_func_name_, *ast_json);
+
+  if (
+    idx_decl.is_null() || !idx_decl.contains("value") ||
+    idx_decl["value"].value("_type", "") != "List" ||
+    !idx_decl["value"].contains("elts"))
+    reject(
+      "requires an index variable whose value is a concrete "
+      "literal list of integers, e.g. idx = [0, 2]");
+
+  std::vector<nlohmann::json> idx_elts(
+    idx_decl["value"]["elts"].begin(), idx_decl["value"]["elts"].end());
+  python_list list(*this, element);
+  return list.build_fancy_index(array, idx_elts, element);
+}
+
+std::optional<exprt> python_converter::try_dispatch_bool_mask_variable_index(
+  const exprt &array,
+  const typet &array_type,
+  const nlohmann::json &slice,
+  const nlohmann::json &element,
+  bool tuple_index_targets_list_model)
+{
+  // Boolean-mask indexing ``a[mask]``: when the index is a bare variable
+  // reference whose static type is a bool array, filter `array` at
+  // runtime to the elements where `mask` is True (NumPy fancy indexing).
+  // Restricted to a simple Name index so the type can be checked without
+  // re-evaluating a side-effecting expression later in this function.
+  if (
+    !tuple_index_targets_list_model || !slice.contains("_type") ||
+    slice["_type"] != "Name")
+    return std::nullopt;
+
+  exprt mask_candidate = get_expr(slice);
+  if (contains_cpp_throw(mask_candidate))
+    return std::nullopt;
+
+  typet mask_type = ns.follow(mask_candidate.type());
+  // A mask parameter decays to pointer-to-whole-array
+  // unwrap it the same way `array` is unwrapped below.
+  if (mask_type.is_pointer())
+  {
+    typet pointed = ns.follow(mask_type.subtype());
+    if (pointed.is_array())
+    {
+      mask_candidate = python_expr::build_dereference(mask_candidate, pointed);
+      mask_type = pointed;
+    }
+  }
+  if (mask_type.is_array())
+  {
+    if (ns.follow(mask_type.subtype()).is_bool())
+    {
+      exprt mask_array = array;
+      if (array_type.is_pointer())
+      {
+        typet pointed = ns.follow(array_type.subtype());
+        if (pointed.is_array())
+          mask_array = python_expr::build_dereference(array, pointed);
+      }
+      python_list list(*this, element);
+      return list.build_bool_mask_index(mask_array, mask_candidate, element);
+    }
+
+    // Fancy/integer-array indexing through a variable (as opposed to
+    // a literal index list, a[[0, 2]]) is not modelled yet; give an
+    // explicit error instead of falling through to the generic
+    // scalar-index path below, whose "not str" message is written
+    // for a different mistake (string indices) and would be
+    // confusing here.
+    std::ostringstream msg;
+    msg << "TypeError: fancy indexing with a non-boolean array is "
+           "not supported; only boolean-mask indexing (a[mask]) and "
+           "literal integer-list indexing (a[[i, j, ...]]) are "
+           "supported for array indices";
+    const locationt loc = get_location_from_decl(element);
+    if (!loc.is_nil())
+      msg << " at " << loc.get_file() << ":" << loc.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  // Fancy indexing through a variable holding a concrete literal
+  // list of integers, e.g. `idx = [0, 2]; a[idx]`.
+  if (mask_type == type_handler_.get_list_type())
+    return try_dispatch_fancy_index_via_list_variable(array, slice, element);
+
+  return std::nullopt;
+}
+
+std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
+  const nlohmann::json &element,
+  const nlohmann::json &slice)
+{
+  // Handle object subscripting through __getitem__:
+  //   obj[key] -> obj.__getitem__(key)
+  if (!has_dunder_method(element["value"], "__getitem__"))
+    return std::nullopt;
+
+  nlohmann::json args = nlohmann::json::array();
+  args.push_back(slice);
+  nlohmann::json call_node =
+    build_dunder_call(element["value"], "__getitem__", args, element);
+  return get_function_call(call_node);
+}
+
+void python_converter::reject_scalar_subscript(
+  const typet &array_type,
+  const nlohmann::json &element) const
+{
+  // Reject subscripting scalar numeric / boolean values up front. CPython
+  // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
+  // the list handler below silently produces an unresolved-type value that
+  // later trips the binop "Unsupported comparison with unresolved operand
+  // type" error far from the actual mistake (e.g. when the user expects
+  // a tuple from a Counter.most_common() result and chains a second
+  // subscript onto an int).
+  if (
+    array_type.is_array() || array_type.is_pointer() ||
+    array_type.is_struct() ||
+    !(array_type.is_signedbv() || array_type.is_unsignedbv() ||
+      array_type.is_floatbv() || array_type.is_bool()))
+    return;
+
+  std::string type_name;
+  if (array_type.is_bool())
+    type_name = "bool";
+  else if (array_type.is_floatbv())
+    type_name = "float";
+  else
+    type_name = "int";
+
+  std::ostringstream msg;
+  msg << "TypeError: '" << type_name << "' object is not subscriptable";
+  const locationt loc = get_location_from_decl(element);
+  if (!loc.is_nil())
+    msg << " at " << loc.get_file() << ":" << loc.get_line();
+  throw std::runtime_error(msg.str());
+}
+
+exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
+{
+  // a.flat[i] (read): see try_build_flat_index_read's own comment for why
+  // this needs to be special-cased ahead of the generic Subscript path.
+  if (std::optional<exprt> flat_value = try_build_flat_index_read(element))
+    return *flat_value;
+
+  exprt array;
+  if (std::optional<exprt> early = resolve_subscript_base(element, array))
+    return *early;
+
+  if (
+    std::optional<exprt> folded =
+      try_fold_constant_string_slice(element, array))
+    return *folded;
+
+  const nlohmann::json &slice = element["slice"];
+  typet array_type = ns.follow(array.type());
+  typet array_type_for_dict;
+  bool array_is_dict_pointer = false;
+  unwrap_subscript_base_types(
+    array, array_type, array_type_for_dict, array_is_dict_pointer, element);
+
+  if (
+    std::optional<exprt> tuple_result =
+      try_dispatch_tuple_subscript(array, array_type, slice, element))
+    return *tuple_result;
+
+  // Boolean-mask row-selection result (build_bool_mask_row_select_symbolic):
+  // a struct, not an array_typet, so it needs its own dispatch ahead of
+  // the array/list handling below.
+  if (python_list::is_bool_mask_rows_type(array_type))
+  {
+    python_list list(*this, element);
+    return list.index_bool_mask_rows(array, slice, element);
+  }
+
+  if (
+    std::optional<exprt> dict_result = try_dispatch_dict_subscript(
+      array, array_type_for_dict, array_is_dict_pointer, slice))
+    return *dict_result;
+
+  const typet list_type = type_handler_.get_list_type();
+  const bool tuple_index_targets_list_model =
+    subscript_targets_list_model(array_type, list_type);
+
+  if (
+    std::optional<exprt> multidim_result = try_dispatch_multidim_tuple_index(
+      array,
+      array_type,
+      slice,
+      element,
+      tuple_index_targets_list_model,
+      list_type))
+    return *multidim_result;
+
+  if (
+    std::optional<exprt> fancy_result = try_dispatch_fancy_list_index(
+      array, slice, element, tuple_index_targets_list_model))
+    return *fancy_result;
+
+  if (
+    std::optional<exprt> mask_result = try_dispatch_bool_mask_variable_index(
+      array, array_type, slice, element, tuple_index_targets_list_model))
+    return *mask_result;
+
+  if (
+    std::optional<exprt> dunder_result =
+      try_dispatch_dunder_getitem(element, slice))
+    return *dunder_result;
+
+  reject_scalar_subscript(array_type, element);
+
+  // Handle regular array/list subscripting
+  python_list list(*this, element);
+  return list.index(array, normalize_bool_index_node(slice));
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -668,6 +1385,61 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
+        // `.ndim`: the rank of the canonical bounded ndarray descriptor
+        // (numpy-architecture-decisions.md). The runtime list model only
+        // ever backs a 1-D array, so its rank is always 1.
+        if (attr_name == "ndim")
+        {
+          if (base_type.is_array())
+          {
+            std::vector<int> dims =
+              type_handler_.get_array_type_shape(base_type);
+            ndarray_descriptor descriptor(
+              std::vector<long long>(dims.begin(), dims.end()), "", 0);
+            descriptor.validate();
+            return from_integer(descriptor.rank(), int_type());
+          }
+
+          const typet list_type = type_handler_.get_list_type();
+          if (
+            base_type == list_type || (base_expr.type().is_pointer() &&
+                                       base_expr.type().subtype() == list_type))
+            return from_integer(1, int_type());
+        }
+
+        // `.shape`/`.ndim` on a boolean-mask row-selection result
+        // (build_bool_mask_row_select_symbolic): shape is `(count, cols)`,
+        // reading the struct's runtime logical row count rather than the
+        // `rows` buffer's physical (worst-case) capacity; rank is always 2
+        // (row selection is only modelled for 2-D arrays).
+        if (
+          (attr_name == "shape" || attr_name == "ndim") &&
+          python_list::is_bool_mask_rows_type(base_type))
+        {
+          if (attr_name == "ndim")
+            return from_integer(2, int_type());
+
+          const struct_typet &result_type = to_struct_type(base_type);
+          const array_typet &rows_type =
+            to_array_type(ns.follow(result_type.components()[0].type()));
+          const BigInt num_cols = binary2integer(
+            to_array_type(ns.follow(rows_type.subtype()))
+              .size()
+              .value()
+              .c_str(),
+            false);
+
+          exprt count_member = python_expr::build_member(
+            base_expr, "count", result_type.components()[1].type());
+          expr2tc count2;
+          migrate_expr(count_member, count2);
+          exprt count_as_int =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+          return build_shape_tuple_expr(
+            *this, {count_as_int, from_integer(num_cols, int_type())});
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -793,16 +1565,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        log_error("Cannot resolve nested attribute: {}", attr_name);
-        abort();
+        throw std::runtime_error(
+          fmt::format("Cannot resolve nested attribute: {}", attr_name));
       }
       else if (element["value"]["_type"] == "Name")
       {
         var_name = element["value"]["id"].get<std::string>();
       }
-      else if (element["value"]["_type"] == "Subscript")
+      else if (is_attribute_base_expression(element["value"]["_type"]))
       {
-        // Attribute access on a subscript result, e.g. `d[key].attr`.
+        // Attribute access on the value an expression produces rather than on
+        // a name: `d[key].attr`, `C().attr`, `(a + b).attr`, `(-a).attr`. A
+        // named instance (`c = a + b; c.attr`) already works; this covers the
+        // unnamed case for every receiver we can convert to an object.
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -813,35 +1588,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        log_error(
-          "Cannot resolve attribute '{}' on subscript result", attr_name);
-        abort();
-      }
-      else if (element["value"]["_type"] == "Call")
-      {
-        // Attribute access on an inline call result, e.g. `C().attr`. Convert
-        // the call to its (materialised) instance and resolve the member on
-        // it, the same way `d[k].attr` is handled above. A named instance
-        // (`c = C(); c.attr`) already works; this covers the unnamed case.
-        exprt base_expr = get_expr(element["value"]);
-        const std::string &attr_name = element["attr"].get<std::string>();
-
-        exprt resolved = resolve_member_on_base(base_expr, attr_name);
-        if (!resolved.is_nil())
-        {
-          expr = resolved;
-          break;
-        }
-
-        log_error("Cannot resolve attribute '{}' on call result", attr_name);
-        abort();
+        throw std::runtime_error(fmt::format(
+          "Cannot resolve attribute '{}' on {} result",
+          attr_name,
+          element["value"]["_type"].get<std::string>()));
       }
       else
       {
-        log_error(
+        throw std::runtime_error(fmt::format(
           "Unsupported Attribute value type: {}",
-          element["value"]["_type"].get<std::string>());
-        abort();
+          element["value"]["_type"].get<std::string>()));
       }
 
       // Handle module attribute access (e.g., math.inf) — unless the module
@@ -878,9 +1634,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *symbol = find_symbol(module_sid.to_string());
         if (!symbol)
         {
-          log_error(
-            "Module member '{}' not found in module '{}'", attr_name, var_name);
-          abort();
+          throw std::runtime_error(fmt::format(
+            "Module member '{}' not found in module '{}'",
+            attr_name,
+            var_name));
         }
 
         expr = symbol_expr(*symbol);
@@ -947,39 +1704,35 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // A bare class name used as a value, e.g. `register(SomeClass)` or
           // `create_publisher(topic, Twist)` -- passing the class object itself
           // as an argument. Python classes are first-class objects, but ESBMC
-          // has no first-class type value, so model it as an opaque nondet
-          // placeholder. Inert uses (storing or forwarding the class) then
-          // convert instead of aborting; constructing through such a forwarded
-          // value is not modelled.
-          if (is_class(var_name, *ast_json))
+          // has no first-class type value, so model one the way a builtin type
+          // identifier is modelled: the class name as a string constant. A
+          // nondet placeholder made two reads of the same class unequal
+          // (#7549). Constructing through such a forwarded value is not
+          // modelled, and two same-named classes in different modules compare
+          // equal. This is reached only after symbol lookup fails, so a name
+          // rebound to a value still resolves to that value.
+          // A builtin exception is a class too, but it is declared by the
+          // exceptions model rather than by this AST, so is_class does not
+          // see it (esbmc/esbmc#7549).
+          if (
+            is_class(var_name, *ast_json) ||
+            type_utils::is_python_exceptions(var_name))
           {
-            expr = side_effect_expr_nondett(any_type());
+            typet str_type =
+              type_handler_.build_array(char_type(), var_name.size() + 1);
+            expr = constant_exprt(var_name, var_name, str_type);
             expr.location() = get_location_from_decl(element);
             break;
           }
         }
-        locationt location = get_location_from_decl(element);
-        std::ostringstream error_msg;
-        if (!current_func_name_.empty())
+        if (symbolt *rv = contract_return_value_symbol(var_name, element))
         {
-          // Variable referenced inside a function
-          error_msg << "Variable '" << var_name
-                    << "' is not defined in function '" << current_func_name_
-                    << "'";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
+          expr = symbol_expr(*rv);
+          break;
         }
-        else
-        {
-          // Variable referenced at global scope
-          error_msg << "Variable '" << var_name << "' is not defined";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
-        }
-        log_error("{}", error_msg.str());
-        abort();
+
+        throw std::runtime_error(undefined_variable_message(
+          var_name, current_func_name_, get_location_from_decl(element)));
       }
     }
 
@@ -995,6 +1748,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
           symbol = retyped;
       }
+
+      symbol = resolve_numpy_array_storage_alias(symbol);
+
+      // Also resolve reads through a permanent tagged-object alias, if a
+      // branch join flagged this variable.
+      dynamic_type_handler_.resolve_read(symbol);
     }
 
     expr = symbol_expr(*symbol);
@@ -1020,6 +1779,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
+
+      if (
+        std::optional<exprt> shape_attr =
+          try_get_numpy_shape_attr(*symbol, attr_name))
+      {
+        expr = *shape_attr;
+        break;
+      }
 
       if (attr_name == "shape")
       {
@@ -1063,6 +1830,67 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
+      }
+
+      // `.ndim`: mirrors the `.shape` block above (see the general
+      // attribute-access path for the descriptor-backed rank computation).
+      if (attr_name == "ndim")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+
+        if (sym_type.is_array())
+        {
+          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
+          ndarray_descriptor descriptor(
+            std::vector<long long>(dims.begin(), dims.end()), "", 0);
+          descriptor.validate();
+          expr = from_integer(descriptor.rank(), int_type());
+          break;
+        }
+
+        const typet list_type = type_handler_.get_list_type();
+        if (
+          sym_type == list_type || (symbol->get_type().is_pointer() &&
+                                    symbol->get_type().subtype() == list_type))
+        {
+          expr = from_integer(1, int_type());
+          break;
+        }
+      }
+
+      // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
+      // general attribute-access path above.
+      if (
+        (attr_name == "shape" || attr_name == "ndim") &&
+        python_list::is_bool_mask_rows_type(symbol->get_type()))
+      {
+        if (attr_name == "ndim")
+        {
+          expr = from_integer(2, int_type());
+          break;
+        }
+
+        const struct_typet &result_type = to_struct_type(symbol->get_type());
+        const array_typet &rows_type =
+          to_array_type(ns.follow(result_type.components()[0].type()));
+        const BigInt num_cols = binary2integer(
+          to_array_type(ns.follow(rows_type.subtype())).size().value().c_str(),
+          false);
+
+        exprt count_member = python_expr::build_member(
+          expr, "count", result_type.components()[1].type());
+        expr2tc count2;
+        migrate_expr(count_member, count2);
+        exprt count_as_int =
+          migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+        expr = build_shape_tuple_expr(
+          *this, {count_as_int, from_integer(num_cols, int_type())});
+        break;
       }
 
       // Delegate complex attribute access (.real, .imag) to the handler.
@@ -1272,7 +2100,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
           // Persist the mutation back to the symbol (read-modify-set).
-          class_symbol->set_type(class_symbol_type);
+          class_symbol->set_type(migrate_type(class_symbol_type));
         }
 
         // Register instance attribute for both regular and normalized keys
@@ -1418,343 +2246,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::SUBSCRIPT:
   {
-    exprt array = get_expr(element["value"]);
-
-    // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
-    // integer returns a cpp-throw side effect), propagate the exception rather
-    // than attempting to index it. Slicing a thrown exception is meaningless
-    // and would build an address_of over a non-array operand, crashing the
-    // converter.
-    if (array.is_nil() || contains_cpp_throw(array))
-    {
-      expr = array;
-      break;
-    }
-
-    // An inline list-returning call used directly as a subscript base --
-    // e.g. sorted(words)[0] -- comes back as a code_function_callt statement.
-    // Indexing it builds __ESBMC_list_size over the call statement, whose
-    // operand type is empty, aborting symex ("got empty, expected pointer").
-    // Materialise the call into a temporary first, mirroring the assigned
-    // path (s = sorted(words); s[0]). See #4807.
-    if (current_block)
-      array =
-        materialize_list_function_call(array, element["value"], *current_block);
-
-    const nlohmann::json &slice = element["slice"];
-    typet array_type = ns.follow(array.type());
-
-    // A fully-constant string slice (e.g. "abcdef"[5:0:-1]) folds at
-    // conversion time. The runtime string-slice path mishandles a negative
-    // step — wrong content and an unconstrained length — whereas consteval's
-    // slice computation matches CPython. Gate on the converted str type (a
-    // bytes literal decodes to the same Constant JSON as str, and its runtime
-    // slice is a separate concern), so only a genuine constant str slice folds
-    // and anything non-constant falls through to the existing runtime path.
-    if (
-      ast_json && slice.is_object() && slice.value("_type", "") == "Slice" &&
-      type_utils::is_string_type(array_type))
-    {
-      python_consteval slice_evaluator(*ast_json);
-      if (auto folded = slice_evaluator.try_eval_global_expr(element))
-        if (folded->kind == PyConstValue::STRING)
-        {
-          expr = string_builder_->build_string_literal(folded->string_val);
-          break;
-        }
-    }
-
-    // Unwrap pointer-to-dict so d[key] reaches the dict handler when
-    // d is held by pointer (e.g. dict-of-class-value via the symbol table).
-    typet array_type_for_dict = array_type;
-    bool array_is_dict_pointer = false;
-    if (array_type_for_dict.is_pointer())
-    {
-      typet pointed = ns.follow(array_type_for_dict.subtype());
-      if (pointed.is_struct() && dict_handler_->is_dict_type(pointed))
-      {
-        array_type_for_dict = pointed;
-        array_is_dict_pointer = true;
-      }
-    }
-    // Handle tuple subscripting - tuples are structs, not arrays.
-    // Unwrap pointer-to-tuple so key[i] reaches the tuple handler when the
-    // tuple arrives by pointer (e.g. a tuple-of-slices coerced to a pointer
-    // parameter for __getitem__, see GitHub #4539).
-    if (array_type.is_pointer())
-    {
-      typet pointed = ns.follow(array_type.subtype());
-      if (pointed.is_struct() && tuple_handler_->is_tuple_type(pointed))
-      {
-        // V.1k keystone (D): deref of the tuple pointer built in IREP2.
-        // build_dereference restores #cpp_type and falls back to legacy for
-        // dyn-array pointees, so it reproduces the legacy node exactly.
-        array = python_expr::build_dereference(array, pointed);
-        array_type = pointed;
-      }
-    }
-    if (tuple_handler_->is_tuple_type(array_type))
-    {
-      expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
-      break;
-    }
-
-    // Handle dictionary subscript with type inference from annotations
-    if (
-      array_type_for_dict.is_struct() &&
-      dict_handler_->is_dict_type(array_type_for_dict))
-    {
-      // Dereference once so the handler operates on the dict struct.
-      if (array_is_dict_pointer)
-      {
-        dereference_exprt deref(array, array_type_for_dict);
-        deref.type() = array_type_for_dict;
-        array = std::move(deref);
-      }
-
-      // Try to resolve the expected return type from the dict's type annotation
-      typet expected_type =
-        dict_handler_->resolve_expected_type_for_dict_subscript(array);
-
-      // Pass the expected type to the dict handler
-      // If empty, the handler will use its default heuristics
-      expr = dict_handler_->handle_dict_subscript(array, slice, expected_type);
-      break;
-    }
-
-    const typet list_type = type_handler_.get_list_type();
-    const bool array_is_runtime_list =
-      array_type == list_type ||
-      (array_type.is_pointer() && ns.follow(array_type.subtype()) == list_type);
-    const bool array_is_builtin_array = array_type.is_array();
-    const bool tuple_index_targets_list_model =
-      array_is_runtime_list || array_is_builtin_array;
-
-    // Multi-dimensional indexing ``a[i, j, k, ...]`` for list/array-backed
-    // models: lower to chained single-axis indexing `a[i][j][k]...`, one
-    // axis at a time. Mixed slice/index tuples (e.g. `a[1:2, 0]`) are not
-    // supported by the chained-list model and are rejected explicitly.
-    if (
-      tuple_index_targets_list_model && slice.contains("_type") &&
-      slice["_type"] == "Tuple")
-    {
-      if (
-        slice.contains("elts") && slice["elts"].is_array() &&
-        !slice["elts"].empty())
-      {
-        std::vector<nlohmann::json> idx_nodes;
-        idx_nodes.reserve(slice["elts"].size());
-        bool has_slice_dim = false;
-        for (const auto &raw_idx : slice["elts"])
-        {
-          const nlohmann::json idx = normalize_bool_index_node(raw_idx);
-          if (idx.contains("_type") && idx["_type"] == "Slice")
-            has_slice_dim = true;
-          idx_nodes.push_back(idx);
-        }
-        if (has_slice_dim)
-        {
-          // 2-D slicing: a[:, j] (column select) and a[i, :] (row select,
-          // equivalent to chained a[i][:]). Any other slice/index tuple
-          // combination (partial bounds, both dims sliced, 3+ dims, ...)
-          // stays unsupported.
-          if (
-            idx_nodes.size() == 2 && is_full_slice_node(idx_nodes[0]) !=
-                                       is_full_slice_node(idx_nodes[1]))
-          {
-            python_list list(*this, element);
-            if (is_full_slice_node(idx_nodes[0]))
-              expr = list.build_column_select(array, idx_nodes[1], element);
-            else
-            {
-              exprt current = list.index(array, idx_nodes[0]);
-              if (!contains_cpp_throw(current))
-                current = list.index(current, idx_nodes[1]);
-              expr = current;
-            }
-            break;
-          }
-
-          throw_numpy_multidim_index_error(*this, element);
-        }
-
-        python_list list(*this, element);
-        exprt current = array;
-        for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
-        {
-          if (axis > 0)
-          {
-            const typet current_type = ns.follow(current.type());
-            const bool current_is_list_like = current_type.is_array() ||
-                                              current_type.is_pointer() ||
-                                              current_type == list_type;
-            if (!current_is_list_like)
-              throw_numpy_too_many_indices_error(
-                *this, element, idx_nodes.size());
-          }
-
-          current = list.index(current, idx_nodes[axis]);
-          if (contains_cpp_throw(current))
-            break;
-        }
-
-        expr = current;
-        break;
-      }
-
-      throw_numpy_multidim_index_error(*this, element);
-    }
-
-    // Fancy/integer-array indexing ``a[[0, 2]]``: a literal index list
-    // selects elements by position, resolved and bounds-checked at
-    // conversion time (see python_list::build_fancy_index).
-    if (
-      tuple_index_targets_list_model && slice.contains("_type") &&
-      slice["_type"] == "List" && slice.contains("elts") &&
-      slice["elts"].is_array())
-    {
-      std::vector<nlohmann::json> idx_elts(
-        slice["elts"].begin(), slice["elts"].end());
-      python_list list(*this, element);
-      expr = list.build_fancy_index(array, idx_elts, element);
-      break;
-    }
-
-    // Boolean-mask indexing ``a[mask]``: when the index is a bare variable
-    // reference whose static type is a bool array, filter `array` at
-    // runtime to the elements where `mask` is True (NumPy fancy indexing).
-    // Restricted to a simple Name index so the type can be checked without
-    // re-evaluating a side-effecting expression later in this function.
-    if (
-      tuple_index_targets_list_model && slice.contains("_type") &&
-      slice["_type"] == "Name")
-    {
-      exprt mask_candidate = get_expr(slice);
-      if (!contains_cpp_throw(mask_candidate))
-      {
-        const typet mask_type = ns.follow(mask_candidate.type());
-        if (mask_type.is_array())
-        {
-          if (ns.follow(mask_type.subtype()).is_bool())
-          {
-            python_list list(*this, element);
-            expr = list.build_bool_mask_index(array, mask_candidate, element);
-            break;
-          }
-
-          // Fancy/integer-array indexing through a variable (as opposed to
-          // a literal index list, a[[0, 2]]) is not modelled yet; give an
-          // explicit error instead of falling through to the generic
-          // scalar-index path below, whose "not str" message is written
-          // for a different mistake (string indices) and would be
-          // confusing here.
-          std::ostringstream msg;
-          msg << "TypeError: fancy indexing with a non-boolean array is "
-                 "not supported; only boolean-mask indexing (a[mask]) and "
-                 "literal integer-list indexing (a[[i, j, ...]]) are "
-                 "supported for array indices";
-          const locationt loc = get_location_from_decl(element);
-          if (!loc.is_nil())
-            msg << " at " << loc.get_file() << ":" << loc.get_line();
-          throw std::runtime_error(msg.str());
-        }
-
-        // Fancy indexing through a variable holding a concrete literal
-        // list of integers, e.g. `idx = [0, 2]; a[idx]`. `idx` is a plain
-        // Python list (not a numpy int array), so it reaches here as the
-        // list model's struct type rather than an array_typet. Resolve it
-        // the same way build_bool_mask_row_select resolves a mask
-        // variable: read its sole AST declaration and reuse
-        // build_fancy_index, which already handles a literal list at the
-        // subscript site (`a[[0, 2]]`).
-        if (mask_type == type_handler_.get_list_type())
-        {
-          const std::string idx_name = slice["id"].get<std::string>();
-          const locationt loc = get_location_from_decl(element);
-
-          auto reject = [&](const std::string &reason) {
-            std::ostringstream msg;
-            msg << "TypeError: fancy indexing through a variable (a[idx]) "
-                << reason;
-            if (!loc.is_nil())
-              msg << " at " << loc.get_file() << ":" << loc.get_line();
-            throw std::runtime_error(msg.str());
-          };
-
-          // find_var_decl returns the first textual assignment in scope,
-          // not necessarily the one reaching this use site; reject any
-          // reassignment rather than risk resolving a stale index list.
-          if (json_utils::has_multiple_assignments_in_scope(
-                idx_name, current_func_name_, *ast_json))
-            reject(
-              "requires an index variable that is assigned exactly once "
-              "(no reassignment) so its literal value can be resolved "
-              "unambiguously");
-
-          const nlohmann::json idx_decl =
-            json_utils::find_var_decl(idx_name, current_func_name_, *ast_json);
-
-          if (
-            idx_decl.is_null() || !idx_decl.contains("value") ||
-            idx_decl["value"].value("_type", "") != "List" ||
-            !idx_decl["value"].contains("elts"))
-            reject(
-              "requires an index variable whose value is a concrete "
-              "literal list of integers, e.g. idx = [0, 2]");
-
-          std::vector<nlohmann::json> idx_elts(
-            idx_decl["value"]["elts"].begin(), idx_decl["value"]["elts"].end());
-          python_list list(*this, element);
-          expr = list.build_fancy_index(array, idx_elts, element);
-          break;
-        }
-      }
-    }
-
-    // Handle object subscripting through __getitem__:
-    //   obj[key] -> obj.__getitem__(key)
-    if (has_dunder_method(element["value"], "__getitem__"))
-    {
-      nlohmann::json args = nlohmann::json::array();
-      args.push_back(slice);
-      nlohmann::json call_node =
-        build_dunder_call(element["value"], "__getitem__", args, element);
-      expr = get_function_call(call_node);
-      break;
-    }
-
-    // Reject subscripting scalar numeric / boolean values up front. CPython
-    // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
-    // the list handler below silently produces an unresolved-type value that
-    // later trips the binop "Unsupported comparison with unresolved operand
-    // type" error far from the actual mistake (e.g. when the user expects
-    // a tuple from a Counter.most_common() result and chains a second
-    // subscript onto an int).
-    if (
-      !array_type.is_array() && !array_type.is_pointer() &&
-      !array_type.is_struct() &&
-      (array_type.is_signedbv() || array_type.is_unsignedbv() ||
-       array_type.is_floatbv() || array_type.is_bool()))
-    {
-      std::string type_name;
-      if (array_type.is_bool())
-        type_name = "bool";
-      else if (array_type.is_floatbv())
-        type_name = "float";
-      else
-        type_name = "int";
-
-      std::ostringstream msg;
-      msg << "TypeError: '" << type_name << "' object is not subscriptable";
-      const locationt loc = get_location_from_decl(element);
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
-
-    // Handle regular array/list subscripting
-    python_list list(*this, element);
-    expr = list.index(array, normalize_bool_index_node(slice));
+    expr = handle_subscript_expr(element);
     break;
   }
   case ExpressionType::FSTRING:

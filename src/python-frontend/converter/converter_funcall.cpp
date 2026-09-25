@@ -1,28 +1,150 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+
+#include <optional>
+#include <sstream>
 
 using namespace json_utils;
+
+namespace
+{
+std::optional<std::size_t>
+get_nonnegative_literal_size(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", std::string()) != "Constant" ||
+    !node.contains("value"))
+    return std::nullopt;
+
+  const auto &value = node["value"];
+  if (value.is_number_unsigned())
+    return value.get<std::size_t>();
+
+  if (value.is_number_integer())
+  {
+    const auto signed_value = value.get<long long>();
+    if (signed_value >= 0)
+      return static_cast<std::size_t>(signed_value);
+  }
+
+  return std::nullopt;
+}
+
+std::optional<std::size_t> get_keyword_literal_size(
+  const nlohmann::json &call,
+  const std::string &keyword_name)
+{
+  if (!call.contains("keywords"))
+    return std::nullopt;
+
+  for (const auto &kw : call["keywords"])
+  {
+    if (
+      kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+      !kw["arg"].is_null() && kw["arg"] == keyword_name)
+      return get_nonnegative_literal_size(kw["value"]);
+  }
+
+  return std::nullopt;
+}
+
+std::optional<long long> get_literal_int_index(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return node["value"].get<long long>();
+
+  if (
+    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+    node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+    node["operand"].value("_type", "") == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<long long>();
+
+  return std::nullopt;
+}
+
+std::optional<std::pair<long long, long long>>
+get_fixed_2d_array_shape(const symbolt &source, const namespacet &ns)
+{
+  typet source_type = ns.follow(source.get_type());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &array_type = to_array_type(source_type);
+  if (array_type.size().is_nil() || !array_type.size().is_constant())
+    return std::nullopt;
+
+  source_type = ns.follow(array_type.subtype());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_type = to_array_type(source_type);
+  if (row_type.size().is_nil() || !row_type.size().is_constant())
+    return std::nullopt;
+
+  return std::make_pair(
+    binary2integer(array_type.size().value().c_str(), false).to_int64(),
+    binary2integer(row_type.size().value().c_str(), false).to_int64());
+}
+
+bool is_numpy_random_attr(const nlohmann::json &func, const std::string &name)
+{
+  if (
+    !func.is_object() || func.value("_type", std::string()) != "Attribute" ||
+    func.value("attr", std::string()) != name || !func.contains("value") ||
+    !func["value"].is_object() ||
+    func["value"].value("_type", std::string()) != "Attribute" ||
+    func["value"].value("attr", std::string()) != "random" ||
+    !func["value"].contains("value") || !func["value"]["value"].is_object())
+    return false;
+
+  const auto &base = func["value"]["value"];
+  return base.value("_type", std::string()) == "Name" &&
+         base.value("id", std::string()) == "np";
+}
+
+nlohmann::json
+make_list_from_repeated_call(const nlohmann::json &call, std::size_t size)
+{
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (call.contains(key))
+      list_node[key] = call[key];
+
+  for (std::size_t i = 0; i < size; ++i)
+    list_node["elts"].push_back(call);
+
+  return list_node;
+}
+} // namespace
 
 // Resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
@@ -71,7 +193,8 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   return nil_exprt();
 }
 
-// Resolve function calls (both identity functions and constant-returning functions)
+// Resolve function calls (both identity functions and constant-returning
+// functions)
 exprt python_converter::resolve_function_call(
   const exprt &func_expr,
   const exprt &args_expr)
@@ -252,10 +375,266 @@ bool python_converter::is_identity_function(
 
   return false;
 }
+
+exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return nil_exprt();
+
+  const nlohmann::json &arg = element["args"][0];
+  const locationt location = get_location_from_decl(element);
+  if (has_dunder_method(arg, "__len__"))
+    return checked_len_result(
+      get_expr(
+        build_dunder_call(arg, "__len__", nlohmann::json::array(), element)),
+      location);
+
+  // Without a __len__ the builtin path measures the struct with strlen and
+  // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
+  const std::string cls = instance_class_name(arg);
+  if (!cls.empty() && is_class_instance(arg))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+
+  return get_len_on_list_element(arg, location);
+}
+
+// len(xs[i]): the AST names no class, but the element's converted type does
+// (#7966). That type is the list's static element type, and the list model
+// tags every object element alike, so the runtime class is known only when
+// the program defines a single class; with several, len() is refused rather
+// than dispatched to a possibly wrong __len__. The converted element appears
+// twice below, so an argument whose conversion could call anything is refused
+// as well.
+exprt python_converter::get_len_on_list_element(
+  const nlohmann::json &arg,
+  const locationt &location)
+{
+  if (arg.value("_type", "") != "Subscript")
+    return nil_exprt();
+  const exprt probed = probe_expr(arg);
+  if (
+    (!is_user_class_pointer(probed.type()) &&
+     !is_user_class_struct_type(probed.type())) ||
+    list_element_type_id(probed).is_nil())
+    return nil_exprt();
+
+  if (!is_pure_read(arg) || count_user_classes() != 1)
+    throw std::runtime_error(
+      "len() of a list element is not modelled when the program defines "
+      "several classes or the index is not a plain read");
+
+  exprt object = get_expr(arg);
+  code_assertt same_class(equality_exprt(
+    list_element_type_id(object),
+    type_handler_.tagged_scalar_type_id(object.type())));
+  same_class.location() = location;
+  same_class.location().user_provided(true);
+  same_class.location().comment(
+    "len() of a list element that is not a class instance is not modelled");
+  current_block->copy_to_operands(same_class);
+
+  const exprt dunder = dispatch_unary_dunder_operator("len", object, location);
+  if (dunder.is_nil())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "object of type '" + class_name_of(object.type()) + "' has no len()");
+  return checked_len_result(dunder, location);
+}
+
+// Classes the program can instantiate: every ClassDef in a user module, at
+// any scope and whether converted yet or not, and every class an operational
+// model has registered.
+std::size_t python_converter::count_user_classes()
+{
+  std::size_t count = json_utils::count_class_defs(*entry_ast_);
+  if (extra_asts_)
+    for (const nlohmann::json &ast : *extra_asts_)
+      count += json_utils::count_class_defs(ast);
+  for (const auto &module : module_ast_pool_)
+    count += json_utils::count_class_defs(module.second);
+
+  std::size_t registered = 0;
+  symbol_table_.foreach_operand([&](const symbolt &sym) {
+    if (
+      sym.id.as_string().rfind("tag-", 0) == 0 &&
+      is_user_class_struct_type(sym.get_type()))
+      ++registered;
+  });
+  return std::max(count, registered);
+}
+
+// The element's `type_id`, read off the PyObject its converted value unwraps
+// (`*(C **)obj->value`), or nil when the expression is not such a read.
+exprt python_converter::list_element_type_id(const exprt &value)
+{
+  if (value.id() == "member" && value.get("component_name") == "value")
+    return member_exprt(value.op0(), "type_id", size_type());
+  for (const exprt &op : value.operands())
+  {
+    exprt found = list_element_type_id(op);
+    if (found.is_not_nil())
+      return found;
+  }
+  return nil_exprt();
+}
+
+// CPython's len() rejects a negative __len__ result with ValueError.
+exprt python_converter::checked_len_result(
+  const exprt &len_call,
+  const locationt &location)
+{
+  // Stored once: the guard and the caller both read it.
+  symbolt tmp =
+    create_return_temp_variable(len_call.type(), location, "__len__");
+  symbol_table_.add(tmp);
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  current_block->copy_to_operands(decl);
+  exprt call = len_call;
+  convert_function_call_to_side_effect(call);
+  code_assignt store(result, call);
+  store.location() = location;
+  current_block->copy_to_operands(store);
+  code_ifthenelset guard;
+  guard.cond() = binary_relation_exprt(result, "<", gen_zero(result.type()));
+  codet raise("expression");
+  raise.copy_to_operands(get_exception_handler().gen_exception_raise(
+    "ValueError", "__len__() should return >= 0"));
+  guard.then_case() = raise;
+  guard.location() = location;
+  current_block->copy_to_operands(guard);
+  return result;
+}
+
+// A name, constant, negated constant, or attribute/subscript chain over them:
+// converting one emits reads and no calls of its own.
+bool python_converter::is_pure_read(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Name" || kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return node["op"].value("_type", "") == "USub" &&
+           node["operand"].value("_type", "") == "Constant";
+  if (kind == "Attribute")
+    return is_pure_read(node["value"]);
+  if (kind == "Subscript")
+    return is_pure_read(node["value"]) && is_pure_read(node["slice"]);
+  return false;
+}
+
+// len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+// slice views): __ESBMC_get_object_size on the pointer would report the
+// base array's remaining size from that offset, not v's own (possibly
+// shorter) logical length -- e.g. an empty view still points at a valid
+// position with nonzero remaining capacity. Returns the tracked literal
+// length directly instead of routing through the generic len() dispatch.
+std::optional<exprt>
+python_converter::try_get_numpy_pointer_view_len(const nlohmann::json &element)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return std::nullopt;
+
+  const nlohmann::json &arg = element["args"][0];
+  if (
+    std::optional<exprt> subscript_len =
+      try_get_numpy_subscript_pointer_view_len(arg, element))
+    return subscript_len;
+
+  return try_get_numpy_named_pointer_view_len(arg);
+}
+
+std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
+  const nlohmann::json &arg,
+  const nlohmann::json &element)
+{
+  if (
+    arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
+    arg["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  std::optional<long long> literal_index = get_literal_int_index(arg["slice"]);
+  if (!literal_index)
+    return std::nullopt;
+
+  const std::string source_id =
+    resolve_name_symbol_id(arg["value"]["id"].get<std::string>());
+  if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+    return std::nullopt;
+
+  const symbolt *source = symbol_table_.find_symbol(source_id);
+  if (!source)
+    return std::nullopt;
+
+  const namespacet ns(symbol_table_);
+  std::optional<std::pair<long long, long long>> shape =
+    get_fixed_2d_array_shape(*source, ns);
+  if (!shape)
+    return std::nullopt;
+
+  long long row_index = *literal_index;
+  const long long row_count = shape->first;
+  const long long col_count = shape->second;
+  if (row_count == 0)
+    return from_integer(0, long_long_int_type());
+
+  if (row_index < 0)
+    row_index += row_count;
+  if (row_index < 0 || row_index >= row_count)
+  {
+    std::ostringstream msg;
+    msg << "index " << *literal_index
+        << " is out of bounds for axis 0 with size " << row_count;
+    const locationt location = get_location_from_decl(element);
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+
+    exprt raise =
+      get_exception_handler().gen_exception_raise("IndexError", msg.str());
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = location;
+    add_instruction(throw_code);
+    return from_integer(0, long_long_int_type());
+  }
+
+  return from_integer(col_count, long_long_int_type());
+}
+
+std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
+  const nlohmann::json &arg) const
+{
+  if (arg.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string arg_id =
+    resolve_name_symbol_id(arg["id"].get<std::string>());
+  if (arg_id.empty())
+    return std::nullopt;
+
+  const auto it = numpy_pointer_view_info_.find(arg_id);
+  if (it == numpy_pointer_view_info_.end())
+    return std::nullopt;
+
+  return from_integer(it->second.length, long_long_int_type());
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
+
+  reject_unknown_numpy_view_call(element);
 
   // A callable instance: `c(args)` where c is an object whose class defines
   // __call__. Calling the instance directly treats it as a function and aborts
@@ -280,6 +659,67 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         attr[f] = element["func"][f];
     call_node["func"] = attr;
     return get_function_call(call_node);
+  }
+
+  // a.<method>(...) on a tracked numpy array (sum/mean/min/max/std/var/
+  // flatten/transpose/reshape/ravel/copy) only resolves through the numpy
+  // operational model when it has the np.<method>(a, ...) shape a
+  // module-form call would have produced. The assignment-statement RHS
+  // already rewrites this shape before it reaches here; this call covers
+  // every other expression context (assert, nested expressions, call
+  // arguments, ...), which otherwise fall through to an unrelated builtin
+  // or class-method lookup for the same method name.
+  if (
+    std::optional<nlohmann::json> rewritten =
+      rewrite_numpy_method_call_node(element))
+    return rewritten->value("_type", "") == "Call"
+             ? get_function_call(*rewritten)
+             : get_expr(*rewritten);
+
+  if (
+    is_numpy_random_attr(element["func"], "random") &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (
+    is_numpy_random_attr(element["func"], "rand") && element.contains("args") &&
+    element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (is_numpy_random_attr(element["func"], "randint"))
+  {
+    if (auto size = get_keyword_literal_size(element, "size"))
+    {
+      nlohmann::json scalar_call = element;
+      nlohmann::json keywords = nlohmann::json::array();
+      if (scalar_call.contains("keywords"))
+      {
+        for (const auto &kw : scalar_call["keywords"])
+        {
+          if (
+            kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+            !kw["arg"].is_null() && kw["arg"] == "size")
+            continue;
+          keywords.push_back(kw);
+        }
+      }
+      scalar_call["keywords"] = std::move(keywords);
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
   }
 
   // Handle direct range(...) calls by converting to list
@@ -453,12 +893,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // return the keys member as a placeholder — same size as the dict,
           // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
           // Full (key, value) tuple semantics are not modelled.
-          return migrate_expr_back(
+          exprt items_view = migrate_expr_back(
             member2tc(migrate_type(list_type), dict2, "keys"));
+          items_view.set(PYTHON_ITEMS_VIEW_ATTR, true);
+          return items_view;
         }
-        // Return the keys or values member directly
-        return migrate_expr_back(
+        exprt view = migrate_expr_back(
           member2tc(migrate_type(list_type), dict2, method_name));
+        if (method_name == "keys")
+          view.set(PYTHON_KEYS_VIEW_ATTR, true);
+        return view;
       }
     }
   }
@@ -479,7 +923,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     nlohmann::json func_node;
     if (can_fold)
     {
-      func_node = find_function((*ast_json)["body"], "parse_nested_parens");
+      func_node = try_find_function((*ast_json)["body"], "parse_nested_parens");
       if (func_node.empty())
         can_fold = false;
     }
@@ -611,7 +1055,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     call.type() = ret_type;
     if (element.contains("args"))
       for (const auto &arg : element["args"])
-        call.arguments().push_back(get_expr(arg));
+      {
+        exprt arg_expr = get_expr(arg);
+        // No parameter types to check against here, so refuse cleanly.
+        if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+          dynamic_type_handler_.refuse_tagged_argument();
+        call.arguments().push_back(arg_expr);
+      }
 
     return call;
   }
@@ -633,13 +1083,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       call.location() = get_location_from_decl(element);
 
       // The function pointer itself, not dereferenced.
-      // For Any-typed (void*) parameters, cast to a generic function pointer
-      // so that the adjuster can dereference it to a code type (it calls
-      // to_code_type on the dereferenced subtype, which would fail on void).
+      // Any pointer whose pointee is not code needs the cast to a generic
+      // function pointer: the adjuster dereferences the callee and calls
+      // to_code_type on the result, which asserts on anything else. Any-typed
+      // (void*) parameters get here, and so does a callable returned by an
+      // unannotated function, which the frontend types None, i.e. bool*
+      // (#6640).
       // V.3: build the function-pointer reference (and the generic-pointer
       // cast the adjuster relies on) in IREP2; both are over a clean symbol.
       exprt func_ptr_expr = python_expr::build_symbol(*var_symbol);
-      if (var_symbol->get_type() == any_type())
+      if (!var_symbol->get_type().subtype().is_code())
         func_ptr_expr = python_expr::build_typecast(
           func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
@@ -683,6 +1136,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         for (const auto &arg_element : element["args"])
         {
           exprt arg_expr = get_expr(arg_element);
+          // The pointer target only carries a return type, no parameter
+          // types, so refuse cleanly instead of passing a mistyped arg.
+          if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+            dynamic_type_handler_.refuse_tagged_argument();
           // A function name used as an argument decays to a function pointer.
           if (arg_expr.type().is_code() && arg_expr.is_symbol())
             arg_expr = address_of_exprt(arg_expr);
@@ -735,7 +1192,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   }
 
   const std::string function = config.options.get_option("function");
-  // To verify a specific function, it is necessary to load the definitions of functions it calls.
+  // To verify a specific function, it is necessary to load the definitions of
+  // functions it calls.
   if (!function.empty() && !is_loading_models)
   {
     std::string func_name("");
@@ -752,12 +1210,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !is_class(func_name, *ast_json))
     {
       // A call into an unrecognised module (e.g. itertools.islice) has no
-      // definition in the AST, so find_function returns an empty node. Skip
+      // definition in the AST, so try_find_function returns an empty node. Skip
       // loading here and let the call fall through to the "Undefined function
       // - replacing with assert(false)" fallback instead of feeding an empty
       // node to get_function_definition, which would dereference missing
       // fields and abort (issue #5898).
-      const auto &func_node = find_function((*ast_json)["body"], func_name);
+      const auto &func_node = try_find_function((*ast_json)["body"], func_name);
       if (!func_node.empty())
         get_function_definition(func_node);
     }
@@ -781,9 +1239,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (!current_func_name_.empty())
     {
       // Walk the function nesting path (split on "@F@").
-      // Use const ref so the non-throwing find_function overload
-      // (returns empty JSON on miss) is selected instead of the
-      // mutable-ref overload that throws.
       const nlohmann::json &ast_body = (*ast_json)["body"];
       nlohmann::json cur_body = ast_body;
       std::string remaining = current_func_name_;
@@ -801,8 +1256,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           part = remaining;
           remaining.clear();
         }
-        auto fn =
-          find_function(static_cast<const nlohmann::json &>(cur_body), part);
+        auto fn = try_find_function(cur_body, part);
         if (fn.empty() || !fn.contains("body") || !fn["body"].is_array())
           break;
         for (const auto &stmt : fn["body"])
@@ -823,7 +1277,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (
       !locally_shadowed && !type_utils::is_builtin_type(callee) &&
       !type_utils::is_python_model_func(callee) &&
-      !find_function((*ast_json)["body"], callee).empty())
+      !try_find_function((*ast_json)["body"], callee).empty())
     {
       // Collect constant arguments
       bool all_const = true;
@@ -918,27 +1372,20 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // len(obj) where obj's class defines __len__: dispatch to obj.__len__().
-  // The builtin len path only recognises the model container types (list,
-  // tuple, dict, str/bytes), so a user-defined __len__ is otherwise ignored
-  // and len falls through to strlen over the struct — a wrong length.
-  if (
-    element.contains("func") && element["func"].is_object() &&
-    element["func"].value("_type", "") == "Name" &&
-    element["func"].value("id", "") == "len" && element.contains("args") &&
-    element["args"].is_array() && element["args"].size() == 1 &&
-    has_dunder_method(element["args"][0], "__len__"))
-  {
-    return get_expr(build_dunder_call(
-      element["args"][0], "__len__", nlohmann::json::array(), element));
-  }
+  if (exprt len_expr = get_len_on_class_instance(element);
+      len_expr.is_not_nil())
+    return len_expr;
+
+  if (std::optional<exprt> view_len = try_get_numpy_pointer_view_len(element))
+    return *view_len;
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
 
-  // Convert boolean-returning function calls to side-effect expressions when used
-  // in expression contexts (e.g., logical operations). This prevents GOTO generation
-  // failures where code statements appear in boolean expression operands.
+  // Convert boolean-returning function calls to side-effect expressions when
+  // used in expression contexts (e.g., logical operations). This prevents GOTO
+  // generation failures where code statements appear in boolean expression
+  // operands.
   if (
     call_expr.is_code() && call_expr.statement() == "function_call" &&
     is_converting_rhs)
@@ -1003,7 +1450,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (it == param_positions.end())
       {
         // For user-defined functions, unknown kwargs are a TypeError.
-        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently
+        // skip.
         if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
           throw std::runtime_error(
             "Unknown keyword argument: " + arg_name + " in function " +
@@ -1011,7 +1459,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         continue;
       }
 
-      exprt arg_expr = get_expr(kw["value"]);
+      exprt arg_expr = function_call_expr::fold_from_bytes_byteorder(
+        get_expr(kw["value"]),
+        kw["value"],
+        *func_symbol,
+        params,
+        it->second,
+        *ast_json);
 
       // Convert array to pointer to match parameter type
       const typet &param_type = params[it->second].type();
@@ -1107,7 +1561,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       throw std::runtime_error(msg.str());
     }
 
-    // Fill empty arguments with proper Optional values or None for optional parameters
+    // Fill empty arguments with proper Optional values or None for optional
+    // parameters
     for (size_t i = 0; i < args.size(); ++i)
     {
       if (args[i].is_nil() || args[i].id().empty())
@@ -1173,10 +1628,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // so a struct is passed to a pointer parameter (#4558/#4564).
           if (arg_actual_type.id() == "symbol")
             arg_actual_type = ns.follow(arg_actual_type);
-          // Handle union types: if param is pointer and arg is struct (or symbol
-          // to struct), take address. This is the post-processing pass for
-          // general pointer-to-struct coercion.
-          // NOTE: function_call_expr.cpp also has an earlier coercion pass that
+          // Handle union types: if param is pointer and arg is struct (or
+          // symbol to struct), take address. This is the post-processing pass
+          // for general pointer-to-struct coercion. NOTE:
+          // function_call_expr.cpp also has an earlier coercion pass that
           // specifically handles char[0]* union parameters (str | T pattern).
           // These two mechanisms are complementary: the pass here handles the
           // general case; the earlier pass handles the specific char[0]* union
@@ -1289,8 +1744,12 @@ exprt python_converter::materialize_list_function_call(
 
   const code_function_callt &call = to_code_function_call(to_code(expr));
 
-  // Only handle list-returning functions
-  if (call.type() != type_handler_.get_list_type())
+  // Only handle list-returning functions and array-value-returning functions
+  // (e.g. bytes): both need a bound temporary before they can be indexed or
+  // sliced, since a code_function_callt embedded directly as an index/slice
+  // operand is a statement, not a value (#4807's list case; bytes hits the
+  // same gap when a `-> bytes` call is indexed inline, e.g. `f()[0:8]`).
+  if (call.type() != type_handler_.get_list_type() && !call.type().is_array())
     return expr;
 
   locationt location = get_location_from_decl(element);

@@ -14,10 +14,10 @@ Module: Unit tests for symbolt -- specifically the legacy / IREP2
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/migrate.h>
-#include <util/std_code.h>
-#include <util/symbol.h>
+#include <util/arith/arith_tools.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_code.h>
+#include <util/symtab/symbol.h>
 
 SCENARIO(
   "Constructed symbol validity checks",
@@ -42,15 +42,15 @@ SCENARIO(
 // ---------------------------------------------------------------------------
 // is_code discriminator parity (B2 S5a precondition).
 //
-// The symbol-table source-of-truth flip (docs/irep2-migration.md, B2 §S5a)
-// turns `symbolt::type` into IREP2 storage and derives the legacy `typet`
+// The symbol-table source-of-truth flip (docs/roadmap/irep2-migration.md, B2
+// §S5a) turns `symbolt::type` into IREP2 storage and derives the legacy `typet`
 // lazily. Pipeline code discriminates function symbols from data symbols by
 // querying `is_code` on the type: today via `sym.get_type().is_code()` (legacy
 // irept walk), tomorrow via `is_code_type(sym.get_type2())` (IREP2 type-id
 // check). These tests pin the property that *both queries always agree*, on
 // every write path that S5a will reshape.
 //
-// The hazard documented in docs/irep2-migration.md is the
+// The hazard documented in docs/roadmap/irep2-migration.md is the
 // dual-role / static-lifetime case: a function symbol and a same-named
 // static_lifetime global have different `is_code` answers despite sharing
 // `base_name`. Both forms of the discriminator must distinguish them.
@@ -224,7 +224,8 @@ TEST_CASE(
 }
 
 // ---------------------------------------------------------------------------
-// Pre-V2 value-side parity (B2 V-track, docs/irep2-migration.md §V-track).
+// Pre-V2 value-side parity (B2 V-track, docs/roadmap/irep2-migration.md
+// §V-track).
 //
 // V2 will mirror S5a on the value side: `expr2tc value_` becomes the dominant
 // representation, the legacy `exprt` is derived lazily via migrate_expr_back

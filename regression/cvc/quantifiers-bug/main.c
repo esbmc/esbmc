@@ -18,7 +18,6 @@ int main()
   __ESBMC_assert(
     __ESBMC_forall(&i, i > 9 || c[i] == i), "array is initialized correctly");
 
-  // BUG: esbmc simplifies i to N
   __ESBMC_assert(__ESBMC_exists(&i, i == 0), "can be anything");
   __ESBMC_assert(__ESBMC_exists(&i, i == 1), "can be anything 2");
   __ESBMC_assert(!__ESBMC_exists(&i, i == 0 && i == 1), "contradiction");

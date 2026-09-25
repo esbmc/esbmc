@@ -1,0 +1,4 @@
+CORE
+symex_ssa_00.c
+--overflow-check --unsigned-overflow-check --memory-leak-check
+^VERIFICATION SUCCESSFUL$

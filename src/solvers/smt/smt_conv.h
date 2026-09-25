@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <irep2/irep2.h>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 #include <solvers/smt/smt_result.h>
 
 // Forward declaration only: the full solver implementation lives in
@@ -60,8 +60,17 @@ public:
   /** Boolean model value of an expression. */
   tvt l_get(const expr2tc &expr);
 
+  /** Whether a satisfiable result can be turned into a model. False for the
+   *  subprocess SMT-LIB backends with no interactive model solver attached:
+   *  they answer sat/unsat, but get() and l_get() have nothing to read. */
+  bool has_model() const;
+
   /** Assert a boolean expression into the solver context. */
   void assert_expr(const expr2tc &e);
+  /** Record divisions in @p expr so the modulus conversion can lower a
+   *  remainder compositionally exactly when its operands are also
+   *  divided somewhere in the formula. */
+  void note_division_operands(const expr2tc &expr);
 
   /** Convert and dump an expression in SMT format (--ssa-smt-trace). */
   void dump_expr(const expr2tc &expr);

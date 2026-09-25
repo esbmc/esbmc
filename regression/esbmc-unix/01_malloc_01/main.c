@@ -28,5 +28,7 @@ int main(void)
 //  assert(0);
   pthread_create(&id1, NULL, thread1, NULL);
   pthread_create(&id2, NULL, thread2, NULL);
-  return 0;
+  /* Returning from main calls exit() and tears the workers down before they
+     can deadlock; pthread_exit keeps them alive (#6479). */
+  pthread_exit(0);
 }

@@ -8,15 +8,16 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
+#include <algorithm>
 #include <regex>
 #include <optional>
 
@@ -47,8 +48,7 @@ void solidity_convertert::get_start_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
+  // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
@@ -66,8 +66,7 @@ void solidity_convertert::get_final_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
+  // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node, true));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
@@ -86,10 +85,20 @@ unsigned int solidity_convertert::get_line_number(
                       : get_src_from_json(ast_node);
 
   std::string position = src.substr(0, src.find(":"));
-  unsigned int byte_position = std::stoul(position) + 1;
+  // size_t, not unsigned int: narrowing here would wrap an out-of-range offset
+  // back into the buffer and silently bypass the clamp below.
+  size_t byte_position = std::stoul(position) + 1;
 
   if (final_position)
     byte_position = add_offset(src, byte_position);
+
+  // A `src` range routinely points past the end of contract_contents -- most
+  // often because add_offset below mis-reads the range length, but also when
+  // the .solast was generated from another revision of the source or from a
+  // multi-source compilation. Walking there is an out-of-bounds read whose
+  // result varies per run (esbmc/esbmc#6760); clamping reports the line just
+  // past the last one instead.
+  byte_position = std::min(byte_position, contract_contents.size());
 
   // the line number can be calculated by counting the number of line breaks prior to the identifier.
   unsigned int loc = std::count(
@@ -100,14 +109,13 @@ unsigned int solidity_convertert::get_line_number(
   return loc;
 }
 
-unsigned int solidity_convertert::add_offset(
-  const std::string &src,
-  unsigned int start_position)
+size_t
+solidity_convertert::add_offset(const std::string &src, size_t start_position)
 {
   // extract the length from "start:length:index"
   std::string offset = src.substr(1, src.find(":"));
   // already added 1 in start_position
-  unsigned int end_position = start_position + std::stoul(offset);
+  size_t end_position = start_position + std::stoul(offset);
   return end_position;
 }
 
@@ -807,7 +815,7 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
   aux_sym.file_local = true;
 
   auto &added_sym = *move_symbol_to_context(aux_sym);
-  added_sym.set_value(val);
+  added_sym.set_value(migrate_expr(val));
 
   code_declt decl(symbol_expr(added_sym));
   decl.operands().push_back(val);

@@ -1,44 +1,33 @@
-
 #include <math.h>
 
-#define fmod_def(type, name, isnan_func, isinf_func, isfinite_func)                    \
-  type name(type x, type y)                                                            \
-  {                                                                                    \
-  __ESBMC_HIDE:;                                                                       \
-    int x_is_nan = isnan_func(x);                                                      \
-    int y_is_nan = isnan_func(y);                                                      \
-                                                                                       \
-    /* If either argument is NaN, NaN is returned */                                   \
-    if (x_is_nan || y_is_nan)                                                          \
-      return NAN;                                                                      \
-                                                                                       \
-    /* If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if (isinf_func(x))                                                                 \
-      return NAN;                                                                      \
-                                                                                       \
-    /* If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if (y == 0.0)                                                                      \
-      return NAN;                                                                      \
-                                                                                       \
-    /* If x is +0.0/-0.0 and y is not zero, +0.0/-0.0 is returned */                   \
-    if (x == 0.0)                                                                      \
-      return x;                                                                        \
-                                                                                       \
-    /* If y is +inf/-inf and x is finite, x is returned. */                            \
-    if (isinf_func(y) && isfinite_func(x))                                             \
-      return x;                                                                        \
-                                                                                       \
-    return x - (y * (int)(x / y));                                                     \
-  }                                                                                    \
-                                                                                       \
-  type __##name(type x, type y)                                                        \
-  {                                                                                    \
-  __ESBMC_HIDE:;                                                                       \
-    return name(x, y);                                                                 \
+/* fmod on top of remainder(): remainder() lowers to the solver's exact
+ * IEEE 754 remainder (fp.rem), which already implements every special case
+ * fmod shares -- NaN operands, infinite x, zero y (all NaN), infinite y
+ * (returns x), zero x (returns x).
+ *
+ * The two functions differ only in which quotient they subtract: fmod
+ * truncates (result carries x's sign, magnitude in [0, |y|)), remainder
+ * rounds to nearest (result in [-|y|/2, |y|/2]). When the signs disagree,
+ * they differ by exactly one |y|, and both values are representable, so the
+ * correction below is exact (C17 7.12.10.1, 7.12.10.2). */
+#define fmod_def(type, name, remainder_func, fabs_func)                        \
+  type name(type x, type y)                                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type r = remainder_func(x, y);                                             \
+    if (r != 0.0 && ((x < 0.0) != (r < 0.0)))                                  \
+      r += (x < 0.0) ? -fabs_func(y) : fabs_func(y);                           \
+    return r;                                                                  \
+  }                                                                            \
+                                                                               \
+  type __##name(type x, type y)                                                \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(x, y);                                                         \
   }
 
-fmod_def(float, fmodf, isnan, isinf, isfinite);
-fmod_def(double, fmod, isnan, isinf, isfinite);
-fmod_def(long double, fmodl, isnan, isinf, isfinite);
+fmod_def(float, fmodf, remainderf, fabsf);
+fmod_def(double, fmod, remainder, fabs);
+fmod_def(long double, fmodl, remainderl, fabsl);
 
 #undef fmod_def

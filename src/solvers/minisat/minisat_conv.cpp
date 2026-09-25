@@ -1,6 +1,6 @@
 #include <set>
 #include <sstream>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <minisat_conv.h>
 
 smt_solver_baset *create_new_minisat_solver(

@@ -21,10 +21,10 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/namespace.h>
-#include <util/symbol.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/symbol.h>
 
 TEST_CASE(
   "base_type tolerates nil sub-operands in sideeffect nondet",

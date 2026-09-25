@@ -1,0 +1,6 @@
+CORE
+main.c
+--context-bound 2 --falsify-context-bound 3
+^Falsifying with context bound 3$
+Falsifying with context bound 1\n(?:(?!VERIFICATION SUCCESSFUL)[\s\S])*Falsifying with context bound 3
+^VERIFICATION SUCCESSFUL$

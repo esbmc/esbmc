@@ -2,4 +2,4 @@ THOROUGH
 main.c
 --condition-coverage
 ^Condition Coverage: 100%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

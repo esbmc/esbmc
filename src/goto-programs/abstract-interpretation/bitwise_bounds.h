@@ -611,7 +611,7 @@ INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
  * Original lower bound on signed interval XOR, inspired by the case-based algorithm
  * for signed interval OR in Henry S. Warren Jr., "Hacker's Delight", 2003
  * @author Edoardo Manino.
- * @brief Maximum value of x ^ y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x ^ y given x in [a,b] and y in [c,d], potentially negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -1052,6 +1052,25 @@ GET_BIT_INTERVALS(
   unsigned_max_right_shift,
   signed_min_right_shift,
   signed_max_right_shift)
+
+template <>
+interval_templatet<BigInt>
+interval_templatet<BigInt>::interval_arithmetic_right_shift(
+  const interval_templatet<BigInt> &lhs,
+  const interval_templatet<BigInt> &rhs) const
+{
+  interval_templatet<BigInt> result;
+  if (!lhs.lower || !lhs.upper || !rhs.lower || !rhs.upper)
+    return result;
+  if (!is_signedbv_type(lhs.type) || !is_signedbv_type(rhs.type))
+    return result;
+
+  if (rhs.get_lower() < 0 || rhs.get_upper() >= BigInt(lhs.type->get_width()))
+    return result;
+  result.set_lower(INT_FUNC(signed_min_right_shift, lhs, rhs));
+  result.set_upper(INT_FUNC(signed_max_right_shift, lhs, rhs));
+  return result;
+}
 
 GET_BIT_INTERVALS(
   interval_left_shift,

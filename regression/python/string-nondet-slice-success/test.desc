@@ -1,3 +1,4 @@
 CORE
 main.py
+--nondet-str-length 7 --unwind 8
 ^VERIFICATION SUCCESSFUL$

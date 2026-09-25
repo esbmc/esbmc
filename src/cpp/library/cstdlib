@@ -48,6 +48,7 @@ using ::wctomb;
 using ::div_t;
 using ::ldiv_t;
 using ::lldiv_t;
+using ::size_t;
 
 #if __cplusplus >= 201703L
 using ::aligned_alloc;

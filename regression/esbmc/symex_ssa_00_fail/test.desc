@@ -1,0 +1,4 @@
+CORE
+symex_ssa_00_fail.c
+-DSYMEX_HARNESS_PERTURB --overflow-check --unsigned-overflow-check --memory-leak-check
+^VERIFICATION FAILED$

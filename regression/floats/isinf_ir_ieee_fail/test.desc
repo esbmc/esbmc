@@ -1,4 +1,5 @@
 CORE
 main.c
 --ir-ieee --z3 --32
+REQUIRES arch32
 ^VERIFICATION FAILED$

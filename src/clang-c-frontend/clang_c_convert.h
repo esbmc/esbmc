@@ -4,11 +4,11 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/symtab/symbol_generator.h>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -18,6 +18,7 @@ class ASTContext;
 class SourceManager;
 class FunctionDecl;
 class Decl;
+class LabelDecl;
 class VarDecl;
 class ParmVarDecl;
 class RecordDecl;
@@ -39,11 +40,13 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class ValueDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
 class AlignedAttr;
 class InitListExpr;
+class TemplateParamObjectDecl;
 } // namespace clang
 
 std::string
@@ -66,9 +69,9 @@ public:
  * The idea is to look for all components of the union and match
  * the type. If not found, throws an error
  *
+ * @param ns Namespace for looking up the union components
  * @param dest RHS dest
  * @param type Union type
- * @param msg  Message object
  */
   static void
   gen_typecast_to_union(const namespacet &ns, exprt &dest, const typet &type);
@@ -112,6 +115,17 @@ protected:
 
   const clang::FunctionDecl *current_functionDecl;
 
+  /** Address-taken labels of the function being converted, in the order the
+   *  addresses appear. A label has no storage, so `&&L` lowers to its 1-based
+   *  position cast to a pointer and `goto *p` to an equality chain over those
+   *  positions. Collected up front because a label's address may be taken
+   *  after the indirect goto that jumps to it. A vector, not a map keyed on
+   *  the decl: pointer order varies per run, and the chain it emits has to be
+   *  reproducible (GCC computed goto, issue #4083). */
+  std::vector<const clang::LabelDecl *> address_taken_labels;
+
+  void collect_address_taken_labels(const clang::Stmt &body);
+
   bool convert_builtin_types();
   virtual bool convert_top_level_decl();
 
@@ -144,7 +158,7 @@ protected:
   /**
    *  Parse function parameters
    *  This function simply contains a loop to populate the code argument list
-   *  and calls get_function_body to parse each individual parameter.
+   *  and calls get_function_param to parse each individual parameter.
    */
   virtual bool get_function_params(
     const clang::FunctionDecl &fd,
@@ -216,6 +230,11 @@ protected:
    * member-expression lowering, and ctor member-initialiser-list lowering. */
   bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
 
+  /* If `vd` is a flexible array member, give its array type `t` size zero:
+   * C17 6.7.2.1p18 sizes the struct as if the member were omitted. Every site
+   * that lowers a field's type must agree, or members and components differ. */
+  void size_flexible_array_member(const clang::ValueDecl &vd, typet &t);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_base_flattened_inits(
@@ -228,6 +247,14 @@ protected:
 
   bool
   get_binary_operator_expr(const clang::BinaryOperator &binop, exprt &new_expr);
+
+  void get_vector_comparison(
+    const clang::BinaryOperator &binop,
+    irep_idt relation,
+    exprt lhs,
+    exprt rhs,
+    const typet &type,
+    exprt &new_expr);
 
   bool get_compound_assign_expr(
     const clang::CompoundAssignOperator &compop,
@@ -255,6 +282,10 @@ protected:
 
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
+
+  /// Report an initializer list none of get_expr's arms models, with its type
+  /// and source location. Always returns true (conversion failed).
+  bool report_unsupported_init_list(const clang::InitListExpr &init_stmt);
 
   void
   get_final_location_from_stmt(const clang::Stmt &stmt, locationt &location);
@@ -303,6 +334,15 @@ protected:
    */
   bool
   process_aligned_attribute(const clang::AlignedAttr &aattr, typet &t) const;
+
+  /*
+   * Apply a record's packing and alignment attributes to its type
+   * Arguments:
+   *   rd: the record definition whose attributes to inspect
+   *   t: the struct/union type to annotate
+   */
+  bool
+  process_record_layout_attributes(const clang::RecordDecl &rd, typet &t) const;
 
   /*
    * add additional annotations if a class/struct/union field has alignment attribute
@@ -364,6 +404,11 @@ protected:
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
 
+  bool get_mangled_id(const clang::NamedDecl &nd, std::string &id);
+  bool add_template_param_object(
+    const clang::TemplateParamObjectDecl &tpo,
+    const std::string &name,
+    const std::string &id);
   bool get_APValue_expr(
     const clang::APValue &value,
     exprt &new_expr,

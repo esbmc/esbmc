@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2 --deadlock-check
+^VERIFICATION FAILED$
+Deadlocked state in pthread_mutex_lock

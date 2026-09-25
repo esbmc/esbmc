@@ -10,11 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_PREPROCESS_H
 
 #include <string>
-#include <util/message.h>
+#include <util/message/message.h>
 
-bool c_preprocess(
-  const std::string &path,
-  std::ostream &outstream,
-  bool is_cpp);
+bool c_preprocess(const std::string &path, std::ostream &outstream);
 
 #endif

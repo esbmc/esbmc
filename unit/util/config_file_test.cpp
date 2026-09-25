@@ -5,7 +5,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <util/config_file.h>
+#include <util/config/config_file.h>
 
 struct TestFixture
 {

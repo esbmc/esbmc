@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std=c++20 --memory-leak-check --incremental-bmc
+^VERIFICATION SUCCESSFUL$

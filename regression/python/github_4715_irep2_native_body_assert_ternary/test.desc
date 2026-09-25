@@ -1,0 +1,6 @@
+CORE
+main.py
+--validate-violation-witness --witness witness.yaml --goto-functions-only
+DECL _Bool tmp\$1;
+IF !c THEN GOTO 1
+ASSERT tmp\$1

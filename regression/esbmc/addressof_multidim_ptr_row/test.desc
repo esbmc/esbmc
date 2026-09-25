@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION SUCCESSFUL$
+PASSED.*&pp\[1\]\[2\] == &r1\[2\]$

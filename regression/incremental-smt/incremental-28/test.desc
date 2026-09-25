@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 --no-pointer-check --no-bounds-check --no-div-by-zero-check --k-induction --k-step 2 --unlimited-k-step --max-inductive-step 3 --add-symex-value-set
+REQUIRES arch_x86
 ^VERIFICATION FAILED$

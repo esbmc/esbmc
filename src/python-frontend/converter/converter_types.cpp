@@ -1,13 +1,13 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
 
 #include <algorithm>
 #include <cctype>
@@ -74,9 +74,8 @@ exprt python_converter::wrap_in_optional(
   // once. Both members are already-built value exprs (a bool literal and either
   // the wrapped value or a zero of the field type), so a constant_struct2t over
   // the migrated operands round-trips exactly through migrate. Re-attach the
-  // full struct type afterwards: migrate_type drops the frontend-only
-  // #python_aggregate_kind="optional" marker that later dispatch reads with no
-  // tag fallback -- mirroring build_shape_tuple_expr / get_tuple_expr.
+  // full struct type: the seam drops the components' `access`
+  // (build_optional_type), which is part of the type's identity.
   expr2tc value_member;
   migrate_expr(
     is_none ? gen_zero(struct_type.components()[1].type()) : value,
@@ -174,6 +173,179 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
     inner_type = extract_type(right);
 
   return inner_type;
+}
+
+/// `Callable[[A, B], R]` as `R (*)(A, B)`, which parses as
+/// Subscript(slice=Tuple([List([A, B]), R])). Carrying the signature lets a
+/// call through the value recover the return type; a bare `Callable`, or one
+/// whose signature is not spelled, keeps the generic function pointer, whose
+/// empty return type leaves every call through it nondet.
+typet python_converter::get_callable_type(
+  const nlohmann::json &annotation,
+  const nlohmann::json &stmt)
+{
+  code_typet fn_type;
+  const nlohmann::json &slice = annotation["slice"];
+  if (
+    slice.is_object() && slice.value("_type", "") == "Tuple" &&
+    slice.contains("elts") && slice["elts"].size() == 2 &&
+    slice["elts"][0].value("_type", "") == "List")
+  {
+    for (const auto &arg : slice["elts"][0]["elts"])
+      fn_type.arguments().push_back(
+        code_typet::argumentt(get_type_from_annotation(arg, stmt)));
+    fn_type.return_type() = get_type_from_annotation(slice["elts"][1], stmt);
+  }
+
+  return fn_type.return_type().is_nil()
+           ? type_handler_.get_typet(std::string("Callable"))
+           : gen_pointer_type(fn_type);
+}
+
+namespace
+{
+/// Whether a union names both a scalar and a container member. Such a union has
+/// no single representative type here; a class or unrecognised member name
+/// counts as neither, leaving those unions as they were.
+bool mixes_scalar_and_container(const std::set<std::string> &names)
+{
+  static const std::set<std::string> scalars = {
+    "int", "float", "bool", "str", "complex"};
+  // Only containers whose arguments --strict-types can match by annotation.
+  static const std::set<std::string> containers = {
+    "list", "List", "dict", "Dict", "tuple", "Tuple"};
+
+  bool has_scalar = false;
+  bool has_container = false;
+  for (const std::string &name : names)
+  {
+    has_scalar = has_scalar || scalars.count(name);
+    has_container = has_container || containers.count(name);
+  }
+  return has_scalar && has_container;
+}
+
+bool is_literal_subscript(const nlohmann::json &node)
+{
+  return node.contains("_type") && node["_type"] == "Subscript" &&
+         node.contains("value") && node["value"].is_object() &&
+         node["value"].contains("id") && node["value"]["id"] == "Literal";
+}
+
+/// The name a single union member contributes, or "" when it names no type.
+/// `re.Match[str]` contributes "Match" and `List[int]` contributes "List", so
+/// members differing only in their parameters count once.
+std::string union_member_name(const nlohmann::json &node)
+{
+  if (node.contains("id"))
+    return node["id"].get<std::string>();
+
+  const std::string node_type = node.value("_type", "");
+
+  if (node_type == "Attribute" && node.contains("attr"))
+    return node["attr"].get<std::string>();
+
+  if (
+    node_type == "Subscript" && node.contains("value") &&
+    node["value"].is_object())
+    return union_member_name(node["value"]);
+
+  return "";
+}
+
+bool is_none_annotation(const nlohmann::json &node)
+{
+  return node.contains("_type") && node["_type"] == "Constant" &&
+         node.contains("value") && node["value"].is_null();
+}
+
+/// Names every member of a (possibly chained) union. `|` is left-associative,
+/// so `A | B | C` nests as BinOp(BinOp(A, B), C).
+void collect_union_member_names(
+  const nlohmann::json &node,
+  std::set<std::string> &names,
+  bool &contains_none)
+{
+  if (!node.is_object())
+    return;
+
+  if (is_none_annotation(node))
+  {
+    contains_none = true;
+    return;
+  }
+
+  std::string name = union_member_name(node);
+  if (!name.empty())
+    names.insert(name);
+
+  if (node.value("_type", "") == "BinOp")
+  {
+    if (node.contains("left"))
+      collect_union_member_names(node["left"], names, contains_none);
+    if (node.contains("right"))
+      collect_union_member_names(node["right"], names, contains_none);
+  }
+}
+} // namespace
+
+/// The single member a union narrows to, once it is known that its members
+/// share a representation. `T | None` over a primitive T is an Optional<T>;
+/// everything else is a pointer, which is how None is spelled for it.
+typet python_converter::narrow_union_to_member(const std::string &member_name)
+{
+  typet base_type = type_handler_.get_typet(member_name);
+
+  if (
+    base_type == long_long_int_type() || base_type == long_long_uint_type() ||
+    base_type == double_type() || base_type == bool_type())
+    return type_handler_.build_optional_type(base_type);
+
+  // List types are already pointers.
+  if (base_type == type_handler_.get_list_type())
+    return base_type;
+
+  return gen_pointer_type(base_type);
+}
+
+/// A PEP 604 (`int | list[int]`) union annotation. This frontend is
+/// monomorphic, so a union mixing a scalar with a container has no
+/// representative type: narrowing `int | list[int]` to its leftmost member
+/// typed the parameter `Optional[int]`, which no list matched (#7876).
+typet python_converter::get_union_type_from_annotation(
+  const nlohmann::json &annotation_node,
+  const nlohmann::json &element)
+{
+  std::string inner_type = extract_non_none_type(annotation_node);
+
+  if (inner_type == "__LITERAL__")
+  {
+    const auto &left = annotation_node["left"];
+    const auto &right = annotation_node["right"];
+    return get_type_from_annotation(
+      is_literal_subscript(left) ? left : right, element);
+  }
+
+  // An external module type (e.g. re.Match[str] | None) stays opaque.
+  if (inner_type == "__EXTERNAL_TYPE__" || inner_type.empty())
+    return any_type();
+
+  std::set<std::string> type_names;
+  bool contains_none = false;
+  collect_union_member_names(annotation_node, type_names, contains_none);
+
+  // Several named types plus None: an untyped pointer, as before. It must not
+  // become opaque, where a 0 or False argument would read as None.
+  if (type_names.size() > 1 && contains_none)
+    return gen_pointer_type(char_type());
+
+  // A scalar alongside a list, dict or tuple has no common representation, so
+  // neither the Optional wrapper nor the leftmost member describes the
+  // parameter. Stay opaque instead (#7876).
+  if (mixes_scalar_and_container(type_names))
+    return any_type();
+
+  return narrow_union_to_member(inner_type);
 }
 
 typet python_converter::get_type_from_annotation(
@@ -505,113 +677,7 @@ typet python_converter::get_type_from_annotation(
     return type_handler_.get_list_type(element);
   }
   else if (annotation_node["_type"] == "BinOp")
-  {
-    // Handle union types such as str | None (PEP 604 syntax)
-    std::string inner_type = extract_non_none_type(annotation_node);
-
-    // Special handling for Literal types in unions
-    if (inner_type == "__LITERAL__")
-    {
-      // Find the Literal node and recursively process it
-      const auto &left = annotation_node["left"];
-      const auto &right = annotation_node["right"];
-
-      // Helper to check if a node is a Literal subscript
-      auto is_literal_subscript = [](const nlohmann::json &node) -> bool {
-        return node.contains("_type") && node["_type"] == "Subscript" &&
-               node.contains("value") && node["value"].is_object() &&
-               node["value"].contains("id") && node["value"]["id"] == "Literal";
-      };
-
-      const auto &literal_node = is_literal_subscript(left) ? left : right;
-
-      return get_type_from_annotation(literal_node, element);
-    }
-
-    // Special handling for external module types (e.g., re.Match[str] | None)
-    // Treat them as opaque pointers (any_type)
-    if (inner_type == "__EXTERNAL_TYPE__")
-    {
-      return any_type();
-    }
-
-    if (inner_type.empty())
-    {
-      // All types were None or couldn't be extracted - use any_type (void*)
-      return any_type();
-    }
-
-    // Count the number of distinct type names in the union
-    std::set<std::string> type_names;
-    std::function<void(const nlohmann::json &)> collect_types;
-    bool contains_none = false;
-    collect_types = [&](const nlohmann::json &node) {
-      // Guard: only process objects
-      if (!node.is_object())
-        return;
-
-      if (
-        node.contains("_type") && node["_type"] == "Constant" &&
-        node.contains("value") && node["value"].is_null())
-      {
-        // This is None, skip it
-        contains_none = true;
-        return;
-      }
-      if (node.contains("id"))
-        type_names.insert(node["id"].get<std::string>());
-      // Handle Attribute nodes (e.g., re.Match in re.Match[str])
-      if (
-        node.contains("_type") && node["_type"] == "Attribute" &&
-        node.contains("attr"))
-        type_names.insert(node["attr"].get<std::string>());
-      // Handle Subscript nodes (e.g., re.Match[str], List[int])
-      if (node.contains("_type") && node["_type"] == "Subscript")
-      {
-        if (node.contains("value") && node["value"].is_object())
-        {
-          const auto &value_node = node["value"];
-          if (value_node.contains("id"))
-            type_names.insert(value_node["id"].get<std::string>());
-          else if (
-            value_node.contains("_type") &&
-            value_node["_type"] == "Attribute" && value_node.contains("attr"))
-            type_names.insert(value_node["attr"].get<std::string>());
-        }
-      }
-      if (node.contains("_type") && node["_type"] == "BinOp")
-      {
-        if (node.contains("left"))
-          collect_types(node["left"]);
-        if (node.contains("right"))
-          collect_types(node["right"]);
-      }
-    };
-    collect_types(annotation_node);
-
-    // If we have multiple types, treat as untyped pointer
-    // This preserves the original behavior for type checking
-    if (type_names.size() > 1 && contains_none)
-      return gen_pointer_type(char_type());
-
-    // Treat T | ... | None as Optional[T]
-    typet base_type = type_handler_.get_typet(inner_type);
-
-    // Single type + None: use Optional wrapper for primitives only
-    if (
-      base_type == long_long_int_type() || base_type == long_long_uint_type() ||
-      base_type == double_type() || base_type == bool_type())
-    {
-      return type_handler_.build_optional_type(base_type);
-    }
-
-    // List types are already pointers
-    if (base_type == type_handler_.get_list_type())
-      return base_type;
-
-    // For other types (e.g., classes, strings), use pointer type
-    return gen_pointer_type(base_type);
-  }
+    return get_union_type_from_annotation(annotation_node, element);
   else if (
     annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
   {

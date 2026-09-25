@@ -136,7 +136,7 @@ public:
     *this = over_meet(*this, value);
   }
 
-  void make_ge_than(const BigInt &v) override // add upper bound
+  void make_ge_than(const BigInt &v) override // add lower bound
   {
     wrapped_interval value(t);
     value.set_lower(v);
@@ -144,7 +144,7 @@ public:
     *this = over_meet(*this, value);
   }
 
-  void make_ge_than(const wrapped_interval &rhs) // add upper bound
+  void make_ge_than(const wrapped_interval &rhs) // add lower bound
   {
     if (rhs.is_bottom())
     {
@@ -1173,7 +1173,6 @@ public:
   friend wrapped_interval
   operator/(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     std::vector<wrapped_interval> r;
 
     wrapped_interval zero(lhs.t);

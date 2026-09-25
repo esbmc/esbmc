@@ -1,0 +1,5 @@
+CORE
+main.py
+--dead-code-check
+main\.py:2: dead code: unreachable branch \[guard: a > b\]$
+^VERIFICATION SUCCESSFUL$

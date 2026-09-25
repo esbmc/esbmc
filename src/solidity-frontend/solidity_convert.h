@@ -16,16 +16,16 @@
 #include <vector>
 #include <map>
 #include <queue>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
-#include <util/symbolic_types.h>
-#include <util/expr_util.h>
+#include <util/expr/symbolic_types.h>
+#include <util/expr/expr_util.h>
 
 class solidity_convertert
 {
@@ -111,19 +111,29 @@ public:
     return !t.get("#sol_bytesn_size").empty();
   }
 
-  // Set/get/test the Solidity contract name carried on a typet via the
-  // #sol_contract irep attribute (the declaring contract of a contract type).
-  static void set_sol_contract(typet &t, const irep_idt &cname)
+  // The declaring contract of a contract type. No longer carried on the typet:
+  // see get_sol_contract below.
+  /// Derived rather than read back from `#sol_contract`: a contract type is a
+  /// pointer to the contract's own `tag-<name>` symbol type, and the converter
+  /// already knows every contract's name, so the name need not ride on the type
+  /// -- which matters because IREP2 has no field for it
+  /// (docs/roadmap/scope-solidity-irep2.md §8).
+  std::string get_sol_contract(const typet &t) const
   {
-    t.set("#sol_contract", cname);
+    const typet &sub = t.is_pointer() ? t.subtype() : t;
+    if (sub.id() != typet::t_symbol)
+      return "";
+
+    const std::string id = sub.identifier().as_string();
+    if (id.compare(0, prefix.size(), prefix) != 0)
+      return "";
+
+    const std::string cname = id.substr(prefix.size());
+    return linearizedBaseList.count(cname) ? cname : "";
   }
-  static std::string get_sol_contract(const typet &t)
+  bool has_sol_contract(const typet &t) const
   {
-    return t.get("#sol_contract").as_string();
-  }
-  static bool has_sol_contract(const typet &t)
-  {
-    return !t.get("#sol_contract").empty();
+    return !get_sol_contract(t).empty();
   }
 
   // Set/get the Solidity "mapping-backed array" flag carried on a typet via
@@ -149,33 +159,23 @@ public:
   }
 
   // Set/get the Solidity "state variable" flag carried on a typet via the
-  // #sol_state_var irep attribute (stored as "1"/"0").
-  static void set_sol_state_var(typet &t, bool v)
-  {
-    t.set("#sol_state_var", v ? "1" : "0");
-  }
-  static bool get_sol_state_var(const typet &t)
-  {
-    return t.get("#sol_state_var") == "1";
-  }
+  /// Whether a declared variable is a contract state variable. Held here, keyed
+  /// by the variable's symbol id, rather than on its `typet`: IREP2 has no
+  /// field for it, and a symbol's id survives every migration by construction,
+  /// so the frontend keeps what is Solidity-level and the shared representation
+  /// stays closed (docs/roadmap/scope-solidity-irep2.md §10).
+  std::unordered_set<irep_idt> sol_state_vars;
 
-  // Set/get the Solidity builtin name carried on a typet via the #sol_name
-  // irep attribute.
-  static void set_sol_name(typet &t, const irep_idt &name)
+  void set_sol_state_var(const irep_idt &symbol_id, bool v)
   {
-    t.set("#sol_name", name);
+    if (v)
+      sol_state_vars.insert(symbol_id);
+    else
+      sol_state_vars.erase(symbol_id);
   }
-  static std::string get_sol_name(const typet &t)
+  bool get_sol_state_var(const irep_idt &symbol_id) const
   {
-    return t.get("#sol_name").as_string();
-  }
-
-  // Set the Solidity data location ("memory"/"storage"/"calldata") carried on
-  // a typet via the #sol_data_loc irep attribute. Set-only today (no readers);
-  // wrapped to keep every Solidity type-attribute write behind one seam.
-  static void set_sol_data_loc(typet &t, const irep_idt &loc)
-  {
-    t.set("#sol_data_loc", loc);
+    return sol_state_vars.count(symbol_id) != 0;
   }
 
   // json nodes that always empty
@@ -668,7 +668,7 @@ protected:
     locationt &location);
   unsigned int
   get_line_number(const nlohmann::json &ast_node, bool final_position = false);
-  unsigned int add_offset(const std::string &src, unsigned int start_position);
+  size_t add_offset(const std::string &src, size_t start_position);
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);

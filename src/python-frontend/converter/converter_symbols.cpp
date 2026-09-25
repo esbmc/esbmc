@@ -1,10 +1,12 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
+#include <filesystem>
 #include <python-frontend/symbol_id.h>
-#include <util/arith_tools.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/message/message.h>
 
 #include <regex>
+#include <utility>
 
 void python_converter::update_symbol(const exprt &expr) const
 {
@@ -42,9 +44,12 @@ void python_converter::update_symbol(const exprt &expr) const
 
   // Update the type of the symbol and its value.
   const typet &expr_type = expr.type();
-  sym->set_type(expr_type);
+  sym->set_type(migrate_type(expr_type));
   {
     exprt v = sym->get_value();
+    // Stays legacy: this retypes the root only, so migrating eagerly would
+    // build an arith node over operands of the old type and trip
+    // assert_arith_2ops_consistency (docs/roadmap/scope-python-irep2.md §6.2).
     v.type() = expr_type;
     sym->set_value(std::move(v));
   }
@@ -78,7 +83,7 @@ void python_converter::update_symbol(const exprt &expr) const
         exprt new_value = from_integer(int_val, expr_type);
 
         // Assign the new value to the symbol.
-        sym->set_value(new_value);
+        sym->set_value(migrate_expr(new_value));
       }
       catch (const std::exception &e)
       {
@@ -91,6 +96,147 @@ void python_converter::update_symbol(const exprt &expr) const
       }
     }
   }
+}
+
+/// Module file and the name that module defines, for the top-level
+/// `from <module> import <bound>` binding @p bound; an empty path when none
+/// does. A bare `from m import B` leaves only the class name at the use site,
+/// so the module cannot be read off the base expression the way `m.B` spells
+/// it (#6745). Python binds the last import of a name, so later statements
+/// win, and an `as` alias hides the name the module really defines.
+static std::pair<std::string, std::string>
+from_import_binding(const nlohmann::json &ast, const std::string &bound)
+{
+  std::pair<std::string, std::string> binding, wildcard;
+
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.value("_type", "") != "ImportFrom" || !stmt.contains("names") ||
+      !stmt["names"].is_array() || !stmt.contains("full_path") ||
+      stmt["full_path"].is_null())
+      continue;
+
+    for (const auto &alias : stmt["names"])
+    {
+      const std::string name = alias.value("name", "");
+      // `from m import *` binds every name m defines, this one included, but
+      // an explicit import of the name still wins over it (#7399).
+      if (name == "*")
+      {
+        wildcard = {stmt["full_path"].get<std::string>(), bound};
+        continue;
+      }
+      const bool aliased =
+        alias.contains("asname") && !alias["asname"].is_null();
+      if ((aliased ? alias["asname"].get<std::string>() : name) == bound)
+        binding = {stmt["full_path"].get<std::string>(), name};
+    }
+  }
+
+  return binding.first.empty() ? wildcard : binding;
+}
+
+/// Class name a `bases` entry denotes. A qualified base (`module.Class`)
+/// parses as an Attribute carrying `attr` instead of `id` -- reading `id`
+/// unconditionally aborted on any model-provided base such as
+/// unittest.TestCase (#6745). The symbol id uses the bare name either way.
+static std::string base_class_name(const nlohmann::json &base_class_node)
+{
+  return base_class_node.contains("id")
+           ? base_class_node["id"].get<std::string>()
+           : base_class_node.value("attr", "");
+}
+
+std::pair<const nlohmann::json *, std::string>
+python_converter::find_imported_class_module(
+  const std::string &class_name) const
+{
+  std::pair<const nlohmann::json *, std::string> found{nullptr, {}};
+
+  for (const auto &[module_name, module_ast] : module_ast_pool_)
+  {
+    const std::string path = get_imported_module_path(module_name);
+    if (path.empty())
+      continue;
+    if (json_utils::find_class(module_ast["body"], class_name).is_null())
+      continue;
+    if (found.first)
+      return {nullptr, {}}; // defined in 2+ modules -- don't guess
+    found = {&module_ast, path};
+  }
+
+  return found;
+}
+
+symbolt *python_converter::find_function_in_imported_base_classes(
+  const std::string &class_name,
+  const std::string &method_name,
+  bool is_ctor) const
+{
+  const auto [module_ast, module_path] = find_imported_class_module(class_name);
+  if (!module_ast)
+    return nullptr;
+
+  nlohmann::json class_node =
+    json_utils::find_class((*module_ast)["body"], class_name);
+
+  for (const auto &base_class_node : class_node["bases"])
+  {
+    const std::string base_class = base_class_name(base_class_node);
+    if (base_class.empty())
+      continue;
+
+    class symbol_id base_id(
+      module_path, base_class, is_ctor ? base_class : method_name);
+    if (symbolt *func = symbol_table_.find_symbol(base_id.to_string()))
+      return func;
+
+    if (
+      symbolt *func = find_function_in_imported_base_classes(
+        base_class, method_name, is_ctor))
+      return func;
+  }
+
+  return nullptr;
+}
+
+/// A base reached through an import lives in that module's file, so an id
+/// rewritten against the current file cannot name it. Both spellings reach
+/// here: `module.Base` names its module at the use site, while
+/// `from module import Base` leaves only the bare name (#6745).
+symbolt *python_converter::find_method_in_imported_base(
+  const nlohmann::json &base_class_node,
+  const std::string &base_class,
+  const std::string &method_name,
+  bool is_ctor) const
+{
+  const bool qualified = base_class_node.contains("value") &&
+                         base_class_node["value"].is_object() &&
+                         base_class_node["value"].contains("id");
+
+  std::string module_path;
+  std::string defined_name = base_class;
+
+  if (qualified)
+    module_path = get_imported_module_path(
+      base_class_node["value"]["id"].get<std::string>());
+  // A class this file defines itself shadows an import of the same name;
+  // reaching into the module would bind the method off an unrelated class.
+  else if (
+    json_utils::find_class((*ast_json)["body"], base_class) == nlohmann::json())
+  {
+    const auto binding = from_import_binding(*ast_json, base_class);
+    module_path = binding.first;
+    defined_name = binding.second;
+  }
+
+  if (module_path.empty())
+    return nullptr;
+
+  class symbol_id base_id(
+    module_path, defined_name, is_ctor ? defined_name : method_name);
+  return symbol_table_.find_symbol(base_id.to_string());
 }
 
 symbolt *python_converter::find_function_in_base_classes(
@@ -118,7 +264,9 @@ symbolt *python_converter::find_function_in_base_classes(
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
   {
-    const std::string &base_class = base_class_node["id"].get<std::string>();
+    const std::string base_class = base_class_name(base_class_node);
+    if (base_class.empty())
+      continue;
 
     // Under the base class, a constructor is named after that base.
     const std::string base_func_name = is_ctor ? base_class : method_name;
@@ -129,15 +277,50 @@ symbolt *python_converter::find_function_in_base_classes(
     if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
       return func;
 
+    if (
+      symbolt *func = find_method_in_imported_base(
+        base_class_node, base_class, method_name, is_ctor))
+      return func;
+
     // Not defined directly in this base: descend into its own bases so a
     // method inherited from a grandparent (or higher) still resolves.
     if (
       symbolt *func = find_function_in_base_classes(
         base_class, sym_id, base_func_name, is_ctor))
       return func;
+
+    // The base itself is defined in an imported module, whose classes this
+    // AST does not hold, so that descent stopped one level too early (#7398).
+    if (
+      symbolt *func = find_function_in_imported_base_classes(
+        base_class, method_name, is_ctor))
+      return func;
   }
 
   return nullptr;
+}
+
+/// The name @p id asks for, as an import would spell it. from_string parses
+/// the @C@/@F@ markers but not the trailing segment; when an id carries one,
+/// that segment is the name and the class/function are only its scope. Reading
+/// the function instead made every name used inside `def acos()` resolve to
+/// `math.acos` from an unrelated `import math` (#6895).
+static std::string
+import_lookup_name(const std::string &id, const ::symbol_id &parsed)
+{
+  ::symbol_id scope = parsed;
+  scope.set_object("");
+  const std::string prefix = scope.to_string();
+  if (
+    id.size() > prefix.size() && id.compare(0, prefix.size(), prefix) == 0 &&
+    id[prefix.size()] == '@')
+    return id.substr(prefix.size() + 1);
+
+  if (!parsed.get_class().empty())
+    return parsed.get_class();
+  if (!parsed.get_function().empty())
+    return parsed.get_function();
+  return parsed.get_object();
 }
 
 symbolt *
@@ -147,11 +330,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   // When the symbol has a class component (py:main@C@Foo@F@bar),
   // use the class name for matching against import names.
   auto parsed = ::symbol_id::from_string(symbol_id);
-  std::string lookup_name =
-    !parsed.get_class().empty()
-      ? parsed.get_class()
-      : (parsed.get_function().empty() ? parsed.get_object()
-                                       : parsed.get_function());
+  std::string lookup_name = import_lookup_name(symbol_id, parsed);
 
   // symbol_id::from_string currently parses class/function components but not
   // trailing object names (e.g. py:file@replace). Recover that case from raw
@@ -343,7 +522,33 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
 
   if (symbolt *symbol = find_symbol_in_global_scope(sym_id))
     return symbol;
+
+  if (symbolt *symbol = find_model_symbol(sym_id))
+    return symbol;
+
   return find_imported_symbol(sym_id);
+}
+
+/// A model-provided name referenced from user code forms an id under the
+/// caller's file; the model defining it lives in its own namespace. Retried
+/// only for an id that names a file: an unresolved reference carries an empty
+/// filename -- `random.random()` without `import random` forms `py:@F@random`
+/// -- and resolving that would accept a module the program never imported.
+symbolt *python_converter::find_model_symbol(const std::string &sym_id) const
+{
+  if (is_loading_models || sym_id.rfind("py:", 0) != 0)
+    return nullptr;
+
+  const std::size_t at = sym_id.find('@');
+  if (at == std::string::npos || at <= 3)
+    return nullptr;
+
+  const std::string suffix = sym_id.substr(at);
+  for (const std::string &ns : model_namespaces_)
+    if (symbolt *symbol = symbol_table_.find_symbol("py:" + ns + suffix))
+      return symbol;
+
+  return nullptr;
 }
 
 symbolt *python_converter::find_symbol_in_global_scope(
@@ -372,7 +577,22 @@ bool python_converter::is_imported_module(const std::string &module_name) const
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
 
+  // A module never imports itself, so its own name is not a module reference
+  // inside it and a variable may legitimately carry that name. The fallback
+  // below only asks whether a module of this name exists on disk, and the file
+  // being converted always does -- so without this, `foo` in foo.py resolves to
+  // the module and every method call on it fails to dispatch (#6639).
+  if (module_name == current_module_name())
+    return false;
+
   return json_utils::is_module(module_name, *ast_json);
+}
+
+/// Stem of the file being converted, i.e. the module name it would be imported
+/// under.
+std::string python_converter::current_module_name() const
+{
+  return std::filesystem::path(current_python_file).stem().string();
 }
 
 symbolt &python_converter::create_tmp_symbol(
@@ -404,7 +624,7 @@ symbolt &python_converter::create_tmp_symbol(
   cl.is_extern = false;
   cl.file_local = true;
   if (symbol_value != exprt())
-    cl.set_value(symbol_value);
+    cl.set_value(migrate_expr(symbol_value));
 
   return cl;
 }

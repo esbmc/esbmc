@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*:1:4: string literal contains surrogate code point U\+D83D

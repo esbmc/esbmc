@@ -1,0 +1,9 @@
+CORE
+second.c
+first.c --witness-output-yaml -
+^VERIFICATION FAILED$
+type: "target"
+type: "function_return"
+file_name: "[^"]*first\.c"
+line: 12$
+(?s)- "[^"]*first\.c".*- "[^"]*second\.c"

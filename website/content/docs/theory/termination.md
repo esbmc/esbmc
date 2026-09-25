@@ -102,7 +102,10 @@ esbmc file.c --termination --max-inductive-step 3 --interval-analysis
 ```
 
 - `--termination` — enable the reduction and the three-pass pipeline above. It
-  is mutually exclusive with `--k-induction` (k-induction takes precedence).
+  is mutually exclusive with `--k-induction`: when both are given,
+  `--termination` takes priority and the run routes to the sequential
+  termination strategy, keeping the verdict deterministic (the parallel
+  k-induction driver has no termination handling).
 - `--max-inductive-step N` — cap how far the inductive step unwinds. The decisive
   non-termination proofs typically fire at small *k* (2 or 3), so a small cap is
   usually enough.

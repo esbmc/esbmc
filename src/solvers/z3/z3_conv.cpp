@@ -50,8 +50,16 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
+    /* `smt` is incomplete for nonlinear real arithmetic, which the
+     * integer/real encoding (--ir) produces from a float multiplication, and
+     * the relevancy=0 below makes it give up rather than grind: it reports
+     * "incomplete (theory arithmetic)", which reaches the user as "SMT solver
+     * failed" with no verdict. Fall back to the complete NRA procedure, which
+     * declines any goal outside QF_NRA and leaves the result unknown exactly
+     * as before. */
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
-            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
+            z3::tactic(z3_ctx, "simplify") &
+            (z3::tactic(z3_ctx, "smt") | z3::tactic(z3_ctx, "qfnra-nlsat")))
              .mk_solver())
 {
   z3::params p(z3_ctx);
@@ -1265,7 +1273,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
 // ***************************** 'get' api *******************************
 
-bool z3_convt::get_bool(smt_astt a)
+tvt z3_convt::get_bool(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   // Set the model_completion to TRUE.
@@ -1273,24 +1281,18 @@ bool z3_convt::get_bool(smt_astt a)
   // which are essentially don't cares.
   z3::expr e = solver.get_model().eval(za->a, true);
 
-  Z3_lbool result = Z3_get_bool_value(z3_ctx, e);
-
-  bool res;
-  switch (result)
+  switch (Z3_get_bool_value(z3_ctx, e))
   {
   case Z3_L_TRUE:
-    res = true;
-    break;
+    return tvt(true);
   case Z3_L_FALSE:
-    res = false;
-    break;
+    return tvt(false);
   default:
-    // Note: quantifiers may result in undefined values
-    log_warning("Can't get boolean value from Z3. Returning false");
-    res = false;
+    // Terms still containing a quantifier have no ground value; report the
+    // absence rather than inventing one (see #6191).
+    log_debug("solver", "Z3 returned no boolean value; term is unevaluatable");
+    return tvt(tvt::TV_UNKNOWN);
   }
-
-  return res;
 }
 
 BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
@@ -1776,6 +1778,14 @@ smt_astt z3_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
   return new_ast(
     z3::to_expr(z3_ctx, Z3_mk_fpa_div(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  const z3_smt_ast *mlhs = to_solver_smt_ast<z3_smt_ast>(lhs);
+  const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, mlhs->a, mrhs->a)), lhs->sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)

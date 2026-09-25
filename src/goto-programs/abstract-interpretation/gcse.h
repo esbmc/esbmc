@@ -2,9 +2,9 @@
 
 // GCSE - Global Common Subexpression Elimination
 
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/value_sets.h>
 /**
  * @brief Abstract domain to obtain all available expressions (AE)
  *
@@ -31,7 +31,7 @@
  *      then just replace the abstract state with "new".
  *   Otherwise, compute the intersection between "prev" and "new".
  * - Transform operator:
- *   + END_FUNCTION: all local variables are not available anymore
+ *   + RETURN: the returned expression (and sub-expressions) is now available
  *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and dependencies) is not available anymore
  *   + GOTO/ASSERT/ASSUME: guard (and sub-expressions) is now available
  *   + DECL/DEAD: variable is no longer available
@@ -53,13 +53,18 @@ public:
 
   virtual void make_bottom() override
   {
-    // A bottom for AE means that there are no expressions available
     available_expressions.clear();
+    bottom = true;
   }
 
+  /// Entry has nothing available yet, but is reachable — distinct from bottom.
+  /// Conflating the two would let a merge adopt the other side's expressions
+  /// wholesale, and would make ai_baset treat a function whose exit has no
+  /// available expression as an unreachable exit point.
   virtual void make_entry() override
   {
     available_expressions.clear();
+    bottom = false;
   };
   virtual void make_top() override
   {
@@ -71,7 +76,7 @@ public:
 
   virtual bool is_bottom() const override
   {
-    return available_expressions.size() == 0;
+    return bottom;
   }
   virtual bool is_top() const override
   {
@@ -91,6 +96,10 @@ public:
   /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
 
+  /// Unreachable-so-far marker. A default-constructed domain must be bottom:
+  /// ai_baset asserts as much for states it has not visited.
+  bool bottom = true;
+
 protected:
   /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.
   void make_expression_available(const expr2tc &e);
@@ -109,16 +118,16 @@ protected:
 public:
   // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
   // that contains a points-to analysis
-  static std::shared_ptr<value_set_analysist> vsa;
+  static std::shared_ptr<value_setst> vsa;
 };
 
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *
  * Compute all common subexpression in a goto program. 
- * For each common subexpression, a new intermediate variable 
- * `__esbmc_cse_symbol$` is created and assigned to the common
+ * For each common subexpression, a new intermediate variable
+ * `__ESBMC_cse_symbol$` is created and assigned to the common
  * value.
  *
  * In ESBMC, the main advantage is for sequential dereferences/with
@@ -137,7 +146,7 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa)
+  goto_cse(contextt &ns, std::shared_ptr<value_setst> &vsa)
     : goto_functions_algorithm(true), context(ns)
   {
     cse_domaint::vsa = vsa;

@@ -1,0 +1,4 @@
+CORE
+main.c
+--dead-code-check --forward-condition
+^ERROR: --dead-code-check cannot be combined with --forward-condition$

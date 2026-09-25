@@ -3,7 +3,7 @@
 // end-of-function GOTO, with the trailing-goto block guard suppressing the local's
 // DEAD) neither corrupts the returned values nor suppresses bug detection:
 // inc(5)+doubled(6) is 18, so the wrong-value assertion is a reachable violation
-// reported as VERIFICATION FAILED under --irep2-native-body.
+// reported as VERIFICATION FAILED under native conversion.
 #include <assert.h>
 
 int inc(int p)

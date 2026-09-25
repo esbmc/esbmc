@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-irep2-adjust --unwind 2
+^VERIFICATION SUCCESSFUL$

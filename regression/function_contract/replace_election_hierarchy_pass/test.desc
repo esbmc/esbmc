@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --replace-call-with-contract "*" --no-align-check --unwind 22
 ^VERIFICATION SUCCESSFUL$

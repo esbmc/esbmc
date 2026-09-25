@@ -1,7 +1,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
-#include <util/config.h>
-#include <util/std_code.h>
+#include <util/config/config.h>
+#include <util/irep/std_code.h>
 
 #include <boost/filesystem.hpp>
 
@@ -111,22 +111,58 @@ bool python_converter::is_coverage_mode() const
          config.options.get_bool_option("branch-function-coverage-claims");
 }
 
+/// Every mode that must see the original assert and its call. Beyond the
+/// coverage modes, --dead-code-check keeps a verdict and so is deliberately
+/// not part of is_coverage_mode() (#6387), but folding the assert would drop
+/// the call and report everything reachable only through it as CWE-561
+/// (#7268).
+bool python_converter::is_assert_fold_disabled() const
+{
+  return is_coverage_mode() ||
+         config.options.get_bool_option("assertion-coverage") ||
+         config.options.get_bool_option("assertion-coverage-claims") ||
+         config.options.get_bool_option("dead-code-check");
+}
+
 bool python_converter::is_pytest_generation_mode() const
 {
   return config.options.get_bool_option("generate-pytest-testcase");
 }
 
+bool python_converter::is_program_file(const std::string &file) const
+{
+  // The file(s) under verification are never a model — not even when passed
+  // by a bare relative name (e.g. `main.py`) that the no-directory heuristic
+  // in is_model_file() would otherwise misread as a model. That
+  // misclassification disabled `and`/`or` short-circuit lowering for the main
+  // module, so a guard like `x is None or x.field is None` was emitted as an
+  // eager compound operand and the verdict flipped depending on whether the
+  // source was given by relative or absolute path (QuixBugs detect_cycle).
+  if (file == main_python_file)
+    return true;
+
+  // Extra positional Python files passed on the command line (github #6211)
+  // are translation units of the same program, not imported/model files, and
+  // must be exempted from the model heuristic the same way main_python_file
+  // is.
+  if (extra_asts_)
+  {
+    for (const auto &extra_ast : *extra_asts_)
+    {
+      if (
+        extra_ast.contains("filename") &&
+        extra_ast["filename"].get<std::string>() == file)
+        return true;
+    }
+  }
+
+  return false;
+}
+
 bool python_converter::is_model_file(const nlohmann::json &node) const
 {
   const std::string file = get_location_from_decl(node).file().as_string();
-  // The file under verification is never a model — not even when it is passed
-  // by a bare relative name (e.g. `main.py`) that the no-directory heuristic
-  // below would otherwise misread as a model. That misclassification disabled
-  // `and`/`or` short-circuit lowering for the main module, so a guard like
-  // `x is None or x.field is None` was emitted as an eager compound operand and
-  // the verdict flipped depending on whether the source was given by relative
-  // or absolute path (QuixBugs detect_cycle).
-  if (file == main_python_file)
+  if (is_program_file(file))
     return false;
 
   if (file.find("/models/") != std::string::npos)

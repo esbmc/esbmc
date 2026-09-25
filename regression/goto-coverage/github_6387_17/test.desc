@@ -1,0 +1,8 @@
+CORE
+main.c
+--dead-code-check
+^\[Dead code\]$
+dead code: unreachable branch
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*COVERAGE ANALYSIS)[\s\S]*\Z
+\A(?![\s\S]*Coverage goals:)[\s\S]*\Z

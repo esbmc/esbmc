@@ -8,25 +8,28 @@
 // Each concrete kind exposes a `static constexpr auto fields` tuple of
 // member pointers covering its user-visible fields, plus a static
 // `field_names` array naming them in tuple order. The generic_*<K>
-// helpers below walk that tuple via std::apply to implement cmp/lt/hash/
-// tostring/clone/get_sub_expr/foreach_operand uniformly. The
+// helpers below walk that tuple via std::apply to implement cmp/lt/
+// tostring/get_sub_expr/foreach_operand uniformly (crc and clone are built
+// on the same `fields` tuple in irep2_crc.cpp and irep2_expr.cpp /
+// irep2_type.cpp). The
 // switch-on-id dispatchers on expr2t / type2t pick the right helper
 // per kind from the X-macro manifests (`expr_kinds.inc`,
 // `type_kinds.inc`).
 
+#include <cassert>
 #include <tuple>
 #include <type_traits>
-#include <util/fixedbv.h>
-#include <util/i2string.h>
-#include <util/ieee_float.h>
-#include <util/migrate.h>
+#include <util/arith/fixedbv.h>
+#include <util/base/i2string.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 
 // ============================================================================
 // Per-field operations the generic dispatchers invoke on every K::fields
-// entry: pretty-printing, structural cmp/lt, SHA-1 ingestion, and
+// entry: pretty-printing, structural cmp/lt, crc/hash ingestion, and
 // sub-expression / delegate iteration. Primary templates cover trivially
 // comparable field types; explicit overloads handle BigInt,
 // std::vector<...>, and null-safe expr2tc/type2tc dispatch.
@@ -36,6 +39,7 @@ std::string type_to_string(const bool &thebool, int);
 std::string type_to_string(const sideeffect_allockind &data, int);
 std::string type_to_string(const unsigned int &theval, int);
 std::string type_to_string(const constant_string_kindt &theval, int);
+std::string type_to_string(const pointer_ref_kindt &theval, int);
 std::string type_to_string(const printf_kindt &theval, int);
 std::string type_to_string(const symbol_renaming_level &theval, int);
 std::string type_to_string(const BigInt &theint, int);
@@ -67,6 +71,21 @@ inline int do_type_lt(const T &side1, const T &side2)
 }
 
 // Explicit overloads for the field types whose semantics differ.
+
+// ieee_floatt's own == and < compare IEEE values, under which -0.0 equals +0.0.
+// irep2 needs literal identity: the packed bits, which do_type_crc() hashes.
+inline bool do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2)
+{
+  // generic_cmp/generic_lt compare the type, which is derived from spec, first.
+  assert(side1.spec == side2.spec);
+  return side1.pack() == side2.pack();
+}
+
+inline int do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
+{
+  assert(side1.spec == side2.spec);
+  return side1.pack().compare(side2.pack());
+}
 
 int do_type_lt(const BigInt &side1, const BigInt &side2);
 int do_type_lt(

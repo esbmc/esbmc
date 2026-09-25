@@ -1,0 +1,4 @@
+CORE
+main.py
+--enforce-contract bump
+^ERROR: __ESBMC_old at line 5 takes 't', which is neither a parameter nor a module-level global; a local has no pre-call value to snapshot$

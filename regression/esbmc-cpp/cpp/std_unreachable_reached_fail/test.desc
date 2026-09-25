@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++23 --enable-unreachability-intrinsic
+^VERIFICATION FAILED$
+reachability: unreachable code reached

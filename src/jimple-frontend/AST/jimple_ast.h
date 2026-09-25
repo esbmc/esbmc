@@ -1,11 +1,12 @@
 #ifndef ESBMC_JIMPLE_AST_H
 #define ESBMC_JIMPLE_AST_H
 
-#include <util/expr.h>
-#include <util/context.h>
-#include <util/std_types.h>
-#include <util/c_types.h>
-#include <util/message.h>
+#include <irep2/irep2_type.h>
+#include <util/irep/expr.h>
+#include <util/symtab/context.h>
+#include <util/irep/std_types.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
 #include <nlohmann/json.hpp>
 
 // For json parsing
@@ -55,7 +56,7 @@ protected:
    * @return an initialized symbolt
    */
   static symbolt create_jimple_symbolt(
-    const typet &t,
+    const type2tc &t,
     const std::string &module,
     const std::string &name,
     const std::string &id,
@@ -65,7 +66,7 @@ protected:
     symbol.mode = "C";
     symbol.module = module;
     symbol.location = std::move(get_location(module, function_name));
-    symbol.set_type(std::move(t));
+    symbol.set_type(t);
     symbol.name = name;
     symbol.id = id;
     return symbol;
@@ -80,7 +81,7 @@ protected:
    * @return symbolt
    */
   static symbolt get_temp_symbol(
-    const typet &t,
+    const type2tc &t,
     const std::string &class_name,
     const std::string &function_name)
   {
@@ -114,12 +115,13 @@ protected:
   static symbolt get_allocation_function()
   {
     std::string allocation_function = "malloc";
-    code_typet code_type;
-    code_type.return_type() = pointer_typet(empty_typet());
-    code_type.arguments().push_back(uint_type());
     symbolt symbol;
     symbol.mode = "C";
-    symbol.set_type(code_type);
+    symbol.set_type(code_type2tc(
+      std::vector<type2tc>{uint_type2()},
+      pointer_type2tc(get_empty_type()),
+      std::vector<irep_idt>{irep_idt()},
+      /*ellipsis=*/false));
     symbol.name = allocation_function;
     symbol.id = allocation_function;
     symbol.is_extern = false;
@@ -138,12 +140,13 @@ protected:
   static symbolt get_lengthof_function()
   {
     std::string func = "__ESBMC_get_object_size";
-    code_typet code_type;
-    code_type.return_type() = uint_type();
-    code_type.arguments().push_back(pointer_typet(empty_typet()));
     symbolt symbol;
     symbol.mode = "C";
-    symbol.set_type(code_type);
+    symbol.set_type(code_type2tc(
+      std::vector<type2tc>{pointer_type2tc(get_empty_type())},
+      uint_type2(),
+      std::vector<irep_idt>{irep_idt()},
+      /*ellipsis=*/false));
     symbol.name = func;
     symbol.id = func;
     symbol.is_extern = false;

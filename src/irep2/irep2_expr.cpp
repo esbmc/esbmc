@@ -1,15 +1,15 @@
 #include <memory>
 #include <charconv>
 #include <unordered_map>
-#include <util/fixedbv.h>
-#include <util/i2string.h>
-#include <util/ieee_float.h>
+#include <util/arith/fixedbv.h>
+#include <util/base/i2string.h>
+#include <util/arith/ieee_float.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 // Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
 // adding a new expression kind there automatically populates this
@@ -100,14 +100,20 @@ void expr2t::dump() const
 
 unsigned long constant_int2t::as_ulong() const
 {
-  // XXXjmorse - add assertion that we don't exceed machine word width?
   assert(!value.is_negative());
+  // Guard the documented truncation (R2): to_uint64() shifts every digit
+  // into a 64-bit accumulator, silently dropping the high digits when the
+  // magnitude exceeds 64 bits. is_uint64() is true iff the magnitude fits.
+  assert(value.is_uint64());
   return value.to_uint64();
 }
 
 long constant_int2t::as_long() const
 {
-  // XXXjmorse - add assertion that we don't exceed machine word width?
+  // Guard the documented truncation/overflow (R2): to_int64() negates the
+  // (possibly truncated) to_uint64() magnitude, so it is only correct when
+  // the value fits the signed 64-bit range. is_int64() is sign-aware.
+  assert(value.is_int64());
   return value.to_int64();
 }
 
@@ -401,7 +407,7 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
 }
 
 /********************** Switch-based v2 dispatchers ***************************/
-// All 111 expr kinds now expose `fields`; every case uses the generic path.
+// Every expr kind exposes `fields`; every case uses the generic path.
 // `end_expr_id` is a sentinel never assigned to a live node; including it as
 // a switch case (with -Wswitch enabled) makes the compiler enforce per-kind
 // exhaustiveness via the X-macro — adding a new kind without wiring it into
@@ -475,6 +481,10 @@ namespace
 // supported would silently fail to instantiate at the make_irep call
 // inside `rebuild_with_type_impl`; the trait pushes the failure to a
 // readable "kind unsupported" path instead.
+//
+// Neither check sees address_of2t, whose constructor accepts a leading
+// `type2tc` and means the pointee by it; an explicit specialization of
+// rebuild_with_type below overrides the generic rebuild for that kind.
 template <class K, std::size_t... Is>
 constexpr bool ctor_takes_type_first(std::index_sequence<Is...>)
 {
@@ -533,6 +543,57 @@ expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
 {
   constexpr std::size_t N = std::tuple_size_v<decltype(K::fields)>;
   return rebuild_with_type_impl(k, new_type, std::make_index_sequence<N - 1>{});
+}
+
+// address_of2t passes both gates but means the *pointee* type by the type2tc
+// its primary constructor takes, building the pointer itself; the generic
+// rebuild would wrap new_type a second time. ref_kind is forwarded, since a
+// reference destination's address-of has to keep the spelling or do_typecast
+// sees a type mismatch and adds a cast the irept copy does not.
+// pointer_type2t::carry_provenance is still re-defaulted to false, as it is at
+// every other address_of2t construction (migrate.cpp), and no with_type caller
+// derives a provenance-carrying type.
+template <>
+expr2tc
+rebuild_with_type<address_of2t>(const address_of2t &k, const type2tc &new_type)
+{
+  return address_of2tc(
+    to_pointer_type(new_type).subtype,
+    k.ptr_obj,
+    k.implicit,
+    to_pointer_type(new_type).ref_kind);
+}
+
+// sideeffect2t carries `constructor` outside `fields` (see irep2_expr.h), so
+// the generic rebuild would drop it and a constructor call would stop reading
+// as one in clang_cpp_maint::adjust_init. Forwarded here for the same reason
+// address_of2t forwards ref_kind.
+template <>
+expr2tc
+rebuild_with_type<sideeffect2t>(const sideeffect2t &k, const type2tc &new_type)
+{
+  return sideeffect2tc(
+    new_type,
+    k.operand,
+    k.size,
+    k.arguments,
+    k.alloctype,
+    k.kind,
+    k.location,
+    k.constructor);
+}
+
+// sideeffect_assign2t carries `member_init` outside `fields` for the same
+// reason (irep2_expr.h), and the generic rebuild would drop it -- turning a
+// member initialiser into an ordinary assignment, which is the distinction the
+// C++ pass reads to leave a reference binding alone.
+template <>
+expr2tc rebuild_with_type<sideeffect_assign2t>(
+  const sideeffect_assign2t &k,
+  const type2tc &new_type)
+{
+  return sideeffect_assign2tc(
+    new_type, k.op, k.lhs, k.rhs, k.location, k.member_init);
 }
 
 [[noreturn]] void with_type_unsupported(const expr2t &e)
@@ -700,7 +761,7 @@ std::string constant_vector2t::field_names[esbmct::num_type_fields] =
 std::string symbol2t::field_names[esbmct::num_type_fields] =
   {"name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names[esbmct::num_type_fields] =
-  {"from", "rounding_mode", "", "", "", ""};
+  {"from", "rounding_mode", "derived_to_base", "base_to_derived", "", ""};
 std::string bitcast2t::field_names[esbmct::num_type_fields] =
   {"from", "", "", "", ""};
 std::string nearbyint2t::field_names[esbmct::num_type_fields] =
@@ -761,6 +822,8 @@ std::string ieee_mul2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_div2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
+std::string ieee_rem2t::field_names[esbmct::num_type_fields] =
+  {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names[esbmct::num_type_fields] =
   {"value_1", "value_2", "value_3", "rounding_mode", "", ""};
 std::string ieee_sqrt2t::field_names[esbmct::num_type_fields] =
@@ -780,7 +843,7 @@ std::string pointer_object2t::field_names[esbmct::num_type_fields] =
 std::string pointer_capability2t::field_names[esbmct::num_type_fields] =
   {"pointer_obj", "", "", "", ""};
 std::string address_of2t::field_names[esbmct::num_type_fields] =
-  {"pointer_obj", "", "", "", ""};
+  {"pointer_obj", "implicit", "", "", ""};
 std::string byte_extract2t::field_names[esbmct::num_type_fields] =
   {"source_value", "source_offset", "big_endian", "", ""};
 std::string byte_update2t::field_names[esbmct::num_type_fields] =
@@ -874,7 +937,7 @@ std::string code_assert2t::field_names[esbmct::num_type_fields] =
 std::string code_assume2t::field_names[esbmct::num_type_fields] =
   {"guard", "", "", "", ""};
 std::string sideeffect_assign2t::field_names[esbmct::num_type_fields] =
-  {"op", "lhs", "rhs", "", ""};
+  {"op", "lhs", "rhs", "member_init", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =

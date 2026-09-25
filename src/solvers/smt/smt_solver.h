@@ -1,25 +1,29 @@
 #ifndef _ESBMC_PROP_SMT_SMT_SOLVER_H_
 #define _ESBMC_PROP_SMT_SMT_SOLVER_H_
 
+#include <optional>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <memory>
 #include <mutex>
+#include <set>
+#include <utility>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_result.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
-#include <util/namespace.h>
-#include <util/threeval.h>
+#include <util/message/message.h>
+#include <util/symtab/namespace.h>
+#include <util/base/threeval.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
- *  smt_solver_baset is the base class for everything that attempts to convert the
- *  contents of an SSA program into something else, generally SMT or SAT based.
+ *  smt_solver_baset is the base class for everything that attempts to convert
+ * the contents of an SSA program into something else, generally SMT or SAT
+ * based.
  *
  *  The class itself does various accounting and structuring of the conversion,
  *  however the challenge is that as we convert the SSA program into anything
@@ -40,9 +44,9 @@
  *  the class smt_solver_baset. Currently, create_solver() will do this, in the
  *  factory-pattern manner (ish). Each solver converter implements all the
  *  abstract methods of smt_solver_baset. When handed an expression to convert,
- *  smt_solver_baset deconstructs it into a series of function applications, which it
- *  creates by calling various abstract methods implemented by the converter
- *  (in particular mk_func_app).
+ *  smt_solver_baset deconstructs it into a series of function applications,
+ * which it creates by calling various abstract methods implemented by the
+ * converter (in particular mk_func_app).
  *
  *  The actual function applications are in smt_ast objects. Following the
  *  SMTLIB definition, these are basically a term.
@@ -110,8 +114,8 @@ class ra_apit;
  *  into the solver context.
  *
  *  The exact lifetime of smt asts here is currently undefined, unfortunately,
- *  although smt_solver_baset posesses a cache, so they generally have a reference
- *  in there. This will probably be fixed in the future.
+ *  although smt_solver_baset posesses a cache, so they generally have a
+ * reference in there. This will probably be fixed in the future.
  *
  *  In theory this class supports pushing and popping of solver contexts,
  *  although of course that depends too on the subclass supporting it. However,
@@ -150,7 +154,8 @@ public:
    *  before the object is used as a solver converter.
    *
    *  @param _ns Namespace for looking up the type of certain symbols.
-   *  @param _options Provide all the needed parameters to configure the solver. */
+   *  @param _options Provide all the needed parameters to configure the solver.
+   */
   smt_solver_baset(const namespacet &_ns, const optionst &_options);
 
   virtual ~smt_solver_baset();
@@ -171,6 +176,14 @@ public:
   /** Pop one context on the SMT assertion stack. */
   virtual void pop_ctx();
 
+  /** Whether a satisfiable result can be turned into a model. False for the
+   *  subprocess SMT-LIB backends with no interactive model solver attached:
+   *  they answer sat/unsat, but get() and l_get() have nothing to read. */
+  virtual bool has_model() const
+  {
+    return true;
+  }
+
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
    *  returning a single smt_ast that represents the converted expressions
@@ -187,6 +200,11 @@ public:
    *  frame per level and overflow the stack. The operand walk inside this
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
+
+  /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
+   *  rem), which share an operand layout and differ only in the solver call
+   *  they end up in. */
+  smt_astt convert_ieee_arith_2op(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -269,15 +287,17 @@ public:
    *  @return Expression representation of a's value */
   expr2tc get_by_value(const type2tc &type, BigInt value);
 
-  /** Extract the assignment to a rational/real value from the SMT solvers model.
-   *  Used in integer/real arithmetic mode to get floating point values.
+  /** Extract the assignment to a rational/real value from the SMT solvers
+   * model. Used in integer/real arithmetic mode to get floating point values.
    *  @param a The AST whose value we wish to know.
    *  @param numerator Output parameter for the numerator of the rational.
    *  @param denominator Output parameter for the denominator of the rational.
-   *  @return True if the rational value was successfully extracted, false otherwise. */
+   *  @return True if the rational value was successfully extracted, false
+   * otherwise. */
   virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
   {
-    // Default implementation returns false - solver-specific implementations should override this
+    // Default implementation returns false - solver-specific implementations
+    // should override this
     (void)a;
     (void)numerator;
     (void)denominator;
@@ -291,6 +311,14 @@ public:
    *  @return Explicit assigned value of expr in the solver. May be nil, in
    *          which case the solver did not assign a value to it for some
    *          reason. */
+  /** get()'s index_id case: read one element out of the solver's array
+   *  model rather than materialising the whole array. Nullopt where the
+   *  case falls through to get()'s generic tail. */
+  std::optional<expr2tc> get_index_value(const expr2tc &expr, expr2tc &res);
+  /** get_index_value(), returning the element it read from the model, if any,
+   *  rather than leaving it in @p res for get()'s generic tail. */
+  std::optional<expr2tc> get_index(const expr2tc &expr, expr2tc &res);
+
   virtual expr2tc get(const expr2tc &expr);
 
   /** Solver name fetcher. Returns a string naming the solver being used, and
@@ -311,7 +339,8 @@ public:
   /** @} */
 
   /** @{
-   *  @name Internal conversion API between smt_solver_baset and solver converter */
+   *  @name Internal conversion API between smt_solver_baset and solver
+   * converter */
 
   virtual smt_astt mk_add(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvadd(smt_astt a, smt_astt b);
@@ -432,26 +461,52 @@ public:
    *         Tends to be one integer divided ('/') by another. After inspecting
    *         all other options, there are none that are good, this is a
    *         legitimate use of strings.
-   *  @return The newly created terminal smt_ast of this real. */
+   *  @return An SMT AST representing this real value.
+   *
+   *  No backend is required to return a distinct smt_ast * per call: a
+   *  backend that memoises real constants by value (a natural
+   *  optimisation) is free to hand back the same pointer for repeated
+   *  calls with the same str. Do not key identity-sensitive metadata
+   *  (e.g. AST-pointer-keyed side-channel maps) directly on the result of
+   *  this call unless the value is known to be one this call site
+   *  exclusively owns; mint a fresh symbol (mk_fresh) and constrain it
+   *  equal to the desired real value instead. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
   // Returns SMT AST representing real zero
   smt_astt get_zero_real();
-  // Returns SMT AST representing double precision minimum normal value (2^-1022)
+  // Returns SMT AST representing double precision minimum normal value
+  // (2^-1022)
   smt_astt get_double_min_normal();
-  // Returns SMT AST representing double precision minimum subnormal value (2^-1074)
+  // Returns SMT AST representing double precision minimum subnormal value
+  // (2^-1074)
   smt_astt get_double_min_subnormal();
-  // Returns SMT AST representing double precision maximum normal value (~1.7976931348623157e+308)
+  // Returns SMT AST representing double precision maximum normal value
+  // (~1.7976931348623157e+308)
   smt_astt get_double_max_normal();
   // Returns SMT AST representing single precision minimum normal value (2^-126)
   smt_astt get_single_min_normal();
-  // Returns SMT AST representing single precision minimum subnormal value (2^-149)
+  // Returns SMT AST representing single precision minimum subnormal value
+  // (2^-149)
   smt_astt get_single_min_subnormal();
-  // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
+  // Returns SMT AST representing single precision maximum normal value
+  // (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
-  // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
+  // Under --ir-ieee, returns real zero when r lies in the region that
+  // rounds to zero under the selected rounding mode; otherwise returns r
+  // unchanged. This models only the zero/nonzero underflow boundary:
+  // signed zero and subnormal-grid quantization are not represented.
+  // Returns r unchanged for unsupported float formats.
+  smt_astt mk_subnormal_flush(
+    smt_astt r,
+    const floatbv_type2t &fbv_type,
+    const expr2tc &rounding_mode);
+
+  // Returns SMT AST for the integer-encoding sentinel for double +∞:
+  // max_normal+1
   smt_astt get_double_inf_sentinel();
-  // Returns SMT AST for the integer-encoding sentinel for single +∞: max_normal+1
+  // Returns SMT AST for the integer-encoding sentinel for single +∞:
+  // max_normal+1
   smt_astt get_single_inf_sentinel();
   // Returns SMT AST for the double precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
@@ -480,7 +535,6 @@ public:
    *  @param s the sort.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
-   *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) = 0;
 
@@ -551,8 +605,10 @@ public:
 
   /** Extract the assignment to a boolean variable from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
-   *  @return Expression representation of a's value, as a constant_bool2tc */
-  virtual bool get_bool(smt_astt a) = 0;
+   *  @return a's value, or tvt::TV_UNKNOWN when the solver cannot reduce it to
+   *          a ground boolean. That is an expected outcome for terms that still
+   *          contain a quantifier: callers must not invent a value for it. */
+  virtual tvt get_bool(smt_astt a) = 0;
 
   /** Extract the assignment to a bitvector from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
@@ -578,8 +634,9 @@ public:
    *  @name Integer overflow solver-converter API. */
 
   /** Detect integer arithmetic overflows. Takes an expression that is one of
-   *  add / sub / mul, and evaluates whether its operation applied to its
-   *  operands will result in an integer overflow or underflow.
+   *  add / sub / mul / div / modulus / shl, and evaluates whether its
+   *  operation applied to its operands will result in an integer overflow or
+   *  underflow.
    *  @param expr Expression to test for arithmetic overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_arith(const expr2tc &expr);
@@ -606,18 +663,19 @@ public:
    *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
    *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
-   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
-   *  Other formats return the original result unchanged.
-   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest constant
-   *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
-   *  For symbolic or directed rounding modes the function falls back to a weak
-   *  unconstrained enclosure (sound but imprecise); tight directed bounds are
-   *  deferred to a future PR.
+   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range
+   * [1.401e-45, 1.175e-38). Other formats return the original result unchanged.
+   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest
+   * constant (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is
+   * asserted. For symbolic or directed rounding modes the function falls back
+   * to a weak unconstrained enclosure (sound but imprecise); tight directed
+   * bounds are deferred to a future PR.
    *  @param real_result The result of exact real arithmetic operation
-   *  @param fbv_type The floating-point type information (exponent/fraction bits)
+   *  @param fbv_type The floating-point type information (exponent/fraction
+   * bits)
    *  @param operand_zero_check Optional boolean AST for special zero handling
-   *         (e.g., multiplication where either operand is zero should yield zero
-   *         regardless of the other operand, even if it would cause underflow)
+   *         (e.g., multiplication where either operand is zero should yield
+   * zero regardless of the other operand, even if it would cause underflow)
    *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
    *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
@@ -674,8 +732,8 @@ public:
    *  conversion */
   smt_sortt convert_sort(const type2tc &type);
   /** Convert a terminal expression into an SMT AST. This dispatches control to
-   *  the appropriate method in the subclassing solver converter for the terminal
-   *  conversion */
+   *  the appropriate method in the subclassing solver converter for the
+   * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
@@ -774,8 +832,36 @@ public:
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
+  /** The pointer, floating-point and struct legs of convert_bitcast, split
+   *  out so the dispatcher stays readable. Each returns null when it does not
+   *  apply. */
+  smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt
+  convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  /** Flatten a pointer to the machine representation a bitcast reinterprets,
+   *  and rebuild it from one. Both record the pointer so that later flattened
+   *  pointers are tied to it; see the comment on the definitions in
+   *  smt_bitcast.cpp. */
+  smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
+  smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
+  void record_flattened_pointer(smt_astt address, smt_astt pointer);
+  /** True when @p ptr_type's representation occupies @p bv_type exactly, so
+   *  the bits read back are the bits that were written. */
+  bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
+  /** Record every division's operand pair in @p expr, recursively.
+   *  convert_modulus lowers a remainder compositionally only when its
+   *  operands appear here; unconditional lowering costs 3-5x on
+   *  rem-heavy proofs. */
+  void note_division_operands(const expr2tc &expr);
+  void note_division_operands(
+    const expr2tc &expr,
+    std::unordered_set<const expr2t *> &seen);
+  /** Encode a remainder: compositional via the matching division when
+   *  one exists in the formula, the solver's rem primitive otherwise. */
+  smt_astt convert_modulus(const modulus2t &m, smt_astt a, smt_astt b);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
 
@@ -794,6 +880,9 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
+
+  /** Operand pairs of every division seen by note_division_operands. */
+  std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
   /** Create and assert address space constraints on the given object ID
    *  number. Essentially, this asserts that all the objects to date don't
    *  overlap with /this/ one. */
@@ -873,6 +962,32 @@ public:
   /** Like decompose_select_chain, but for multidimensional stores. */
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
 
+  /** One element update an array `with` denotes, as an index into the array's
+   *  flattened form and the value stored there. */
+  struct flat_storet
+  {
+    expr2tc index;
+    expr2tc value;
+  };
+
+  /** Name every element of a row being written whole as a store of the
+   *  corresponding read out of it, at @p offset in the flattened array.
+   *  Requires the row's flattened size to be a compile-time constant, which
+   *  both call sites establish; false when a nested row's is not. */
+  bool expand_row_stores(
+    const expr2tc &row,
+    const expr2tc &offset,
+    std::vector<flat_storet> &stores);
+
+  /** Decompose an array `with` into the flat element updates it denotes,
+   *  oldest first, giving back the array the chain is rooted at. Unlike
+   *  decompose_store_chain(), keeps every store a row carries. */
+  bool decompose_stores(
+    const expr2tc &expr,
+    const expr2tc &offset,
+    std::vector<flat_storet> &stores,
+    expr2tc &base);
+
   /** Prepare an array_of expression by flattening its dimensions, if it
    *  has more than one. */
   smt_astt convert_array_of_prep(const expr2tc &expr);
@@ -935,6 +1050,13 @@ public:
    *  by the boolean smt_ast pointer (solver ASTs are hash-consed, so
    *  identical pointer ⇒ identical term ⇒ identical model value). */
   std::unordered_map<smt_astt, tvt> l_get_cache;
+  /** Model-value cache for get_by_ast(), on the same terms and with the same
+   *  invalidation as l_get_cache. The pointer key is safe because pop_ctx
+   *  clears this map before deleting any smt_ast, so an address cannot be
+   *  reused while an entry for it survives. The stored type gates reuse
+   *  rather than keying it: the same bit-vector reads differently as signed
+   *  or unsigned. */
+  std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -948,7 +1070,8 @@ public:
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
-  /** Whether --ir-ieee mode is active (integer encoding with IEEE float semantics). */
+  /** Whether --ir-ieee mode is active (integer encoding with IEEE float
+   * semantics). */
   bool ir_ieee;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
@@ -985,6 +1108,19 @@ public:
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter = 0;
 
+  /** One pointer flattened to, or rebuilt from, its machine representation by
+   *  a bitcast. See convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  struct ptr_flatten_entry
+  {
+    smt_astt address;
+    smt_astt pointer;
+    unsigned int level;
+  };
+  /** Every such pointer in this context, tied pairwise so that two flattened
+   *  pointers sharing an address are the same pointer. Pruned on pop_ctx like
+   *  uf_ackermann_history, whose asts have the same lifetime. */
+  std::vector<ptr_flatten_entry> ptr_flatten_history;
+
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
    *  expression; used in convert_ast to inline nested quantifier bodies
@@ -1016,7 +1152,8 @@ public:
    */
   expr2tc current_valid_objects_sym;
 
-  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked with.
+  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked
+   * with.
    */
   expr2tc cur_dynamic;
 
@@ -1043,6 +1180,8 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
+
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);

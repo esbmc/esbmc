@@ -141,7 +141,6 @@ __ESBMC_HIDE:;
   // Set currently reading state
   __esbmc_currently_reading = 1;
 
-  // (rest of existing fgets implementation...)
   _Bool early_termination = 0;
   // check for pre-conditions
   __ESBMC_assert(
@@ -195,6 +194,59 @@ __ESBMC_HIDE:;
   str[size - 1] = '\0';
 
   return str;
+}
+
+ssize_t getline(char **lineptr, size_t *n, FILE *stream)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    stream == stdin || stream != NULL,
+    "the pointer to a file object must be a valid argument");
+
+  /* POSIX.1-2008 makes a null lineptr or n a "shall fail" [EINVAL], not
+   * undefined behaviour, so report it where the caller can see it rather than
+   * as a property violation on a portable program. */
+  if (lineptr == NULL || n == NULL)
+  {
+    __esbmc_errno = 22; // EINVAL
+    return -1;
+  }
+
+  __esbmc_currently_reading = 1;
+
+  /* Nothing left to read: -1, with *lineptr and *n as they were. POSIX allows
+   * that; glibc and musl allocate before reading instead, so a program that
+   * frees only after a success is correct under either and this model does
+   * not pick one. */
+  if (nondet_bool())
+    return -1;
+
+  /* 1 <= len <= SSIZE_MAX - 1. getline never returns 0, the cast below has to
+   * stay positive, and len + 1 must not wrap at any size_t width -- an
+   * unbounded draw does both on ILP32. */
+  size_t len;
+  __ESBMC_assume(len >= 1 && len <= (((size_t)-1) >> 1) - 1);
+
+  /* Hand back a fresh object rather than writing into the caller's: the bytes
+   * are the stream's, and keeping the old ones would let a second call prove
+   * the line came back unchanged. POSIX has *lineptr malloc-allocated exactly
+   * so getline may replace it. The capacity need only cover the line and its
+   * terminator; pinning it to len + 1 would be more precise than the spec. */
+  size_t cap;
+  __ESBMC_assume(cap >= len + 1);
+  char *buf = malloc(cap);
+  if (buf == NULL)
+  {
+    __esbmc_errno = 12; // ENOMEM
+    return -1;
+  }
+
+  free(*lineptr);
+  *lineptr = buf;
+  *n = cap;
+
+  buf[len] = '\0';
+  return (ssize_t)len;
 }
 
 size_t fread(void *ptr, size_t size, size_t nitems, FILE *stream)

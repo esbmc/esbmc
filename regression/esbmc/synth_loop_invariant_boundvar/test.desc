@@ -1,0 +1,5 @@
+CORE
+main.c
+--synthesise-loop-invariants --unwind 7
+\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
+^VERIFICATION SUCCESSFUL$

@@ -1,10 +1,13 @@
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
+#include <clang-cpp-frontend/clang_cpp_destructor_call.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
 #include <goto-programs/destructor.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -61,7 +64,12 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   adjust_assign(copy_ctor_assign);
   ctor_body.operands().push_back(copy_ctor_assign);
 
-  symbol.set_value(std::move(value));
+  // Resolvable only because clang_c_adjust::adjust() points
+  // migrate_namespace_lookup at the context being adjusted; without that both
+  // operands collapse onto one name (§52).
+  expr2tc value2;
+  migrate_expr(value, value2);
+  symbol.set_value(value2);
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
@@ -73,7 +81,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
   if (symbol.get_type().is_code())
   {
     typet t = symbol.get_type();
-    finalize_exception_specification(t);
+    ::finalize_exception_specification(ns, t);
     symbol.set_type(std::move(t));
   }
 
@@ -83,7 +91,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    * add implicit code to set each virtual pointer of this
    * class to point to the corresponding virtual table.
    */
-  gen_vptr_initializations(symbol);
+  gen_vptr_initializations(context, symbol);
   gen_implicit_union_copy_move_constructor(symbol);
 }
 
@@ -97,18 +105,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
-    adjust_operands(expr);
-    // adjust side effect node to explicitly call class destructor
-    // e.g. the adjustment here will add the following instruction in GOTO:
-    // FUNCTION_CALL:  ~t2(&(*p))
-    code_function_callt destructor;
-    if (get_destructor(ns, expr.type(), destructor))
-    {
-      exprt new_object("new_object", expr.type());
-
-      destructor.arguments().push_back(address_of_exprt(new_object));
-      expr.set("destructor", destructor);
-    }
+    adjust_cpp_delete(expr);
   }
   else if (statement == "temporary_object")
   {
@@ -130,6 +127,31 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
+}
+
+void clang_cpp_adjust::adjust_cpp_delete(side_effect_exprt &expr)
+{
+  adjust_operands(expr);
+
+  // adjust side effect node to explicitly call class destructor
+  // e.g. the adjustment here will add the following instruction in GOTO:
+  // FUNCTION_CALL:  ~t2(&(*p))
+  const struct_typet *class_type = resolve_class_type(ns, expr.type());
+  if (class_type == nullptr)
+    return;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, *class_type);
+  if (dtor == nullptr)
+    return;
+
+  exprt new_object("new_object", expr.type());
+
+  code_function_callt destructor;
+  destructor.function() =
+    destructor_binding(ns, *class_type, *dtor, new_object);
+  destructor.arguments().push_back(address_of_exprt(new_object));
+  expr.set("destructor", destructor);
 }
 
 void clang_cpp_adjust::adjust_new(exprt &expr)
@@ -417,81 +439,7 @@ void clang_cpp_adjust::convert_exception_id(
   std::vector<irep_idt> &ids,
   bool is_catch)
 {
-  if (type.id() == "pointer" || type.id() == "array")
-  {
-    if (type.reference())
-    {
-      convert_exception_id(type.subtype(), suffix, ids, is_catch);
-      return;
-    }
-    if (type.subtype().id() == "empty")
-    {
-      irep_idt identifier = "void_ptr";
-      ids.emplace_back(id2string(identifier) + suffix);
-    }
-    else
-    {
-      convert_exception_id(type.subtype(), "_ptr" + suffix, ids, is_catch);
-      return;
-    }
-  }
-  else if (type.id() == "symbol")
-  {
-    irep_idt identifier = type.identifier();
-
-    // Check if base class exists
-    typet t = ns.lookup(identifier)->get_type();
-
-    // only get the base class when throwing
-    if (t.id() == "struct" && !is_catch)
-    {
-      struct_typet struct_type = to_struct_type(t);
-      const exprt &bases =
-        static_cast<const exprt &>(struct_type.find("bases"));
-
-      // Throwing a derived class
-      if (bases.is_not_nil() && bases.get_sub().size())
-      {
-        // record the derived class
-        ids.emplace_back(id2string(identifier).substr(4) + suffix);
-
-        // record all the base classes id
-        for (const auto &i : bases.get_sub())
-        {
-          identifier = i.id();
-          ids.emplace_back(id2string(identifier).substr(4) + suffix);
-        }
-      }
-      else
-        ids.emplace_back(id2string(identifier).substr(4) + suffix);
-    }
-    else
-      ids.emplace_back(id2string(identifier) + suffix);
-  }
-  else if (type.ellipsis())
-  {
-    irep_idt identifier = "ellipsis";
-    ids.emplace_back(id2string(identifier) + suffix);
-  }
-  else if (type.id() == "noexcept")
-  {
-    irep_idt identifier = "noexcept";
-    ids.emplace_back(id2string(identifier) + suffix);
-  }
-
-  // add C++ type
-  std::string cpp_type = type.get("#cpp_type").as_string();
-  if (!cpp_type.empty())
-    ids.emplace_back(cpp_type + suffix);
-
-  // Fallback: an unusual catch parameter type (e.g. a function type, as in the
-  // ill-formed `catch (exception())`) matches none of the cases above and would
-  // leave `ids` empty, which callers such as adjust_catch dereference via
-  // `ids.front()`. Emit the type's own id so the result is never empty; such a
-  // synthetic id simply never matches a real throw, which is the intended
-  // behaviour for a catch clause that cannot name a throwable type.
-  if (ids.empty())
-    ids.emplace_back(id2string(type.id()) + suffix);
+  ::convert_exception_id(ns, type, suffix, ids, is_catch);
 }
 
 void clang_cpp_adjust::adjust_side_effect_function_call(

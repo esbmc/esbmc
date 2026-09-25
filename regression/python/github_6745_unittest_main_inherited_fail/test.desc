@@ -1,0 +1,6 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[assertEqual\.assertion\.1\]
+^\s*PASSED\s+\[setUp\.assertion\.2\]

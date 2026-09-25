@@ -1,0 +1,5 @@
+CORE
+main.py
+--function main --incremental-bmc
+
+^VERIFICATION FAILED$

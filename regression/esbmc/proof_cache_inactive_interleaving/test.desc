@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --proof-cache proof-store
+^WARNING: Proof cache: inactive \(thread interleavings after the first, where a claim carries a schedule its cone does not name\); every claim will be solved and none stored$
+^VERIFICATION SUCCESSFUL$

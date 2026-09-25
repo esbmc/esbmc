@@ -1,0 +1,10 @@
+properties:
+
+  # A falling-edge contact energises the coil on the scan its operand goes low,
+  # so the coil is on while the operand reads low. Unreachable under level
+  # sensing (edge_level_safe).
+  - id: P1
+    kind: reachability
+    expression: "!a && q"
+    description: "Coil energised while its operand reads low"
+    justification: "Only transition sensing can energise a coil while its operand is low"

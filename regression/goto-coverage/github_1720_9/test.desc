@@ -2,4 +2,4 @@ CORE
 main.c
 --condition-coverage --no-cov-asserts -Wno-error=implicit-function-declaration
 ^Condition Coverage: 50%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

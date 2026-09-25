@@ -1,7 +1,7 @@
 #pragma once
 
 #include <goto-programs/read_cbmc_goto_object.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 
 #include <string>
 #include <utility>

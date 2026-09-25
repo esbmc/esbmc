@@ -1,0 +1,5 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --no-unwinding-assertions
+^VERIFICATION FAILED$
+array bounds violated: array `a' upper bound

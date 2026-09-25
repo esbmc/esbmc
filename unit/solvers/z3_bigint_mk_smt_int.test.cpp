@@ -17,10 +17,10 @@
 #include <memory>
 #include <z3++.h>
 #include <big-int/bigint.hh>
-#include <util/context.h>
-#include <util/mp_arith.h>
-#include <util/namespace.h>
-#include <util/options.h>
+#include <util/symtab/context.h>
+#include <util/arith/mp_arith.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/solve.h>
 #include <z3_conv.h>

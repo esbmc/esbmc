@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--incremental-bmc --memory-leak-check
+^VERIFICATION FAILED$
+^  dereference failure: forgotten memory: dynamic_[0-9]+_value$

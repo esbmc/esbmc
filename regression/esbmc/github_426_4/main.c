@@ -1,3 +1,5 @@
+// Known limitation, recorded with the reason the obvious fix is unsound in
+// docs/design/pointer-integer-provenance.md (esbmc/esbmc#6545).
 
 #include <stdint.h>
 #include <assert.h>

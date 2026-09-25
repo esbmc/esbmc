@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-por --context-bound 3 --falsify-context-bound 1
+^Falsifying with context bound 1$
+Falsifying with context bound 1\n(?:(?!VERIFICATION SUCCESSFUL)[\s\S])*VERIFICATION FAILED

@@ -7,17 +7,17 @@ set(ESBMC_ENABLE_mathsat 0)
 set(ESBMC_ENABLE_yices 0)
 set(ESBMC_ENABLE_bitwuzla 0)
 set(ESBMC_ENABLE_bitwuzllob 0)
+set(ESBMC_ENABLE_neurosym 0)
 
 add_subdirectory(prop)
 add_subdirectory(smt)
 
 
-add_library(solve solve.cpp)
-target_link_libraries(solve PUBLIC smt PRIVATE smttuple smtfp fmt::fmt)
+add_library(solve solve.cpp smt/simplification_equivalence.cpp)
+target_link_libraries(solve PUBLIC esbmc_common smt PRIVATE smttuple smtfp fmt::fmt)
 target_include_directories(solve
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
 add_library(solvers INTERFACE)
@@ -34,6 +34,7 @@ add_subdirectory(yices)
 add_subdirectory(bitwuzla)
 add_subdirectory(smtlib)
 add_subdirectory(bitwuzllob) # after smtlib: reuses its library
+add_subdirectory(neurosym) # after smtlib: reuses its library
 
 if(ENABLE_BITWUZLA OR ENABLE_MATHSAT OR ENABLE_CVC4)
     find_library(GMP_LIB gmp)

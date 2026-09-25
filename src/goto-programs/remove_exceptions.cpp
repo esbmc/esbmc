@@ -1,17 +1,25 @@
+#include <functional>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/exception_typeid.h>
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/migrate.h>
-#include <util/expr_util.h>
-#include <util/std_types.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/base/filesystem.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/symtab/base_subobject.h>
+#include <util/irep/migrate.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
+
+#include <optional>
+#include <tuple>
 
 #include <algorithm>
 
@@ -22,6 +30,44 @@ const irep_idt ellipsis_id = "ellipsis";
 bool is_pointer_catch(const irep_idt &type)
 {
   return type.as_string().find("_ptr") != std::string::npos;
+}
+
+/// Maintain \p open_handlers across one instruction, reading the positional
+/// CATCH push/pop nesting the same way collect() does: a CATCH with targets
+/// opens a try region and carries its clause types, one without closes it.
+static void track_open_handlers(
+  goto_programt::const_targett it,
+  std::vector<std::vector<irep_idt>> &open_handlers)
+{
+  if (it->type != CATCH)
+    return;
+  if (!it->targets.empty())
+  {
+    const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
+    open_handlers.emplace_back(
+      c.exception_list.begin(), c.exception_list.end());
+  }
+  else if (!open_handlers.empty())
+    open_handlers.pop_back();
+}
+
+/// Whether an enclosing handler in the same function catches this raise: an
+/// ellipsis clause, or one naming a type on the throw's own chain (which runs
+/// dynamic type first, then its bases). Such a raise cannot be the one that
+/// escapes, so it must not narrow -- or clear -- the type's anchor: a
+/// `try: raise ValueError / except ValueError` beside an escaping raise of the
+/// same type otherwise reported at the caught line (#7433).
+static bool locally_caught(
+  const std::vector<std::vector<irep_idt>> &open_handlers,
+  const std::vector<irep_idt> &chain)
+{
+  for (const std::vector<irep_idt> &clause : open_handlers)
+    for (const irep_idt &h : clause)
+      if (
+        h == ellipsis_id ||
+        std::find(chain.begin(), chain.end(), h) != chain.end())
+        return true;
+  return false;
 }
 
 /// One catch clause: its static type (or "ellipsis"), the instruction that
@@ -69,7 +115,8 @@ public:
       type_id(mk_global(exception_globals::typeid_id)),
       value(mk_global(exception_globals::value_id)),
       uncaught_count(mk_global(exception_globals::uncaught_count_id)),
-      terminate_reason(mk_global(exception_globals::terminate_reason_id))
+      terminate_reason(mk_global(exception_globals::terminate_reason_id)),
+      site(mk_global(exception_globals::site_id))
   {
   }
 
@@ -106,7 +153,11 @@ public:
 
     track_uncaught_ = program_reads_uncaught(goto_functions);
 
-    may_throw = compute_may_throw(goto_functions);
+    const call_grapht call_graph = build_call_graph(goto_functions);
+    const std::set<irep_idt> address_taken =
+      collect_address_taken(goto_functions, context);
+    may_throw = compute_may_throw(call_graph, address_taken);
+    entry_reachable_ = compute_entry_reachable(call_graph, address_taken);
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
@@ -125,11 +176,17 @@ public:
         exception_specificationt::kindt::dynamic)
         for (const irep_idt &ty : fn.second.exception_spec.allowed_types)
           registry.register_chain({ty});
-      for (const auto &ins : fn.second.body.instructions)
+      const goto_programt::instructionst &body = fn.second.body.instructions;
+      // Handler types of the try regions open at the current instruction,
+      // recovered from the positional CATCH push/pop nesting the same way
+      // collect() does.
+      std::vector<std::vector<irep_idt>> open_handlers;
+      for (auto it = body.begin(); it != body.end(); ++it)
       {
-        if (ins.type == THROW)
+        track_open_handlers(it, open_handlers);
+        if (it->type == THROW)
         {
-          const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
+          const code_cpp_throw2t &t = to_code_cpp_throw2t(it->code);
           if (!is_nil_expr(t.operand))
           {
             registry.register_chain(t.exception_list);
@@ -142,14 +199,22 @@ public:
                 thrown_dynamic_types_.end(),
                 dyn) == thrown_dynamic_types_.end())
               thrown_dynamic_types_.push_back(dyn);
+            const locationt loc = raise_location(body, it);
+            raise_location_[&*it] = loc;
+            raise_site_id_[&*it] = record_throw_site(
+              fn.first,
+              fn.second.body.hide,
+              dyn,
+              loc,
+              locally_caught(open_handlers, t.exception_list));
           }
         }
-        else if (ins.type == FUNCTION_CALL)
+        else if (it->type == FUNCTION_CALL)
         {
-          const code_function_call2t &c = to_code_function_call2t(ins.code);
+          const code_function_call2t &c = to_code_function_call2t(it->code);
           if (is_symbol2t(c.function))
             direct_call_targets.insert(to_symbol2t(c.function).thename);
-          collect_thread_entry(c);
+          collect_thread_entry(fn.first, c);
         }
       }
     }
@@ -251,11 +316,7 @@ public:
     const symbolt *s = ns.lookup(name);
     if (!s)
       return false;
-    const std::string file = s->location.file().as_string();
-    // OM/library models live under the extracted-headers temp dir at runtime
-    // ("-headers-") and under c2goto/library/ when built in-tree.
-    return file.find("-headers-") != std::string::npos ||
-           file.find("c2goto/library/") != std::string::npos;
+    return file_operations::is_bundled_source(s->location.file().as_string());
   }
 
   /// True if *user* code contains a real throw or catch — i.e. a user exception
@@ -375,7 +436,7 @@ private:
   contextt &context;
   const namespacet &ns;
   exception_typeidt registry;
-  expr2tc thrown, type_id, value, uncaught_count, terminate_reason;
+  expr2tc thrown, type_id, value, uncaught_count, terminate_reason, site;
   std::set<irep_idt> may_throw;
   // Handled-stack OM helpers whose body is linked (set in run()); a call is
   // emitted only for these, else the lowering uses its inline fallback.
@@ -404,6 +465,139 @@ private:
   // name_to_id, which the exception_typeidt constructor seeds from *every* type
   // symbol, not just exception types.
   std::vector<irep_idt> thrown_dynamic_types_;
+  /// One statement a type is raised from, and the id the lowering stamps on the
+  /// exception state there.
+  struct throw_sitet
+  {
+    unsigned id;
+    locationt loc;
+  };
+
+  /// Per exception type, the distinct statements its attributable raises come
+  /// from, in first-seen order and deduplicated by file:line. One entry means
+  /// the type has a single raise site and the property can name it outright;
+  /// several mean the property is partitioned per site (issue #7769).
+  std::map<irep_idt, std::vector<throw_sitet>> type_throw_sites_;
+  /// Site id assigned to each accepted (type, file:line), so a second raise on
+  /// the same statement reuses it. Ids start at 1; 0 is unattributed.
+  std::map<std::tuple<irep_idt, irep_idt, irep_idt>, unsigned> site_ids_;
+  unsigned next_site_id_ = exception_globals::unattributed_site + 1;
+  /// Site id to assign at each throw, resolved by the pre-lowering scan.
+  /// A throw the scan rejected is absent and assigns the unattributed id, which
+  /// only the residual check matches.
+  std::map<const goto_programt::instructiont *, unsigned> raise_site_id_;
+  // Functions reachable from the whole-program entry; a raise anywhere else
+  // cannot happen, so it must not name the property (see record_throw_site).
+  std::set<irep_idt> entry_reachable_;
+  // Each throw's resolved source location, taken before any lowering runs.
+  // wire_throw stamps it on the instructions it inserts after the throw, so
+  // resolving it there instead would let a later throw's backward walk stop on
+  // an earlier throw's lowering and inherit its line.
+  std::map<const goto_programt::instructiont *, locationt> raise_location_;
+
+  /// Whether \p loc can place a report. Not is_nil(): a synthesized
+  /// instruction is left with an empty-but-not-nil location, which is not nil
+  /// yet names no file, so it places nothing.
+  static bool is_located(const locationt &loc)
+  {
+    return !loc.get_file().empty();
+  }
+
+  /// The source location of the raise at \p it: its own, or — for a
+  /// frontend-synthesized throw that carries none, as the Python bounds and
+  /// zero-division guards do — that of the nearest preceding located
+  /// instruction, which is the guard that decided to raise.
+  static locationt raise_location(
+    const goto_programt::instructionst &body,
+    goto_programt::const_targett it)
+  {
+    for (; it != body.begin(); --it)
+      if (is_located(it->location))
+        return it->location;
+    return body.begin()->location;
+  }
+
+  /// Records the raise of \p type at \p loc, in function \p fn, and returns the
+  /// site id the lowering must stamp on the exception state there. Raises that
+  /// share a file:line share an id, so a statement raising the same type twice
+  /// yields one property rather than two identical ones.
+  ///
+  /// Only a raise that can run and that the user can act on may name the
+  /// property. A raise in an unreachable function never happens (the Python
+  /// frontend defines a builtin model per program whether or not it is called),
+  /// and one in library code points where the user cannot act, so a type raised
+  /// only there (std::bad_alloc) keeps the whole-program anchor. \p hidden
+  /// covers what \ref is_bundled_source cannot: the Python operational models
+  /// are stamped with the *user's* filename and their own line numbers, so
+  /// nothing in the location distinguishes them.
+  ///
+  /// \p caught marks a raise an enclosing handler in the same function takes,
+  /// which therefore cannot be the escaping one (see \ref locally_caught).
+  ///
+  /// A rejected raise gets \ref exception_globals::unattributed_site, which no
+  /// per-site property matches; the per-type residual in \ref
+  /// emit_uncaught_checks is what covers it. Dropping it from the partition
+  /// without that residual would let such an exception escape unchecked.
+  unsigned record_throw_site(
+    const irep_idt &fn,
+    bool hidden,
+    const irep_idt &type,
+    const locationt &loc,
+    bool caught)
+  {
+    if (
+      hidden || caught || !entry_reachable_.count(fn) || !is_located(loc) ||
+      file_operations::is_bundled_source(loc.get_file().as_string()))
+      return exception_globals::unattributed_site;
+
+    auto key = std::make_tuple(type, loc.get_file(), loc.get_line());
+    auto [it, fresh] = site_ids_.emplace(key, next_site_id_);
+    std::vector<throw_sitet> &sites = type_throw_sites_[type];
+    if (fresh)
+    {
+      ++next_site_id_;
+      sites.push_back({it->second, loc});
+      return it->second;
+    }
+    // Keep only what the raises on this statement agree on, so the location
+    // never asserts a position that belongs to just one of them (the Python
+    // frontend copies a callee's guard into its caller).
+    for (throw_sitet &site : sites)
+      if (site.id == it->second)
+      {
+        if (site.loc.get_column() != loc.get_column())
+          site.loc.set_column(irep_idt());
+        if (site.loc.get_function() != loc.get_function())
+          site.loc.set_function(irep_idt());
+      }
+    return it->second;
+  }
+
+  /// The statements \p type is raised from that a property may name, empty when
+  /// none qualified (every raise hidden, unreachable or locally caught).
+  const std::vector<throw_sitet> &throw_sites(const irep_idt &type) const
+  {
+    static const std::vector<throw_sitet> none;
+    auto it = type_throw_sites_.find(type);
+    return it != type_throw_sites_.end() ? it->second : none;
+  }
+
+  /// The site id recorded for the throw at \p thr. A throw this pass
+  /// synthesized was never scanned, so it is unattributed.
+  unsigned resolved_site_id(goto_programt::const_targett thr) const
+  {
+    auto it = raise_site_id_.find(&*thr);
+    return it != raise_site_id_.end() ? it->second
+                                      : exception_globals::unattributed_site;
+  }
+
+  /// The location recorded for the throw at \p thr by the pre-lowering scan.
+  /// A throw the scan did not see (one this pass synthesized) keeps its own.
+  locationt resolved_raise_location(goto_programt::const_targett thr) const
+  {
+    auto it = raise_location_.find(&*thr);
+    return it != raise_location_.end() ? it->second : thr->location;
+  }
 
   expr2tc mk_global(const char *id)
   {
@@ -441,16 +635,22 @@ private:
     return call;
   }
 
-  /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
-  /// as a thread entry, so lower_ip enforces the uncaught-escape terminate at
-  /// that function's epilogue. The argument is `&worker`, possibly under
+  /// If @p call is a pthread_create, record its start-routine argument (the
+  /// 3rd) as a thread entry, so lower_ip enforces the uncaught-escape terminate
+  /// at that function's epilogue. The argument is `&worker`, possibly under
   /// typecasts; peel them to the underlying function symbol. A computed
   /// (unresolvable) routine sets thread_entry_unresolved so run() declines the
   /// program rather than silently miss its uncaught-escape check.
-  void collect_thread_entry(const code_function_call2t &call)
+  ///
+  /// Only a call the entry can reach starts a thread, so @p caller gates the
+  /// scan: std::thread's operational model hands pthread_create its own `f`
+  /// parameter, and scanning unreachable bodies reported an unresolved routine
+  /// for any program that merely includes <thread> and uses exceptions (#7644).
+  void
+  collect_thread_entry(const irep_idt &caller, const code_function_call2t &call)
   {
     if (
-      !is_symbol2t(call.function) ||
+      !entry_reachable_.count(caller) || !is_symbol2t(call.function) ||
       id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
         std::string::npos ||
       call.operands.size() < 3)
@@ -573,10 +773,59 @@ private:
 
   // ---- may-throw analysis ------------------------------------------------
 
-  static std::set<irep_idt> compute_may_throw(const goto_functionst &gf)
+  /// Every function whose address the program takes, whether in a function
+  /// body or in a static initialiser -- a virtual table is the latter. A call
+  /// through a pointer can only land on one of these, so it needs exception
+  /// propagation only when one of them may throw. Treating *every* indirect
+  /// call as possibly-throwing instead costs a branch at each one: a C++
+  /// program whose only indirect calls are the virtual sink of <ostream> then
+  /// grows exception-propagation branches around every `cout << x`.
+  static std::set<irep_idt>
+  collect_address_taken(const goto_functionst &gf, const contextt &context)
   {
-    std::set<irep_idt> may;
+    std::set<irep_idt> taken;
+
+    std::function<void(const expr2tc &)> scan = [&](const expr2tc &e) {
+      if (is_nil_expr(e))
+        return;
+      if (is_address_of2t(e))
+      {
+        const expr2tc &obj = to_address_of2t(e).ptr_obj;
+        if (is_symbol2t(obj) && is_code_type(obj->type))
+          taken.insert(to_symbol2t(obj).thename);
+      }
+      e->foreach_operand(scan);
+    };
+
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+        {
+          scan(ins.code);
+          scan(ins.guard);
+        }
+
+    // Virtual tables live in the symbol table, not in any body: without this
+    // the set would miss every virtual method and the result would be unsound.
+    context.foreach_operand(
+      [&scan](const symbolt &s) { scan(s.get_value2()); });
+
+    return taken;
+  }
+
+  /// The direct call graph, the functions that raise directly, and the ones
+  /// that call through a pointer. Built once and shared by the may-throw
+  /// fixpoint and the entry-reachability walk.
+  struct call_grapht
+  {
+    std::set<irep_idt> raises;
     std::map<irep_idt, std::set<irep_idt>> callees;
+    std::set<irep_idt> indirect_callers;
+  };
+
+  static call_grapht build_call_graph(const goto_functionst &gf)
+  {
+    call_grapht cg;
     for (const auto &fn : gf.function_map)
     {
       if (!fn.second.body_available)
@@ -584,29 +833,71 @@ private:
       for (const auto &ins : fn.second.body.instructions)
       {
         if (ins.type == THROW)
-          may.insert(fn.first);
+          cg.raises.insert(fn.first);
         else if (ins.type == FUNCTION_CALL)
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
-          if (is_symbol2t(c.function))
+          if (!is_symbol2t(c.function))
           {
-            const irep_idt callee = to_symbol2t(c.function).thename;
-            if (
-              id2string(callee).find("__ESBMC_rethrow_exception_raw") !=
-              std::string::npos)
-              may.insert(fn.first);
-            else
-              callees[fn.first].insert(callee);
+            cg.indirect_callers.insert(fn.first);
+            continue;
           }
+          const irep_idt callee = to_symbol2t(c.function).thename;
+          if (
+            id2string(callee).find("__ESBMC_rethrow_exception_raw") !=
+            std::string::npos)
+            cg.raises.insert(fn.first);
           else
-            may.insert(fn.first); // indirect call: callee may throw
+            cg.callees[fn.first].insert(callee);
         }
       }
     }
+    return cg;
+  }
+
+  /// Functions reachable from the whole-program entry over the direct call
+  /// graph, seeded also with every address-taken function. Over-approximate by
+  /// design: keeping a function that is really unreachable only makes a
+  /// throw-site location less specific, while dropping a reachable one would
+  /// attribute the uncaught-exception property to the wrong raise. Seeding the
+  /// address-taken set unconditionally is what makes that direction safe — a
+  /// function entered only through a pointer handed to a bodyless spawn
+  /// primitive (__ESBMC_spawn_thread, pthread_create) is reached by no call
+  /// this graph can see.
+  static std::set<irep_idt> compute_entry_reachable(
+    const call_grapht &cg,
+    const std::set<irep_idt> &address_taken)
+  {
+    std::set<irep_idt> reachable;
+    std::vector<irep_idt> work(address_taken.begin(), address_taken.end());
+    work.push_back(irep_idt("__ESBMC_main"));
+    while (!work.empty())
+    {
+      const irep_idt fn = work.back();
+      work.pop_back();
+      if (!reachable.insert(fn).second)
+        continue;
+      if (auto it = cg.callees.find(fn); it != cg.callees.end())
+        work.insert(work.end(), it->second.begin(), it->second.end());
+    }
+    return reachable;
+  }
+
+  static std::set<irep_idt> compute_may_throw(
+    const call_grapht &cg,
+    const std::set<irep_idt> &address_taken)
+  {
+    std::set<irep_idt> may = cg.raises;
+    std::set<irep_idt> indirect_callers = cg.indirect_callers;
+
+    // An indirect call reaches only an address-taken function, so it forces
+    // exception propagation on its caller exactly when one of those may throw.
+    // That is a fixpoint of its own: resolving it can put a new function in
+    // `may`, which may in turn be address-taken.
     for (bool changed = true; changed;)
     {
       changed = false;
-      for (const auto &[caller, cs] : callees)
+      for (const auto &[caller, cs] : cg.callees)
         if (!may.count(caller))
           for (const irep_idt &callee : cs)
             if (may.count(callee))
@@ -615,6 +906,16 @@ private:
               changed = true;
               break;
             }
+
+      if (!indirect_callers.empty())
+        for (const irep_idt &fn : address_taken)
+          if (may.count(fn))
+          {
+            for (const irep_idt &caller : indirect_callers)
+              changed |= may.insert(caller).second;
+            indirect_callers.clear();
+            break;
+          }
     }
     return may;
   }
@@ -993,6 +1294,63 @@ private:
     }
   }
 
+  /// Byte offset of the *direct* base subobject of class @p target_tag inside
+  /// struct @p st, or nullopt when @p st has no such direct base. Only direct
+  /// bases are resolved: a transitive or absent base returns nullopt, so the
+  /// caller keeps the plain (unadjusted) cast rather than ever emitting a wrong
+  /// offset.
+  std::optional<BigInt>
+  direct_base_offset(const type2tc &st, const irep_idt &target_tag)
+  {
+    if (!is_struct_type(st))
+      return std::nullopt;
+    const struct_type2t &s = to_struct_type(st);
+    const std::string want = base_subobject_name(id2string(target_tag));
+    for (const irep_idt &m : s.member_names)
+      if (m.as_string() == want)
+        return member_offset(st, m, &ns);
+    return std::nullopt;
+  }
+
+  /// The `catch_ptr_type` view of the stored thrown object for a catch of class
+  /// @p catch_type. `value` points at the *most-derived* object, so when the
+  /// caught type is a base sitting at a non-zero offset inside the dynamic type
+  /// (multiple inheritance), the pointer is re-based per the runtime type_id:
+  ///   type_id == id(D) ? (T*)((char*)value + off(T in D)) : (T*)value
+  /// Only non-zero-offset bases add an arm, so a single-inheritance / exact /
+  /// first-base catch keeps exactly the plain `(T*)value` it had.
+  expr2tc catch_object_pointer(
+    const type2tc &catch_ptr_type,
+    const irep_idt &catch_type)
+  {
+    expr2tc result = typecast2tc(catch_ptr_type, value);
+
+    const irep_idt target_tag = "tag-" + id2string(catch_type);
+    const type2tc char_ptr = pointer_type2tc(get_uint8_type());
+    for (const auto &[dname, id] : registry.concrete_subtypes(catch_type))
+    {
+      const symbolt *dsym = ns.lookup(irep_idt("tag-" + id2string(dname)));
+      if (!dsym)
+        continue;
+      std::optional<BigInt> off =
+        direct_base_offset(migrate_type(dsym->get_type()), target_tag);
+      if (!off || *off == 0)
+        continue;
+      expr2tc rebased = typecast2tc(
+        catch_ptr_type,
+        add2tc(
+          char_ptr,
+          typecast2tc(char_ptr, value),
+          constant_int2tc(index_type2(), *off)));
+      result = if2tc(
+        catch_ptr_type,
+        equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id))),
+        rebased,
+        result);
+    }
+    return result;
+  }
+
   /// Insert `__ESBMC_exc_thrown = false` before a handler and rewrite its
   /// `var = NONDET` binding to read the thrown object via __ESBMC_exc_value:
   ///   catch (T &v): v is a T* — bind the address      v = (T*)value
@@ -1011,7 +1369,13 @@ private:
     // for a typed catch. The decrement of the uncaught count goes there, so it
     // happens once the exception has entered its handler ([except.uncaught]) and
     // after the catch-parameter is bound (§5.5).
-    auto before_body = h.target;
+    // Anchor the handler prologue (uncaught decrement, handled-stack push) so
+    // it precedes the handler body. A typed catch reassigns this to its binding
+    // instruction below; a catch-all has no binding, and its `h.target` is the
+    // body's first instruction, so anchoring on `landing` keeps the push ahead
+    // of a bare `throw;` (otherwise it landed after the rethrow, leaving the
+    // handled stack empty so the re-raise found no exception -- #6297).
+    auto before_body = landing;
     if (h.type != ellipsis_id)
     {
       auto bind = std::next(h.target);
@@ -1021,11 +1385,13 @@ private:
       // the stored object/pointer out: var = *(decltype(var)*)value. The two
       // pointer-typed forms are told apart by the catch type's `_ptr` suffix.
       bool ref_catch = is_pointer_type(var->type) && !is_pointer_catch(h.type);
-      expr2tc src =
-        ref_catch
-          ? typecast2tc(var->type, value)
-          : dereference2tc(
-              var->type, typecast2tc(pointer_type2tc(var->type), value));
+      // View the stored object as the caught class, re-basing to the correct
+      // base subobject when the catch is by a non-zero-offset base of a
+      // multiple-inheritance dynamic type (else a plain cast).
+      type2tc catch_ptr_type =
+        ref_catch ? var->type : pointer_type2tc(var->type);
+      expr2tc obj_ptr = catch_object_pointer(catch_ptr_type, h.type);
+      expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
     }
@@ -1098,15 +1464,18 @@ private:
     return disj;
   }
 
-  /// A call to the installed std::unexpected handler — the set_unexpected
-  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  /// A call to the std::unexpected dispatcher (__ESBMC_run_unexpected), which
+  /// invokes the handler installed via std::set_unexpected or, when none is
+  /// installed, the default handler (which calls std::terminate). Nil when the
+  /// exception OM is not linked, in which case the caller falls back to an
+  /// immediate specification-violation.
   expr2tc make_unexpected_call()
   {
-    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_run_unexpected");
     if (!h)
       return expr2tc();
     code_function_callt fc;
-    fc.function() = h->get_value();
+    fc.function() = symbol_exprt(h->id, h->get_type());
     expr2tc call;
     migrate_expr(fc, call);
     return call;
@@ -1215,25 +1584,56 @@ private:
     expr2tc known_disj;
     goto_programt::targett head = before;
     bool have_head = false;
+    auto emit =
+      [&](const expr2tc &escapes, const locationt &at, const irep_idt &name) {
+        auto t = emit_terminate(
+          body,
+          before,
+          not2tc(escapes),
+          at,
+          fn,
+          exception_globals::terminate_reason_uncaught,
+          "uncaught exception: " + name.as_string());
+        if (!have_head)
+        {
+          head = t;
+          have_head = true;
+        }
+      };
+
     for (const irep_idt &name : thrown_dynamic_types_)
     {
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+      const expr2tc t_escapes = and2tc(thrown, eq);
+      const std::vector<throw_sitet> &sites = throw_sites(name);
 
-      // assert(!(thrown && typeid == id(T))) — fires iff T escapes uncaught.
-      auto t = emit_terminate(
-        body,
-        before,
-        not2tc(and2tc(thrown, eq)),
-        loc,
-        fn,
-        exception_globals::terminate_reason_uncaught,
-        "uncaught exception: " + name.as_string());
-      if (!have_head)
+      // With at most one site there is one statement to name, so no split is
+      // needed, and the check must not depend on the site id: a C/C++ rethrow
+      // through the handled-exception helper restores typeid and value but
+      // leaves the site id of whatever was raised last.
+      if (sites.size() <= 1)
       {
-        head = t;
-        have_head = true;
+        emit(t_escapes, sites.empty() ? loc : sites.front().loc, name);
+        continue;
       }
+
+      // Several sites: one property per raise, each at its own statement
+      // (issue #7769), then a residual for a site id matching none of them --
+      // an unattributable raise or a stale id left by a rethrow. The site
+      // conditions are exhaustive by construction, so the conjunction of these
+      // skip conditions is exactly !(thrown && typeid == id(T)), the single
+      // check they replace.
+      expr2tc site_disj;
+      for (const throw_sitet &st : sites)
+      {
+        expr2tc at_site =
+          equality2tc(site, constant_int2tc(site->type, BigInt(st.id)));
+        site_disj =
+          is_nil_expr(site_disj) ? at_site : or2tc(site_disj, at_site);
+        emit(and2tc(t_escapes, at_site), st.loc, name);
+      }
+      emit(and2tc(t_escapes, not2tc(site_disj)), loc, name);
     }
 
     // Residual: assert(thrown == false || typeid ∈ known). With no known types
@@ -1306,12 +1706,27 @@ private:
     if (!is_nil_expr(call))
     {
       // Clear `thrown` so the handler runs with no exception in flight; keep
-      // typeid/value so a bare `throw;` in the handler rethrows the original.
+      // typeid/value naming the original exception.
       auto clear = ins(fail);
       clear->make_assignment();
       clear->code = code_assign2tc(thrown, gen_false_expr());
 
+      // Make the original exception the "currently handled" one for the duration
+      // of the handler, so a bare `throw;` in it re-raises the original
+      // ([except.throw]/8, [except.unexpected]) via __ESBMC_rethrow_current
+      // rather than terminating on an empty handled stack.
+      expr2tc push = make_c_helper_call(exception_globals::push_handled_id);
+      if (!is_nil_expr(push))
+        ins(fail)->make_function_call(push);
+
       ins(fail)->make_function_call(call);
+
+      // Balance the handled stack. A throw out of the handler leaves `thrown`
+      // set, so pop preserves the newly in-flight exception; a normal return
+      // leaves it clear and we fall to the violation assert below regardless.
+      expr2tc pop = make_c_helper_call(exception_globals::pop_handled_id);
+      if (!is_nil_expr(pop))
+        ins(fail)->make_function_call(pop);
 
       // Handler returned without throwing -> the specification is violated.
       ins(fail)->make_goto(fail, not_thrown());
@@ -1328,11 +1743,61 @@ private:
         a_cnt->code = adjust_uncaught(-1);
       }
 
-      // Handler rethrew a permitted type -> let it propagate.
+      // Handler threw a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
+
+      // Handler threw a disallowed type: substitute std::bad_exception
+      // ([except.unexpected]/2). The substitute propagates when the spec lists
+      // bad_exception, and otherwise stays disallowed and falls through to the
+      // terminate assert — which reports the violation directly (FAILED) instead
+      // of routing through std::terminate(), whose custom handler could end the
+      // path and swallow it.
+      expr2tc bad_exc_obj = build_bad_exception_object();
+      if (!is_nil_expr(bad_exc_obj))
+      {
+        const unsigned bad_id = registry.id_of(bad_exception_name_);
+        auto a_tid = ins(fail);
+        a_tid->make_assignment();
+        a_tid->code = code_assign2tc(
+          type_id, constant_int2tc(type_id->type, BigInt(bad_id)));
+
+        auto a_val = ins(fail);
+        a_val->make_assignment();
+        a_val->code = code_assign2tc(
+          value,
+          typecast2tc(
+            value->type, address_of2tc(bad_exc_obj->type, bad_exc_obj)));
+
+        ins(fail)->make_goto(ret, permitted());
+      }
     }
     // Fall through to fail.
   }
+
+  /// A fresh static std::bad_exception object for the [except.unexpected]/2
+  /// substitution, or nil when the <exception> model's bad_exception is not in
+  /// the symbol table. As with build_bad_cast_throw the object's state is
+  /// irrelevant — only its type identity (recorded in bad_exception_name_ for
+  /// the caller's typeid) and address matter. Built at most once and reused.
+  expr2tc build_bad_exception_object()
+  {
+    if (!is_nil_expr(bad_exception_obj_))
+      return bad_exception_obj_;
+
+    const symbolt *sym = ns.lookup("tag-std::bad_exception");
+    if (!sym)
+      sym = ns.lookup("tag-class std::bad_exception");
+    if (!sym)
+      return expr2tc();
+
+    bad_exception_name_ =
+      irep_idt(id2string(sym->id).substr(4)); // strip "tag-"
+    bad_exception_obj_ = make_exception_storage(migrate_symbol_type(*sym));
+    return bad_exception_obj_;
+  }
+
+  expr2tc bad_exception_obj_;
+  irep_idt bad_exception_name_;
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise
   /// the in-flight one) and branch to the enclosing dispatch / epilogue.
@@ -1342,7 +1807,7 @@ private:
     goto_programt::targett dest)
   {
     const code_cpp_throw2t throw_ref = to_code_cpp_throw2t(thr->code); // copy
-    const locationt loc = thr->location;
+    const locationt loc = resolved_raise_location(thr);
     const irep_idt fn = thr->function;
 
     auto pos = std::next(thr);
@@ -1402,6 +1867,15 @@ private:
       a_tid->code =
         code_assign2tc(type_id, constant_int2tc(type_id->type, BigInt(tid)));
 
+      // Which statement raised, for the uncaught-exception property to name
+      // (issue #7769). Written at every real throw, the unattributable ones
+      // included: a stale id left over from a caught exception would otherwise
+      // attribute this raise to the wrong statement.
+      auto a_site = add();
+      a_site->make_assignment();
+      a_site->code = code_assign2tc(
+        site, constant_int2tc(site->type, BigInt(resolved_site_id(thr))));
+
       // Copy the thrown object into a stable static slot, then point the global
       // at the copy — the operand is a temporary whose frame may be gone by the
       // time a handler (possibly in a caller) reads it.
@@ -1437,6 +1911,7 @@ private:
     auto g = body.insert(std::next(call));
     g->make_goto(dest, thrown);
     g->location = call->location;
+    g->location.property("skipped");
     g->function = call->function;
   }
 };

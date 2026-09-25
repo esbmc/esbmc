@@ -1,0 +1,6 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only
+^  division by zero$
+^  b\.real \* b\.real \+ b\.imag \* b\.imag != 0$
+^VERIFICATION FAILED$

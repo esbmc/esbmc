@@ -9,14 +9,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 /*
@@ -179,7 +179,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   code_typet ft;
   typet tmp_rtn_type("constructor");
   ft.return_type() = tmp_rtn_type;
-  ft.set("#member_name", prefix + c_name);
+  ft.member_name(prefix + c_name);
   ft.set("#inlined", true);
   symbolt fs;
   locationt l;
@@ -240,7 +240,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   param.cmt_identifier(aid);
   param.location() = l;
   ft.arguments().push_back(param);
-  add_sym.set_type(ft);
+  add_sym.set_type(migrate_type(ft));
 
   // body
   exprt func_body = code_blockt();
@@ -468,7 +468,7 @@ bool solidity_convertert::get_high_level_call_wrapper(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(msg_sender);
+  added_old_sender.set_value(migrate_expr(msg_sender));
   old_sender_decl.operands().push_back(msg_sender);
   front_block.move_to_operands(old_sender_decl);
 
@@ -652,7 +652,7 @@ bool solidity_convertert::multi_transaction_verification(
   // no params
   main_type.make_ellipsis();
 
-  main_sym.set_type(main_type);
+  main_sym.set_type(migrate_type(main_type));
   main_sym.set_value(func_body);
 
   // set "_ESBMC_Main_X" as the main function
@@ -732,7 +732,7 @@ bool solidity_convertert::register_harness_main(
 
   symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
   main_type.make_ellipsis();
-  added_symbol.set_type(main_type);
+  added_symbol.set_type(migrate_type(main_type));
   added_symbol.set_value(func_body);
   config.main = sol_name;
   return false;

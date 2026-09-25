@@ -3,4 +3,4 @@ main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
 ^Violated property:$
-^  array bounds violated: array `a'\[\] upper bound$
+^  dereference failure: array bounds violated$

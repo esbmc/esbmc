@@ -5,7 +5,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <ostream>
-#include <util/context.h>
+#include <util/symtab/context.h>
 
 bool write_goto_binary(
   std::ostream &out,

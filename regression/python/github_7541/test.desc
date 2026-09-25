@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: class .A. is defined 2 times \(lines 5 12\); ESBMC keys a class symbol by name alone

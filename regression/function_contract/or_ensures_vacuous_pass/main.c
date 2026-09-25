@@ -13,6 +13,7 @@
 void f(int *p)
 {
   __ESBMC_requires(p != NULL);
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(int)));
   __ESBMC_ensures(p != NULL || *p == __ESBMC_old(*p) + 1);
 
   *p = 9999; /* wrong, but never checked due to vacuous left side */

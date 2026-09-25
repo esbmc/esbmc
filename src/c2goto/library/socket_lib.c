@@ -10,8 +10,8 @@
  * Key design decisions:
  *   - socket()/bind()/listen()/accept()/connect() return non-deterministic
  *     success/failure values within their valid range.
- *   - recv() fills the user buffer with non-deterministic bytes (modeling
- *     attacker-controlled input) and returns a non-deterministic byte count.
+ *   - recv() returns a non-deterministic byte count in [0, len]; the buffer
+ *     contents are left unmodelled (untouched), matching an unmodelled stub.
  *   - send() returns a non-deterministic count of bytes "sent" (0 to len).
  *   - select()/poll() return non-deterministic readiness, preserving the
  *     contract that at least one fd is ready when the return value > 0.

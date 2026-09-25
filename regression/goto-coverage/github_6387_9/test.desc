@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property --assertion-coverage --function target --witness-output-yaml w.yaml
+claim\(s\) outside the coverage instrumentation were violated
+helper never sees 7
+SEED_FILE base-k0-0-w.yaml SENTINEL_NOT_OVERWRITTEN
+CHECK_FILE base-k0-0-w.yaml contains SENTINEL_NOT_OVERWRITTEN

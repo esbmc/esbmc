@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc --function current_sync_committee_gindex_at_slot
+^VERIFICATION SUCCESSFUL$

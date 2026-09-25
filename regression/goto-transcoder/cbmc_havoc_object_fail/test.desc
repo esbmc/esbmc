@@ -1,0 +1,5 @@
+CORE
+cbmc_havoc_object_fail.goto
+--binary
+^VERIFICATION FAILED$
+a\[\(signed long int\)2\] == 3

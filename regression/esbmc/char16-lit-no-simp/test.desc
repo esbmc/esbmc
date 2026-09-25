@@ -1,4 +1,5 @@
 CORE
 char16-lit.c
 --no-simplify
+REQUIRES uchar_h
 ^VERIFICATION SUCCESSFUL$

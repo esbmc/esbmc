@@ -1,0 +1,4 @@
+CORE
+cbmc_bitreverse.goto
+--binary
+^VERIFICATION SUCCESSFUL$

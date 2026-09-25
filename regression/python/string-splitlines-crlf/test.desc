@@ -1,3 +1,4 @@
-CORE
+THOROUGH
 main.py
+--unwind 8
 ^VERIFICATION SUCCESSFUL$

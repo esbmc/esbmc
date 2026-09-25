@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3 --context-bound 3
+^Schedule reduction: peak_threads 3, schedules_explored 38, pruned_by_mpor 36, pruned_by_hash 0, pruned_by_sleep 0, pruned_by_cs_bound \d+$
+^VERIFICATION SUCCESSFUL$

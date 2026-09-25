@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --no-irep2-native-body --goto-functions-only
+^WARNING: function should not return value$

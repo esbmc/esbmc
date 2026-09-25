@@ -17,6 +17,11 @@
 // monadic and_then / or_else / transform; in_place / unexpect tags;
 // and reference-typed expected<T&,E>.
 
+// C++23 header: libstdc++ and libc++ both expand it to nothing in an
+// older language mode rather than erroring, so a translation unit that
+// includes it unconditionally still compiles (github #3387).
+#if __cplusplus >= 202302L
+
 namespace std
 {
 
@@ -207,5 +212,7 @@ public:
 };
 
 } // namespace std
+
+#endif // __cplusplus >= 202302L
 
 #endif

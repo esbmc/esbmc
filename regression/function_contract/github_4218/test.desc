@@ -1,0 +1,4 @@
+CORE
+main.c
+--function strlen --enforce-contract strlen --loop-invariant-check --loop-frame-rule
+^VERIFICATION FAILED$

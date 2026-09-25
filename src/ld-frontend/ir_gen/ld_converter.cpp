@@ -1,10 +1,10 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
 #include <ld-frontend/ir_gen/st_fb_translator.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/symbol.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/symtab/symbol.h>
 #include <map>
 #include <stdexcept>
 
@@ -46,6 +46,18 @@ typet ld_converter::type_of_kind(VarKind kind) const
 exprt ld_converter::int_const(long long value) const
 {
   return from_integer(BigInt(value), int32_t_());
+}
+
+// Saturation bounds for CV, taken from the configured integer width rather than
+// assumed to be 32-bit.
+exprt ld_converter::int_max() const
+{
+  return to_signedbv_type(int32_t_()).largest_expr();
+}
+
+exprt ld_converter::int_min() const
+{
+  return to_signedbv_type(int32_t_()).smallest_expr();
 }
 
 static std::string ld_name(const std::string &var)
@@ -90,15 +102,16 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
   switch (v.kind)
   {
   case VarKind::BOOL:
-    sym.set_value(false_exprt());
+    sym.set_value(v.init_value ? exprt(true_exprt()) : exprt(false_exprt()));
     break;
   case VarKind::REAL:
-    sym.set_value(from_double(0.0, double_type()));
+    sym.set_value(
+      from_double(static_cast<double>(v.init_value), double_type()));
     break;
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
-    sym.set_value(int_const(0));
+    sym.set_value(int_const(v.init_value));
     break;
   }
 
@@ -175,6 +188,14 @@ symbol_exprt ld_converter::var_expr(const std::string &name) const
 // Per-node translation
 // -----------------------------------------------------------------------
 
+// Coerce a numeric (INT/REAL) operand to a Boolean test (var != 0).
+exprt ld_converter::bool_value_of(const symbol_exprt &var) const
+{
+  if (var.type() == bool_t())
+    return var;
+  return not_exprt(equality_exprt(var, gen_zero(var.type())));
+}
+
 codet ld_converter::translate_contact(
   const LdIRNode &n,
   const exprt &pf_in,
@@ -187,11 +208,21 @@ codet ld_converter::translate_contact(
                  ? ContactKind::NormallyClosed
                  : ContactKind::NormallyOpen;
 
-  // Coerce a numeric (INT/REAL) contact variable to a Boolean test (var != 0).
-  exprt base = (var.type() == bool_t())
-                 ? static_cast<exprt>(var)
-                 : static_cast<exprt>(
-                     not_exprt(equality_exprt(var, gen_zero(var.type()))));
+  exprt base = bool_value_of(var);
+  // Transition-sensing contact (IEC 61131-3 §2.5.1.1): the edge is sensed on
+  // the operand, and the contact's polarity is applied to the result. The
+  // shadow holding the previous-scan sample is updated in the scan epilogue,
+  // not here, so every contact sensing the same operand agrees within a scan.
+  if (n.contact_edge != ContactEdge::None)
+  {
+    symbol_exprt prev =
+      declare_bool_shadow(ld_name("__edge_prev_" + n.variable));
+    edge_shadows_.insert({n.variable, prev});
+    base = (n.contact_edge == ContactEdge::Rising)
+             ? and_exprt(base, not_exprt(prev))
+             : and_exprt(not_exprt(base), prev);
+  }
+
   exprt contact_val = (eff_kind == ContactKind::NormallyClosed)
                         ? static_cast<exprt>(not_exprt(base))
                         : base;
@@ -238,10 +269,15 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   return blk;
 }
 
-// TimerStep: synchronous fixed-tick model
-//   TON: if IN then ET++ else ET:=0;  Q := (ET >= PT)
-//   TOF: if !IN then ET++ else ET:=0; Q := (ET < PT)
-//   TP:  simplified to TON semantics
+// TimerStep: synchronous fixed-tick model (§3.3) — one scan advances ET by one
+// tick, so PT is a dimensionless scan count. IEC 61131-3 §2.5.2.3.
+//
+//   TON: ET counts while IN holds; Q rises once ET reaches PT.
+//   TOF: Q follows IN up, then holds for PT scans after IN drops.
+//   TP:  a rising IN starts a PT-scan pulse that ignores IN until it expires.
+//
+// Every timer starts with Q false: at power-up the timer has not run, so the
+// elapsed count must not be read as an already-expired interval.
 codet ld_converter::translate_timer(const LdIRNode &n)
 {
   symbol_exprt et_sym = var_expr(n.timer_ET);
@@ -251,24 +287,78 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 
   exprt one = gen_one(int32_t_());
   exprt zero = gen_zero(int32_t_());
+  exprt in_val = bool_value_of(in_sym);
+  exprt q_val = bool_value_of(q_sym);
 
-  exprt condition = (n.timer_kind == FBKind::TOF) ? not_exprt(in_sym)
-                                                  : static_cast<exprt>(in_sym);
-
-  code_ifthenelset et_step;
-  et_step.cond() = condition;
-  et_step.then_case() =
+  // IEC 61131-3 §2.5.2.3.2 bounds ET by PT, so the count stops once the
+  // interval is up. Without the bound ET rises every scan IN holds and
+  // eventually overflows, which is UB and flips Q back to false.
+  code_ifthenelset advance_et;
+  advance_et.cond() = binary_relation_exprt(et_sym, "<", pt_sym);
+  advance_et.then_case() =
     code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, int32_t_()));
-  et_step.else_case() = code_assignt(et_sym, zero);
-
-  exprt q_expr =
-    (n.timer_kind == FBKind::TOF)
-      ? binary_relation_exprt(et_sym, "<", pt_sym)
-      : static_cast<exprt>(binary_relation_exprt(et_sym, ">=", pt_sym));
+  auto q_while_pending =
+    code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
 
   code_blockt blk;
-  blk.copy_to_operands(et_step);
-  blk.copy_to_operands(code_assignt(q_sym, q_expr));
+
+  if (n.timer_kind == FBKind::TON)
+  {
+    code_ifthenelset et_step;
+    et_step.cond() = in_val;
+    et_step.then_case() = advance_et;
+    et_step.else_case() = code_assignt(et_sym, zero);
+    blk.copy_to_operands(et_step);
+    blk.copy_to_operands(code_assignt(
+      q_sym, and_exprt(in_val, binary_relation_exprt(et_sym, ">=", pt_sym))));
+    return blk;
+  }
+
+  // Both TOF and TP hold Q for PT scans once started, so they share the
+  // countdown arm and differ only in what starts it.
+  code_blockt countdown;
+  countdown.copy_to_operands(advance_et);
+  countdown.copy_to_operands(q_while_pending);
+
+  if (n.timer_kind == FBKind::TOF)
+  {
+    code_blockt energise;
+    energise.copy_to_operands(code_assignt(et_sym, zero));
+    energise.copy_to_operands(code_assignt(q_sym, true_exprt()));
+
+    code_ifthenelset step;
+    step.cond() = in_val;
+    step.then_case() = energise;
+
+    code_ifthenelset hold;
+    hold.cond() = q_val;
+    hold.then_case() = countdown;
+    step.else_case() = hold;
+
+    blk.copy_to_operands(step);
+    return blk;
+  }
+
+  // TP: retriggerable only once the pulse has expired, so the pulse start is
+  // gated on a rising edge of IN rather than on its level.
+  symbol_exprt in_prev =
+    declare_bool_shadow(ld_name("__timer_prev_" + n.timer_instance));
+
+  code_blockt start;
+  start.copy_to_operands(code_assignt(et_sym, zero));
+  start.copy_to_operands(code_assignt(q_sym, true_exprt()));
+
+  code_ifthenelset step;
+  step.cond() = q_val;
+  step.then_case() = countdown;
+
+  code_ifthenelset trigger;
+  trigger.cond() = and_exprt(in_val, not_exprt(in_prev));
+  trigger.then_case() = start;
+  step.else_case() = trigger;
+
+  blk.copy_to_operands(step);
+  blk.copy_to_operands(code_assignt(in_prev, in_val));
   return blk;
 }
 
@@ -290,7 +380,9 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cu_step;
-    cu_step.cond() = and_exprt(cu, not_exprt(cu_prev));
+    cu_step.cond() = and_exprt(
+      and_exprt(cu, not_exprt(cu_prev)),
+      binary_relation_exprt(cv, "<", int_max()));
     cu_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
     blk.copy_to_operands(cu_step);
@@ -323,7 +415,9 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cd_step;
-    cd_step.cond() = and_exprt(cd, not_exprt(cd_prev));
+    cd_step.cond() = and_exprt(
+      and_exprt(cd, not_exprt(cd_prev)),
+      binary_relation_exprt(cv, ">", int_min()));
     cd_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
     blk.copy_to_operands(cd_step);
@@ -528,6 +622,13 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     codet fb = translate_user_fb(ex);
     scan_body.move_to_operands(fb);
   }
+
+  // Latch the operands sensed by edge contacts for the next scan's comparison.
+  // This runs after every rung so an edge contact sees the operand's value at
+  // the previous scan boundary rather than a mid-scan update.
+  for (const auto &[name, shadow] : edge_shadows_)
+    scan_body.copy_to_operands(
+      code_assignt(shadow, bool_value_of(var_expr(name))));
 
   return scan_body;
 }

@@ -4,7 +4,7 @@
 using namespace std;
 int main(){
 	string str;
-	str = string('A',12);
+	str = string(12,'A');
 	assert(str.capacity() >= 12);
 	cout << str.capacity() ;	
 }

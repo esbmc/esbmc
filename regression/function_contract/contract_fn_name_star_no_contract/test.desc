@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract "*"
+^ERROR: --replace-call-with-contract: no function with a contract to act on$
+\A(?!(.|\n)*VERIFICATION)

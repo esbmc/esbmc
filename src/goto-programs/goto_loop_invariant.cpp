@@ -32,21 +32,70 @@
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/frame_enforcer.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/std_expr.h>
-#include <util/options.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/std_expr.h>
+#include <util/config/options.h>
 #include <irep2/irep2_utils.h>
+#include <functional>
 #include <map>
 
 // ---------------------------------------------------------------------------
 // Shared helper: extract the loop invariant near a loop head
 // ---------------------------------------------------------------------------
 
-/// Maximum number of instructions to search backwards from the loop head
-/// when locating the LOOP_INVARIANT instruction.
-static constexpr size_t kMaxInvariantSearchBack = 10;
+const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+
+namespace loop_invariant
+{
+bool is_inert_scan_instruction(goto_programt::const_targett t)
+{
+  // OTHER also carries `free`, `delete`, `printf` and `asm`, whose effects a
+  // caller cannot ignore; a code_expression2t is only an evaluation
+  // (symex_other.cpp). glibc spells assert(e) with a leading
+  // `(void) sizeof ((e) ? 1 : 0)`, which lands here.
+  if (t->type == OTHER)
+    return !is_nil_expr(t->code) && is_code_expression2t(t->code);
+
+  return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
+         t->is_assume();
+}
+} // namespace loop_invariant
+
+/// True for a name the frontend generated rather than the user: ESBMC spells
+/// those with a '$' (e.g. return_value$___ESBMC_forall$N).
+static bool is_generated_name(const irep_idt &name)
+{
+  return id2string(name).find('$') != std::string::npos;
+}
+
+/// Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
+/// FUNCTION_CALL.  These may legitimately appear between consecutive
+/// __ESBMC_loop_invariant() calls.  FUNCTION_CALL instructions arise when
+/// remove_function_call emits a DECL + FUNCTION_CALL pair for helper functions
+/// called inside an invariant.
+static bool is_compiler_temp(goto_programt::const_targett t)
+{
+  if (t->is_decl() && is_code_decl2t(t->code))
+    return is_generated_name(to_code_decl2t(t->code).value);
+
+  if (t->is_assign() && is_code_assign2t(t->code))
+  {
+    const expr2tc &target = to_code_assign2t(t->code).target;
+    return is_symbol2t(target) &&
+           is_generated_name(to_symbol2t(target).thename);
+  }
+
+  if (t->is_function_call() && is_code_function_call2t(t->code))
+  {
+    const expr2tc &ret = to_code_function_call2t(t->code).ret;
+    return !is_nil_expr(ret) && is_symbol2t(ret) &&
+           is_generated_name(to_symbol2t(ret).thename);
+  }
+
+  return false;
+}
 
 /// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
@@ -67,59 +116,58 @@ static std::vector<expr2tc> extract_invariants_near(
   // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
   // Multiple sub-expressions are combined with &&.
   auto collect = [&](const std::list<expr2tc> &lst) {
-    if (lst.size() == 1)
-    {
-      invariants.push_back(lst.front());
-    }
-    else
-    {
-      auto jt = lst.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != lst.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-  };
-
-  // Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
-  // FUNCTION_CALL (name contains '$', e.g. return_value$___ESBMC_forall$N).
-  // These may legitimately appear between consecutive __ESBMC_loop_invariant()
-  // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
-  // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
-  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
-    if (t->is_decl() && is_code_decl2t(t->code))
-      return id2string(to_code_decl2t(t->code).value).find('$') !=
-             std::string::npos;
-    if (t->is_assign() && is_code_assign2t(t->code))
-    {
-      const auto &assign = to_code_assign2t(t->code);
-      return is_symbol2t(assign.target) &&
-             id2string(to_symbol2t(assign.target).thename).find('$') !=
-               std::string::npos;
-    }
-    if (t->is_function_call() && is_code_function_call2t(t->code))
-    {
-      const auto &call = to_code_function_call2t(t->code);
-      return !is_nil_expr(call.ret) && is_symbol2t(call.ret) &&
-             id2string(to_symbol2t(call.ret).thename).find('$') !=
-               std::string::npos;
-    }
-    return false;
+    auto jt = lst.begin();
+    expr2tc combined = *jt;
+    for (++jt; jt != lst.end(); ++jt)
+      combined = and2tc(combined, *jt);
+    invariants.push_back(combined);
   };
 
   // Phase 1: skip non-invariant instructions (including for-init assignments)
   // until we find the closest LOOP_INVARIANT for this loop.
-  while (it != begin && dist < kMaxInvariantSearchBack)
+  // Whether the walk has stepped over an instruction that does real work. A
+  // synthesised marker is only ever emitted immediately before its own loop
+  // head, so crossing one means this marker belongs to a *different* loop and
+  // the proximity window has run past that loop's end. Without this check an
+  // affine loop followed by an unrecognised one had the first loop's invariant
+  // applied to the second, which was then havoc'd and cut under an invariant
+  // saying nothing about its variables -- a spurious failure on a correct
+  // program (regression/esbmc/synth_loop_invariant_adjacent).
+  bool crossed_real_instruction = false;
+
+  while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
     ++dist;
 
     if (!it->is_loop_invariant())
+    {
+      if (
+        !loop_invariant::is_inert_scan_instruction(it) && !is_compiler_temp(it))
+        crossed_real_instruction = true;
       continue;
+    }
 
     const std::list<expr2tc> &inv_list = it->get_loop_invariants();
     if (inv_list.empty())
       continue;
+
+    // A user-written invariant keeps the historical proximity-only behaviour:
+    // the frontend may legitimately place it further from the head, and #3936
+    // depends on that latitude.
+    if (
+      it->location.property().as_string() == kSynthesisedInvariantProperty &&
+      crossed_real_instruction)
+    {
+      // The count line has already reported this as synthesised. Say so rather
+      // than drop it silently: the rule leans on the marker sitting immediately
+      // before its own head, so if a future pass ever inserts real work there,
+      // invariants would start disappearing with no signal at all.
+      log_debug(
+        "loop-invariant",
+        "ignoring a synthesised loop invariant that belongs to another loop");
+      return invariants;
+    }
 
     collect(inv_list);
 
@@ -131,7 +179,7 @@ static std::vector<expr2tc> extract_invariants_near(
     // a different context (e.g. outer-loop body), so we stop immediately.
     // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
     // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
-    while (it != begin && dist < kMaxInvariantSearchBack)
+    while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
     {
       --it;
       ++dist;
@@ -201,12 +249,36 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   goto_programt side_effects;
   extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
 
+  // insert_assert_before_loop swaps the base case into the loop-head slot and
+  // moves the head's own instruction to a fresh node behind it, so the
+  // `loop_head` iterator no longer denotes the loop head afterwards. Anchor the
+  // instruction that follows it, which no insertion before the head can move.
+  goto_programt::targett after_head = std::next(loop_head);
+
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
 
-  // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
+  // A write through a dereference has no named symbol for the havoc to cover,
+  // so resolve the pointer to the objects it may reference and havoc those
+  // instead. Where that abstains -- an unresolvable pointer, an unknown or heap
+  // pointee, a callee reached through a function pointer -- the loop would be
+  // symex'd from its concrete pre-loop state, the invariant discharged against
+  // one concrete iteration and the claims after the loop dropped unsolved
+  // (issue #7478). Leave the loop for the unwinder rather than report a proof
+  // we did not make. The base case above is checked against the concrete
+  // pre-loop state and needs no havoc, so it still stands.
+  if (loop.writes_through_pointer() && loop.pointer_array_write_unresolvable())
+  {
+    log_warning(
+      "loop invariant at {} not checked beyond its base case: the loop writes "
+      "through a pointer the havoc cannot cover",
+      loop.get_original_loop_head()->location.as_string());
+    return;
+  }
+
+  // 2. Insert HAVOC and ASSUME at the loop head, ahead of the guard
   insert_havoc_and_assume_before_condition(
-    loop_head, loop, invariants, loop_assigns, side_effects);
+    std::prev(after_head), loop, invariants, loop_assigns, side_effects);
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
@@ -239,7 +311,7 @@ goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
   size_t search_distance = 0;
 
   while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < kMaxInvariantSearchBack)
+         search_distance < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --search_it;
     ++search_distance;
@@ -329,11 +401,6 @@ static bool symbol_name_matches(
          s.compare(suffix_pos, d.size(), d) == 0;
 }
 
-/// Shared implementation used by both the legacy loop-invariant pass and the
-/// combined loop-invariant + k-induction pass.  See the declaration of
-/// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
-/// description; this helper just takes an explicit goto_function parameter so
-/// it can be reused from both passes.
 /// Local helper: collect all symbol names reachable from an expression tree.
 static void
 collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
@@ -355,6 +422,11 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
   }
 }
 
+/// Shared implementation used by both the legacy loop-invariant pass and the
+/// combined loop-invariant + k-induction pass.  See the declaration of
+/// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
+/// description; this helper just takes an explicit goto_function parameter so
+/// it can be reused from both passes.
 static void extract_and_remove_side_effects_impl(
   goto_functiont &goto_function,
   goto_programt::targett loop_head,
@@ -388,7 +460,7 @@ static void extract_and_remove_side_effects_impl(
   goto_programt::targett loop_inv_it = loop_head;
   size_t back_dist = 0;
   while (loop_inv_it != goto_function.body.instructions.begin() &&
-         back_dist < kMaxInvariantSearchBack)
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --loop_inv_it;
     ++back_dist;
@@ -492,6 +564,16 @@ static void extract_and_remove_side_effects_impl(
       continue;
     }
 
+    // Consecutive __ESBMC_loop_invariant() calls for the same loop lower to
+    // several adjacent LOOP_INVARIANT instructions (issue #3936), separated
+    // only by the DECL/ASSIGN that compute each invariant's temporaries. Skip
+    // past an earlier LOOP_INVARIANT so we keep collecting the side effects of
+    // *every* invariant in the cluster, not just the nearest one; otherwise a
+    // quantifier invariant that is not the last in the cluster is never
+    // re-evaluated after havoc and its stale pre-loop value is assumed.
+    if (search->is_loop_invariant())
+      continue;
+
     break;
   }
 
@@ -501,7 +583,12 @@ static void extract_and_remove_side_effects_impl(
   for (auto rit = to_remove.rbegin(); rit != to_remove.rend(); ++rit)
   {
     side_effects_out.instructions.push_back(**rit);
-    goto_function.body.instructions.erase(*rit);
+    /* Erasing dangles any goto that targets this instruction -- a preceding
+     * loop's exit can land on one of the invariant's temporaries, and
+     * compute_target_numbers then aborts on the unnumbered target. Leaving a
+     * skip keeps every incoming target valid; only DECL/ASSIGN/FUNCTION_CALL
+     * reach here, so nothing that carries targets of its own is cleared. */
+    (*rit)->make_skip();
   }
 }
 
@@ -539,24 +626,70 @@ void goto_loop_invariantt::insert_assert_before_loop(
   goto_function.body.insert_swap(loop_head, dest);
 }
 
+/// Storage a loop writes through a pointer has no named symbol, so havoc the
+/// pointed-to object through the pointer itself and let symex resolve it
+/// against its own value set. Without this the pointee keeps its pre-loop value
+/// across the abstract iteration and a claim about it after the loop is decided
+/// on state the loop overwrote (issue #7478).
+///
+/// A pointee is havoc'd as one nondet value, which for a large aggregate costs
+/// more to encode than the loop it replaces: the 1024-element `poly` of
+/// quantified_array_invariant goes from under a second to nine minutes, against
+/// eight seconds at 256 elements. Cover what is cheap and leave the rest to
+/// issue #7502 rather than trade a proof for a timeout.
+void goto_loop_invariantt::havoc_pointees(
+  const loopst &loop,
+  const locationt &loc,
+  goto_programt &dest) const
+{
+  const namespacet ns(context);
+
+  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
+  {
+    if (!is_pointer_type(ptr->type))
+      continue;
+
+    const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
+    if (is_empty_type(pointee) || is_code_type(pointee))
+      continue;
+
+    // get_width() throws on a VLA or an infinite array, and on a type the
+    // namespace could not resolve. A pointee with no static width has no
+    // nondet value to build either, so it is out of reach here.
+    unsigned width;
+    try
+    {
+      width = pointee->get_width();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      continue;
+    }
+    if (width > kMaxHavocPointeeBits)
+      continue;
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
+    t->location = loc;
+    t->location.comment("loop invariant havoc");
+  }
+}
+
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
-  goto_programt::targett &loop_head,
+  goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   const std::vector<expr2tc> &loop_assigns,
   goto_programt &side_effects)
 {
-  // Find the loop condition (IF instruction) - this should be right at loop_head
-  goto_programt::targett condition_it = loop_head;
-  while (condition_it != goto_function.body.instructions.end() &&
-         !condition_it->is_goto())
-    ++condition_it;
-
-  if (condition_it == goto_function.body.instructions.end())
-    return; // No loop condition found
-
-  // Insert BEFORE the loop condition (after the base case assert)
-  goto_programt::targett insert_point = condition_it;
+  // The havoc models an arbitrary iteration, so it belongs at the loop head,
+  // where the base case and the inductive step already anchor the invariant --
+  // not at the guard's IF. A guard with a side effect (`while (cnt--)`), a call
+  // (`while (f(&x))`) or a short circuit is lowered to instructions that sit
+  // between the two; havoc'ing after them leaves the IF testing a pre-havoc
+  // temporary, which makes the loop-exit edge infeasible and silently drops
+  // every claim after the loop (issue #7478).
+  goto_programt::targett insert_point = loop_head;
 
   goto_programt dest;
 
@@ -587,6 +720,11 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
   }
 
+  // Before Step 2: a pointer the loop reassigns is havoc'd there, and writing
+  // through it afterwards would reach an arbitrary object rather than the
+  // storage this loop writes.
+  havoc_pointees(loop, loop_head->location, dest);
+
   // =========================================================
   // Step 2: Standard Havoc — assign nondet to all modified variables
   // =========================================================
@@ -607,6 +745,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->code = code_assign2tc(lhs, rhs);
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
+    t->loop_invariant_havoc = true;
   }
 
   // =========================================================
@@ -619,28 +758,77 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
       loop_assigns, dest, loop_head->location);
   }
 
-  // Emit side-effect instructions (use havoc'd variables).
+  // Symbols defined by the extracted side-effect block (function-call results
+  // and their temporaries). A conjunct that reads one of these is assumed
+  // *after* the side effects; one that does not is a pure constraint on the
+  // havoc'd variables and is assumed *before* them, so it bounds any havoc'd
+  // value feeding a side-effecting invariant — e.g. a function call whose body
+  // loops over that value. Without this ordering the call is symex'd with an
+  // unconstrained nondet bound and its inner loop's unwinding assertion fails
+  // spuriously (issue #6189).
+  std::set<irep_idt> side_effect_defs;
   for (const auto &instr : side_effects.instructions)
-    dest.instructions.push_back(instr);
-
-  // Assume invariants (entering the loop).
-  for (const auto &invariant : invariants)
   {
-    expr2tc inst_invariant = invariant;
-
-    // If frame rule is enabled, replace any old() references with snapshots
-    if (use_frame_rule && active_frame_enforcer)
+    if (instr.is_assign() && is_code_assign2t(instr.code))
     {
-      inst_invariant =
-        active_frame_enforcer->replace_old_with_snapshots(invariant);
+      const code_assign2t &a = to_code_assign2t(instr.code);
+      if (is_symbol2t(a.target))
+        side_effect_defs.insert(to_symbol2t(a.target).get_symbol_name());
     }
+    else if (instr.is_function_call() && is_code_function_call2t(instr.code))
+    {
+      const code_function_call2t &fc = to_code_function_call2t(instr.code);
+      if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
+        side_effect_defs.insert(to_symbol2t(fc.ret).get_symbol_name());
+    }
+  }
 
-    // Create assume instruction: just the invariant
+  auto uses_side_effect = [&side_effect_defs](const expr2tc &conjunct) {
+    std::set<irep_idt> syms;
+    collect_symbols_local(conjunct, syms);
+    for (const auto &s : syms)
+      if (side_effect_defs.count(s))
+        return true;
+    return false;
+  };
+
+  // Flatten top-level conjunctions so a pure conjunct can be split out even when
+  // the frontend folded it together with a side-effecting one into `a && b`.
+  // The conjunct guards are themselves pure: any embedded call has already been
+  // hoisted into the side_effects block (see file header).
+  std::function<void(const expr2tc &)> partition;
+  std::vector<expr2tc> pure, impure;
+  partition = [&](const expr2tc &e) {
+    if (is_and2t(e))
+    {
+      partition(to_and2t(e).side_1);
+      partition(to_and2t(e).side_2);
+    }
+    else
+      (uses_side_effect(e) ? impure : pure).push_back(e);
+  };
+  for (const auto &invariant : invariants)
+    partition(invariant);
+
+  auto emit_assume = [&](const expr2tc &conjunct) {
+    expr2tc inst = conjunct;
+    if (use_frame_rule && active_frame_enforcer)
+      inst = active_frame_enforcer->replace_old_with_snapshots(conjunct);
+
     goto_programt::targett t = dest.add_instruction(ASSUME);
-    t->guard = inst_invariant;
+    t->guard = inst;
     t->location = loop_head->location;
     t->location.comment("loop invariant step case");
-  }
+  };
+
+  // Assume pure conjuncts, run the side effects under those constraints, then
+  // assume the side-effect-dependent conjuncts.
+  for (const auto &conjunct : pure)
+    emit_assume(conjunct);
+  for (const auto &instr : side_effects.instructions)
+    dest.instructions.push_back(instr);
+  for (const auto &conjunct : impure)
+    emit_assume(conjunct);
 
   // Note: active_frame_enforcer is NOT deleted here.
   // It is reused in insert_inductive_step_and_termination for the ASSERT
@@ -676,22 +864,42 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
       active_loop_assigns, dest, loop_exit->location, frame_modet::ASSERT);
   }
 
+  // A `do`-`while` back edge carries the loop's own exit test, so unlike the
+  // unconditional back edge of a `while` or `for` loop it cannot be cut with
+  // ASSUME(false): the fall-through is the exit path, and killing it drops
+  // every claim after the loop (issue #7478). Assume the negated condition
+  // instead and drop the back edge outright, and guard the inductive step by
+  // that condition so it is required only of an iteration that would actually
+  // follow -- the same correction the combined pass made for do-while in
+  // PR #3777.
+  const bool conditional_back_edge =
+    loop_exit->is_goto() && !is_true(loop_exit->guard);
+  const expr2tc exit_cond =
+    conditional_back_edge ? not2tc(loop_exit->guard) : gen_false_expr();
+
   // 3. ASSERT for inductive step.
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = invariant;
+    t->guard =
+      conditional_back_edge ? expr2tc(or2tc(exit_cond, invariant)) : invariant;
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
     t->location.property("invariant-inductive-step");
   }
 
-  // 4. Insert ASSUME(FALSE) to terminate the loop
+  // 4. Cut the back edge: the havoc already covers every iteration.
   goto_programt::targett t = dest.add_instruction(ASSUME);
-  t->guard = gen_false_expr();
+  t->guard = exit_cond;
   t->location = loop_exit->location;
   t->location.comment("loop termination");
+
+  // ASSUME(false) leaves an unconditional back edge statically unreachable, but
+  // a conditional one still has a satisfiable guard and symex would unwind it
+  // forever. Remove it; the ASSUME above already constrains the exit path.
+  if (conditional_back_edge)
+    loop_exit->make_skip();
 
   // Insert at the insert point
   goto_function.body.insert_swap(insert_point, dest);
@@ -717,7 +925,7 @@ void goto_loop_invariant_combinedt::process_loops_combined()
 }
 
 void goto_loop_invariant_combinedt::copy_loop_body(
-  goto_programt::targett loop_head,
+  goto_programt::targett body_begin,
   goto_programt::targett loop_exit,
   goto_programt &out) const
 {
@@ -725,7 +933,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
   std::map<goto_programt::targett, unsigned> target_map;
   {
     unsigned count = 0;
-    for (auto t = std::next(loop_head); t != loop_exit; ++t, ++count)
+    for (auto t = body_begin; t != loop_exit; ++t, ++count)
       target_map[t] = count;
   }
 
@@ -733,7 +941,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
-  for (auto t = std::next(loop_head); t != loop_exit; ++t)
+  for (auto t = body_begin; t != loop_exit; ++t)
   {
     goto_programt::targett copied_t = out.add_instruction(*t);
     target_vector.push_back(copied_t);
@@ -751,6 +959,44 @@ void goto_loop_invariant_combinedt::copy_loop_body(
         target = target_vector[m_it->second];
     }
   }
+}
+
+/// The condition under which a while or for loop is entered: the negation of
+/// its head IF's guard, which ASSUME(entry_cond) stands in for so the head need
+/// not be copied. Nil for a do-while, whose head is not a conditional goto but
+/// the first instruction of the body -- it always enters (issue #7494).
+static expr2tc loop_entry_cond(goto_programt::targett loop_head)
+{
+  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
+    return not2tc(loop_head->guard);
+  return expr2tc();
+}
+
+/// Where the copied body starts: after the head when ASSUME(entry_cond) stands
+/// in for it, at the head otherwise, because a do-while head is a body
+/// instruction and skipping it left the verification branch empty (#7494).
+static goto_programt::targett
+loop_body_begin(goto_programt::targett loop_head, const expr2tc &entry_cond)
+{
+  return is_nil_expr(entry_cond) ? loop_head : std::next(loop_head);
+}
+
+/// Constrain the copied iteration to one another would follow. A do-while's
+/// exit test lives on its back edge, so the copy may be the last iteration, and
+/// a head invariant need not hold where the loop exits: `x <= 4` on
+/// `do x++; while (x < 5)` holds at every head and is false once the exiting
+/// iteration leaves x == 5. No-op for the unconditional back edge of a while or
+/// for loop (issue #7494).
+static void
+assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
+{
+  if (!loop_exit->is_goto() || is_true(loop_exit->guard))
+    return;
+
+  auto t = out.add_instruction(ASSUME);
+  t->guard = loop_exit->guard;
+  t->location = loop_exit->location;
+  t->location.comment("loop continue condition (verification branch)");
 }
 
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
@@ -773,18 +1019,11 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects);
 
-  // ── 2. Copy loop body
-  goto_programt body_copy;
-  copy_loop_body(loop_head, loop_exit, body_copy);
+  // ── 2. Copy loop body, and the entry condition that stands in for the head
+  const expr2tc entry_cond = loop_entry_cond(loop_head);
 
-  // ── 3. Extract the loop entry condition ───────────────────────────────────
-  // loop_head is "IF !(cond) GOTO exit", so the entry condition is "cond"
-  // i.e. the negation of the GOTO guard.
-  expr2tc entry_cond;
-  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
-    entry_cond = not2tc(loop_head->guard);
-  // If loop_head is not a conditional GOTO (e.g. do-while), entry_cond
-  // stays nil and we omit the ASSUME(entry_cond) — always enters.
+  goto_programt body_copy;
+  copy_loop_body(loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
 
   // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
   const auto &loop_vars = loop.get_modified_loop_vars();
@@ -839,6 +1078,11 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4e] One iteration of the loop body
   branch1.destructive_insert(branch1.instructions.end(), body_copy);
 
+  // [4e'] Only an iteration another would follow has to preserve the invariant.
+  // PR #3777 describes this for the copied body; it never bit because a
+  // do-while's body was not copied at all (issue #7494).
+  assume_continue_cond(loop_exit, branch1);
+
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
     branch1.instructions.push_back(instr);
@@ -872,10 +1116,15 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     branch1.destructive_insert(branch1.instructions.begin(), gate);
   }
 
-  // ── 6. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
-  // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
-  // k-induction will see the assumption at the end of every iteration without
-  // any modification to goto_k_induction itself.
+  // ── 6. Add ASSUME(INV) at the loop head (Branch 2) ───────────────────────
+  // The invariant holds where it is annotated, at the head of an iteration, so
+  // that is where k-induction gets to assume it. For a while or for loop the
+  // head is the guard, and the assumption goes just inside it, where the body
+  // begins. A do-while head is already the first body instruction: advancing
+  // past it puts the ASSUME at the body tail, ahead of the loop's own exit
+  // test, where a head invariant need not hold -- the exiting iteration then
+  // contradicts it, the exit edge is assumed away and every claim after the
+  // loop silently disappears (issue #7494).
 
   // ── 7. Insert before loop_head using splice (NOT insert_swap) ─────────────
   // splice() inserts before loop_head without moving it, so any existing
@@ -891,7 +1140,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->guard = inv;
     t->location = loop_head->location;
     t->location.comment("loop invariant assume (k-induction hint)");
-    loop_head++;
+    if (!is_nil_expr(entry_cond))
+      loop_head++;
     goto_function.body.insert_swap(loop_head, assume_inv);
   }
 }

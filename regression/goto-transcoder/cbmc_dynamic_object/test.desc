@@ -1,0 +1,4 @@
+CORE
+cbmc_dynamic_object.goto
+--binary
+^ERROR: CBMC adapter: __CPROVER_DYNAMIC_OBJECT \(is_dynamic_object\) is not yet supported

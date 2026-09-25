@@ -104,6 +104,8 @@ time_t time(time_t *tloc);
 double difftime(time_t end, time_t beginning);
 clock_t clock(void);
 time_t mktime(struct tm *timeptr);
+/* GNU/BSD extension: mktime's UTC counterpart */
+time_t timegm(struct tm *timeptr);
 
 struct tm *localtime(const time_t *timer);
 struct tm *gmtime(const time_t *timer);

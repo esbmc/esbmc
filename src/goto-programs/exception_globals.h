@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/irep.h>
+#include <util/irep/irep.h>
 
 class contextt;
 
@@ -18,7 +18,14 @@ class contextt;
 ///   $esbmc_exc_uncaught_count : size_t — number of exceptions thrown (or
 ///                                   rethrown) in this thread that have not yet
 ///                                   entered their matching handler; backs
-///                                   std::uncaught_exception(s) ([except.uncaught]).
+///                                   std::uncaught_exception(s)
+///                                   ([except.uncaught]).
+///   $esbmc_exc_site    : size_t  — id of the raise the in-flight exception
+///                                   came from, so the uncaught-exception
+///                                   property can name the raising statement
+///                                   when a type is raised from several
+///                                   (issue #7769). 0 means "no attributable
+///                                   site", which the residual check covers.
 ///   $esbmc_exc_terminate_reason : size_t — classification of the terminate
 ///                                   point that routed into std::terminate(),
 ///                                   so the default handler can keep the
@@ -34,7 +41,14 @@ constexpr const char *thrown_id = "c:@__ESBMC_exc_thrown";
 constexpr const char *typeid_id = "c:@__ESBMC_exc_typeid";
 constexpr const char *value_id = "c:@__ESBMC_exc_value";
 constexpr const char *uncaught_count_id = "c:@__ESBMC_exc_uncaught_count";
+constexpr const char *site_id = "c:@__ESBMC_exc_site";
 constexpr const char *terminate_reason_id = "c:@__ESBMC_exc_terminate_reason";
+
+/// Site id for a raise no property may be attributed to: one in a hidden
+/// operational model, in an unreachable function, or taken by a handler in its
+/// own function. Never assigned to a real site, so a per-site check never
+/// matches it and the residual is what covers such a raise.
+constexpr unsigned unattributed_site = 0;
 constexpr const char *push_handled_id = "c:@F@__ESBMC_push_handled_exception";
 constexpr const char *pop_handled_id = "c:@F@__ESBMC_pop_handled_exception";
 constexpr const char *rethrow_current_id =

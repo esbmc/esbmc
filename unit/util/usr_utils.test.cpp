@@ -9,7 +9,7 @@ Notes:
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <util/usr_utils.h>
+#include <util/base/usr_utils.h>
 #include <string>
 
 TEST_CASE(

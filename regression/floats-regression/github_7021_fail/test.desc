@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --multi-property
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.\d+\] +line +11 +assertion !signbit\(s\)$

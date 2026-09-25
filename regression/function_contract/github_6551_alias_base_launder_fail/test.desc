@@ -1,0 +1,5 @@
+CORE
+main.c
+--function f --enforce-contract f --unwind 8 --no-pointer-check
+^VERIFICATION FAILED$
+^.*assigns compliance.*$

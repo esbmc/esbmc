@@ -1,0 +1,7 @@
+# H-C7 (--multi-property vs per-claim) known divergences.
+# See the header of simplify-parity.txt for the baseline policy.
+
+# R19 / #6540 -- this test's own flags include --smt-during-symex, so the
+# per-claim report marks a violable claim PASSED. The oracle sees it both at the
+# claim's location and in the aggregate.
+github_1655

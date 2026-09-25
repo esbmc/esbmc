@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^\s+PASSED\s+\[main\.assertion\.3\]\s+line\s+14\s+assertion cnt == -1$
+^VERIFICATION SUCCESSFUL$

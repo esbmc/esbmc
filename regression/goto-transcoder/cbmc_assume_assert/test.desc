@@ -1,0 +1,4 @@
+CORE
+cbmc_assume_assert.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_non_function_decl(
@@ -47,7 +47,7 @@ bool solidity_convertert::get_non_function_decl(
   }
   case SolidityGrammar::ContractBodyElementT::StructDef:
   {
-    return get_struct_class(ast_node); // rule enum-definition
+    return get_struct_class(ast_node); // rule struct-definition
   }
   case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
@@ -282,7 +282,6 @@ bool solidity_convertert::get_var_decl(
   // this will be used to decide if the var will be converted to this->var
   // when parsing function body.
   bool is_state_var = ast_node["stateVariable"].get<bool>();
-  set_sol_state_var(t, is_state_var);
 
   // For local storage reference variables (e.g. Wrapper storage ref = param),
   // register an alias so that uses of 'ref' resolve to the source symbol.
@@ -315,6 +314,10 @@ bool solidity_convertert::get_var_decl(
     if (get_var_decl_name(ast_node, name, id))
       return true;
   }
+
+  // The state flag is keyed by symbol id, so it is recorded here rather than
+  // beside the type: the id is not known until now (§10).
+  set_sol_state_var(id, is_state_var);
 
   // if we have already populated the var symbol, we do not need to re-parse
   // however, we need to return the symbol info
@@ -494,7 +497,7 @@ bool solidity_convertert::get_var_decl(
       solidity_gen_typecast(ns, acpy_call, t);
       set_sol_array_size(acpy_call.type(), arr_size);
       // set as rvalue
-      added_symbol.set_value(acpy_call);
+      added_symbol.set_value(migrate_expr(acpy_call));
       decl.operands().push_back(acpy_call);
     }
     else
@@ -507,7 +510,7 @@ bool solidity_convertert::get_var_decl(
       // typecast
       solidity_gen_typecast(ns, calc_call, t);
       // set as rvalue
-      added_symbol.set_value(calc_call);
+      added_symbol.set_value(migrate_expr(calc_call));
       decl.operands().push_back(calc_call);
     }
   }
@@ -559,7 +562,7 @@ bool solidity_convertert::get_var_decl(
       //=> uint* zz = (uint *)calloc(10, sizeof(uint));
       //=> uint* zz = (uint *)calloc(len, sizeof(uint));
       solidity_gen_typecast(ns, val, t);
-      added_symbol.set_value(val);
+      added_symbol.set_value(migrate_expr(val));
       decl.operands().push_back(val);
 
       // get rhs size, e.g. 10
@@ -689,7 +692,7 @@ bool solidity_convertert::get_var_decl(
     solidity_gen_typecast(ns, addr_expr, comps[addr_idx].type());
     inits.operands()[addr_idx] = addr_expr;
 
-    added_symbol.set_value(inits);
+    added_symbol.set_value(migrate_expr(inits));
     decl.operands().push_back(inits);
   }
   else if (!set_init && is_byte_static)
@@ -704,7 +707,7 @@ bool solidity_convertert::get_var_decl(
     assert(has_sol_bytesn_size(t));
     exprt len = from_integer(std::stoul(get_sol_bytesn_size(t)), uint_type());
     call.arguments().push_back(len);
-    added_symbol.set_value(call);
+    added_symbol.set_value(migrate_expr(call));
     decl.operands().push_back(call);
   }
   // now we have rule out other special cases
@@ -849,7 +852,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       struct_typet::componentt comp;
       comp.swap(tmp_expr);
       comp.id("component");
-      comp.type().set("#member_name", t.tag());
+      comp.type().member_name(t.tag());
 
       if (get_access_from_decl(*itr, comp))
         return true;
@@ -874,12 +877,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
 
       if (comp.is_code() && to_code(comp).statement() == "skip")
         break;
-
-      // set virtual / override
-      if ((*itr).contains("virtual") && (*itr)["virtual"] == true)
-        comp.set("#is_sol_virtual", true);
-      else if ((*itr).contains("overrides"))
-        comp.set("#is_sol_override", true);
 
       t.methods().push_back(comp);
       break;
@@ -1033,7 +1030,7 @@ bool solidity_convertert::get_struct_class_fields(
   //   comp.type().subtype() = t;
   //   comp.set_is_unnamed_bitfield(false);
   // }
-  comp.type().set("#member_name", type.tag());
+  comp.type().member_name(type.tag());
 
   if (get_access_from_decl(ast_node, comp))
     return true;
@@ -1058,12 +1055,6 @@ bool solidity_convertert::get_struct_class_method(
 
   if (get_access_from_decl(ast_node, comp))
     return true;
-
-  // set virtual / override
-  if (ast_node.contains("virtual") && ast_node["virtual"] == true)
-    comp.set("#is_sol_virtual", true);
-  else if (ast_node.contains("overrides"))
-    comp.set("#is_sol_override", true);
 
   type.methods().push_back(comp);
   return false;
@@ -1484,7 +1475,7 @@ void solidity_convertert::get_error_definition_name(
   if (cname.empty())
     id = "sol:@" + name + "#" + std::to_string(id_num);
   else
-    // e.g. sol:@C@Base@F@error@1
+    // e.g. sol:@C@Base@F@errmsg#12
     id = "sol:@C@" + cname + "@F@" + name + "#" + std::to_string(id_num);
 }
 

@@ -6,13 +6,13 @@
 #include <solvers/smt/fp/ir_ieee_conv.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <sstream>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 #include <cmath>
 #include <limits>
 
@@ -46,22 +46,25 @@ unsigned int smt_solver_baset::get_member_name_field(
   const type2tc &t,
   const irep_idt &name) const
 {
-  unsigned int idx = 0;
   // Pointer types lower to the synthetic pointer_struct tuple in SMT;
   // for them the named lookup uses pointer_struct's member_names.
-  const std::vector<irep_idt> &names =
-    struct_union_member_names(is_pointer_type(t) ? pointer_struct : t);
+  const type2tc &lookup_type = is_pointer_type(t) ? pointer_struct : t;
+  const std::vector<irep_idt> &names = struct_union_member_names(lookup_type);
 
-  for (const irep_idt &it : names)
-  {
-    if (it == name)
-      break;
-    idx++;
-  }
-  assert(
-    idx != names.size() && "Member name of with expr not found in struct type");
+  for (unsigned int idx = 0; idx < names.size(); idx++)
+    if (names[idx] == name)
+      return idx;
 
-  return idx;
+  // Never fall out returning names.size(): both callers index a tuple with the
+  // result, project() reading and update() writing, so an out-of-range answer
+  // is an out-of-bounds access rather than a diagnosable error. The assert
+  // that used to stand here vanished under NDEBUG.
+  log_error(
+    "Member '{}' is not a field of {}, whose members are: {}",
+    name,
+    struct_union_name(lookup_type),
+    fmt::join(names, ", "));
+  throw std::string("member name not found in struct type");
 }
 
 unsigned int smt_solver_baset::get_member_name_field(
@@ -188,6 +191,7 @@ void smt_solver_baset::push_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -247,6 +251,7 @@ void smt_solver_baset::pop_ctx()
 {
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
@@ -265,6 +270,10 @@ void smt_solver_baset::pop_ctx()
     });
     it = entries.empty() ? uf_ackermann_history.erase(it) : std::next(it);
   }
+
+  std::erase_if(ptr_flatten_history, [this](const ptr_flatten_entry &e) {
+    return e.level >= ctx_level;
+  });
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -365,10 +374,11 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
-  // Put that into the smt cache, thus preserving the value of the assigned symbols.
-  // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
-  // in that one can choose to create a set of expressions and their ASTs, then
-  // store them in the cache, rather than have a more sophisticated conversion.
+  // Put that into the smt cache, thus preserving the value of the assigned
+  // symbols. IMPORTANT: the cache is now a fundamental part of how some
+  // flatteners work, in that one can choose to create a set of expressions and
+  // their ASTs, then store them in the cache, rather than have a more
+  // sophisticated conversion.
   {
     const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
     // Lock automatically released when it goes out of scope
@@ -381,6 +391,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // for compositional lifting.
   ir_ieee_api->propagate_interval(side1, side2);
   ir_ieee_api->propagate_nan_pred(side1, side2);
+  ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
 }
@@ -407,6 +418,7 @@ static bool walks_operands(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
+  case expr2t::ieee_rem_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
@@ -469,7 +481,14 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
       // foreach_operand (both fold over K::fields), so no operand is skipped.
       const size_t n = node->get_num_sub_exprs();
       for (size_t i = n; i-- > 0;)
-        stack.emplace_back(*node->get_sub_expr(i), false);
+      {
+        // Optional operand slots are nil for some kinds (sideeffect2t's
+        // operand and size); pushing one hashes a null container below.
+        const expr2tc *sub = node->get_sub_expr(i);
+        if (sub == nullptr || is_nil_expr(*sub))
+          continue;
+        stack.emplace_back(*sub, false);
+      }
       continue;
     }
 
@@ -491,6 +510,53 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   return smt_cache.find(expr)->ast;
 }
 
+smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
+{
+  assert(is_floatbv_type(expr));
+
+  if (int_encoding)
+    switch (expr->expr_id)
+    {
+    case expr2t::ieee_add_id:
+      return ir_ieee_api->encode_ieee_add(expr);
+    case expr2t::ieee_sub_id:
+      return ir_ieee_api->encode_ieee_sub(expr);
+    case expr2t::ieee_mul_id:
+      return ir_ieee_api->encode_ieee_mul(expr);
+    case expr2t::ieee_div_id:
+      return ir_ieee_api->encode_ieee_div(expr);
+    default:
+      assert(expr->expr_id == expr2t::ieee_rem_id);
+      return ir_ieee_api->encode_ieee_rem(expr);
+    }
+
+  /* ESBMC_DEFINE_IEEE_ARITH_2OP fixes the field order for the whole family:
+   * rounding mode first, then the two values. Convert in that order, which is
+   * the order the per-op arms this replaced produced (three conversions as
+   * call arguments, evaluated right-to-left by GCC). The solver hashes and
+   * searches on node creation order, so converting operands first leaves the
+   * formula equivalent but reshuffled: it cost nn-tanh_5_unsafe 29s -> 275s. */
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
+  smt_astt side_2 = convert_ast(*expr->get_sub_expr(2));
+  smt_astt side_1 = convert_ast(*expr->get_sub_expr(1));
+
+  switch (expr->expr_id)
+  {
+  case expr2t::ieee_add_id:
+    return fp_api->mk_smt_fpbv_add(side_1, side_2, rm);
+  case expr2t::ieee_sub_id:
+    return fp_api->mk_smt_fpbv_sub(side_1, side_2, rm);
+  case expr2t::ieee_mul_id:
+    return fp_api->mk_smt_fpbv_mul(side_1, side_2, rm);
+  case expr2t::ieee_div_id:
+    return fp_api->mk_smt_fpbv_div(side_1, side_2, rm);
+  default:
+    assert(expr->expr_id == expr2t::ieee_rem_id);
+    /* fp.rem is exact; the node's rounding_mode is plumbing only. */
+    return fp_api->mk_smt_fpbv_rem(side_1, side_2);
+  }
+}
+
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
   {
@@ -500,10 +566,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       return (cache_result->ast);
   }
 
-  // A sizeof(T) node lowers to its eagerly-computed byte-size value. do_simplify
-  // normally folds it away, but under --no-simplify it survives to here, so
-  // lower it explicitly rather than hitting the unrecognised-format abort
-  // (esbmc/esbmc#5337).
+  // A sizeof(T) node lowers to its eagerly-computed byte-size value.
+  // do_simplify normally folds it away, but under --no-simplify it survives to
+  // here, so lower it explicitly rather than hitting the unrecognised-format
+  // abort (esbmc/esbmc#5337).
   if (is_sizeof2t(expr))
     return convert_ast(to_sizeof2t(expr).value);
   /* Vectors!
@@ -515,7 +581,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
    * The simplification module take care of all the operations, but if
    * for some reason we would like to run ESBMC without simplifications
    * then we need to apply it here.
-  */
+   */
   if (is_vector_type(expr))
   {
     if (is_neg2t(expr))
@@ -535,6 +601,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     case expr2t::ieee_sub_id:
     case expr2t::ieee_mul_id:
     case expr2t::ieee_div_id:
+    case expr2t::ieee_rem_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id,
         *expr->get_sub_expr(1),   // side_1
@@ -572,6 +639,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
+  case expr2t::ieee_rem_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
@@ -778,53 +846,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::ieee_add_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_add(expr);
-    else
-      a = fp_api->mk_smt_fpbv_add(
-        convert_ast(to_ieee_add2t(expr).side_1),
-        convert_ast(to_ieee_add2t(expr).side_2),
-        convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_sub_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_sub(expr);
-    else
-      a = fp_api->mk_smt_fpbv_sub(
-        convert_ast(to_ieee_sub2t(expr).side_1),
-        convert_ast(to_ieee_sub2t(expr).side_2),
-        convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_mul_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_mul(expr);
-    else
-      a = fp_api->mk_smt_fpbv_mul(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2),
-        convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_div_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_div(expr);
-    else
-      a = fp_api->mk_smt_fpbv_div(
-        convert_ast(to_ieee_div2t(expr).side_1),
-        convert_ast(to_ieee_div2t(expr).side_2),
-        convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
+  case expr2t::ieee_rem_id:
+    a = convert_ieee_arith_2op(expr);
     break;
-  }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
@@ -968,28 +995,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::modulus_id:
-  {
-    auto m = to_modulus2t(expr);
-
-    if (int_encoding)
-    {
-      a = mk_mod(args[0], args[1]);
-    }
-    else if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
-    {
-      a = mk_bvsmod(args[0], args[1]);
-    }
-    else if (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
-    {
-      a = mk_bvumod(args[0], args[1]);
-    }
-    else
-    {
-      assert(is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
-      a = mk_bvsmod(args[0], args[1]);
-    }
+    a = convert_modulus(to_modulus2t(expr), args[0], args[1]);
     break;
-  }
   case expr2t::index_id:
   {
     a = convert_array_index(expr);
@@ -1029,18 +1036,32 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
                      expr->type, to_constant_string2t(with.update_field).value)
                      .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      expr2tc upd = bitcast2tc(
-        get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
-      if (mem_bits < bits)
-        upd = concat2tc(
-          get_uint_type(bits),
-          extract2tc(
-            get_uint_type(bits - mem_bits),
-            with.source_value,
-            bits - 1,
-            mem_bits),
-          upd);
-      a = convert_ast(upd);
+      if (mem_bits == 0)
+      {
+        // A zero-sized union member (e.g. a Rust unit enum variant such as
+        // Result's Err carrying only ()) occupies no storage, so writing it
+        // leaves the union's bit representation unchanged. Encoding it via
+        // get_uint_type(0) would build a degenerate 0-width bitvector that the
+        // solver widens to 1 bit, producing a value one bit wider than the
+        // union sort.
+        a = convert_ast(with.source_value);
+      }
+      else
+      {
+        expr2tc upd = bitcast2tc(
+          get_uint_type(mem_bits),
+          typecast2tc(tu.members[c], with.update_value));
+        if (mem_bits < bits)
+          upd = concat2tc(
+            get_uint_type(bits),
+            extract2tc(
+              get_uint_type(bits - mem_bits),
+              with.source_value,
+              bits - 1,
+              mem_bits),
+            upd);
+        a = convert_ast(upd);
+      }
     }
     else
     {
@@ -1103,9 +1124,77 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::nearbyint_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_nearbyint_from_float(
-      convert_ast(to_nearbyint2t(expr).from),
-      convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
+    if (int_encoding)
+    {
+      const nearbyint2t &ni = to_nearbyint2t(expr);
+      const expr2tc &rm = ni.rounding_mode;
+      smt_astt operand = convert_ast(ni.from);
+
+      smt_astt zero = mk_smt_real("0");
+      smt_astt one = mk_smt_real("1");
+      smt_astt half = mk_smt_real("0.5");
+
+      // floor(x): SMT real2int rounds toward -inf; lift back to Real.
+      smt_astt floor_v = mk_int2real(mk_real2int(operand));
+      // ceil(x): floor+1 unless x is already integral.
+      smt_astt ceil_v =
+        mk_ite(mk_isint(operand), operand, mk_add(floor_v, one));
+      // Fractional part in [0,1) for all real x (also negative).
+      smt_astt frac = mk_sub(operand, floor_v);
+
+      if (smt_fp_rounding_utils::is_round_to_minus_inf(rm))
+      {
+        a = floor_v;
+      }
+      else if (smt_fp_rounding_utils::is_round_to_plus_inf(rm))
+      {
+        a = ceil_v;
+      }
+      else if (smt_fp_rounding_utils::is_round_to_zero(rm))
+      {
+        // Reuse existing RTZ helper; its integer result is lifted to Real.
+        a = mk_int2real(round_real_to_int(operand));
+      }
+      else if (smt_fp_rounding_utils::is_nearest_rounding_mode(rm))
+      {
+        // Round half to even: tie goes to whichever of floor, floor+1 is even.
+        // floor/2 is an integer iff floor is even — works for negative floors
+        // too (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
+        smt_astt two = mk_smt_real("2");
+        smt_astt floor_is_even = mk_isint(mk_div(floor_v, two));
+        smt_astt tie_rte = mk_ite(floor_is_even, floor_v, mk_add(floor_v, one));
+        a = mk_ite(
+          mk_lt(frac, half),
+          floor_v,
+          mk_ite(mk_gt(frac, half), mk_add(floor_v, one), tie_rte));
+      }
+      else if (smt_fp_rounding_utils::is_round_to_away(rm))
+      {
+        // At a 0.5 tie, round toward the integer farther from zero:
+        //   x >= 0: ceil is farther  -> use strict-less so tie picks ceil.
+        //   x <  0: floor is farther -> use <=      so tie picks floor.
+        smt_astt away_pos = mk_ite(mk_lt(frac, half), floor_v, ceil_v);
+        smt_astt away_neg = mk_ite(mk_le(frac, half), floor_v, ceil_v);
+        a = mk_ite(mk_le(zero, operand), away_pos, away_neg);
+      }
+      else
+      {
+        // Symbolic or unsupported rounding mode: produce an unconstrained
+        // integer-valued Real (sound but non-deterministically chosen).
+        smt_astt fresh = mk_fresh(mk_real_sort(), "ra_nearbyint::", nullptr);
+        assert_ast(mk_isint(fresh));
+        a = fresh;
+      }
+
+      if (ir_ieee)
+        ir_ieee_api->propagate_nan_pred(a, operand);
+    }
+    else
+    {
+      a = fp_api->mk_smt_nearbyint_from_float(
+        convert_ast(to_nearbyint2t(expr).from),
+        convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::if_id:
@@ -1116,6 +1205,17 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     args[1] = convert_ast(if_ref.true_value);
     args[2] = convert_ast(if_ref.false_value);
     a = args[1]->ite(this, args[0], args[2]);
+    if (ir_ieee && is_floatbv_type(expr->type))
+    {
+      smt_astt np_t = ir_ieee_api->get_nan_pred(args[1]);
+      smt_astt np_f = ir_ieee_api->get_nan_pred(args[2]);
+      if (np_t || np_f)
+      {
+        smt_astt t = np_t ? np_t : mk_smt_bool(false);
+        smt_astt f = np_f ? np_f : mk_smt_bool(false);
+        ir_ieee_api->store_nan_pred(a, mk_ite(args[0], t, f));
+      }
+    }
     break;
   }
   case expr2t::isnan_id:
@@ -1363,6 +1463,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
+      if (ir_ieee && is_floatbv_type(abs.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     break;
   }
@@ -1382,6 +1484,24 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     expr2tc inner = if2tc(
       cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
     expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
+
+    // Floating-point operands yield std::partial_ordering, whose fourth
+    // result is `unordered` when either operand is NaN ([expr.spaceship]/4).
+    // Without this the NaN case falls through the chain above and is reported
+    // as `greater`. The sentinel must agree with std::partial_ordering's
+    // representation in src/cpp/library/compare, which follows libc++.
+    if (is_floatbv_type(cw.side_1) || is_floatbv_type(cw.side_2))
+    {
+      constexpr int partial_ordering_unordered = -127;
+      expr2tc gt = greaterthan2tc(cw.side_1, cw.side_2);
+      expr2tc ordered = or2tc(lt, or2tc(eq, gt));
+      outer = if2tc(
+        cw.type,
+        ordered,
+        outer,
+        make_cmp_value(cw.type, partial_ordering_unordered));
+    }
+
     a = convert_ast(outer);
     break;
   }
@@ -1568,6 +1688,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
     {
       a = mk_neg(args[0]);
+      if (ir_ieee && is_floatbv_type(neg.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     else if (is_floatbv_type(neg.value))
     {
@@ -1610,12 +1732,13 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::code_comma_id:
   {
-    /* 
+    /*
       TODO: for some reason comma expressions survive when they are under
       * RETURN statements. They should have been taken care of at the GOTO
       * level. Remove this code once we do!
 
-      the expression on the right side will become the value of the entire comma-separated expression.
+      the expression on the right side will become the value of the entire
+      comma-separated expression.
 
       e.g.
         return side_1, side_2;
@@ -1631,7 +1754,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::exists_id:
   {
     // TODO: technically the forall could be a list of symbols
-    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow,
+    // arithmetic-overflow, etc...
     expr2tc symbol;
     expr2tc predicate;
 
@@ -1646,7 +1770,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       predicate = to_exists2t(expr).side_2;
     }
 
-    // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
+    // We only want expressions of typecast(address_of(symbol)) or
+    // address_of(symbol).
     {
       if (const typecast2t *tc = try_to_typecast2t(symbol);
           tc && is_address_of2t(tc->from))
@@ -1707,6 +1832,54 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     smt_cache.insert(entry);
   }
   return a;
+}
+
+/// Encode a remainder: compositional as a - (a / b) * b when the
+/// formula also divides the same operands, the rem primitive otherwise.
+smt_astt
+smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return mk_mod(a, b);
+  if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
+    return mk_bvsmod(a, b);
+
+  assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
+  const bool both_unsigned =
+    is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2);
+  if (divided_operand_pairs.count({m.side_1, m.side_2}))
+  {
+    smt_astt quot = both_unsigned ? mk_bvudiv(a, b) : mk_bvsdiv(a, b);
+    return mk_bvsub(a, mk_bvmul(quot, b));
+  }
+  return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+void smt_solver_baset::note_division_operands(const expr2tc &expr)
+{
+  // A propagated `with` chain over a nested array references itself once per
+  // store, so an SSA step is a DAG and an unmemoised walk costs a number of
+  // paths exponential in the store count -- the same reason
+  // pre_register_addresses and get_value_set_rec memoise.
+  std::unordered_set<const expr2t *> seen;
+  note_division_operands(expr, seen);
+}
+
+void smt_solver_baset::note_division_operands(
+  const expr2tc &expr,
+  std::unordered_set<const expr2t *> &seen)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (!seen.insert(expr.get()).second)
+    return;
+  if (is_div2t(expr))
+  {
+    const div2t &d = to_div2t(expr);
+    divided_operand_pairs.emplace(d.side_1, d.side_2);
+  }
+  expr->foreach_operand(
+    [this, &seen](const expr2tc &e) { note_division_operands(e, seen); });
 }
 
 void smt_solver_baset::assert_expr(const expr2tc &e)
@@ -1821,9 +1994,10 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 
   case type2t::empty_id:
     // Empty type can appear during Solidity nested mapping encoding
-    // when the 'with' expression generates intermediate void-typed subexpressions.
-    // Return a minimal sort as placeholder — these are never directly used in
-    // solver queries and the verification result is unaffected.
+    // when the 'with' expression generates intermediate void-typed
+    // subexpressions. Return a minimal sort as placeholder — these are never
+    // directly used in solver queries and the verification result is
+    // unaffected.
     result = mk_int_bv_sort(1);
     break;
 
@@ -1917,8 +2091,41 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (thereal.value.is_zero() || thereal.value.is_NaN())
+      if (thereal.value.is_zero())
+      {
+        // A literal -0.0 constant is a second source of IEEE 754 negative
+        // zero, alongside the subnormal-flush case handled by
+        // mk_subnormal_flush. Reuse the same neg_zero_pred side-channel
+        // rather than adding new tracking machinery -- but tag a fresh
+        // symbol constrained equal to zero, not the shared mk_smt_real("0")
+        // AST directly: nothing guarantees mk_smt_real returns a distinct
+        // pointer per call (see its declaration), so tagging the literal
+        // itself could let an ordinary +0.0 silently inherit this
+        // predicate if any backend ever memoises real constants by value.
+        // Mirrors the NaN branch below, which mints mk_fresh(...) for the
+        // same reason.
+        if (ir_ieee && thereal.value.get_sign())
+        {
+          smt_astt neg_zero_ast =
+            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", nullptr);
+          smt_astt is_zero = mk_eq(neg_zero_ast, mk_smt_real("0"));
+          assert_ast(is_zero);
+          ir_ieee_api->store_neg_zero_pred(neg_zero_ast, is_zero);
+          return neg_zero_ast;
+        }
         return mk_smt_real("0");
+      }
+      if (thereal.value.is_NaN())
+      {
+        if (ir_ieee)
+        {
+          smt_astt nan_var =
+            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", nullptr);
+          ir_ieee_api->store_nan_pred(nan_var, mk_smt_bool(true));
+          return nan_var;
+        }
+        return mk_smt_real("0");
+      }
       if (thereal.value.is_infinity())
       {
         // Encode ±∞ as ±double_inf_sentinel (one above double max_normal) for
@@ -1927,7 +2134,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         // float) produces the same value as a double IEEE_DIV(x,0) result.
         // The double sentinel exceeds both single and double max_normal, so
         // isinf/isfinite predicates work correctly for both precisions.
-        // NaN handling is deferred to the IEEE corner-case phase.
+        // NaN is handled above; infinity is encoded as a sentinel value here.
         smt_astt sentinel = get_double_inf_sentinel();
         if (thereal.value.get_sign())
           return mk_sub(get_zero_real(), sentinel);
@@ -2005,6 +2212,35 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     smt_astt sym_ast = mk_smt_symbol(name, sort);
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
+
+    if (
+      ir_ieee && is_floatbv_type(sym.type) &&
+      name.rfind("nondet$symex::nondet", 0) == 0)
+    {
+      smt_astt nan_pred =
+        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+
+      // A nondet float is otherwise an unconstrained real. Without this,
+      // it can take a value strictly between 0 and the smallest subnormal
+      // (a magnitude no floating-point operation ever produces), which
+      // breaks identities like x+0==x now that mk_subnormal_flush()
+      // distinguishes that gap from zero. Representability doesn't depend
+      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
+      // back to its magnitude-only threshold, which is the correct (not
+      // merely conservative) check here.
+      const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
+      assert_ast(
+        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+      // The other half of representability: a magnitude strictly between
+      // max_normal and the infinity sentinel is a value no operation can
+      // produce, and the two readings of "infinite" disagree there --
+      // encode_ieee_mul's invalid-operation term tests |x| > max_normal
+      // while a math.h isinf() that compares against INFINITY tests
+      // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
+      ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
+    }
 
     return sym_ast;
   }
@@ -2392,9 +2628,11 @@ static unsigned long size_to_bit_width(unsigned long sz)
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
 
-  // Shift domwidth up until it's either larger or equal to sz, or we risk
-  // overflowing.
-  while (domwidth != 0x8000000000000000ULL && domwidth < sz)
+  // Shift domwidth up until it is strictly larger than sz, or we risk
+  // overflowing. Strictly larger, not just equal: sz itself is the
+  // one-past-the-end index, a valid pointer value in C, and a domain that
+  // cannot represent it wraps it to 0 and aliases element 0 (#6399).
+  while (domwidth != 0x8000000000000000ULL && domwidth <= sz)
   {
     domwidth <<= 1;
     dombits++;
@@ -2589,9 +2827,229 @@ expr2tc smt_solver_baset::decompose_store_chain(
   return output;
 }
 
+/* The expression an array `with` chain is rooted at. */
+static const expr2tc &with_chain_base(const expr2tc &e)
+{
+  const expr2tc *p = &e;
+  while (is_with2t(*p))
+    p = &to_with2t(*p).source_value;
+  return *p;
+}
+
+/* The expression a select chain is rooted at. */
+static const expr2tc &select_chain_root(const expr2tc &e)
+{
+  const expr2tc *p = &e;
+  while (is_index2t(*p))
+    p = &to_index2t(*p).source_value;
+  return *p;
+}
+
+/* Whether @p e denotes a *row* of a multi-dimensional array: an array-typed
+ * expression the SMT layer has no term for, because flatten_array_type()
+ * collapses the enclosing array and a partial index into the flat form selects
+ * an element rather than a row. Infinite arrays (Solidity's nested mappings)
+ * are not flattened, so they are encodable and excluded. */
+static bool is_flattened_row(const expr2tc &e)
+{
+  if (!is_array_type(e->type) || to_array_type(e->type).size_is_infinite)
+    return false;
+
+  if (is_index2t(e))
+  {
+    const expr2tc &src = to_index2t(e).source_value;
+    return is_array_type(src->type) &&
+           !to_array_type(src->type).size_is_infinite;
+  }
+
+  if (is_with2t(e))
+    return is_flattened_row(to_with2t(e).source_value);
+
+  if (is_if2t(e))
+    return is_flattened_row(to_if2t(e).true_value) ||
+           is_flattened_row(to_if2t(e).false_value);
+
+  return false;
+}
+
+/* A read of @p row at @p i, pushed inside the row's own structure so that no
+ * term for the row itself is needed: select-over-store for a `with`
+ * (`(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`), distribution over an
+ * `ite`, and the inner read first for a row read out of a deeper one.
+ * Repeated, this drives the read down to an index chain
+ * decompose_select_chain() can flatten. Nil when @p row is a plain select
+ * chain, which that flattener already handles. */
+static expr2tc
+push_row_read(const type2tc &t, const expr2tc &row, const expr2tc &i)
+{
+  if (is_with2t(row))
+  {
+    const with2t &w = to_with2t(row);
+
+    /* Compared one bit wider than either operand. A narrowing comparison
+     * would let an out-of-range write alias an in-range read, so the widening
+     * is unconditional rather than a branch nothing exercises. */
+    unsigned w1 = i->type->get_width();
+    unsigned w2 = w.update_field->type->get_width();
+    type2tc common = get_uint_type((w1 > w2 ? w1 : w2) + 1);
+
+    return if2tc(
+      t,
+      equality2tc(typecast2tc(common, i), typecast2tc(common, w.update_field)),
+      w.update_value,
+      index2tc(t, w.source_value, i));
+  }
+
+  if (is_if2t(row))
+  {
+    const if2t &c = to_if2t(row);
+    return if2tc(
+      t, c.cond, index2tc(t, c.true_value, i), index2tc(t, c.false_value, i));
+  }
+
+  /* A read out of a row that is itself read out of a deeper one: lower the
+   * inner read first, so the subscript this level adds lands on a shape that
+   * has somewhere to go. Only when the chain roots at a row -- otherwise
+   * decompose_select_chain() already flattens it against a real array. The
+   * root is a `with` or an `ite`, select_chain_root() having walked past every
+   * index node, so the recursion always has an arm to take. */
+  if (is_index2t(row) && is_flattened_row(select_chain_root(row)))
+  {
+    const index2t &in = to_index2t(row);
+    return index2tc(t, push_row_read(row->type, in.source_value, in.index), i);
+  }
+
+  return expr2tc();
+}
+
+static expr2tc lower_flattened_row_select(const index2t &index)
+{
+  /* Only a read down to an element: a read that itself yields a row leaves the
+   * unencodable shape in place, so there is nothing to gain by rewriting it.
+   * That first test could not decide while array_may_propagate() stopped at
+   * two dimensions -- a source that is itself a row makes the array at least
+   * three deep -- and lifting that bound is what puts it in play. */
+  if (is_array_type(index.type) || !is_flattened_row(index.source_value))
+    return expr2tc();
+
+  return push_row_read(index.type, index.source_value, index.index);
+}
+
+/* Name every element of @p row, a row being written whole, as a store of the
+ * corresponding read out of it. Correct whatever the row denotes -- the read
+ * is of the row expression itself -- which is what makes it the general case
+ * behind decompose_stores()' in-place fast path. False when any length it has
+ * to enumerate is not a compile-time constant, which leaves the caller to fall
+ * back on the whole-array encoding. */
+bool smt_solver_baset::expand_row_stores(
+  const expr2tc &row,
+  const expr2tc &offset,
+  std::vector<flat_storet> &stores)
+{
+  const array_type2t &rowtype = to_array_type(row->type);
+  const type2tc &dom = offset->type;
+  const bool nested = is_array_type(rowtype.subtype);
+
+  BigInt stride = 1;
+  if (nested)
+  {
+    type2tc flat = flatten_array_type(rowtype.subtype);
+    const array_type2t &sub = to_array_type(flat);
+    if (is_nil_expr(sub.array_size) || !is_constant_int2t(sub.array_size))
+      return false;
+    stride = to_constant_int2t(sub.array_size).value;
+  }
+
+  /* Not implied by the caller's check on the flattened size: mul2t folds
+     `n * 0` to `0`, so a zero-length inner dimension makes a row's flattened
+     size constant while this dimension stays symbolic. */
+  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+    return false;
+
+  BigInt n = to_constant_int2t(rowtype.array_size).value;
+  for (BigInt k = 0; k < n; k = k + 1)
+  {
+    expr2tc off = add2tc(dom, offset, constant_int2tc(dom, k * stride));
+    expr2tc elem =
+      index2tc(rowtype.subtype, row, constant_int2tc(index_type2(), k));
+    if (nested)
+    {
+      if (!expand_row_stores(elem, off, stores))
+        return false;
+    }
+    else
+      stores.push_back({off, elem});
+  }
+
+  return true;
+}
+
+/* Decompose an array `with` into the flat element updates it denotes, oldest
+ * first, and give back the array the chain is rooted at. @p offset is the flat
+ * position of @p expr's own base within the outermost flattened array.
+ *
+ * decompose_store_chain() walks only the newest update's spine, so a row
+ * carrying more than one update -- which is what propagating a
+ * multi-dimensional array composes out of `a[1][0] = 5; a[1][1] = 4;` -- keeps
+ * its last store and silently loses the rest. This walks the chain *and* each
+ * row it updates. A row whose own chain is rooted at exactly the row being
+ * replaced is updated in place, which keeps the ordinary `a[i][j] = v` a
+ * single store; any other row is written out element by element. */
+bool smt_solver_baset::decompose_stores(
+  const expr2tc &expr,
+  const expr2tc &offset,
+  std::vector<flat_storet> &stores,
+  expr2tc &base)
+{
+  if (!is_with2t(expr))
+  {
+    base = expr;
+    return true;
+  }
+
+  const with2t &w = to_with2t(expr);
+  if (!decompose_stores(w.source_value, offset, stores, base))
+    return false;
+
+  const type2tc &dom = offset->type;
+  expr2tc field = typecast2tc(dom, w.update_field);
+
+  if (!is_array_type(w.update_value->type))
+  {
+    stores.push_back({add2tc(dom, offset, field), w.update_value});
+    return true;
+  }
+
+  type2tc flatrow = flatten_array_type(w.update_value->type);
+  const array_type2t &rowtype = to_array_type(flatrow);
+  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+    return false;
+
+  expr2tc origin = add2tc(
+    dom, offset, mul2tc(dom, field, typecast2tc(dom, rowtype.array_size)));
+
+  const expr2tc &rowbase = with_chain_base(w.update_value);
+  if (
+    is_index2t(rowbase) && to_index2t(rowbase).source_value == w.source_value &&
+    to_index2t(rowbase).index == w.update_field)
+  {
+    expr2tc rowbase_out;
+    return decompose_stores(w.update_value, origin, stores, rowbase_out);
+  }
+
+  return expand_row_stores(w.update_value, origin, stores);
+}
+
 smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
+
+  /* A `with` or `ite` over a row of a flattened multi-dimensional array has no
+   * term of its own, so push the read inside it rather than building one. */
+  expr2tc lowered = lower_flattened_row_select(index);
+  if (!is_nil_expr(lowered))
+    return convert_ast(lowered);
+
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
@@ -2644,8 +3102,32 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     is_array_type(to_array_type(with.type).subtype) &&
     !to_array_type(with.type).size_is_infinite)
   {
-    // Finite multi-dimensional arrays: flatten into single array with extended
-    // domain via decompose_store_chain.
+    // Finite multi-dimensional arrays: flatten into a single array with an
+    // extended domain. Prefer the element-wise decomposition, which keeps
+    // every store a row carries; decompose_store_chain() keeps only the last.
+    type2tc dom =
+      make_array_domain_type(to_array_type(flatten_array_type(with.type)));
+    std::vector<flat_storet> stores;
+    expr2tc base;
+    if (decompose_stores(expr, gen_zero(dom), stores, base))
+    {
+      const bool bools_as_bv =
+        is_bool_type(get_flattened_array_subtype(expr->type)) &&
+        !array_api->supports_bools_in_arrays;
+
+      smt_astt src = convert_ast(base);
+      for (const flat_storet &s : stores)
+      {
+        expr2tc idx = s.index;
+        simplify(idx);
+        expr2tc val = bools_as_bv
+                        ? expr2tc(typecast2tc(get_uint_type(1), s.value))
+                        : s.value;
+        src = src->update(this, convert_ast(val), 0, idx);
+      }
+      return src;
+    }
+
     newidx = decompose_store_chain(expr, update_val);
   }
   else
@@ -2655,12 +3137,12 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
-  assert(is_array_type(expr->type));
   smt_astt src, update;
-  const array_type2t &arrtype = to_array_type(expr->type);
+  // A vector is encoded as an array too (convert_sort).
+  const type2tc &subtype = array_or_vector_subtype(expr->type);
 
   // Workaround for bools-in-arrays.
-  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
+  if (is_bool_type(subtype) && !array_api->supports_bools_in_arrays)
   {
     expr2tc cast = typecast2tc(get_uint_type(1), update_val);
     update = convert_ast(cast);
@@ -2702,6 +3184,10 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
   type_rec = to_array_type(type_rec).subtype;
   expr2tc arr_size2 = to_array_type(type_rec).array_size;
 
+  /* Every nil array_size is built alongside size_is_infinite, and an infinite
+   * outer level returned above, so none reached here carries one (#7481). */
+  assert(!is_nil_expr(arr_size1) && !is_nil_expr(arr_size2));
+
   if (arr_size1->type != arr_size2->type)
     arr_size1 = typecast2tc(arr_size2->type, arr_size1);
 
@@ -2709,11 +3195,10 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
 
   while (is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size = mul2tc(
-      arr_size1->type,
-      to_array_type(to_array_type(type_rec).subtype).array_size,
-      arr_size);
     type_rec = to_array_type(type_rec).subtype;
+    assert(!is_nil_expr(to_array_type(type_rec).array_size));
+    arr_size =
+      mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
   }
   simplify(arr_size);
   return array_type2tc(subtype, arr_size, false);
@@ -2812,12 +3297,90 @@ void smt_solver_baset::pre_solve()
 {
   // A new solve produces a fresh model; drop memoised l_get values.
   l_get_cache.clear();
+  get_ast_cache.clear();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.
   tuple_api->add_tuple_constraints_for_solving();
   array_api->add_array_constraints_for_solving();
+}
+
+/* An element get_index_value() read from the model is a value already. Walking
+ * its operands would query the object inside an address_of: a function aborts,
+ * data prints as &0. A symbol element (NULL, INVALID<n>) is returned as is. */
+std::optional<expr2tc>
+smt_solver_baset::get_index(const expr2tc &expr, expr2tc &res)
+{
+  std::optional<expr2tc> v = get_index_value(expr, res);
+  if (!v && res != expr)
+    v = is_symbol2t(res) ? res : get(res);
+  return v;
+}
+
+/* get()'s index_id case: read one element out of the solver's array model
+ * rather than materialising the whole array. Nullopt where the case falls
+ * through to get()'s generic tail, having possibly rewritten @p res. */
+std::optional<expr2tc>
+smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
+{
+  // If we try to get an index from the solver, it will first
+  // return the whole array and then get the index, we can
+  // do better and call get_array_element directly
+  index2t index = to_index2t(res);
+
+  /* Same lowering convert_array_index() applies: a row of a flattened array
+     has no term, so convert_ast() below cannot be handed one. get() resolves
+     the ite this produces by asking the solver for its condition. */
+  expr2tc lowered = lower_flattened_row_select(index);
+  if (!is_nil_expr(lowered))
+    return get(lowered);
+
+  expr2tc src_value = index.source_value;
+
+  expr2tc newidx;
+  // Same NDEBUG-off safety guard as in convert_array_index() above.
+  const bool src_is_infinite_array =
+    is_array_type(index.source_value->type) &&
+    to_array_type(index.source_value->type).size_is_infinite;
+  if (is_index2t(index.source_value) && !src_is_infinite_array)
+  {
+    newidx = decompose_select_chain(expr, src_value);
+  }
+  else
+  {
+    newidx = fix_array_idx(index.index, index.source_value->type);
+  }
+
+  // if the source value is a constant, there's no need to
+  // call the array api
+  if (is_constant_number(src_value))
+    return src_value;
+
+  // Convert the idx, it must be an integer
+  expr2tc idx = get(newidx);
+  if (is_constant_int2t(idx))
+  {
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(src_value);
+
+    // Retrieve the element
+    if (is_tuple_array_ast_type(src_value->type))
+      res = tuple_api->tuple_get_array_elem(
+        array, to_constant_int2t(idx).value.to_uint64(), res->type);
+    else
+      res = array_api->get_array_elem(
+        array,
+        to_constant_int2t(idx).value.to_uint64(),
+        get_flattened_array_subtype(res->type));
+
+    // If we got a nil result, return original expression
+    if (is_nil_expr(res))
+      return expr;
+  }
+
+  // TODO: Give up, then what?
+  return std::nullopt;
 }
 
 expr2tc smt_solver_baset::get(const expr2tc &expr)
@@ -2834,57 +3397,9 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   switch (res->expr_id)
   {
   case expr2t::index_id:
-  {
-    // If we try to get an index from the solver, it will first
-    // return the whole array and then get the index, we can
-    // do better and call get_array_element directly
-    index2t index = to_index2t(res);
-    expr2tc src_value = index.source_value;
-
-    expr2tc newidx;
-    // Same NDEBUG-off safety guard as in convert_array_index() above.
-    const bool src_is_infinite_array =
-      is_array_type(index.source_value->type) &&
-      to_array_type(index.source_value->type).size_is_infinite;
-    if (is_index2t(index.source_value) && !src_is_infinite_array)
-    {
-      newidx = decompose_select_chain(expr, src_value);
-    }
-    else
-    {
-      newidx = fix_array_idx(index.index, index.source_value->type);
-    }
-
-    // if the source value is a constant, there's no need to
-    // call the array api
-    if (is_constant_number(src_value))
-      return src_value;
-
-    // Convert the idx, it must be an integer
-    expr2tc idx = get(newidx);
-    if (is_constant_int2t(idx))
-    {
-      // Convert the array so we can call the array api
-      smt_astt array = convert_ast(src_value);
-
-      // Retrieve the element
-      if (is_tuple_array_ast_type(src_value->type))
-        res = tuple_api->tuple_get_array_elem(
-          array, to_constant_int2t(idx).value.to_uint64(), res->type);
-      else
-        res = array_api->get_array_elem(
-          array,
-          to_constant_int2t(idx).value.to_uint64(),
-          get_flattened_array_subtype(res->type));
-
-      // If we got a nil result, return original expression
-      if (is_nil_expr(res))
-        return expr;
-    }
-
-    // TODO: Give up, then what?
+    if (auto v = get_index(expr, res))
+      return *v;
     break;
-  }
 
   case expr2t::with_id:
   {
@@ -2900,7 +3415,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
       decompose_store_chain(expr, update_val);
     }
 
-    /* Try to construct a constant struct when we handle  
+    /* Try to construct a constant struct when we handle
      * struct type "with" expr2tc
      *
      * Simplify the source value. If it is a constant,
@@ -2990,12 +3505,18 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     // we return it, without casting to the ternary if type.
     if2t i = to_if2t(res);
 
+    // c is null when the solver produced no value for the condition (e.g. it
+    // still contains a quantifier); fall through to the operand recursion
+    // below, which handles unresolved sub-expressions.
     expr2tc c = get(i.cond);
-    if (is_true(c))
-      return get(i.true_value);
+    if (c)
+    {
+      if (is_true(c))
+        return get(i.true_value);
 
-    if (is_false(c))
-      return get(i.false_value);
+      if (is_false(c))
+        return get(i.false_value);
+    }
   }
 
   default:;
@@ -3065,10 +3586,28 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 
 expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
 {
+  auto cached = get_ast_cache.find(a);
+  if (cached != get_ast_cache.end() && cached->second.first == type)
+    return cached->second.second;
+
+  expr2tc res = get_by_ast_uncached(type, a);
+  get_ast_cache[a] = {type, res};
+  return res;
+}
+
+expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
+{
   switch (type->type_id)
   {
   case type2t::bool_id:
-    return get_bool(a) ? gen_true_expr() : gen_false_expr();
+  {
+    // A null expr2tc is the established "solver produced no value" signal; the
+    // get() callers already treat it as unresolved (see #6191).
+    tvt val = get_bool(a);
+    if (val.is_unknown())
+      return expr2tc();
+    return val.is_true() ? gen_true_expr() : gen_false_expr();
+  }
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
@@ -3185,7 +3724,8 @@ double smt_solver_baset::convert_rational_to_double(
 
         if (result != nullptr)
         {
-          // 1a) as_string returns a pointer to the first digit; copy it forward.
+          // 1a) as_string returns a pointer to the first digit; copy it
+          // forward.
           size_t len = strnlen(result, buffer.size());
           if (len > 0 && len < buffer.size())
           {
@@ -3378,7 +3918,8 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 
   expr2tc arr_size;
   if (type == flat_type && !ar.size_is_infinite)
-    // avoid handelling the flattend multidimensional and malloc arrays(assume size is infinite)
+    // avoid handelling the flattend multidimensional and malloc arrays(assume
+    // size is infinite)
     arr_size = to_array_type(flat_type).array_size;
   else
     arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
@@ -3684,6 +4225,12 @@ smt_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->mk_ite(cond, this, falseop);
 }
 
+smt_astt smt_ast::with_sort(smt_solver_baset *, smt_sortt s) const
+{
+  const_cast<smt_ast *>(this)->sort = s;
+  return this;
+}
+
 smt_astt smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
@@ -3759,7 +4306,7 @@ tvt smt_solver_baset::l_get(smt_astt a)
   auto it = l_get_cache.find(a);
   if (it != l_get_cache.end())
     return it->second;
-  tvt res = get_bool(a) ? tvt(true) : tvt(false);
+  tvt res = get_bool(a);
   l_get_cache.emplace(a, res);
   return res;
 }
@@ -3795,7 +4342,8 @@ expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)
   {
     // Build the fixedbv from its spec + raw bit pattern directly, mirroring
     // fixedbvt::from_expr (spec from the type, v = the value's signed binary
-    // round-trip) without staging a legacy constant_exprt / type back-migration.
+    // round-trip) without staging a legacy constant_exprt / type
+    // back-migration.
     fixedbvt fbv(fixedbv_spect(to_fixedbv_type(type)));
     fbv.set_value(
       binary2integer(integer2binary(value, type->get_width()), true));

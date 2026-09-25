@@ -1,0 +1,4 @@
+CORE
+main.c
+--function touch_outer --enforce-contract touch_outer --replace-call-with-contract touch_inner
+^VERIFICATION SUCCESSFUL$

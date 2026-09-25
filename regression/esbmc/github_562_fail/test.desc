@@ -1,0 +1,5 @@
+CORE
+main.c
+--fixedbv
+^VERIFICATION FAILED$
+assertion

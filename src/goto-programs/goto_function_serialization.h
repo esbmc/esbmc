@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_serialization.h>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 
 class goto_function_serializationt
 {

@@ -4,7 +4,7 @@
 #include <goto-programs/static_analysis.h>
 #include <pointer-analysis/value_set_domain.h>
 #include <pointer-analysis/value_sets.h>
-#include <util/xml.h>
+#include <util/base/xml.h>
 
 class value_set_analysist : public value_setst,
                             public static_analysist<value_set_domaint>
@@ -16,6 +16,11 @@ public:
   }
 
   typedef static_analysist<value_set_domaint> baset;
+
+  // value_setst and static_analysis_baset each declare a locationt (both
+  // goto_programt::const_targett); name one to keep member declarations
+  // unambiguous.
+  using locationt = baset::locationt;
 
   // overloading
   void initialize(const goto_programt &goto_program) override;
@@ -57,6 +62,22 @@ public:
     override
   {
     (*this)[l].value_set->get_value_set(expr, dest);
+  }
+
+  // Both members already exist on the static_analysist base, but a member
+  // inherited from one base does not override a pure virtual declared in
+  // another, so value_setst needs these explicit forwarders.
+  void get_reference_set(
+    locationt l,
+    const expr2tc &expr,
+    value_setst::valuest &dest) override
+  {
+    baset::get_reference_set(l, expr, dest);
+  }
+
+  bool has_location(locationt l) const override
+  {
+    return baset::has_location(l);
   }
 };
 

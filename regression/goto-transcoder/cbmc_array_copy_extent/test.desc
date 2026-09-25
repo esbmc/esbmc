@@ -1,0 +1,4 @@
+CORE
+cbmc_array_copy_extent.goto
+--binary
+^ERROR: CBMC adapter: 'array_copy' whole-object operations are not yet supported

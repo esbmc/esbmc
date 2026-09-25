@@ -8,9 +8,9 @@
 #include <set>
 #include <vector>
 #include <irep2/irep2_utils.h>
-#include <util/location.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
+#include <util/irep/location.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \
   for (goto_programt::instructionst::const_iterator it =                       \
@@ -63,7 +63,7 @@ class goto_programt
 {
 public:
   /*! \brief copy constructor
-      \param[in] src an empty goto program
+      \param[in] src the goto program to copy from
   */
   inline goto_programt(const goto_programt &src)
   {
@@ -76,7 +76,7 @@ public:
   }
 
   /*! \brief assignment operator
-      \param[in] src an empty goto program
+      \param[in] src the goto program to copy from
   */
   inline goto_programt &operator=(const goto_programt &src)
   {
@@ -126,7 +126,7 @@ public:
       return *loop_contract_data;
     }
 
-    //! the target for gotos and for start_thread nodes
+    //! the targets for gotos and catch
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
     typedef std::list<targett> targetst;
@@ -169,6 +169,17 @@ public:
     // condition, so GOTO-taken means the branch body (original target) IS reached.
     bool flipped_guard;
 
+    // Set on the nondet assignments the standalone --loop-invariant-check
+    // schema emits in place of a loop. Every claim symex reaches after one of
+    // them is checked against the invariant's over-approximation, so a
+    // violation there means the invariant is too weak to carry the claim, not
+    // that the program can reach the state (issue #7480). A boolean rather
+    // than a test on location.comment(): the combined --loop-invariant pass
+    // emits "loop invariant havoc (verification branch)", whose downstream
+    // claims are *not* abstracted, and that comment is user-visible text
+    // rather than an interface.
+    bool loop_invariant_havoc;
+
     // Set by convert_switch: decimal strings of all case constants whose
     // target is this GOTO, used by witness waypoint matching.  Contains more
     // than one entry when multiple case labels fall through to the same body.
@@ -191,6 +202,7 @@ public:
       inductive_step_instruction = false;
       inductive_assertion = false;
       flipped_guard = false;
+      loop_invariant_havoc = false;
     }
 
     inline void make_goto()
@@ -370,6 +382,7 @@ public:
         inductive_step_instruction(false),
         inductive_assertion(false),
         flipped_guard(false),
+        loop_invariant_havoc(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -384,6 +397,7 @@ public:
         inductive_step_instruction(false),
         inductive_assertion(false),
         flipped_guard(false),
+        loop_invariant_havoc(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -410,6 +424,7 @@ public:
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        loop_invariant_havoc(other.loop_invariant_havoc),
         switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -441,6 +456,7 @@ public:
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        loop_invariant_havoc(other.loop_invariant_havoc),
         switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -479,6 +495,7 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
+      std::swap(loop_invariant_havoc, instruction.loop_invariant_havoc);
       instruction.switch_case_ids.swap(switch_case_ids);
       // Swap location_number too — same copy-assign-through-swap
       // reasoning as for labels.
@@ -637,7 +654,7 @@ public:
     return --tmp;
   }
 
-  //! Adds an instruction of given type at the end.
+  //! Adds a copy of the given instruction at the end.
   //! \return The newly added instruction.
   inline targett add_instruction(instructiont &instruction)
   {

@@ -241,7 +241,7 @@ reference and the wiki as background.
 - `src/esbmc/esbmc_parseoptions.cpp` — extend solver-selection.
 - Top-level [`README.md`](../../README.md) and `scripts/build.sh` —
   install/dependency notes for the new solver.
-- `.github/workflows/build.yml` and `.github/workflows/release.yml` —
+- `.github/workflows/aux-build.yml` and `.github/workflows/ci-release.yml` —
   add the new solver to the CI matrix.
 - `regression/esbmc/` — add at least one passing and one failing
   regression test exercising `--<solver>` (per the project's two-test
@@ -268,7 +268,7 @@ The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
   the pointer/memory model.
 - `src/solvers/smt/smt_conv.{h,cpp}` — encoding flag, any new
   `smt_func_kind` entries, and the encoding hook itself.
-- `src/util/expr_simplifier.cpp` — simplification rules for new operators,
+- `src/util/expr/expr_simplifier.cpp` — simplification rules for new operators,
   if any.
 - Each affected backend — typically `bitwuzla/`, `boolector/`, and the
   text backend `smtlib/smtlib_conv.cpp`.

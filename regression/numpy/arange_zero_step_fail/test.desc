@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ValueError: numpy.arange\(\) step must not be zero$

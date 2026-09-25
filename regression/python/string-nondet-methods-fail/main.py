@@ -1,4 +1,4 @@
 
-s = nondet_string(5)
+s = nondet_str()
 upper = s.upper()
 assert upper == "HELLO"  # FALHA

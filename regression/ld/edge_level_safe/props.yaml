@@ -1,0 +1,17 @@
+properties:
+
+  # The complement of edge_rising_fail / edge_falling_fail: with a plain contact
+  # the coil tracks its operand within the scan, so both transition-only states
+  # are provably unreachable. Together the three tests pin the distinction
+  # between level and transition sensing rather than just one side of it.
+  - id: P1
+    kind: reachability
+    expression: "a && !q"
+    description: "Operand held with the coil dropped is unreachable under level sensing"
+    justification: "Complement of edge_rising_fail; a plain contact drives the coil every scan"
+
+  - id: P2
+    kind: reachability
+    expression: "!a && q"
+    description: "Coil on with the operand low is unreachable under level sensing"
+    justification: "Complement of edge_falling_fail; a plain contact drives the coil every scan"

@@ -1,54 +1,53 @@
-
 #include <fenv.h>
 #include <math.h>
 
-#define remquo_def(type, name, isnan_func, isinf_func, llrint_func)                    \
-  type name(type x, type y, int *quo)                                                  \
-  {                                                                                    \
-  __ESBMC_HIDE:;                                                                       \
-    /* If either argument is NaN, NaN is returned */                                   \
-    if (isnan_func(x) || isnan_func(y))                                                \
-      return NAN;                                                                      \
-                                                                                       \
-    /* If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if (y == 0.0)                                                                      \
-      return NAN;                                                                      \
-                                                                                       \
-    /* If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised */ \
-    if (isinf_func(x))                                                                 \
-      return NAN;                                                                      \
-                                                                                       \
-    /* If y is +inf/-inf, return x */                                                  \
-    if (isinf_func(y))                                                                 \
-      return x;                                                                        \
-                                                                                       \
-    /* remainder = x - rquot * y */                                                    \
-    /* Where rquot is the result of: x/y, rounded toward the nearest */                \
-    /* integral value (with halfway cases rounded toward the even number). */          \
-                                                                                       \
-    /* Save previous rounding mode */                                                  \
-    int old_rm = fegetround();                                                         \
-                                                                                       \
-    /* Set round to nearest */                                                         \
-    fesetround(FE_TONEAREST);                                                          \
-                                                                                       \
-    /* Perform division */                                                             \
-    long long rquot = llrint_func(x / y);                                              \
-                                                                                       \
-    /* Restore old rounding mode */                                                    \
-    fesetround(old_rm);                                                                \
-                                                                                       \
-    return x - (y * rquot);                                                            \
-  }                                                                                    \
-                                                                                       \
-  type __##name(type x, type y, int *quo)                                              \
-  {                                                                                    \
-  __ESBMC_HIDE:;                                                                       \
-    return name(x, y, quo);                                                            \
+/* remquo: the remainder is exactly what remainder() returns -- normally the
+ * solver's fp.rem via frontend interception, with remainder.c's
+ * self-contained body as the fallback (that body never calls back here, so
+ * the chain cannot recurse).
+ *
+ * *quo receives the sign and low bits of the rounded-to-nearest integral
+ * quotient x/y (C17 7.12.10.3 requires at least three bits). It is computed
+ * with llrint(x/y), which double-rounds and can overflow long long for huge
+ * quotient magnitudes; C only defines *quo modulo a power of two, so the
+ * low bits remain meaningful in the common range. */
+#define remquo_def(                                                            \
+  type, name, isnan_func, isinf_func, llrint_func, remainder_func)             \
+  type name(type x, type y, int *quo)                                          \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    if (isnan_func(x) || isnan_func(y))                                        \
+      return NAN;                                                              \
+                                                                               \
+    if (y == 0.0)                                                              \
+      return NAN;                                                              \
+                                                                               \
+    if (isinf_func(x))                                                         \
+      return NAN;                                                              \
+                                                                               \
+    if (isinf_func(y))                                                         \
+    {                                                                          \
+      *quo = 0;                                                                \
+      return x;                                                                \
+    }                                                                          \
+                                                                               \
+    int old_rm = fegetround();                                                 \
+    fesetround(FE_TONEAREST);                                                  \
+    long long rquot = llrint_func(x / y);                                      \
+    fesetround(old_rm);                                                        \
+                                                                               \
+    *quo = (int)rquot;                                                         \
+    return remainder_func(x, y);                                               \
+  }                                                                            \
+                                                                               \
+  type __##name(type x, type y, int *quo)                                      \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    return name(x, y, quo);                                                    \
   }
 
-remquo_def(float, remquof, isnan, isinf, llrintf);
-remquo_def(double, remquo, isnan, isinf, llrint);
-remquo_def(long double, remquol, isnan, isinf, llrintl);
+remquo_def(float, remquof, isnan, isinf, llrintf, remainderf);
+remquo_def(double, remquo, isnan, isinf, llrint, remainder);
+remquo_def(long double, remquol, isnan, isinf, llrintl, remainderl);
 
 #undef remquo_def

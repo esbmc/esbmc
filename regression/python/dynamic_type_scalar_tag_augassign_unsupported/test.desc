@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: operator 'Mult' on a dynamically-typed variable is not yet supported$

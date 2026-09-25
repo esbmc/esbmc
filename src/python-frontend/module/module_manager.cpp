@@ -1,0 +1,406 @@
+#include <python-frontend/module/module_manager.h>
+#include <python-frontend/module/module.h>
+#include <python-frontend/json_utils.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/message/message.h>
+
+#include <nlohmann/json.hpp>
+
+#include <filesystem>
+#include <fstream>
+
+namespace fs = std::filesystem;
+
+namespace
+{
+// Helper function to safely extract string value from JSON node
+// Returns empty string if the field is missing, null, or not a string
+std::string get_string_safe(const nlohmann::json &node, const std::string &key)
+{
+  if (!node.contains(key))
+    return "";
+
+  if (node[key].is_string())
+    return node[key].get<std::string>();
+
+  return "";
+}
+} // namespace
+
+module_manager::module_manager(const std::string &module_search_path)
+  : module_search_path_(module_search_path)
+{
+}
+
+/// A legacy forward reference, `-> "int"`, and the `-> None` that shares its
+/// node type.
+static std::string string_annotation_type(const nlohmann::json &returns)
+{
+  if (!returns.contains("value"))
+    return "";
+  if (returns["value"].is_string())
+    return returns["value"].get<std::string>();
+  return returns["value"].is_null() ? "None" : "";
+}
+
+/// The return type named by a FunctionDef's annotation, or "" when it carries
+/// none. "None" stands for an annotation this reader understands to be
+/// NoneType, so a caller cannot tell it apart from an unrecognised shape --
+/// which is the behaviour callers have always seen.
+static std::string annotated_return_type(const nlohmann::json &returns)
+{
+  // PEP 604 union syntax: int | bool
+  if (returns["_type"] == "BinOp")
+    return "Union";
+
+  if (returns["_type"] == "Subscript")
+  {
+    if (
+      returns.contains("value") && returns["value"].contains("id") &&
+      returns["value"]["id"].is_string())
+      return returns["value"]["id"].get<std::string>();
+    return "";
+  }
+
+  if (returns["_type"] == "Tuple")
+    return "Tuple";
+
+  if (returns["_type"] == "Constant" || returns["_type"] == "Str")
+    return string_annotation_type(returns);
+
+  if (returns.contains("value") && returns["value"].is_null())
+    return "None";
+
+  if (returns.contains("id") && returns["id"].is_string())
+    return returns["id"].get<std::string>();
+
+  return "None";
+}
+
+static void add_function_def(module &md, const nlohmann::json &node)
+{
+  function f;
+  f.name_ = get_string_safe(node, "name");
+  if (f.name_.empty() || node["returns"].is_null())
+    return;
+
+  f.return_type_ = annotated_return_type(node["returns"]);
+
+  if (json_utils::has_overload_decorator(node))
+    md.add_overload(node);
+
+  md.add_function(f);
+}
+
+static void add_class_def(module &md, const nlohmann::json &node)
+{
+  class_definition c;
+  c.name_ = get_string_safe(node, "name");
+  if (c.name_.empty())
+    return;
+
+  if (node.contains("bases") && node["bases"].is_array())
+    for (const auto &base : node["bases"])
+    {
+      std::string base_name = get_string_safe(base, "id");
+      if (!base_name.empty())
+        c.bases_.push_back(base_name);
+    }
+
+  if (node.contains("body") && node["body"].is_array())
+    for (const auto &item : node["body"])
+    {
+      if (item["_type"] != "FunctionDef")
+        continue;
+      std::string method_name = get_string_safe(item, "name");
+      if (!method_name.empty())
+        c.methods_.push_back(method_name);
+    }
+
+  md.add_class(c);
+}
+
+/// Read \p json_path into \p md, reporting whether it could. Only functions,
+/// classes and overloads may be added here -- see module::add_source for why.
+/// Diagnostics keep the create_module tag the messages have always carried.
+static bool populate_module(module &md, const fs::path &json_path)
+{
+  std::ifstream json_file(json_path);
+  if (!json_file.is_open())
+  {
+    log_warning(
+      "[module_manager] create_module: failed to open {}", json_path.string());
+    return false;
+  }
+
+  try
+  {
+    nlohmann::json ast;
+    // Pin FE_TONEAREST while nlohmann's strtod converts float literals (see
+    // python_language.cpp): a leftover rounding mode skews them by one ulp.
+    const round_to_nearest_guard rounding_guard;
+    json_file >> ast;
+    json_file.close();
+
+    // Validate JSON structure
+    if (!ast.contains("body") || !ast["body"].is_array())
+    {
+      log_error(
+        "[module_manager] create_module: Invalid or missing 'body' in {}",
+        json_path.string());
+      return false;
+    }
+
+    for (const auto &node : ast["body"])
+    {
+      std::string node_type =
+        node.contains("_type") && node["_type"].is_string()
+          ? node["_type"].get<std::string>()
+          : "unknown";
+
+      if (node_type == "unknown")
+      {
+        log_warning(
+          "[module_manager] create_module: Unknown or missing node type in {}",
+          json_path.string());
+        continue;
+      }
+
+      if (node_type == "FunctionDef")
+        add_function_def(md, node);
+      else if (node_type == "ClassDef")
+        add_class_def(md, node);
+    }
+    return true;
+  }
+  catch (const nlohmann::json::type_error &e)
+  {
+    log_error(
+      "JSON type error in create_module for {}: {} (id: {})",
+      json_path.string(),
+      e.what(),
+      e.id);
+  }
+  catch (const nlohmann::json::parse_error &e)
+  {
+    // Catches JSON parsing errors (e.g., invalid JSON content)
+    log_error("Error parsing the JSON {}: {}", json_path.string(), e.what());
+  }
+  catch (const std::exception &e)
+  {
+    log_error(
+      "Exception in create_module for {}: {}", json_path.string(), e.what());
+  }
+  return false;
+}
+
+void module_manager::load_directory(
+  const fs::path &current_path,
+  ModulePtr parent_module)
+{
+  for (const auto &entry : fs::directory_iterator(current_path))
+  {
+    if (entry.is_regular_file() && entry.path().extension() == ".json")
+    {
+      const std::string name = entry.path().stem().string();
+
+      // The entry-script JSON is only at the top level; a submodule whose
+      // basename happens to match (e.g. kernels/<main>.py) is a distinct
+      // module and must be loaded.
+      if (!parent_module && main_module_ == name)
+        continue;
+
+      // find_module is a top-level lookup, so two files sharing a stem merge
+      // into one node even when one of them is a submodule: `import pkg.math`
+      // attaches pkg/math.json to the stdlib `math` model and leaves pkg.math
+      // unresolvable. Pre-existing (the old code merged their functions and
+      // classes the same way); preserved here rather than fixed.
+      auto current_module = find_module(name);
+      if (!current_module)
+      {
+        current_module = std::make_shared<module>(name);
+        ++discovered_;
+        if (parent_module)
+          parent_module->add_submodule(current_module);
+        else
+          modules_.insert(current_module);
+      }
+      current_module->add_source(entry.path().string());
+    }
+    else if (entry.is_directory())
+    {
+      // Create or retrieve the module corresponding to the directory
+      auto module_dir = get_module_from_dir(entry.path(), parent_module);
+
+      // Recursively process files and subdirectories
+      if (module_dir)
+        load_directory(entry.path(), module_dir);
+    }
+  }
+}
+
+ModulePtr module_manager::get_module_from_dir(
+  const fs::path &path,
+  ModulePtr parent_module)
+{
+  ModulePtr current_module = parent_module;
+
+  auto relative_path = std::filesystem::relative(path, module_search_path_);
+
+  if (relative_path.filename() == "__pycache__")
+    return nullptr;
+
+  // Split the path into components and process each one
+  for (const auto &component : relative_path)
+  {
+    // Module name without extension
+    const auto module_name = component.stem().string();
+    if (!current_module)
+    {
+      // If there is no parent module, create or get it at the top level
+      current_module = find_module(module_name);
+      if (!current_module && !module_name.empty())
+      {
+        current_module = std::make_shared<module>(module_name);
+        ++discovered_;
+        modules_.insert(current_module);
+      }
+    }
+    else
+    {
+      // If there is a parent module, create or get it as a submodule
+      auto existing_submodule = std::find_if(
+        current_module->submodules().begin(),
+        current_module->submodules().end(),
+        [&module_name](std::shared_ptr<module> mod) {
+          return mod->name() == module_name;
+        });
+
+      if (existing_submodule == current_module->submodules().end())
+      {
+        auto new_submodule = std::make_shared<module>(module_name);
+        ++discovered_;
+        current_module->add_submodule(new_submodule);
+        current_module = new_submodule;
+      }
+      else
+      {
+        current_module = *existing_submodule;
+      }
+    }
+  }
+
+  return current_module;
+}
+
+void module_manager::load()
+{
+  load_directory(module_search_path_);
+}
+
+std::shared_ptr<module_manager> module_manager::create(
+  const std::string &module_search_path,
+  const std::string &main_module_path)
+{
+  std::shared_ptr<module_manager> mm(new module_manager(module_search_path));
+  if (mm)
+  {
+    mm->main_module_ = fs::path(main_module_path).stem().string();
+    mm->load();
+    return mm;
+  }
+  return nullptr;
+}
+
+static std::vector<std::string> split(const std::string &str, char delimiter)
+{
+  std::vector<std::string> tokens;
+  std::string token;
+  std::istringstream tokenStream(str);
+  while (std::getline(tokenStream, token, delimiter))
+    tokens.push_back(token);
+
+  return tokens;
+}
+
+ModulePtr get_module_recursive(
+  const std::vector<std::string> &parts,
+  const ModulesList &current_modules)
+{
+  if (parts.empty())
+    return nullptr;
+
+  // First, find the module that matches the first part of the module name
+  for (const auto &mod : current_modules)
+  {
+    if (mod->name() == parts[0])
+    {
+      if (parts.size() == 1)
+      {
+        // If there's no more parts left, return the found module
+        return mod;
+      }
+      else
+      {
+        // If there are more parts, search in the submodules
+        return get_module_recursive(
+          std::vector<std::string>(parts.begin() + 1, parts.end()),
+          mod->submodules());
+      }
+    }
+  }
+  return nullptr; // Return nullptr if the module is not found
+}
+
+const ModulePtr
+module_manager::find_module(const std::string &module_name) const
+{
+  std::vector<std::string> parts = split(module_name, '.');
+  return get_module_recursive(parts, modules_);
+}
+
+bool module_manager::hydrate(const ModulePtr &mod)
+{
+  if (!mod)
+    return false;
+
+  if (mod->hydrated())
+    return mod->readable();
+
+  // Set before parsing, not after: a source that throws past populate_module's
+  // handlers would otherwise be retried on every lookup, and overloads_ is a
+  // vector, so a retry would append duplicates.
+  mod->mark_hydrated();
+  if (mod->sources().empty())
+    return true;
+
+  ++parsed_;
+  bool any = false;
+  // By index: populate_module must not add sources (module::add_source), but
+  // indexing costs nothing and does not depend on it holding.
+  for (std::size_t i = 0; i < mod->sources().size(); ++i)
+    any |= populate_module(*mod, mod->sources()[i]);
+
+  mod->set_readable(any);
+  return any;
+}
+
+module_manager::~module_manager()
+{
+  log_debug(
+    "python",
+    "module cache: {} modules discovered, {} parsed",
+    discovered_,
+    parsed_);
+}
+
+const ModulePtr module_manager::get_module(const std::string &module_name)
+{
+  const ModulePtr result = find_module(module_name);
+
+  // A module whose every source failed to parse answers as absent, the way it
+  // did when the parse happened during the directory walk: callers branch on
+  // null, and an empty module would take a different path through the
+  // annotator's import and attribute resolution.
+  return hydrate(result) ? result : nullptr;
+}

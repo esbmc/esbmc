@@ -1,0 +1,5 @@
+CORE
+empty.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: .*no ladder logic was translated; the scan cycle would be empty and every property vacuous$
+^ERROR: PARSING ERROR$

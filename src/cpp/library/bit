@@ -4,6 +4,11 @@
 #include "cstdint"
 #include "type_traits"
 
+// C++20 header: libstdc++ and libc++ both expand it to nothing in an
+// older language mode rather than erroring, so a translation unit that
+// includes it unconditionally still compiles (github #3387).
+#if __cplusplus >= 202002L
+
 namespace std
 {
 
@@ -148,5 +153,7 @@ enum class endian
 };
 
 } // namespace std
+
+#endif // __cplusplus >= 202002L
 
 #endif

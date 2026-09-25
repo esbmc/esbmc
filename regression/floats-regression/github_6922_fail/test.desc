@@ -1,0 +1,5 @@
+CORE
+main.c
+--32 --z3
+REQUIRES arch32
+^VERIFICATION FAILED$

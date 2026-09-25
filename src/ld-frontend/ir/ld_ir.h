@@ -34,9 +34,11 @@ struct LdIRNode
   // Fields used by ContactEval / CoilAssign
   std::string variable;
   ContactKind contact_kind = ContactKind::NormallyOpen;
+  ContactEdge contact_edge = ContactEdge::None;
   CoilKind coil_kind = CoilKind::Output;
 
   // Fields used by TimerStep
+  std::string timer_instance; // FB instance name (for shadow edge variable)
   std::string timer_IN;
   std::string timer_ET;
   std::string timer_PT;

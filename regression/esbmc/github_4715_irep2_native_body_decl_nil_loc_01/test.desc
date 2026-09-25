@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto-functions-only
+DECL union [^\n]*compound-literal\$1;\n\s+// \d+ \n\s+ASSIGN

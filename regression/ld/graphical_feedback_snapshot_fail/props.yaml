@@ -1,0 +1,12 @@
+properties:
+
+  # m is written by the first rung and read by the second, so IEC 61131-3 §4.1.3
+  # has the read take m's value at network entry, not the value the first rung
+  # just wrote. The scan in which a first goes high therefore sets m but leaves q
+  # off. Reading m immediately instead would make q track a and this state
+  # unreachable.
+  - id: P1
+    kind: reachability
+    expression: "m && !q"
+    description: "Intermediate coil set while the coil reading it is still off"
+    justification: "Only an entry snapshot of a feedback variable can delay the read by one scan"

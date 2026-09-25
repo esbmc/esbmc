@@ -6,8 +6,8 @@
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
-#include <util/c_types.h>
-#include <util/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/irep/std_expr.h>
 
 #include <map>
 #include <memory>

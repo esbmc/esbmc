@@ -1,8 +1,8 @@
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 
 #include <catch2/catch.hpp>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/global_scope.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/module/global_scope.h>
 #include <nlohmann/json.hpp>
 
 TEST_CASE("Add type annotation")

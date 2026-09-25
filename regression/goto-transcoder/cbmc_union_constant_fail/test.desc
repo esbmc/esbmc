@@ -1,0 +1,4 @@
+CORE
+cbmc_union_constant_fail.goto
+--binary
+^VERIFICATION FAILED$

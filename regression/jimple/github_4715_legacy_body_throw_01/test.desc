@@ -1,0 +1,4 @@
+CORE
+main.jimple
+--no-irep2-native-body --force-malloc-success
+^VERIFICATION SUCCESSFUL$

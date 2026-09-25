@@ -7,31 +7,32 @@
 // implementations live in function_call/expr.{h,cpp}.
 
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/complex_handler_utils.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_typecast.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_typecast.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <optional>
+#include <limits>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -59,6 +60,13 @@ int get_nondet_str_length()
     }
   }
   return DEFAULT_NONDET_STR_LENGTH;
+}
+
+// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
+int get_nondet_str_buffer_size()
+{
+  const int length = get_nondet_str_length();
+  return length < std::numeric_limits<int>::max() ? length + 1 : length;
 }
 
 // Banker's rounding (IEEE 754 round-half-to-even): rounds to the nearest
@@ -131,7 +139,7 @@ exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // Model as a bounded C-string without embedded nulls.
-  int max_str_length = get_nondet_str_length();
+  int max_str_length = get_nondet_str_buffer_size();
   typet string_type = type_handler_.get_typet("str", max_str_length);
 
   symbolt &input_sym =
@@ -192,7 +200,7 @@ exprt function_call_expr::build_nondet_call() const
 
   if (type == "str")
   {
-    int max_str_length = get_nondet_str_length();
+    int max_str_length = get_nondet_str_buffer_size();
 
     typet char_array_type =
       array_typet(char_type(), from_integer(max_str_length, size_type()));
@@ -238,6 +246,57 @@ exprt function_call_expr::build_nondet_call() const
     exprt nondet_imag("sideeffect", dt);
     nondet_imag.statement("nondet");
     return make_complex(nondet_real, nondet_imag);
+  }
+
+  if (type == "bytes")
+  {
+    // nondet_bytes(n): a fixed-length bytes value, each byte an independent
+    // symbolic value in [0, 255]. No relation is claimed between two bytes
+    // or between two calls -- a placeholder shape for "give me real bytes
+    // here", not a hash/crypto model. See hash() in models/consensus.py.
+    if (
+      call_["args"].empty() ||
+      call_["args"][0].value("_type", "") != "Constant" ||
+      !call_["args"][0].contains("value") ||
+      !call_["args"][0]["value"].is_number_integer())
+      throw std::runtime_error(
+        "nondet_bytes(n) requires a constant integer length");
+
+    const long long length = call_["args"][0]["value"].get<long long>();
+    if (length < 0)
+      throw std::runtime_error("ValueError: negative count");
+
+    const typet bytes_type = type_handler_.get_typet("bytes", length);
+    const typet &element_type = bytes_type.subtype();
+
+    symbolt &nondet_bytes_symbol = converter_.create_tmp_symbol(
+      call_, "$nondet_bytes$", bytes_type, exprt());
+
+    code_declt decl(build_symbol(nondet_bytes_symbol));
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+
+    exprt nondet_value("sideeffect", bytes_type);
+    nondet_value.statement("nondet");
+    code_assignt nondet_assign(build_symbol(nondet_bytes_symbol), nondet_value);
+    nondet_assign.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(nondet_assign);
+
+    for (long long i = 0; i < length; ++i)
+    {
+      exprt elem = build_index(
+        build_symbol(nondet_bytes_symbol), from_integer(i, size_type()));
+
+      exprt ge0(">=", bool_type());
+      ge0.copy_to_operands(elem, from_integer(0, element_type));
+      converter_.add_instruction(code_assumet(ge0));
+
+      exprt le255("<=", bool_type());
+      le255.copy_to_operands(elem, from_integer(255, element_type));
+      converter_.add_instruction(code_assumet(le255));
+    }
+
+    return build_symbol(nondet_bytes_symbol);
   }
 
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
@@ -359,6 +418,13 @@ exprt function_call_expr::handle_isinstance() const
 
   // Build isinstance check for a given type name
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    // A tagged-scalar operand's real type lives in the runtime `.type_id`
+    // field rather than in a single static C type, so it needs its own
+    // check instead of the static-type comparisons below.
+    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+      return converter_.dynamic_type_handler_.build_isinstance_check(
+        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {
@@ -478,13 +544,50 @@ exprt function_call_expr::handle_isinstance() const
   return build_isinstance(extract_type_name(type_arg));
 }
 
+std::optional<exprt> function_call_expr::module_hasattr(
+  const nlohmann::json &obj_arg,
+  const std::string &attr_name) const
+{
+  if (obj_arg["_type"] != "Name")
+    return std::nullopt;
+
+  const std::string module_name = obj_arg["id"].get<std::string>();
+
+  // Python scoping gives a local binding of the same name precedence over the
+  // module, so only treat the name as a module when nothing else claims it.
+  symbol_id local = converter_.create_symbol_id();
+  local.set_object(module_name);
+  if (converter_.find_symbol(local.to_string()))
+    return std::nullopt;
+  local.set_function("");
+  if (
+    converter_.find_symbol(local.to_string()) ||
+    converter_.find_symbol(local.global_to_string()))
+    return std::nullopt;
+
+  const std::string module_path =
+    converter_.get_imported_module_path(module_name);
+  if (module_path.empty())
+    return std::nullopt;
+
+  // The module contributes a symbol per member: @F@name for a function,
+  // @C@name for a class, @name for a module-level variable.
+  symbol_id member(module_path, "", "");
+  member.set_object(attr_name);
+  const bool present =
+    converter_.find_symbol(member.to_string()) ||
+    converter_.find_symbol(symbol_id(module_path, "", attr_name).to_string()) ||
+    converter_.find_symbol(symbol_id(module_path, attr_name, "").to_string());
+
+  return gen_boolean(present);
+}
+
 exprt function_call_expr::handle_hasattr() const
 {
   const auto &args = call_["args"];
   if (args.size() != 2)
     throw std::runtime_error("hasattr() takes exactly 2 arguments");
 
-  const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &attr_arg = args[1];
 
   if (
@@ -494,6 +597,14 @@ exprt function_call_expr::handle_hasattr() const
       "hasattr() expects attribute name as string literal");
 
   std::string attr_name = attr_arg["value"].get<std::string>();
+
+  // A module has no symbol of its own, so get_expr() below would abort on it
+  // (GitHub #6739). Answer from the module's own symbols instead, which
+  // reports what ESBMC actually models for that module.
+  if (std::optional<exprt> known = module_hasattr(args[0], attr_name))
+    return *known;
+
+  const exprt &obj_expr = converter_.get_expr(args[0]);
   typet attr_type = array_typet(
     unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
   string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
@@ -1220,13 +1331,13 @@ exprt function_call_expr::handle_complex() const
             const exprt &cond = sym_val.operands()[0];
 
             symbolt true_sym;
-            true_sym.set_value(sym_val.operands()[1]);
-            true_sym.set_type(true_sym.get_value().type());
+            true_sym.set_value(migrate_expr(sym_val.operands()[1]));
+            true_sym.set_type(migrate_type(true_sym.get_value().type()));
             auto true_text = extract_string_from_symbol(&true_sym);
 
             symbolt false_sym;
-            false_sym.set_value(sym_val.operands()[2]);
-            false_sym.set_type(false_sym.get_value().type());
+            false_sym.set_value(migrate_expr(sym_val.operands()[2]));
+            false_sym.set_type(migrate_type(false_sym.get_value().type()));
             auto false_text = extract_string_from_symbol(&false_sym);
 
             auto parse_complex_text =
@@ -1716,11 +1827,23 @@ exprt function_call_expr::handle_any_all(ReduceOp op, const char *name)
 
 exprt function_call_expr::handle_any()
 {
+  if (std::optional<exprt> reduced = try_reduce_numpy_descriptor_method())
+    return *reduced;
+
+  if (call_["func"]["_type"] == "Attribute")
+    return handle_general_function_call();
+
   return handle_any_all(ReduceOp::Any, "any");
 }
 
 exprt function_call_expr::handle_all()
 {
+  if (std::optional<exprt> reduced = try_reduce_numpy_descriptor_method())
+    return *reduced;
+
+  if (call_["func"]["_type"] == "Attribute")
+    return handle_general_function_call();
+
   return handle_any_all(ReduceOp::All, "all");
 }
 

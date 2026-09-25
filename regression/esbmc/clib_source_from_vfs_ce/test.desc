@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc
+file ([A-Za-z]:)?/esbmc-vfs/libc/library/string\.c line \d+ column \d+ function memcpy
+^VERIFICATION FAILED$

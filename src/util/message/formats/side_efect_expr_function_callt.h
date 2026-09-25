@@ -6,7 +6,7 @@
 #endif
 
 // side_effect_expr_function_callt Specialization
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 template <>
 struct fmt::formatter<side_effect_expr_function_callt>
 {

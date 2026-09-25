@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract plain
+^ERROR: --replace-call-with-contract: cannot use 'plain': that function declares no contract clauses$
+\A(?!(.|\n)*VERIFICATION)

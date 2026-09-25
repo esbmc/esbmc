@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract f --function f
+^ERROR: --enforce-contract: cannot use 'f': a contract clause calls 'c:@F@inner', whose result the clause cannot name outside the function body$

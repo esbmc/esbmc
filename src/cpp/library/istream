@@ -1,9 +1,29 @@
 #ifndef STL_ISTREAM
 #define STL_ISTREAM
 
+#include "iosfwd"
 #include "ios"
 #include "definitions.h"
 #include "cstdio"
+
+// Extraction has no input to read, so it yields an unconstrained value of the
+// target type. Leaving the operand at its prior value proved properties that
+// real input refutes -- `int v = 7; cin >> v; assert(v == 7);` succeeded.
+extern bool nondet_bool();
+extern char nondet_char();
+extern signed char nondet_schar();
+extern unsigned char nondet_uchar();
+extern short nondet_short();
+extern unsigned short nondet_ushort();
+extern int nondet_int();
+extern unsigned int nondet_uint();
+extern long nondet_long();
+extern unsigned long nondet_ulong();
+extern long long nondet_llong();
+extern unsigned long long nondet_ullong();
+extern float nondet_float();
+extern double nondet_double();
+extern long double nondet_ldouble();
 
 namespace std
 {
@@ -72,7 +92,7 @@ public:
 
   istream(const istream &);            // disabled
   istream &operator=(const istream &); // disabled
-  streamsize _filesize;
+  unsigned int _filesize; // as in ostream (#7540)
   static streampos _filepos;
 };
 } // namespace std
@@ -88,52 +108,62 @@ istream &operator>>(istream &is, bool &val)
   {
     boolalpha(is);
   }
+  val = nondet_bool();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, char &val)
 {
+  val = nondet_char();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, signed char &val)
 {
+  val = nondet_schar();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, unsigned char &val)
 {
+  val = nondet_uchar();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, short &val)
 {
+  val = nondet_short();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, unsigned short &val)
 {
+  val = nondet_ushort();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, int &val)
 {
+  val = nondet_int();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, unsigned int &val)
 {
+  val = nondet_uint();
   is._gcount = 0;
   return is;
 }
 #if defined(__clang__) || __WORDSIZE == 64
 istream &operator>>(istream &is, long &val)
 {
+  val = nondet_long();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, unsigned long &val)
 {
+  val = nondet_ulong();
   is._gcount = 0;
   return is;
 }
@@ -141,28 +171,33 @@ istream &operator>>(istream &is, unsigned long &val)
 #if __cplusplus >= 201103L
 istream &operator>>(istream &is, long long &val)
 {
+  val = nondet_llong();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, unsigned long long &val)
 {
+  val = nondet_ullong();
   is._gcount = 0;
   return is;
 }
 #endif
 istream &operator>>(istream &is, float &val)
 {
+  val = nondet_float();
   is._gcount = 0;
   return is;
 }
 istream &operator>>(istream &is, double &val)
 {
+  val = nondet_double();
   is._gcount = 0;
   return is;
 }
 #if defined(__clang__)
 istream &operator>>(istream &is, long double &val)
 {
+  val = nondet_ldouble();
   is._gcount = 0;
   return is;
 }
@@ -318,11 +353,23 @@ ios::streampos istream::tellg()
 {
   return _filepos;
 }
+/* basic_istream and basic_iostream are alias templates declared in <iosfwd>,
+ * which this header includes; repeating them here would declare the default
+ * template argument twice (#7531). */
+
 } // namespace std
 
 namespace std
 {
-istream &ws(istream &is);
+istream &ws(istream &is)
+{
+  return is;
+}
+
+inline istream &operator>>(istream &is, istream &(*manip)(istream &))
+{
+  return manip(is);
+}
 }
 
 #endif

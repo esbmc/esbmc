@@ -1,8 +1,8 @@
 int main() {
-  int a; // 8
+  int a; // 4 * 8 = 32
   {
-    int a; // 8
-    // Total: 16
+    int a; // 4 * 8 = 32
+    // Total: 64
   }
   return 0;
 }

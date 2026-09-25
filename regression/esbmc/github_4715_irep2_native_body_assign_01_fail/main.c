@@ -3,7 +3,7 @@
 // natively does not corrupt the assigned values or suppress bug detection: the
 // value stored by the native code_assign2t in set() must reach main(), so the
 // wrong-value assertion is a reachable violation reported as VERIFICATION
-// FAILED under --irep2-native-body.
+// FAILED under native conversion.
 #include <assert.h>
 
 void set(int *p, int v)

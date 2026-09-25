@@ -1,0 +1,10 @@
+CORE
+main.cpp
+--multi-property --assertion-coverage --witness-output-yaml w.yaml --witness-output-graphml w.graphml --cex-output cex.txt
+^Assertion Instances Coverage: 100%$
+SEED_FILE base-k0-0-w.yaml SENTINEL_NOT_OVERWRITTEN
+SEED_FILE base-k0-0-w.graphml SENTINEL_NOT_OVERWRITTEN
+CHECK_FILE base-k0-0-w.yaml contains SENTINEL_NOT_OVERWRITTEN
+CHECK_FILE base-k0-0-w.graphml contains SENTINEL_NOT_OVERWRITTEN
+CHECK_FILE base-k0-0-cex.txt absent Violated property
+CHECK_FILE base-k0-0-cex.txt contains Reached:

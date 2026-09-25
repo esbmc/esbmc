@@ -1,1 +1,12 @@
+#pragma once
+
 #include <locale.h>
+
+// [clocale.syn]: <clocale> declares the C locale facilities in namespace std.
+// Mirrors the cstring/cstdlib models.
+namespace std
+{
+using ::lconv;
+using ::localeconv;
+using ::setlocale;
+} // namespace std

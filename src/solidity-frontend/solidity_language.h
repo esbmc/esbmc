@@ -12,7 +12,7 @@
 
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <util/language.h>
+#include <util/lang/language.h>
 #include <fstream>
 #include <sstream>
 #include <nlohmann/json.hpp>

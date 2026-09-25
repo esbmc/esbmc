@@ -18,18 +18,12 @@ struct Room
   ~Room() { dtor_calls++; }
 };
 
-struct House
-{
-  Room *rm;
-  House() { rm = new Room(); }
-};
-
 int main()
 {
-  House h;
-  // `new Room()` materialises a temporary that is copied into the heap object
-  // and then destroyed, so the destructor runs exactly once during
-  // construction. Without the fix it was dropped (dtor_calls == 0).
+  // The discarded temporary is destroyed at the end of the full expression,
+  // running ~Room exactly once. If get_destructor() fails on the degraded
+  // inline type, no destructor is scheduled and the count stays 0.
+  Room();
   __ESBMC_assert(dtor_calls == 1, "dtor count");
   return 0;
 }

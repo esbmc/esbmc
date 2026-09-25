@@ -1,8 +1,8 @@
 #include <cassert>
 #include <cstring>
 #include <langapi/mode.h>
-#include <util/config.h>
-#include <util/language.h>
+#include <util/config/config.h>
+#include <util/lang/language.h>
 
 namespace
 {

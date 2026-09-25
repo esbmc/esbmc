@@ -1,0 +1,4 @@
+CORE
+main.c
+--neurosym --neurosym-prog fake-neurosym.sh
+requires a local interactive SMT-LIB2 solver

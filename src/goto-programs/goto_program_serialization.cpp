@@ -1,7 +1,7 @@
 #include <goto-programs/goto_program_irep.h>
 #include <goto-programs/goto_program_serialization.h>
 #include <sstream>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 
 void goto_program_serializationt::convert(
   const goto_programt &goto_program,

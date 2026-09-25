@@ -1,4 +1,4 @@
-KNOWNBUG
+THOROUGH
 main.py
 --incremental-bmc
 ^VERIFICATION SUCCESSFUL$

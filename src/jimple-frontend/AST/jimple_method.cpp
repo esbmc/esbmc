@@ -1,13 +1,14 @@
 #include <jimple-frontend/AST/jimple_class_member.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
 
 exprt jimple_method::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &) const
 {
-  // Dummy will be return expression. It will just hold the type
+  // Returned as an empty placeholder; the method symbol is registered via
+  // move_symbol_to_context below.
   exprt dummy;
   code_typet method_type;
   typet inner_type;
@@ -15,7 +16,8 @@ exprt jimple_method::to_exprt(
   method_type.return_type() = inner_type;
 
   auto id = get_method_name(class_name, name);
-  auto symbol = create_jimple_symbolt(method_type, class_name, name, id);
+  auto symbol =
+    create_jimple_symbolt(migrate_type(method_type), class_name, name, id);
 
   std::string symbol_name = symbol.id.as_string();
 
@@ -39,8 +41,8 @@ exprt jimple_method::to_exprt(
     param_id = temp;
     param_name = oss.str();
 
-    auto param_symbol =
-      create_jimple_symbolt(this_type, class_name, param_name, param_id, id);
+    auto param_symbol = create_jimple_symbolt(
+      migrate_type(this_type), class_name, param_name, param_id, id);
     param_symbol.lvalue = true;
     param_symbol.is_parameter = true;
     param_symbol.file_local = true;
@@ -73,8 +75,8 @@ exprt jimple_method::to_exprt(
     param.cmt_base_name(param_name);
     param.cmt_identifier(param_id);
 
-    auto param_symbol =
-      create_jimple_symbolt(param_type, class_name, param_name, param_id, id);
+    auto param_symbol = create_jimple_symbolt(
+      migrate_type(param_type), class_name, param_name, param_id, id);
     param_symbol.lvalue = true;
     param_symbol.is_parameter = true;
     param_symbol.file_local = true;
@@ -87,8 +89,8 @@ exprt jimple_method::to_exprt(
   if (!method_type.arguments().size())
     method_type.make_ellipsis();
 
-  added_symbol.set_type(method_type);
-  added_symbol.set_value(body->to_exprt(ctx, class_name, this->name));
+  added_symbol.set_type(migrate_type(method_type));
+  added_symbol.set_value(body->to_code2t(ctx, class_name, this->name));
 
   return dummy;
 }

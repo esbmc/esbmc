@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++11 --unwind 2
+^VERIFICATION FAILED$

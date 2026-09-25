@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -8,11 +9,78 @@
 #include <functional>
 #include <unordered_map>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
 namespace json_utils
 {
+inline bool
+ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b);
+
+inline bool ast_location_key(const std::string &k)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  for (const char *lk : loc_keys)
+    if (k == lk)
+      return true;
+  return false;
+}
+
+// Object case of ast_equal_ignoring_location. Split out to keep that
+// function's own decision count down.
+inline bool ast_objects_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  for (auto it = a.begin(); it != a.end(); ++it)
+  {
+    if (ast_location_key(it.key()))
+      continue;
+    if (
+      !b.contains(it.key()) ||
+      !ast_equal_ignoring_location(it.value(), b[it.key()]))
+      return false;
+  }
+  for (auto it = b.begin(); it != b.end(); ++it)
+    if (!ast_location_key(it.key()) && !a.contains(it.key()))
+      return false;
+  return true;
+}
+
+// Array case of ast_equal_ignoring_location. Split out to keep that
+// function's own decision count down.
+inline bool ast_arrays_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (size_t i = 0; i < a.size(); ++i)
+    if (!ast_equal_ignoring_location(a[i], b[i]))
+      return false;
+  return true;
+}
+
+// Structural equality of two AST JSON nodes, ignoring source-location keys
+// (lineno/col_offset/...). Two textually distinct occurrences of the same
+// expression -- e.g. the `l[i+1:]` on each side of
+// `l[i+1:] = reversed(l[i+1:])`, or `np.zeros(3)` spelled on both arms of an
+// if/else -- differ only in their location fields, so a raw `==` would
+// wrongly report them as different.
+inline bool
+ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b)
+{
+  if (a.type() != b.type())
+    return false;
+  if (a.is_object())
+    return ast_objects_equal_ignoring_location(a, b);
+  if (a.is_array())
+    return ast_arrays_equal_ignoring_location(a, b);
+  return a == b;
+}
+
 /// Convert a dotted Python module name to a filesystem path segment.
 /// Example: "pkg.mod4" -> "pkg/mod4", "l.ks.foo" -> "l/ks/foo"
 inline std::string dotted_to_path(const std::string &module_name)
@@ -68,11 +136,94 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+/// Counts every ClassDef under @p node, at any depth.
+template <typename JsonType>
+std::size_t count_class_defs(const JsonType &node)
+{
+  std::size_t count = 0;
+  if (node.is_object() && node.value("_type", "") == "ClassDef")
+    ++count;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      count += count_class_defs(child);
+  return count;
+}
+
+/// Counts the ClassDef nodes named @p class_name that sit inside a function
+/// body under @p body. Module-scope definitions are not counted: find_class
+/// already reports those.
+template <typename JsonType>
+unsigned count_function_scope_classes(
+  const JsonType &body,
+  const std::string &class_name,
+  bool in_function = false)
+{
+  unsigned count = 0;
+  for (const auto &node : body)
+  {
+    if (!node.is_object() || !node.contains("_type"))
+      continue;
+
+    const auto &type = node["_type"];
+    if (in_function && type == "ClassDef" && node["name"] == class_name)
+      ++count;
+
+    if (
+      (type == "FunctionDef" || type == "AsyncFunctionDef") &&
+      node.contains("body"))
+      count += count_function_scope_classes(node["body"], class_name, true);
+  }
+  return count;
+}
+
+/// Source lines of every ClassDef named @p class_name under @p node that the
+/// converter registers: at any scope except directly inside a class body.
+template <typename JsonType>
+void collect_class_definition_lines(
+  const JsonType &node,
+  const std::string &class_name,
+  std::vector<int> &lines)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_class_definition_lines(child, class_name, lines);
+    return;
+  }
+
+  if (!node.is_object())
+    return;
+
+  const bool is_class_def = node.value("_type", "") == "ClassDef";
+  if (is_class_def && node.value("name", "") == class_name)
+    lines.push_back(node.value("lineno", 0));
+
+  for (const auto &child : node.items())
+  {
+    // A class nested directly in a class body is never registered.
+    if (is_class_def && child.key() == "body")
+    {
+      for (const auto &stmt : child.value())
+        if (stmt.value("_type", "") != "ClassDef")
+          collect_class_definition_lines(stmt, class_name, lines);
+      continue;
+    }
+    collect_class_definition_lines(child.value(), class_name, lines);
+  }
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
   // Find class definition in the current json
   if (find_class(ast_json["body"], name) != JsonType())
+    return true;
+
+  // A class defined in a function body is an ordinary class (#6743). Accept
+  // it only when the name is unambiguous: a class symbol is keyed by name
+  // alone, so same-named classes in two functions share one symbol and
+  // resolving here would answer for whichever was converted last.
+  if (count_function_scope_classes(ast_json["body"], name) == 1)
     return true;
 
   // Cache loaded module JSONs
@@ -111,7 +262,11 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   {
     if (obj["_type"] == "ImportFrom")
     {
-      if (load_and_check(obj["module"].template get<std::string>()))
+      // `from . import X` (relative, no module name) has module == null; skip
+      // it rather than crashing on a null-to-string conversion (#6281).
+      if (
+        !obj["module"].is_null() &&
+        load_and_check(obj["module"].template get<std::string>()))
         return true;
     }
     else if (obj["_type"] == "Import")
@@ -135,21 +290,39 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   if (!ast.contains("ast_output_dir"))
     return false;
 
-  const std::string path = ast["ast_output_dir"].template get<std::string>() +
-                           "/" + dotted_to_path(module_name) + ".json";
+  const std::string rel = dotted_to_path(module_name) + ".json";
+  const std::string dir = ast["ast_output_dir"].template get<std::string>();
+  const std::string path = dir + "/" + rel;
 
   auto it = is_module_cache.find(path);
   if (it != is_module_cache.end())
     return it->second;
 
-  std::ifstream file(path);
-  bool result = file.is_open();
+  // Opening the path is not enough to decide the name *is* a module: on a
+  // case-insensitive filesystem (macOS, Windows) `Queue.json` opens
+  // `queue.json`, so the class `Queue` imported from `queue` is taken for a
+  // module and every method call on it fails to dispatch. Require a directory
+  // entry that matches byte-for-byte.
+  const std::filesystem::path full(path);
+  std::error_code ec;
+  bool result = false;
+  for (std::filesystem::directory_iterator dit(full.parent_path(), ec), end;
+       !ec && dit != end;
+       dit.increment(ec))
+  {
+    if (dit->path().filename() == full.filename())
+    {
+      result = true;
+      break;
+    }
+  }
   is_module_cache.emplace(path, result);
   return result;
 }
 
+/// Returns an empty JsonType on a miss. Never throws.
 template <typename JsonType>
-JsonType find_function(const JsonType &json, const std::string &func_name)
+JsonType try_find_function(const JsonType &json, const std::string &func_name)
 {
   for (const auto &elem : json)
   {
@@ -159,8 +332,9 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
   return JsonType();
 }
 
+/// Throws std::runtime_error on a miss.
 template <typename JsonType>
-JsonType &find_function(JsonType &json, const std::string &func_name)
+JsonType &find_function_or_throw(JsonType &json, const std::string &func_name)
 {
   for (auto &elem : json)
   {
@@ -168,6 +342,28 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
       return elem;
   }
   throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+/// True when `from <module> import <entity>` appears at the AST top level.
+template <typename JsonType>
+bool is_imported_from(
+  const JsonType &ast,
+  const std::string &module,
+  const std::string &entity)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
+      stmt.contains("module") && stmt["module"] == module &&
+      stmt.contains("names"))
+    {
+      for (const auto &name : stmt["names"])
+        if (name.contains("name") && name["name"] == entity)
+          return true;
+    }
+  }
+  return false;
 }
 
 template <typename JsonType>
@@ -324,8 +520,27 @@ inline std::vector<std::string> split_function_path(const std::string &function)
   return path;
 }
 
+// The annotation pass names a method "Cls@C@m". For such a @p name, return the
+// body of class Cls in @p body (null if absent) and strip @p name to "m";
+// otherwise return @p body unchanged.
+template <typename JsonType>
+const JsonType *class_method_scope(const JsonType &body, std::string &name)
+{
+  const size_t sep = name.find("@C@");
+  if (sep == std::string::npos)
+    return &body;
+  const std::string class_name = name.substr(0, sep);
+  name.erase(0, sep + 3);
+  const JsonType *scope = nullptr;
+  for (const auto &elem : body)
+    if (elem["_type"] == "ClassDef" && elem["name"] == class_name)
+      scope = &elem["body"];
+  return scope;
+}
+
 // Find a function in AST by hierarchical path
-// Example: ["foo", "bar"] finds nested function bar() inside foo()
+// Example: ["foo", "bar"] finds nested function bar() inside foo(), and
+// ["Cls@C@m"] finds method m() of class Cls
 template <typename JsonType>
 JsonType
 find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
@@ -339,9 +554,12 @@ find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
     if (depth >= path.size())
       return JsonType();
 
-    const std::string &target_name = path[depth];
+    std::string target_name = path[depth];
+    const JsonType *scope = class_method_scope(parent_body, target_name);
+    if (scope == nullptr)
+      return JsonType();
 
-    for (const auto &elem : parent_body)
+    for (const auto &elem : *scope)
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == target_name)
       {
@@ -469,6 +687,75 @@ std::string get_annotation_type_name(const JsonType &annotation)
     return annotation["value"]["id"];
 
   return "";
+}
+
+/// Split a rendered parameter list on commas that are not inside brackets,
+/// trimming each part. "str, list[int, int]" -> {"str", "list[int, int]"}.
+inline std::vector<std::string> split_top_level_params(const std::string &s)
+{
+  std::vector<std::string> parts;
+  int depth = 0;
+  size_t start = 0;
+  for (size_t i = 0; i <= s.size(); ++i)
+  {
+    if (i == s.size() || (s[i] == ',' && depth == 0))
+    {
+      std::string part = s.substr(start, i - start);
+      const size_t b = part.find_first_not_of(" \t");
+      if (b != std::string::npos)
+        parts.push_back(part.substr(b, part.find_last_not_of(" \t") - b + 1));
+      start = i + 1;
+    }
+    else if (s[i] == '[')
+      ++depth;
+    else if (s[i] == ']')
+      --depth;
+  }
+  return parts;
+}
+
+/// The full generic spelling of an annotation node, e.g. "int",
+/// "list[tuple[int, int]]". Unlike get_annotation_type_name, which flattens a
+/// parameterized slice to its base, this recurses, so an element type that is
+/// itself a generic survives round-tripping through
+/// python_annotation::create_annotation_from_type. Empty when the node is not
+/// an annotation this renderer understands.
+template <typename JsonType>
+std::string render_annotation_type(const JsonType &annotation)
+{
+  if (!annotation.is_object())
+    return "";
+
+  if (annotation.contains("id") && annotation["id"].is_string())
+    return annotation["id"];
+
+  if (annotation.value("_type", "") != "Subscript")
+    return "";
+
+  const std::string base = render_annotation_type(annotation["value"]);
+  if (base.empty() || !annotation.contains("slice"))
+    return base;
+
+  const auto &slice = annotation["slice"];
+
+  // tuple[A, B] and dict[K, V] carry their parameters in a Tuple slice.
+  if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+  {
+    std::string params;
+    for (const auto &elt : slice["elts"])
+    {
+      const std::string rendered = render_annotation_type(elt);
+      if (rendered.empty())
+        return "";
+      if (!params.empty())
+        params += ", ";
+      params += rendered;
+    }
+    return params.empty() ? base : base + "[" + params + "]";
+  }
+
+  const std::string param = render_annotation_type(slice);
+  return param.empty() ? "" : base + "[" + param + "]";
 }
 
 template <typename JsonType>
@@ -732,6 +1019,61 @@ bool has_overload_decorator(const JsonType &func_node)
       return true;
   }
   return false;
+}
+
+/// The declared return-type name of a function `name` defined in a module this
+/// AST imports, or "" if there is none. Some operational models implement what
+/// Python calls a class as a function (collections.deque -> list[int]), and
+/// such a name is still legal in an annotation; resolving it to the return type
+/// is what makes `d: collections.deque` usable (#6639). Only imported modules
+/// are scanned, so a user function never shadows a type name this way.
+template <typename JsonType>
+std::string
+imported_function_return_type(const std::string &name, const JsonType &ast_json)
+{
+  if (!ast_json.contains("ast_output_dir") || !ast_json.contains("body"))
+    return "";
+
+  const std::string output_dir =
+    ast_json["ast_output_dir"].template get<std::string>();
+
+  auto lookup = [&](const std::string &module_name) -> std::string {
+    std::ifstream f(output_dir + "/" + dotted_to_path(module_name) + ".json");
+    if (!f.is_open())
+      return "";
+    JsonType module_json;
+    f >> module_json;
+    if (!module_json.contains("body"))
+      return "";
+    JsonType fn = try_find_function(module_json["body"], name);
+    if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
+      return "";
+    return get_annotation_type_name(fn["returns"]);
+  };
+
+  for (const auto &obj : ast_json["body"])
+  {
+    if (obj["_type"] == "ImportFrom")
+    {
+      if (obj["module"].is_null())
+        continue;
+      const std::string r = lookup(obj["module"].template get<std::string>());
+      if (!r.empty())
+        return r;
+    }
+    else if (obj["_type"] == "Import")
+    {
+      for (const auto &imported : obj["names"])
+      {
+        const std::string r =
+          lookup(imported["name"].template get<std::string>());
+        if (!r.empty())
+          return r;
+      }
+    }
+  }
+
+  return "";
 }
 
 } // namespace json_utils

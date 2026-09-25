@@ -1,36 +1,41 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/exception_utils.h>
+#include <python-frontend/exception/exception_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_int_overflow.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
+#include <algorithm>
+#include <charconv>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/symbol.h>
-#include <util/type.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/symtab/symbol.h>
+#include <util/irep/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <array>
 #include <cmath>
 #include <cctype>
 #include <climits>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -511,7 +516,7 @@ bool string_handler::try_extract_const_string_expr(
           if (!path.empty())
           {
             nlohmann::json func_scope =
-              json_utils::find_function(ast["body"], path.back());
+              json_utils::try_find_function(ast["body"], path.back());
             if (
               !func_scope.empty() && try_const_string_from_single_assignment(
                                        bare_name, func_scope, out))
@@ -530,6 +535,86 @@ bool string_handler::try_extract_const_string_expr(
   }
 
   return false;
+}
+
+std::string
+string_handler::fstring_repr_of_constant(const nlohmann::json &operand)
+{
+  if (operand["_type"] != "Constant")
+    return {};
+
+  const nlohmann::json &literal = operand["value"];
+  if (literal.is_number_integer())
+    return std::to_string(literal.get<long long>());
+
+  if (!literal.is_string())
+    return {};
+
+  const std::string text = literal.get<std::string>();
+  const bool needs_escape =
+    std::any_of(text.begin(), text.end(), [](unsigned char c) {
+      return c < 0x20 || c > 0x7e || c == '\'' || c == '"' || c == '\\';
+    });
+  return needs_escape ? std::string() : "'" + text + "'";
+}
+
+exprt string_handler::build_repr(const exprt &value, const locationt &location)
+{
+  // A char is an integer type but not a number. A float's repr is its str(),
+  // which __python_float_to_str renders only where it is exact.
+  const typet &type = value.type();
+  if (type_utils::is_char_type(type))
+    return nil_exprt();
+  if (type.is_bool() || type_utils::is_integer_type(type) || type.is_floatbv())
+    return convert_to_string(value);
+  if (!type_utils::is_string_type(type))
+    return nil_exprt();
+
+  symbolt *repr_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_repr");
+  if (!repr_symbol)
+    throw std::runtime_error(
+      "__python_str_repr function not found in symbol table");
+
+  exprt string_copy = value;
+  exprt str_addr =
+    get_array_base_address(ensure_null_terminated_string(string_copy));
+  exprt repr_call =
+    build_call_expr(*repr_symbol, pointer_typet(char_type()), {str_addr});
+  repr_call.location() = location;
+  return repr_call;
+}
+
+exprt string_handler::build_fstring_conversion(
+  const nlohmann::json &value,
+  int conversion,
+  const exprt &operand,
+  const locationt &location)
+{
+  // !r and !a render repr(); fold the spellings whose repr is exactly the
+  // digits or the quoted text (#7559).
+  const bool reprs = conversion == 'r' || conversion == 'a';
+  const std::string repr =
+    reprs ? fstring_repr_of_constant(value["value"]) : std::string();
+
+  if (repr.empty())
+  {
+    if (reprs)
+    {
+      exprt runtime_repr = build_repr(operand, location);
+      if (runtime_repr.is_not_nil())
+        return runtime_repr;
+    }
+    log_warning(
+      "f-string conversion '!{}' is not modelled: using a nondet string",
+      static_cast<char>(conversion));
+    return build_nondet_string_fallback(location);
+  }
+
+  typet string_type = type_handler_.build_array(char_type(), repr.size() + 1);
+  std::vector<unsigned char> chars(repr.begin(), repr.end());
+  chars.push_back('\0');
+  return make_char_array_expr(chars, string_type);
 }
 
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
@@ -706,6 +791,45 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
+std::string string_handler::cpython_float_str(double d)
+{
+  if (std::isnan(d))
+    return "nan";
+  if (std::isinf(d))
+    return d < 0 ? "-inf" : "inf";
+
+  // to_chars emits the shortest digits that read back as d, the digits
+  // CPython's repr chooses, as d.ddde<exp>. Lay them out as CPython does:
+  // scientific iff the exponent is < -4 or >= 16, with a sign and at least
+  // two exponent digits; fixed notation otherwise, keeping a ".0".
+  char buf[64];
+  const std::to_chars_result r = std::to_chars(
+    buf, buf + sizeof(buf), std::fabs(d), std::chars_format::scientific);
+  const std::string sci(buf, r.ptr);
+  const std::size_t e_pos = sci.find('e');
+  std::string digits = sci.substr(0, e_pos);
+  digits.erase(std::remove(digits.begin(), digits.end(), '.'), digits.end());
+  const int exp = std::stoi(sci.substr(e_pos + 1));
+
+  std::string out = std::signbit(d) ? "-" : "";
+  if (exp < -4 || exp >= 16)
+  {
+    out += digits.substr(0, 1);
+    if (digits.size() > 1)
+      out += "." + digits.substr(1);
+    const int mag = std::abs(exp);
+    out += std::string("e") + (exp < 0 ? "-" : "+") + (mag < 10 ? "0" : "") +
+           std::to_string(mag);
+  }
+  else if (exp < 0)
+    out += "0." + std::string(-exp - 1, '0') + digits;
+  else if (digits.size() <= static_cast<std::size_t>(exp) + 1)
+    out += digits + std::string(exp + 1 - digits.size(), '0') + ".0";
+  else
+    out += digits.substr(0, exp + 1) + "." + digits.substr(exp + 1);
+  return out;
+}
+
 // Parse the leading [[fill]align][0][width] portion of a Python format
 // spec. Returns true if any padding parameters were extracted; on success,
 // *rest is set to the remainder of the spec (precision/type) for further
@@ -774,7 +898,7 @@ static bool parse_format_padding(
 }
 
 // Apply fill/align/width padding to a literal string per Python's
-// format-spec mini-language. Returns padded as a fresh char_array expr.
+// format-spec mini-language. Returns the padded string.
 static std::string
 apply_padding(const std::string &input, char fill, char align, int width)
 {
@@ -1189,30 +1313,22 @@ exprt string_handler::convert_to_string(const exprt &expr)
     }
     else if (t.is_floatbv())
     {
-      std::string str_value = "0.0";
-      if (expr.is_constant() && !expr.value().empty())
+      // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
+      // concrete value is rendered; a 32-bit float or an empty (nondet) value
+      // stays a sound nondet string.
+      std::optional<std::string> folded;
+      if (!expr.value().empty() && bv_width(t) == 64)
       {
-        const std::string &float_bits = expr.value().as_string();
-        if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
-        {
-          str_value = float_to_string(float_bits, 64, 6);
-          // Match Python's str(float): drop trailing fractional zeros, keep
-          // at least one digit after the dot ("5.0" rather than "5.").
-          auto dot = str_value.find('.');
-          if (dot != std::string::npos)
-          {
-            size_t last_nonzero = str_value.find_last_not_of('0');
-            if (last_nonzero == dot)
-              str_value.resize(dot + 2);
-            else
-              str_value.resize(last_nonzero + 1);
-          }
-        }
+        ieee_floatt f;
+        f.from_expr(to_constant_expr(expr));
+        folded = cpython_float_str(f.to_double());
       }
+      if (!folded)
+        return build_nondet_string_fallback(expr.location());
 
       typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+        type_handler_.build_array(char_type(), folded->size() + 1);
+      std::vector<unsigned char> chars(folded->begin(), folded->end());
       chars.push_back('\0');
 
       return make_char_array_expr(chars, string_type);
@@ -1270,6 +1386,30 @@ exprt string_handler::convert_to_string(const exprt &expr)
   return make_char_array_expr(chars, string_type);
 }
 
+exprt string_handler::format_fstring_part(const nlohmann::json &value)
+{
+  exprt expr = converter_.get_expr(value["value"]);
+  const bool has_spec =
+    value.contains("format_spec") && !value["format_spec"].is_null();
+
+  // A !r/!a conversion changes the rendered text ("{s!r}" quotes). A format
+  // spec then pads the converted text, which is not modelled: a sound nondet
+  // string. !s renders the same text as the default.
+  const int conversion =
+    (value.contains("conversion") && value["conversion"].is_number())
+      ? value["conversion"].get<int>()
+      : -1;
+  if (conversion != -1 && conversion != 's')
+    return has_spec ? build_nondet_string_fallback(expr.location())
+                    : build_fstring_conversion(
+                        value, conversion, expr, expr.location());
+
+  if (has_spec)
+    return apply_format_specification(
+      expr, process_format_spec(value["format_spec"]));
+  return convert_to_string(expr);
+}
+
 exprt string_handler::get_fstring_expr(const nlohmann::json &element)
 {
   if (!element.contains("values") || element["values"].empty())
@@ -1297,36 +1437,7 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
         part_expr = converter_.get_literal(value);
       }
       else if (value["_type"] == "FormattedValue")
-      {
-        // Expression to be formatted
-        exprt expr = converter_.get_expr(value["value"]);
-
-        // A !r/!a conversion changes the rendered text ("{s!r}" quotes);
-        // rendering the unconverted value would be a wrong value that can
-        // satisfy a false assertion. Not modelled — use a sound nondet
-        // string. !s renders the same text as the default.
-        int conversion =
-          (value.contains("conversion") && value["conversion"].is_number())
-            ? value["conversion"].get<int>()
-            : -1;
-        if (conversion != -1 && conversion != 's')
-        {
-          log_warning(
-            "f-string conversion '!{}' is not modelled: using a nondet "
-            "string",
-            static_cast<char>(conversion));
-          part_expr = build_nondet_string_fallback(expr.location());
-        }
-        // Handle format specification if present
-        else if (
-          value.contains("format_spec") && !value["format_spec"].is_null())
-        {
-          std::string format = process_format_spec(value["format_spec"]);
-          part_expr = apply_format_specification(expr, format);
-        }
-        else
-          part_expr = convert_to_string(expr);
-      }
+        part_expr = format_fstring_part(value);
       else
       {
         // Other expression types
@@ -1588,7 +1699,7 @@ exprt string_handler::handle_string_membership(
       strchr_type.return_type() = char_ptr;
       strchr_type.arguments().push_back(code_typet::argumentt(char_ptr));
       strchr_type.arguments().push_back(code_typet::argumentt(int_type()));
-      new_symbol.set_type(strchr_type);
+      new_symbol.set_type(migrate_type(strchr_type));
 
       symbol_table_.add(new_symbol);
       strchr_symbol = find_cached_c_function_symbol("c:@F@strchr");
@@ -2271,18 +2382,13 @@ exprt string_handler::handle_ord_conversion(
   exprt str_expr = ensure_null_terminated_string(string_copy);
   exprt str_addr = get_array_base_address(str_expr);
 
-  // Code point of the single character: (int) *str_addr.
-  // V.3: build the dereference in IREP2, back-migrating once. dereference2t
-  // carries only (type, value) — no offset/guard — so the round-trip is
-  // byte-identical to dereference_exprt(str_addr, char) (mirrors build_index/
-  // build_dereference). Restore the exact element type migrate_type may drop.
-  expr2tc str_addr2;
-  migrate_expr(str_addr, str_addr2);
-  exprt first_char =
-    migrate_expr_back(dereference2tc(migrate_type(char_type()), str_addr2));
-  first_char.type() = char_type();
-  first_char.location() = location;
-  return build_typecast(first_char, int_type());
+  symbolt *ord_symbol = find_cached_c_function_symbol("c:@F@__python_ord");
+  if (!ord_symbol)
+    throw std::runtime_error("__python_ord function not found in symbol table");
+
+  exprt ord_call = build_call_expr(*ord_symbol, int_type(), {str_addr});
+  ord_call.location() = location;
+  return ord_call;
 }
 
 exprt string_handler::try_handle_len_string_fast_path(
@@ -3085,6 +3191,7 @@ exprt string_handler::handle_string_attribute_call(
         *this,
         method_name,
         call_json,
+        receiver_json,
         args,
         keyword_values,
         get_receiver_expr,
@@ -3125,6 +3232,7 @@ exprt string_handler::handle_string_attribute_call(
       string_method_dispatch::dispatch_replace_method(
         *this,
         method_name,
+        call_json,
         args,
         keyword_values,
         get_receiver_expr,
@@ -3269,8 +3377,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       const std::string &scope_func = converter_.get_current_func_name();
       const nlohmann::json &ast = converter_.get_ast_json();
       const nlohmann::json func_node =
-        scope_func.empty() ? nlohmann::json()
-                           : json_utils::find_function(ast["body"], scope_func);
+        scope_func.empty()
+          ? nlohmann::json()
+          : json_utils::try_find_function(ast["body"], scope_func);
       const nlohmann::json &scan_body =
         func_node.contains("body") ? func_node["body"] : ast["body"];
       if (list_var_is_mutated(scan_body, var_name))

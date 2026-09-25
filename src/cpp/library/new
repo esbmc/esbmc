@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <exception>
+#include "OM_compiler_defs.h" // OM_NOEXCEPT
 
 /* These are not in the 'std' namespace */
 
@@ -55,3 +56,16 @@ enum class align_val_t : size_t
 #endif
 
 } // namespace std
+
+namespace std
+{
+// Tag type for non-throwing allocation ([new.syn]); the model's operator
+// new does not throw, so the tag only needs to exist and be passable.
+struct nothrow_t
+{
+};
+const nothrow_t nothrow = {};
+} // namespace std
+
+void *operator new(size_t count, const std::nothrow_t &) OM_NOEXCEPT;
+void *operator new[](size_t count, const std::nothrow_t &) OM_NOEXCEPT;

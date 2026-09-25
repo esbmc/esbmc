@@ -1,0 +1,12 @@
+CORE
+main.py
+--generate-html-report
+^Generating HTML report for trace: 1$
+^VERIFICATION FAILED$
+CHECK_FILE report-1.html contains <h3>Bug Summary</h3>\s*<table class=["']simpletable["']>
+CHECK_FILE report-1.html contains <div id=["']?File1["']?>\s*<h4 class=["']?FileName["']?>[^<]*html_report_python_fail[\\/]main\.py</h4>
+CHECK_FILE report-1.html contains <span class=["']keyword["']>def</span>
+CHECK_FILE report-1.html contains <span class=["']keyword["']>return</span>
+CHECK_FILE report-1.html contains <span class=["']keyword["']>assert</span>
+CHECK_FILE report-1.html absent <span class=["']keyword["']>int</span>
+CHECK_FILE report-1.html contains <div id=["']EndPath["'] class=["']msg msgEvent["']

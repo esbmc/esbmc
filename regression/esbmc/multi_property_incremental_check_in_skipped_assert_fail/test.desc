@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 6
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+12\s+assertion \*p == 0$
+^\s+UNKNOWN\s+\[main\.array-bounds-violated\.1\]\s+line\s+12\s+dereference failure: array bounds violated$

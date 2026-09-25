@@ -161,20 +161,19 @@ smt_solver_baset *create_new_smtlib_solver(
 
 std::string smtlib_convt::dump_smt()
 {
+  assert(emit_opt_output);
+  emit_opt_output.emit("%s\n", "(check-sat)");
+
   auto path = config.options.get_option("output");
   if (path.empty() || path == "-")
-  {
-    assert(emit_opt_output);
-    emit_opt_output.emit("%s\n", "(check-sat)");
     log_status("SMT formula written to standard output");
-  }
   else
-  {
-    assert(emit_opt_output);
-    emit_opt_output.emit("%s\n", "(check-sat)");
     log_status("SMT formula written to output file {}", path);
-  }
-  return "SMT formula dumped successfully";
+
+  /* The formula was already written through emit_opt_output, which targets the
+   * --output path. Return empty so bmc.cpp's dump path does not reopen and
+   * overwrite that same file with this string (issue #6059). */
+  return "";
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)
@@ -391,18 +390,21 @@ smtlib_convt::smtlib_convt(
   const namespacet &_ns,
   const optionst &_options,
   const std::string &solver_prog,
-  const std::string &output_path)
+  const std::string &output_path,
+  const std::string &logic)
   : smt_solver_baset(_ns, _options),
     array_iface(true, false),
     fp_convt(this),
     emit_proc(solver_prog),
     emit_opt_output(output_path)
 {
-  std::string logic =
-    options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
+  std::string used_logic = !logic.empty() ? logic
+                           : options.get_bool_option("int-encoding")
+                             ? "QF_AUFLIRA"
+                             : "QF_AUFBV";
 
   emit("%s", "(set-option :produce-models true)\n");
-  emit("(set-logic %s)\n", logic.c_str());
+  emit("(set-logic %s)\n", used_logic.c_str());
   emit("%s", "(set-info :status unknown)\n");
 }
 
@@ -751,7 +753,10 @@ sexpr smtlib_convt::get_value(smt_astt a) const
   return respval;
 }
 
-static BigInt interp_numeric(const sexpr &respval, bool is_signed)
+/* The magnitude a model literal denotes. Both bitvector literal forms stand
+ * for nat2bv[m](n), a natural number (SMT-LIB FixedSizeBitVectors theory), so
+ * the sign is not theirs to carry -- get_bv() recovers it from the sort. */
+static BigInt interp_numeric(const sexpr &respval)
 {
   yytokentype tok = static_cast<yytokentype>(respval.token);
   switch (tok)
@@ -761,7 +766,7 @@ static BigInt interp_numeric(const sexpr &respval, bool is_signed)
   case TOK_HEXNUM:
     return string2integer(respval.data.substr(2), 16);
   case TOK_BINNUM:
-    return binary2integer(respval.data.substr(2), is_signed);
+    return binary2integer(respval.data.substr(2), false);
   default:
     log_error(
       "interpreting S-expr of token type {} as an integer",
@@ -772,12 +777,14 @@ static BigInt interp_numeric(const sexpr &respval, bool is_signed)
 
 BigInt smtlib_convt::get_bv(smt_astt a, bool is_signed)
 {
-  sexpr respval = get_value(a);
+  BigInt m = interp_numeric(get_value(a));
+  if (!is_signed)
+    return m;
 
-  // Attempt to read an integer.
-  BigInt m = interp_numeric(respval, is_signed);
-
-  return m;
+  /* Reinterpret at the sort's width, not the literal's: a solver that states a
+   * wider or narrower one than it was asked for would otherwise change the
+   * value rather than be caught (#7929). */
+  return binary2integer(integer2binary(m, a->sort->get_data_width()), true);
 }
 
 expr2tc
@@ -875,12 +882,16 @@ tvt smtlib_convt::l_get(smt_astt a)
 
   if (second.token == TOK_SIMPLESYM && second.data == "???")
   {
-    /* Yices sometimes returns '???', e.g. when using get-value of stores */
+    /* Yices sometimes returns '???', e.g. when using get-value of stores.
+     * That is an incomplete model rather than a quantified term, so log it:
+     * get_bool() no longer aborts here, and the two causes of TV_UNKNOWN
+     * would otherwise be indistinguishable in a bug report. */
+    log_debug("solver", "smtlib solver returned no boolean value (unknown)");
     return tvt(tvt::TV_UNKNOWN);
   }
 
   /* Boolector sometimes returns #b0 or #b1 for Bool-sorted constants */
-  BigInt m = interp_numeric(second, false);
+  BigInt m = interp_numeric(second);
   if (m == 0)
     return tvt(false);
   if (m == 1)
@@ -889,22 +900,25 @@ tvt smtlib_convt::l_get(smt_astt a)
   abort();
 }
 
-bool smtlib_convt::get_bool(smt_astt a)
+tvt smtlib_convt::get_bool(smt_astt a)
 {
-  tvt tv = l_get(a);
-
-  if (tv.is_true())
-    return true;
-  if (tv.is_false())
-    return false;
-
-  abort();
+  return l_get(a);
 }
 
 const std::string smtlib_convt::solver_text()
 {
   if (emit_proc)
-    return "'" + options.get_option("smtlib-solver-prog") + "'";
+  {
+    // A short label; the full command is at log_debug in oneshot_process.cpp.
+    std::string prog = options.get_option("smtlib-solver-prog");
+    size_t sp = prog.find(' ');
+    std::string first_tok =
+      (sp == std::string::npos) ? prog : prog.substr(0, sp);
+    size_t slash = first_tok.find_last_of('/');
+    std::string base =
+      (slash == std::string::npos) ? first_tok : first_tok.substr(slash + 1);
+    return base.empty() ? prog : base;
+  }
 
   if (emit_opt_output)
     return "Text output";

@@ -2,6 +2,8 @@
 
 // SOS semantic rule tags — used to annotate LdIR nodes with the rule that
 // generated them, enabling structured proof obligations in T1.2.
+// The rules are specified in docs/safe-ld-sos-semantics.md; the summaries
+// below are the rule conclusions, not the full premises.
 enum class SosRule
 {
   // Contact rules
@@ -10,15 +12,22 @@ enum class SosRule
   NC_Contact_True,  // [NC-TRUE]  IN=T, var=F  => pf_out = T
   NC_Contact_False, // [NC-FALSE] IN=T, var=T  => pf_out = F
 
+  // Transition-sensing contacts. The operand is compared against its value at
+  // the previous scan boundary, which the scan epilogue latches.
+  Rising_Contact,  // [P-EDGE]  pf_out = IN and var and not prev(var)
+  Falling_Contact, // [N-EDGE]  pf_out = IN and not var and prev(var)
+
   // Coil rules
   Output_Coil, // [COIL]   var := pf
   Set_Coil,    // [SET]    if pf then var := true
   Reset_Coil,  // [RESET]  if pf then var := false
 
-  // Timer rules (fixed-tick model)
-  TON_Step, // [TON]    if IN then ET++ else ET:=0; Q := (ET >= PT)
-  TOF_Step, // [TOF]    if !IN then ET++ else ET:=0; Q := (ET < PT)
-  TP_Step,  // [TP]     if IN and Q then ET++; Q := (ET < PT)
+  // Timer rules (fixed-tick model). Every timer starts with Q false: at
+  // power-up it has not run, so ET must not read as an expired interval.
+  TON_Step, // [TON] if IN then ET++ else ET:=0; Q := IN and ET >= PT
+  TOF_Step, // [TOF] if IN then {ET:=0; Q:=T} elif Q then {ET++; Q := ET < PT}
+  TP_Step,  // [TP]  if Q then {ET++; Q := ET < PT}
+            //       elif rising IN then {ET:=0; Q:=T}
 
   // Counter rules
   CTU_Step, // [CTU]    rising CU => CV++; Q := (CV >= PV); R => CV:=0
@@ -26,4 +35,7 @@ enum class SosRule
 
   // Arithmetic rules
   Arith_Step, // [ARITH]  OUT := IN1 op IN2
+
+  // Network rules
+  Feedback_Snapshot, // [FEEDBACK] prev(var) := var, before any rung runs
 };

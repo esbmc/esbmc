@@ -4,7 +4,7 @@
 #include <solvers/smt/smt_sort.h>
 
 #include <irep2/irep2_expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 class smt_solver_baset;
 
@@ -41,6 +41,13 @@ public:
   smt_ast(smt_solver_baset *ctx, smt_sortt s);
   virtual ~smt_ast() = default;
 
+  /** The same solver term under a different sort. The default rewrites this
+   *  node's sort in place, which is what the bit-vector-only backends have
+   *  always relied on -- there both sorts are the same solver sort. A backend
+   *  where they are genuinely different solver sorts must return a fresh node,
+   *  or the rewrite corrupts every other holder of this shared ast. */
+  virtual smt_astt with_sort(smt_solver_baset *ctx, smt_sortt s) const;
+
   // "this" is the true operand.
   virtual smt_astt
   ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const;
@@ -56,8 +63,7 @@ public:
    *  for some special cases up to the backend, there may be optimizations made
    *  for array or tuple assigns, and so forth.
    *  @param ctx SMT context to do the assignment in.
-   *  @param sym Symbol to assign to
-   *  @return AST representing the assigned symbol */
+   *  @param sym Symbol to assign to */
   virtual void assign(smt_solver_baset *ctx, smt_astt sym) const;
 
   /** Abstractly produce an "update", i.e., an array 'with' or tuple 'with'.

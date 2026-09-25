@@ -1,4 +1,5 @@
 #include <ld-frontend/semantics/type_checker.h>
+#include <algorithm>
 #include <sstream>
 
 // -----------------------------------------------------------------------
@@ -174,6 +175,21 @@ void TypeChecker::check_rung_element(const RungElement &elem)
 void TypeChecker::check(const LdAst &ast)
 {
   build_var_type_map(ast);
+
+  // Second, independent guard on the vacuity of #7354: the parser's body
+  // whitelist is keyed on notation, this catches an empty model however it
+  // arose (empty <LD/>, namespace-prefixed document, a dropped element).
+  const bool has_logic =
+    std::any_of(
+      ast.networks.begin(),
+      ast.networks.end(),
+      [](const NetworkNode &n) { return !n.rungs.empty(); }) ||
+    !ast.user_fb_instances.empty();
+  if (!has_logic)
+    throw TypeCheckError(
+      ast.source_file +
+      ": no ladder logic was translated; the scan cycle "
+      "would be empty and every property vacuous");
 
   for (const auto &net : ast.networks)
     for (const auto &rung : net.rungs)

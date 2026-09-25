@@ -1,0 +1,4 @@
+CORE
+cbmc_unknown_type.goto
+--binary
+^ERROR: Unexpected type: totally_unknown_type_id$
