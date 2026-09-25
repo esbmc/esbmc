@@ -369,7 +369,8 @@ public:
   /// "destructor"), which ret_type models as empty; and whether it is an
   /// implicit copy/move constructor of a union. Unreflected, like the fields
   /// above. Carried because vptr initialisation and the union copy/move
-  /// synthesis read them (docs/roadmap/frontends-to-irep2.md §50.2).
+  /// synthesis read them (docs/roadmap/frontends-to-irep2.md §50.2,
+  /// scope-clang-cpp-irep2.md §12).
   irep_idt return_marker;
   bool ellipsis;
   bool implicit_union_copy_move;

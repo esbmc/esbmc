@@ -1605,6 +1605,21 @@ TEST_CASE("a function type keeps its exception specification", "[migrate]")
     REQUIRE(static_cast<const typet &>(decl[0]) == signedbv_typet(32));
   }
 
+  SECTION("a constructor and a destructor keep their pseudo return types")
+  {
+    code_typet ctor = f, dtor = f;
+    ctor.return_type() = typet("constructor");
+    ctor.return_type().set("#implicit_union_copy_move_constructor", true);
+    dtor.return_type() = typet("destructor");
+    const typet ctor_back =
+      to_code_type(migrate_type_back(migrate_type(ctor))).return_type();
+    REQUIRE(ctor_back.id() == "constructor");
+    REQUIRE(ctor_back.get_bool("#implicit_union_copy_move_constructor"));
+    REQUIRE(
+      to_code_type(migrate_type_back(migrate_type(dtor))).return_type().id() ==
+      "destructor");
+  }
+
   SECTION("no specification gains no key")
   {
     const typet back = migrate_type_back(migrate_type(f));

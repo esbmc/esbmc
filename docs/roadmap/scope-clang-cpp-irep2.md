@@ -2576,6 +2576,13 @@ Two further things the carry exposed, each measured:
   which it only ever saw once the marker survived; it now adds one only when the call is short of the
   constructor's parameters (`cpp/irep2_array_vla_construction` failed without it).
 
+What the round trip still drops from a ctor/dtor type, from diffing `--symbol-table-only`: `#inlined`
+on the code type, `#constant` on a reference parameter's pointee, and an implicit parameter's
+`#location`, `name` and plain `identifier`. The one reader found is `c_link.cpp:193`, where `#inlined`
+silences a duplicate-definition warning across translation units; a two-file probe with inline
+ctors and dtors raised none. The argument-count rule in `goto_sideeffects` also cannot tell a variadic
+constructor called without its object from one called with it; no probe reaches that shape.
+
 `esbmc-cpp/{cpp,try_catch}` 1 333 of 1 339 pass, and the six failures (`github_7433*`, `ch8_5`) are the
 exception-type spelling pins another branch updates; the rest of `esbmc-cpp` (1 927) passes apart from
 seven tests at the 120 s cap that take the same time on the base binary.
