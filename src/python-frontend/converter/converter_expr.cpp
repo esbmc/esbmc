@@ -71,6 +71,66 @@ static exprt build_shape_tuple_expr(
   return tuple_expr;
 }
 
+static exprt build_shape_size_expr(const std::vector<exprt> &dims)
+{
+  exprt total = from_integer(1, int_type());
+  for (const exprt &dim : dims)
+    total = python_expr::build_mul(total, dim, int_type());
+  return total;
+}
+
+static std::vector<exprt> build_dim_exprs(const std::vector<int> &dims)
+{
+  std::vector<exprt> dim_exprs;
+  dim_exprs.reserve(dims.size());
+  for (int dim : dims)
+    dim_exprs.push_back(from_integer(dim, int_type()));
+  return dim_exprs;
+}
+
+static exprt build_runtime_list_len_expr(
+  contextt &symbol_table,
+  const exprt &list_expr,
+  const std::string &diagnostic)
+{
+  const symbolt *size_func = symbol_table.find_symbol("c:@F@__ESBMC_list_size");
+  if (!size_func)
+    throw std::runtime_error(diagnostic);
+
+  expr2tc base2;
+  migrate_expr(list_expr, base2);
+  if (!is_pointer_type(base2->type))
+    base2 = address_of2tc(base2->type, base2);
+  expr2tc size_call = side_effect_function_call2tc(
+    migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+  return migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
+}
+
+static bool is_python_list_model_type(
+  typet type,
+  const typet &list_type,
+  const namespacet &ns)
+{
+  if (type.id() == "symbol")
+    type = ns.follow(type);
+  if (type == list_type)
+    return true;
+
+  typet list_object_type = list_type;
+  if (list_object_type.is_pointer())
+    list_object_type = ns.follow(list_object_type.subtype());
+
+  if (type == list_object_type)
+    return true;
+  if (!type.is_pointer())
+    return false;
+
+  typet subtype = type.subtype();
+  if (subtype.id() == "symbol")
+    subtype = ns.follow(subtype);
+  return subtype == list_type || subtype == list_object_type;
+}
+
 static nlohmann::json normalize_bool_index_node(const nlohmann::json &node)
 {
   if (
@@ -562,6 +622,8 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
       *this, {from_integer(it->second.length, int_type())});
   if (attr_name == "ndim")
     return from_integer(1, int_type());
+  if (attr_name == "size")
+    return from_integer(it->second.length, int_type());
   return std::nullopt;
 }
 
@@ -1352,35 +1414,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         {
           if (base_type.is_array())
           {
-            std::vector<int> dims =
-              type_handler_.get_array_type_shape(base_type);
-            std::vector<exprt> dim_exprs;
-            dim_exprs.reserve(dims.size());
-            for (int dim : dims)
-              dim_exprs.push_back(from_integer(dim, int_type()));
+            std::vector<exprt> dim_exprs =
+              build_dim_exprs(type_handler_.get_array_type_shape(base_type));
             return build_shape_tuple_expr(*this, dim_exprs);
           }
 
           const typet list_type = type_handler_.get_list_type();
-          if (
-            base_type == list_type || (base_expr.type().is_pointer() &&
-                                       base_expr.type().subtype() == list_type))
+          if (is_python_list_model_type(base_expr.type(), list_type, ns))
           {
-            const symbolt *size_func =
-              symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-            if (!size_func)
-              throw std::runtime_error(
-                "__ESBMC_list_size not found for list shape access");
-
-            // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
-            expr2tc base2;
-            migrate_expr(base_expr, base2);
-            if (!is_pointer_type(base2->type))
-              base2 = address_of2tc(base2->type, base2);
-            expr2tc size_call = side_effect_function_call2tc(
-              migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
-            exprt list_len = migrate_expr_back(
-              typecast2tc(migrate_type(int_type()), size_call));
+            exprt list_len = build_runtime_list_len_expr(
+              symbol_table_,
+              base_expr,
+              "__ESBMC_list_size not found for list shape access");
             return build_shape_tuple_expr(*this, {list_len});
           }
         }
@@ -1401,10 +1446,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
 
           const typet list_type = type_handler_.get_list_type();
-          if (
-            base_type == list_type || (base_expr.type().is_pointer() &&
-                                       base_expr.type().subtype() == list_type))
+          if (is_python_list_model_type(base_expr.type(), list_type, ns))
             return from_integer(1, int_type());
+        }
+
+        if (attr_name == "size")
+        {
+          if (base_type.is_array())
+          {
+            std::vector<exprt> dim_exprs =
+              build_dim_exprs(type_handler_.get_array_type_shape(base_type));
+            return build_shape_size_expr(dim_exprs);
+          }
+
+          const typet list_type = type_handler_.get_list_type();
+          if (is_python_list_model_type(base_expr.type(), list_type, ns))
+            return build_runtime_list_len_expr(
+              symbol_table_,
+              base_expr,
+              "__ESBMC_list_size not found for list size access");
         }
 
         // `.shape`/`.ndim` on a boolean-mask row-selection result
@@ -1413,7 +1473,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // `rows` buffer's physical (worst-case) capacity; rank is always 2
         // (row selection is only modelled for 2-D arrays).
         if (
-          (attr_name == "shape" || attr_name == "ndim") &&
+          (attr_name == "shape" || attr_name == "ndim" ||
+           attr_name == "size") &&
           python_list::is_bool_mask_rows_type(base_type))
         {
           if (attr_name == "ndim")
@@ -1436,8 +1497,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           exprt count_as_int =
             migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
 
-          return build_shape_tuple_expr(
-            *this, {count_as_int, from_integer(num_cols, int_type())});
+          exprt col_count = from_integer(num_cols, int_type());
+          if (attr_name == "size")
+            return build_shape_size_expr({count_as_int, col_count});
+
+          return build_shape_tuple_expr(*this, {count_as_int, col_count});
         }
 
         if (base_type.is_struct())
@@ -1798,35 +1862,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (sym_type.is_array())
         {
-          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
-          std::vector<exprt> dim_exprs;
-          dim_exprs.reserve(dims.size());
-          for (int dim : dims)
-            dim_exprs.push_back(from_integer(dim, int_type()));
+          std::vector<exprt> dim_exprs =
+            build_dim_exprs(type_handler_.get_array_type_shape(sym_type));
           expr = build_shape_tuple_expr(*this, dim_exprs);
           break;
         }
 
         const typet list_type = type_handler_.get_list_type();
-        if (
-          sym_type == list_type || (symbol->get_type().is_pointer() &&
-                                    symbol->get_type().subtype() == list_type))
+        if (is_python_list_model_type(symbol->get_type(), list_type, ns))
         {
-          const symbolt *size_func =
-            symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-          if (!size_func)
-            throw std::runtime_error(
-              "__ESBMC_list_size not found for list shape access");
-
-          // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
-          expr2tc base2;
-          migrate_expr(expr, base2);
-          if (!is_pointer_type(base2->type))
-            base2 = address_of2tc(base2->type, base2);
-          expr2tc size_call = side_effect_function_call2tc(
-            migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
-          exprt list_len =
-            migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
+          exprt list_len = build_runtime_list_len_expr(
+            symbol_table_,
+            expr,
+            "__ESBMC_list_size not found for list shape access");
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
@@ -1853,11 +1901,36 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         const typet list_type = type_handler_.get_list_type();
-        if (
-          sym_type == list_type || (symbol->get_type().is_pointer() &&
-                                    symbol->get_type().subtype() == list_type))
+        if (is_python_list_model_type(symbol->get_type(), list_type, ns))
         {
           expr = from_integer(1, int_type());
+          break;
+        }
+      }
+
+      if (attr_name == "size")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+
+        if (sym_type.is_array())
+        {
+          std::vector<exprt> dim_exprs =
+            build_dim_exprs(type_handler_.get_array_type_shape(sym_type));
+          expr = build_shape_size_expr(dim_exprs);
+          break;
+        }
+
+        const typet list_type = type_handler_.get_list_type();
+        if (is_python_list_model_type(symbol->get_type(), list_type, ns))
+        {
+          expr = build_runtime_list_len_expr(
+            symbol_table_,
+            expr,
+            "__ESBMC_list_size not found for list size access");
           break;
         }
       }
@@ -1865,7 +1938,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
       // general attribute-access path above.
       if (
-        (attr_name == "shape" || attr_name == "ndim") &&
+        (attr_name == "shape" || attr_name == "ndim" || attr_name == "size") &&
         python_list::is_bool_mask_rows_type(symbol->get_type()))
       {
         if (attr_name == "ndim")
@@ -1888,8 +1961,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         exprt count_as_int =
           migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
 
-        expr = build_shape_tuple_expr(
-          *this, {count_as_int, from_integer(num_cols, int_type())});
+        exprt col_count = from_integer(num_cols, int_type());
+        if (attr_name == "size")
+          expr = build_shape_size_expr({count_as_int, col_count});
+        else
+          expr = build_shape_tuple_expr(*this, {count_as_int, col_count});
         break;
       }
 

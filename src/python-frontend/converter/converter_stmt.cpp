@@ -332,6 +332,126 @@ std::size_t numpy_shape_element_count(const std::vector<std::size_t> &shape)
     shape.begin(), shape.end(), std::size_t{1}, std::multiplies<>());
 }
 
+std::optional<std::vector<std::size_t>>
+numpy_raw_shape_sequence(const nlohmann::json &shape_arg)
+{
+  if (shape_arg.value("_type", "") == "Constant")
+  {
+    std::optional<long long> dim = literal_int_value(shape_arg);
+    if (!dim || *dim < 0)
+      return std::nullopt;
+    return std::vector<std::size_t>{static_cast<std::size_t>(*dim)};
+  }
+
+  if (!shape_arg.contains("elts"))
+    return std::nullopt;
+
+  std::vector<std::size_t> shape;
+  for (const auto &dim_node : shape_arg["elts"])
+  {
+    std::optional<long long> dim = literal_int_value(dim_node);
+    if (!dim || *dim < 0)
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(*dim));
+  }
+  return shape;
+}
+
+std::optional<std::vector<std::size_t>>
+numpy_literal_array_shape(const nlohmann::json &node)
+{
+  if (!node.contains("elts") || !node["elts"].is_array())
+    return std::nullopt;
+
+  std::vector<std::size_t> shape{node["elts"].size()};
+  if (node["elts"].empty())
+    return shape;
+
+  const nlohmann::json &first = node["elts"][0];
+  if (
+    !first.is_object() ||
+    (first.value("_type", "") != "List" && first.value("_type", "") != "Tuple"))
+    return shape;
+
+  std::optional<std::vector<std::size_t>> row_shape =
+    numpy_literal_array_shape(first);
+  if (!row_shape)
+    return std::nullopt;
+
+  for (std::size_t i = 1; i < node["elts"].size(); ++i)
+  {
+    const nlohmann::json &row = node["elts"][i];
+    if (!row.is_object() || row.value("_type", "") != first.value("_type", ""))
+      return std::nullopt;
+    if (numpy_literal_array_shape(row) != row_shape)
+      return std::nullopt;
+  }
+
+  shape.insert(shape.end(), row_shape->begin(), row_shape->end());
+  return shape;
+}
+
+std::optional<std::vector<std::size_t>>
+numpy_constructor_shape(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Call" ||
+    !node.contains("func") || !node["func"].is_object() ||
+    node["func"].value("_type", "") != "Attribute" || !node.contains("args") ||
+    !node["args"].is_array())
+    return std::nullopt;
+
+  const std::string ctor = node["func"].value("attr", "");
+  const nlohmann::json &args = node["args"];
+
+  if (ctor == "array")
+  {
+    if (args.empty())
+      return std::nullopt;
+    return numpy_literal_array_shape(args[0]);
+  }
+
+  if (ctor == "zeros" || ctor == "ones" || ctor == "full" || ctor == "empty")
+  {
+    if (args.empty())
+      return std::nullopt;
+    return numpy_raw_shape_sequence(args[0]);
+  }
+
+  if (ctor == "eye" || ctor == "identity")
+  {
+    if (args.empty())
+      return std::nullopt;
+    std::optional<long long> rows = literal_int_value(args[0]);
+    if (!rows || *rows < 0)
+      return std::nullopt;
+    long long cols = *rows;
+    if (ctor == "eye" && args.size() > 1)
+    {
+      std::optional<long long> parsed_cols = literal_int_value(args[1]);
+      if (!parsed_cols || *parsed_cols < 0)
+        return std::nullopt;
+      cols = *parsed_cols;
+    }
+    return std::vector<std::size_t>{
+      static_cast<std::size_t>(*rows), static_cast<std::size_t>(cols)};
+  }
+
+  if (ctor == "linspace")
+  {
+    if (args.size() >= 3)
+    {
+      std::optional<long long> num = literal_int_value(args[2]);
+      if (!num || *num < 0)
+        return std::nullopt;
+      return std::vector<std::size_t>{static_cast<std::size_t>(*num)};
+    }
+    return std::vector<std::size_t>{50};
+  }
+
+  return std::nullopt;
+}
+
 std::optional<std::vector<long long>>
 numpy_raw_reshape_sequence(const nlohmann::json &shape_arg)
 {
@@ -3773,6 +3893,11 @@ void python_converter::update_numpy_array_binding(
       clear_numpy_array_storage_aliases_for(lhs_id);
       clear_numpy_view_copy(lhs);
       numpy_array_symbols_.insert(lhs_id);
+      if (auto shape_it = numpy_param_shapes_.find(rhs_id);
+          shape_it != numpy_param_shapes_.end())
+        numpy_param_shapes_[lhs_id] = shape_it->second;
+      else
+        numpy_param_shapes_.erase(lhs_id);
       return;
     }
 
@@ -3789,6 +3914,11 @@ void python_converter::update_numpy_array_binding(
       clear_numpy_view_copy(lhs);
       numpy_array_symbols_.insert(lhs_id);
       bind_numpy_array_storage_alias(lhs_id, rhs_id);
+      if (auto shape_it = numpy_param_shapes_.find(rhs_id);
+          shape_it != numpy_param_shapes_.end())
+        numpy_param_shapes_[lhs_id] = shape_it->second;
+      else
+        numpy_param_shapes_.erase(lhs_id);
       return;
     }
   }
@@ -3821,9 +3951,20 @@ void python_converter::update_numpy_array_binding(
   if (
     is_numpy_array_constructor_expr(rhs_node) ||
     is_array_returning_call_expr(rhs_node, lhs))
+  {
     numpy_array_symbols_.insert(lhs_id);
+    if (
+      std::optional<std::vector<std::size_t>> shape =
+        numpy_constructor_shape(rhs_node))
+      numpy_param_shapes_[lhs_id] = *shape;
+    else
+      numpy_param_shapes_.erase(lhs_id);
+  }
   else
+  {
     numpy_array_symbols_.erase(lhs_id);
+    numpy_param_shapes_.erase(lhs_id);
+  }
 }
 
 bool python_converter::is_array_returning_call_expr(
