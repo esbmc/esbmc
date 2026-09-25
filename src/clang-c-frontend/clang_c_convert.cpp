@@ -5115,6 +5115,13 @@ static void collect_local_decls(
       t = ptr->getPointeeType();
     else if (const clang::ArrayType *arr = t->getAsArrayTypeUnsafe())
       t = arr->getElementType();
+    else if (const auto *mp = t->getAs<clang::MemberPointerType>())
+    {
+      const clang::CXXRecordDecl *cls = mp->getMostRecentCXXRecordDecl();
+      if (cls && cls->getParentFunctionOrMethod())
+        out.push_back(cls);
+      t = mp->getPointeeType();
+    }
     else
       break;
   }
