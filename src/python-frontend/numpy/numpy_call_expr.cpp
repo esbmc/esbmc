@@ -2998,6 +2998,30 @@ numpy_call_expr::extract_literal_diagonal_offset(const char *error_context)
   return offset_value.int_value;
 }
 
+static std::optional<nlohmann::json>
+materialize_literal_diagonal(const nlohmann::json &array_node, long long offset)
+{
+  std::vector<std::size_t> shape;
+  if (!get_literal_shape(array_node, shape) || shape.size() != 2)
+    return std::nullopt;
+
+  long long row = offset < 0 ? -offset : 0;
+  long long col = offset > 0 ? offset : 0;
+  const long long rows = static_cast<long long>(shape[0]);
+  const long long cols = static_cast<long long>(shape[1]);
+
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = nlohmann::json::array();
+  while (row < rows && col < cols)
+  {
+    result["elts"].push_back(array_node["elts"][row]["elts"][col]);
+    ++row;
+    ++col;
+  }
+  return result;
+}
+
 exprt numpy_call_expr::handle_diagonal_call()
 {
   if (call_["args"].empty())
@@ -3016,6 +3040,25 @@ exprt numpy_call_expr::handle_diagonal_call()
       "TypeError: numpy diagonal only supports the default axis1/axis2");
 
   long long offset = extract_literal_diagonal_offset("diagonal");
+
+  std::optional<nlohmann::json> materialized =
+    get_literal_numpy_array_arg(call_["args"][0]);
+  if (!materialized)
+    materialized =
+      materialize_numpy_constructor_array(call_["args"][0], converter_.ast());
+  if (materialized)
+  {
+    if (
+      std::optional<nlohmann::json> diagonal =
+        materialize_literal_diagonal(*materialized, offset))
+    {
+      const bool old_build_static_lists = converter_.build_static_lists;
+      converter_.build_static_lists = false;
+      exprt result = converter_.get_expr(*diagonal);
+      converter_.build_static_lists = old_build_static_lists;
+      return result;
+    }
+  }
 
   exprt array_expr = converter_.get_expr(call_["args"][0]);
   python_list list(converter_, call_);
