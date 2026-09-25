@@ -238,11 +238,19 @@ std::string wrap_smtlib_dump(std::string smt_formula)
  * UseUnsatAssumptions stays false (the v0.18 default): ESBMC never calls
  * getUnsatAssumptions(), and producing cores costs solve time on every check
  * in the backends that must track assumption participation. */
-camada::SolverConfig pick_solver_config(const optionst &)
+camada::SolverConfig pick_solver_config(const optionst &options)
 {
   camada::SolverConfig config;
-  config.Arrays = camada::ArrayEncoding::Native;
-  config.Tuples = camada::TupleEncoding::Camada;
+  config.Arrays = options.get_bool_option("force-camada-array")
+                    ? camada::ArrayEncoding::Ackermann
+                    : camada::ArrayEncoding::Native;
+  /* Native is safe to ask for unconditionally: camada's nativeTupleSupport()
+   * also requires the backend to implement datatypes, so a backend without
+   * them lowers the tuple itself rather than emitting a declaration it
+   * cannot honour. The exception is the SMT-LIB wire -- see smtlib_config. */
+  config.Tuples = options.get_bool_option("force-camada-tuple")
+                    ? camada::TupleEncoding::Camada
+                    : camada::TupleEncoding::Native;
   return config;
 }
 
@@ -252,6 +260,15 @@ smtlib_config(const optionst &options, const std::string &logic)
 {
   camada::SolverConfig config = pick_solver_config(options);
   config.Logic = logic;
+  /* Tuples stay lowered in camada here whatever the default is. On the wire
+   * Native emits (declare-datatypes ...) under the pick_logic() name, and
+   * those logics (QF_AUFBV and friends) admit no datatypes: a conforming
+   * solver answers `(error "logic does not support algebraic datatypes")`,
+   * which is not `success`, so camada's ack reader drops the child before
+   * (check-sat) is ever sent -- silently, a protocol error being
+   * indistinguishable there from an ack timeout. That was the "model solver
+   * unavailable" in regression/bitwuzllob/mono-diverging-model. */
+  config.Tuples = camada::TupleEncoding::Camada;
   return config;
 }
 
@@ -980,6 +997,41 @@ smt_solver_baset::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
   return solver->mkFPDiv(lhs, rhs, rm);
 }
+
+/* Bitwuzla and cvc5 both answer fp.rem through symfpu, whose remainder
+ * algorithm is far slower than bit-blasting the same operation: on
+ * regression/floats-regression/ieee_rem_remainder_bound the query drops from
+ * minutes to about a second, on a formula whose other eight fp operators are
+ * identical either way. The other backends keep the native operator, where
+ * paying the reinterpret would be a regression.
+ *
+ * Camada picks the lowering per operand sort -- mkFPRem dispatches to its own
+ * software implementation when the operands carry FPEncoding::BV -- so
+ * reinterpreting them here selects it through the public API alone.
+ *
+ * fp.rem is exact and the lowering handles NaN operands through its own isNaN
+ * branches, so this does not depend on camada tracking a NaN payload through
+ * mkIEEEFPToBV (see camada.h on mkFPNeg). */
+smt_astt smt_solver_baset::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  const std::string solver_name = solver->getSolverNameAndVersion();
+  if (
+    solver_name.rfind("Bitwuzla", 0) == 0 || solver_name.rfind("CVC5", 0) == 0)
+  {
+    camada::SMTSortRef bv_sort = solver->mkFPSort(
+      lhs->Sort->getFPExponentWidth(),
+      lhs->Sort->getFPSignificandWidth(),
+      camada::FPEncoding::BV);
+    smt_astt bv_lhs = solver->mkBVToIEEEFP(solver->mkIEEEFPToBV(lhs), bv_sort);
+    smt_astt bv_rhs = solver->mkBVToIEEEFP(solver->mkIEEEFPToBV(rhs), bv_sort);
+    /* mkFPRem keeps its operands' sort, so the remainder is already
+     * BV-encoded; only the conversion back to the caller's native sort is
+     * needed. */
+    return solver->mkBVToIEEEFP(solver->mkFPRem(bv_lhs, bv_rhs), lhs->Sort);
+  }
+  return solver->mkFPRem(lhs, rhs);
+}
+
 smt_astt smt_solver_baset::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 {
   return solver->mkFPSqrt(rd, rm);

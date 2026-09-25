@@ -716,6 +716,14 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Encode floating-point as bit-vectors (default for solvers that don't "
      "support the SMT floating-point theory)"},
+    {"force-camada-tuple",
+     NULL,
+     "Lower tuples to per-field symbols in camada instead of using the "
+     "solver's datatype theory. Automatic on backends without one"},
+    {"force-camada-array",
+     NULL,
+     "Lower arrays to Ackermann congruence axioms in camada instead of "
+     "using the solver's array theory"},
     {"no-return-value-opt",
      NULL,
      "Disable return value optimization to compute the stack size"}}},

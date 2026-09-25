@@ -546,7 +546,7 @@ smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
   default:
     assert(expr->expr_id == expr2t::ieee_rem_id);
     /* fp.rem is exact; the node's rounding_mode is plumbing only. */
-    return solver->mkFPRem(side_1, side_2);
+    return mk_smt_fpbv_rem(side_1, side_2);
   }
 }
 
