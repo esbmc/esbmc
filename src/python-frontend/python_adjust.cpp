@@ -1233,15 +1233,15 @@ void python_adjust::adjust_type(type2tc &type)
     {
       if (is_struct_type(type))
       {
-        const struct_type2t &st = to_struct_type(type);
-        type = struct_type2tc(
-          members, st.member_names, st.member_pretty_names, st.name, st.packed);
+        struct_type2t st = to_struct_type(type);
+        st.members = std::move(members);
+        type = struct_type2tc(st);
       }
       else
       {
-        const union_type2t &ut = to_union_type(type);
-        type = union_type2tc(
-          members, ut.member_names, ut.member_pretty_names, ut.name, ut.packed);
+        union_type2t ut = to_union_type(type);
+        ut.members = std::move(members);
+        type = union_type2tc(ut);
       }
     }
 

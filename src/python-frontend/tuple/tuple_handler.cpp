@@ -177,11 +177,6 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   }
   exprt tuple_expr =
     migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
-  // Restore the full struct type: migrate_type does not model the frontend-only
-  // aggregate-kind marker set_python_aggregate_kind attaches, and the
-  // `in`/membership dispatch reads it (python_aggregate_kind) with no tag-based
-  // fallback for tuples. Re-attaching mirrors type_handler's lower_to_seam.
-  tuple_expr.type() = tuple_type;
 
   // Set location information
   if (element.contains("lineno"))
@@ -308,10 +303,7 @@ exprt tuple_handler::handle_tuple_subscript(
       elem_types.push_back(components[k].type());
     struct_typet new_type = create_tuple_struct_type(elem_types);
 
-    // V.3: build the sub-tuple value in IREP2, back-migrating once, then
-    // restore the full type -- migrate_type drops the frontend-only
-    // aggregate-kind marker read by the `in`/membership dispatch (see
-    // get_tuple_expr).
+    // V.3: build the sub-tuple value in IREP2, back-migrating once.
     std::vector<expr2tc> members;
     members.reserve(kept.size());
     for (size_t k : kept)
@@ -322,7 +314,6 @@ exprt tuple_handler::handle_tuple_subscript(
     }
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);
