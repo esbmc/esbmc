@@ -8546,6 +8546,35 @@ ids do too, and a variable declared once still gets one id. Both halves of
 `regression/esbmc/macro_local_same_name{,_fail}` flip against the unfixed
 binary. R54's mixed shape, a record and a variable of the same names in one
 expansion, needs both fixes.
+### M9 (G15–G18) — 2026-09-24, `goto_symex_state.h` parses, and the first verdict is a violation
+
+With G12–G14 out of the way (§15 M9 (G14, R53), PR #7979), the remaining
+self-verification header, `goto-symex/state/goto_symex_state.h`, failed to
+parse on three operational-model gaps. Each was measured against native
+`clang++` with libc++ in C++11, 17 and 23, where all three compile and run:
+
+| ID | Gap | Model | Smallest failing input |
+|---|---|---|---|
+| **G15** | no `operator>>(istream &, istream &(*)(istream &))`, and `std::ws` declared but never defined | `src/cpp/library/istream` | `is >> std::ws`, from boost `property_tree` and yaml-cpp |
+| **G16** | no `std::u16string` / `std::u32string` | `src/cpp/library/string` | `std::u16string a;`, from boost `core/type_name.hpp` |
+| **G17** | `shared_ptr<void>` and `unique_ptr<void, D>` do not instantiate: `operator*` returns `T &` | `src/cpp/library/memory` | `std::shared_ptr<void> p;`, `goto_symex_state.h:110` |
+
+All three are fixed. `operator*` now returns `add_lvalue_reference<T>::type`,
+as libc++ declares it and [util.smartptr.shared.obs] requires, and
+`add_lvalue_reference` gains its cv-`void` specialisations so
+`shared_ptr<const void>` works too. `u16string`/`u32string` are gated at C++11,
+where `char16_t` exists; the tests pin `--std c++11`, and `--std c++98` turns
+`u16string_typedef` into a `PARSING ERROR`. Six tests:
+`regression/esbmc-cpp/cpp/{istream_ws_manip,u16string_typedef,smart_ptr_void}{,_fail}`.
+
+**G18, open.** With these fixes and R53 applied together, the header converts
+and symex completes. An empty `main` then reports `VERIFICATION FAILED`:
+`dereference failure: invalid pointer` in the atomic model's `fetch_sub`
+(`/esbmc-vfs/cpp/atomic:150`). The counterexample has a single state, so no
+program step precedes the violation; the neighbouring claims are in
+`irep_container` and `irep2.h`'s `release`, which decrements a reference count
+through that `fetch_sub`. Whether this is a model artefact or a real defect in
+how a static irep2 object is initialised is not yet known.
 
 ---
 

@@ -338,6 +338,13 @@ protected:
    */
   void symex_assert();
 
+public:
+  /// The message of the claim an ASSERT instruction raises for itself, as
+  /// opposed to a check symex raises while evaluating its guard.
+  static std::string
+  assertion_message(const namespacet &ns, const goto_programt::instructiont &i);
+
+protected:
   /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
