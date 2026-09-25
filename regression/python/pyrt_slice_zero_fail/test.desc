@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-runtime
+^VERIFICATION FAILED$
+^.*slice step cannot be zero.*$
