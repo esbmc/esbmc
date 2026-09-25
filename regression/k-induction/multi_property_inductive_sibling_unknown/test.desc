@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-induction --multi-property --max-k-step 5
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion x > 0$
+^\s+UNKNOWN\s+\[main\.assertion\.2\]\s+line\s+11\s+assertion y != 3 \(inductive step could not prove this claim\)$
+^VERIFICATION UNKNOWN$

@@ -3,6 +3,7 @@
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Attr.h>
+#include <clang/AST/Mangle.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
@@ -3994,6 +3995,33 @@ bool clang_c_convertert::get_enum_value(
   return false;
 }
 
+#if CLANG_VERSION_MAJOR >= 12
+/// A C++20 class-type template argument names a template parameter object: a
+/// static const object holding the argument's value ([temp.param]/8). Clang
+/// has no declaration for it to convert, so add its symbol on first use.
+bool clang_c_convertert::add_template_param_object(
+  const clang::TemplateParamObjectDecl &tpo,
+  const std::string &name,
+  const std::string &id)
+{
+  typet type;
+  if (get_type(tpo.getType(), type))
+    return true;
+  const clang::QualType qt = tpo.getType();
+  exprt value;
+  if (get_APValue_expr(tpo.getValue(), value, &qt))
+    return true;
+
+  symbolt symbol;
+  get_default_symbol(symbol, "", type, name, id, locationt());
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+  symbol.set_value(value);
+  context.move_symbol_to_context(symbol);
+  return false;
+}
+#endif
+
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
@@ -4029,6 +4057,12 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
       if (get_type(nd->getType(), type))
         return true;
     }
+
+#if CLANG_VERSION_MAJOR >= 12
+    if (const auto *tpo = llvm::dyn_cast<clang::TemplateParamObjectDecl>(nd))
+      if (!context.find_symbol(id) && add_template_param_object(*tpo, name, id))
+        return true;
+#endif
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
@@ -5112,6 +5146,52 @@ getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c)
   return clang::TypeName::getFullyQualifiedName(t, c, Policy);
 }
 
+/// The USR generator gives up on some C++20 declarations: a specialisation
+/// over a class-type template argument, its members and parameters, and the
+/// template parameter object that argument names. Their mangled names still
+/// identify them; a parameter is named after its function.
+bool clang_c_convertert::get_mangled_id(
+  const clang::NamedDecl &nd,
+  std::string &id)
+{
+  if (const auto *pd = llvm::dyn_cast<clang::ParmVarDecl>(&nd))
+  {
+    const auto *fn =
+      llvm::dyn_cast_or_null<clang::FunctionDecl>(pd->getDeclContext());
+    std::string fn_id;
+    if (!fn || !get_mangled_id(*fn, fn_id))
+      return false;
+    id = fn_id + "@" + pd->getNameAsString() +
+         "::" + std::to_string(pd->getFunctionScopeIndex());
+    return true;
+  }
+
+  clang::GlobalDecl gd;
+  if (const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&nd))
+    gd = clang::GlobalDecl(ctor, clang::Ctor_Complete);
+  else if (const auto *dtor = llvm::dyn_cast<clang::CXXDestructorDecl>(&nd))
+    gd = clang::GlobalDecl(dtor, clang::Dtor_Complete);
+  else if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(&nd))
+    gd = clang::GlobalDecl(fd);
+#if CLANG_VERSION_MAJOR >= 12
+  else if (llvm::isa<clang::TemplateParamObjectDecl>(nd))
+    gd = clang::GlobalDecl(&nd);
+#endif
+  else
+    return false;
+
+  std::unique_ptr<clang::MangleContext> mangler(
+    ASTContext->createMangleContext());
+  if (!mangler->shouldMangleDeclName(&nd))
+    return false;
+  std::string mangled;
+  llvm::raw_string_ostream os(mangled);
+  mangler->mangleName(gd, os);
+  os.flush();
+  id = "c:@" + mangled;
+  return true;
+}
+
 void clang_c_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -5303,6 +5383,9 @@ void clang_c_convertert::get_decl_name(
     id = DeclUSR.str().str();
     return;
   }
+
+  if (get_mangled_id(nd, id))
+    return;
 
   // Otherwise, abort
   std::ostringstream oss;
