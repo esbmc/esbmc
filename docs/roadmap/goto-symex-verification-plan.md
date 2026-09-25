@@ -8604,7 +8604,7 @@ groups:
 | Group | Tests | Outcome |
 |---|---|---|
 | Locals and records declared by an inner macro expanded twice inside one outer expansion | bzip2's `BZ2_decompress` (three tests), `github_2512_1` (`container_of`) | a false SUCCESSFUL for both variables and records; R56's and R54's spelling offset does not separate the two expansions. Both now use the macro location's raw encoding, on their own PRs |
-| Parameters of two lambdas in one macro | `github_7530{,_fail}` | same types in the test; a probe with different types did not collide |
+| Parameters of two lambdas in one macro | `github_7530{,_fail}` | benign: the function USR encodes parameter types, so only same-typed parameters collide, and symex renames a parameter per activation, so even one lambda calling the other inside its own call verifies correctly |
 | A header's `static` function or variable, one copy per file | `github_902{,-extern}`, `01_cbmc_Linking2`, `github_1210-2-*` | **R58**, below |
 
 **R58.** `clang_c_languaget::parse` merges every input file into the first
@@ -8633,6 +8633,25 @@ single-file programs and the operational models untouched.
 | the same, `assert(x == 1 && y == 1)` | `FAILED` | `SUCCESSFUL` | passes |
 | `static int g` bumped from each file, `assert(g == 3)` | **`SUCCESSFUL`** | `FAILED` | aborts |
 | the same program in C++ | — | `FAILED` | aborts |
+
+### M9 (WI-4 re-measured) — 2026-09-25, the driver converts, and immer's release loop is the wall
+
+With R53–R55 and G15–G17 applied together, `goto-symex/state/renaming.h`,
+`irep2/irep2_utils.h` and `goto-symex/state/goto_symex_state.h` each reach
+`VERIFICATION SUCCESSFUL` with an empty `main`, under the §13 invocation. The
+next step, §13.6 WI-4, is a driver that calls into `renaming::level1t`: look up
+a `name_record`, `set` it twice, and assert the value read back, with a
+mutated twin that must fail. Both halves convert and symex runs, but neither
+reaches a verdict in 20 minutes at `--unwind 3`: symex is still in immer's
+`hamts/node.hpp:1113` `delete_deep` and `util.hpp:109` `destroy_n`.
+
+Allocating the `level1t` with `new` and never freeing it does not help, so
+the loops are not the map's destructor at scope exit. They are inside `set`:
+a persistent map replaces its root on every update, and releasing the old
+root's reference count walks the HAMT node it frees. The blocker for WI-4 is
+therefore the cost of immer's release path, not conversion. §13.3's
+`unordered_map` scaling measurement found the same kind of wall in a
+different container.
 
 ---
 
