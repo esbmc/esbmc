@@ -882,6 +882,14 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       if (json_utils::is_class(class_name, ast_))
         return class_name;
 
+      // hash() returns bytes only for the consensus spec's own
+      // hash(data: bytes); on any other argument it is the real builtin,
+      // which returns int (see is_generic_hash_call in function_call/expr.cpp).
+      if (
+        func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
+        get_argument_type(arg["args"][0]) != "bytes")
+        return "int";
+
       // Check built-in functions first
       auto it = builtin_functions().find(func_name);
       if (it != builtin_functions().end())
@@ -2942,6 +2950,24 @@ InferResult python_annotation<Json>::infer_type(
       Json temp_stmt = {{"value", operand}};
       inferred_type = get_type_from_binary_expr(temp_stmt, body);
     }
+    else
+    {
+      // Any other operand, e.g. -c.speed in a sort key (#7745): infer the
+      // operand (an unknown one leaves the assignment to the converter), then
+      // the operator's result. `not` is always a bool, and a numeric operator
+      // promotes a bool to int.
+      const Json operand_stmt = {
+        {"_type", "Assign"}, {"value", operand}, {"lineno", current_line_}};
+      std::string operand_inferred;
+      const InferResult operand_result =
+        infer_type(operand_stmt, body, operand_inferred);
+      if (operand_result != InferResult::OK)
+        return operand_result;
+      if (stmt["value"]["op"]["_type"] == "Not")
+        inferred_type = "bool";
+      else
+        inferred_type = operand_inferred == "bool" ? "int" : operand_inferred;
+    }
   }
 
   // Get type from RHS variable
@@ -3223,6 +3249,18 @@ void python_annotation<Json>::collect_return_types(
         return_val["func"]["_type"] == "Name")
       {
         const std::string &called_func = return_val["func"]["id"];
+
+        // hash() returns bytes only for the consensus spec's own
+        // hash(data: bytes); get_function_return_type has no access to this
+        // call's arguments, so check them here first (mirrors get_argument_type).
+        if (
+          called_func == "hash" && return_val.contains("args") &&
+          !return_val["args"].empty() &&
+          get_argument_type(return_val["args"][0]) != "bytes")
+        {
+          types.insert("int");
+          continue;
+        }
 
         // Try to get the return type of the called function
         try

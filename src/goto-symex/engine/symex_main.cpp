@@ -229,18 +229,21 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
   expr2tc lhs = eq.side_1;
   expr2tc rhs = eq.side_2;
 
-  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit
-  // patterns; propagating either would mask signbit-sensitive bugs.
-  auto is_fp_zero = [](const expr2tc &e) {
-    return is_constant_floatbv2t(e) && to_constant_floatbv2t(e).value.is_zero();
-  };
-
   // Only propagate when the other side is a constant: a symbol == symbol
   // assumption must NOT be turned into an assignment, as that perturbs the
   // symbolic state and aliasing (e.g. a[i]=7; assume(i==j); read a[j]).
-  if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_fp_zero(rhs))
+  // assignment() emits no SSA step: lift only a value level2 records (#7974).
+  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit patterns;
+  // propagating either would mask signbit-sensitive bugs.
+  auto is_liftable = [this](const expr2tc &e) {
+    return is_constant_expr(e) && cur_state->constant_propagation(e) &&
+           !(is_constant_floatbv2t(e) &&
+             to_constant_floatbv2t(e).value.is_zero());
+  };
+
+  if (is_symbol2t(lhs) && is_liftable(rhs))
     cur_state->assignment(lhs, rhs);
-  else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_fp_zero(lhs))
+  else if (is_symbol2t(rhs) && is_liftable(lhs))
     cur_state->assignment(rhs, lhs);
 }
 

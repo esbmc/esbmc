@@ -25,17 +25,24 @@ bool contains_dyn_array(const typet &t)
 
 void set_symbol_type(symbolt &sym, const typet &t)
 {
-  if (contains_dyn_array(t))
-    sym.set_type(t);
-  else
-    sym.set_type(migrate_type(t));
+  // symbolt::set_type(const typet&) caches t as the legacy type directly; the
+  // type2tc overload stores it as an IREP2 type instead, so a later
+  // sym.get_type() re-derives the legacy type via migrate_type_back, which
+  // drops #cpp_type (the `bytes` tag). Always use the legacy overload so the
+  // exact type, tag included, is what a later read sees.
+  sym.set_type(t);
 }
 
 exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))
     return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
+  exprt result = migrate_expr_back(symbol_expr2tc(sym));
+  // migrate_type drops #cpp_type (e.g. the `bytes` tag on an otherwise-plain
+  // array type). Restore the symbol's declared type exactly, matching
+  // build_typecast below.
+  result.type() = sym.get_type();
+  return result;
 }
 
 exprt build_typecast(const exprt &from, const typet &t)

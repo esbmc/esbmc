@@ -18,6 +18,7 @@ class PreprocessorStateMixin:
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self._builtin_shadow_names = None
+        self._unobservable_builtin_keys = frozenset()
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
