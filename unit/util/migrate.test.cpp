@@ -28,6 +28,7 @@
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
+#include <util/lang/python_types.h>
 #include <util/arith/arith_tools.h>
 #include <chrono>
 #include <utility>
@@ -1617,5 +1618,39 @@ TEST_CASE("a function type keeps its exception specification", "[migrate]")
     spec.set(exception_specificationt::kind_attribute(), "non_throwing");
     REQUIRE(migrate_type(spec) == migrate_type(f));
     REQUIRE(migrate_type(spec)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// `#python_aggregate` marks a Python model struct (tuple, dict, Optional).
+// Unreflected -- the tag already names the type -- but `in` dispatches on it,
+// and a user class can share a tuple's tag prefix, so it cannot be derived
+// from the tag (docs/roadmap/scope-python-irep2.md §10.4).
+TEST_CASE("a struct keeps its Python aggregate kind", "[migrate]")
+{
+  struct_typet tuple;
+  tuple.components().emplace_back("element_0", "element_0", signedbv_typet(64));
+  tuple.tag("tag-tuple_signedbv");
+
+  SECTION("the kind round-trips")
+  {
+    set_python_aggregate_kind(tuple, "tuple");
+    REQUIRE(
+      python_aggregate_kind(migrate_type_back(migrate_type(tuple))) ==
+      irep_idt("tuple"));
+  }
+
+  SECTION("an unmarked struct gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(tuple));
+    REQUIRE(back.find(PYTHON_AGGREGATE_ATTR).is_nil());
+    REQUIRE(full_eq(back, tuple));
+  }
+
+  SECTION("the kind is no part of the type's identity")
+  {
+    struct_typet marked = tuple;
+    set_python_aggregate_kind(marked, "tuple");
+    REQUIRE(migrate_type(marked) == migrate_type(tuple));
+    REQUIRE(migrate_type(marked)->crc() == migrate_type(tuple)->crc());
   }
 }

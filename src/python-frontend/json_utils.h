@@ -520,8 +520,27 @@ inline std::vector<std::string> split_function_path(const std::string &function)
   return path;
 }
 
+// The annotation pass names a method "Cls@C@m". For such a @p name, return the
+// body of class Cls in @p body (null if absent) and strip @p name to "m";
+// otherwise return @p body unchanged.
+template <typename JsonType>
+const JsonType *class_method_scope(const JsonType &body, std::string &name)
+{
+  const size_t sep = name.find("@C@");
+  if (sep == std::string::npos)
+    return &body;
+  const std::string class_name = name.substr(0, sep);
+  name.erase(0, sep + 3);
+  const JsonType *scope = nullptr;
+  for (const auto &elem : body)
+    if (elem["_type"] == "ClassDef" && elem["name"] == class_name)
+      scope = &elem["body"];
+  return scope;
+}
+
 // Find a function in AST by hierarchical path
-// Example: ["foo", "bar"] finds nested function bar() inside foo()
+// Example: ["foo", "bar"] finds nested function bar() inside foo(), and
+// ["Cls@C@m"] finds method m() of class Cls
 template <typename JsonType>
 JsonType
 find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
@@ -535,9 +554,12 @@ find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
     if (depth >= path.size())
       return JsonType();
 
-    const std::string &target_name = path[depth];
+    std::string target_name = path[depth];
+    const JsonType *scope = class_method_scope(parent_body, target_name);
+    if (scope == nullptr)
+      return JsonType();
 
-    for (const auto &elem : parent_body)
+    for (const auto &elem : *scope)
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == target_name)
       {
