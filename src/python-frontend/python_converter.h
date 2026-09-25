@@ -655,6 +655,12 @@ private:
   /// __len__, or raising TypeError as CPython does when it defines none.
   /// Returns nil when @p element is not such a call.
   exprt get_len_on_class_instance(const nlohmann::json &element);
+  static bool is_pure_read(const nlohmann::json &node);
+  exprt
+  get_len_on_list_element(const nlohmann::json &arg, const locationt &location);
+  static exprt list_element_type_id(const exprt &value);
+  std::size_t count_user_classes();
+  exprt checked_len_result(const exprt &len_call, const locationt &location);
 
   // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
   // slice views). Split out of get_function_call() to keep that already
@@ -1420,6 +1426,9 @@ private:
   bool is_tracked_numpy_view_name_node(const nlohmann::json &node);
 
   bool is_basic_numpy_view_subscript_escape(const nlohmann::json &node);
+  /// Converts @p node into a discarded block, so only its value is kept and
+  /// nothing it would emit reaches the program.
+  exprt probe_expr(const nlohmann::json &node);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
