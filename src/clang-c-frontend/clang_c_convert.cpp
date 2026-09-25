@@ -5330,12 +5330,12 @@ void clang_c_convertert::get_decl_name(
   {
     id = DeclUSR.str().str();
     /* A local variable's USR is its expansion offset, so two declared by one
-     * macro expansion shared a symbol; add the spelling offset, as for
-     * lambdas (#7530). */
+     * macro expansion shared a symbol. The spelling offset does not separate
+     * an inner macro expanded twice inside one outer expansion, but each
+     * expanded token has its own macro location. */
     const auto *vd = llvm::dyn_cast<clang::VarDecl>(&nd);
-    if (vd && vd->isLocalVarDecl() && vd->getLocation().isMacroID() && sm)
-      id += "_m" + std::to_string(
-                     sm->getFileOffset(sm->getSpellingLoc(vd->getLocation())));
+    if (vd && vd->isLocalVarDecl() && vd->getLocation().isMacroID())
+      id += "_m" + std::to_string(vd->getLocation().getRawEncoding());
     return;
   }
 
