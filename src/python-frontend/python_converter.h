@@ -1613,6 +1613,11 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  bool update_numpy_array_binding_from_name(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node);
+
   bool record_numpy_view_copy_from_returned_argument(
     const exprt &lhs,
     const std::string &lhs_id,

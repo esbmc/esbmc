@@ -391,63 +391,85 @@ numpy_literal_array_shape(const nlohmann::json &node)
   return shape;
 }
 
-std::optional<std::vector<std::size_t>>
-numpy_constructor_shape(const nlohmann::json &node)
+static bool get_numpy_constructor_call(
+  const nlohmann::json &node,
+  std::string &ctor,
+  const nlohmann::json *&args)
 {
   if (
     !node.is_object() || node.value("_type", "") != "Call" ||
     !node.contains("func") || !node["func"].is_object() ||
     node["func"].value("_type", "") != "Attribute" || !node.contains("args") ||
     !node["args"].is_array())
+    return false;
+
+  ctor = node["func"].value("attr", "");
+  args = &node["args"];
+  return true;
+}
+
+static std::optional<std::vector<std::size_t>>
+numpy_shape_from_shape_arg(const nlohmann::json &args)
+{
+  if (args.empty())
+    return std::nullopt;
+  return numpy_raw_shape_sequence(args[0]);
+}
+
+static std::optional<std::vector<std::size_t>>
+numpy_eye_or_identity_shape(const nlohmann::json &args, bool has_cols_arg)
+{
+  if (args.empty())
     return std::nullopt;
 
-  const std::string ctor = node["func"].value("attr", "");
-  const nlohmann::json &args = node["args"];
+  std::optional<long long> rows = literal_int_value(args[0]);
+  if (!rows || *rows < 0)
+    return std::nullopt;
+
+  long long cols = *rows;
+  if (has_cols_arg && args.size() > 1)
+  {
+    std::optional<long long> parsed_cols = literal_int_value(args[1]);
+    if (!parsed_cols || *parsed_cols < 0)
+      return std::nullopt;
+    cols = *parsed_cols;
+  }
+
+  return std::vector<std::size_t>{
+    static_cast<std::size_t>(*rows), static_cast<std::size_t>(cols)};
+}
+
+static std::optional<std::vector<std::size_t>>
+numpy_linspace_shape(const nlohmann::json &args)
+{
+  if (args.size() < 3)
+    return std::vector<std::size_t>{50};
+
+  std::optional<long long> num = literal_int_value(args[2]);
+  if (!num || *num < 0)
+    return std::nullopt;
+  return std::vector<std::size_t>{static_cast<std::size_t>(*num)};
+}
+
+std::optional<std::vector<std::size_t>>
+numpy_constructor_shape(const nlohmann::json &node)
+{
+  std::string ctor;
+  const nlohmann::json *args = nullptr;
+  if (!get_numpy_constructor_call(node, ctor, args))
+    return std::nullopt;
 
   if (ctor == "array")
-  {
-    if (args.empty())
-      return std::nullopt;
-    return numpy_literal_array_shape(args[0]);
-  }
+    return args->empty() ? std::nullopt : numpy_literal_array_shape((*args)[0]);
 
   if (ctor == "zeros" || ctor == "ones" || ctor == "full" || ctor == "empty")
-  {
-    if (args.empty())
-      return std::nullopt;
-    return numpy_raw_shape_sequence(args[0]);
-  }
+    return numpy_shape_from_shape_arg(*args);
 
   if (ctor == "eye" || ctor == "identity")
-  {
-    if (args.empty())
-      return std::nullopt;
-    std::optional<long long> rows = literal_int_value(args[0]);
-    if (!rows || *rows < 0)
-      return std::nullopt;
-    long long cols = *rows;
-    if (ctor == "eye" && args.size() > 1)
-    {
-      std::optional<long long> parsed_cols = literal_int_value(args[1]);
-      if (!parsed_cols || *parsed_cols < 0)
-        return std::nullopt;
-      cols = *parsed_cols;
-    }
-    return std::vector<std::size_t>{
-      static_cast<std::size_t>(*rows), static_cast<std::size_t>(cols)};
-  }
+    return numpy_eye_or_identity_shape(*args, ctor == "eye");
 
   if (ctor == "linspace")
-  {
-    if (args.size() >= 3)
-    {
-      std::optional<long long> num = literal_int_value(args[2]);
-      if (!num || *num < 0)
-        return std::nullopt;
-      return std::vector<std::size_t>{static_cast<std::size_t>(*num)};
-    }
-    return std::vector<std::size_t>{50};
-  }
+    return numpy_linspace_shape(*args);
 
   return std::nullopt;
 }
@@ -3872,6 +3894,55 @@ void python_converter::mirror_numpy_transpose_assignment_from_targets(
     ast_node["targets"][0], rhs, location, target_block);
 }
 
+bool python_converter::update_numpy_array_binding_from_name(
+  const exprt &lhs,
+  const std::string &lhs_id,
+  const nlohmann::json &rhs_node)
+{
+  if (rhs_node.value("_type", "") != "Name" || !rhs_node.contains("id"))
+    return false;
+
+  const std::string rhs_id =
+    resolve_name_symbol_id(rhs_node["id"].get<std::string>());
+  if (rhs_id == lhs_id)
+    return true;
+
+  if (rhs_node.value("_numpy_copy_method", false))
+  {
+    clear_numpy_array_storage_aliases_for(lhs_id);
+    clear_numpy_view_copy(lhs);
+    numpy_array_symbols_.insert(lhs_id);
+    if (auto shape_it = numpy_param_shapes_.find(rhs_id);
+        shape_it != numpy_param_shapes_.end())
+      numpy_param_shapes_[lhs_id] = shape_it->second;
+    else
+      numpy_param_shapes_.erase(lhs_id);
+    return true;
+  }
+
+  auto view_it = numpy_view_copy_sources_.find(rhs_id);
+  if (view_it != numpy_view_copy_sources_.end())
+  {
+    clear_numpy_array_storage_aliases_for(lhs_id);
+    numpy_view_copy_sources_[lhs_id] = view_it->second;
+    numpy_array_symbols_.insert(lhs_id);
+    return true;
+  }
+
+  if (numpy_array_symbols_.count(rhs_id) == 0)
+    return false;
+
+  clear_numpy_view_copy(lhs);
+  numpy_array_symbols_.insert(lhs_id);
+  bind_numpy_array_storage_alias(lhs_id, rhs_id);
+  if (auto shape_it = numpy_param_shapes_.find(rhs_id);
+      shape_it != numpy_param_shapes_.end())
+    numpy_param_shapes_[lhs_id] = shape_it->second;
+  else
+    numpy_param_shapes_.erase(lhs_id);
+  return true;
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3880,48 +3951,8 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
-
-  if (rhs_node.value("_type", "") == "Name" && rhs_node.contains("id"))
-  {
-    const std::string rhs_id =
-      resolve_name_symbol_id(rhs_node["id"].get<std::string>());
-    if (rhs_id == lhs_id)
-      return;
-
-    if (rhs_node.value("_numpy_copy_method", false))
-    {
-      clear_numpy_array_storage_aliases_for(lhs_id);
-      clear_numpy_view_copy(lhs);
-      numpy_array_symbols_.insert(lhs_id);
-      if (auto shape_it = numpy_param_shapes_.find(rhs_id);
-          shape_it != numpy_param_shapes_.end())
-        numpy_param_shapes_[lhs_id] = shape_it->second;
-      else
-        numpy_param_shapes_.erase(lhs_id);
-      return;
-    }
-
-    auto view_it = numpy_view_copy_sources_.find(rhs_id);
-    if (view_it != numpy_view_copy_sources_.end())
-    {
-      clear_numpy_array_storage_aliases_for(lhs_id);
-      numpy_view_copy_sources_[lhs_id] = view_it->second;
-      numpy_array_symbols_.insert(lhs_id);
-      return;
-    }
-    if (numpy_array_symbols_.count(rhs_id) != 0)
-    {
-      clear_numpy_view_copy(lhs);
-      numpy_array_symbols_.insert(lhs_id);
-      bind_numpy_array_storage_alias(lhs_id, rhs_id);
-      if (auto shape_it = numpy_param_shapes_.find(rhs_id);
-          shape_it != numpy_param_shapes_.end())
-        numpy_param_shapes_[lhs_id] = shape_it->second;
-      else
-        numpy_param_shapes_.erase(lhs_id);
-      return;
-    }
-  }
+  if (update_numpy_array_binding_from_name(lhs, lhs_id, rhs_node))
+    return;
 
   clear_numpy_transpose_views_of(lhs_id);
   clear_numpy_array_storage_aliases_for(lhs_id);

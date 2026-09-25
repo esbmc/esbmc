@@ -293,6 +293,17 @@ private:
     nlohmann::json search_space,
     bool right);
 
+  std::optional<exprt> try_searchsorted_sorter_descriptor_fallback(
+    const nlohmann::json *sorter_node,
+    const std::string &array_name,
+    bool right);
+
+  exprt finish_searchsorted_call(
+    std::optional<nlohmann::json> literal_arg,
+    const nlohmann::json *sorter_node,
+    const std::string &array_name,
+    bool right);
+
   // np.sum(identity(x))/np.argmin(identity(x)): a reducer's argument reaches
   // get() as a raw Call node when it is itself a nested call, never through
   // function_call_expr's own dispatch (where try_fold_identity_array_return
