@@ -72,11 +72,13 @@ public:
    *  divided somewhere in the formula. */
   void note_division_operands(const expr2tc &expr);
   /** Bracket the conversion of one SSA step: its guard, its condition, and
-   *  the symbol it assigns (nil when it assigns none). */
+   *  the assignment it makes (both nil when it makes none). Every step must
+   *  be bracketed; a bitcast converted outside one is read by no rebuild. */
   void begin_step(
     const expr2tc &guard,
     const expr2tc &cond,
-    const expr2tc &assigned);
+    const expr2tc &lhs,
+    const expr2tc &rhs);
   void end_step();
 
   /** Convert and dump an expression in SMT format (--ssa-smt-trace). */

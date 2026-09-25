@@ -71,9 +71,10 @@ void smt_convt::note_division_operands(const expr2tc &expr)
 void smt_convt::begin_step(
   const expr2tc &guard,
   const expr2tc &cond,
-  const expr2tc &assigned)
+  const expr2tc &lhs,
+  const expr2tc &rhs)
 {
-  solver_impl->begin_step(guard, cond, assigned);
+  solver_impl->begin_step(guard, cond, lhs, rhs);
 }
 
 void smt_convt::end_step()

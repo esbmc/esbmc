@@ -127,7 +127,10 @@ void convert_internal_step(
   }
 
   smt_conv.begin_step(
-    step.guard, step.cond, step.is_assignment() ? step.lhs : expr2tc());
+    step.guard,
+    step.cond,
+    step.is_assignment() ? step.lhs : expr2tc(),
+    step.is_assignment() ? step.rhs : expr2tc());
 
   if (step.is_assume() || step.is_assert() || step.is_branching())
   {

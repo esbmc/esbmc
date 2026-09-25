@@ -167,8 +167,9 @@ smt_astt smt_solver_baset::encode_pointer_repr(
   const type2tc &to_type)
 {
   smt_astt address = convert_ast(typecast2tc(to_type, ptr));
-  /* A pointer rebuilt from bits already carries where those bits came from. */
-  if (is_symbol2t(ptr) && ptr_flow.count(to_symbol2t(ptr).get_symbol_name()))
+  /* The pointer a byte update overwrites: once a byte changes, its bits name
+   * no pointer, and recording each partial value swamps the solver. */
+  if (ptr == step_overwritten)
     return address;
   smt_astt pointer = convert_ast(ptr);
   flattened.emplace(
@@ -201,7 +202,8 @@ void smt_solver_baset::record_flattened_pointer(
 void smt_solver_baset::begin_step(
   const expr2tc &guard,
   const expr2tc &cond,
-  const expr2tc &assigned)
+  const expr2tc &lhs,
+  const expr2tc &rhs)
 {
   step_sources.clear();
   step_flattens.clear();
@@ -220,7 +222,8 @@ void smt_solver_baset::begin_step(
       {
         auto it = ptr_flow.find(to_symbol2t(e).get_symbol_name());
         if (it != ptr_flow.end())
-          step_sources.insert(it->second.begin(), it->second.end());
+          step_sources.insert(
+            it->second.second.begin(), it->second.second.end());
       }
       else if (auto it = flattened.find(e); it != flattened.end())
         reused.push_back(it->second);
@@ -233,20 +236,23 @@ void smt_solver_baset::begin_step(
   step_guard = convert_ast(guard);
   for (const ptr_flatten_entry &flat : reused)
     record_flattened_pointer(flat.address, flat.pointer);
-  step_assigned = !is_nil_expr(assigned) && is_symbol2t(assigned)
-                    ? to_symbol2t(assigned).get_symbol_name()
-                    : "";
+  step_assigned = is_nil_expr(lhs) ? "" : to_symbol2t(lhs).get_symbol_name();
+  step_overwritten =
+    !is_nil_expr(rhs) && is_pointer_type(rhs) && is_byte_update2t(rhs)
+      ? to_byte_update2t(rhs).source_value
+      : expr2tc();
 }
 
 void smt_solver_baset::end_step()
 {
   step_sources.insert(step_flattens.begin(), step_flattens.end());
   if (!step_assigned.empty() && !step_sources.empty())
-    ptr_flow[step_assigned] = step_sources;
+    ptr_flow[step_assigned] = {ctx_level, step_sources};
   step_guard = nullptr;
   step_sources.clear();
   step_flattens.clear();
   step_assigned.clear();
+  step_overwritten = expr2tc();
 }
 
 smt_astt smt_solver_baset::decode_pointer_repr(

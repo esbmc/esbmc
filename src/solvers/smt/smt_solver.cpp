@@ -276,6 +276,8 @@ void smt_solver_baset::pop_ctx()
   });
   std::erase_if(
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
+  std::erase_if(
+    ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
