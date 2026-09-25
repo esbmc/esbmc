@@ -8,7 +8,10 @@
 #include <cstddef>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
+
+class optionst;
 
 /// Outcome of checking one property. Ordered by dominance: when a property is
 /// checked more than once in a run, the numerically greater verdict survives.
@@ -93,21 +96,30 @@ public:
     const property_locationt &loc,
     const std::string &note = "");
 
-  /// Raises every NotChecked entry to Passed. Call only once the run has
-  /// established that *all* properties hold -- a monolithic UNSAT refutes the
-  /// disjunction of every claim violation, so each claim holds -- and never
-  /// after a merely bounded round such as a k-induction base case. Does
-  /// nothing once note_incomplete() has been called.
+  /// Raises every NotChecked entry recorded since the last begin_round() or
+  /// clear() to Passed. Call only once the run has established that *all*
+  /// properties hold -- a monolithic UNSAT refutes the disjunction of every
+  /// claim violation, so each claim holds -- and never after a merely bounded
+  /// round such as a k-induction base case. Does nothing while
+  /// is_incomplete().
   void promote_unchecked_to_passed();
 
-  /// Records that some phase of the run stopped before every property reached
-  /// a verdict. A k-step strategy promotes across phases -- the forward
-  /// condition proves what the base cases left NotChecked -- so a phase that
-  /// skipped properties has to disarm that promotion for the whole run, not
-  /// only for itself.
+  /// Records that a phase stopped before every property reached a verdict,
+  /// disarming proofs until the next round completes.
   void note_incomplete();
 
-  /// Whether note_incomplete() has been called since the last clear().
+  /// Starts the round of a k-step strategy's next base case, incomplete until
+  /// complete_round(). A row this round never records is not promoted.
+  void begin_round();
+
+  /// Records that the round's base case solved every claim it raised.
+  void complete_round()
+  {
+    incomplete = false;
+  }
+
+  /// Whether a phase since the last clear() or complete_round() stopped short,
+  /// or the round's base case has not completed.
   bool is_incomplete() const
   {
     return incomplete;
@@ -139,8 +151,14 @@ public:
 private:
   mutable std::mutex mutex;
   std::map<std::string, property_resultt> results;
+  std::set<std::string> recorded_this_round;
   std::atomic<bool> violation{false};
   std::atomic<bool> incomplete{false};
 };
+
+/// Whether a phase must leave a claim it discharges NotChecked rather than
+/// Passed: under a k-step strategy, a base case always, and any other phase
+/// while its round is incomplete.
+bool withholds_proofs(const optionst &options);
 
 #endif
