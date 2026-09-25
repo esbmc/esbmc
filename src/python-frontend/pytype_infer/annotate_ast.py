@@ -40,6 +40,15 @@ def annotate_parameters(funct_node: ast.FunctionDef, param_types):
         if isinstance(t, Unknown):
             continue
 
+        if isinstance(t, UnionType):
+            supported_types = (IntType, BoolType, FloatType)
+            support_union = True
+
+            for member in t.members:
+                if not isinstance(member, supported_types):
+                    supported_types = False
+                    break
+
         annotation = type_to_ast_annotation(t)    
 
         if annotation is None:
