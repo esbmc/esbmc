@@ -5249,6 +5249,13 @@ void clang_c_convertert::get_decl_name(
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
     id = DeclUSR.str().str();
+    /* A local variable's USR is its expansion offset, so two declared by one
+     * macro expansion shared a symbol; add the spelling offset, as for
+     * lambdas (#7530). */
+    const auto *vd = llvm::dyn_cast<clang::VarDecl>(&nd);
+    if (vd && vd->isLocalVarDecl() && vd->getLocation().isMacroID() && sm)
+      id += "_m" + std::to_string(
+                     sm->getFileOffset(sm->getSpellingLoc(vd->getLocation())));
     return;
   }
 
