@@ -4,6 +4,7 @@
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
@@ -325,7 +326,8 @@ static type2tc migrate_type0(const typet &type)
       name,
       packed,
       base_names,
-      explicit_alignment(type));
+      explicit_alignment(type),
+      python_aggregate_kind(type));
   }
 
   if (type.id() == typet::t_union)
@@ -3200,6 +3202,8 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       thetype.set("packed", true);
     if (ref2.alignment != 0)
       thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
+    if (!ref2.python_aggregate.empty())
+      set_python_aggregate_kind(thetype, ref2.python_aggregate);
     return thetype;
   }
   case type2t::union_id:

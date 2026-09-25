@@ -4591,3 +4591,24 @@ argument's `#location` and `#default_value`, and the second of those was missed 
 entirely: the probe ran on a function with no default argument. **The blind spot was the probe's input,
 not its comparator** (`scope-python-irep2.md` §11.3.3). Choosing the comparator carefully is cheap;
 choosing an input that can exhibit every key the node can carry is the part that needs thought.
+
+## 82. `#python_aggregate` crosses the seam (2026-09-25)
+
+The sixth carried attribute, after §80's `#cpp_type`. `irep_idt python_aggregate` on `struct_type2t`,
+unreflected like `alignment`, both directions in `migrate_type`, back-write guarded on non-empty.
+
+Why carry rather than derive: the kind ("tuple", "dict", "optional") looks derivable from the tag
+(`tag-tuple_*`, `__python_dict__`, `tag-Optional_*`), but a user class's tag is `tag-<name>`, so a class
+named `tuple_x` would read as a tuple. #5424 introduced the marker for exactly that distinction. The
+reader, `python_aggregate_kind`, is right; so by §80's rule the marker is carried.
+
+It lands the tuple arm `scope-python-irep2.md` §10.4 had to keep legacy
+(`handle_assignment_type_adjustments`). The seven tests §10.4 lists -- `tuple9{,_fail}`,
+`tuple17-nondet`, `tuple_str_membership`, `github_5936_type_is`, `humaneval_146`, `humaneval_78` --
+pass with the arm converted and all fail with only the back-write mutated out; `unit/util/migrate.test.cpp`
+fails the same way and pins that an unmarked struct gains no key and that the kind is no part of the
+type's identity.
+
+It also changes output: over the Python suites 25 symbol tables now keep a `#python_aggregate` that an
+earlier IREP2-side write had silently dropped. All 25 tests pass; none changed verdict. Python B-2*
+52 -> 51 against `dae0885ed3`.
