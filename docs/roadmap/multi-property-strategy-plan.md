@@ -1,6 +1,7 @@
 # Plan — `--multi-property` under the k-step strategies
 
 **Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage and W6 done.
+**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage done.
 **Origin:** Discussion
 [#7900](https://github.com/esbmc/esbmc/discussions/7900), *"Current state of
 --multi-property support"*: is `--multi-property` orthogonal to the analysis
@@ -11,6 +12,7 @@ mode, and which modes can its results be trusted under? Related open issues:
 [#2075](https://github.com/esbmc/esbmc/issues/2075),
 [#7503](https://github.com/esbmc/esbmc/issues/7503).
 **Last updated:** 2026-09-24.
+**Last updated:** 2026-09-23.
 
 **Measurement environment.** aarch64 macOS, ESBMC 8.5.0 built from master
 `25b71af213`, default solver (Bitwuzla 0.9.1). Every result below is a verdict
@@ -740,6 +742,15 @@ D6 still aborts; filed as #7971. Its assert predates #7587.
   `--falsify-context-bound` rejection. W1-W4 changed none of them.
 - `d5.c` is not in the matrix: its one row is the D5 residual, and a CORE cell
   would pin the wrong answer.
+D6 still aborts, and no issue or KNOWNBUG test covers it. Its assert predates
+#7587.
+
+### W6 — documentation
+
+Add a `--multi-property` section to the website documentation with the §1
+table as it stands after W4. Also add a matrix test that runs §2's reproducers
+under every strategy in §1 and pins each verdict, so that the next strategy
+added cannot silently diverge.
 
 ---
 

@@ -807,6 +807,54 @@ private:
     const std::string &param_name,
     size_t param_index) const;
 
+  /// A bare `bytes` annotation carries no length, so its parameter type
+  /// defaults to a zero-size array (register_function_argument). Recovers a
+  /// concrete length by following each call site's argument for `func_name`
+  /// at `param_index` back to a `nondet_bytes(N)` literal, directly, through
+  /// one local-variable assignment, or forwarded through an intermediate
+  /// function's own bytes parameter; disagreeing call sites leave the
+  /// parameter untyped (returns false), same policy as
+  /// try_infer_numpy_param_type.
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size) const;
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size,
+    std::set<std::string> &visiting) const;
+
+  /// `arg` is a bare `Name` that did not resolve locally: if it names one
+  /// of `enclosing_function`'s own parameters, resolves that parameter's
+  /// bytes size recursively instead.
+  std::optional<long long> resolve_forwarded_bytes_param_size(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body,
+    const std::string &enclosing_function,
+    std::set<std::string> &visiting) const;
+
+  /// A single call site's argument (at `param_index`) resolved to a bytes
+  /// length: locally within the call's enclosing scope, or forwarded
+  /// through that scope's own bytes parameter
+  /// (resolve_forwarded_bytes_param_size).
+  std::optional<long long> resolve_bytes_call_site_arg_size(
+    const std::string &enclosing_function,
+    const nlohmann::json &call,
+    size_t param_index,
+    const nlohmann::json &module_body,
+    std::set<std::string> &visiting) const;
+
+  /// Wraps infer_bytes_param_size_from_call_sites for
+  /// register_function_argument: nullopt for `self`/`cls`, a non-bytes or
+  /// already-sized parameter, or one with no single inferable size; otherwise
+  /// the resolved `bytes` type.
+  std::optional<typet> try_infer_bytes_param_size(
+    const std::string &arg_name,
+    const typet &arg_type,
+    const symbol_id &id,
+    size_t param_index) const;
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
@@ -1047,7 +1095,7 @@ private:
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
-  bool module_scope_rhs_needs_type_probe(const nlohmann::json &value);
+  bool module_scope_rhs_needs_type_probe(const nlohmann::json &ast_node);
 
   /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
   /// declares it in `target_block` when it is a local, and records the
@@ -1767,6 +1815,9 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  exprt
+  build_emptiness_check(const exprt &value, const nlohmann::json &element);
+
   /// A call statement nested in an expression is invisible to goto-convert's
   /// side-effect removal, so it would reach the solver unevaluated.
   static void convert_function_call_to_side_effect(exprt &expr);
@@ -1825,6 +1876,11 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  /// Builds a `bytes` concatenation (`lhs + rhs`) as a fresh array literal of
+  /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
+  /// nil_exprt if either side's length is not a compile-time constant.
+  exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
 
   /**
    * @brief Handles list-related binary operations.
