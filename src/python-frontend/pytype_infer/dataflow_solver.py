@@ -94,7 +94,7 @@ def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef, context:
                     print("AST:", ast.dump(stmt))
                 else:
                     print("NOT AST!", repr(stmt))
-                if isinstance(stmt, ast.Return) and stmt.value is not None:
+                if isinstance(stmt, ast.Return):
                     return_types[id(stmt)] = infer_return_type(
                         stmt,
                         env,
@@ -145,7 +145,7 @@ def infer_return_type(stmt, env, context):
         "=>",
         current_type,
     )
-    return infer_type_from_expr(stmt.value, env, context)
+    return current_type
 
 def propagate_block(block, env, cond, in_envs):
     if cond is not None and block.succ:
@@ -558,7 +558,7 @@ def handle_append(call, env, context):
             env[listname] = ListType(
                 current.elem.join(arg_type)
             )
-        else:
+        elif isinstance(current, Unknown):
             env[listname] = ListType(arg_type)
 
         return
