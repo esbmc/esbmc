@@ -624,7 +624,8 @@ trailing set_value      a class used as a value is a char-array constant_exprt w
                         github_3520_{3_fail,4,5,7_fail,8,9}, github_7549{,_fail}
 ```
 
-The tuple arm and the trailing value write go back to legacy. The str/list arm keeps the IREP2 write and
+The tuple arm and the trailing value write go back to legacy. (The tuple arm has since landed:
+`frontends-to-irep2.md` §82 carries `#python_aggregate`.) The str/list arm keeps the IREP2 write and
 falls back only for a dynamically-sized array, through `python_expr::contains_dyn_array`, the guard the
 expression builders already use for this hazard. It has to stay converted because it is the arm
 `val = "hello"[0]` takes: with the carry mutated out of `migrate_type`, `github_4715_cpp_type_char{,_fail}`
@@ -694,6 +695,28 @@ loss, and the next step is the three experiments above rather than another conve
 So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
 `val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
 pass review silently.
+
+## 12. Three assignment type writes outside §10's eleven (2026-09-24)
+
+`handle_function_call_rhs` (a class-pointer result retyping a class-typed target),
+`get_var_assign` (an array target retyped by a different rhs) and `get_compound_assign`
+(`s += "..."` on a char array) now store the type IREP2-side. The `get_var_assign` arm keeps a legacy
+fallback for a nil rhs type, which `migrate_type` would turn into `empty`
+(`regression/python/string-symbolic-7`, a FUTURE test, is the only one that reaches it), for a
+dyn-sized array, and for a Python aggregate, whose `#python_aggregate` the seam drops as §10.4 found.
+The corpus below never sends a tuple through this arm, so the aggregate case was missed by the sweep
+and caught in review: `s = "ab"; s = (1, 2); 1 in s` stopped at `Unsupported expression for 'in'`.
+`regression/python/str_rebound_to_tuple_in{,_fail}` pin it; both fail without the check.
+
+Evidence, against master `dae0885ed3`: over the 6 697 tests under `python/`, `numpy/`, `humaneval/`
+and `python-intensive/`, `--goto-functions-only` and `--symbol-table-only` are byte-identical to the
+base binary after `frontends-to-irep2.md` §21.3's normalisations plus one more -- a `/tmp/` path
+stored as a char-array value (`{ 47, 116, 109, 112, 47, ... }`) -- except `callable_class_field`, a
+KNOWNBUG abort whose message names the binary. A temporary marker census shows 7, 48 and 41 tests
+reach the three writes; all 96 pass.
+
+The "array to pointer decay" write in `handle_assignment_type_adjustments` stays legacy: no test in
+the four suites reaches it, so converting it would add a line nothing covers. Python B-2* 52 -> 50.
 
 ## 13. An argument's default crosses the seam (2026-09-25)
 

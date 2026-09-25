@@ -683,16 +683,6 @@ answer under `--smt-formula-only` — is no longer folded into
 `VERIFICATION SUCCESSFUL`; a solver error additionally names the claim it failed
 on.
 
-Under a k-step strategy — `--k-induction` or `--incremental-bmc`, with
-`--multi-property` explicit or implied by `--parallel-solving` or
-`--all-witnesses` — the run keeps going past a violation. Running out of `k`
-steps after one was recorded now reports `VERIFICATION FAILED` on the recorded
-violation. It previously printed the counterexamples and then ended
-`VERIFICATION UNKNOWN` with exit status 0, so a program whose loop could not be
-unwound reported no bug despite having found one
-([#7913](https://github.com/esbmc/esbmc/pull/7913)). A run in which nothing was
-violated still ends `VERIFICATION UNKNOWN`.
-
 Verdicts accumulate across the whole run and each property is reported exactly
 once at the end, with *failed* dominating *unknown* dominating *passed* — so a
 property discharged under one schedule and violated under another is reported as
@@ -700,6 +690,30 @@ violated rather than printing contradictory lines. For a concurrent program,
 exploration continues past the first violation until
 `--multi-property-interleavings` consecutive interleavings decide nothing new; a
 run that stops early states that its report is partial.
+
+### Under the verification strategies
+
+`--multi-property` works with plain BMC and with the k-step strategies; two
+strategies reject it:
+
+| Strategy | Per-property result |
+|---|---|
+| `--unwind N` | Every violated claim `FAILED`, the rest `PASSED` |
+| `--k-induction`, `--incremental-bmc` | `FAILED` at the k where a base case finds the violation, `PASSED` once the forward condition (or, under `--k-induction`, the inductive step) proves the remaining claims, `UNKNOWN` if neither happens by `--max-k-step` |
+| `--falsification` | `FAILED` as above; nothing is proved, so a claim not violated by `--max-k-step` is `UNKNOWN` |
+| `--k-induction-parallel` (except with `--termination`), `--falsify-context-bound` | Rejected with an error |
+
+This holds whether `--multi-property` is given or implied by
+`--parallel-solving` or `--all-witnesses`. Under a k-step strategy the run
+keeps going past a violation and prints one table at the end, with property ids
+that stay the same across k. Running out of k steps after a violation was
+recorded ends `VERIFICATION FAILED` ([#7913](https://github.com/esbmc/esbmc/pull/7913));
+a run that neither violated nor proved anything ends `VERIFICATION UNKNOWN`.
+`--falsification` does not stop after a violation, because a larger k can raise
+claims that no smaller k did; with `--unlimited-k-steps` it runs until killed
+and prints no table, so give it `--max-k-step`. Claims with the same
+comment at the same location still share one row
+([#7900](https://github.com/esbmc/esbmc/discussions/7900)).
 
 ### Enumerating all violating inputs
 

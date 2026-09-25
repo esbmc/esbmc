@@ -1,0 +1,10 @@
+CORE
+../vac3.c
+--k-induction --multi-property --max-k-step 12
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+7\s+assertion x < 3$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+8\s+assertion x != 10$
+^\*\* 2 of 2 properties failed$
+^VERIFICATION FAILED$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z
+\A(?![\s\S]*PASSED)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION UNKNOWN)[\s\S]*\Z

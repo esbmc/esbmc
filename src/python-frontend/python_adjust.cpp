@@ -1241,7 +1241,14 @@ void python_adjust::adjust_type(type2tc &type)
       {
         const struct_type2t &st = to_struct_type(type);
         type = struct_type2tc(
-          members, st.member_names, st.member_pretty_names, st.name, st.packed);
+          members,
+          st.member_names,
+          st.member_pretty_names,
+          st.name,
+          st.packed,
+          st.member_base_names,
+          st.alignment,
+          st.python_aggregate);
       }
       else
       {
