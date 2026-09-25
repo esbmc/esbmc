@@ -2524,3 +2524,22 @@ mixes the features, where the corpus's 3 095 rows do.
 What remains for this frontend is therefore not more probing of the adjust pass.
 It is `clang_cpp_convert.cpp` and the 639 legacy type mentions
 (`frontends-to-irep2.md` §43), which the phase list puts last for every frontend.
+
+## 11. The exception specification crosses the seam (2026-09-25)
+
+`clang_cpp_adjust::adjust_symbol` and `clang_cpp_adjust_irep2::adjust_symbol_type` resolved a
+dynamic exception specification (`throw(T...)`) and then wrote every C++ function type back, legacy,
+because `migrate_type` dropped `exception_spec_kind` and `exception_spec_types` -- and
+`goto_convert_functions` decodes the specification from the symbol's type.
+
+`code_type2t` now carries a resolved specification as two unreflected fields, `exception_kind` and
+`exception_types`, both ways in `migrate_type`. An unresolved one (still holding
+`exception_spec_decl`) is not carried: carrying only its kind would read back as `throw()`.
+`finalize_exception_specification` now reports whether it resolved anything, so both writes happen only
+for a `throw(T...)` function -- every other function's type was being rewritten unchanged -- and they
+store the type IREP2-side. clang-cpp B-2* 4 -> 2.
+
+Removing the back-write fails ten `regression/esbmc-cpp/try_catch/` tests (e.g.
+`exception_spec_dynamic_violation_fail`, `lower-exceptions_throw_spec_fail`); all 172 in that suite
+pass with it. `unit/util/migrate.test.cpp` pins the round trip, that no specification adds no key,
+and that a specification is no part of the type's identity.

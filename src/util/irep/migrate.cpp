@@ -4,6 +4,7 @@
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
@@ -199,6 +200,24 @@ static bool migrates_to_empty(const typet &type)
   return type.id().as_string().empty() || type.id() == "nil" ||
          type.id() == "ellipsis" || type.id() == typet::t_ptrmem ||
          type.id() == "destructor" || type.id() == "constructor";
+}
+
+// Only a resolved specification: before finalize_exception_specification a
+// dynamic one still lists its declared types, which this cannot carry.
+static void migrate_exception_spec(
+  const typet &type,
+  irep_idt &kind,
+  std::vector<irep_idt> &types)
+{
+  if (!type.find("exception_spec_decl").is_nil())
+    return;
+  const irept &k = type.find(exception_specificationt::kind_attribute());
+  if (k.is_nil())
+    return;
+  kind = k.id();
+  for (const irept &t :
+       type.find(exception_specificationt::types_attribute()).get_sub())
+    types.push_back(t.id());
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -413,8 +432,19 @@ static type2tc migrate_type0(const typet &type)
       ret_type = migrate_type(static_cast<const typet &>(type.return_type()));
     }
 
+    irep_idt exc_kind;
+    std::vector<irep_idt> exc_types;
+    migrate_exception_spec(type, exc_kind, exc_types);
+
     return code_type2tc(
-      args, ret_type, arg_names, ellipsis, arg_base_names, arg_defaults);
+      args,
+      ret_type,
+      arg_names,
+      ellipsis,
+      arg_base_names,
+      arg_defaults,
+      exc_kind,
+      exc_types);
   }
 
   if (type.id() == "cpp-name")
@@ -3143,6 +3173,20 @@ void migrate_type_back_cache_clear()
   back_cache.clear();
 }
 
+static void
+migrate_exception_spec_back(const code_type2t &ref, code_typet &code)
+{
+  if (ref.exception_kind.empty())
+    return;
+  code.set(exception_specificationt::kind_attribute(), ref.exception_kind);
+  if (ref.exception_kind != "dynamic")
+    return;
+  irept types;
+  for (const irep_idt &id : ref.exception_types)
+    types.get_sub().emplace_back(id);
+  code.set(exception_specificationt::types_attribute(), types);
+}
+
 static typet migrate_type_back_uncached(const type2tc &ref);
 
 typet migrate_type_back(const type2tc &ref)
@@ -3245,6 +3289,8 @@ static typet migrate_type_back_uncached(const type2tc &ref)
 
     code.arguments() = args;
     code.return_type() = ret_type;
+
+    migrate_exception_spec_back(ref2, code);
 
     if (ref2.ellipsis)
       code.make_ellipsis();
