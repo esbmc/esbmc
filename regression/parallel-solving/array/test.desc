@@ -1,4 +1,4 @@
 CORE
 main.c
---parallel-solving
+--force-camada-array --parallel-solving
 ^VERIFICATION SUCCESSFUL$
