@@ -491,6 +491,149 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
   return false;
 }
 
+/// A C++ function-local static whose initializer is not a constant runs it
+/// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
+/// hoisted into static_lifetime_init. Arrays keep the hoisted form, and the
+/// IREP2 adjuster, which drops the declaration's marker, keeps it too.
+bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
+{
+  return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
+         vd.hasInit() && !vd.getType()->isArrayType() &&
+         !vd.getInit()->isConstantInitializer(
+           *ASTContext, vd.getType()->isReferenceType()) &&
+         !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
+}
+
+/// The static-storage arm of get_var: converts @p vd's initializer and adds
+/// @p symbol to the context.
+bool clang_c_convertert::get_static_var_init(
+  const clang::VarDecl &vd,
+  symbolt &symbol,
+  const typet &t,
+  const locationt &location_begin,
+  exprt &new_expr)
+{
+  const bool dynamic_local_init = has_dynamic_local_init(vd);
+  symbolt *added_symbol = nullptr;
+  /* Static symbols can't refer to themselves in the initializer (which the
+   * 'else' case handles) as it would not be constant then.
+   *
+   * We need to get the initializer first, since it can contain compound
+   * literals (with their own initialization) that this variable here is
+   * initialized to:
+   *
+   * int x = (int){5};
+   *
+   * This creates a new symbol for the compound literal, and x's initializer
+   * should point to that (already initialized) symbol. As
+   * static_lifetime_init() expects the symbols to be initialized in the order
+   * they are put into the context, by getting the RHS first, we avoid first
+   * initializing 'x' and then the compound literal symbol, which would be
+   * wrong.
+   */
+
+  /* Since this is in static storage context, pretend that any surrounding
+   * block does not exist in order to force declarations by the RHS to appear
+   * in file scope as well. Technically, this is not fully correct, as the
+   * initialization of x in
+   *
+   * void f() {
+   *   static int x = 42;
+   * }
+   *
+   * should only occur the first time f() is run, but for C this makes no
+   * difference as x cannot be accessed outside of f() anyway and the
+   * initializer can't have side-effects (it's a constant expression). */
+  /* C++ lets that initializer have side effects and runs it on the first
+   * pass through the declaration, so a dynamic one is lowered there by
+   * goto_convert (see has_dynamic_local_init) and converted in the
+   * function's scope. */
+  const clang::Stmt *stmt = vd.getInit();
+  code_blockt *orig = current_block;
+  if (!dynamic_local_init)
+    current_block = nullptr;
+
+  exprt val;
+  bool r = get_expr(*stmt, val);
+  current_block = orig;
+  if (r)
+    return true;
+
+  bool aggregate_without_init =
+    is_aggregate_type(vd.getType()) &&
+    stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
+
+  // An array of a class type with a non-trivial constructor is an aggregate,
+  // but its CXXConstructExpr is not a no-op: every element must be
+  // constructed.  Keep the constructor call so static_lifetime_init (via
+  // clang_cpp_maint::adjust_init) can expand it into per-element calls;
+  // otherwise the element constructors are silently dropped and any side
+  // effect (e.g. a global counter bumped by the ctor) never happens.  See
+  // regression esbmc-cpp/gcc-template-tests/ctor2.
+  if (aggregate_without_init)
+  {
+    const auto &construct_expr =
+      static_cast<const clang::CXXConstructExpr &>(*stmt);
+    const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
+    if (ctor && !ctor->isTrivial())
+      aggregate_without_init = false;
+  }
+
+  if (vd.isStaticDataMember() && vd.isOutOfLine())
+  {
+    // Reorder to respect definition order for static_lifetime_init().
+    // C++ class static members are inserted when the class body is processed
+    // (in declaration order), but their out-of-class definitions appear later
+    // in textual order, and the later definition supplies the complete type
+    // (e.g. an array's real size). Erase the incomplete declaration-order
+    // symbol so move_symbol_to_context below re-adds the complete one at the
+    // end — both replacing its contents and fixing the init order.
+    symbolt *s = context.find_symbol(symbol.id);
+    if (
+      s &&
+      vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
+      // In AST, nodes are also generated for the template instantiation,
+      // already initialized — skip those.
+      context.erase_symbol(s->id);
+  }
+
+  aggregate_without_init &= !dynamic_local_init;
+  added_symbol = context.move_symbol_to_context(symbol);
+  gen_typecast(ns, val, t);
+  if (!aggregate_without_init && !dynamic_local_init)
+    added_symbol->set_value(val);
+
+  code_declt decl(symbol_expr(*added_symbol));
+  decl.location() = location_begin;
+  if (!aggregate_without_init)
+    decl.operands().push_back(val);
+  if (dynamic_local_init)
+    add_init_guard(*added_symbol);
+
+  new_expr = decl;
+  return false;
+}
+
+/// The flag goto_convert tests to run @p var's initializer only once; its
+/// presence in the symbol table is what marks the initializer as dynamic, so
+/// it survives the declaration's round trip through IREP2.
+void clang_c_convertert::add_init_guard(const symbolt &var)
+{
+  symbolt guard;
+  guard.id = var.id.as_string() + "$init_guard";
+  guard.name = var.name.as_string() + "$init_guard";
+  guard.set_type(bool_type());
+  guard.mode = var.mode;
+  guard.module = var.module;
+  guard.location = var.location;
+  guard.lvalue = true;
+  guard.static_lifetime = true;
+  guard.file_local = true;
+  guard.is_thread_local = var.is_thread_local;
+  guard.set_value(false_exprt());
+  context.move_symbol_to_context(guard);
+}
+
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Get type
@@ -560,7 +703,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
   if (
     symbol.static_lifetime && !symbol.is_extern &&
-    (!vd.hasInit() || is_aggregate_type(vd.getType())))
+    (!vd.hasInit() || is_aggregate_type(vd.getType()) ||
+     has_dynamic_local_init(vd)))
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
@@ -574,122 +718,30 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
-  symbolt *added_symbol = nullptr;
   if (symbol.static_lifetime && vd.hasInit())
+    return get_static_var_init(vd, symbol, t, location_begin, new_expr);
+
+  // We have to add the symbol before converting the initial assignment
+  // because we might have something like 'int x = x + 1;' which is
+  // completely wrong but allowed by the language
+  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  code_declt decl(symbol_expr(*added_symbol));
+  decl.location() = location_begin;
+
+  if (vd.hasInit() && !vd.isExceptionVariable())
   {
-    /* Static symbols can't refer to themselves in the initializer (which the
-     * 'else' case handles) as it would not be constant then.
-     *
-     * We need to get the initializer first, since it can contain compound
-     * literals (with their own initialization) that this variable here is
-     * initialized to:
-     *
-     * int x = (int){5};
-     *
-     * This creates a new symbol for the compound literal, and x's initializer
-     * should point to that (already initialized) symbol. As
-     * static_lifetime_init() expects the symbols to be initialized in the order
-     * they are put into the context, by getting the RHS first, we avoid first
-     * initializing 'x' and then the compound literal symbol, which would be
-     * wrong.
-     */
-
-    /* Since this is in static storage context, pretend that any surrounding
-     * block does not exist in order to force declarations by the RHS to appear
-     * in file scope as well. Technically, this is not fully correct, as the
-     * initialization of x in
-     *
-     * void f() {
-     *   static int x = 42;
-     * }
-     *
-     * should only occur the first time f() is run, but for C this makes no
-     * difference as x cannot be accessed outside of f() anyway and the
-     * initializer can't have side-effects (it's a constant expression). */
-    code_blockt *orig = current_block;
-    current_block = nullptr;
-    const clang::Stmt *stmt = vd.getInit();
-
     exprt val;
-    bool r = get_expr(*stmt, val);
-    current_block = orig;
-    if (r)
+    if (get_expr(*vd.getInit(), val))
       return true;
 
-    bool aggregate_without_init =
-      is_aggregate_type(vd.getType()) &&
-      stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
-
-    // An array of a class type with a non-trivial constructor is an aggregate,
-    // but its CXXConstructExpr is not a no-op: every element must be
-    // constructed.  Keep the constructor call so static_lifetime_init (via
-    // clang_cpp_maint::adjust_init) can expand it into per-element calls;
-    // otherwise the element constructors are silently dropped and any side
-    // effect (e.g. a global counter bumped by the ctor) never happens.  See
-    // regression esbmc-cpp/gcc-template-tests/ctor2.
-    if (aggregate_without_init)
-    {
-      const auto &construct_expr =
-        static_cast<const clang::CXXConstructExpr &>(*stmt);
-      const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
-      if (ctor && !ctor->isTrivial())
-        aggregate_without_init = false;
-    }
-
-    if (vd.isStaticDataMember() && vd.isOutOfLine())
-    {
-      // Reorder to respect definition order for static_lifetime_init().
-      // C++ class static members are inserted when the class body is processed
-      // (in declaration order), but their out-of-class definitions appear later
-      // in textual order, and the later definition supplies the complete type
-      // (e.g. an array's real size). Erase the incomplete declaration-order
-      // symbol so move_symbol_to_context below re-adds the complete one at the
-      // end — both replacing its contents and fixing the init order.
-      symbolt *s = context.find_symbol(symbol.id);
-      if (
-        s &&
-        vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
-        // In AST, nodes are also generated for the template instantiation,
-        // already initialized — skip those.
-        context.erase_symbol(s->id);
-    }
-
-    added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
-    if (!aggregate_without_init)
-      added_symbol->set_value(val);
 
-    code_declt decl(symbol_expr(*added_symbol));
-    decl.location() = location_begin;
-    if (!aggregate_without_init)
-      decl.operands().push_back(val);
-
-    new_expr = decl;
+    added_symbol->set_value(val);
+    decl.operands().push_back(val);
   }
-  else
-  {
-    // We have to add the symbol before converting the initial assignment
-    // because we might have something like 'int x = x + 1;' which is
-    // completely wrong but allowed by the language
-    added_symbol = context.move_symbol_to_context(symbol);
 
-    code_declt decl(symbol_expr(*added_symbol));
-    decl.location() = location_begin;
-
-    if (vd.hasInit() && !vd.isExceptionVariable())
-    {
-      exprt val;
-      if (get_expr(*vd.getInit(), val))
-        return true;
-
-      gen_typecast(ns, val, t);
-
-      added_symbol->set_value(val);
-      decl.operands().push_back(val);
-    }
-
-    new_expr = decl;
-  }
+  new_expr = decl;
   return false;
 }
 

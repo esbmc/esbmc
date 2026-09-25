@@ -27,6 +27,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 #include <util/arith/arith_tools.h>
 #include <chrono>
 #include <utility>
@@ -1527,5 +1528,73 @@ TEST_CASE("a type keeps its source spelling", "[migrate]")
     REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
     REQUIRE(
       migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
+  }
+}
+
+// An argument's `#default_value` is no part of a function's type, but Python
+// call lowering fills a missing argument from it, so it must survive the seam.
+TEST_CASE("a function type keeps its argument defaults", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  f.arguments().emplace_back(signedbv_typet(64));
+  f.arguments().emplace_back(signedbv_typet(64));
+
+  SECTION("a default round-trips on the argument that has one")
+  {
+    f.arguments()[1].default_value() = from_integer(7, signedbv_typet(64));
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    REQUIRE(!back.arguments()[0].has_default_value());
+    REQUIRE(
+      back.arguments()[1].default_value() == f.arguments()[1].default_value());
+  }
+
+  SECTION("no default gains no key")
+  {
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    for (const auto &arg : back.arguments())
+      REQUIRE(arg.find("#default_value").is_nil());
+  }
+
+  SECTION("a default is no part of the type's identity")
+  {
+    code_typet with = f;
+    with.arguments()[0].default_value() = from_integer(1, signedbv_typet(64));
+    REQUIRE(migrate_type(with) == migrate_type(f));
+    REQUIRE(migrate_type(with)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// `#python_aggregate` marks a Python model struct (tuple, dict, Optional).
+// Unreflected -- the tag already names the type -- but `in` dispatches on it,
+// and a user class can share a tuple's tag prefix, so it cannot be derived
+// from the tag (docs/roadmap/scope-python-irep2.md §10.4).
+TEST_CASE("a struct keeps its Python aggregate kind", "[migrate]")
+{
+  struct_typet tuple;
+  tuple.components().emplace_back("element_0", "element_0", signedbv_typet(64));
+  tuple.tag("tag-tuple_signedbv");
+
+  SECTION("the kind round-trips")
+  {
+    set_python_aggregate_kind(tuple, "tuple");
+    REQUIRE(
+      python_aggregate_kind(migrate_type_back(migrate_type(tuple))) ==
+      irep_idt("tuple"));
+  }
+
+  SECTION("an unmarked struct gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(tuple));
+    REQUIRE(back.find(PYTHON_AGGREGATE_ATTR).is_nil());
+    REQUIRE(full_eq(back, tuple));
+  }
+
+  SECTION("the kind is no part of the type's identity")
+  {
+    struct_typet marked = tuple;
+    set_python_aggregate_kind(marked, "tuple");
+    REQUIRE(migrate_type(marked) == migrate_type(tuple));
+    REQUIRE(migrate_type(marked)->crc() == migrate_type(tuple)->crc());
   }
 }
