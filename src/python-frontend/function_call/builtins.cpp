@@ -345,28 +345,12 @@ exprt function_call_expr::handle_isinstance() const
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
-  if (obj_arg["_type"] == "Name")
+  if (obj_arg["_type"] == "Name" && obj_expr.is_symbol())
   {
-    const std::string &obj_name = obj_arg["id"];
-
-    // Check if this variable holds a type object by checking the symbol
-    std::string lookup_name = obj_name;
-    if (obj_expr.is_symbol())
-    {
-      const symbol_exprt &sym_expr = to_symbol_expr(obj_expr);
-      lookup_name = sym_expr.get_identifier().as_string();
-    }
-
-    const symbolt *var_symbol = converter_.ns.lookup(lookup_name);
-    if (var_symbol && var_symbol->get_value().is_constant())
-    {
-      const constant_exprt &const_val =
-        to_constant_expr(var_symbol->get_value());
-      std::string value_str = const_val.get_value().as_string();
-      // Check if this constant value is a type name
-      if (type_utils::is_type_identifier(value_str))
-        return gen_boolean(admits_class_object(type_arg));
-    }
+    const std::string *name =
+      converter_.class_object_name(obj_expr.identifier());
+    if (name && type_utils::is_type_identifier(*name))
+      return gen_boolean(admits_class_object(type_arg));
   }
 
   // Extract type name from various AST node formats
