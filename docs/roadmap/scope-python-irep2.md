@@ -694,3 +694,51 @@ loss, and the next step is the three experiments above rather than another conve
 So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
 `val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
 pass review silently.
+
+## 14. The class-object value write, and why it is a reader problem (2026-09-25)
+
+§10.4's third legacy write -- the trailing `lhs_symbol->set_value(rhs)` in
+`handle_assignment_type_adjustments` -- stays legacy because a class object used as a value (`x = int`,
+`x = C`) is a char-array `constant_exprt` with the class name in `value` and no operands
+(`converter_expr.cpp:1281` for a builtin type, `:1718` for a class), and `migrate_expr` turns that
+into `{ }`. Converting the write is not blocked on the seam, though: the shape itself is the defect.
+
+### 14.1 The shape collides with `str`
+
+A class object and a string share `char[N]`, told apart only by whether the constant has operands.
+That collision was a live false proof: `isinstance(<any str>, type)` folded to true, so
+`x = "int"; assert isinstance(x, type)` was proved (PR #7989, which also fixes the tuple form of the
+same check). After #7989 a str-typed operand that is neither a literal nor a known class object is
+nondeterministic -- sound, but `def f(s: str): assert not isinstance(s, type)` is a false alarm, and it
+stays one until the two are distinguishable.
+
+### 14.2 Who reads the value
+
+Three readers ask one question -- does this variable hold a class object, and which -- and all answer
+it from the symbol's legacy value:
+
+| reader | what it reads |
+|---|---|
+| `function_call/builtins.cpp` `handle_isinstance`, early block | `to_constant_expr(sym.get_value()).get_value()` |
+| `converter_compare.cpp` `resolve_type_identifier` (`type(x) is T`, `x is int`) | the same, plus `type(x)`'s own constant |
+| `string_handler::extract_string_from_array_operands` | `value` when a char constant has no operands |
+
+A symbol's value is one of its assignments, chosen by conversion order, so this is also a
+flow-insensitive read; it has not produced a wrong answer in #7989's reassignment probes, but it is
+not a sound way to answer a flow-sensitive question either.
+
+### 14.3 Plan
+
+Of §57.3's three answers, the third fits: move the fact out of the value.
+
+1. Record `symbol id -> class name` in the converter when an assignment's rhs is a class object, the
+   way `scope-solidity-irep2.md` §10 keys Solidity facts by symbol id.
+2. Point the three readers at it.
+3. Build the class-object constant as an ordinary string constant (with operands) -- nothing reads
+   `value` any more -- and convert the trailing write, which then round-trips.
+
+Step 3 is the IREP2 change; steps 1-2 are what make it safe, and each is measurable on its own with
+the corpus A/B `frontends-to-irep2.md` §21.3 describes, plus the `isinstance`/`is` tests (170 of them
+use `isinstance`). A distinct class-object type would also separate it from `str` and remove §14.1's
+false alarm; that is a larger change to what the frontend builds, and is not needed for the write to
+move.
