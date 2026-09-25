@@ -201,6 +201,19 @@ static bool migrates_to_empty(const typet &type)
          type.id() == "destructor" || type.id() == "constructor";
 }
 
+static std::vector<expr2tc>
+migrate_arg_defaults(const code_typet::argumentst &old_args)
+{
+  std::vector<expr2tc> defaults;
+  for (std::size_t i = 0; i < old_args.size(); i++)
+    if (old_args[i].has_default_value())
+    {
+      defaults.resize(old_args.size());
+      migrate_expr(old_args[i].default_value(), defaults[i]);
+    }
+  return defaults;
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -386,7 +399,6 @@ static type2tc migrate_type0(const typet &type)
       ellipsis = true;
 
     std::vector<irep_idt> arg_base_names;
-    std::vector<expr2tc> arg_defaults;
     const code_typet::argumentst &old_args = ref.arguments();
     for (const auto &old_arg : old_args)
     {
@@ -394,11 +406,6 @@ static type2tc migrate_type0(const typet &type)
       args.push_back(tmp);
       arg_names.push_back(old_arg.get_identifier());
       arg_base_names.push_back(old_arg.cmt_base_name());
-      if (old_arg.has_default_value())
-      {
-        arg_defaults.resize(old_args.size());
-        migrate_expr(old_arg.default_value(), arg_defaults[args.size() - 1]);
-      }
     }
 
     // Don't migrate return type if it's a symbol. There are a variety of C++
@@ -414,7 +421,12 @@ static type2tc migrate_type0(const typet &type)
     }
 
     return code_type2tc(
-      args, ret_type, arg_names, ellipsis, arg_base_names, arg_defaults);
+      args,
+      ret_type,
+      arg_names,
+      ellipsis,
+      arg_base_names,
+      migrate_arg_defaults(old_args));
   }
 
   if (type.id() == "cpp-name")
