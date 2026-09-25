@@ -2567,9 +2567,11 @@ Two further things the carry exposed, each measured:
 
 - **An unresolved dynamic specification must cross too.** The converter's write runs before
   `finalize_exception_specification`, so a `throw(T...)` spec still holds `exception_spec_decl`.
-  Dropping it made `X() throw() { throw 5; }` potentially throwing, a false proof in
-  `try_catch/try-catch_decl_10_bug`. `exception_decl` now carries the declared types, and finalize
-  resolves them after the round trip.
+  §11 dropped such a spec whole, which made `X() throw() { throw 5; }` potentially throwing, a false
+  proof in `try_catch/try-catch_decl_10_bug`; its kind now always crosses. `exception_decl` carries the
+  declared types, and finalize resolves them after the round trip:
+  `try_catch/ctor_throw_spec_declared_types` fails without it (its `_fail` twin cannot, since losing
+  the types only makes the specification stricter).
 - **A constructor call that already passes its object.** In the IREP2 adjust pass a declined VLA
   construction keeps its initialiser, a constructor call whose first argument is the object.
   `goto_sideeffects` lowered every call to a `"constructor"`-typed callee by adding a temporary `this`,
