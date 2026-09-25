@@ -109,6 +109,24 @@ static struct_union_typet::componentst migrate_components_back(
   return comps;
 }
 
+static code_typet::argumentst migrate_arguments_back(const code_type2t &ref2)
+{
+  code_typet::argumentst args;
+  for (std::size_t i = 0; i < ref2.arguments.size(); i++)
+  {
+    args.emplace_back(migrate_type_back(ref2.arguments[i]));
+    args.back().set_identifier(ref2.argument_names[i]);
+    // Unreflected, so it may be absent on a type built by a frontend rather
+    // than by migrate_type (§44).
+    if (i < ref2.argument_base_names.size())
+      args.back().cmt_base_name(ref2.argument_base_names[i]);
+    if (i < ref2.argument_defaults.size() && ref2.argument_defaults[i])
+      args.back().default_value() =
+        migrate_expr_back(ref2.argument_defaults[i]);
+  }
+  return args;
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -3282,23 +3300,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
 
     assert(ref2.arguments.size() == ref2.argument_names.size());
 
-    code_typet::argumentst args;
-    unsigned int i = 0;
-    for (auto const &it : ref2.arguments)
-    {
-      args.emplace_back(migrate_type_back(it));
-      args.back().set_identifier(ref2.argument_names[i]);
-      // Unreflected, so it may be absent on a type built by a frontend rather
-      // than by migrate_type (§44).
-      if (i < ref2.argument_base_names.size())
-        args.back().cmt_base_name(ref2.argument_base_names[i]);
-      if (i < ref2.argument_defaults.size() && ref2.argument_defaults[i])
-        args.back().default_value() =
-          migrate_expr_back(ref2.argument_defaults[i]);
-      i++;
-    }
-
-    code.arguments() = args;
+    code.arguments() = migrate_arguments_back(ref2);
     code.return_type() = ret_type;
 
     migrate_exception_spec_back(ref2, code);
