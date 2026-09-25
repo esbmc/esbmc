@@ -882,3 +882,25 @@ a reflected field on `struct_type2t`, or should Python record bases structurally
 list becomes derivable?** The second is the smaller change to the IR and the larger one to the frontend,
 and it would retire this residue and the exception-id divergence §11.3.1 notes together. Neither should
 be picked without the maintainers, and neither is blocked on measurement -- the routes above are priced.
+
+## 13. Three assignment type writes outside §10's eleven (2026-09-24)
+
+`handle_function_call_rhs` (a class-pointer result retyping a class-typed target),
+`get_var_assign` (an array target retyped by a different rhs) and `get_compound_assign`
+(`s += "..."` on a char array) now store the type IREP2-side. The `get_var_assign` arm keeps a legacy
+fallback for a nil rhs type, which `migrate_type` would turn into `empty`
+(`regression/python/string-symbolic-7`, a FUTURE test, is the only one that reaches it), for a
+dyn-sized array, and for a Python aggregate, whose `#python_aggregate` the seam drops as §10.4 found.
+The corpus below never sends a tuple through this arm, so the aggregate case was missed by the sweep
+and caught in review: `s = "ab"; s = (1, 2); 1 in s` stopped at `Unsupported expression for 'in'`.
+`regression/python/str_rebound_to_tuple_in{,_fail}` pin it; both fail without the check.
+
+Evidence, against master `dae0885ed3`: over the 6 697 tests under `python/`, `numpy/`, `humaneval/`
+and `python-intensive/`, `--goto-functions-only` and `--symbol-table-only` are byte-identical to the
+base binary after `frontends-to-irep2.md` §21.3's normalisations plus one more -- a `/tmp/` path
+stored as a char-array value (`{ 47, 116, 109, 112, 47, ... }`) -- except `callable_class_field`, a
+KNOWNBUG abort whose message names the binary. A temporary marker census shows 7, 48 and 41 tests
+reach the three writes; all 96 pass.
+
+The "array to pointer decay" write in `handle_assignment_type_adjustments` stays legacy: no test in
+the four suites reaches it, so converting it would add a line nothing covers. Python B-2* 52 -> 50.

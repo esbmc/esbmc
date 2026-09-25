@@ -923,6 +923,36 @@ bool is_imported_numpy_module_alias(
   return false;
 }
 
+// Converts a scalar RHS whose kind differs from the LHS's, returning whether
+// it did; both must run before Case 6, whose width alignment retypes the RHS
+// in place.
+// Case 5 (P19): a real RHS into a complex LHS is promoted. A complex struct is
+// 128-bit and a float 64-bit, so width alignment would otherwise corrupt the
+// float by assigning it the struct type. Handles z = 1.0, z = n, z = True.
+// Case 5b: a bool into an int or float LHS is a value conversion; retyped,
+// the constant `true` is read as a number and aborts in binary2integer.
+static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
+{
+  const typet rhs_type = rhs.type();
+  // is_bool() must be explicit since is_integer_type() excludes bool.
+  const bool is_real = rhs_type.is_floatbv() ||
+                       type_utils::is_integer_type(rhs_type) ||
+                       rhs_type.is_bool();
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  {
+    rhs = promote_to_complex(rhs);
+    return true;
+  }
+  if (
+    rhs_type.is_bool() &&
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  {
+    rhs = typecast_exprt(rhs, lhs_type);
+    return true;
+  }
+  return false;
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -1039,19 +1069,9 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
-  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
-  // while a scalar float is 64-bit, so width alignment would otherwise fire
-  // first and corrupt the float by assigning struct type to it.
-  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
-  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
-  else if (
-    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
-    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
-     rhs_type.is_bool()))
-  {
-    rhs = promote_to_complex(rhs);
-  }
+  // Cases 5 and 5b: see convert_scalar_rhs.
+  else if (convert_scalar_rhs(lhs_type, rhs))
+    return;
   // Case 6: Align bit-widths between LHS and RHS if they differ. Never
   // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
   // the scalar's type corrupts already-emitted tuple member reads (see the
@@ -1957,9 +1977,6 @@ python_converter::classify_numpy_method_call(
     method_base.value("_type", "") == "Name" && method_base.contains("id")
       ? method_base["id"].get<std::string>()
       : std::string();
-  const bool receiver_is_rewritable =
-    !method_base_is_imported_module(method_base_name) &&
-    method_base_is_tracked_numpy_array(method_base_name);
 
   // transpose()/reshape()/ravel() are view-like (see is_numpy_view_copy_expr,
   // which handles them separately); flatten()/sum()/mean()/min()/max()/
@@ -1983,6 +2000,50 @@ python_converter::classify_numpy_method_call(
     "argmax",
     "argsort",
     "searchsorted"};
+
+  // `np.eye(3).transpose()`: the receiver is itself a raw Call (a
+  // constructor, or a user function returning an array), not a Name bound
+  // to an already-tracked numpy array -- method_base_is_tracked_numpy_array
+  // can't recognise it at all. Every dispatch-rewrite method above is
+  // eligible for the rewrite itself: numpy_call_expr::
+  // try_hoist_call_arg_for_view_method either resolves the raw Call
+  // argument (transpose/flatten/ravel/sum/mean/min/max/argsort/
+  // searchsorted, whose Name-argument dispatch resolves through descriptor
+  // materialization and so also sees a temp that exists only in the GOTO
+  // IR), or -- for the rest, whose Name-argument dispatch walks the
+  // *source* AST instead (reshape's own resolve_numpy_var, prod/std/var/
+  // argmin/argmax's literal-only fallback, diagonal's pointer-view
+  // construction, none of which can see such a temp) -- raises a clean
+  // diagnostic rather than falling through to the pre-existing generic
+  // runtime-call fallback, which silently produced a wrong NONDET value
+  // for this shape (see numpy_call_expr.cpp for the full rationale).
+  //
+  // sum/max/min/mean and friends are not numpy-exclusive names: `Foo()` is
+  // syntactically the same Call shape as a plain function call, so without
+  // this guard `Foo().sum()` (a user class defining its own `sum` method)
+  // would be rewritten to `np.sum(Foo())` and never reach `Foo.sum`
+  // (issue caught in review). Excluding a call whose callee names a known
+  // class keeps the exact ambiguous case out while still allowing a plain
+  // function call (`make().sum()`) through -- get()'s own dispatch still
+  // declines/throws for a call that materialize/hoist can't resolve to a
+  // concrete array either way, so this is a precision improvement, not a
+  // soundness requirement on its own.
+  const bool receiver_is_call_to_known_class =
+    method_base.value("_type", "") == "Call" && method_base.contains("func") &&
+    method_base["func"].is_object() &&
+    method_base["func"].value("_type", std::string()) == "Name" &&
+    json_utils::is_class(
+      method_base["func"].value("id", std::string()), *ast_json);
+  const bool receiver_is_raw_call_view_method =
+    method_base.value("_type", "") == "Call" &&
+    !receiver_is_call_to_known_class &&
+    dispatch_rewrite_methods.count(method_name) != 0;
+
+  const bool receiver_is_rewritable =
+    !method_base_is_imported_module(method_base_name) &&
+    (method_base_is_tracked_numpy_array(method_base_name) ||
+     receiver_is_raw_call_view_method);
+
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
   const bool supported_copy_method =
@@ -2170,6 +2231,12 @@ bool python_converter::is_basic_numpy_view_subscript_escape(
   if (!root_is_numpy_view_source)
     return false;
 
+  const exprt probe = probe_expr(node);
+  return !contains_cpp_throw(probe) && probe.type().is_array();
+}
+
+exprt python_converter::probe_expr(const nlohmann::json &node)
+{
   code_blockt scratch_block;
   code_blockt *saved_block = current_block;
   exprt *saved_lhs = current_lhs;
@@ -2188,7 +2255,7 @@ bool python_converter::is_basic_numpy_view_subscript_escape(
   }
   current_block = saved_block;
   current_lhs = saved_lhs;
-  return !contains_cpp_throw(probe) && probe.type().is_array();
+  return probe;
 }
 
 bool python_converter::contains_tracked_numpy_view_object(
@@ -4445,9 +4512,14 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     // If the expression is itself invalid — e.g. accessing a non-existent
     // attribute — get_expr will raise the correct, precise error at the
     // point of access rather than the misleading "Type undefined" later.
+    // Probed through rewrite_assign_rhs_node the same way the real
+    // conversion further down is, so a `.T` on a non-Name base (already
+    // rewritten to `np.transpose(...)` there) doesn't fail this probe on
+    // the original, unrewritten Attribute node before the real pass ever
+    // runs.
     is_converting_rhs = true;
     in_rhs_type_probe_ = true;
-    exprt rhs_expr = get_expr(ast_node["value"]);
+    exprt rhs_expr = get_expr(rewrite_assign_rhs_node(ast_node)["value"]);
     in_rhs_type_probe_ = false;
     is_converting_rhs = false;
 
@@ -4648,7 +4720,7 @@ void python_converter::handle_function_call_rhs(
     is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
   {
     lhs.type() = rhs.type();
-    lhs_symbol->set_type(rhs.type());
+    lhs_symbol->set_type(migrate_type(rhs.type()));
   }
 
   // Set return destination
@@ -5523,14 +5595,32 @@ void python_converter::propagate_list_type_info(
 /// the scalar path built a member over the tagged struct, aborting in member2t.
 /// The same assignment inside a function already worked. A `for` over a list of
 /// tagged scalars hits this too: the preprocessor unrolls it into exactly such
-/// a chain of tagged-name copies.
+/// a chain of tagged-name copies. An inferred annotation on a dict subscript
+/// (`y = d[k]`) needs the same check: it's a guess, and the dict's value may
+/// be tagged anyway. Narrowed to dict subscripts specifically, since probing
+/// any other inferred-annotation RHS here re-evaluates it outside its normal
+/// guarded path (e.g. a list subscript's bounds check).
 bool python_converter::module_scope_rhs_needs_type_probe(
-  const nlohmann::json &value)
+  const nlohmann::json &ast_node)
 {
   if (!current_func_name_.empty())
     return false;
   if (type_handler_.is_tagged_scalar_type(current_element_type))
     return true;
+  const nlohmann::json &value = ast_node["value"];
+  if (
+    ast_node.value("_inferred_annotation", false) && value.is_object() &&
+    value.value("_type", "") == "Subscript" && value.contains("value") &&
+    value["value"].value("_type", "") == "Name" &&
+    value["value"].contains("id"))
+  {
+    symbol_id base_sid = create_symbol_id();
+    base_sid.set_object(value["value"]["id"].get<std::string>());
+    const symbolt *base_sym = symbol_table_.find_symbol(base_sid.to_string());
+    if (
+      base_sym && dict_handler_->is_dict_type(ns.follow(base_sym->get_type())))
+      return true;
+  }
   return value.is_object() && value.value("_type", "") == "Name" &&
          value.contains("id") &&
          dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
@@ -5840,7 +5930,7 @@ void python_converter::get_var_assign(
     if (
       (sid.to_string().find("@F") != std::string::npos &&
        sid.to_string().find("@C") == std::string::npos) ||
-      module_scope_rhs_needs_type_probe(ast_node["value"]))
+      module_scope_rhs_needs_type_probe(ast_node))
     {
       is_right = true;
       if (!ast_node["value"].is_null())
@@ -6495,7 +6585,7 @@ void python_converter::get_var_assign(
       // `const array_typet& = lhs.type()` constructed a throwaway array (with
       // a nil size) rather than reinterpreting the real type; it asserted
       // nothing meaningful and is removed.
-      lhs_symbol->set_type(rhs.type());
+      python_expr::set_symbol_type_if_carried(*lhs_symbol, rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
@@ -6830,7 +6920,7 @@ void python_converter::get_compound_assign(
       if (symbol)
       {
         // Update the symbol's type to pointer if concatenated returns pointer
-        symbol->set_type(concatenated.type());
+        symbol->set_type(migrate_type(concatenated.type()));
 
         // Update LHS to be a symbol with the new type
         lhs = symbol_exprt(symbol->id, symbol->get_type());
@@ -7021,8 +7111,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   nlohmann::json call_node;
   bool is_wrapped_in_unary = false;
 
-  // Check for function call wrapped in UnaryOp (e.g., "not func()")
-  if (test_type == "UnaryOp" && ast_node["test"].contains("operand"))
+  // Check for function call wrapped in `not` (e.g., "not func()"). Only `not`
+  // is re-applied below; -, ~ and + over a call take the general expression
+  // path, which dropped here used to leave the condition as the bare call.
+  if (
+    test_type == "UnaryOp" && ast_node["test"].contains("operand") &&
+    ast_node["test"]["op"]["_type"] == "Not")
   {
     auto operand_type = ast_node["test"]["operand"]["_type"].get<std::string>();
     if (operand_type == "Call")
@@ -7293,14 +7387,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       if (!is_wrapped_in_unary)
         return base_expr;
 
-      auto op = ast_node["test"]["op"]["_type"].get<std::string>();
-      if (op == "Not")
-      {
-        exprt unary_expr("not", bool_type());
-        unary_expr.copy_to_operands(base_expr);
-        return unary_expr;
-      }
-      return base_expr;
+      exprt unary_expr("not", bool_type());
+      unary_expr.copy_to_operands(base_expr);
+      return unary_expr;
     };
 
     // Get the function call expression with special handling

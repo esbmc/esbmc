@@ -1,0 +1,8 @@
+import numpy as np
+
+a = np.array([1, 3, 3, 3, 5])
+left = np.searchsorted(a, [3, 3], side="left")
+right = np.searchsorted(a, [3, 3], side="right")
+
+assert left[0] == 1
+assert right[0] == 4

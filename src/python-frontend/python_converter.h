@@ -47,6 +47,16 @@ bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
 
+// One `Call` node together with the name of the function whose body it
+// textually appears in (empty for a module-level call). Declared here (Impl
+// in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
+// that finds these instead of every caller re-walking the AST itself.
+struct numpy_param_call_site
+{
+  const nlohmann::json *call;
+  std::string enclosing_function;
+};
+
 /**
  * @class python_converter
  * @brief Main converter for transforming Python AST into ESBMC's intermediate
@@ -258,6 +268,53 @@ public:
   {
     if (current_block)
       current_block->copy_to_operands(expr);
+  }
+
+  // Converts `ast_node` (an Assign statement) into GOTO and appends it to
+  // current_block, the same way any real source-level assignment is
+  // converted -- for a caller (numpy argument hoisting) that only has
+  // add_instruction's implicit current_block, not a codet& of its own to
+  // pass to get_var_assign directly. False when there is no current block to
+  // emit into (e.g. converting outside statement context).
+  bool emit_statement_into_current_block(const nlohmann::json &ast_node)
+  {
+    if (!current_block || !safe_to_emit_side_effecting_statement())
+      return false;
+    // get_var_assign always leaves current_lhs pointing at its own target
+    // (or null) when it returns, clobbering whatever an enclosing
+    // assignment's own RHS conversion had it pointing at -- e.g. a call
+    // argument hoisted into a temp mid-conversion (hoist_call_argument_
+    // into_temp) would otherwise silently erase the outer assignment's
+    // ability to retype its own target from the freshly computed RHS
+    // (retype_current_lhs_and_return and friends), leaving a stale
+    // static-annotator guess in place. Save and restore around the nested
+    // statement so it only ever affects its own target.
+    exprt *outer_lhs = current_lhs;
+    bool outer_is_converting_rhs = is_converting_rhs;
+    bool outer_is_converting_lhs = is_converting_lhs;
+    const nlohmann::json *outer_store_target = lhs_store_target_;
+    typet outer_element_type = current_element_type;
+    get_var_assign(ast_node, *current_block);
+    current_lhs = outer_lhs;
+    is_converting_rhs = outer_is_converting_rhs;
+    is_converting_lhs = outer_is_converting_lhs;
+    lhs_store_target_ = outer_store_target;
+    current_element_type = outer_element_type;
+    return true;
+  }
+
+  // True where a side-effecting statement (e.g. a hoisted temporary
+  // assignment) is safe to plant into current_block without being evaluated
+  // an extra time or leaking into a specification -- the same guard
+  // needs_zero_division_guard applies before hoisting a side-effecting
+  // divisor: not a lambda body at its definition (operands still unbound),
+  // not the discarded type-probe pass of an assignment RHS (which runs the
+  // real conversion again right after), and not inside a contract clause
+  // (which must not plant a statement into the enclosing block at all).
+  bool safe_to_emit_side_effecting_statement() const
+  {
+    return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+           !in_contract_clause_;
   }
 
   void update_symbol(const exprt &expr) const;
@@ -598,6 +655,12 @@ private:
   /// __len__, or raising TypeError as CPython does when it defines none.
   /// Returns nil when @p element is not such a call.
   exprt get_len_on_class_instance(const nlohmann::json &element);
+  static bool is_pure_read(const nlohmann::json &node);
+  exprt
+  get_len_on_list_element(const nlohmann::json &arg, const locationt &location);
+  static exprt list_element_type_id(const exprt &value);
+  std::size_t count_user_classes();
+  exprt checked_len_result(const exprt &len_call, const locationt &location);
 
   // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
   // slice views). Split out of get_function_call() to keep that already
@@ -795,6 +858,54 @@ private:
   bool try_infer_dynamic_param_type(
     const std::string &func_name,
     const std::string &param_name,
+    size_t param_index) const;
+
+  /// A bare `bytes` annotation carries no length, so its parameter type
+  /// defaults to a zero-size array (register_function_argument). Recovers a
+  /// concrete length by following each call site's argument for `func_name`
+  /// at `param_index` back to a `nondet_bytes(N)` literal, directly, through
+  /// one local-variable assignment, or forwarded through an intermediate
+  /// function's own bytes parameter; disagreeing call sites leave the
+  /// parameter untyped (returns false), same policy as
+  /// try_infer_numpy_param_type.
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size) const;
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size,
+    std::set<std::string> &visiting) const;
+
+  /// `arg` is a bare `Name` that did not resolve locally: if it names one
+  /// of `enclosing_function`'s own parameters, resolves that parameter's
+  /// bytes size recursively instead.
+  std::optional<long long> resolve_forwarded_bytes_param_size(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body,
+    const std::string &enclosing_function,
+    std::set<std::string> &visiting) const;
+
+  /// A single call site's argument (at `param_index`) resolved to a bytes
+  /// length: locally within the call's enclosing scope, or forwarded
+  /// through that scope's own bytes parameter
+  /// (resolve_forwarded_bytes_param_size).
+  std::optional<long long> resolve_bytes_call_site_arg_size(
+    const std::string &enclosing_function,
+    const nlohmann::json &call,
+    size_t param_index,
+    const nlohmann::json &module_body,
+    std::set<std::string> &visiting) const;
+
+  /// Wraps infer_bytes_param_size_from_call_sites for
+  /// register_function_argument: nullopt for `self`/`cls`, a non-bytes or
+  /// already-sized parameter, or one with no single inferable size; otherwise
+  /// the resolved `bytes` type.
+  std::optional<typet> try_infer_bytes_param_size(
+    const std::string &arg_name,
+    const typet &arg_type,
+    const symbol_id &id,
     size_t param_index) const;
 
   void validate_return_paths(
@@ -1037,7 +1148,7 @@ private:
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
-  bool module_scope_rhs_needs_type_probe(const nlohmann::json &value);
+  bool module_scope_rhs_needs_type_probe(const nlohmann::json &ast_node);
 
   /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
   /// declares it in `target_block` when it is a local, and records the
@@ -1194,6 +1305,106 @@ private:
 
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
 
+  // The last direct assignment to `name` in `block[0..end)`, following into
+  // both arms of a trailing if/else (nullptr unless both arms agree it's a
+  // numpy array constructor call). Shared by block_assigns_numpy_array_to
+  // and reject_incompatible_numpy_local_return_branches so both walk the
+  // same "what did this name last bind to" search -- one only needs to know
+  // whether it resolved, the other needs the value node itself to compare
+  // shapes between branches.
+  const nlohmann::json *find_numpy_ctor_value_assigned_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `block[0..end)` ends (directly, or through both arms of a
+  // trailing if/else) in an assignment binding `name` from a numpy array
+  // constructor call. Shared by local_var_numpy_array_return's straight-line
+  // and branching cases so both walk the same "what did this name last bind
+  // to" search.
+  bool block_assigns_numpy_array_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `func_def`'s only top-level statement is `return <Name>`, and
+  // that Name was last bound (directly, or identically on both arms of an
+  // if/else) by a numpy array constructor call. get_function_definition
+  // checks this before its own return-type dispatch: the static annotator's
+  // pre-pass already resolved such a Name's own `np.zeros(...)`-shaped
+  // assignment through the numpy operational model's declared signature
+  // (`list[float]`) and wrote that bogus annotation into
+  // `function_node["returns"]` ahead of real conversion -- locking the
+  // function's return type to a generic PyListObject* before the body (which
+  // actually returns a concrete array) is ever converted. A direct
+  // `return np.zeros(...)` never hits this: static inference only chases a
+  // Name-based callee, not np.zeros's Attribute-based one, so it leaves the
+  // return type empty and the existing GOTO-scan fallback already types it
+  // correctly. Treating the local-var case the same way here (by having the
+  // caller skip the annotation-driven dispatch entirely) reaches that same
+  // already-correct fallback instead of duplicating it.
+  bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
+
+  // The `returns` node get_function_definition's own dispatch should use:
+  // null when local_var_numpy_array_return applies, function_node["returns"]
+  // otherwise. Split out to keep the ternary this needs out of
+  // get_function_definition's own decision count.
+  const nlohmann::json &
+  resolve_return_annotation_node(const nlohmann::json &function_node) const;
+
+  // Throws an explicit TypeError when local_var_numpy_array_return's
+  // trailing if/else binds the returned name from a numpy array constructor
+  // call with a different literal shape argument on each arm -- e.g.
+  // np.zeros(3) on one branch, np.zeros((2, 2)) on the other. Left
+  // unchecked, converting the branch merge with two different concrete
+  // array types crashes value_sett::assign's type-compatibility assertion
+  // instead of rejecting cleanly (ADR-NP principle 3).
+  void reject_incompatible_numpy_local_return_branches(
+    const nlohmann::json &func_def) const;
+
+  // True when `func_name`'s own body reads `param_name`'s `.shape`/`.ndim`/
+  // `.size`/`.T`, or passes it to `numpy.transpose`/`numpy.sort`/
+  // `numpy.argsort`, *and* some call site feeds the `param_index`-th
+  // argument from a module-level numpy array constructor call whose shape
+  // argument is not a literal (e.g. `np.ones(n)` for a variable `n`).
+  // register_function_argument uses this to reject such a parameter with an
+  // explicit diagnostic instead of leaving it untyped, which previously
+  // surfaced as a generic runtime AttributeError the first time the callee
+  // touched one of those. Deliberately excludes `len()`, which already
+  // resolves soundly for a symbolic-shape parameter through a different
+  // path.
+  bool numpy_param_call_site_has_symbolic_shape(
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &param_name) const;
+
+  // Every `Call` node in the AST, computed once and reused:
+  // register_function_argument calls numpy_param_call_site_has_symbolic_shape
+  // once per parameter, and each call previously re-walked the entire AST from
+  // scratch.
+  const std::vector<numpy_param_call_site> &numpy_call_sites() const;
+  mutable std::vector<numpy_param_call_site> numpy_call_sites_cache_;
+  mutable bool numpy_call_sites_cached_ = false;
+
+  // True when some top-level statement in `module_body` binds `arg_name` to
+  // a numpy array constructor call with a non-literal shape. Split out of
+  // numpy_param_call_site_has_symbolic_shape to keep that function's own
+  // decision count down.
+  bool module_level_symbolic_ctor_binding(
+    const nlohmann::json &module_body,
+    const std::string &arg_name) const;
+
+  // Throws when `numpy_array_param` is false and some call site feeds this
+  // parameter from a numpy array constructor call with a non-literal shape.
+  // Split out of register_function_argument to keep the `if` this check
+  // needs out of that function's own decision count.
+  void reject_if_symbolic_shape_param(
+    bool numpy_array_param,
+    const typet &arg_type,
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &arg_name) const;
+
   // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
   // itself returns a numpy array is never an is_numpy_array_constructor_expr
   // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type
@@ -1215,6 +1426,9 @@ private:
   bool is_tracked_numpy_view_name_node(const nlohmann::json &node);
 
   bool is_basic_numpy_view_subscript_escape(const nlohmann::json &node);
+  /// Converts @p node into a discarded block, so only its value is kept and
+  /// nothing it would emit reaches the program.
+  exprt probe_expr(const nlohmann::json &node);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
@@ -1657,6 +1871,13 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  exprt
+  build_emptiness_check(const exprt &value, const nlohmann::json &element);
+
+  /// A call statement nested in an expression is invisible to goto-convert's
+  /// side-effect removal, so it would reach the solver unevaluated.
+  static void convert_function_call_to_side_effect(exprt &expr);
+
   /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
@@ -1711,6 +1932,11 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  /// Builds a `bytes` concatenation (`lhs + rhs`) as a fresh array literal of
+  /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
+  /// nil_exprt if either side's length is not a compile-time constant.
+  exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
 
   /**
    * @brief Handles list-related binary operations.

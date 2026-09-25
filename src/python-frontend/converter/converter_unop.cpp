@@ -1,6 +1,7 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -9,77 +10,55 @@
 #include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
 
-exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
+// The type of a numeric unary node: the operand's exact type (keeping its
+// metadata) where the operator preserves it, else @p fallback. The fallback is
+// current_element_type, the enclosing context's -- bool inside an assert.
+static typet unary_numeric_type(
+  const std::string &op,
+  const typet &operand_type,
+  const typet &fallback)
 {
-  typet type = current_element_type;
-  if (
-    element["operand"].contains("value") &&
-    element["operand"]["_type"] == "Constant")
-  {
-    type = type_handler_.get_typet(element["operand"]["value"]);
-  }
-  else if (element["operand"]["_type"] == "Name")
-  {
-    const std::string var_type =
-      type_handler_.get_var_type(element["operand"]["id"].get<std::string>());
-    type = type_handler_.get_typet(var_type);
-  }
+  const bool integral = type_utils::is_integer_type(operand_type);
+  if ((op == "USub" || op == "UAdd") && (integral || operand_type.is_floatbv()))
+    return operand_type;
+  if (op == "Invert" && integral)
+    return operand_type;
+  return fallback;
+}
 
-  // Get the operand expression
-  exprt unary_sub = get_expr(element["operand"]);
+// The emptiness test behind Python truthiness (`not x`, and `bool(x)`
+// negated) for a dict, str, list or tuple literal, or nil for any other value.
+// A dict or list needs a statement context: its size is read into a temporary.
+exprt python_converter::build_emptiness_check(
+  const exprt &value,
+  const nlohmann::json &element)
+{
+  typet list_type = type_handler_.get_list_type();
 
-  // A tagged operand needs runtime dispatch.
-  if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
+  // A tuple literal's length is its type's. A tuple variable keeps its first
+  // binding's type when rebound (x = (1,); x = ()), so its length is unknown.
+  if (tuple_handler_->is_tuple_type(value.type()))
   {
-    std::string unary_op = element["op"]["_type"].get<std::string>();
-    if (unary_op == "USub")
-      return dynamic_type_handler_.build_neg_tagged(unary_sub);
-    throw std::runtime_error(
-      "operator '" + unary_op +
-      "' on a dynamically-typed variable is not yet supported");
-  }
-
-  // An unresolved method call yields a placeholder null (see
-  // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
-  // `not obj.unresolved()` be proved from an inference gap, so this is the one
-  // context where the result has to be unknown rather than constant.
-  if (
-    element["op"]["_type"] == "Not" &&
-    unary_sub.get_bool(PYTHON_UNRESOLVED_CALL_ATTR))
-  {
-    side_effect_expr_nondett unknown_truth(bool_type());
-    unknown_truth.location() = get_location_from_decl(element);
-    unknown_truth.location().user_provided(true);
-    return unknown_truth;
+    if (!value.is_constant())
+      throw std::runtime_error(
+        "truthiness of a tuple that is not a literal is not yet supported");
+    return value.operands().empty() ? exprt(true_exprt())
+                                    : exprt(false_exprt());
   }
 
-  // Use operand's exact type to preserve metadata
-  if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())
-  {
-    std::string op = element["op"]["_type"].get<std::string>();
-    if (op == "USub" || op == "UAdd") // Unary minus/plus
-      if (
-        unary_sub.type().is_floatbv() ||
-        type_utils::is_integer_type(unary_sub.type()))
-        type = unary_sub.type();
-  }
-
-  // Handle 'not' operator on dictionary types: convert to emptiness check
-  std::string op = element["op"]["_type"].get<std::string>();
-  if (op == "Not" && dict_handler_->is_dict_type(unary_sub.type()))
+  if (dict_handler_->is_dict_type(value.type()))
   {
     if (!current_block)
       throw std::runtime_error(
         "Dictionary truthiness check requires a statement context");
 
     locationt location = get_location_from_decl(element);
-    typet list_type = type_handler_.get_list_type();
 
     // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
-    // member_exprt); `unary_sub` is dict-typed (is_dict_type ⇒ struct), so the
+    // member_exprt); `value` is dict-typed (is_dict_type ⇒ struct), so the
     // member2t source precondition holds.
     expr2tc dict2;
-    migrate_expr(unary_sub, dict2);
+    migrate_expr(value, dict2);
     exprt keys_member =
       migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
 
@@ -117,9 +96,9 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return is_empty;
   }
 
-  // Handle 'not' operator on string types: convert to strlen(a) == 0.
+  // A string is empty when strlen(a) == 0.
   // In Python, a non-empty string is truthy; only "" is falsy.
-  if (op == "Not" && type_utils::is_string_type(unary_sub.type()))
+  if (type_utils::is_string_type(value.type()))
   {
     locationt location = get_location_from_decl(element);
     const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
@@ -134,7 +113,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     // legacy `codet` shell is involved (P1 untouched).
     const type2tc size_t2 = migrate_type(size_type());
     expr2tc base2;
-    migrate_expr(string_handler_.get_array_base_address(unary_sub), base2);
+    migrate_expr(string_handler_.get_array_base_address(value), base2);
 
     expr2tc strlen_call2 = side_effect_function_call2tc(
       size_t2, symbol_expr2tc(*strlen_sym), {base2});
@@ -146,12 +125,10 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     return is_empty;
   }
 
-  // Handle 'not' operator on list types: convert to emptiness check
-  typet list_type = type_handler_.get_list_type();
+  // A list is empty when __ESBMC_list_size(list) == 0.
   if (
-    op == "Not" && (unary_sub.type() == list_type ||
-                    (unary_sub.type().is_pointer() &&
-                     unary_sub.type().subtype() == list_type)))
+    value.type() == list_type ||
+    (value.type().is_pointer() && value.type().subtype() == list_type))
   {
     if (!current_block)
       throw std::runtime_error(
@@ -178,10 +155,10 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     size_call.function() = symbol_expr(*size_func);
     size_call.lhs() = symbol_expr(size_result);
     // Pass address if not already a pointer
-    if (unary_sub.type().is_pointer())
-      size_call.arguments().push_back(unary_sub);
+    if (value.type().is_pointer())
+      size_call.arguments().push_back(value);
     else
-      size_call.arguments().push_back(address_of_exprt(unary_sub));
+      size_call.arguments().push_back(address_of_exprt(value));
     size_call.type() = size_type();
     size_call.location() = location;
     current_block->copy_to_operands(size_call);
@@ -194,6 +171,63 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     exprt is_empty = migrate_expr_back(is_empty2);
     is_empty.location() = location;
     return is_empty;
+  }
+
+  return nil_exprt();
+}
+
+exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
+{
+  typet type = current_element_type;
+  if (
+    element["operand"].contains("value") &&
+    element["operand"]["_type"] == "Constant")
+  {
+    type = type_handler_.get_typet(element["operand"]["value"]);
+  }
+  else if (element["operand"]["_type"] == "Name")
+  {
+    const std::string var_type =
+      type_handler_.get_var_type(element["operand"]["id"].get<std::string>());
+    type = type_handler_.get_typet(var_type);
+  }
+
+  // Get the operand expression
+  exprt unary_sub = get_expr(element["operand"]);
+  convert_function_call_to_side_effect(unary_sub);
+
+  // A tagged operand needs runtime dispatch.
+  if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
+  {
+    std::string unary_op = element["op"]["_type"].get<std::string>();
+    if (unary_op == "USub")
+      return dynamic_type_handler_.build_neg_tagged(unary_sub);
+    throw std::runtime_error(
+      "operator '" + unary_op +
+      "' on a dynamically-typed variable is not yet supported");
+  }
+
+  // An unresolved method call yields a placeholder null (see
+  // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
+  // `not obj.unresolved()` be proved from an inference gap, so this is the one
+  // context where the result has to be unknown rather than constant.
+  if (
+    element["op"]["_type"] == "Not" &&
+    unary_sub.get_bool(PYTHON_UNRESOLVED_CALL_ATTR))
+  {
+    side_effect_expr_nondett unknown_truth(bool_type());
+    unknown_truth.location() = get_location_from_decl(element);
+    unknown_truth.location().user_provided(true);
+    return unknown_truth;
+  }
+
+  std::string op = element["op"]["_type"].get<std::string>();
+  type = unary_numeric_type(op, unary_sub.type(), type);
+  if (op == "Not")
+  {
+    exprt is_empty = build_emptiness_check(unary_sub, element);
+    if (is_empty.is_not_nil())
+      return is_empty;
   }
 
   {

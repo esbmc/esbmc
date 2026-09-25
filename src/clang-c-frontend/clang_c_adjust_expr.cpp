@@ -946,8 +946,8 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
 
   expr.type() = typet("pointer");
 
-  // turn &array into &(array[0])
-  if (is_array_like(op.type()))
+  // turn &array into &(array[0]); a vector is a value, not an array (#7907)
+  if (op.type().is_array() || op.type().is_incomplete_array())
   {
     index_exprt index;
     index.array() = op;

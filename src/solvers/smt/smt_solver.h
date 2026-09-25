@@ -832,9 +832,11 @@ public:
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
-  /** The pointer and struct legs of convert_bitcast, split out so the
-   *  dispatcher stays readable. Both return null when they do not apply. */
+  /** The pointer, floating-point and struct legs of convert_bitcast, split
+   *  out so the dispatcher stays readable. Each returns null when it does not
+   *  apply. */
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
@@ -1048,6 +1050,13 @@ public:
    *  by the boolean smt_ast pointer (solver ASTs are hash-consed, so
    *  identical pointer ⇒ identical term ⇒ identical model value). */
   std::unordered_map<smt_astt, tvt> l_get_cache;
+  /** Model-value cache for get_by_ast(), on the same terms and with the same
+   *  invalidation as l_get_cache. The pointer key is safe because pop_ctx
+   *  clears this map before deleting any smt_ast, so an address cannot be
+   *  reused while an entry for it survives. The stored type gates reuse
+   *  rather than keying it: the same bit-vector reads differently as signed
+   *  or unsigned. */
+  std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -1171,6 +1180,8 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
+
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);

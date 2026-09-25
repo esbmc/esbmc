@@ -21,6 +21,7 @@ void interval_analysis(
   goto_functionst &goto_functions,
   const namespacet &ns,
   const optionst &options,
+  bool continue_past_failed_assertions,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode =
     INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL);
 
@@ -42,6 +43,7 @@ void interval_analysis(
 void instrument_loop_bounds_after_kind(
   goto_functionst &goto_functions,
   const namespacet &ns,
-  const optionst &options);
+  const optionst &options,
+  bool continue_past_failed_assertions);
 
 #endif // CPROVER_ANALYSES_INTERVAL_ANALYSIS_H

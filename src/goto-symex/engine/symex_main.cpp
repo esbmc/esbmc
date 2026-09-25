@@ -149,11 +149,21 @@ void goto_symext::record_property_verdict(
   property_verdictt verdict,
   const std::string &note)
 {
-  const locationt &location = cur_state->source.pc->location;
+  // The simplifier's discharge is withheld exactly where the solver's UNSAT
+  // is: it saw the paths this unwinding reached and no others. The claim keeps
+  // its row and stays undecided.
+  if (verdict == property_verdictt::Passed && withholds_proofs(options))
+    verdict = property_verdictt::NotChecked;
+
+  const goto_programt::instructiont &pc = *cur_state->source.pc;
+  // A coverage report prints the key, so its goals keep description and
+  // position.
+  const bool coverage = options.get_bool_option("coverage-measurement") ||
+                        options.get_bool_option("dead-code-check");
   goto_functionst::property_verdicts.record(
-    msg + " at " + location.as_string(),
+    coverage ? msg + " at " + pc.location.as_string() : property_key(pc, msg),
     verdict,
-    property_location(location, msg),
+    property_location(pc, msg),
     note);
 }
 
@@ -219,18 +229,21 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
   expr2tc lhs = eq.side_1;
   expr2tc rhs = eq.side_2;
 
-  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit
-  // patterns; propagating either would mask signbit-sensitive bugs.
-  auto is_fp_zero = [](const expr2tc &e) {
-    return is_constant_floatbv2t(e) && to_constant_floatbv2t(e).value.is_zero();
-  };
-
   // Only propagate when the other side is a constant: a symbol == symbol
   // assumption must NOT be turned into an assignment, as that perturbs the
   // symbolic state and aliasing (e.g. a[i]=7; assume(i==j); read a[j]).
-  if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_fp_zero(rhs))
+  // assignment() emits no SSA step: lift only a value level2 records (#7974).
+  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit patterns;
+  // propagating either would mask signbit-sensitive bugs.
+  auto is_liftable = [this](const expr2tc &e) {
+    return is_constant_expr(e) && cur_state->constant_propagation(e) &&
+           !(is_constant_floatbv2t(e) &&
+             to_constant_floatbv2t(e).value.is_zero());
+  };
+
+  if (is_symbol2t(lhs) && is_liftable(rhs))
     cur_state->assignment(lhs, rhs);
-  else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_fp_zero(lhs))
+  else if (is_symbol2t(rhs) && is_liftable(lhs))
     cur_state->assignment(rhs, lhs);
 }
 
@@ -507,6 +520,16 @@ void goto_symext::symex_assume()
   propagate_assume_equality(cond);
 }
 
+std::string goto_symext::assertion_message(
+  const namespacet &ns,
+  const goto_programt::instructiont &i)
+{
+  const std::string comment = i.location.comment().as_string();
+  if (!comment.empty())
+    return comment;
+  return "assertion " + from_expr(ns, "", migrate_expr_back(i.guard));
+}
+
 void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
@@ -519,12 +542,7 @@ void goto_symext::symex_assert()
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  std::string msg = cur_state->source.pc->location.comment().as_string();
-  if (msg == "")
-  {
-    exprt guard = migrate_expr_back(instruction.guard);
-    msg = "assertion " + from_expr(ns, "", guard);
-  }
+  const std::string msg = assertion_message(ns, instruction);
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
