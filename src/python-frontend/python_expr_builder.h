@@ -31,6 +31,11 @@ bool contains_dyn_array(const typet &t);
 // dyn-sized array (docs/roadmap/scope-python-irep2.md §10.4).
 void set_symbol_type(symbolt &sym, const typet &t);
 
+// Store `t` as `sym`'s type IREP2-side unless migrate_type would lose it: a
+// nil type, a dyn-sized array or #python_aggregate
+// (docs/roadmap/scope-python-irep2.md §10.4).
+void set_symbol_type_if_carried(symbolt &sym, const typet &t);
+
 // Symbol reference `sym`.
 exprt build_symbol(const symbolt &sym);
 
