@@ -174,7 +174,7 @@ smt_astt smt_solver_baset::encode_pointer_repr(
   smt_astt pointer = convert_ast(ptr);
   flattened.emplace(
     bitcast2tc(to_type, ptr),
-    ptr_flatten_entry{address, pointer, nullptr, ctx_level});
+    ptr_flatten_entry{address, pointer, nullptr, ctx_level, 0});
   record_flattened_pointer(address, pointer);
   return address;
 }

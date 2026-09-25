@@ -103,6 +103,16 @@ void encode_assertion(
   state.assertions.push_back(not2tc(step.cond_expr));
 }
 
+void begin_step(
+  smt_convt &smt_conv,
+  const symex_target_equationt::SSA_stept &step)
+{
+  if (step.is_assignment())
+    smt_conv.begin_step(step.guard, step.cond, step.lhs, step.rhs);
+  else
+    smt_conv.begin_step(step.guard, step.cond, expr2tc(), expr2tc());
+}
+
 void convert_internal_step(
   const namespacet &ns,
   bool ssa_trace,
@@ -126,11 +136,7 @@ void convert_internal_step(
     log_status("{}", oss.str());
   }
 
-  smt_conv.begin_step(
-    step.guard,
-    step.cond,
-    step.is_assignment() ? step.lhs : expr2tc(),
-    step.is_assignment() ? step.rhs : expr2tc());
+  begin_step(smt_conv, step);
 
   if (step.is_assume() || step.is_assert() || step.is_branching())
   {
