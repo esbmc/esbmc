@@ -1796,3 +1796,11 @@ regression/k-induction/github_7964_safe
 regression/k-induction/github_7964_list
 regression/k-induction/github_7964_list_safe
 regression/k-induction/github_7964_leave_entry
+regression/esbmc/char_walk_one_member
+regression/esbmc/char_walk_one_member_fail
+regression/esbmc/char_walk_members
+regression/esbmc/char_walk_members_fail
+regression/esbmc/char_view_through_pointer
+regression/esbmc/char_view_through_pointer_fail
+regression/esbmc/char_walk_arrays
+regression/esbmc/char_walk_arrays_fail
