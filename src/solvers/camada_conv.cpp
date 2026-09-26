@@ -1014,9 +1014,8 @@ smt_solver_baset::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
  * mkIEEEFPToBV (see camada.h on mkFPNeg). */
 smt_astt smt_solver_baset::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
 {
-  const std::string solver_name = solver->getSolverNameAndVersion();
-  if (
-    solver_name.rfind("Bitwuzla", 0) == 0 || solver_name.rfind("CVC5", 0) == 0)
+  const camada::SolverKind kind = solver->getSolverKind();
+  if (kind == camada::SolverKind::Bitwuzla || kind == camada::SolverKind::CVC5)
   {
     camada::SMTSortRef bv_sort = solver->mkFPSort(
       lhs->Sort->getFPExponentWidth(),
@@ -1169,7 +1168,7 @@ smt_astt smt_solver_baset::tuple_array_create(
 
   if (const_array)
   {
-    return solver->mkArrayConst(domain, *input_args);
+    return solver->mkArrayConst(domain, *input_args, const_array_lowering());
   }
 
   assert(!is_nil_expr(arrtype.array_size));
@@ -1255,6 +1254,25 @@ expr2tc smt_solver_baset::tuple_get_array_elem(
   return get_array_elem(array, index, get_flattened_array_subtype(subtype));
 }
 
+/* Bitwuzla 0.9.x cannot reason about constant arrays: its array solver bails
+ * on any access to one, and formulas only appear to work when preprocessing
+ * substitutes the constant array away first. Whether it does is not
+ * predictable (regression/esbmc-unix2/pthread_cancel_basic_fail and
+ * regression/esbmc-solidity/mapping_8 answer UNKNOWN), so keep Bitwuzla on
+ * camada's lazy lowering and let every other backend use its own.
+ *
+ * Except under --smt-during-symex, where every incremental check re-solves the
+ * lazy lowering's per-index axioms: incremental-smt/incremental-31 makes 1420
+ * checks and takes ~10s native against ~600s lazy. */
+camada::ConstArrayLowering smt_solver_baset::const_array_lowering() const
+{
+  if (
+    solver->getSolverKind() != camada::SolverKind::Bitwuzla ||
+    options.get_bool_option("smt-during-symex"))
+    return camada::ConstArrayLowering::Auto;
+  return camada::ConstArrayLowering::Lazy;
+}
+
 smt_astt smt_solver_baset::convert_array_of(
   smt_astt init_val,
   unsigned long domain_width)
@@ -1262,8 +1280,7 @@ smt_astt smt_solver_baset::convert_array_of(
   auto idx_sort = int_encoding
                     ? solver->mkIntSort()
                     : solver->mkBVSort(domain_width == 0 ? 1 : domain_width);
-  auto value = solver->mkArrayConst(idx_sort, init_val);
-  return value;
+  return solver->mkArrayConst(idx_sort, init_val, const_array_lowering());
 }
 
 const std::string smt_solver_baset::solver_text()

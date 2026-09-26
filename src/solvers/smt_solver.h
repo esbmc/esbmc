@@ -926,6 +926,9 @@ public:
    *  @return The newly created remainder smt_ast */
   smt_astt mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs);
 
+  /** Constant-array lowering to request from camada for this backend. */
+  camada::ConstArrayLowering const_array_lowering() const;
+
   /** Convert an ieee greater than
    *  @param lhs left hand side
    *  @param rhs right hand side
