@@ -1126,6 +1126,9 @@ public:
   /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The most flattens one rebuilt pointer is defined over; see
+   *  decode_pointer_repr(). */
+  static constexpr size_t max_rebuild_sources = 32;
   /** Each flattening bitcast converted so far, for steps that hit it in the
    *  conversion cache. */
   std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
