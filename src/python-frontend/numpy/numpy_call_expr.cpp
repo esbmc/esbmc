@@ -7378,6 +7378,12 @@ static exprt build_searchsorted_position_expr(
     exprt inc = if_exprt(satisfied, make_index(1), make_index(0));
     count = python_expr::build_add(count, inc, count.type());
   }
+  if (target.type().is_floatbv())
+  {
+    exprt target_is_nan = python_expr::build_notequal(target, target);
+    return if_exprt(target_is_nan, make_index(values.size()), count);
+  }
+
   return count;
 }
 
