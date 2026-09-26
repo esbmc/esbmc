@@ -1028,6 +1028,12 @@ struct retype_alias_scope_guard
 
 } // namespace
 
+std::optional<std::vector<std::size_t>>
+python_converter::get_numpy_constructor_shape(const nlohmann::json &node) const
+{
+  return numpy_constructor_shape(node);
+}
+
 // External linkage: shared with numpy_call_expr.cpp (declared in
 // python_converter.h) so both can verify a Name/Attribute receiver actually
 // resolves to the imported numpy module.
@@ -3924,6 +3930,7 @@ bool python_converter::update_numpy_array_binding_from_name(
   if (view_it != numpy_view_copy_sources_.end())
   {
     clear_numpy_array_storage_aliases_for(lhs_id);
+    numpy_param_shapes_.erase(lhs_id);
     numpy_view_copy_sources_[lhs_id] = view_it->second;
     numpy_array_symbols_.insert(lhs_id);
     return true;
@@ -3956,6 +3963,7 @@ void python_converter::update_numpy_array_binding(
 
   clear_numpy_transpose_views_of(lhs_id);
   clear_numpy_array_storage_aliases_for(lhs_id);
+  numpy_param_shapes_.erase(lhs_id);
 
   if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
     return;
@@ -3986,7 +3994,7 @@ void python_converter::update_numpy_array_binding(
     numpy_array_symbols_.insert(lhs_id);
     if (
       std::optional<std::vector<std::size_t>> shape =
-        numpy_constructor_shape(rhs_node))
+        get_numpy_constructor_shape(rhs_node))
       numpy_param_shapes_[lhs_id] = *shape;
     else
       numpy_param_shapes_.erase(lhs_id);
