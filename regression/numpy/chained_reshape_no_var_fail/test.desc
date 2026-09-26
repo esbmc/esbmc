@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy\.reshape\(\) chained directly on a constructor call with no intermediate variable is not supported yet; assign the constructor's result to a variable first$

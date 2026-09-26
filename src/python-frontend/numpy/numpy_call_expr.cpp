@@ -2103,6 +2103,14 @@ materialize_zeros_ones(const std::string &ctor, const nlohmann::json &args)
 }
 
 static std::optional<nlohmann::json>
+materialize_array(const nlohmann::json &args)
+{
+  if (args.empty())
+    return std::nullopt;
+  return get_literal_numpy_array_arg(args[0]);
+}
+
+static std::optional<nlohmann::json>
 materialize_full(const nlohmann::json &args)
 {
   if (args.size() < 2)
@@ -2383,7 +2391,9 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   const auto &args = call_node["args"];
 
   std::optional<nlohmann::json> materialized;
-  if (ctor == "zeros" || ctor == "ones")
+  if (ctor == "array")
+    materialized = materialize_array(args);
+  else if (ctor == "zeros" || ctor == "ones")
     materialized = materialize_zeros_ones(ctor, args);
   else if (ctor == "full")
     materialized = materialize_full(args);
@@ -2988,6 +2998,30 @@ numpy_call_expr::extract_literal_diagonal_offset(const char *error_context)
   return offset_value.int_value;
 }
 
+static std::optional<nlohmann::json>
+materialize_literal_diagonal(const nlohmann::json &array_node, long long offset)
+{
+  std::vector<std::size_t> shape;
+  if (!get_literal_shape(array_node, shape) || shape.size() != 2)
+    return std::nullopt;
+
+  long long row = offset < 0 ? -offset : 0;
+  long long col = offset > 0 ? offset : 0;
+  const long long rows = static_cast<long long>(shape[0]);
+  const long long cols = static_cast<long long>(shape[1]);
+
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = nlohmann::json::array();
+  while (row < rows && col < cols)
+  {
+    result["elts"].push_back(array_node["elts"][row]["elts"][col]);
+    ++row;
+    ++col;
+  }
+  return result;
+}
+
 exprt numpy_call_expr::handle_diagonal_call()
 {
   if (call_["args"].empty())
@@ -3006,6 +3040,25 @@ exprt numpy_call_expr::handle_diagonal_call()
       "TypeError: numpy diagonal only supports the default axis1/axis2");
 
   long long offset = extract_literal_diagonal_offset("diagonal");
+
+  std::optional<nlohmann::json> materialized =
+    get_literal_numpy_array_arg(call_["args"][0]);
+  if (!materialized)
+    materialized =
+      materialize_numpy_constructor_array(call_["args"][0], converter_.ast());
+  if (materialized)
+  {
+    if (
+      std::optional<nlohmann::json> diagonal =
+        materialize_literal_diagonal(*materialized, offset))
+    {
+      const bool old_build_static_lists = converter_.build_static_lists;
+      converter_.build_static_lists = false;
+      exprt result = converter_.get_expr(*diagonal);
+      converter_.build_static_lists = old_build_static_lists;
+      return result;
+    }
+  }
 
   exprt array_expr = converter_.get_expr(call_["args"][0]);
   python_list list(converter_, call_);
@@ -6990,6 +7043,37 @@ static std::vector<std::size_t> resolve_searchsorted_sorter(
   return result;
 }
 
+static std::optional<std::vector<std::size_t>>
+resolve_searchsorted_literal_sorter_indices(
+  nlohmann::json sorter_arg,
+  python_converter &converter)
+{
+  sorter_arg = resolve_single_assignment_name(sorter_arg, converter);
+  if (is_argsort_call(sorter_arg))
+    return std::nullopt;
+
+  std::optional<nlohmann::json> literal =
+    get_literal_numpy_array_arg(sorter_arg);
+  if (!literal)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() sorter must be a literal array of "
+      "indices");
+
+  std::vector<std::size_t> result;
+  result.reserve((*literal)["elts"].size());
+  for (const nlohmann::json &elt : (*literal)["elts"])
+  {
+    if (
+      elt.value("_type", std::string()) != "Constant" ||
+      !elt.contains("value") || !elt["value"].is_number_integer())
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() sorter must be a literal array of "
+        "indices");
+    result.push_back(static_cast<std::size_t>(elt["value"].get<int64_t>()));
+  }
+  return result;
+}
+
 // Validates `sorter` is a permutation of arr_arg's own index range, and
 // builds the virtually-reordered `arr_arg[sorter]` searchsorted actually
 // searches -- the same array numpy.searchsorted(a, v, sorter=sorter) would
@@ -7022,6 +7106,35 @@ static nlohmann::json apply_searchsorted_sorter(
   reordered["elts"] = nlohmann::json::array();
   for (std::size_t idx : sorter)
     reordered["elts"].push_back(arr_arg["elts"][idx]);
+  return reordered;
+}
+
+static std::vector<exprt> apply_searchsorted_descriptor_sorter(
+  const std::vector<exprt> &values,
+  const std::vector<std::size_t> &sorter)
+{
+  if (sorter.size() != values.size())
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() sorter must be a 1-D array matching "
+      "the input length");
+
+  std::vector<bool> seen(sorter.size(), false);
+  for (std::size_t idx : sorter)
+  {
+    if (idx >= sorter.size())
+      throw std::runtime_error(
+        "ValueError: numpy.searchsorted() sorter index out of range");
+    if (seen[idx])
+      throw std::runtime_error(
+        "ValueError: numpy.searchsorted() sorter is not a valid "
+        "permutation");
+    seen[idx] = true;
+  }
+
+  std::vector<exprt> reordered;
+  reordered.reserve(sorter.size());
+  for (std::size_t idx : sorter)
+    reordered.push_back(values[idx]);
   return reordered;
 }
 
@@ -7201,9 +7314,10 @@ numpy_call_expr::resolve_searchsorted_sorted_values_via_descriptor(
   const nlohmann::json &sorter_node,
   const std::string &array_name)
 {
-  if (
-    !is_argsort_call(sorter_node) ||
-    !argsort_call_targets_array(sorter_node, array_name, converter_.ast()))
+  const bool same_array_argsort =
+    is_argsort_call(sorter_node) &&
+    argsort_call_targets_array(sorter_node, array_name, converter_.ast());
+  if (is_argsort_call(sorter_node) && !same_array_argsort)
     return std::nullopt;
 
   std::optional<std::vector<exprt>> values =
@@ -7220,9 +7334,19 @@ numpy_call_expr::resolve_searchsorted_sorted_values_via_descriptor(
       "TypeError: numpy.searchsorted() sorter supports arrays up to " +
       std::to_string(max_numpy_sort_elements) + " elements");
 
-  std::vector<exprt> sorted_values = *values;
-  bubble_sort_numpy_paired(sorted_values, nullptr);
-  return sorted_values;
+  if (same_array_argsort)
+  {
+    std::vector<exprt> sorted_values = *values;
+    bubble_sort_numpy_paired(sorted_values, nullptr);
+    return sorted_values;
+  }
+
+  std::optional<std::vector<std::size_t>> sorter =
+    resolve_searchsorted_literal_sorter_indices(sorter_node, converter_);
+  if (!sorter)
+    return std::nullopt;
+
+  return apply_searchsorted_descriptor_sorter(*values, *sorter);
 }
 
 // Computes numpy.searchsorted()'s insertion index of `target` into `values`
@@ -7254,7 +7378,60 @@ static exprt build_searchsorted_position_expr(
     exprt inc = if_exprt(satisfied, make_index(1), make_index(0));
     count = python_expr::build_add(count, inc, count.type());
   }
+  if (target.type().is_floatbv())
+  {
+    exprt target_is_nan = python_expr::build_notequal(target, target);
+    return if_exprt(target_is_nan, make_index(values.size()), count);
+  }
+
   return count;
+}
+
+static exprt build_literal_searchsorted_position_expr(
+  python_converter &converter,
+  const nlohmann::json &search_space,
+  const nlohmann::json &value_node,
+  bool right)
+{
+  std::vector<exprt> values;
+  values.reserve(search_space["elts"].size());
+  for (const nlohmann::json &element : search_space["elts"])
+    values.push_back(converter.get_expr(element));
+  return build_searchsorted_position_expr(
+    converter, values, converter.get_expr(value_node), right);
+}
+
+static std::optional<exprt> try_build_literal_searchsorted_position(
+  python_converter &converter,
+  const nlohmann::json &search_space,
+  const nlohmann::json &value_node,
+  bool right)
+{
+  try
+  {
+    numeric_to_key(
+      value_node, "TypeError: numpy.searchsorted() requires a literal value");
+    return std::nullopt;
+  }
+  catch (const std::runtime_error &)
+  {
+    if (
+      value_node.value("_type", std::string()) == "Constant" &&
+      (!value_node.contains("value") || !value_node["value"].is_number()))
+      throw;
+    return build_literal_searchsorted_position_expr(
+      converter, search_space, value_node, right);
+  }
+}
+
+static exprt build_searchsorted_index_constant(
+  python_converter &converter,
+  std::size_t index)
+{
+  nlohmann::json position;
+  position["_type"] = "Constant";
+  position["value"] = static_cast<int64_t>(index);
+  return converter.get_expr(position);
 }
 
 exprt numpy_call_expr::handle_searchsorted_call_over_descriptor(
@@ -7432,24 +7609,88 @@ exprt numpy_call_expr::handle_searchsorted_call_over_literal(
     std::optional<nlohmann::json> values =
       resolve_searchsorted_value_vector(value_arg, converter_))
   {
-    std::vector<std::size_t> indices;
-    indices.reserve((*values)["elts"].size());
+    std::vector<exprt> positions;
+    positions.reserve((*values)["elts"].size());
     for (const nlohmann::json &value : (*values)["elts"])
     {
-      numeric_to_key(
-        value, "TypeError: numpy.searchsorted() requires a literal value");
-      indices.push_back(searchsorted_position(search_space, value, right));
+      if (
+        std::optional<exprt> symbolic = try_build_literal_searchsorted_position(
+          converter_, search_space, value, right))
+        positions.push_back(*symbolic);
+      else
+        positions.push_back(build_searchsorted_index_constant(
+          converter_, searchsorted_position(search_space, value, right)));
     }
-    return converter_.get_expr(make_integer_list(indices));
+    if (positions.empty())
+      return converter_.get_expr(make_integer_list({}));
+    return build_1d_numpy_array_value(positions, type_handler_);
   }
 
-  numeric_to_key(
-    value_arg, "TypeError: numpy.searchsorted() requires a literal value");
-  nlohmann::json position;
-  position["_type"] = "Constant";
-  position["value"] =
-    static_cast<int64_t>(searchsorted_position(search_space, value_arg, right));
-  return converter_.get_expr(position);
+  if (
+    std::optional<exprt> symbolic = try_build_literal_searchsorted_position(
+      converter_, search_space, value_arg, right))
+    return *symbolic;
+
+  return build_searchsorted_index_constant(
+    converter_, searchsorted_position(search_space, value_arg, right));
+}
+
+std::optional<exprt>
+numpy_call_expr::try_searchsorted_sorter_descriptor_fallback(
+  const nlohmann::json *sorter_node,
+  const std::string &array_name,
+  bool right)
+{
+  if (sorter_node == nullptr)
+    return try_searchsorted_call_over_descriptor(right);
+
+  std::optional<std::vector<exprt>> sorted_values =
+    resolve_searchsorted_sorted_values_via_descriptor(
+      call_["args"][0], *sorter_node, array_name);
+  if (!sorted_values)
+    return std::nullopt;
+
+  return handle_searchsorted_call_over_descriptor(
+    std::move(*sorted_values), right);
+}
+
+exprt numpy_call_expr::finish_searchsorted_call(
+  std::optional<nlohmann::json> literal_arg,
+  const nlohmann::json *sorter_node,
+  const std::string &array_name,
+  bool right)
+{
+  if (!literal_arg)
+  {
+    if (
+      std::optional<exprt> result = try_searchsorted_sorter_descriptor_fallback(
+        sorter_node, array_name, right))
+      return *result;
+
+    resolve_literal_numpy_array_input(
+      call_["args"][0], function_id_.get_function(), false);
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() currently supports only literal "
+      "numpy.array inputs");
+  }
+
+  try
+  {
+    nlohmann::json search_space = resolve_searchsorted_space(
+      std::move(*literal_arg), sorter_node, array_name);
+    return handle_searchsorted_call_over_literal(
+      std::move(search_space), right);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (sorter_node != nullptr)
+      throw;
+    if (
+      std::optional<exprt> result =
+        try_searchsorted_call_over_descriptor(right))
+      return *result;
+    throw;
+  }
 }
 
 exprt numpy_call_expr::handle_searchsorted_call()
@@ -7480,45 +7721,14 @@ exprt numpy_call_expr::handle_searchsorted_call()
     if (std::optional<exprt> placeholder = try_searchsorted_probe_placeholder())
       return *placeholder;
 
-  // The AST-literal path is tried first and, whenever it can resolve the
-  // array, wins outright -- it already validates things the descriptor path
-  // does not attempt (the array is actually sorted, the search value is a
-  // literal), so a Name it can already follow (e.g. `a = np.array([...])`)
-  // must keep going through it rather than being silently picked up by the
-  // newer, less validated path below. The descriptor path (a Name already
-  // bound to a concrete numpy array via a route the AST can't trace, or a
-  // local-array-return function call) is only a fallback for what the
-  // AST-literal path itself declines on.
-  std::optional<nlohmann::json> literal_arg =
-    try_resolve_searchsorted_literal_array(function);
-
-  if (!literal_arg && sorter_node == nullptr)
-    if (
-      std::optional<exprt> result =
-        try_searchsorted_call_over_descriptor(right))
-      return *result;
-
-  // sorter=argsort(<the same array>) over a descriptor-resolved array: an
-  // exprt-level stable-sort gather, since these elements (index expressions
-  // into a local array) are almost never compile-time constants the way a
-  // genuine AST literal's would be. See
-  // resolve_searchsorted_sorted_values_via_descriptor for the full
-  // rationale; nullopt (not this shape) leaves the diagnostic below
-  // unchanged.
-  if (!literal_arg && sorter_node != nullptr)
-    if (
-      std::optional<std::vector<exprt>> sorted_values =
-        resolve_searchsorted_sorted_values_via_descriptor(
-          call_["args"][0], *sorter_node, array_name))
-      return handle_searchsorted_call_over_descriptor(
-        std::move(*sorted_values), right);
-
-  if (!literal_arg)
-    resolve_literal_numpy_array_input(call_["args"][0], function, false);
-
-  nlohmann::json search_space = resolve_searchsorted_space(
-    std::move(*literal_arg), sorter_node, array_name);
-  return handle_searchsorted_call_over_literal(std::move(search_space), right);
+  // The AST-literal path is tried first and wins whenever it resolves the
+  // array; descriptor resolution is only a fallback for cases the AST cannot
+  // trace, such as local-array-return function calls.
+  return finish_searchsorted_call(
+    try_resolve_searchsorted_literal_array(function),
+    sorter_node,
+    array_name,
+    right);
 }
 
 void numpy_call_expr::parse_sort_axis_and_keywords(
