@@ -1808,3 +1808,13 @@ regression/esbmc-cpp/cpp/local_member_pointer_template_arg
 regression/esbmc-cpp/cpp/local_member_pointer_template_arg_fail
 regression/esbmc-cpp/cpp/local_template_arg_kinds
 regression/esbmc-cpp/cpp/local_template_arg_kinds_fail
+regression/esbmc/char_walk_one_member
+regression/esbmc/char_walk_one_member_fail
+regression/esbmc/char_walk_members
+regression/esbmc/char_walk_members_fail
+regression/esbmc/char_view_through_pointer
+regression/esbmc/char_view_through_pointer_fail
+regression/esbmc/char_walk_arrays
+regression/esbmc/char_walk_arrays_fail
+regression/esbmc/char_walk_symbolic_bound
+regression/esbmc/char_walk_symbolic_bound_fail
