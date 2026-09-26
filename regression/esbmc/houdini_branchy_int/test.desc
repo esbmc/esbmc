@@ -1,0 +1,5 @@
+CORE
+main.c
+--houdini-loop-invariants
+^\s+PASSED\s+\[main\.assertion\.\d+\]\s+line 14\s+assertion x >= 5$
+^VERIFICATION SUCCESSFUL$
