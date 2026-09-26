@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy\.searchsorted\(\) sorter supports arrays up to 64 elements$

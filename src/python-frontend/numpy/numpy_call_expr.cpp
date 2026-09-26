@@ -7325,17 +7325,15 @@ numpy_call_expr::resolve_searchsorted_sorted_values_via_descriptor(
   if (!values)
     return std::nullopt;
 
-  // Matches the cap sort()/argsort() themselves enforce on the same
-  // conversion-time-unrolled comparison network (bubble_sort_numpy_paired);
-  // without it a large fixed-shape array here would unroll an unbounded
-  // quadratic number of comparison expressions.
-  if (values->size() > max_numpy_sort_elements)
-    throw std::runtime_error(
-      "TypeError: numpy.searchsorted() sorter supports arrays up to " +
-      std::to_string(max_numpy_sort_elements) + " elements");
-
   if (same_array_argsort)
   {
+    // Matches the cap sort()/argsort() themselves enforce on the same
+    // conversion-time-unrolled comparison network (bubble_sort_numpy_paired).
+    if (values->size() > max_numpy_sort_elements)
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() sorter supports arrays up to " +
+        std::to_string(max_numpy_sort_elements) + " elements");
+
     std::vector<exprt> sorted_values = *values;
     bubble_sort_numpy_paired(sorted_values, nullptr);
     return sorted_values;
@@ -7649,6 +7647,17 @@ numpy_call_expr::try_searchsorted_sorter_descriptor_fallback(
       call_["args"][0], *sorter_node, array_name);
   if (!sorted_values)
     return std::nullopt;
+
+  if (
+    sorted_values->size() > 1 &&
+    converter_.safe_to_emit_side_effecting_statement())
+  {
+    code_assertt sorted_assert(build_is_sorted_expr(*sorted_values));
+    sorted_assert.location() = converter_.get_location_from_decl(call_);
+    sorted_assert.location().comment(
+      "numpy.searchsorted() requires the input array to be sorted");
+    converter_.add_instruction(sorted_assert);
+  }
 
   return handle_searchsorted_call_over_descriptor(
     std::move(*sorted_values), right);
