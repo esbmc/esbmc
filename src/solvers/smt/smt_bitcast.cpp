@@ -354,7 +354,7 @@ smt_astt smt_solver_baset::decode_pointer_repr(
    * it, once per byte copied. */
   const flattened_pointert same =
     pointer_flattened_at(repr, 0, repr->type->get_width());
-  smt_astt original;
+  smt_astt original = nullptr;
   if (same.pointer)
   {
     original = convert_ast(
