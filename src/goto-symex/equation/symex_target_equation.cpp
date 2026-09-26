@@ -126,7 +126,7 @@ void convert_internal_step(
     log_status("{}", oss.str());
   }
 
-  smt_conv.convert_ast(step.guard);
+  smt_conv.begin_step(step.guard, step.cond);
 
   if (step.is_assume() || step.is_assert() || step.is_branching())
   {
@@ -136,6 +136,7 @@ void convert_internal_step(
   }
   else if (step.is_assignment())
   {
+    smt_conv.note_assignment(step.lhs, step.rhs);
     smt_conv.convert_assign(step.cond);
     if (ssa_smt_trace)
       smt_conv.dump_expr(step.cond);
@@ -167,6 +168,7 @@ void convert_internal_step(
   {
     assert(0 && "Unexpected SSA step type in conversion");
   }
+  smt_conv.end_step();
 
   if (step.is_assert())
   {
