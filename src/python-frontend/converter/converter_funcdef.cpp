@@ -1,6 +1,7 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
@@ -1483,7 +1484,7 @@ void python_converter::refine_any_param_to_list(
   if (param_id.empty())
     return;
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
-    param_sym->set_type(param_arg.type());
+    python_expr::set_symbol_type_if_carried(*param_sym, param_arg.type());
   if (elem_type != typet())
     element_type_registry_.record(param_id, "", elem_type);
 }
