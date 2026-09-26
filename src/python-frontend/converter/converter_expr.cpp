@@ -719,6 +719,15 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
     return build_shape_size_expr(dim_exprs);
   }
 
+  return try_get_numpy_bool_mask_rows_shape_attr(
+    base_expr, base_type, attr_name);
+}
+
+std::optional<exprt> python_converter::try_get_numpy_bool_mask_rows_shape_attr(
+  const exprt &base_expr,
+  const typet &base_type,
+  const std::string &attr_name)
+{
   if (!python_list::is_bool_mask_rows_type(base_type))
     return std::nullopt;
 

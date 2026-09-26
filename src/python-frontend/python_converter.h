@@ -724,6 +724,11 @@ private:
     const nlohmann::json &base_node,
     const std::string &attr_name);
 
+  std::optional<exprt> try_get_numpy_bool_mask_rows_shape_attr(
+    const exprt &base_expr,
+    const typet &base_type,
+    const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
