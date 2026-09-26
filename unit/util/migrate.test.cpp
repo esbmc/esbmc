@@ -1595,14 +1595,30 @@ TEST_CASE("a function type keeps its exception specification", "[migrate]")
       round_trip(f).kind == exception_specificationt::kindt::non_throwing);
   }
 
-  SECTION("an unresolved dynamic specification is not carried")
+  SECTION("an unresolved dynamic specification keeps its declared types")
   {
-    // Carrying only its kind would read back as throw(), which permits nothing.
     f.set(exception_specificationt::kind_attribute(), "dynamic");
-    f.add("exception_spec_decl").get_sub().emplace_back("signedbv");
+    f.add("exception_spec_decl").get_sub().push_back(signedbv_typet(32));
+    const typet back = migrate_type_back(migrate_type(f));
+    REQUIRE(back.get(exception_specificationt::kind_attribute()) == "dynamic");
+    const auto &decl = back.find("exception_spec_decl").get_sub();
+    REQUIRE(decl.size() == 1);
+    REQUIRE(static_cast<const typet &>(decl[0]) == signedbv_typet(32));
+  }
+
+  SECTION("a constructor and a destructor keep their pseudo return types")
+  {
+    code_typet ctor = f, dtor = f;
+    ctor.return_type() = typet("constructor");
+    ctor.return_type().set("#implicit_union_copy_move_constructor", true);
+    dtor.return_type() = typet("destructor");
+    const typet ctor_back =
+      to_code_type(migrate_type_back(migrate_type(ctor))).return_type();
+    REQUIRE(ctor_back.id() == "constructor");
+    REQUIRE(ctor_back.get_bool("#implicit_union_copy_move_constructor"));
     REQUIRE(
-      round_trip(f).kind ==
-      exception_specificationt::kindt::potentially_throwing);
+      to_code_type(migrate_type_back(migrate_type(dtor))).return_type().id() ==
+      "destructor");
   }
 
   SECTION("no specification gains no key")

@@ -2550,3 +2550,57 @@ With the carry disabled while the writes were IREP2-side, ten `regression/esbmc-
 failed (e.g. `exception_spec_dynamic_violation_fail`); `unit/util/migrate.test.cpp` pins the round
 trip, the unresolved case, that no specification adds no key, and that a specification is no part of
 the type's identity.
+
+## 12. The ctor/dtor marker crosses the seam (2026-09-25)
+
+`frontends-to-irep2.md` §50.2 found the ctor/dtor function-type write blocked on the pseudo return
+type: `migrate_type` maps `"constructor"` and `"destructor"` to `empty`, and vptr initialisation tests
+for exactly those ids. §11 hit the same wall from the exception-specification side.
+
+`code_type2t` now carries the marker (`return_marker`) and `#implicit_union_copy_move_constructor`
+(`implicit_union_copy_move`) as unreflected fields, and `migrate_type_back` restores the pseudo return
+type from them. With it, three writes store IREP2: `clang_cpp_convert.cpp`'s ctor/dtor
+`fd_symb->set_type` (§50.2's 254 failures of 1 061) and §11's two exception-specification writes.
+clang-cpp B-2* 4 -> 1; the last is `need_vptr_init` on the value.
+
+Two further things the carry exposed, each measured:
+
+- **An unresolved dynamic specification must cross too.** The converter's write runs before
+  `finalize_exception_specification`, so a `throw(T...)` spec still holds `exception_spec_decl`.
+  §11 dropped such a spec whole, which made `X() throw() { throw 5; }` potentially throwing, a false
+  proof in `try_catch/try-catch_decl_10_bug`; its kind now always crosses. `exception_decl` carries the
+  declared types, and finalize resolves them after the round trip:
+  `try_catch/ctor_throw_spec_declared_types` fails without it (its `_fail` twin cannot, since losing
+  the types only makes the specification stricter).
+- **A constructor call that already passes its object.** In the IREP2 adjust pass a declined VLA
+  construction keeps its initialiser, a constructor call whose first argument is the object.
+  `goto_sideeffects` lowered every call to a `"constructor"`-typed callee by adding a temporary `this`,
+  which it only ever saw once the marker survived; it now adds one only when the call is short of the
+  constructor's parameters (`cpp/irep2_array_vla_construction` failed without it).
+
+What the round trip still drops from a ctor/dtor type, from diffing `--symbol-table-only`: `#inlined`
+on the code type, `#constant` on a reference parameter's pointee, and an implicit parameter's
+`#location`, `name` and plain `identifier`. The one reader found is `c_link.cpp:193`, where `#inlined`
+silences a duplicate-definition warning across translation units; a two-file probe with inline
+ctors and dtors raised none. The argument-count rule in `goto_sideeffects` also cannot tell a variadic
+constructor called without its object from one called with it; no probe reaches that shape.
+
+`esbmc-cpp/{cpp,try_catch}` 1 333 of 1 339 pass, and the six failures (`github_7433*`, `ch8_5`) are the
+exception-type spelling pins another branch updates; the rest of `esbmc-cpp` (1 927) passes apart from
+seven tests at the 120 s cap that take the same time on the base binary.
+
+## 13. The last write: `need_vptr_init` is a one-shot pending flag (2026-09-25)
+
+After §12 clang-cpp's B-2* is 1: `clang_cpp_convert.cpp`'s `fd_symb->set_value(v)` that only sets
+`#need_vptr_init` on a ctor/dtor body. Its value is the class's "has a vptr component" -- the converter
+already falls back to reading `is_vtptr` off the class symbol, "exactly as the adjuster does" -- so the
+fact itself is derivable in `gen_vptr_initializations`.
+
+The flag carries a second meaning, though. `gen_vptr_initializations` clears it once it has inserted
+the assignments and stores the body IREP2-side, so a later pass over the same symbol inserts nothing.
+A derived condition is true every time it is asked. Deleting the write therefore needs somewhere else
+to record "done" -- or a proof that `adjust_symbol` runs once per symbol, which the multi-TU fallback
+above suggests is not something to assume. Converting the write instead needs the body migrated at
+conversion time, which `scope-python-irep2.md` §6.1's rule forbids until every symbol it names exists.
+
+So the write stays until one of those is settled; neither is a mechanical change.
