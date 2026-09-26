@@ -1,5 +1,5 @@
 CORE
 main.c
---no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --k-step 2 --floatbv --unlimited-k-steps --32 --memory-leak-check
+--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --k-step 2 --unlimited-k-steps --32 --memory-leak-check
 REQUIRES arch32
 ^VERIFICATION FAILED$

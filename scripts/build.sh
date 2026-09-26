@@ -35,7 +35,6 @@ BASE_ARGS=(
 )
 
 SOLVER_FLAGS=(
-  "-DENABLE_BOOLECTOR=On"
   "-DENABLE_YICES=Off"
   "-DENABLE_BITWUZLA=On"
   "-DENABLE_GOTO_CONTRACTOR=On"
@@ -247,8 +246,6 @@ collect_ubuntu_packages() {
     libcsmith-dev
     gperf
     cmake
-    bison
-    flex
     llvm
     linux-libc-dev
     libboost-date-time-dev
@@ -317,8 +314,6 @@ collect_macos_formulae() {
     ccache
     python@3.12
     automake
-    bison
-    flex
     "llvm@$CLANG_VERSION"
   )
 }
@@ -641,9 +636,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:l:" flag; do
       # SV-COMP behaviour is now a runtime flag (--sv-comp, set by the
       # competition wrapper), so this only selects the competition solver set.
       SOLVER_FLAGS=(
-        "-DENABLE_BOOLECTOR=On"
         "-DENABLE_YICES=On"
-        "-DENABLE_CVC4=OFF"
         "-DENABLE_BITWUZLA=On"
         "-DENABLE_Z3=On"
         "-DENABLE_MATHSAT=ON"
@@ -678,7 +671,6 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:l:" flag; do
           "-DENABLE_PYTHON_FRONTEND=OFF"
         )
         SOLVER_FLAGS=(
-          "-DENABLE_BOOLECTOR=On"
           "-DENABLE_Z3=On"
         )
       fi

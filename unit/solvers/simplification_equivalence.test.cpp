@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <string>
 #include <irep2/irep2_utils.h>
-#include <solvers/smt/simplification_equivalence.h>
+#include <solvers/simplification_equivalence.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/ieee_float.h>
 #include <util/config/config.h>

@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 33 --no-unwinding-assertions
+^VERIFICATION FAILED$

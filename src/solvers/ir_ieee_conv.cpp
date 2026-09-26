@@ -1,0 +1,932 @@
+#include <solvers/ir_ieee_conv.h>
+#include <solvers/smt_solver.h>
+#include <solvers/smt_fp_rounding_utils.h>
+#include <irep2/irep2_type.h>
+#include <util/arith/ieee_float.h>
+
+ir_ieee_convt::ir_ieee_convt(smt_solver_baset *ctx) : ctx(ctx)
+{
+}
+
+void ir_ieee_convt::propagate_interval(smt_astt lhs, smt_astt rhs)
+{
+  auto it = ir_ra_interval_map.find(rhs.get());
+  if (it != ir_ra_interval_map.end())
+    ir_ra_interval_map[lhs.get()] = it->second;
+}
+
+void ir_ieee_convt::assert_symbol_range(
+  const std::string &name,
+  smt_astt sym_ast,
+  const symbol2t &sym)
+{
+  if (
+    !ctx->ir_ieee || !ctx->int_encoding ||
+    (!is_unsignedbv_type(sym.type) && !is_signedbv_type(sym.type)) ||
+    sym.type->get_width() >= 32 || !ir_ieee_ranged_syms.insert(name).second)
+    return;
+
+  const unsigned w = sym.type->get_width();
+  if (is_unsignedbv_type(sym.type))
+  {
+    ctx->assert_ast(ctx->mk_le(ctx->mk_smt_int(BigInt(0)), sym_ast));
+    ctx->assert_ast(
+      ctx->mk_le(sym_ast, ctx->mk_smt_int(BigInt::power2(w) - 1)));
+  }
+  else
+  {
+    ctx->assert_ast(
+      ctx->mk_le(ctx->mk_smt_int(-BigInt::power2(w - 1)), sym_ast));
+    ctx->assert_ast(
+      ctx->mk_le(sym_ast, ctx->mk_smt_int(BigInt::power2(w - 1) - 1)));
+  }
+}
+
+void ir_ieee_convt::assert_representable_magnitude(
+  smt_astt sym_ast,
+  const floatbv_type2t &fbv_type)
+{
+  smt_astt zero = ctx->get_zero_real();
+  smt_astt abs_sym = ctx->solver->mkIte(
+    ctx->mk_lt(sym_ast, zero), ctx->mk_sub(zero, sym_ast), sym_ast);
+  // The double sentinel represents infinity for every float width, matching
+  // the constant_floatbv encoding in smt_solver.cpp.
+  ctx->assert_ast(ctx->mk_or(
+    ctx->mk_le(abs_sym, get_max_normal_real(fbv_type)),
+    ctx->mk_eq(abs_sym, ctx->get_double_inf_sentinel())));
+}
+
+ir_ieee_convt::ra_interval_t ir_ieee_convt::get_interval(smt_astt t) const
+{
+  auto it = ir_ra_interval_map.find(t.get());
+  return it != ir_ra_interval_map.end() ? it->second : ra_interval_t{t, t};
+}
+
+void ir_ieee_convt::store_interval(smt_astt t, smt_astt lo, smt_astt hi)
+{
+  ir_ra_interval_map[t.get()] = {lo, hi};
+}
+
+void ir_ieee_convt::store_nan_pred(smt_astt t, smt_astt nan_pred)
+{
+  ir_ieee_nan_map[t.get()] = nan_pred;
+}
+
+smt_astt ir_ieee_convt::get_nan_pred(smt_astt t) const
+{
+  auto it = ir_ieee_nan_map.find(t.get());
+  return it != ir_ieee_nan_map.end() ? it->second : smt_astt{};
+}
+
+void ir_ieee_convt::propagate_nan_pred(smt_astt lhs, smt_astt rhs)
+{
+  auto it = ir_ieee_nan_map.find(rhs.get());
+  if (it != ir_ieee_nan_map.end())
+    ir_ieee_nan_map[lhs.get()] = it->second;
+}
+
+void ir_ieee_convt::store_neg_zero_pred(smt_astt t, smt_astt neg_zero_pred)
+{
+  ir_ieee_neg_zero_map[t.get()] = neg_zero_pred;
+}
+
+smt_astt ir_ieee_convt::get_neg_zero_pred(smt_astt t) const
+{
+  auto it = ir_ieee_neg_zero_map.find(t.get());
+  return it != ir_ieee_neg_zero_map.end() ? it->second : smt_astt{};
+}
+
+void ir_ieee_convt::propagate_neg_zero_pred(smt_astt lhs, smt_astt rhs)
+{
+  auto it = ir_ieee_neg_zero_map.find(rhs.get());
+  if (it != ir_ieee_neg_zero_map.end())
+    ir_ieee_neg_zero_map[lhs.get()] = it->second;
+}
+
+void ir_ieee_convt::propagate_neg_zero_through_ite(
+  smt_astt outer,
+  smt_astt inner,
+  smt_astt guard)
+{
+  smt_astt inner_neg_zero = get_neg_zero_pred(inner);
+  if (inner_neg_zero)
+    store_neg_zero_pred(outer, ctx->solver->mkAnd(guard, inner_neg_zero));
+}
+
+smt_astt ir_ieee_convt::combine_nan_preds(smt_astt a, smt_astt b) const
+{
+  if (!a && !b)
+    return {};
+  if (!a)
+    return b;
+  if (!b)
+    return a;
+  return ctx->mk_or(a, b);
+}
+
+void ir_ieee_convt::store_combined_nan_pred(
+  smt_astt result,
+  smt_astt s1,
+  smt_astt s2)
+{
+  smt_astt nan_p = combine_nan_preds(get_nan_pred(s1), get_nan_pred(s2));
+  if (nan_p)
+    store_nan_pred(result, nan_p);
+}
+
+smt_astt
+ir_ieee_convt::get_max_normal_real(const floatbv_type2t &fbv_type) const
+{
+  const auto single_spec = ieee_float_spect::single_precision();
+  return (fbv_type.exponent == single_spec.e &&
+          fbv_type.fraction == single_spec.f)
+           ? ctx->get_single_max_normal()
+           : ctx->get_double_max_normal();
+}
+
+smt_astt
+ir_ieee_convt::is_pos_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const
+{
+  return ctx->mk_gt(x, get_max_normal_real(fbv_type));
+}
+
+smt_astt
+ir_ieee_convt::is_neg_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const
+{
+  smt_astt max_normal = get_max_normal_real(fbv_type);
+  return ctx->mk_lt(x, ctx->mk_sub(ctx->get_zero_real(), max_normal));
+}
+
+smt_astt
+ir_ieee_convt::is_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const
+{
+  return ctx->mk_or(is_pos_inf_real(x, fbv_type), is_neg_inf_real(x, fbv_type));
+}
+
+smt_astt
+ir_ieee_convt::apply_nan_cmp(smt_astt cmp, smt_astt a, smt_astt b, bool is_neq)
+{
+  smt_astt either_nan = combine_nan_preds(get_nan_pred(a), get_nan_pred(b));
+  if (!either_nan)
+    return cmp;
+  return ctx->solver->mkIte(either_nan, ctx->solver->mkBool(is_neq), cmp);
+}
+
+std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rne_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel = {}, eps_abs = {};
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel = ctx->get_double_eps_rel();
+    eps_abs = ctx->get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel = ctx->get_single_eps_rel();
+    eps_abs = ctx->get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rne_enclosure: unsupported FP format");
+    abort();
+  }
+
+  smt_sortt rs = ctx->solver->mkRealSort();
+  smt_astt zero = ctx->solver->mkReal("0.0");
+
+  smt_astt abs_lo =
+    ctx->solver->mkIte(ctx->mk_lt(lo_r, zero), ctx->mk_sub(zero, lo_r), lo_r);
+  smt_astt bound_lo = ctx->mk_add(ctx->mk_mul(eps_rel, abs_lo), eps_abs);
+
+  smt_astt abs_hi =
+    ctx->solver->mkIte(ctx->mk_lt(hi_r, zero), ctx->mk_sub(zero, hi_r), hi_r);
+  smt_astt bound_hi = ctx->mk_add(ctx->mk_mul(eps_rel, abs_hi), eps_abs);
+
+  smt_astt ra_lo_expr = ctx->mk_sub(lo_r, bound_lo);
+  smt_astt ra_hi_expr = ctx->mk_add(hi_r, bound_hi);
+
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi::", {});
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
+  ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
+  ctx->assert_ast(ctx->mk_le(ra_hi, ra_hi_expr));
+  ctx->assert_ast(ctx->mk_le(ra_hi_expr, ra_hi));
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, real_result));
+  ctx->assert_ast(ctx->mk_le(real_result, ra_hi));
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rna_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel = {}, eps_abs = {};
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel = ctx->get_double_eps_rel();
+    eps_abs = ctx->get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel = ctx->get_single_eps_rel();
+    eps_abs = ctx->get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rna_enclosure: unsupported FP format");
+    abort();
+  }
+
+  smt_sortt rs = ctx->solver->mkRealSort();
+  smt_astt zero = ctx->solver->mkReal("0.0");
+
+  smt_astt abs_lo =
+    ctx->solver->mkIte(ctx->mk_lt(lo_r, zero), ctx->mk_sub(zero, lo_r), lo_r);
+  smt_astt bound_lo = ctx->mk_add(ctx->mk_mul(eps_rel, abs_lo), eps_abs);
+
+  smt_astt abs_hi =
+    ctx->solver->mkIte(ctx->mk_lt(hi_r, zero), ctx->mk_sub(zero, hi_r), hi_r);
+  smt_astt bound_hi = ctx->mk_add(ctx->mk_mul(eps_rel, abs_hi), eps_abs);
+
+  smt_astt ra_lo_expr = ctx->mk_sub(lo_r, bound_lo);
+  smt_astt ra_hi_expr = ctx->mk_add(hi_r, bound_hi);
+
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_aw::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_aw::", {});
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
+  ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
+  ctx->assert_ast(ctx->mk_le(ra_hi, ra_hi_expr));
+  ctx->assert_ast(ctx->mk_le(ra_hi_expr, ra_hi));
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, real_result));
+  ctx->assert_ast(ctx->mk_le(real_result, ra_hi));
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rup_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir = {}, eps_abs = {};
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = ctx->get_double_eps_up();
+    eps_abs = ctx->get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = ctx->get_single_eps_up();
+    eps_abs = ctx->get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rup_enclosure: unsupported FP format");
+    abort();
+  }
+
+  smt_sortt rs = ctx->solver->mkRealSort();
+  smt_astt zero = ctx->solver->mkReal("0.0");
+
+  smt_astt abs_hi =
+    ctx->solver->mkIte(ctx->mk_lt(hi_r, zero), ctx->mk_sub(zero, hi_r), hi_r);
+  smt_astt bound_hi = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_hi), eps_abs);
+  smt_astt ra_hi_expr = ctx->mk_add(hi_r, bound_hi);
+
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_up::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_up::", {});
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, lo_r));
+  ctx->assert_ast(ctx->mk_le(lo_r, ra_lo));
+
+  ctx->assert_ast(ctx->mk_le(ra_hi, ra_hi_expr));
+  ctx->assert_ast(ctx->mk_le(ra_hi_expr, ra_hi));
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, real_result));
+  ctx->assert_ast(ctx->mk_le(real_result, ra_hi));
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rdn_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir = {}, eps_abs = {};
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = ctx->get_double_eps_up();
+    eps_abs = ctx->get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = ctx->get_single_eps_up();
+    eps_abs = ctx->get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rdn_enclosure: unsupported FP format");
+    abort();
+  }
+
+  smt_sortt rs = ctx->solver->mkRealSort();
+  smt_astt zero = ctx->solver->mkReal("0.0");
+
+  smt_astt abs_lo =
+    ctx->solver->mkIte(ctx->mk_lt(lo_r, zero), ctx->mk_sub(zero, lo_r), lo_r);
+  smt_astt bound_lo = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_lo), eps_abs);
+  smt_astt ra_lo_expr = ctx->mk_sub(lo_r, bound_lo);
+
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_dn::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_dn::", {});
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
+  ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
+
+  ctx->assert_ast(ctx->mk_le(ra_hi, hi_r));
+  ctx->assert_ast(ctx->mk_le(hi_r, ra_hi));
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, real_result));
+  ctx->assert_ast(ctx->mk_le(real_result, ra_hi));
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rtz_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir = {}, eps_abs = {};
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = ctx->get_double_eps_up();
+    eps_abs = ctx->get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = ctx->get_single_eps_up();
+    eps_abs = ctx->get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rtz_enclosure: unsupported FP format");
+    abort();
+  }
+
+  smt_sortt rs = ctx->solver->mkRealSort();
+  smt_astt zero = ctx->solver->mkReal("0.0");
+
+  smt_astt abs_lo =
+    ctx->solver->mkIte(ctx->mk_lt(lo_r, zero), ctx->mk_sub(zero, lo_r), lo_r);
+  smt_astt abs_hi =
+    ctx->solver->mkIte(ctx->mk_lt(hi_r, zero), ctx->mk_sub(zero, hi_r), hi_r);
+
+  smt_astt bound_lo = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_lo), eps_abs);
+  smt_astt bound_hi = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_hi), eps_abs);
+
+  smt_astt abs_max =
+    ctx->solver->mkIte(ctx->mk_le(abs_lo, abs_hi), abs_hi, abs_lo);
+  smt_astt bound_max = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_max), eps_abs);
+
+  smt_astt lo_nonneg = ctx->mk_le(zero, lo_r);
+  smt_astt hi_nonpos = ctx->mk_le(hi_r, zero);
+
+  smt_astt ra_lo_expr = ctx->solver->mkIte(
+    lo_nonneg,
+    ctx->mk_sub(lo_r, bound_lo),
+    ctx->solver->mkIte(hi_nonpos, lo_r, ctx->mk_sub(lo_r, bound_max)));
+
+  smt_astt ra_hi_expr = ctx->solver->mkIte(
+    lo_nonneg,
+    hi_r,
+    ctx->solver->mkIte(
+      hi_nonpos, ctx->mk_add(hi_r, bound_hi), ctx->mk_add(hi_r, bound_max)));
+
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_tz::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_tz::", {});
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
+  ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
+
+  ctx->assert_ast(ctx->mk_le(ra_hi, ra_hi_expr));
+  ctx->assert_ast(ctx->mk_le(ra_hi_expr, ra_hi));
+
+  ctx->assert_ast(ctx->mk_le(ra_lo, real_result));
+  ctx->assert_ast(ctx->mk_le(real_result, ra_hi));
+  ctx->assert_ast(ctx->mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt>
+ir_ieee_convt::widen_for_flush(smt_astt lo, smt_astt hi)
+{
+  smt_astt zero_r = ctx->get_zero_real();
+  return {
+    ctx->solver->mkIte(ctx->mk_lt(lo, zero_r), lo, zero_r),
+    ctx->solver->mkIte(ctx->mk_lt(zero_r, hi), hi, zero_r)};
+}
+
+std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type,
+  const expr2tc &rounding_mode)
+{
+  if (smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode))
+    return apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+  if (smt_fp_rounding_utils::is_round_to_away(rounding_mode))
+    return apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
+  if (smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode))
+    return apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
+  if (smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode))
+    return apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+  return apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
+}
+
+static bool is_known_rounding_mode(const expr2tc &rounding_mode)
+{
+  return smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_away(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_zero(rounding_mode);
+}
+
+static bool is_single_or_double(const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  return (fbv_type.exponent == double_spec.e &&
+          fbv_type.fraction == double_spec.f) ||
+         (fbv_type.exponent == single_spec.e &&
+          fbv_type.fraction == single_spec.f);
+}
+
+smt_astt ir_ieee_convt::encode_ieee_add(const expr2tc &expr)
+{
+  smt_astt side1 = ctx->convert_ast(to_ieee_add2t(expr).side_1);
+  smt_astt side2 = ctx->convert_ast(to_ieee_add2t(expr).side_2);
+  smt_astt real_result = ctx->mk_add(side1, side2);
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+  const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
+
+  if (
+    ctx->options.get_bool_option("ir-ieee") &&
+    is_known_rounding_mode(rounding_mode) && is_single_or_double(fbv_type))
+  {
+    ra_interval_t iv1 = get_interval(side1);
+    ra_interval_t iv2 = get_interval(side2);
+    smt_astt lo_r = ctx->mk_add(iv1.lo, iv2.lo);
+    smt_astt hi_r = ctx->mk_add(iv1.hi, iv2.hi);
+    auto bounds =
+      apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
+
+    // +∞ + (−∞) and (−∞) + (+∞) are invalid operations that produce NaN.
+    smt_astt invalid_op_nan = ctx->mk_or(
+      ctx->solver->mkAnd(
+        is_pos_inf_real(side1, fbv_type), is_neg_inf_real(side2, fbv_type)),
+      ctx->solver->mkAnd(
+        is_neg_inf_real(side1, fbv_type), is_pos_inf_real(side2, fbv_type)));
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+      invalid_op_nan);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
+  }
+  return ctx->apply_ieee754_semantics(
+    real_result, fbv_type, smt_astt{}, rounding_mode);
+}
+
+smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
+{
+  smt_astt side1 = ctx->convert_ast(to_ieee_sub2t(expr).side_1);
+  smt_astt side2 = ctx->convert_ast(to_ieee_sub2t(expr).side_2);
+  smt_astt real_result = ctx->mk_sub(side1, side2);
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+  const expr2tc &rounding_mode = to_ieee_sub2t(expr).rounding_mode;
+
+  if (
+    ctx->options.get_bool_option("ir-ieee") &&
+    is_known_rounding_mode(rounding_mode) && is_single_or_double(fbv_type))
+  {
+    ra_interval_t iv1 = get_interval(side1);
+    ra_interval_t iv2 = get_interval(side2);
+    smt_astt lo_r = ctx->mk_sub(iv1.lo, iv2.hi);
+    smt_astt hi_r = ctx->mk_sub(iv1.hi, iv2.lo);
+    auto bounds =
+      apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
+
+    // +∞ − (+∞) and (−∞) − (−∞) are invalid operations that produce NaN.
+    smt_astt invalid_op_nan = ctx->mk_or(
+      ctx->solver->mkAnd(
+        is_pos_inf_real(side1, fbv_type), is_pos_inf_real(side2, fbv_type)),
+      ctx->solver->mkAnd(
+        is_neg_inf_real(side1, fbv_type), is_neg_inf_real(side2, fbv_type)));
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+      invalid_op_nan);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
+  }
+  return ctx->apply_ieee754_semantics(
+    real_result, fbv_type, smt_astt{}, rounding_mode);
+}
+
+smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
+{
+  smt_astt side1 = ctx->convert_ast(to_ieee_mul2t(expr).side_1);
+  smt_astt side2 = ctx->convert_ast(to_ieee_mul2t(expr).side_2);
+  smt_astt real_result = ctx->mk_mul(side1, side2);
+  smt_astt zero = ctx->solver->mkReal("0.0");
+  smt_astt operand_is_zero = ctx->mk_or(
+    ctx->solver->mkEqual(side1, zero), ctx->solver->mkEqual(side2, zero));
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+  const expr2tc &rounding_mode = to_ieee_mul2t(expr).rounding_mode;
+
+  if (
+    ctx->options.get_bool_option("ir-ieee") &&
+    is_known_rounding_mode(rounding_mode) && is_single_or_double(fbv_type))
+  {
+    ra_interval_t iv1 = get_interval(side1);
+    ra_interval_t iv2 = get_interval(side2);
+    smt_astt p1 = ctx->mk_mul(iv1.lo, iv2.lo);
+    smt_astt p2 = ctx->mk_mul(iv1.lo, iv2.hi);
+    smt_astt p3 = ctx->mk_mul(iv1.hi, iv2.lo);
+    smt_astt p4 = ctx->mk_mul(iv1.hi, iv2.hi);
+    smt_astt lo_r = ctx->solver->mkIte(
+      ctx->mk_le(p1, p2),
+      ctx->solver->mkIte(
+        ctx->mk_le(p1, p3),
+        ctx->solver->mkIte(ctx->mk_le(p1, p4), p1, p4),
+        ctx->solver->mkIte(ctx->mk_le(p3, p4), p3, p4)),
+      ctx->solver->mkIte(
+        ctx->mk_le(p2, p3),
+        ctx->solver->mkIte(ctx->mk_le(p2, p4), p2, p4),
+        ctx->solver->mkIte(ctx->mk_le(p3, p4), p3, p4)));
+    smt_astt hi_r = ctx->solver->mkIte(
+      ctx->mk_le(p2, p1),
+      ctx->solver->mkIte(
+        ctx->mk_le(p3, p1),
+        ctx->solver->mkIte(ctx->mk_le(p4, p1), p1, p4),
+        ctx->solver->mkIte(ctx->mk_le(p4, p3), p3, p4)),
+      ctx->solver->mkIte(
+        ctx->mk_le(p3, p2),
+        ctx->solver->mkIte(ctx->mk_le(p4, p2), p2, p4),
+        ctx->solver->mkIte(ctx->mk_le(p4, p3), p3, p4)));
+    auto bounds =
+      apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
+
+    // 0 × ±∞ and ±∞ × 0 are invalid operations that produce NaN.
+    // When both operands are the same value it can be neither zero nor
+    // infinite at once, so the term is unsatisfiable; skipping it also avoids
+    // feeding the huge max-normal constant into Z3's nonlinear reasoning.
+    smt_astt invalid_op_nan = {};
+    if (side1.get() != side2.get())
+    {
+      smt_astt s1_inf = is_inf_real(side1, fbv_type);
+      smt_astt s2_inf = is_inf_real(side2, fbv_type);
+      smt_astt s1_zero = ctx->solver->mkEqual(side1, zero);
+      smt_astt s2_zero = ctx->solver->mkEqual(side2, zero);
+      invalid_op_nan = ctx->mk_or(
+        ctx->solver->mkAnd(s1_zero, s2_inf),
+        ctx->solver->mkAnd(s1_inf, s2_zero));
+    }
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+      invalid_op_nan);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
+  }
+  return ctx->apply_ieee754_semantics(
+    real_result, fbv_type, operand_is_zero, rounding_mode);
+}
+
+smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
+{
+  smt_astt side1 = ctx->convert_ast(to_ieee_div2t(expr).side_1);
+  smt_astt side2 = ctx->convert_ast(to_ieee_div2t(expr).side_2);
+  smt_astt zero = ctx->get_zero_real();
+  smt_astt div_by_zero = ctx->solver->mkEqual(side2, zero);
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+  const auto single_spec = ieee_float_spect::single_precision();
+  const auto double_spec = ieee_float_spect::double_precision();
+  const bool is_single =
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f;
+  const bool is_double =
+    fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f;
+
+  if (!is_single && !is_double)
+  {
+    smt_astt real_result = ctx->mk_div(side1, side2);
+    return ctx->apply_ieee754_semantics(
+      real_result, fbv_type, smt_astt{}, to_ieee_div2t(expr).rounding_mode);
+  }
+
+  smt_astt sentinel = ctx->get_double_inf_sentinel();
+  // IEEE 754: the sign of x / +-0 is sign(x) XOR sign of the zero divisor.
+  // side2 is a bare real zero here (div_by_zero requires side2 == zero),
+  // which cannot carry its own sign, so the divisor's sign is recovered
+  // from its tracked negative-zero predicate (set when side2 is the
+  // result of flushing a negative subnormal-range value, or is itself a
+  // literal -0.0 constant); absent that predicate, side2 is treated as
+  // ordinary +0.0, matching prior behaviour.
+  smt_astt side1_neg = ctx->mk_lt(side1, zero);
+  smt_astt side2_neg_zero = get_neg_zero_pred(side2);
+  smt_astt result_neg =
+    side2_neg_zero ? ctx->solver->mkXor(side1_neg, side2_neg_zero) : side1_neg;
+  smt_astt inf_result =
+    ctx->solver->mkIte(result_neg, ctx->mk_sub(zero, sentinel), sentinel);
+  smt_astt real_result = ctx->mk_div(side1, side2);
+  const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
+
+  if (
+    ctx->options.get_bool_option("ir-ieee") &&
+    is_known_rounding_mode(rounding_mode))
+  {
+    ra_interval_t iv1 = get_interval(side1);
+    ra_interval_t iv2 = get_interval(side2);
+
+    smt_astt denom_admissible =
+      ctx->mk_or(ctx->mk_lt(zero, iv2.lo), ctx->mk_lt(iv2.hi, zero));
+
+    smt_astt q1 = ctx->mk_div(iv1.lo, iv2.lo);
+    smt_astt q2 = ctx->mk_div(iv1.lo, iv2.hi);
+    smt_astt q3 = ctx->mk_div(iv1.hi, iv2.lo);
+    smt_astt q4 = ctx->mk_div(iv1.hi, iv2.hi);
+    smt_astt lo_r_full = ctx->solver->mkIte(
+      ctx->mk_le(q1, q2),
+      ctx->solver->mkIte(
+        ctx->mk_le(q1, q3),
+        ctx->solver->mkIte(ctx->mk_le(q1, q4), q1, q4),
+        ctx->solver->mkIte(ctx->mk_le(q3, q4), q3, q4)),
+      ctx->solver->mkIte(
+        ctx->mk_le(q2, q3),
+        ctx->solver->mkIte(ctx->mk_le(q2, q4), q2, q4),
+        ctx->solver->mkIte(ctx->mk_le(q3, q4), q3, q4)));
+    smt_astt hi_r_full = ctx->solver->mkIte(
+      ctx->mk_le(q2, q1),
+      ctx->solver->mkIte(
+        ctx->mk_le(q3, q1),
+        ctx->solver->mkIte(ctx->mk_le(q4, q1), q1, q4),
+        ctx->solver->mkIte(ctx->mk_le(q4, q3), q3, q4)),
+      ctx->solver->mkIte(
+        ctx->mk_le(q3, q2),
+        ctx->solver->mkIte(ctx->mk_le(q4, q2), q2, q4),
+        ctx->solver->mkIte(ctx->mk_le(q4, q3), q3, q4)));
+
+    smt_astt d_lo = ctx->mk_div(iv1.lo, side2);
+    smt_astt d_hi = ctx->mk_div(iv1.hi, side2);
+    smt_astt lo_r_point =
+      ctx->solver->mkIte(ctx->mk_le(d_lo, d_hi), d_lo, d_hi);
+    smt_astt hi_r_point =
+      ctx->solver->mkIte(ctx->mk_le(d_hi, d_lo), d_lo, d_hi);
+
+    smt_astt lo_r = ctx->solver->mkIte(denom_admissible, lo_r_full, lo_r_point);
+    smt_astt hi_r = ctx->solver->mkIte(denom_admissible, hi_r_full, hi_r_point);
+
+    auto bounds =
+      apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    smt_astt a = ctx->solver->mkIte(div_by_zero, inf_result, flushed);
+    // When div_by_zero fires (denominator flushed to zero), the result is
+    // ±sentinel (infinity).  Widen to [−sentinel, sentinel] in that branch;
+    // otherwise widen to include zero for the subnormal-flush case.
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    smt_astt lo_a =
+      ctx->solver->mkIte(div_by_zero, ctx->mk_sub(zero, sentinel), lo_w);
+    smt_astt hi_a = ctx->solver->mkIte(div_by_zero, sentinel, hi_w);
+    store_interval(a, lo_a, hi_a);
+    smt_astt zero_div_zero_nan =
+      ctx->solver->mkAnd(ctx->solver->mkEqual(side1, zero), div_by_zero);
+    // ±∞ / ±∞ is an invalid operation that produces NaN.
+    smt_astt inf_div_inf_nan = ctx->solver->mkAnd(
+      is_inf_real(side1, fbv_type), is_inf_real(side2, fbv_type));
+    store_nan_pred(
+      a,
+      combine_nan_preds(
+        combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+        combine_nan_preds(zero_div_zero_nan, inf_div_inf_nan)));
+    // `a` is a further ite over `flushed`, not `flushed` itself.
+    propagate_neg_zero_through_ite(a, flushed, ctx->mk_not(div_by_zero));
+    return a;
+  }
+
+  smt_astt ieee_result = ctx->apply_ieee754_semantics(
+    real_result, fbv_type, smt_astt{}, rounding_mode);
+  smt_astt result = ctx->solver->mkIte(div_by_zero, inf_result, ieee_result);
+  // `result` is a further ite over `ieee_result`, not `ieee_result` itself.
+  propagate_neg_zero_through_ite(result, ieee_result, ctx->mk_not(div_by_zero));
+  return result;
+}
+
+smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
+{
+  smt_astt val1 = ctx->convert_ast(to_ieee_fma2t(expr).value_1);
+  smt_astt val2 = ctx->convert_ast(to_ieee_fma2t(expr).value_2);
+  smt_astt val3 = ctx->convert_ast(to_ieee_fma2t(expr).value_3);
+  smt_astt intermediate = ctx->mk_mul(val1, val2);
+  smt_astt real_result = ctx->mk_add(intermediate, val3);
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+  const expr2tc &rounding_mode = to_ieee_fma2t(expr).rounding_mode;
+
+  if (
+    ctx->options.get_bool_option("ir-ieee") &&
+    is_known_rounding_mode(rounding_mode) && is_single_or_double(fbv_type))
+  {
+    ra_interval_t iv1 = get_interval(val1);
+    ra_interval_t iv2 = get_interval(val2);
+    ra_interval_t iv3 = get_interval(val3);
+
+    // Multiplication hull: min/max over the four endpoint products of x and y.
+    smt_astt p1 = ctx->mk_mul(iv1.lo, iv2.lo);
+    smt_astt p2 = ctx->mk_mul(iv1.lo, iv2.hi);
+    smt_astt p3 = ctx->mk_mul(iv1.hi, iv2.lo);
+    smt_astt p4 = ctx->mk_mul(iv1.hi, iv2.hi);
+    smt_astt mul_lo = ctx->solver->mkIte(
+      ctx->mk_le(p1, p2),
+      ctx->solver->mkIte(
+        ctx->mk_le(p1, p3),
+        ctx->solver->mkIte(ctx->mk_le(p1, p4), p1, p4),
+        ctx->solver->mkIte(ctx->mk_le(p3, p4), p3, p4)),
+      ctx->solver->mkIte(
+        ctx->mk_le(p2, p3),
+        ctx->solver->mkIte(ctx->mk_le(p2, p4), p2, p4),
+        ctx->solver->mkIte(ctx->mk_le(p3, p4), p3, p4)));
+    smt_astt mul_hi = ctx->solver->mkIte(
+      ctx->mk_le(p2, p1),
+      ctx->solver->mkIte(
+        ctx->mk_le(p3, p1),
+        ctx->solver->mkIte(ctx->mk_le(p4, p1), p1, p4),
+        ctx->solver->mkIte(ctx->mk_le(p4, p3), p3, p4)),
+      ctx->solver->mkIte(
+        ctx->mk_le(p3, p2),
+        ctx->solver->mkIte(ctx->mk_le(p4, p2), p2, p4),
+        ctx->solver->mkIte(ctx->mk_le(p4, p3), p3, p4)));
+
+    // Fused add: extend the multiplication hull by the z interval.
+    // r = x*y + z is a single rounding, so the enclosure is applied once.
+    smt_astt lo_r = ctx->mk_add(mul_lo, iv3.lo);
+    smt_astt hi_r = ctx->mk_add(mul_hi, iv3.hi);
+
+    auto bounds =
+      apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
+
+    // 0 × ±∞ in the multiply sub-step is an invalid operation.
+    smt_astt zero = ctx->get_zero_real();
+    smt_astt mul_nan = ctx->mk_or(
+      ctx->solver->mkAnd(
+        ctx->solver->mkEqual(val1, zero), is_inf_real(val2, fbv_type)),
+      ctx->solver->mkAnd(
+        is_inf_real(val1, fbv_type), ctx->solver->mkEqual(val2, zero)));
+
+    // An infinite product combined with an opposite-signed infinite addend is
+    // an invalid operation.  In IEEE 754 FMA the intermediate product is
+    // computed at infinite precision, so it is infinite only when a factor is
+    // infinite — a pair of large finite values whose product merely overflows
+    // is NOT an invalid operation.  We therefore check factor infiniteness
+    // rather than the magnitude of the intermediate product.
+    smt_astt v1_pos = ctx->mk_gt(val1, zero);
+    smt_astt v1_neg = ctx->mk_lt(val1, zero);
+    smt_astt v2_pos = ctx->mk_gt(val2, zero);
+    smt_astt v2_neg = ctx->mk_lt(val2, zero);
+    smt_astt same_sign = ctx->mk_or(
+      ctx->solver->mkAnd(v1_pos, v2_pos), ctx->solver->mkAnd(v1_neg, v2_neg));
+    smt_astt opp_sign = ctx->mk_or(
+      ctx->solver->mkAnd(v1_pos, v2_neg), ctx->solver->mkAnd(v1_neg, v2_pos));
+    smt_astt either_factor_inf =
+      ctx->mk_or(is_inf_real(val1, fbv_type), is_inf_real(val2, fbv_type));
+    smt_astt add_nan = ctx->solver->mkAnd(
+      either_factor_inf,
+      ctx->mk_or(
+        ctx->solver->mkAnd(same_sign, is_neg_inf_real(val3, fbv_type)),
+        ctx->solver->mkAnd(opp_sign, is_pos_inf_real(val3, fbv_type))));
+
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(val1), get_nan_pred(val2)),
+      combine_nan_preds(
+        get_nan_pred(val3), combine_nan_preds(mul_nan, add_nan)));
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
+  }
+
+  return ctx->apply_ieee754_semantics(
+    real_result, fbv_type, smt_astt{}, rounding_mode);
+}
+
+smt_astt ir_ieee_convt::encode_ieee_rem(const expr2tc &expr)
+{
+  smt_astt x = ctx->convert_ast(to_ieee_rem2t(expr).side_1);
+  smt_astt y = ctx->convert_ast(to_ieee_rem2t(expr).side_2);
+  smt_astt zero = ctx->get_zero_real();
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+
+  /* IEEE 754 remainder: r = x - n*y with n the integer nearest x/y, even on
+   * ties. r is exact for every representable pair, so nothing is rounded,
+   * flushed or enclosed; instead of computing rne(x/y), r is pinned through
+   * a fresh integer n.
+   *
+   * All constraints are gated on the operands being finite with y nonzero:
+   * the remaining cases are either metadata (NaN) or passthrough (infinite
+   * y), and an ungated magnitude bound would wrongly constrain x to zero
+   * when y == 0. */
+  smt_astt n_int = ctx->mk_fresh(ctx->mk_int_sort(), "ieee_rem_n::", {});
+  smt_astt k_int = ctx->mk_fresh(ctx->mk_int_sort(), "ieee_rem_k::", {});
+  smt_astt n = ctx->mk_int2real(n_int);
+  smt_astt r = ctx->mk_sub(x, ctx->mk_mul(n, y));
+
+  smt_astt x_inf =
+    ctx->mk_or(is_pos_inf_real(x, fbv_type), is_neg_inf_real(x, fbv_type));
+  smt_astt y_inf =
+    ctx->mk_or(is_pos_inf_real(y, fbv_type), is_neg_inf_real(y, fbv_type));
+  smt_astt y_zero = ctx->solver->mkEqual(y, zero);
+  smt_astt defined = ctx->solver->mkAnd(
+    ctx->solver->mkNot(x_inf),
+    ctx->solver->mkAnd(ctx->solver->mkNot(y_inf), ctx->solver->mkNot(y_zero)));
+
+  smt_astt abs_r =
+    ctx->solver->mkIte(ctx->mk_lt(r, zero), ctx->mk_sub(zero, r), r);
+  smt_astt abs_y =
+    ctx->solver->mkIte(ctx->mk_lt(y, zero), ctx->mk_sub(zero, y), y);
+  smt_astt two_abs_r = ctx->mk_add(abs_r, abs_r);
+
+  /* |r| <= |y| / 2, written 2|r| <= |y| to stay constant-free. */
+  ctx->assert_ast(
+    ctx->mk_or(ctx->solver->mkNot(defined), ctx->mk_le(two_abs_r, abs_y)));
+
+  /* A tie (2|r| == |y|) must round n to even: force n = k + k there. k is
+   * otherwise unconstrained, so non-tie models are unaffected. */
+  smt_astt tie = ctx->solver->mkEqual(two_abs_r, abs_y);
+  ctx->assert_ast(ctx->mk_or(
+    ctx->solver->mkNot(ctx->solver->mkAnd(defined, tie)),
+    ctx->solver->mkEqual(n_int, ctx->mk_add(k_int, k_int))));
+
+  /* Infinite y with finite x passes x through untouched. */
+  smt_astt result = ctx->solver->mkIte(
+    ctx->solver->mkAnd(y_inf, ctx->solver->mkNot(x_inf)), x, r);
+
+  /* NaN whenever an operand is NaN, x is infinite, or y is zero. */
+  smt_astt invalid = ctx->mk_or(x_inf, y_zero);
+  smt_astt nan_p = combine_nan_preds(
+    combine_nan_preds(get_nan_pred(x), get_nan_pred(y)), invalid);
+  if (nan_p)
+    store_nan_pred(result, nan_p);
+  return result;
+}

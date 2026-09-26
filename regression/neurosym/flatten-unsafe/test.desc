@@ -1,5 +1,5 @@
 CORE
 main.c
---neurosym --neurosym-prog fake-neurosym.sh --neurosym-model-prog "z3 -in"
+--smtlib --smtlib-logic QF_BV --smtlib-oneshot-prog fake-neurosym.sh --smtlib-oneshot-model-prog "z3 -in"
 ^\[Counterexample\]$
 ^VERIFICATION FAILED$

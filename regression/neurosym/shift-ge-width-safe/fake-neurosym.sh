@@ -8,6 +8,10 @@ cat "$1" > "$q"
 echo '(get-model)' >> "$q"
 out=$(z3 -smt2 "$q" 2>/dev/null)
 rm -f "$q"
+# The one-shot backend sets :print-success, so z3 acknowledges every
+# set-option with "success" before the verdict. Drop those first: the old
+# --neurosym backend sent no such options and this read line 1 directly.
+out=$(printf '%s\n' "$out" | grep -vx success)
 verdict=$(printf '%s\n' "$out" | head -n 1)
 echo "[NeuroSym] solving $1"
 echo "$verdict"

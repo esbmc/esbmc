@@ -1,4 +1,4 @@
 CORE
 main.c
---neurosym --neurosym-prog fake-neurosym.sh --result-only
+--smtlib --smtlib-logic QF_BV --smtlib-oneshot-prog fake-neurosym.sh --result-only
 ^VERIFICATION FAILED$

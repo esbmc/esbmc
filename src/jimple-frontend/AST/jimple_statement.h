@@ -154,7 +154,6 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-
   std::string variable;
   std::string value;
 };

@@ -4,7 +4,7 @@
 #include <goto-symex/witness/witnesses.h>
 #include <ac_config.h>
 #include <langapi/mode.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <util/base/prefix.h>
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>

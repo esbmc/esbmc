@@ -2,7 +2,7 @@
 #include <goto-symex/trace/build_goto_trace.h>
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {

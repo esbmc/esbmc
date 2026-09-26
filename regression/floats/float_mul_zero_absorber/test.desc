@@ -1,5 +1,5 @@
 CORE
 main.c
---floatbv
+
 ^VERIFICATION SUCCESSFUL$
 \A(?![\s\S]*FAILED)[\s\S]*\Z
