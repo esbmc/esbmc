@@ -416,8 +416,24 @@ numpy_shape_from_shape_arg(const nlohmann::json &args)
   return numpy_raw_shape_sequence(args[0]);
 }
 
-static std::optional<std::vector<std::size_t>>
-numpy_eye_or_identity_shape(const nlohmann::json &args, bool has_cols_arg)
+static const nlohmann::json *
+numpy_keyword_value(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.contains("keywords") || !node["keywords"].is_array())
+    return nullptr;
+
+  for (const auto &kw : node["keywords"])
+    if (
+      kw.is_object() && kw.value("arg", std::string()) == name &&
+      kw.contains("value"))
+      return &kw["value"];
+  return nullptr;
+}
+
+static std::optional<std::vector<std::size_t>> numpy_eye_or_identity_shape(
+  const nlohmann::json &node,
+  const nlohmann::json &args,
+  bool has_cols_arg)
 {
   if (args.empty())
     return std::nullopt;
@@ -427,9 +443,13 @@ numpy_eye_or_identity_shape(const nlohmann::json &args, bool has_cols_arg)
     return std::nullopt;
 
   long long cols = *rows;
-  if (has_cols_arg && args.size() > 1)
+  const nlohmann::json *cols_arg =
+    has_cols_arg ? numpy_keyword_value(node, "M") : nullptr;
+  if (has_cols_arg && !cols_arg && args.size() > 1)
+    cols_arg = &args[1];
+  if (cols_arg)
   {
-    std::optional<long long> parsed_cols = literal_int_value(args[1]);
+    std::optional<long long> parsed_cols = literal_int_value(*cols_arg);
     if (!parsed_cols || *parsed_cols < 0)
       return std::nullopt;
     cols = *parsed_cols;
@@ -466,7 +486,7 @@ numpy_constructor_shape(const nlohmann::json &node)
     return numpy_shape_from_shape_arg(*args);
 
   if (ctor == "eye" || ctor == "identity")
-    return numpy_eye_or_identity_shape(*args, ctor == "eye");
+    return numpy_eye_or_identity_shape(node, *args, ctor == "eye");
 
   if (ctor == "linspace")
     return numpy_linspace_shape(*args);
