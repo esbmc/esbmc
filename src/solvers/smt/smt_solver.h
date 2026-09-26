@@ -95,6 +95,10 @@
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
+
+/** The bit a byte update with a symbolic offset writes at, in bit-vector mode:
+ *  the offset scaled to bits, in the width of the updated value. */
+expr2tc byte_update_bit_offset(const byte_update2t &data);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>

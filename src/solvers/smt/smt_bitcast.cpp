@@ -254,16 +254,124 @@ void smt_solver_baset::end_step()
   step_overwritten = expr2tc();
 }
 
+/** The pointer whose flattened representation is bits [lo, lo + width) of
+ *  @p e whenever @p untouched holds (nil: always), looking through extracts,
+ *  byte updates that leave those bits alone and the member layout of
+ *  flatten_to_bitvector. The pointer is nil when that is not evident. */
+struct flattened_pointert
+{
+  expr2tc pointer;
+  expr2tc untouched;
+};
+
+static flattened_pointert
+pointer_flattened_at(const expr2tc &e, unsigned lo, unsigned width);
+
+static flattened_pointert
+flattened_past_byte_update(const byte_update2t &bu, unsigned lo, unsigned width)
+{
+  if (bu.update_value->type->get_width() != 8)
+    return {};
+
+  const unsigned src_width = bu.source_value->type->get_width();
+  if (is_constant_int2t(bu.source_offset))
+  {
+    // The byte convert_byte_update_bv_mode() writes; it skips out-of-range
+    // ones.
+    const BigInt offset = to_constant_int2t(bu.source_offset).value;
+    if (offset < 0 || offset >= src_width / 8)
+      return {};
+    const BigInt byte = bu.big_endian ? src_width / 8 - 1 - offset : offset;
+    if (byte * 8 >= lo + width || byte * 8 + 8 <= lo)
+      return pointer_flattened_at(bu.source_value, lo, width);
+    return {};
+  }
+
+  flattened_pointert inner = pointer_flattened_at(bu.source_value, lo, width);
+  if (!inner.pointer || inner.untouched)
+    return {};
+  // The byte convert_byte_update_bv_mode() clears, against these bits.
+  const type2tc t = get_uint_type(src_width);
+  expr2tc mask =
+    shl2tc(t, constant_int2tc(t, BigInt(255)), byte_update_bit_offset(bu));
+  BigInt bits = (BigInt::power2(width) - 1) * BigInt::power2(lo);
+  return {
+    inner.pointer,
+    equality2tc(bitand2tc(t, mask, constant_int2tc(t, bits)), gen_zero(t))};
+}
+
+static flattened_pointert
+flattened_in_struct(const expr2tc &from, unsigned lo, unsigned width)
+{
+  const struct_type2t &st = to_struct_type(from->type);
+  flattened_pointert found;
+  unsigned member_lo = 0;
+  for (size_t i = 0; i < st.members.size(); ++i)
+  {
+    const unsigned w = type_byte_size_bits(st.members[i]).to_uint64();
+    if (w && member_lo <= lo && lo + width <= member_lo + w)
+      found = pointer_flattened_at(
+        bitcast2tc(
+          get_uint_type(w), member2tc(st.members[i], from, st.member_names[i])),
+        lo - member_lo,
+        width);
+    member_lo += w;
+  }
+  // The walk assumes no padding outside the members, as flatten_to_bitvector.
+  return member_lo == from->type->get_width() ? found : flattened_pointert{};
+}
+
+static flattened_pointert
+pointer_flattened_at(const expr2tc &e, unsigned lo, unsigned width)
+{
+  if (is_extract2t(e))
+    return pointer_flattened_at(
+      to_extract2t(e).from, lo + to_extract2t(e).lower, width);
+
+  if (is_byte_update2t(e))
+    return flattened_past_byte_update(to_byte_update2t(e), lo, width);
+
+  if (!is_bitcast2t(e))
+    return {};
+  const expr2tc &from = to_bitcast2t(e).from;
+
+  if (is_pointer_type(from) && lo == 0 && width == from->type->get_width())
+    return {from, expr2tc()};
+
+  if (is_struct_type(from))
+    return flattened_in_struct(from, lo, width);
+
+  return {};
+}
+
 smt_astt smt_solver_baset::decode_pointer_repr(
   const expr2tc &repr,
   const type2tc &to_type)
 {
+  /* Bits that are one pointer's representation, untouched since it was
+   * flattened, read back as that pointer. A byte-wise copy of a struct that
+   * holds pointers otherwise rebuilds each of them from every flatten reaching
+   * it, once per byte copied. */
+  const flattened_pointert same =
+    pointer_flattened_at(repr, 0, repr->type->get_width());
+  smt_astt original;
+  if (same.pointer)
+  {
+    original = convert_ast(
+      same.pointer->type == to_type ? same.pointer
+                                    : typecast2tc(to_type, same.pointer));
+    if (!same.untouched)
+      return original;
+  }
+
   smt_astt address = convert_ast(repr);
   smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
   for (const ptr_flatten_entry &flat : ptr_flatten_history)
     if (step_sources.count(flat.id))
       pointer = flat.pointer->ite(
         this, mk_and(flat.guard, mk_eq(address, flat.address)), pointer);
+  if (same.pointer)
+    pointer = original->ite(this, convert_ast(same.untouched), pointer);
   return pointer;
 }
 
