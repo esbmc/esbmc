@@ -1820,3 +1820,15 @@ regression/esbmc/pointer_repr_array_member_keep
 regression/esbmc/pointer_repr_array_member_keep_fail
 regression/esbmc/pointer_repr_symbolic_byte_big_endian
 regression/esbmc/pointer_repr_symbolic_byte_big_endian_fail
+regression/esbmc/local_struct_same_tag
+regression/esbmc/local_struct_same_tag_fail
+regression/esbmc/local_struct_nested_macro
+regression/esbmc/local_struct_nested_macro_fail
+regression/esbmc-cpp/cpp/local_class_template_arg
+regression/esbmc-cpp/cpp/local_class_template_arg_fail
+regression/esbmc-cpp/cpp/local_enum_template_arg
+regression/esbmc-cpp/cpp/local_enum_template_arg_fail
+regression/esbmc-cpp/cpp/local_member_pointer_template_arg
+regression/esbmc-cpp/cpp/local_member_pointer_template_arg_fail
+regression/esbmc-cpp/cpp/local_template_arg_kinds
+regression/esbmc-cpp/cpp/local_template_arg_kinds_fail
