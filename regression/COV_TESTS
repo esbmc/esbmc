@@ -1804,3 +1804,5 @@ regression/esbmc/char_view_through_pointer
 regression/esbmc/char_view_through_pointer_fail
 regression/esbmc/char_walk_arrays
 regression/esbmc/char_walk_arrays_fail
+regression/esbmc/char_walk_symbolic_bound
+regression/esbmc/char_walk_symbolic_bound_fail
