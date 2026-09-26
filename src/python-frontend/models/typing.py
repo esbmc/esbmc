@@ -3,8 +3,9 @@
 # names on `__class_getitem__` and `TypeVar` are part of the API contract
 # matched by ESBMC's Python converter, even when the abstract body does
 # not reference them.
-def TypeVar(name, *args, **kwargs) -> type:
-    return object
+def TypeVar(name, *args, **kwargs) -> None:
+    # A bare TypeVar(...) is lowered to a placeholder; typing.TypeVar(...) runs this.
+    pass
 
 
 class Any:

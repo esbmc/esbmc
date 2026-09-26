@@ -1,4 +1,5 @@
 #include <util/base/compiler_defs.h>
+#include <cctype>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -5146,6 +5147,85 @@ getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c)
   return clang::TypeName::getFullyQualifiedName(t, c, Policy);
 }
 
+// Function-local declarations reachable from template arguments. Their
+// printed names omit the enclosing function, so a specialisation over one
+// prints like a specialisation over any other of the same name.
+static void collect_local_decls(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  std::vector<const clang::NamedDecl *> &out);
+
+static void collect_local_decls(
+  clang::QualType t,
+  std::vector<const clang::NamedDecl *> &out)
+{
+  t = t.getCanonicalType();
+  for (;;)
+  {
+    if (const auto *ref = t->getAs<clang::ReferenceType>())
+      t = ref->getPointeeType();
+    else if (const auto *ptr = t->getAs<clang::PointerType>())
+      t = ptr->getPointeeType();
+    else if (const clang::ArrayType *arr = t->getAsArrayTypeUnsafe())
+      t = arr->getElementType();
+    else if (const auto *mp = t->getAs<clang::MemberPointerType>())
+    {
+      const clang::CXXRecordDecl *cls = mp->getMostRecentCXXRecordDecl();
+      if (cls && cls->getParentFunctionOrMethod())
+        out.push_back(cls);
+      t = mp->getPointeeType();
+    }
+    else
+      break;
+  }
+  if (const auto *fn = t->getAs<clang::FunctionProtoType>())
+  {
+    collect_local_decls(fn->getReturnType(), out);
+    for (clang::QualType param : fn->getParamTypes())
+      collect_local_decls(param, out);
+    return;
+  }
+  const clang::TagDecl *td = t->getAsTagDecl();
+  if (!td)
+    return;
+  if (td->getParentFunctionOrMethod())
+    out.push_back(td);
+  if (
+    const auto *cs = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(td))
+    collect_local_decls(cs->getTemplateArgs().asArray(), out);
+}
+
+static void collect_local_decls(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  std::vector<const clang::NamedDecl *> &out)
+{
+  for (const clang::TemplateArgument &arg : args)
+    switch (arg.getKind())
+    {
+    case clang::TemplateArgument::Pack:
+      collect_local_decls(arg.getPackAsArray(), out);
+      break;
+    case clang::TemplateArgument::Type:
+      collect_local_decls(arg.getAsType(), out);
+      break;
+    case clang::TemplateArgument::Declaration:
+      if (arg.getAsDecl()->getParentFunctionOrMethod())
+        out.push_back(arg.getAsDecl());
+      break;
+    default:
+      break;
+    }
+}
+
+// Keeps a record name identifier-shaped: goto2c prints it as a C tag, and
+// reformat_class_name splits it on ':'.
+static std::string identifier_suffix(const std::string &text)
+{
+  std::string out;
+  for (char c : text)
+    out += std::isalnum(static_cast<unsigned char>(c)) ? c : '_';
+  return out;
+}
+
 /// The USR generator gives up on some C++20 declarations: a specialisation
 /// over a class-type template argument, its members and parameters, and the
 /// template parameter object that argument names. Their mangled names still
@@ -5373,6 +5453,43 @@ void clang_c_convertert::get_decl_name(
       name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
 #endif
+
+    /* A local class's qualified name omits the function it is declared in,
+     * so same-named local classes in two functions, two blocks, or two
+     * instantiations of one function template shared a single record. The
+     * definition's location keeps a forward declaration on the same id, and
+     * the raw encoding of a macro location, unique per expanded token,
+     * separates blocks from one macro expansion, nested ones included. */
+    const auto *fn = llvm::dyn_cast_or_null<clang::FunctionDecl>(
+      rd.getParentFunctionOrMethod());
+    if (fn && !rd.getCanonicalDecl()->getNameAsString().empty())
+    {
+      const clang::RecordDecl *def = rd.getDefinition();
+      const clang::TagDecl &at = def ? *def : *rd.getCanonicalDecl();
+      std::string fn_name, fn_id;
+      get_decl_name(*fn, fn_name, fn_id);
+      locationt location_begin;
+      get_location_from_decl(at, location_begin);
+      std::string suffix = fn_id + "_" + location_begin.line().as_string() +
+                           "_" + location_begin.column().as_string();
+      if (at.getLocation().isMacroID())
+        suffix += "_m" + std::to_string(at.getLocation().getRawEncoding());
+      name += "_at_" + identifier_suffix(suffix);
+    }
+
+    // A specialisation, or a member of one, over a local declaration.
+    std::vector<const clang::NamedDecl *> locals;
+    for (const clang::DeclContext *dc = &rd; dc; dc = dc->getParent())
+      if (
+        const auto *cs =
+          llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(dc))
+        collect_local_decls(cs->getTemplateArgs().asArray(), locals);
+    for (const clang::NamedDecl *local : locals)
+    {
+      std::string local_name, local_id;
+      get_decl_name(*local, local_name, local_id);
+      name += "_of_" + identifier_suffix(local_id);
+    }
 
     id = "tag-" + name;
     return;
