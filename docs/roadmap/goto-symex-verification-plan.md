@@ -752,6 +752,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R55** | **High (false SUCCESSFUL, default configuration, C++)** — the root cause of G18, found by reducing it, §15 M9 (G18, R55); **FIXED**, same entry | **A function-local static's dynamic initializer ran before `main`.** `get_var` hoisted every static initializer into `static_lifetime_init`, which is right for C, where it is a constant expression, and wrong for C++, where it runs on the first pass through the declaration ([stmt.dcl]/3). `int bump() { return ++g; } void n() { static int c = bump(); }` never calls `n`, yet `assert(g == 1)` in `main` reports **SUCCESSFUL**; calling `n` twice made correct programs FAILED, and a class-typed static was constructed before `main` from whatever its arguments held then. | `clang_c_convertert::get_var`, `src/clang-c-frontend/clang_c_convert.cpp`; `goto_convertt::convert_decl`; `regression/esbmc-cpp/cpp/static_local_*` | — | **Fixed**: such a static is zero-initialised, the frontend adds an `<id>$init_guard` symbol, and `convert_decl` lowers the declaration to `atomic { if (!guard) { init; guard = 1; } }`, constructing in place through `convert_decl_initializer`. **Residuals**: arrays keep the hoisted form; `--clang-cpp-irep2-adjust-only` keeps it too; exit-time destructors of statics are not modelled, before or after. |
 | **R56** | **High (false SUCCESSFUL, default configuration, C and C++)** — R54's variable residual, §15 M9 (R56); **FIXED**, same entry | **Two same-named locals declared by one macro expansion share one symbol.** A local variable's id is its clang USR, which encodes the expansion offset, so `{ unsigned char s = 200; } { int s = 1000; r2 = s; }` from one macro gives one `c:t.c@113@F@main@s` of type `unsigned char`, the second block stores 1000 into it, and `assert(r2 == 232)` reports **SUCCESSFUL** under Bitwuzla and Z3 where native C reads 1000. | `clang_c_convertert::get_decl_name`; `regression/esbmc/macro_local_same_name{,_fail}` | — | **Fixed**: a local variable declared inside a macro expansion gains its macro location's raw encoding, which is unique per expanded token; a spelling offset, the first version, did not separate an inner macro expanded twice inside one outer expansion. |
 | **R57** | **Medium (no verdict, C++20)** — found by review of R53's fix, §15 M9 (R57); **FIXED**, same entry | **A class-type template argument aborts the frontend.** `template <S s> int g() { return s.x; }` used as `g<S{1}>()` exits with `ERROR: Unable to generate the USR`: clang's USR generator gives up on the specialisation, on its constructors and parameters, and on the template parameter object `S{1}` names. The object has no declaration ESBMC converts, so a reference to it had no symbol either. | `clang_c_convertert::get_decl_name`, `clang_cpp_convertert::get_decl_name`, `get_decl_ref`; `regression/esbmc-cpp/cpp/class_nttp_{param_object,class_template}{,_fail}` | — | **Fixed**: when the USR fails, the id falls back to the Itanium mangled name (complete-object variants for constructors and destructors; a parameter is named after its function), and the parameter object gets a static symbol valued by its `APValue` on first reference ([temp.param]/8). |
+| **R58** | **High (false SUCCESSFUL, default configuration, multi-file C and C++)** — found by the corpus-wide id census, §15 M9 (R58); **FIXED**, same entry | **Each file's copy of a header's internal-linkage entity shared one symbol.** Several C files are merged into one AST, and the importer rightly keeps each file's copy of a `static` function or variable a header defines, but the USR names the header, so the copies, and the function's static locals, got one id. `static int counter(void) { static int c; return ++c; }` in a header called once from each of two files returns 1 in both natively; ESBMC shared `c`, so `assert(y == 2)` reported **SUCCESSFUL**. A header's `static int g` shared between files did the same. | `clang_c_convertert::get_decl_name`; `regression/esbmc/header_static_per_tu{,_fail}` | — | **Fixed**: `header_internal_suffix` numbers the second and later copies of an internal-linkage function or variable with the same USR (`@tu<k>`), and their locals follow; the first copy keeps its id, so single-file programs and the operational models are unchanged. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -8829,6 +8830,71 @@ program step precedes the violation; the neighbouring claims are in
 `irep_container` and `irep2.h`'s `release`, which decrements a reference count
 through that `fetch_sub`. Whether this is a model artefact or a real defect in
 how a static irep2 object is initialised is not yet known.
+
+### M9 (R58) — 2026-09-25, a corpus-wide id census, and the collision it found in multi-file C
+
+R53–R56 were each one way two declarations reached one symbol id, found one at
+a time. This round looked for all of them at once. A temporary hook recorded
+every id the frontends produce against the canonical declaration that
+produced it, and reported ids reached by two. It was run with each test's own
+flags and `--goto-functions-only` over 6,518 C and C++ regression
+directories, on a build carrying R53–R56. Most raw reports were one entity
+named twice for legitimate reasons: an operational-model header parsed into
+two units, a forward declaration in `iosfwd` and its definition in `ostream`.
+Restricting reports to user code left 61 collisions in 12 tests, in three
+groups:
+
+| Group | Tests | Outcome |
+|---|---|---|
+| Locals and records declared by an inner macro expanded twice inside one outer expansion | bzip2's `BZ2_decompress` (three tests), `github_2512_1` (`container_of`) | a false SUCCESSFUL for both variables and records; R56's and R54's spelling offset does not separate the two expansions. Both now use the macro location's raw encoding, on their own PRs |
+| Parameters of two lambdas in one macro | `github_7530{,_fail}` | benign: the function USR encodes parameter types, so only same-typed parameters collide, and symex renames a parameter per activation, so even one lambda calling the other inside its own call verifies correctly |
+| A header's `static` function or variable, one copy per file | `github_902{,-extern}`, `01_cbmc_Linking2`, `github_1210-2-*` | **R58**, below |
+
+**R58.** `clang_c_languaget::parse` merges every input file into the first
+one's AST. `ASTImporter` correctly keeps a separate copy of each
+internal-linkage declaration, so `counter` in two files is two declarations.
+But the USR names the header, so both became `c:h.h@F@counter`, and their
+static locals became one `c:h.h@27@F@counter@c`. `c_link`'s module-based
+rename of clashing file-local symbols never ran, because the files were
+converted in one context. Qualifying by the file at the top of the include
+chain did not work either: the importer does not preserve the imported
+copy's include chain, and every copy resolved to the first file.
+
+**Fixed** by numbering. `header_internal_suffix` records, for each
+internal-linkage function or variable, the canonical declarations that share
+its USR in the order they are first named. The first keeps its id, and each
+later one gets `@tu<k>`. Its locals take the same suffix through their owning
+function. The first version qualified every internal-linkage declaration
+outside the main file, and that broke the build: the Python library's
+`list.c` is included into another unit, and `python2goto` looks up its static
+`__ESBMC_float_buf` by id. Keeping the first copy's id is what leaves
+single-file programs and the operational models untouched.
+
+| Program (two files, one header) | Before | After | Native |
+|---|---|---|---|
+| `static int counter(void) { static int c; ... }`, one call from each file, `assert(y == 2)` | **`SUCCESSFUL`** | `FAILED` | aborts |
+| the same, `assert(x == 1 && y == 1)` | `FAILED` | `SUCCESSFUL` | passes |
+| `static int g` bumped from each file, `assert(g == 3)` | **`SUCCESSFUL`** | `FAILED` | aborts |
+| the same program in C++ | — | `FAILED` | aborts |
+
+### M9 (WI-4 re-measured) — 2026-09-25, the driver converts, and immer's release loop is the wall
+
+With R53–R55 and G15–G17 applied together, `goto-symex/state/renaming.h`,
+`irep2/irep2_utils.h` and `goto-symex/state/goto_symex_state.h` each reach
+`VERIFICATION SUCCESSFUL` with an empty `main`, under the §13 invocation. The
+next step, §13.6 WI-4, is a driver that calls into `renaming::level1t`: look up
+a `name_record`, `set` it twice, and assert the value read back, with a
+mutated twin that must fail. Both halves convert and symex runs, but neither
+reaches a verdict in 20 minutes at `--unwind 3`: symex is still in immer's
+`hamts/node.hpp:1113` `delete_deep` and `util.hpp:109` `destroy_n`.
+
+Allocating the `level1t` with `new` and never freeing it does not help, so
+the loops are not the map's destructor at scope exit. They are inside `set`:
+a persistent map replaces its root on every update, and releasing the old
+root's reference count walks the HAMT node it frees. The blocker for WI-4 is
+therefore the cost of immer's release path, not conversion. §13.3's
+`unordered_map` scaling measurement found the same kind of wall in a
+different container.
 
 ---
 

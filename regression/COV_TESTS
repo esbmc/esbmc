@@ -1808,3 +1808,5 @@ regression/esbmc-cpp/cpp/local_member_pointer_template_arg
 regression/esbmc-cpp/cpp/local_member_pointer_template_arg_fail
 regression/esbmc-cpp/cpp/local_template_arg_kinds
 regression/esbmc-cpp/cpp/local_template_arg_kinds_fail
+regression/esbmc/header_static_per_tu
+regression/esbmc/header_static_per_tu_fail
