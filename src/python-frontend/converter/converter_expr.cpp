@@ -672,6 +672,80 @@ std::optional<exprt> python_converter::try_get_numpy_shape_attr(
   return try_get_numpy_param_shape_attr(symbol, attr_name);
 }
 
+std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
+  const exprt &base_expr,
+  const nlohmann::json &base_node,
+  const std::string &attr_name)
+{
+  if (attr_name != "shape" && attr_name != "ndim" && attr_name != "size")
+    return std::nullopt;
+
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      get_numpy_constructor_shape(base_node))
+  {
+    std::vector<exprt> dim_exprs;
+    dim_exprs.reserve(shape->size());
+    for (std::size_t dim : *shape)
+      dim_exprs.push_back(from_integer(dim, int_type()));
+
+    if (attr_name == "shape")
+      return build_shape_tuple_expr(*this, dim_exprs);
+    if (attr_name == "ndim")
+      return from_integer(shape->size(), int_type());
+    return build_shape_size_expr(dim_exprs);
+  }
+
+  typet base_type = base_expr.type();
+  if (base_type.is_pointer())
+    base_type = base_type.subtype();
+  if (base_type.id() == "symbol")
+    base_type = ns.follow(base_type);
+
+  if (base_type.is_array())
+  {
+    std::vector<exprt> dim_exprs =
+      build_dim_exprs(type_handler_.get_array_type_shape(base_type));
+    if (attr_name == "shape")
+      return build_shape_tuple_expr(*this, dim_exprs);
+    if (attr_name == "ndim")
+    {
+      std::vector<int> dims = type_handler_.get_array_type_shape(base_type);
+      ndarray_descriptor descriptor(
+        std::vector<long long>(dims.begin(), dims.end()), "", 0);
+      descriptor.validate();
+      return from_integer(descriptor.rank(), int_type());
+    }
+    return build_shape_size_expr(dim_exprs);
+  }
+
+  if (!python_list::is_bool_mask_rows_type(base_type))
+    return std::nullopt;
+
+  if (attr_name == "ndim")
+    return from_integer(2, int_type());
+
+  const struct_typet &result_type = to_struct_type(base_type);
+  const array_typet &rows_type =
+    to_array_type(ns.follow(result_type.components()[0].type()));
+  const BigInt num_cols = binary2integer(
+    to_array_type(ns.follow(rows_type.subtype())).size().value().c_str(),
+    false);
+
+  exprt count_member = python_expr::build_member(
+    base_expr, "count", result_type.components()[1].type());
+  expr2tc count2;
+  migrate_expr(count_member, count2);
+  exprt count_as_int =
+    migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+  if (attr_name == "shape")
+    return build_shape_tuple_expr(
+      *this, {count_as_int, from_integer(num_cols, int_type())});
+  return python_expr::build_mul(
+    count_as_int, from_integer(num_cols, int_type()), int_type());
+}
+
 std::optional<exprt> python_converter::resolve_subscript_base(
   const nlohmann::json &element,
   exprt &array)
@@ -1351,8 +1425,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       // Resolve `<base>.<attr>` after unwrapping Optional[T] / pointer-to-struct
       // / complex types. Returns nil if the attribute cannot be resolved.
-      auto resolve_member_on_base =
-        [this](exprt base_expr, const std::string &attr_name) -> exprt {
+      auto resolve_member_on_base = [this](
+                                      exprt base_expr,
+                                      const nlohmann::json &base_node,
+                                      const std::string &attr_name) -> exprt {
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
@@ -1407,102 +1483,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             return result;
         }
 
-        // NumPy baseline support: expose `.shape` for modelled arrays/lists.
-        // - C arrays: shape is extracted from nested array dimensions.
-        // - ESBMC runtime list model: shape is a 1D tuple (len(list),).
-        if (attr_name == "shape")
-        {
-          if (base_type.is_array())
-          {
-            std::vector<exprt> dim_exprs =
-              build_dim_exprs(type_handler_.get_array_type_shape(base_type));
-            return build_shape_tuple_expr(*this, dim_exprs);
-          }
-
-          const typet list_type = type_handler_.get_list_type();
-          if (is_python_list_model_type(base_expr.type(), list_type, ns))
-          {
-            exprt list_len = build_runtime_list_len_expr(
-              symbol_table_,
-              base_expr,
-              "__ESBMC_list_size not found for list shape access");
-            return build_shape_tuple_expr(*this, {list_len});
-          }
-        }
-
-        // `.ndim`: the rank of the canonical bounded ndarray descriptor
-        // (numpy-architecture-decisions.md). The runtime list model only
-        // ever backs a 1-D array, so its rank is always 1.
-        if (attr_name == "ndim")
-        {
-          if (base_type.is_array())
-          {
-            std::vector<int> dims =
-              type_handler_.get_array_type_shape(base_type);
-            ndarray_descriptor descriptor(
-              std::vector<long long>(dims.begin(), dims.end()), "", 0);
-            descriptor.validate();
-            return from_integer(descriptor.rank(), int_type());
-          }
-
-          const typet list_type = type_handler_.get_list_type();
-          if (is_python_list_model_type(base_expr.type(), list_type, ns))
-            return from_integer(1, int_type());
-        }
-
-        if (attr_name == "size")
-        {
-          if (base_type.is_array())
-          {
-            std::vector<exprt> dim_exprs =
-              build_dim_exprs(type_handler_.get_array_type_shape(base_type));
-            return build_shape_size_expr(dim_exprs);
-          }
-
-          const typet list_type = type_handler_.get_list_type();
-          if (is_python_list_model_type(base_expr.type(), list_type, ns))
-            return build_runtime_list_len_expr(
-              symbol_table_,
-              base_expr,
-              "__ESBMC_list_size not found for list size access");
-        }
-
-        // `.shape`/`.ndim` on a boolean-mask row-selection result
-        // (build_bool_mask_row_select_symbolic): shape is `(count, cols)`,
-        // reading the struct's runtime logical row count rather than the
-        // `rows` buffer's physical (worst-case) capacity; rank is always 2
-        // (row selection is only modelled for 2-D arrays).
         if (
-          (attr_name == "shape" || attr_name == "ndim" ||
-           attr_name == "size") &&
-          python_list::is_bool_mask_rows_type(base_type))
-        {
-          if (attr_name == "ndim")
-            return from_integer(2, int_type());
-
-          const struct_typet &result_type = to_struct_type(base_type);
-          const array_typet &rows_type =
-            to_array_type(ns.follow(result_type.components()[0].type()));
-          const BigInt num_cols = binary2integer(
-            to_array_type(ns.follow(rows_type.subtype()))
-              .size()
-              .value()
-              .c_str(),
-            false);
-
-          exprt count_member = python_expr::build_member(
-            base_expr, "count", result_type.components()[1].type());
-          expr2tc count2;
-          migrate_expr(count_member, count2);
-          exprt count_as_int =
-            migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
-
-          exprt col_count = from_integer(num_cols, int_type());
-          if (attr_name == "size")
-            return build_shape_size_expr({count_as_int, col_count});
-
-          return build_shape_tuple_expr(*this, {count_as_int, col_count});
-        }
+          std::optional<exprt> numpy_shape_attr =
+            try_get_numpy_value_shape_attr(base_expr, base_node, attr_name))
+          return *numpy_shape_attr;
 
         if (base_type.is_struct())
         {
@@ -1596,7 +1580,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
-        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        exprt resolved =
+          resolve_member_on_base(base_expr, element["value"], attr_name);
 
         // Flow-sensitive class tracking (#4771/#4772): the usage-site scanner
         // left this attribute as any_type() (void*) because it was assigned
@@ -1619,7 +1604,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             exprt cast =
               migrate_expr_back(typecast2tc(migrate_type(cast_t), base2));
             cast.type() = cast_t; // restore #cpp_type that migrate_type drops
-            resolved = resolve_member_on_base(cast, attr_name);
+            resolved =
+              resolve_member_on_base(cast, element["value"], attr_name);
           }
         }
 
@@ -1645,7 +1631,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
-        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        exprt resolved =
+          resolve_member_on_base(base_expr, element["value"], attr_name);
         if (!resolved.is_nil())
         {
           expr = resolved;
@@ -1869,7 +1856,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         const typet list_type = type_handler_.get_list_type();
-        if (is_python_list_model_type(symbol->get_type(), list_type, ns))
+        if (
+          numpy_array_symbols_.count(symbol->id.as_string()) != 0 &&
+          is_python_list_model_type(symbol->get_type(), list_type, ns))
         {
           exprt list_len = build_runtime_list_len_expr(
             symbol_table_,
@@ -1901,7 +1890,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         const typet list_type = type_handler_.get_list_type();
-        if (is_python_list_model_type(symbol->get_type(), list_type, ns))
+        if (
+          numpy_array_symbols_.count(symbol->id.as_string()) != 0 &&
+          is_python_list_model_type(symbol->get_type(), list_type, ns))
         {
           expr = from_integer(1, int_type());
           break;
@@ -1925,7 +1916,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         const typet list_type = type_handler_.get_list_type();
-        if (is_python_list_model_type(symbol->get_type(), list_type, ns))
+        if (
+          numpy_array_symbols_.count(symbol->id.as_string()) != 0 &&
+          is_python_list_model_type(symbol->get_type(), list_type, ns))
         {
           expr = build_runtime_list_len_expr(
             symbol_table_,
