@@ -1818,3 +1818,11 @@ regression/esbmc/char_walk_arrays
 regression/esbmc/char_walk_arrays_fail
 regression/esbmc/char_walk_symbolic_bound
 regression/esbmc/char_walk_symbolic_bound_fail
+regression/esbmc/array_of_vector_store
+regression/esbmc/array_of_vector_store_fail
+regression/esbmc/array_of_vector_ops
+regression/esbmc/array_of_vector_trace_fail
+regression/esbmc/array_of_vector_symbolic
+regression/esbmc/array_of_vector_symbolic_fail
+regression/esbmc/array_of_vector_vla
+regression/esbmc/array_of_vector_vla_fail

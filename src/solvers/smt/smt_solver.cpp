@@ -3040,6 +3040,15 @@ bool smt_solver_baset::decompose_stores(
   return expand_row_stores(w.update_value, origin, stores);
 }
 
+// A subscript of a subscript selects another flattened dimension, except
+// through an infinite array or a vector (get_flattened_array_subtype).
+static bool selects_flattened_dimension(const index2t &index)
+{
+  const type2tc &src_type = index.source_value->type;
+  return is_index2t(index.source_value) && !is_vector_type(src_type) &&
+         !(is_array_type(src_type) && to_array_type(src_type).size_is_infinite);
+}
+
 smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
@@ -3053,13 +3062,7 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
-  // Source type might not be an array (e.g. vector); to_array_type() throws
-  // std::bad_cast under -DNDEBUG-off builds. Gate the size_is_infinite probe
-  // on is_array_type() before dereferencing.
-  const bool src_is_infinite_array =
-    is_array_type(index.source_value->type) &&
-    to_array_type(index.source_value->type).size_is_infinite;
-  if (is_index2t(index.source_value) && !src_is_infinite_array)
+  if (selects_flattened_dimension(index))
   {
     // Finite multi-dimensional arrays: flatten via decompose_select_chain.
     newidx = decompose_select_chain(expr, src_value);
@@ -3282,12 +3285,13 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
     is_array_type(to_array_type(type).subtype))
     return to_array_type(type).subtype;
 
+  // A vector inside an array is the element, not a flattened dimension.
+  if (is_vector_type(type))
+    return to_vector_type(type).subtype;
+
   type2tc type_rec = type;
-  while (is_array_type(type_rec) || is_vector_type(type_rec))
-  {
-    type_rec = is_array_type(type_rec) ? to_array_type(type_rec).subtype
-                                       : to_vector_type(type_rec).subtype;
-  }
+  while (is_array_type(type_rec))
+    type_rec = to_array_type(type_rec).subtype;
 
   // type_rec is now the base type.
   return type_rec;
@@ -3339,11 +3343,7 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
-  // Same NDEBUG-off safety guard as in convert_array_index() above.
-  const bool src_is_infinite_array =
-    is_array_type(index.source_value->type) &&
-    to_array_type(index.source_value->type).size_is_infinite;
-  if (is_index2t(index.source_value) && !src_is_infinite_array)
+  if (selects_flattened_dimension(index))
   {
     newidx = decompose_select_chain(expr, src_value);
   }
@@ -3372,7 +3372,8 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
       res = array_api->get_array_elem(
         array,
         to_constant_int2t(idx).value.to_uint64(),
-        get_flattened_array_subtype(res->type));
+        is_vector_type(res->type) ? res->type
+                                  : get_flattened_array_subtype(res->type));
 
     // If we got a nil result, return original expression
     if (is_nil_expr(res))
@@ -3678,6 +3679,12 @@ expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
 
   case type2t::array_id:
     return get_array(type, a);
+
+  case type2t::vector_id:
+  {
+    expr2tc arr = get_array(flatten_array_type(type), a);
+    return constant_vector2tc(type, to_constant_array2t(arr).datatype_members);
+  }
 
   default:
     if (!options.get_bool_option("non-supported-models-as-zero"))
