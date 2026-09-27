@@ -4607,3 +4607,31 @@ type's identity.
 It also changes output: over the Python suites 25 symbol tables now keep a `#python_aggregate` that an
 earlier IREP2-side write had silently dropped. All 25 tests pass; none changed verdict. Python B-2*
 52 -> 51 against `dae0885ed3`.
+
+## 83. The sixth loss, fixed in the reader (2026-09-17)
+
+`code_typet::argumentt` carries both `identifier` and `#identifier`. §44's carry moved the `#` one, and
+`argumentt::get_identifier()` reads that, so the carry looked complete -- but the plain key, which lives
+in `named_sub`, was never touched. `scope-python-irep2.md` §11.3.1 has the measured diff.
+
+The consequence was a wrong verdict, not a crash: `copy_instance_attributes`
+(`converter_funcall.cpp:1537`) keyed on the plain identifier, so a function type stored IREP2-side made
+it propagate nothing and Python's pass-by-object-reference modelling silently stopped working.
+
+The fix is the reader. Both keys are written from one string at the parameter's only writer, so
+`get_identifier()` is exactly equivalent and survives -- two accessor changes, no field, no size cost.
+That is §80's second route taken for the first time, and the contrast with §10 is the useful part: the
+same problem shape cost eight bytes on the three most-constructed type kinds when answered with a carry
+and two call sites when answered in the reader. Which route is right is not a matter of taste; it is
+whether the reader had a reason to want the marker it lost. `copy_instance_attributes` did not.
+
+Two of the six losses so far were a plain key mistaken for its `#` twin, so when a node carries both,
+check which key each accessor reads before believing a carry covers it.
+
+The probe lesson wants stating carefully, because the obvious version of it is wrong here. `full_eq` over
+`==` is right in general -- `==` compares `named_sub` but not comments (`irep.cpp:186-205`) -- but the
+plain `identifier` lives in `named_sub`, so `==` *would* have found this one. What `==` cannot see are the
+argument's `#location` and `#default_value`, and the second of those was missed for a different reason
+entirely: the probe ran on a function with no default argument. **The blind spot was the probe's input,
+not its comparator** (`scope-python-irep2.md` §11.3.3). Choosing the comparator carefully is cheap;
+choosing an input that can exhibit every key the node can carry is the part that needs thought.
