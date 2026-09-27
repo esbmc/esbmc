@@ -547,6 +547,12 @@ string_handler::fstring_repr_of_constant(const nlohmann::json &operand)
   if (literal.is_number_integer())
     return std::to_string(literal.get<long long>());
 
+  // A tagged bignum (#4642) or non-finite float is not None.
+  if (
+    literal.is_null() && !operand.contains("_bigint") &&
+    !operand.contains("value_nonfinite"))
+    return "None";
+
   if (!literal.is_string())
     return {};
 
@@ -577,8 +583,22 @@ exprt string_handler::build_repr(const exprt &value, const locationt &location)
       "__python_str_repr function not found in symbol table");
 
   exprt string_copy = value;
-  exprt str_addr =
-    get_array_base_address(ensure_null_terminated_string(string_copy));
+  exprt str = ensure_null_terminated_string(string_copy);
+  // Symex bounds the model's loops only over a named object: a literal's
+  // address does not constant-propagate into the callee (#7559).
+  if (str.type().is_array() && !str.is_symbol())
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(location, "$repr_arg$", str.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(symbol_expr(tmp), str);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    str = symbol_expr(tmp);
+  }
+  exprt str_addr = get_array_base_address(str);
   exprt repr_call =
     build_call_expr(*repr_symbol, pointer_typet(char_type()), {str_addr});
   repr_call.location() = location;
