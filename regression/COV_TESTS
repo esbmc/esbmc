@@ -1861,3 +1861,17 @@ regression/python/optional_list_call_unannotated_fail
 regression/python/optional_class_module_level
 regression/python/isinstance_tuple_user_class
 regression/python/optional_forward_ref_call_fail
+regression/esbmc-cpp/cpp/member_init_prvalue_dtor
+regression/esbmc-cpp/cpp/member_init_prvalue_dtor_fail
+regression/esbmc-cpp/cpp/member_init_prvalue_value
+regression/esbmc-cpp/cpp/member_init_prvalue_value_fail
+regression/esbmc-cpp/cpp/member_init_braced_prvalue
+regression/esbmc-cpp/cpp/member_init_braced_prvalue_fail
+regression/esbmc-cpp/cpp/member_init_const_prvalue
+regression/esbmc-cpp/cpp/member_init_const_prvalue_fail
+regression/esbmc-cpp/cpp/member_init_functional_cast
+regression/esbmc-cpp/cpp/member_init_functional_cast_fail
+regression/esbmc-cpp/cpp/member_init_elided_copy
+regression/esbmc-cpp/cpp/member_init_elided_copy_fail
+regression/esbmc-cpp/cpp/member_init_converting_ctor
+regression/esbmc-cpp/cpp/member_init_converting_ctor_fail
