@@ -622,7 +622,7 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   symbolt guard;
   guard.id = var.id.as_string() + "$init_guard";
   guard.name = var.name.as_string() + "$init_guard";
-  guard.set_type(bool_type());
+  guard.set_type(get_bool_type());
   guard.mode = var.mode;
   guard.module = var.module;
   guard.location = var.location;
@@ -630,7 +630,7 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   guard.static_lifetime = true;
   guard.file_local = true;
   guard.is_thread_local = var.is_thread_local;
-  guard.set_value(false_exprt());
+  guard.set_value(gen_false_expr());
   context.move_symbol_to_context(guard);
 }
 
