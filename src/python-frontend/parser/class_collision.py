@@ -61,6 +61,28 @@ def _annotations(tree: ast.AST) -> Iterator[ast.AST]:
             yield node.annotation
 
 
+def _import_binds(node: ast.AST, name: str, allowed_module: str | None) -> bool:
+    if isinstance(node, ast.Import):
+        return any((a.asname or a.name) == name for a in node.names)
+    if isinstance(node, ast.ImportFrom) and node.module != allowed_module:
+        return any((a.asname or a.name) in (name, "*") for a in node.names)
+    return False
+
+
+def _non_class_binds(node: ast.AST, name: str) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id == name and not isinstance(node.ctx, ast.Load)
+    if isinstance(node, ast.arg):
+        return node.arg == name
+    if isinstance(node, (ast.Global, ast.Nonlocal)):
+        return name in node.names
+    if isinstance(node, ast.MatchMapping):
+        return node.rest == name
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef) + _NAMED_BINDERS):
+        return getattr(node, "name", None) == name
+    return False
+
+
 def _binds_otherwise(tree: ast.Module,
                      name: str,
                      own_class: bool,
@@ -72,19 +94,9 @@ def _binds_otherwise(tree: ast.Module,
     """
 
     def binds(node: ast.AST) -> bool:
-        return ((isinstance(node, ast.Name) and node.id == name
-                 and not isinstance(node.ctx, ast.Load))
-                or (isinstance(node, ast.arg) and node.arg == name)
-                or (isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names)
-                or (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name)
-                or (isinstance(node, ast.ClassDef) and node.name == name
-                    and not (own_class and node in tree.body))
-                or (isinstance(node, ast.Import) and any(
-                    (a.asname or a.name) == name for a in node.names))
-                or (isinstance(node, ast.ImportFrom) and node.module != allowed_module and any(
-                    (a.asname or a.name) in (name, "*") for a in node.names))
-                or (isinstance(node, _NAMED_BINDERS) and getattr(node, "name", None) == name)
-                or (isinstance(node, ast.MatchMapping) and node.rest == name))
+        if isinstance(node, ast.ClassDef):
+            return node.name == name and not (own_class and node in tree.body)
+        return _non_class_binds(node, name) or _import_binds(node, name, allowed_module)
 
     return any(binds(node) for node in ast.walk(tree))
 
@@ -109,8 +121,12 @@ def _importer_is_plain(tree: ast.Module, module_name: str, name: str) -> bool:
         return True
     if name not in top_level_classes(tree):
         return not _binds_otherwise(tree, name, own_class=False, allowed_module=module_name)
-    # The importer's own class shadows the import only if every import of the
-    # name runs, at module level, before the class and nothing reads it between.
+    return _own_class_shadows(tree, name, named)
+
+
+def _own_class_shadows(tree: ast.Module, name: str, named: list[ast.ImportFrom]) -> bool:
+    """The importer's own class shadows the import only if every import of the
+    name runs, at module level, before the class and nothing reads it between."""
     class_index, own = next((i, node) for i, node in enumerate(tree.body)
                             if isinstance(node, ast.ClassDef) and node.name == name)
     # The class header runs before the class name is bound.
