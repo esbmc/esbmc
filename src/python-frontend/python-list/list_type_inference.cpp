@@ -60,6 +60,15 @@ int get_list_compare_depth()
   return DEFAULT_LIST_COMPARE_DEPTH;
 }
 
+const nlohmann::json &unwrap_optional_annotation(const nlohmann::json &ann)
+{
+  if (
+    ann.is_object() && ann.contains("value") && ann["value"].is_object() &&
+    ann["value"].value("id", "") == "Optional" && ann.contains("slice"))
+    return ann["slice"];
+  return ann;
+}
+
 // Extract element type from annotation
 typet get_elem_type_from_annotation(
   const nlohmann::json &node,
@@ -104,7 +113,7 @@ typet get_elem_type_from_annotation(
   if (!node.contains("annotation") || !node["annotation"].is_object())
     return typet();
 
-  const auto &annotation = node["annotation"];
+  const auto &annotation = unwrap_optional_annotation(node["annotation"]);
 
   // Case 1: Direct subscript annotation like list[str]
   if (annotation.is_object() && annotation.contains("slice"))
