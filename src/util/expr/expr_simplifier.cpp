@@ -4066,10 +4066,12 @@ static expr2tc byte_address_on_root(const expr2tc &e)
   if (!root)
     return expr2tc();
   const expr2tc anchor = byte_view_anchor(*root, e->type);
-  if (is_nil_expr(anchor))
+  // The anchor of an array of byte arrays is its first row's address, a byte
+  // view of that row: rewriting it again to anchor + 0 never terminates.
+  if (is_nil_expr(anchor) || e == anchor)
     return expr2tc();
   if (root == &obj)
-    return is_typecast2t(e) && e != anchor ? anchor : expr2tc();
+    return is_typecast2t(e) ? anchor : expr2tc();
 
   expr2tc offset = compute_pointer_offset(obj);
   if (expr2tc folded = offset->simplify(); !is_nil_expr(folded))

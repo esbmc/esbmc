@@ -1912,3 +1912,9 @@ regression/python/github_7559_none
 regression/python/github_7559_none_fail
 regression/python/github_7559_nonfinite
 regression/python/github_7559_nonfinite_fail
+regression/esbmc/byte_view_row_anchor
+regression/esbmc/byte_view_row_anchor_fail
+regression/esbmc/byte_walk_row
+regression/esbmc/byte_walk_row_fail
+regression/esbmc/byte_view_3d_anchor
+regression/esbmc/byte_view_3d_anchor_fail
