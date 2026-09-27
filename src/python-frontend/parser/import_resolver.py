@@ -504,11 +504,7 @@ def process_collected_imports(output_dir: str,
 
     callbacks.propagate_range_aliases(parsed_trees)
 
-    for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
-        preprocessor.finalize_module(tree)
-
-    if entry_tree is not None:
-        _separate_colliding_classes(entry_tree, parsed_trees)
+    _finalize_parsed_trees(parsed_trees, entry_tree)
 
     # Each module was preprocessed in isolation, so it only knows its own call
     # signatures. Publish them, now that every body has been visited, for the
@@ -529,6 +525,13 @@ def process_collected_imports(output_dir: str,
             default_helper_exports[module_name] = set(preprocessor.hoisted_default_names)
 
     _emit_collected_import_json(parsed_trees, output_dir, callbacks)
+
+
+def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
+    for tree, _filename, preprocessor in parsed_trees.values():
+        preprocessor.finalize_module(tree)
+    if entry_tree is not None:
+        _separate_colliding_classes(entry_tree, parsed_trees)
 
 
 def _separate_colliding_classes(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:
