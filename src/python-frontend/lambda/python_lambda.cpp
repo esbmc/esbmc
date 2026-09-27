@@ -252,9 +252,12 @@ symbolt python_lambda::create_symbol(
   symbolt symbol;
   symbol.id = id;
   symbol.name = name;
-  // Left legacy: migrate_type drops #cpp_type, and the python type checker
-  // reads it -- a bool default otherwise lowers as double (#4715).
-  symbol.set_type(type);
+  // A function type, or a pointer to one, keeps its arguments' plain
+  // identifiers only legacy-side (docs/roadmap/scope-python-irep2.md §11).
+  if (type.is_code() || (type.is_pointer() && type.subtype().is_code()))
+    symbol.set_type(type);
+  else
+    python_expr::set_symbol_type_if_carried(symbol, type);
   symbol.location = location;
   symbol.mode = "Python";
   symbol.module = module_name;
