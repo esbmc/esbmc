@@ -660,6 +660,17 @@ typet python_converter::get_type_from_annotation(
           // Always use pointer type for Optional to properly represent None
           return gen_pointer_type(base_type);
         }
+
+        // Optional[List[T]] / Optional[Set[T]]: the container is already a
+        // pointer, so NULL represents None.
+        if (slice.value("_type", "") == "Subscript")
+        {
+          const std::string container = slice["value"].value("id", "");
+          if (
+            container == "List" || container == "list" || container == "Set" ||
+            container == "set")
+            return type_handler_.get_list_type();
+        }
       }
     }
 
