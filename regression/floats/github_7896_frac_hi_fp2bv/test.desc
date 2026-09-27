@@ -1,0 +1,4 @@
+CORE
+main.c
+--fp2bv
+^VERIFICATION FAILED$

@@ -1,3 +1,4 @@
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <util/config/config.h>
@@ -29,7 +30,16 @@ symbolt python_converter::create_symbol(
   symbol.mode = "Python";
   symbol.module = module;
   symbol.location = location;
-  symbol.set_type(type);
+  // Legacy where the seam loses data: a function type, or a pointer to one,
+  // keeps its arguments' plain identifiers (scope-python-irep2.md §11), a class
+  // struct its methods and its components' access, and a `bytes` array its
+  // #cpp_type tag, which migrate_type_back does not restore on arrays.
+  if (
+    type.is_code() || (type.is_pointer() && type.subtype().is_code()) ||
+    type.is_struct() || type.is_union() || type_utils::is_bytes_array(type))
+    symbol.set_type(type);
+  else
+    python_expr::set_symbol_type_if_carried(symbol, type);
   symbol.name = name;
   symbol.id = id;
   return symbol;

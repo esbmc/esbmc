@@ -6700,11 +6700,9 @@ void python_converter::get_var_assign(
   }
   else
   {
-    {
-      exprt v = gen_zero(current_element_type, true);
-      v.zero_initializer(true);
-      lhs_symbol->set_value(std::move(v));
-    }
+    // No Python reader wants #zero_initializer; only Solidity's converter
+    // reads it, on its own values.
+    lhs_symbol->set_value(migrate_expr(gen_zero(current_element_type, true)));
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
@@ -6962,7 +6960,7 @@ void python_converter::get_compound_assign(
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
         {
-          symbol->set_value(concatenated);
+          symbol->set_value(migrate_expr(concatenated));
         }
       }
     }
