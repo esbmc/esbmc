@@ -631,7 +631,12 @@ std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
 {
-  const auto it = numpy_param_shapes_.find(symbol.id.as_string());
+  const std::string symbol_id = symbol.id.as_string();
+  if (numpy_ambiguous_shape_symbols_.count(symbol_id) != 0)
+    throw std::runtime_error(
+      "TypeError: numpy array shape is ambiguous across control-flow branches");
+
+  const auto it = numpy_param_shapes_.find(symbol_id);
   if (it == numpy_param_shapes_.end())
     return std::nullopt;
 
