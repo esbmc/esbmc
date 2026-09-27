@@ -2425,20 +2425,12 @@ exprt string_handler::try_handle_len_string_fast_path(
     len_cache_scope_id_ = current_scope_id;
   }
 
-  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json);
+  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json, arg_expr);
       !fast.is_nil())
     return fast;
 
   if (exprt fast = try_len_fast_path_from_name_arg(arg_json); !fast.is_nil())
     return fast;
-
-  if (
-    arg_expr.is_constant() && arg_expr.type().is_array() &&
-    arg_expr.type().subtype() == char_type())
-  {
-    if (auto len = constant_codepoint_len(arg_expr))
-      return from_integer(*len, size_type());
-  }
 
   if (arg_expr.is_symbol())
   {
@@ -2499,7 +2491,8 @@ exprt string_handler::try_handle_len_string_fast_path(
 }
 
 exprt string_handler::try_len_fast_path_from_constant_arg(
-  const nlohmann::json &arg_json)
+  const nlohmann::json &arg_json,
+  const exprt &arg_expr)
 {
   const std::string arg_type =
     (arg_json.contains("_type") && arg_json["_type"].is_string())
@@ -2511,6 +2504,13 @@ exprt string_handler::try_len_fast_path_from_constant_arg(
   {
     const std::string text = arg_json["value"].get<std::string>();
     return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+  }
+  if (
+    arg_expr.is_constant() && arg_expr.type().is_array() &&
+    arg_expr.type().subtype() == char_type())
+  {
+    if (auto len = constant_codepoint_len(arg_expr))
+      return from_integer(*len, size_type());
   }
   return nil_exprt();
 }
