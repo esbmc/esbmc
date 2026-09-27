@@ -1815,3 +1815,4 @@ regression/python/optional_return_ternary_fail
 regression/python/optional_list_call_unannotated_fail
 regression/python/optional_class_module_level
 regression/python/isinstance_tuple_user_class
+regression/python/optional_forward_ref_call_fail
