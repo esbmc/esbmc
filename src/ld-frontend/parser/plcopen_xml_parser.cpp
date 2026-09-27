@@ -1258,6 +1258,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     for (auto v : pou.select_nodes(".//interface/localVars/variable"))
       def.local_vars.push_back(
         {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
+    for (auto v : pou.select_nodes(".//interface/outputVars/variable"))
+      def.output_vars.push_back(
+        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
     if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
     {
       def.output_var = ov.attribute("name").as_string();
