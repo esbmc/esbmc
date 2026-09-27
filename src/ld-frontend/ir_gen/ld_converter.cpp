@@ -427,9 +427,9 @@ codet ld_converter::translate_counter(const LdIRNode &n)
     else
     {
       const exprt pv =
-        n.ctr_PV.empty() ? zero
-                         : static_cast<exprt>(
-                             typecast_exprt(var_expr(n.ctr_PV), cv.type()));
+        n.ctr_PV.empty()
+          ? zero
+          : static_cast<exprt>(typecast_exprt(var_expr(n.ctr_PV), cv.type()));
       code_ifthenelset load;
       load.cond() = var_expr(n.ctr_LD);
       load.then_case() = code_assignt(cv, pv);
