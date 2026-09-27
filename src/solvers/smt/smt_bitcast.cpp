@@ -1,5 +1,6 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/expr/type_byte_size.h>
+#include <functional>
 
 /**
  * Constructs the tree-like concatenation of expressions from a sequence.
@@ -135,11 +136,15 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
  *
  * The address has to stay the representation -- a program can memset pointer
  * storage or store a literal into it, and reading that back must still mean
- * what the bits say (regression/esbmc/memset_pointer). So keep it, and record
- * every pointer a bitcast flattens or rebuilds. Tying those pairwise, so two
- * flattened pointers sharing an address are the same pointer, is what lets the
- * round trip prove anything; it constrains only pointers that reach a bitcast,
- * and leaves every address-space constraint alone.
+ * what the bits say (regression/esbmc/memset_pointer). So keep it and record
+ * every pointer a bitcast flattens.
+ *
+ * Flattened pointers sharing an address are tied: two values with the same
+ * object representation compare equal (C17 6.2.6.1p4). A rebuilt pointer is
+ * not tied but defined: it is the flattened pointer its bits came from, or the
+ * address-space reconstruction when none matches. Tying the reconstruction
+ * instead pins it to the live object at that address and makes a NULL-based
+ * pointer unsatisfiable (#7965).
  *
  * Only bitcast takes this path. A typecast keeps plain C integer-to-pointer
  * semantics, where the address really is all the program has. */
@@ -157,33 +162,225 @@ bool smt_solver_baset::pointer_repr_applies(
   return ptr_type->get_width() == bv_type->get_width();
 }
 
-/** Tie @p pointer to @p address, and to every pointer flattened before it. */
-void smt_solver_baset::record_flattened_pointer(
-  smt_astt address,
-  smt_astt pointer)
-{
-  for (const ptr_flatten_entry &prev : ptr_flatten_history)
-    assert_ast(mk_implies(
-      mk_eq(address, prev.address), pointer->eq(this, prev.pointer)));
-
-  ptr_flatten_history.push_back({address, pointer, ctx_level});
-}
-
 smt_astt smt_solver_baset::encode_pointer_repr(
   const expr2tc &ptr,
   const type2tc &to_type)
 {
   smt_astt address = convert_ast(typecast2tc(to_type, ptr));
-  record_flattened_pointer(address, convert_ast(ptr));
+  /* The pointer a byte update overwrites: once a byte changes, its bits name
+   * no pointer, and recording each partial value swamps the solver. */
+  if (ptr == step_overwritten)
+    return address;
+  smt_astt pointer = convert_ast(ptr);
+  flattened.emplace(
+    bitcast2tc(to_type, ptr),
+    ptr_flatten_entry{address, pointer, nullptr, ctx_level, 0});
+  record_flattened_pointer(address, pointer);
   return address;
+}
+
+void smt_solver_baset::record_flattened_pointer(
+  smt_astt address,
+  smt_astt pointer)
+{
+  const ptr_flatten_entry flat{
+    address,
+    pointer,
+    step_guard ? step_guard : mk_smt_bool(true),
+    ctx_level,
+    flatten_count++};
+  step_flattens.insert(flat.id);
+
+  for (const ptr_flatten_entry &prev : ptr_flatten_history)
+    assert_ast(mk_implies(
+      mk_and(mk_and(flat.guard, prev.guard), mk_eq(address, prev.address)),
+      pointer->eq(this, prev.pointer)));
+
+  ptr_flatten_history.push_back(flat);
+}
+
+void smt_solver_baset::begin_step(const expr2tc &guard, const expr2tc &cond)
+{
+  step_sources.clear();
+  step_flattens.clear();
+
+  /* A bitcast converted in an earlier step is a cache hit here, so
+   * encode_pointer_repr() does not run; it is re-recorded under this step's
+   * guard below. The walk is memoised: SSA steps are DAGs (#7474). */
+  std::vector<ptr_flatten_entry> reused;
+  if (!ptr_flow.empty() || !flattened.empty())
+  {
+    std::unordered_set<const expr2t *> seen;
+    std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+      if (!e || !seen.insert(e.get()).second)
+        return;
+      if (is_symbol2t(e))
+      {
+        auto it = ptr_flow.find(to_symbol2t(e).get_symbol_name());
+        if (it != ptr_flow.end())
+          step_sources.insert(
+            it->second.second.begin(), it->second.second.end());
+      }
+      else if (auto it = flattened.find(e); it != flattened.end())
+        reused.push_back(it->second);
+      e->foreach_operand(walk);
+    };
+    walk(guard);
+    walk(cond);
+  }
+
+  step_guard = convert_ast(guard);
+  for (const ptr_flatten_entry &flat : reused)
+    record_flattened_pointer(flat.address, flat.pointer);
+}
+
+void smt_solver_baset::note_assignment(const expr2tc &lhs, const expr2tc &rhs)
+{
+  step_assigned = to_symbol2t(lhs).get_symbol_name();
+  step_overwritten = is_pointer_type(rhs) && is_byte_update2t(rhs)
+                       ? to_byte_update2t(rhs).source_value
+                       : expr2tc();
+}
+
+void smt_solver_baset::end_step()
+{
+  step_sources.insert(step_flattens.begin(), step_flattens.end());
+  if (!step_assigned.empty() && !step_sources.empty())
+    ptr_flow[step_assigned] = {ctx_level, step_sources};
+  step_guard = nullptr;
+  step_sources.clear();
+  step_flattens.clear();
+  step_assigned.clear();
+  step_overwritten = expr2tc();
+}
+
+/** The pointer whose flattened representation is bits [lo, lo + width) of
+ *  @p e whenever @p untouched holds (nil: always), looking through extracts,
+ *  byte updates that leave those bits alone and the member layout of
+ *  flatten_to_bitvector. The pointer is nil when that is not evident. */
+struct flattened_pointert
+{
+  expr2tc pointer;
+  expr2tc untouched;
+};
+
+static flattened_pointert
+pointer_flattened_at(const expr2tc &e, unsigned lo, unsigned width);
+
+static flattened_pointert
+flattened_past_byte_update(const byte_update2t &bu, unsigned lo, unsigned width)
+{
+  if (bu.update_value->type->get_width() != 8)
+    return {};
+
+  const unsigned src_width = bu.source_value->type->get_width();
+  if (is_constant_int2t(bu.source_offset))
+  {
+    // The byte convert_byte_update_bv_mode() writes; it skips out-of-range
+    // ones.
+    const BigInt offset = to_constant_int2t(bu.source_offset).value;
+    if (offset < 0 || offset >= src_width / 8)
+      return {};
+    const BigInt byte = bu.big_endian ? src_width / 8 - 1 - offset : offset;
+    if (byte * 8 >= lo + width || byte * 8 + 8 <= lo)
+      return pointer_flattened_at(bu.source_value, lo, width);
+    return {};
+  }
+
+  flattened_pointert inner = pointer_flattened_at(bu.source_value, lo, width);
+  if (!inner.pointer || inner.untouched)
+    return {};
+  // The byte convert_byte_update_bv_mode() clears, against these bits.
+  const type2tc t = get_uint_type(src_width);
+  expr2tc mask =
+    shl2tc(t, constant_int2tc(t, BigInt(255)), byte_update_bit_offset(bu));
+  BigInt bits = (BigInt::power2(width) - 1) * BigInt::power2(lo);
+  return {
+    inner.pointer,
+    equality2tc(bitand2tc(t, mask, constant_int2tc(t, bits)), gen_zero(t))};
+}
+
+static flattened_pointert
+flattened_in_struct(const expr2tc &from, unsigned lo, unsigned width)
+{
+  const struct_type2t &st = to_struct_type(from->type);
+  flattened_pointert found;
+  unsigned member_lo = 0;
+  for (size_t i = 0; i < st.members.size(); ++i)
+  {
+    const unsigned w = type_byte_size_bits(st.members[i]).to_uint64();
+    if (w && member_lo <= lo && lo + width <= member_lo + w)
+      found = pointer_flattened_at(
+        bitcast2tc(
+          get_uint_type(w), member2tc(st.members[i], from, st.member_names[i])),
+        lo - member_lo,
+        width);
+    member_lo += w;
+  }
+  // The walk assumes no padding outside the members, as flatten_to_bitvector.
+  return member_lo == from->type->get_width() ? found : flattened_pointert{};
+}
+
+static flattened_pointert
+pointer_flattened_at(const expr2tc &e, unsigned lo, unsigned width)
+{
+  if (is_extract2t(e))
+    return pointer_flattened_at(
+      to_extract2t(e).from, lo + to_extract2t(e).lower, width);
+
+  if (is_byte_update2t(e))
+    return flattened_past_byte_update(to_byte_update2t(e), lo, width);
+
+  if (!is_bitcast2t(e))
+    return {};
+  const expr2tc &from = to_bitcast2t(e).from;
+
+  if (is_pointer_type(from) && lo == 0 && width == from->type->get_width())
+    return {from, expr2tc()};
+
+  if (is_struct_type(from))
+    return flattened_in_struct(from, lo, width);
+
+  return {};
 }
 
 smt_astt smt_solver_baset::decode_pointer_repr(
   const expr2tc &repr,
   const type2tc &to_type)
 {
+  /* Bits that are one pointer's representation, untouched since it was
+   * flattened, read back as that pointer. A byte-wise copy of a struct that
+   * holds pointers otherwise rebuilds each of them from every flatten reaching
+   * it, once per byte copied. */
+  const flattened_pointert same =
+    pointer_flattened_at(repr, 0, repr->type->get_width());
+  smt_astt original = nullptr;
+  if (same.pointer)
+  {
+    original = convert_ast(
+      same.pointer->type == to_type ? same.pointer
+                                    : typecast2tc(to_type, same.pointer));
+    if (!same.untouched)
+      return original;
+  }
+
+  smt_astt address = convert_ast(repr);
   smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
-  record_flattened_pointer(convert_ast(repr), pointer);
+  std::vector<const ptr_flatten_entry *> sources;
+  for (const ptr_flatten_entry &flat : ptr_flatten_history)
+    if (step_sources.count(flat.id))
+      sources.push_back(&flat);
+  /* Past the cap the rebuilt pointer is the address-space reconstruction
+   * alone, as before #7895: each source adds an ite over pointer tuples, and
+   * data flow can hand one rebuild hundreds, which ran the C++ stream and map
+   * suites out of memory. The reconstruction is not tied, so #7965 cannot
+   * recur; what is lost is the flattened pointer's provenance. */
+  if (sources.size() <= max_rebuild_sources)
+    for (const ptr_flatten_entry *flat : sources)
+      pointer = flat->pointer->ite(
+        this, mk_and(flat->guard, mk_eq(address, flat->address)), pointer);
+  if (same.pointer)
+    pointer = original->ite(this, convert_ast(same.untouched), pointer);
   return pointer;
 }
 
