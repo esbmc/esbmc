@@ -7126,7 +7126,9 @@ typet python_converter::optional_ternary_type(
 {
   const typet &value_type = then_is_none ? else_expr.type() : then.type();
   const bool reference_value = value_type.is_array() || value_type.is_pointer();
-  if (!reference_value || !current_lhs || !current_lhs->type().is_pointer())
+  const typet &target =
+    current_lhs ? current_lhs->type() : ternary_return_target_;
+  if (!reference_value || !target.is_pointer())
   {
     typet result_type = type_handler_.build_optional_type(value_type);
     then = wrap_in_optional(then, result_type);
@@ -7134,7 +7136,7 @@ typet python_converter::optional_ternary_type(
     return result_type;
   }
 
-  const typet result_type = current_lhs->type();
+  const typet result_type = target;
   exprt &value = then_is_none ? else_expr : then;
   if (value.type().is_array())
     value = string_handler_.get_array_base_address(value);
@@ -7837,6 +7839,18 @@ exprt python_converter::box_value_on_heap(
   return heap_ptr;
 }
 
+/// A returned `T if c else None` takes the declared return type as its
+/// target, as an assigned one takes the variable's.
+exprt python_converter::get_return_value(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "IfExp")
+    return get_expr(value);
+  ternary_return_target_ = current_func_return_type_;
+  exprt result = get_expr(value);
+  ternary_return_target_ = typet();
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7940,7 +7954,7 @@ void python_converter::get_return_statements(
     }
   }
 
-  exprt return_value = get_expr(ast_node["value"]);
+  exprt return_value = get_return_value(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type

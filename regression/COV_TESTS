@@ -1808,3 +1808,10 @@ regression/esbmc-cpp/cpp/local_member_pointer_template_arg
 regression/esbmc-cpp/cpp/local_member_pointer_template_arg_fail
 regression/esbmc-cpp/cpp/local_template_arg_kinds
 regression/esbmc-cpp/cpp/local_template_arg_kinds_fail
+regression/python/optional_str_nondet_none_fail
+regression/python/optional_call_unannotated_fail
+regression/python/optional_str_ternary_fail
+regression/python/optional_return_ternary_fail
+regression/python/optional_list_call_unannotated_fail
+regression/python/optional_class_module_level
+regression/python/isinstance_tuple_user_class
