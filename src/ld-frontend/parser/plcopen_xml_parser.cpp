@@ -623,31 +623,6 @@ static bool parse_graphical_ld(
     return e;
   };
 
-  // A variable both written by a coil and read by a contact closes a feedback
-  // loop across the network. IEC 61131-3 §4.1.3 requires the loop variable to
-  // be read at its value on entry to the network, so contacts read a snapshot
-  // taken before any rung runs rather than whatever an earlier coil left.
-  // Without this the network's meaning depends on the order the resolver
-  // happens to emit its sinks in — exactly the order-dependence §3.2 rejects.
-  std::set<std::string> feedback_vars;
-  {
-    std::set<std::string> written, sensed;
-    for (auto &[lid, g] : nodes)
-    {
-      (void)lid;
-      if (is_coil_tag(g.tag) && !g.var.empty())
-        written.insert(g.var);
-      if (g.tag == "contact" && !g.var.empty())
-        sensed.insert(g.var);
-    }
-    for (const auto &v : written)
-      if (sensed.count(v))
-        feedback_vars.insert(v);
-  }
-  auto sensed_name = [&](const std::string &var) {
-    return feedback_vars.count(var) ? var + "__prev" : var;
-  };
-
   std::set<std::string> declared_synth;
   auto synth_var =
     [&](const std::string &name, VarKind kind, bool driven, long long init) {
@@ -733,9 +708,9 @@ static bool parse_graphical_ld(
     return make_contact(pf_name(lid), false, ContactEdge::None);
   };
 
-  // Emit the rungs that assign a node's power flow, once per node. The
-  // accumulator is cleared and then set from each live predecessor, so the
-  // whole network costs one clear plus one rung per edge.
+  // Emit the rungs that assign a node's power flow, once per node per sink
+  // (step 7). The accumulator is cleared and then set from each live
+  // predecessor: one clear plus one rung per edge.
   std::set<int> pf_emitted;
   std::set<int> pf_in_progress;
   auto emit_pf = [&](int lid) {
@@ -754,7 +729,7 @@ static bool parse_graphical_ld(
       // own condition.
       if (nodes.at(p).tag != "leftPowerRail")
         r.elements.push_back(pf_contact(p));
-      r.elements.push_back(make_contact(sensed_name(g.var), g.negated, g.edge));
+      r.elements.push_back(make_contact(g.var, g.negated, g.edge));
       r.elements.push_back(make_coil(acc, CoilKind::Set));
       net.rungs.push_back(std::move(r));
     }
@@ -925,18 +900,8 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(step));
   };
 
-  // Step 6: snapshot the feedback variables before any rung runs.
-  for (const auto &v : feedback_vars)
-  {
-    RungNode snap = new_rung();
-    snap.elements.push_back(make_contact(v, false, ContactEdge::None));
-    snap.elements.push_back(make_coil(
-      synth_var(v + "__prev", VarKind::BOOL, true, 0), CoilKind::Output));
-    net.rungs.push_back(std::move(snap));
-  }
-
-  // Step 7: emit one sink per coil, in rightPowerRail order — the order the
-  // vendor tool draws the networks, hence the scan execution order.
+  // Step 6: order the coils by rightPowerRail order, the order the vendor tool
+  // draws the networks and hence the scan execution order.
   std::vector<int> coils;
   std::set<int> coils_seen;
   for (auto rpr : ld_body.children("rightPowerRail"))
@@ -965,9 +930,14 @@ static bool parse_graphical_ld(
   });
   coils.insert(coils.end(), unlisted.begin(), unlisted.end());
 
+  // Step 7: emit the coils. Evaluation is sequential, as in the ST Beremiz
+  // generates for MATIEC: each coil re-reads its contacts after every earlier
+  // write, including one made by an earlier coil of the same rung (#7352), so
+  // no power flow is reused across coils. A block still runs once per scan.
   for (int coil : coils)
   {
     const GNode &g = nodes.at(coil);
+    pf_emitted.clear();
     CoilKind kind = CoilKind::Output;
     if (g.storage == "set")
       kind = CoilKind::Set;
@@ -977,7 +947,9 @@ static bool parse_graphical_ld(
   }
 
   // Blocks whose outputs drive nothing still advance their internal state
-  // every scan, so they are emitted even when no coil consumes them.
+  // every scan, so they are emitted even when no coil consumes them, after
+  // every coil and reading the values the coils left, as Beremiz orders them.
+  pf_emitted.clear();
   for (auto &[lid, g] : nodes)
     if (g.tag == "block" || g.tag == "Block")
       emit_block(lid);

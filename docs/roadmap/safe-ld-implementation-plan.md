@@ -960,6 +960,9 @@ second, and the GOTO shows `m__prev = m` emitted before any rung, so the reader
 sees the entry value and the scan in which `a` rises leaves `q` off. Reading `m`
 immediately would make `q` track `a` and the state unreachable.
 
+The entry-snapshot rule was later replaced by sequential evaluation (#7352), and
+this test became `graphical_cross_rung_read_safe`; see SOS §6.3.
+
 Note the textual-`<rung>` tests (`counter_*`, `function_blocks_*`, `userfb_*`)
 bypass the graphical resolver entirely and are not cover for it.
 

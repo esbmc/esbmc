@@ -35,7 +35,4 @@ enum class SosRule
 
   // Arithmetic rules
   Arith_Step, // [ARITH]  OUT := IN1 op IN2
-
-  // Network rules
-  Feedback_Snapshot, // [FEEDBACK] prev(var) := var, before any rung runs
 };
