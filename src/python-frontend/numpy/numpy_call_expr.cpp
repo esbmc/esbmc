@@ -2979,6 +2979,35 @@ numpy_call_expr::find_keyword_arg(const std::string &name) const
   return nullptr;
 }
 
+void numpy_call_expr::reject_invalid_eye_identity_args(
+  const std::string &function) const
+{
+  const nlohmann::json *m_keyword =
+    function == "eye" ? find_keyword_arg("M") : nullptr;
+  if (
+    call_["args"].empty() || call_["args"].size() > 2 ||
+    (function == "identity" && m_keyword) ||
+    (m_keyword && call_["args"].size() > 1))
+    throw std::runtime_error(
+      "TypeError: numpy.eye()/identity() expects 1 or 2 arguments");
+}
+
+nlohmann::json numpy_call_expr::eye_column_arg_or_default(
+  const std::string &function,
+  const nlohmann::json &default_arg) const
+{
+  if (function != "eye")
+    return default_arg;
+
+  if (call_["args"].size() > 1)
+    return call_["args"][1];
+
+  if (const nlohmann::json *m_keyword = find_keyword_arg("M"))
+    return *m_keyword;
+
+  return default_arg;
+}
+
 long long
 numpy_call_expr::extract_literal_diagonal_offset(const char *error_context)
 {
@@ -4787,29 +4816,25 @@ exprt numpy_call_expr::create_expr_from_call()
 
     if (function == "eye" || function == "identity")
     {
-      if (call_["args"].empty() || call_["args"].size() > 2)
-        throw std::runtime_error(
-          "TypeError: numpy.eye()/identity() expects 1 or 2 arguments");
+      reject_invalid_eye_identity_args(function);
 
       nlohmann::json n_node = call_["args"][0];
       resolve_var(n_node);
+      nlohmann::json m_node = eye_column_arg_or_default(function, n_node);
+      resolve_var(m_node);
+
       numeric_value n_value;
       if (!try_extract_numeric_constant(n_node, n_value))
         throw std::runtime_error(
           "TypeError: numpy.eye()/identity() requires constant integer sizes");
 
+      numeric_value m_value;
+      if (!try_extract_numeric_constant(m_node, m_value))
+        throw std::runtime_error(
+          "TypeError: numpy.eye() requires constant integer sizes");
+
       std::size_t n = static_cast<std::size_t>(n_value.int_value);
-      std::size_t m = n;
-      if (function == "eye" && call_["args"].size() == 2)
-      {
-        nlohmann::json m_node = call_["args"][1];
-        resolve_var(m_node);
-        numeric_value m_value;
-        if (!try_extract_numeric_constant(m_node, m_value))
-          throw std::runtime_error(
-            "TypeError: numpy.eye() requires constant integer sizes");
-        m = static_cast<std::size_t>(m_value.int_value);
-      }
+      std::size_t m = static_cast<std::size_t>(m_value.int_value);
 
       nlohmann::json out;
       out["_type"] = "List";
@@ -7693,12 +7718,11 @@ exprt numpy_call_expr::finish_searchsorted_call(
       "numpy.array inputs");
   }
 
+  nlohmann::json search_space;
   try
   {
-    nlohmann::json search_space = resolve_searchsorted_space(
+    search_space = resolve_searchsorted_space(
       std::move(*literal_arg), sorter_node, array_name);
-    return handle_searchsorted_call_over_literal(
-      std::move(search_space), right);
   }
   catch (const std::runtime_error &)
   {
@@ -7710,6 +7734,8 @@ exprt numpy_call_expr::finish_searchsorted_call(
       return *result;
     throw;
   }
+
+  return handle_searchsorted_call_over_literal(std::move(search_space), right);
 }
 
 exprt numpy_call_expr::handle_searchsorted_call()
@@ -8627,8 +8653,10 @@ exprt numpy_call_expr::get()
 
     if (function == "eye" || function == "identity")
     {
+      reject_invalid_eye_identity_args(function);
       auto n = get_arg(0);
-      auto m = function == "eye" && call_["args"].size() > 1 ? get_arg(1) : n;
+      auto m = eye_column_arg_or_default(function, n);
+      resolve_var(m);
       const std::size_t rows = n["value"].get<std::size_t>();
       const std::size_t cols = m["value"].get<std::size_t>();
       std::vector<nlohmann::json> out_rows;

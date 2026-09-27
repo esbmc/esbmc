@@ -3948,10 +3948,66 @@ void python_converter::mirror_numpy_transpose_assignment_from_targets(
     ast_node["targets"][0], rhs, location, target_block);
 }
 
+bool python_converter::preserve_conditional_numpy_alias_shape(
+  const std::string &lhs_id,
+  const std::string &rhs_id,
+  bool unconditional_assignment)
+{
+  if (unconditional_assignment)
+    return false;
+
+  if (
+    numpy_ambiguous_shape_symbols_.count(rhs_id) != 0 ||
+    numpy_param_shapes_.count(rhs_id) != 0)
+    numpy_ambiguous_shape_symbols_.insert(lhs_id);
+  else
+    numpy_ambiguous_shape_symbols_.erase(lhs_id);
+  numpy_param_shapes_.erase(lhs_id);
+  return true;
+}
+
+void python_converter::copy_numpy_alias_shape_state(
+  const std::string &lhs_id,
+  const std::string &rhs_id)
+{
+  if (numpy_ambiguous_shape_symbols_.count(rhs_id) != 0)
+    numpy_ambiguous_shape_symbols_.insert(lhs_id);
+  else
+    numpy_ambiguous_shape_symbols_.erase(lhs_id);
+
+  if (auto rhs_shape = numpy_param_shapes_.find(rhs_id);
+      rhs_shape != numpy_param_shapes_.end())
+    numpy_param_shapes_[lhs_id] = rhs_shape->second;
+  else
+    numpy_param_shapes_.erase(lhs_id);
+}
+
+void python_converter::reject_conditional_numpy_alias_rebind(
+  const exprt &lhs,
+  const nlohmann::json &ast_node) const
+{
+  if (
+    block_nesting_ == function_body_depth_ + 1 || !lhs.is_symbol() ||
+    !ast_node.contains("value") || !ast_node["value"].is_object())
+    return;
+
+  const nlohmann::json &rhs_node = ast_node["value"];
+  if (rhs_node.value("_type", "") != "Name" || !rhs_node.contains("id"))
+    return;
+
+  const std::string rhs_id =
+    resolve_name_symbol_id(rhs_node["id"].get<std::string>());
+  if (numpy_array_symbols_.count(rhs_id) != 0)
+    throw std::runtime_error(
+      "TypeError: numpy array shape is ambiguous across control-flow "
+      "branches");
+}
+
 bool python_converter::update_numpy_array_binding_from_name(
   const exprt &lhs,
   const std::string &lhs_id,
-  const nlohmann::json &rhs_node)
+  const nlohmann::json &rhs_node,
+  bool unconditional_assignment)
 {
   if (rhs_node.value("_type", "") != "Name" || !rhs_node.contains("id"))
     return false;
@@ -3966,15 +4022,10 @@ bool python_converter::update_numpy_array_binding_from_name(
     clear_numpy_array_storage_aliases_for(lhs_id);
     clear_numpy_view_copy(lhs);
     numpy_array_symbols_.insert(lhs_id);
-    if (numpy_ambiguous_shape_symbols_.count(rhs_id) != 0)
-      numpy_ambiguous_shape_symbols_.insert(lhs_id);
-    else
-      numpy_ambiguous_shape_symbols_.erase(lhs_id);
-    if (auto shape_it = numpy_param_shapes_.find(rhs_id);
-        shape_it != numpy_param_shapes_.end())
-      numpy_param_shapes_[lhs_id] = shape_it->second;
-    else
-      numpy_param_shapes_.erase(lhs_id);
+    if (preserve_conditional_numpy_alias_shape(
+          lhs_id, rhs_id, unconditional_assignment))
+      return true;
+    copy_numpy_alias_shape_state(lhs_id, rhs_id);
     return true;
   }
 
@@ -3983,7 +4034,10 @@ bool python_converter::update_numpy_array_binding_from_name(
   {
     clear_numpy_array_storage_aliases_for(lhs_id);
     numpy_param_shapes_.erase(lhs_id);
-    numpy_ambiguous_shape_symbols_.erase(lhs_id);
+    if (!unconditional_assignment)
+      numpy_ambiguous_shape_symbols_.insert(lhs_id);
+    else
+      numpy_ambiguous_shape_symbols_.erase(lhs_id);
     numpy_view_copy_sources_[lhs_id] = view_it->second;
     numpy_array_symbols_.insert(lhs_id);
     return true;
@@ -3995,15 +4049,10 @@ bool python_converter::update_numpy_array_binding_from_name(
   clear_numpy_view_copy(lhs);
   numpy_array_symbols_.insert(lhs_id);
   bind_numpy_array_storage_alias(lhs_id, rhs_id);
-  if (numpy_ambiguous_shape_symbols_.count(rhs_id) != 0)
-    numpy_ambiguous_shape_symbols_.insert(lhs_id);
-  else
-    numpy_ambiguous_shape_symbols_.erase(lhs_id);
-  if (auto shape_it = numpy_param_shapes_.find(rhs_id);
-      shape_it != numpy_param_shapes_.end())
-    numpy_param_shapes_[lhs_id] = shape_it->second;
-  else
-    numpy_param_shapes_.erase(lhs_id);
+  if (preserve_conditional_numpy_alias_shape(
+        lhs_id, rhs_id, unconditional_assignment))
+    return true;
+  copy_numpy_alias_shape_state(lhs_id, rhs_id);
   return true;
 }
 
@@ -4015,14 +4064,15 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
-  if (update_numpy_array_binding_from_name(lhs, lhs_id, rhs_node))
+  const bool unconditional_assignment =
+    block_nesting_ == function_body_depth_ + 1;
+  if (update_numpy_array_binding_from_name(
+        lhs, lhs_id, rhs_node, unconditional_assignment))
     return;
 
   clear_numpy_transpose_views_of(lhs_id);
   clear_numpy_array_storage_aliases_for(lhs_id);
   numpy_param_shapes_.erase(lhs_id);
-  const bool unconditional_assignment =
-    block_nesting_ == function_body_depth_ + 1;
   if (unconditional_assignment)
     numpy_ambiguous_shape_symbols_.erase(lhs_id);
 
@@ -6821,6 +6871,8 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
+
+    reject_conditional_numpy_alias_rebind(lhs, effective_ast_node);
 
     adjust_statement_types(lhs, rhs);
 

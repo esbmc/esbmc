@@ -1861,7 +1861,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (sym_type.id() == "symbol")
           sym_type = ns.follow(sym_type);
 
-        if (sym_type.is_array())
+        if (
+          sym_type.is_array() &&
+          numpy_array_symbols_.count(symbol->id.as_string()) != 0)
         {
           std::vector<exprt> dim_exprs =
             build_dim_exprs(type_handler_.get_array_type_shape(sym_type));
@@ -1893,7 +1895,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (sym_type.id() == "symbol")
           sym_type = ns.follow(sym_type);
 
-        if (sym_type.is_array())
+        if (
+          sym_type.is_array() &&
+          numpy_array_symbols_.count(symbol->id.as_string()) != 0)
         {
           std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
           ndarray_descriptor descriptor(
@@ -1921,7 +1925,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (sym_type.id() == "symbol")
           sym_type = ns.follow(sym_type);
 
-        if (sym_type.is_array())
+        if (
+          sym_type.is_array() &&
+          numpy_array_symbols_.count(symbol->id.as_string()) != 0)
         {
           std::vector<exprt> dim_exprs =
             build_dim_exprs(type_handler_.get_array_type_shape(sym_type));
@@ -1942,15 +1948,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
-      if (attr_name == "shape" || attr_name == "ndim" || attr_name == "size")
-      {
-        const typet list_type = type_handler_.get_list_type();
-        if (
-          numpy_array_symbols_.count(symbol->id.as_string()) == 0 &&
-          is_python_list_model_type(symbol->get_type(), list_type, ns))
-          throw std::runtime_error(
-            fmt::format("Cannot resolve attribute: {}", attr_name));
-      }
+      if (
+        (attr_name == "shape" || attr_name == "ndim" || attr_name == "size") &&
+        numpy_array_symbols_.count(symbol->id.as_string()) == 0 &&
+        !python_list::is_bool_mask_rows_type(symbol->get_type()))
+        throw std::runtime_error(
+          fmt::format("Cannot resolve attribute: {}", attr_name));
 
       // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
       // general attribute-access path above.

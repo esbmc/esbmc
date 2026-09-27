@@ -1633,7 +1633,21 @@ private:
   bool update_numpy_array_binding_from_name(
     const exprt &lhs,
     const std::string &lhs_id,
-    const nlohmann::json &rhs_node);
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
+  bool preserve_conditional_numpy_alias_shape(
+    const std::string &lhs_id,
+    const std::string &rhs_id,
+    bool unconditional_assignment);
+
+  void copy_numpy_alias_shape_state(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  void reject_conditional_numpy_alias_rebind(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node) const;
 
   bool record_numpy_view_copy_from_returned_argument(
     const exprt &lhs,

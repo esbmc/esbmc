@@ -97,6 +97,12 @@ private:
   // out-of-scope keyword arguments.
   const nlohmann::json *find_keyword_arg(const std::string &name) const;
 
+  void reject_invalid_eye_identity_args(const std::string &function) const;
+
+  nlohmann::json eye_column_arg_or_default(
+    const std::string &function,
+    const nlohmann::json &default_arg) const;
+
   // Routes to the below for "diagonal"/"trace"/"fill_diagonal"/"ravel",
   // std::nullopt otherwise. Split out of get() for the same reason as
   // get_arange_expr(): keeping that function's own decision count from
