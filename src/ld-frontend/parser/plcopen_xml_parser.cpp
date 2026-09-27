@@ -315,7 +315,7 @@ struct GNode
   std::map<std::string, int> in_pins; // formalParameter -> source localId
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
   int execution_order = 0; // executionOrderId; 0 is unset, as in Beremiz
-  int x = 0, y = 0;         // <position>
+  int x = 0, y = 0;        // <position>
 };
 
 // Parse an IEC 61131-3 duration literal (T#20s, TIME#1m30s, t#500ms) into
