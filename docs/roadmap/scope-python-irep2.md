@@ -991,3 +991,24 @@ so the unreflected ones -- the defaults and §44's base names -- survive it. (Co
 would keep the unpadded node's cached CRC.)
 `unit/util/migrate.test.cpp` pins the round trip, that no default adds no key, and that a default is no
 part of the type's identity; the first fails with the back-write removed.
+
+## 15. What is left, and what each needs (2026-09-28)
+
+Python B-2* is 17 on master `b3d49c401d`; #8024, #8027 and #8030 take it to 15. Each of the 15 is
+below, with what it needs. None converts mechanically.
+
+| site | why it is legacy | what would move it |
+|---|---|---|
+| `python_expr_builder.cpp` `set_symbol_type` | always legacy, for the `bytes` tag (#7902) | carry `#cpp_type` on arrays |
+| `python_expr_builder.cpp` `set_symbol_type_if_carried`, `set_function_type` | the fallback arm of a guarded helper | nothing -- the arm is the guard |
+| `converter_util.cpp` `create_symbol` | struct/union and `bytes` arrays | the two rows below |
+| `python_class_builder.cpp` (2) | a class struct's methods and components' `access` | carry them on `struct_type2t`, or derive them |
+| `converter_stmt.cpp` class-object value | the operand-less char-array shape (§14) | a distinct class-object type (§14.3 step 3) |
+| `converter_stmt.cpp` array-to-pointer decay, `converter_funcdef.cpp` mutated-parameter pointer and inferred-return arm | no test reaches them | a reaching test, or removal with a C-Dead proof |
+| `converter_symbols.cpp` root retype | arith node consistency (§6.2) | push the retype through the operands |
+| `converter_funcdef.cpp` function body, `python_converter.cpp` entry bodies (2) | a body names symbols that do not exist yet (§6.1) | move them to the adjust pass |
+| `python_adjust.cpp` patched value | adjust-pass legacy value rewrite | the adjust pass going IREP2-only |
+
+The three rows that are not design work are the unreached arms: a C-Dead proof over frontend code for
+arbitrary Python input is not tractable, so each needs either a test that reaches it or an argument
+that the enclosing condition cannot hold.
