@@ -23,6 +23,7 @@ CC_DIAGNOSTIC_POP()
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
