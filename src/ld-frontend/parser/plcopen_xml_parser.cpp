@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <tuple>
 
 // -----------------------------------------------------------------------
 // Internal helpers
@@ -313,6 +314,8 @@ struct GNode
   std::string expression;             // inVariable literal text (T#20s, 5, ...)
   std::map<std::string, int> in_pins; // formalParameter -> source localId
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
+  int execution_order = 0; // executionOrderId; 0 is unset, as in Beremiz
+  int x = 0, y = 0;         // <position>
 };
 
 // Parse an IEC 61131-3 duration literal (T#20s, TIME#1m30s, t#500ms) into
@@ -479,6 +482,9 @@ static bool parse_graphical_ld(
         storage_attr = "reset";
     }
     g.storage = storage_attr;
+    g.execution_order = child.attribute("executionOrderId").as_int(0);
+    g.x = child.child("position").attribute("x").as_int(0);
+    g.y = child.child("position").attribute("y").as_int(0);
 
     if (t == "block" || t == "Block")
     {
@@ -942,9 +948,22 @@ static bool parse_graphical_ld(
         coils_seen.insert(cid).second)
         coils.push_back(cid);
     }
+  // Coils the rail does not list (an unwired rail is common in exports) follow
+  // by executionOrderId, then position; `nodes` is unordered, so iterating it
+  // would make the scan order depend on hashing (#7352).
+  std::vector<int> unlisted;
   for (auto &[lid, g] : nodes)
-    if (is_coil_tag(g.tag) && coils_seen.insert(lid).second)
-      coils.push_back(lid);
+    if (is_coil_tag(g.tag) && !coils_seen.count(lid))
+      unlisted.push_back(lid);
+  auto scan_order = [&](int lid) {
+    const GNode &g = nodes.at(lid);
+    return std::make_tuple(
+      g.execution_order <= 0, g.execution_order, g.y, g.x, lid);
+  };
+  std::sort(unlisted.begin(), unlisted.end(), [&](int a, int b) {
+    return scan_order(a) < scan_order(b);
+  });
+  coils.insert(coils.end(), unlisted.begin(), unlisted.end());
 
   for (int coil : coils)
   {
