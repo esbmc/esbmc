@@ -482,6 +482,23 @@ void goto_cse::replace_in_lvalue(
     });
 }
 
+/// `initialized` follows program order, so it says nothing at a join or after
+/// a call (@p restart). Elsewhere a symbol holds its expression only until the
+/// expression is killed: a guard or a call target may make it available again
+/// without assigning the symbol (#7992).
+static void forget_stale_symbols(
+  std::unordered_set<expr2tc, irep2_hash> &initialized,
+  const cse_domaint &state,
+  bool restart)
+{
+  if (restart)
+    initialized.clear();
+  else
+    std::erase_if(initialized, [&state](const expr2tc &e) {
+      return !state.available_expressions.count(e);
+    });
+}
+
 bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
@@ -549,22 +566,7 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
     // However, when changing dereferences we need to them posterior
     // a[i] = &addr; *a[i] = 42 ===> a[i] = &addr; tmp = a[i]; *tmp = 42;
 
-    // `initialized` follows program order, so it says nothing at a join or
-    // after a call. Elsewhere a symbol holds its expression only until the
-    // expression is killed: a guard or a call target may make it available
-    // again without assigning the symbol (#7992).
-    if (it->is_target() || after_call)
-      initialized.clear();
-    else
-    {
-      for (auto x = initialized.begin(); x != initialized.end();)
-      {
-        if (state.available_expressions.count(*x))
-          ++x;
-        else
-          x = initialized.erase(x);
-      }
-    }
+    forget_stale_symbols(initialized, state, it->is_target() || after_call);
     after_call = it->is_function_call();
     std::unordered_set<expr2tc, irep2_hash> matched_pre_expressions;
     std::unordered_set<expr2tc, irep2_hash> matched_post_expressions;
