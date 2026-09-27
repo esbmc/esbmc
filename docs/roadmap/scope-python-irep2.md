@@ -994,7 +994,7 @@ part of the type's identity; the first fails with the back-write removed.
 
 ## 15. What is left, and what each needs (2026-09-28)
 
-Python B-2* is 17 on master `b3d49c401d`; #8024, #8027 and #8030 take it to 15. Each of the 15 is
+Python B-2* is 19 on master `b3d49c401d`; #8024, #8027 and #8030 take it to 15. Each of the 15 is
 below, with what it needs. None converts mechanically.
 
 | site | why it is legacy | what would move it |
