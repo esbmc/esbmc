@@ -6938,7 +6938,7 @@ void python_converter::get_compound_assign(
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
         {
-          symbol->set_value(concatenated);
+          symbol->set_value(migrate_expr(concatenated));
         }
       }
     }
