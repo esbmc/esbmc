@@ -1,5 +1,5 @@
-# hash() is not defined here: ESBMC's Python frontend routes it to the
-# operational-model stub in src/python-frontend/models/consensus.py.
+# Verifies hash_to_bls_field with hash() as nondet bytes, since real
+# SHA-256 is intractable for BMC.
 
 class uint256(int):
     pass

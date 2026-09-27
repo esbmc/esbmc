@@ -81,6 +81,12 @@ public:
   // original expression
   expr2tc original_lhs;
 
+  /* For a violated assert: the source-level lvalues its claim reads that no
+   * assignment step carries -- a field of an object the program never wrote --
+   * each paired with its value in this counterexample. A witness has nothing
+   * else to record them from (#7858). */
+  std::list<std::pair<expr2tc, expr2tc>> nondet_reads;
+
   // for OUTPUT
   std::string format_string;
   std::list<expr2tc> output_args;

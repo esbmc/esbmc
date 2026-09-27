@@ -106,6 +106,8 @@ int rand(void);
 
 long random(void);
 
+void srandom(unsigned int seed);
+
 void srand(unsigned int s);
 
 __ESBMC_C_CPP_END

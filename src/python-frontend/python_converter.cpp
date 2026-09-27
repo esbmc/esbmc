@@ -128,7 +128,7 @@ static void add_global_static_variable(
   std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
-  symbol.set_type(std::move(t));
+  symbol.set_type(migrate_type(t));
   symbol.name = name;
   symbol.id = id;
 
@@ -139,7 +139,7 @@ static void add_global_static_variable(
   {
     exprt v = gen_zero(t, true);
     v.zero_initializer(true);
-    symbol.set_value(std::move(v));
+    symbol.set_value(migrate_expr(v));
   }
 
   [[maybe_unused]] symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
@@ -200,7 +200,7 @@ void python_converter::create_builtin_symbols()
         integer2binary(BigInt(0), bv_width(char_type_ref)),
         integer2string(BigInt(0)),
         char_type_ref);
-      sym.set_value(value_expr);
+      sym.set_value(migrate_expr(value_expr));
 
       symbol_table_.add(sym);
     };
@@ -887,7 +887,7 @@ void python_converter::convert()
         symbolt len_sym;
         len_sym.id = "__ESBMC_harness_arg_len_" + idx;
         len_sym.name = len_sym.id;
-        len_sym.set_type(size_type());
+        len_sym.set_type(migrate_type(size_type()));
         len_sym.static_lifetime = true;
         len_sym.lvalue = true;
         symbolt *len_ptr = symbol_table_.move_symbol_to_context(len_sym);
@@ -900,7 +900,7 @@ void python_converter::convert()
         symbolt arr_sym;
         arr_sym.id = "__ESBMC_harness_arg_data_" + idx;
         arr_sym.name = arr_sym.id;
-        arr_sym.set_type(array_typet(arg_type.subtype(), len));
+        arr_sym.set_type(migrate_type(array_typet(arg_type.subtype(), len)));
         arr_sym.static_lifetime = true;
         arr_sym.lvalue = true;
         symbolt *arr_ptr = symbol_table_.move_symbol_to_context(arr_sym);
@@ -1013,7 +1013,7 @@ void python_converter::convert()
     symbolt init_symbol;
     init_symbol.id = init_name;
     init_symbol.name = init_name;
-    init_symbol.set_type(init_type);
+    init_symbol.set_type(migrate_type(init_type));
     init_symbol.lvalue = true;
     init_symbol.is_extern = false;
     init_symbol.file_local = false;
@@ -1030,7 +1030,7 @@ void python_converter::convert()
     {
       exprt v = init_symbol.get_value();
       v.swap(init_body);
-      init_symbol.set_value(std::move(v));
+      init_symbol.set_value(migrate_expr(v));
     }
 
     if (symbol_table_.move(init_symbol))
@@ -1049,7 +1049,7 @@ void python_converter::convert()
   symbolt user_main_symbol;
   user_main_symbol.id = "python_user_main";
   user_main_symbol.name = "python_user_main";
-  user_main_symbol.set_type(user_main_type);
+  user_main_symbol.set_type(migrate_type(user_main_type));
   user_main_symbol.lvalue = true;
   user_main_symbol.is_extern = false;
   user_main_symbol.file_local = false;
@@ -1069,7 +1069,7 @@ void python_converter::convert()
   symbolt main_symbol;
   main_symbol.id = "__ESBMC_main";
   main_symbol.name = "__ESBMC_main";
-  main_symbol.set_type(main_type);
+  main_symbol.set_type(migrate_type(main_type));
   main_symbol.lvalue = true;
   main_symbol.is_extern = false;
   main_symbol.file_local = false;

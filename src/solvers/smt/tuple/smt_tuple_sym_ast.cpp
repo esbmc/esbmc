@@ -134,6 +134,12 @@ smt_astt tuple_sym_smt_ast::update(
   const std::vector<type2tc> &members =
     struct_union_members(sort->get_tuple_type());
 
+  // The loop below matches idx against each field in turn, so an out-of-range
+  // index matches none and the update is dropped: `with(s, f, v)` would return
+  // a tuple equal to `s`, and a claim that depends on the write could then
+  // discharge as proved.
+  check_tuple_field(idx, members.size(), sort->get_tuple_type());
+
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
 
@@ -183,7 +189,10 @@ tuple_sym_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
   const std::vector<irep_idt> &member_names =
     struct_union_member_names(sort->get_tuple_type());
 
-  assert(idx < members.size() && "Out-of-bounds tuple element accessed");
+  // members and member_names come from the same type, so one check covers both
+  // reads below.
+  check_tuple_field(idx, members.size(), sort->get_tuple_type());
+
   const std::string &fieldname = member_names[idx].as_string();
   std::string sym_name = name + fieldname;
 

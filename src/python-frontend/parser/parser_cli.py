@@ -225,6 +225,7 @@ def main(*, deps: CliDeps) -> int | None:
 
     alias_seed, wrapper_seed = deps.compute_range_seed(tree, import_resolver)
     preprocessor.apply_range_rewrites(tree, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+    preprocessor.is_entry_module = True
     tree = preprocessor.finalize_module(tree)
     import_resolver.ensure_default_helper_imports(tree)
 

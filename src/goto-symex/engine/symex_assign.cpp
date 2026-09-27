@@ -22,6 +22,13 @@ static bool is_lvalue(const expr2tc &e)
          is_dereference2t(e);
 }
 
+/// A literal holding one lvalue per element: an array member, or a vector a
+/// dereference rebuilt lane by lane (#7907).
+static bool is_elementwise_literal(const expr2tc &e)
+{
+  return is_constant_array2t(e) || is_constant_vector2t(e);
+}
+
 goto_symext::goto_symext(
   const namespacet &_ns,
   contextt &_new_context,
@@ -401,148 +408,6 @@ void goto_symext::symex_assign(
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 
-  // The k-induction `make_nondet_assign` pass emits, at every loop
-  // head it transforms, one `ASSIGN p = nondet()` per modified-loop
-  // variable, with `inductive_step_instruction = true`. For pointers
-  // the resulting nondet wipes p's value-set to {*}, and the
-  // dereference-time `--add-symex-value-sets` assume can only pin
-  // the *resolved* address — not the source pointer. The IS encoding
-  // then sees a completely unconstrained p, admitting models where
-  // (say) `step()` writes through one havoc'd alias and `property()`
-  // reads through another, returning SAT on programs that are
-  // actually true (e.g. linked-list traversals where every
-  // dereference goes through the same pointer chain).
-  //
-  // Snapshot p's pre-havoc value-set entry before symex_assign_rec
-  // overwrites it with {unknown}. The k-induction `make_nondet_assign`
-  // pass emits one `ASSIGN p = nondet()` per modified-loop variable
-  // with inductive_step_instruction=true; for pointers this wipes
-  // p's value-set, which then drives the dereference-time encoding
-  // in symex_dereference.cpp to `invalid_object`. Restoring the
-  // pre-havoc object_map after the assignment lets the next deref of
-  // p resolve to the same candidate set the body would see in BC.
-  //
-  // Compute the L1 name via an explicit L1 rename. cur_state->rename
-  // may wrap the result in a typecast (e.g. when the symbol's type
-  // changes across renaming levels), which makes is_symbol2t return
-  // false on the renamed form even though the underlying value-set
-  // entry exists; the L1 rename keeps the symbol shape so we can
-  // index the value-set map directly.
-  std::string is_ptr_havoc_l1_name;
-  value_sett::object_mapt is_ptr_havoc_pre_object_map;
-  if (
-    inductive_step && cur_state->source.pc->inductive_step_instruction &&
-    is_symbol2t(lhs) && is_pointer_type(lhs->type) && is_sideeffect2t(rhs) &&
-    to_sideeffect2t(rhs).kind == sideeffect2t::allockind::nondet &&
-    options.get_bool_option("add-symex-value-sets"))
-  {
-    expr2tc l1_lhs = lhs;
-    cur_state->top().level1.rename(l1_lhs);
-    if (is_symbol2t(l1_lhs))
-    {
-      is_ptr_havoc_l1_name = to_symbol2t(l1_lhs).get_symbol_name();
-      is_ptr_havoc_pre_object_map =
-        cur_state->value_set.get_object_map(is_ptr_havoc_l1_name, "");
-
-      // Rewrite the nondet RHS to the pre-havoc value of the pointer,
-      // matching the behaviour these benchmarks relied on before this
-      // pass existed: pointer havocs were skipped entirely under
-      // --add-symex-value-sets, leaving p bound to whatever SSA value
-      // it had before the (would-be) havoc. The pre-havoc value either
-      // resolves statically to a concrete object address (singleton
-      // case, the `p = a` pattern) or to an ITE chain through prior
-      // loop iterations (multi-candidate case, the SSA chain through
-      // `p = p->n` updates). Either way
-      // the solver gets a concrete binding rather than a fresh
-      // nondet pinned via SAME-OBJECT to one of N candidates, and
-      // the inductive-step verdict matches the BC depth-k+1
-      // encoding's verdict.
-      if (!is_ptr_havoc_pre_object_map.empty())
-      {
-        expr2tc pre_havoc_value;
-        // Walk the candidates and build an ITE chain. For each
-        // candidate object O with offset off, build
-        //   address_of(O) + off
-        // (or just address_of(O) if offset is unknown). Combine
-        // them as: SAME-OBJECT(p_pre, &O1) ? &O1+off1 : ...
-        // where p_pre is the pre-havoc lhs (which is already
-        // constrained to one of the candidates by the existing
-        // SSA chain).
-        for (const auto &entry : is_ptr_havoc_pre_object_map)
-        {
-          const expr2tc &obj = value_sett::object_numbering[entry.first];
-          if (is_unknown2t(obj) || is_invalid2t(obj))
-            continue;
-
-          expr2tc obj_ptr;
-          if (is_null_object2t(obj))
-          {
-            type2tc nullptrtype = pointer_type2tc(lhs->type);
-            obj_ptr = symbol2tc(nullptrtype, "NULL");
-          }
-          else if (!entry.second.offset_is_set || entry.second.offset == 0)
-          {
-            obj_ptr = address_of2tc(lhs->type, obj);
-          }
-          else if (
-            is_array_type(obj) &&
-            is_scalar_type(to_array_type(obj->type).subtype))
-          {
-            // Offset is in bytes; convert it to an element index so the
-            // SMT encoding doesn't treat the integer as pointer
-            // arithmetic on the (likely-pointer) lhs type (which scales
-            // by sizeof(lhs subtype) and produces nonsense like &x+32
-            // for what should be &x[1]).
-            const type2tc &elt_t = to_array_type(obj->type).subtype;
-            const BigInt elt_sz_bits(elt_t->get_width());
-            const BigInt elt_sz_bytes = elt_sz_bits / 8;
-            if (
-              elt_sz_bytes != 0 &&
-              entry.second.offset % elt_sz_bytes == BigInt(0))
-            {
-              BigInt idx_val = entry.second.offset / elt_sz_bytes;
-              expr2tc idx = constant_int2tc(index_type2(), idx_val);
-              obj_ptr = address_of2tc(lhs->type, index2tc(elt_t, obj, idx));
-            }
-            else
-            {
-              // Offset doesn't divide evenly — fall back to byte
-              // arithmetic via add2tc; this still produces the wrong
-              // literal for pointer-typed lhs but at least matches
-              // what the deref-time pin does.
-              obj_ptr = add2tc(
-                lhs->type,
-                address_of2tc(lhs->type, obj),
-                gen_ulong(entry.second.offset.to_int64()));
-            }
-          }
-          else
-          {
-            obj_ptr = add2tc(
-              lhs->type,
-              address_of2tc(lhs->type, obj),
-              gen_ulong(entry.second.offset.to_int64()));
-          }
-
-          if (!pre_havoc_value)
-            pre_havoc_value = obj_ptr;
-          else
-          {
-            // SAME-OBJECT(lhs_pre, obj_ptr) ? obj_ptr : pre_havoc_value
-            // Use the L1-renamed lhs as the test pointer — that's the
-            // pre-havoc SSA binding, which the existing chain has
-            // already constrained.
-            expr2tc test = same_object2tc(l1_lhs, obj_ptr);
-            pre_havoc_value = if2tc(lhs->type, test, obj_ptr, pre_havoc_value);
-          }
-        }
-
-        if (pre_havoc_value)
-          rhs = pre_havoc_value;
-      }
-    }
-  }
-
   replace_nondet(lhs);
   replace_nondet(rhs);
   volatile_check(rhs);
@@ -610,47 +475,6 @@ void goto_symext::symex_assign(
       }
     }
   }
-
-  // Restore the value-set entry to the pre-havoc set after the
-  // assignment. The next dereference through this pointer (in
-  // `symex_dereference.cpp`) will read this restored set and
-  // synthesize an ITE chain over the actual candidate objects —
-  // without it, the deref-time assume can pin the resolved address
-  // but can't drive the value-load itself, because the load
-  // expression's value-set is {*}/invalid_object.
-  if (!is_ptr_havoc_l1_name.empty() && !is_ptr_havoc_pre_object_map.empty())
-  {
-    // Drop unknown/invalid entries from the restored set. Their
-    // presence flips `known_exhaustive` to false in
-    // dereferencet::dereference, which makes the deref-time ITE
-    // chain start from a fresh `invalid_object` symbol (a free
-    // variable). The solver can then satisfy `*p != expected` by
-    // routing through that invalid_object, killing the inductive
-    // proof. The over-approximation we get by dropping them is
-    // sound: any model that would have used the invalid sink must
-    // also be expressible by one of the concrete candidates.
-    value_sett::object_mapt filtered;
-    for (const auto &entry : is_ptr_havoc_pre_object_map)
-    {
-      const expr2tc &obj = value_sett::object_numbering[entry.first];
-      if (is_unknown2t(obj) || is_invalid2t(obj))
-        continue;
-      filtered.insert(entry);
-    }
-    if (!filtered.empty())
-      cur_state->value_set.update_object_map(
-        value_sett::entryt(is_ptr_havoc_l1_name, ""), filtered, false);
-  }
-
-  // Note: an earlier prototype also emitted an explicit
-  // assume(SAME-OBJECT(p_new, &candidate_1) || ...) right here. With
-  // the value-set restore above in place, that assume is redundant —
-  // symex_dereference.cpp's --add-symex-value-sets path emits the
-  // same disjunction at every dereference of the freshly-nondet p,
-  // and the deref-time assume is the one that actually tightens the
-  // SSA. The explicit assume only added extra guards in the SSA
-  // (one per IS-havoc rather than per deref), which the solver had
-  // to process without gaining new information.
 }
 
 void goto_symext::symex_assign_rec(
@@ -697,7 +521,7 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
-  else if (is_constant_array2t(lhs))
+  else if (is_elementwise_literal(lhs))
   {
     symex_assign_array_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
@@ -811,23 +635,26 @@ void goto_symext::symex_assign_array_structure(
   guard2tc &guard,
   const bool hidden)
 {
-  const array_type2t &arrtype = to_array_type(lhs->type);
-  const constant_array2t &the_array = to_constant_array2t(lhs);
+  const type2tc &subtype = array_or_vector_subtype(lhs->type);
+  const std::vector<expr2tc> &elems =
+    is_constant_vector2t(lhs) ? to_constant_vector2t(lhs).datatype_members
+                              : to_constant_array2t(lhs).datatype_members;
 
   // Explicitly project lhs elements out of the array literal and recurse,
   // mirroring symex_assign_structure. This handles a re-constituted array
   // (e.g. an array-typed struct member surfaced by symex_assign_structure)
-  // by assigning element-wise through the index expressions.
+  // by assigning element-wise through the index expressions. A vector rebuilt
+  // lane by lane is assigned the same way.
   //
   // The sibling constant_array_of2t (repeat-initialised array) is deliberately
   // not handled here: its members alias a single initializer value rather than
   // distinct element lvalues, so it falls through to the unhandled-lhs abort as
   // before. Projecting it would need per-index lvalues that it does not carry.
-  for (std::size_t i = 0; i < the_array.datatype_members.size(); i++)
+  for (std::size_t i = 0; i < elems.size(); i++)
   {
-    const expr2tc &lhs_elem = the_array.datatype_members[i];
+    const expr2tc &lhs_elem = elems[i];
     expr2tc rhs_elem =
-      index2tc(arrtype.subtype, rhs, constant_int2tc(index_type2(), BigInt(i)));
+      index2tc(subtype, rhs, constant_int2tc(index_type2(), BigInt(i)));
     symex_assign_rec(lhs_elem, full_lhs, rhs_elem, full_rhs, guard, hidden);
   }
 }

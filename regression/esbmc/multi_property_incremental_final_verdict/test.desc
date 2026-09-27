@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 10
+^VERIFICATION FAILED$
+\A(?![\s\S]*Unable to prove or falsify the program)[\s\S]*\Z

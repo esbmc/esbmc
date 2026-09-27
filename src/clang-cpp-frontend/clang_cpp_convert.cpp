@@ -163,6 +163,61 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+// The types of the nullptr template arguments in @p args, which print as a
+// bare `nullptr` whatever their type.
+static bool print_nullptr_arg_types(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  llvm::raw_ostream &os)
+{
+  bool found = false;
+  for (const clang::TemplateArgument &arg : args)
+    if (arg.getKind() == clang::TemplateArgument::Pack)
+      found |= print_nullptr_arg_types(arg.getPackAsArray(), os);
+    else if (arg.getKind() == clang::TemplateArgument::NullPtr)
+    {
+      os << "(nullptr:" << arg.getNullPtrType().getCanonicalType().getAsString()
+         << ")";
+      found = true;
+    }
+  return found;
+}
+
+// clang's USR spells a member-pointer type and a nullptr template argument as
+// nothing, so f<int A::*> and f<long B::*>, the members of W<int A::*> and
+// W<long B::*>, overloads f(int A::*) and f(long B::*), and g<(int *)nullptr>
+// and g<(long *)nullptr> share one id and the last body converted wins.
+static std::string
+usr_gap_suffix(const clang::Decl &decl, const clang::ASTContext &ctx)
+{
+  std::string args;
+  llvm::raw_string_ostream os(args);
+  const clang::PrintingPolicy policy = ctx.getPrintingPolicy();
+  bool has_nullptr = false;
+  auto print = [&](llvm::ArrayRef<clang::TemplateArgument> list) {
+    clang::printTemplateArgumentList(os, list, policy);
+    has_nullptr |= print_nullptr_arg_types(list, os);
+  };
+  for (const clang::Decl *d = &decl; !llvm::isa<clang::TranslationUnitDecl>(d);
+       d = clang::Decl::castFromDeclContext(d->getDeclContext()))
+  {
+    if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
+    {
+      if (const auto *targs = fd->getTemplateSpecializationArgs())
+        print(targs->asArray());
+      os << "(" << fd->getType().getCanonicalType().getAsString(policy) << ")";
+    }
+    else if (
+      const auto *cs =
+        llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(d))
+      print(cs->getTemplateArgs().asArray());
+    else if (
+      const auto *vs = llvm::dyn_cast<clang::VarTemplateSpecializationDecl>(d))
+      print(vs->getTemplateArgs().asArray());
+  }
+  os.flush();
+  return has_nullptr || args.find("::*") != std::string::npos ? "#" + args : "";
+}
+
 void clang_cpp_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -256,6 +311,8 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    if (id.rfind("c:", 0) == 0)
+      id += usr_gap_suffix(nd, *ASTContext);
     /* A lambda's operator(), __invoke and conversion-operator USRs name the
      * enclosing specialisation but not the closure, so siblings in one
      * instantiation share an id and the last body converted wins (#7499); the
@@ -274,9 +331,12 @@ void clang_cpp_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str() + id_suffix;
+    id = DeclUSR.str().str() + usr_gap_suffix(nd, *ASTContext) + id_suffix;
     return;
   }
+
+  if (get_mangled_id(nd, id))
+    return;
 
   // Otherwise, abort
   std::ostringstream oss;
@@ -718,6 +778,57 @@ static void reduce_pseudo_destructor_call(exprt &expr)
 
   assert(expr.op0().operands().size() == 1);
   expr = expr.op0().op0();
+}
+
+/// Whether a thrown type's exception ids follow from the type alone, *and*
+/// cannot change between here and the adjust pass.
+///
+/// A class type's id is its symbol's name and its bases come from the symbol
+/// table, a lookup this early in conversion cannot rely on; everything else
+/// resolves to the `#cpp_type` spelling, which the IREP2 seam does not carry,
+/// so those ids are recorded at conversion time instead (§7.6). Pointer layers
+/// are stripped because convert_exception_id recurses through them.
+///
+/// An **array** operand is excluded: it decays between here and the legacy
+/// pass, so an id recorded from the pre-decay type is not the one the handler
+/// is matched against. A pointer is fine and is recursed through, as
+/// convert_exception_id does.
+static bool exception_id_needs_no_lookup(const typet &type)
+{
+  if (type.id() == "array")
+    return false;
+
+  if (type.id() == "pointer")
+    return exception_id_needs_no_lookup(type.subtype());
+
+  return type.id() != "symbol" && type.id() != "struct" &&
+         !type.cpp_type().empty();
+}
+
+/// Record a throw's exception ids at conversion time, for the operand types
+/// whose ids follow from the type alone.
+///
+/// A primitive's id is its `#cpp_type` spelling, and the IREP2 seam does not
+/// carry that: computed from a back-migrated type, `throw 1` reads as
+/// `signedbv` while the handler, whose ids never cross the seam, still reads
+/// `signed_int`, and the throw escapes uncaught. A class type is left to the
+/// adjust pass instead: its id is the type symbol's name, which crosses
+/// intact, and resolving its bases needs a lookup this early in conversion
+/// (docs/roadmap/scope-clang-cpp-irep2.md §7.6).
+static void
+record_primitive_exception_ids(exprt &throw_expr, const namespacet &ns)
+{
+  if (!exception_id_needs_no_lookup(throw_expr.op0().type()))
+    return;
+
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, throw_expr.op0().type(), "", ids);
+
+  irept exception_list("exception_list");
+  exception_list.get_sub().resize(ids.size());
+  for (std::size_t i = 0; i < ids.size(); i++)
+    exception_list.get_sub()[i].id(ids[i]);
+  throw_expr.set("exception_list", exception_list);
 }
 
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -1444,7 +1555,13 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       new_expr.move_to_operands(tmp);
+      // Deliberately the moved-from `tmp`, i.e. empty: a cpp-throw's own type
+      // is set by the adjust pass, and giving it the operand's type here
+      // changes the default path (three try_catch rows stop failing as they
+      // should).
       new_expr.type() = tmp.type();
+
+      record_primitive_exception_ids(new_expr, namespacet(context));
     }
 
     break;
@@ -2435,6 +2552,7 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
           build_member_from_component(fd, member);
+        size_flexible_array_member(*member_decl, member.type());
 
         // set #member_init flag again, as it has been cleared between the first call...
         member.set("#member_init", 1);
@@ -2476,7 +2594,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.set_type(this_type);
+            new_symbol.set_type(migrate_type(this_type));
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
@@ -3076,14 +3194,12 @@ bool clang_cpp_convertert::annotate_class_field(
   const struct_union_typet &type,
   struct_typet::componentt &comp)
 {
-  // set parent in component's type
+  // A field of a tagless class type has no parent to attach it to.
   if (type.tag().empty())
   {
     log_error("Goto empty tag in parent class type in {}", __func__);
     return true;
   }
-  std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().member_name(parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -3147,12 +3263,11 @@ bool clang_cpp_convertert::annotate_class_method(
   /*
    * The order of annotations matters.
    */
-  // annotate parent — derive the id via get_decl_name so it matches the
-  // record's symbol id exactly (Clang 22+ prepends the kind name; older
-  // versions don't).
+  // The multi-TU vptr-init fallback below needs the class id; derive it via
+  // get_decl_name so it matches the record's symbol id exactly (Clang 22+
+  // prepends the kind name; older versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.member_name(parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
@@ -3165,15 +3280,14 @@ bool clang_cpp_convertert::annotate_class_method(
     /*
      * We also have a `component` in class type representing the ctor/dtor.
      * Need to sync the type of this function symbol and its corresponding type
-     * of the component inside the class' symbol
-     * We just need "#member_name" and "return_type" fields to be synced for later use
-     * in the adjuster.
+     * of the component inside the class' symbol: the adjuster reads the return
+     * type back to tell a ctor from a dtor.
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if (fd_symb)
     {
-      fd_symb->set_type(component_type);
+      fd_symb->set_type(migrate_type(component_type));
       /*
        * We indicate the need for vptr initializations in the ctor/dtor;
        * they are added in the adjuster.

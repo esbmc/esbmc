@@ -2,5 +2,6 @@ CORE
 main.c
 --synthesise-loop-invariants --unwind 6 --multi-property --result-only
 \A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
-^  PASSED       \[main\.assertion\.1\]  line 27  loop invariant base case$
+^  PASSED       \[main\.assertion\.\d+\]  line 27  loop invariant base case \[i <= 4\]$
+^  PASSED       \[main\.assertion\.\d+\]  line 27  loop invariant base case \[return_value\S* == 4\]$
 ^VERIFICATION SUCCESSFUL$

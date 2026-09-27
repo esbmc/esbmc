@@ -467,21 +467,28 @@ public:
    *  @param expr Expression to count global refs in.
    *  @param global_list Output set of global refs.
    *  @param kind Whether this access is a READ or a WRITE.
+   *  @param under_deref Whether expr sits beneath a dereference.
    */
   void get_expr_globals(
     const namespacet &ns,
     const expr2tc &expr,
     std::set<expr2tc> &global_list,
-    access_kindt kind);
+    access_kindt kind,
+    bool under_deref = false);
 
   /**
    *  Resolve one pointer level: the object `ptr`'s value set names, or nil.
    *  @param to_global Set when the resolved object is shared.
+   *  @param through_deref Whether the pointer is dereferenced. Only then does
+   *  an address-taken local count as shared: copying a pointer to it accesses
+   *  nothing. Intrinsics that read through a pointer argument are keyed where
+   *  symex dispatches them.
    */
   expr2tc resolve_pointer_target(
     const namespacet &ns,
     const expr2tc &ptr,
-    bool &to_global);
+    bool &to_global,
+    bool through_deref);
 
   /**
    *  Record what a dereference reaches when the pointer it goes through is not

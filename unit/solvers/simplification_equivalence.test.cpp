@@ -373,6 +373,19 @@ SCENARIO(
           x, symbol2tc(get_int64_type(), "y"), ns, options) ==
         simplification_equivalencet::skipped);
     }
+    THEN("a float outside the IEEE interchange formats is skipped")
+    {
+      // The bundled Bitwuzla aborts on these sorts (#7326).
+      for (const type2tc &t :
+           {floatbv_type2tc(7, 8) /* bfloat16 */,
+            floatbv_type2tc(80, 15) /* long double under --32 */})
+      {
+        const expr2tc f = symbol2tc(t, "f");
+        REQUIRE(
+          check_simplification_equivalence(f, f, ns, options) ==
+          simplification_equivalencet::skipped);
+      }
+    }
   }
 }
 

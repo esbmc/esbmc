@@ -170,6 +170,14 @@ static inline expr2tc gen_byte_expression(
   return result;
 }
 
+/* Bitwise operations are valid for floats, but there is no implementation of
+ * them here yet; and a vector would reach the primitive arm below, which casts
+ * one byte to the whole vector (#7907). __memset_impl handles both. */
+static bool lacks_byte_model(const type2tc &type)
+{
+  return is_floatbv_type(type) || is_fixedbv_type(type) || is_vector_type(type);
+}
+
 static inline expr2tc gen_value_by_byte(
   const type2tc &type,
   const expr2tc &src,
@@ -194,9 +202,7 @@ static inline expr2tc gen_value_by_byte(
   if (num_of_bytes == 0)
     return src;
 
-  /* TODO: Bitwise operations are valid for floats, but we don't have an
-   * implementation, yet. Give up. */
-  if (is_floatbv_type(type) || is_fixedbv_type(type))
+  if (lacks_byte_model(type))
     return expr2tc();
 
   if (is_scalar_type(type) && type->get_width() == 8 && offset == 0)

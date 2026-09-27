@@ -607,3 +607,27 @@ def affine_range(n):
     assert pre.exported_range_aliases == {"nl_affine_range"}
     assert set(pre.exported_range_wrappers) == {"affine_range"}
     assert pre.module_dunder_all == ["nl_affine_range", "affine_range"]
+
+
+def _sorted_key_lowering(source):
+    tree = ast.parse(source)
+    return ast.unparse(preprocessor_mod.Preprocessor("test_module").visit(tree))
+
+
+def test_sorted_builtin_key_without_side_effect_is_reapplied():
+    # The parallel key list costs the solver ~15x on humaneval_149 (#7745).
+    lowered = _sorted_key_lowering("def f(xs):\n    return sorted(xs, key=len)\n")
+    assert "ESBMC_srtk_" not in lowered
+
+
+def test_sorted_key_that_may_observe_its_calls_keeps_key_list():
+    cases = {
+        "user __len__": "class C:\n    def __len__(self):\n        return 0\n",
+        "shadowed len": "def len(x):\n    return 0\n",
+        "import": "import helpers\n",
+        "lambda": "",
+    }
+    for name, prelude in cases.items():
+        key = "lambda s: s" if name == "lambda" else "len"
+        lowered = _sorted_key_lowering(prelude + f"def f(xs):\n    return sorted(xs, key={key})\n")
+        assert "ESBMC_srtk_" in lowered, name

@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+^.*FAILED.*dereference failure: NULL pointer$
+^.*FAILED.*dereference failure: invalid pointer$

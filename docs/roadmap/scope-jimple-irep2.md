@@ -1577,6 +1577,116 @@ Reviewed and deliberately not done here, each its own change:
   because the temp symbol is never referenced (§26). A one-line fix, and
   `--symbol-table-only` can now pin it.
 
+## 40. B-1's other half: one dead arm, and why the rest are not (2026-09-15)
+
+B-2 for jimple has been met since §39. B-1 was 190 legacy mentions. This measures how
+much of that is dead code rather than work.
+
+### 40.1 The body's legacy builder is unreachable
+
+`jimple_method.cpp:93` calls `body->to_code2t(...)`, so the IREP2 path is the live one
+and `jimple_full_method_body::to_exprt` should never run. Instrumented with an
+unconditional `fprintf` and swept over all 27 jimple tests: **0 observations**, the suite
+green, so the runs happened. Deleted, with its override declaration -- the base's
+`jimple_method_field::to_exprt` has a default body, so the class stays concrete.
+B-1 190 -> 186.
+
+### 40.2 The nine statement arms are *not* dead, measured twice
+
+The obvious next step -- if the only entry is the body's `to_exprt`, the statements'
+arms are unreachable too -- is wrong, and the suite says so twice:
+
+- deleting all nine statement `to_exprt` overrides: **7 of 27 fail**, including
+  `github_4715_irep2_bodies_jimple_01_fail` and `github_4715_legacy_body_throw_01_fail`,
+  the two tests that exist to pin exactly this;
+- deleting only the six whose class also declares a native `to_code2t`: **5 of 27
+  fail**, the same two plus `kt-func-call-true` and `kt-func-call2-true`.
+
+So a native `to_code2t` does not imply its class's `to_exprt` is unused: the arms are
+reached from the statement builders themselves (`jimple_statement.cpp:197`, `:432`,
+`:444` and others), where one statement's construction calls another node's legacy form.
+Retiring them means converting those call sites first, one at a time, the way §32-§38
+converted the expression arms -- not deleting the arm and seeing what breaks.
+
+B-1 for jimple is therefore 186 of which the statements' share is real work, not dead
+code. That is worth knowing before anyone reads the count as slack.
+
+### 40.3 Which arms, measured instead of inferred
+
+§40.2 drew a conclusion from two deletion failures. Instrumenting all nine arms with an
+`fprintf` naming the class and sweeping the 27 tests replaces it with the answer:
+
+```
+14 jimple_throw
+ 8 jimple_assignment
+```
+
+**Two** of the nine are reached; the other seven never run. Both earlier attempts failed
+because each deleted one of those two -- attempt 1 both, attempt 2 `jimple_assignment`,
+which has a native `to_code2t` and is reached through its legacy arm anyway. That is the
+fact neither inference could supply: a native IREP2 arm existing does not mean the legacy
+one is unused.
+
+The seven are deleted: `jimple_identity`, `jimple_invoke`, `jimple_return`,
+`jimple_label`, `jimple_goto`, `jimple_if`, `jimple_assertion`. 27 of 27 jimple tests and
+876 of 876 unit tests pass, and B-1 goes 186 -> **160**, a sixth of the phase's remaining
+count removed as dead code.
+
+What is left needs `jimple_throw` and `jimple_assignment` converted at their call sites
+first, which is the §32-§38 shape and the next slice.
+
+## 41. `jimple_throw` on a native arm (2026-09-15)
+
+The first of §40.3's two. `jimple_throw::to_exprt` built a bare `codet("cpp-throw")` --
+no operand and no exception list, because throw is not implemented -- so the native form
+is `code_cpp_throw2tc(expr2tc(), {}, loc)` and takes the location as a parameter rather
+than having it stamped afterwards, per K.2.
+
+27 of 27 jimple and 876 of 876 unit tests, B-1 160 -> **157**.
+
+Pinned rather than assumed: replacing the arm's body with a skip fails 7 of 27,
+`github_4715_legacy_body_throw_01_fail` among them, so the arm is load-bearing and the
+14 observations §40.3 measured are what exercises it.
+
+`jimple_assignment` is the remaining one, and it is the harder half: it already has a
+native `to_code2t` and its legacy arm is reached anyway, so the conversion is at the call
+site rather than in the class.
+
+
+## 42. The expression arms, probed the same way (2026-09-15)
+
+§40.3's probe worked on the statements, so the same instrument was pointed at the twelve
+`jimple_expr` legacy arms. Over the 27 tests:
+
+```
+10 jimple_symbol
+ 8 jimple_expr_invoke
+ 4 jimple_constant
+```
+
+**Three** of the twelve are reached. The nine that are not -- `jimple_binop`,
+`jimple_cast`, `jimple_lengthof`, `jimple_virtual_invoke`, `jimple_newarray`,
+`jimple_deref`, `jimple_nondet`, `jimple_static_member`, `jimple_virtual_member` -- are
+deleted. 27 of 27 jimple and 876 of 876 unit tests, and B-1 157 -> **110**.
+
+That is 310 lines of unreachable code, and §32-§38 had already converted each of those
+nine to a native `to_expr2t`; what was left behind was the arm the conversion superseded.
+Deleting them was never risky -- it only needed the measurement to say which.
+
+### 42.1 What the three live arms need
+
+| arm | why it is still reached |
+|---|---|
+| `jimple_symbol` | no native `to_expr2t`; the default migrates it |
+| `jimple_constant` | same |
+| `jimple_expr_invoke` | has a native arm, but it handles only the `valueOf_1` intrinsic and falls back for a real call |
+
+The first two are ordinary conversions. The third is the chain §41 flagged:
+`jimple_assignment::to_code2t` routes an invoke right-hand side to the migrating default
+because `jimple_expr_invoke`'s native arm cannot build the call, and the invoke's `lhs` is
+a legacy `exprt` set by `set_lhs`. Converting it means giving both invoke classes an IREP2
+`lhs` and a native arm that builds `code_function_call2t` -- three classes, in that
+order, and the only remaining B-1 work in this frontend that is not a one-liner.
 ## 33. `jimple_newarray::to_expr2t` goes native, and two defects it exposes
 
 §32.5 named the width reader as the blocker on making the class symbol
@@ -1948,12 +2058,449 @@ What is left live, and what it reaches:
 | `jimple_class_field` | nothing -- it builds a struct component from a type |
 | `jimple_throw` | nothing -- its operand conversion is commented out upstream |
 
-So every expression `to_exprt` is callerless, as is `jimple_assignment`'s. That
-is the next slice, and it is the §36.2 shape rather than the §36.1 one: a caller
-argument exists for all of them, so they can go the way the seven in #7786 did.
+So every expression `to_exprt` looked callerless, as did `jimple_assignment`'s.
+
+**That conclusion was wrong, and §38 corrects it.** `jimple_binop::to_expr2t`
+covered six operators and sent the rest to the migrating default, which converts
+its operands with `to_exprt` -- so any expression kind was still reachable as the
+operand of, say, a multiplication. The census read zero only because every binop
+in the corpus happens to be one of the six. That is exactly §36.1's lesson
+applied to a conclusion drawn one section after stating it.
 
 ### 37.4 Status
 
 Twenty-seven PRs. B-1 is 154, from 160 -- the drop is the two `exprt lhs`
 members and their setters. The slice mostly adds native code rather than removing
 legacy code; the removal it unlocks is worth most of `jimple_expr.cpp`.
+
+
+## 43. The invoke cluster, and an over-deletion §42 hid (2026-09-15)
+
+§42.1 called `jimple_symbol` and `jimple_constant` "ordinary conversions". They are not:
+both already have native `to_expr2t` arms, and their legacy arms were reached only from
+inside the two remaining legacy consumers -- `jimple_assignment::to_exprt` and
+`jimple_expr_invoke::to_exprt`. Grepping every direct `to_exprt` call confirms it: the
+only ones left on expressions are at `jimple_statement.cpp:136,142,149,152` and
+`jimple_expr.cpp:330,335,358`, all inside those two.
+
+So the three live arms were one cluster rooted at the invoke lowering.
+`jimple_expr_invoke` now builds the call natively -- a `code_block2tc` of the
+`@parameter<i>` assignments followed by `code_function_call2tc`, with an `lhs2` the
+assignment sets -- and `jimple_assignment::to_code2t` routes the non-virtual invoke there
+instead of to the migrating default. Re-probing all four remaining legacy arms over the 27
+tests gives **0 observations**: the cluster is retired.
+
+### 43.1 What that probe also exposed
+
+`jimple_virtual_invoke::to_exprt` was in the nine §42 deleted as unreached, and deleting
+it was wrong. `jimple_assignment`'s virtual-invoke branch still delegates to the migrating
+default, which reaches that arm; with the arm gone the base's `code_skipt` was returned
+instead, so **a virtual-invoke assignment silently became a skip**.
+
+Nothing in the corpus builds that shape -- which is why the deletion passed 27 of 27 and
+why the probe read zero. The arm is restored here with a comment saying so. Two things
+follow:
+
+- the probe answers "is this reached by the corpus", not "is this dead". For a deletion
+  the second question is the one that matters, and only a caller audit answers it. §42's
+  other eight deletions are safe on that stricter test -- each class has a native
+  `to_expr2t` and no remaining caller -- but that was luck rather than method;
+- `regression/jimple` has no test for an assignment whose right-hand side is a virtual
+  invoke. That gap let a silent semantic change through, and it is worth closing before
+  `jimple_virtual_invoke` is converted for real.
+
+### 43.2 The gap closed
+
+`github_4715_virtual_invoke_assign_01{,_fail}` is that test. The jimple input is JSON, so
+it is hand-authored rather than compiled: `kt-func-call-true`'s structure with its callee
+made an instance method, a receiver local allocated with `new`, and the assignment's
+right-hand side changed from `static_invoke` to `virtual_invoke`. The failing half changes
+the callee's return value rather than the assertion, so both halves exercise the same
+lowering.
+
+It bites on exactly the over-deletion it exists to catch: delete
+`jimple_virtual_invoke::to_exprt` again and **both halves fail**, where the 27 tests before
+it all passed. `jimple` is 29 of 29 with it added.
+
+B-1 is 115 rather than the 110 §42 reported, the difference being the restored arm.
+
+## 44. `jimple_virtual_invoke` converted, and two more over-deletions found (2026-09-15)
+
+With §43.2's test in place, `jimple_virtual_invoke` gets the native arm
+`jimple_expr_invoke` got in §43: a `code_block2tc` of the `@this` and `@parameter<i>`
+assignments followed by `code_function_call2tc`, and `jimple_assignment::to_code2t` now
+routes both invoke forms to their own arm instead of to the migrating default. 29 of 29
+jimple and 876 of 876 unit tests.
+
+### 44.1 The caller audit §43.1 asked for, and what it found
+
+§43.1 said a deletion needs a caller audit rather than the probe. Doing that audit across
+both hierarchies -- which classes declare a native arm, and which inherit the base's
+migrating default -- found **two more classes** in the same state
+`jimple_virtual_invoke` was in:
+
+| class | native `to_code2t` | legacy `to_exprt` |
+|---|---|---|
+| `jimple_identity` | no | deleted by §40.3 |
+| `jimple_assertion` | no | deleted by §40.3 |
+
+Both fall through `jimple_method_field::to_code2t` to the base's `to_exprt`, which returns
+`code_skipt`. So since §40.3 an identity statement and an `Assertion` statement have
+silently produced a skip. Both arms are restored here with a comment saying why.
+
+No test builds either statement -- jimple tests express an assertion through the
+`If`/`AssertionError` idiom rather than the `Assertion` object, and nothing in the corpus
+emits `Identity` -- which is exactly why three deletions in a row passed 27 of 27.
+
+### 44.2 The rule, stated properly this time
+
+The probe answers *"does the corpus reach this?"*. A deletion needs *"can anything reach
+this?"*, and for a virtual with a non-abstract base the answer is yes unless the class
+overrides the replacement. So the criterion is:
+
+> an arm may be deleted only if its class declares the native replacement.
+
+That is checkable without running anything, it is what the table above applies, and it
+would have prevented all three over-deletions. B-1 is 124: the true figure once the three
+restorations are counted, against the 110 §42 claimed.
+
+## 45. The legacy expression tree retired (2026-09-15)
+
+§44.2's criterion -- an arm may be deleted only if its class declares the native
+replacement -- applied to what was left. Five arms qualify and are deleted:
+`jimple_assignment`, `jimple_constant`, `jimple_symbol`, `jimple_expr_invoke` and
+`jimple_virtual_invoke`. 227 lines, 29 of 29 jimple and 876 of 876 unit tests, B-1
+124 -> **103**.
+
+The deletion is safe by inspection rather than by the suite: every direct `to_exprt` call
+on an expression was inside one of those five arms, so they formed a closed cycle that the
+`to_code2t`/`to_expr2t` conversions had already routed around. Re-auditing afterwards, the
+only expression class still declaring a legacy arm is the base `jimple_expr` itself, whose
+arm is the default the whole scheme hangs off.
+
+### 45.1 What remains, and it is exactly two things
+
+| class | why it still has a legacy arm |
+|---|---|
+| `jimple_identity` | no native `to_code2t`; restored in §44.1 |
+| `jimple_assertion` | no native `to_code2t`; restored in §44.1 |
+
+Both need converting before their arms can go, and neither is exercised by any test --
+`regression/jimple` asserts through the `If`/`AssertionError` idiom rather than the
+`Assertion` object, and nothing in the corpus emits `Identity`. So the next slice is a test
+first, as §43.2 was for the virtual invoke, and only then the conversion. Converting them
+blind is how §40.3's deletions passed while breaking both.
+
+Jimple's B-1 over this run: **190 -> 103**, of which 87 is deleted dead code and three
+restorations are the correction for measuring reachability where reachability was not the
+question.
+
+## 46. `jimple_assertion` is parse-only, and the audit has to include `unit/` (2026-09-15)
+
+§45.1 named `jimple_identity` and `jimple_assertion` as the two classes still needing a
+native arm. One of them does not need one at all.
+
+There is no `statement::Assertion` enumerator (`jimple_method_body.h:108-122`) and no
+`"Assertion"` entry in the JSON dispatcher's `from_map`, so the body walk can never build a
+`jimple_assertion`. Its `to_exprt` has no production path, and §44.1's restoration of it was
+unnecessary -- harmless, but it was restoring something unreachable. The arm is deleted
+again, this time with the reason; the class stays. B-1 103 -> **97**.
+
+### 46.1 How that was nearly got wrong, again
+
+The first attempt deleted the whole class. The build failed:
+
+```
+unit/jimple-frontend/jimple_ast.test.cpp:165: 'jimple_assertion' was not declared
+```
+
+`unit/` constructs one and tests its `from_json`. So the class is live, only its lowering is
+not -- and §44.2's criterion, applied to `src/` alone, would have missed that. The criterion
+needs its scope stated:
+
+> an arm may be deleted only if its class declares the native replacement, and a class only
+> if nothing in `src/` **or `unit/`** names it.
+
+The compiler enforces the second half for free, which is why this attempt cost a build
+rather than a regression.
+
+### 46.2 `jimple_identity` is the last one, and its arm looks broken
+
+`Identity` *is* in the enum and the dispatcher, so that class is reachable and its arm has to
+stay until it is converted. Reading it first, though:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare jimple local (`$i0`), not a qualified symbol id, and every other
+lookup in this frontend goes through `get_symbol_name(class, function, name)`. So the arm
+dereferences the result of a lookup that looks certain to miss. No test builds an `Identity`
+statement, so nothing has exercised it either way.
+
+That makes the next slice a probe rather than a conversion: author a jimple input with an
+`Identity` statement and find out whether the existing arm works at all. Converting it first
+would port a defect into IREP2 and call it a migration.
+
+## 47. The identity statement crashes, and that is why it could not be converted (2026-09-15)
+
+§46.2 suspected `jimple_identity::to_exprt` was broken and said to probe before converting.
+Probing it took two attempts and both were informative.
+
+The first used `"object": "Identity"` and got `ERROR: Unknown type`. The dispatcher's
+`from_map` spells it **lowercase** -- `{"identity", statement::Identity}`
+(`jimple_method_body.h:129`) -- while `to_map`, which is only used for printing, spells it
+`"Identity"`. Reading the wrong one of the two is how the tag was got wrong.
+
+With `"object": "identity"`, a three-statement method -- declare `$i0`, identify it as
+`@parameter0`, return -- **SIGSEGVs during GOTO conversion**. The cause is the one §46.2
+read off the source:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare local (`$i0`); every other lookup in this frontend goes through
+`get_symbol_name(class, function, name)`. The lookup misses and the dereference is on null.
+
+### 47.1 Pinned, not fixed, and why
+
+`regression/jimple/github_4715_identity_crash_01` is the reproducer, as `KNOWNBUG`. It
+passes ctest, which in this repo means the bug is still live.
+
+It is not fixed here because the fix is not mechanical. The arm's right-hand side is a
+`symbolt` that is never added to the context:
+
+```cpp
+symbolt rhs;
+rhs.name = "@" + at_identifier;
+rhs.id = "@" + at_identifier;
+code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
+```
+
+so the statement was meant to assign from a symbol nothing declares. Since the arm has never
+run -- it crashes first -- there is no observed behaviour to preserve, and choosing what
+`$i0 = @parameter0` should lower to is a design decision about how this frontend binds
+parameters, not a migration step. Converting it would be inventing semantics and calling it
+IREP2.
+
+So jimple's B-1 stops at 97 with one legacy statement arm left, and that arm is blocked on a
+question about the frontend rather than about the migration.
+
+## 48. B-2's residue, and two more spelling false positives (2026-09-15)
+
+§39 recorded jimple's B-2 as met. `scripts/irep2/bars.py` reports 10 raw and 8 refined, so
+the two disagree, and taking the eight one at a time explains why.
+
+**Three convert**: `jimple_method.cpp:92` (a method's code type),
+`jimple-language.cpp:97` and `:193` (a post-processed symbol's type and `main`'s). 30 of 30
+jimple and 876 of 876 unit tests; B-2* 8 -> **5**.
+
+**Two were never debt**, and both are cases the script's own caveat names:
+
+- `jimple_ast.h:69` -- `create_jimple_symbolt` takes a `const type2tc &`, so
+  `symbol.set_type(t)` already writes IREP2. The grep matched the spelling `set_type(t)` and
+  the refinement could not tell, because the argument is a plain name.
+- `jimple_method.cpp:93` -- `set_value(body->to_code2t(...))` passes an `expr2tc` returned by
+  a method call, which is neither a `migrate_*` call nor a `*2tc` constructor.
+
+Wrapping the first in `migrate_type` does not compile, which is how it was caught. §58's
+`B-2*` is an upper bound for exactly this reason, and jimple is the frontend where the
+remaining count is small enough for the residue to matter: 5 of the 8 are real.
+
+**Three stay legacy, each for a reason already recorded**: `jimple_file.cpp:159` sets a
+`width` attribute on the class struct type immediately before writing it, and that attribute
+is read by this frontend's own `newarray` arms (§45.2 of the parent document);
+`jimple-language.cpp:108` and `:194` are body writes, which §6.1 of
+`scope-python-irep2.md` established must stay lazy until every symbol they name exists.
+
+So jimple's B-2 residue is 5 reported, 3 of which are by design and 2 of which are miscounts.
+That is what "met" in §39 meant, stated in numbers.
+## 38. Every binop the frontend supports, and what a zero still hid
+
+§37.3 concluded that the expression `to_exprt` arms were callerless. They were
+not. `jimple_binop::to_expr2t` handled six operators and sent everything else to
+the migrating default, whose legacy arm converts *its own operands* with
+`to_exprt` -- so a multiplication with a cast operand would have reached
+`jimple_cast::to_exprt`. The census read zero because the corpus's binops are all
+among the six, which is §36.1's own lesson landing one section after it was
+written down.
+
+### 38.1 What the frontend actually supports
+
+`jimple_binop::from_json` takes the operator string verbatim apart from mapping
+`==` to `=`, and the legacy arm hands it to `gen_binary`, which builds an `exprt`
+with that id whatever it is. So the supported set is not a list in the frontend at
+all -- it is whatever `migrate_expr` knows. Probing 29 candidate spellings through
+the frontend separates them cleanly:
+
+| Converts | Rejected |
+|---|---|
+| `+ - * / mod < <= > >= = == notequal and or bitand bitor bitxor shl ashr lshr` | `% shr << >> >>> != & \| ^` |
+
+Twenty work; nine produce `ERROR: migrate expr failed: <op>`. The rejected ones
+are mostly the symbolic spellings of operators that *are* supported under a word
+(`&` versus `bitand`), which is worth knowing before assuming a parser change is
+safe.
+
+The IREP2 arm covered 6 of the 20. The other 13 are added here, and all 20 emit a
+byte-identical instruction. Two details fell out of the measurement rather than
+from reading: the relational and logical kinds return a bool-typed node and the
+*enclosing assignment* is what casts it, which is why the dump shows
+`(signed int)($i1 < 2)`; and `and`/`or` take the operands as they come, not as
+bools, because the legacy arm typed the node with the left-hand side's type too.
+
+### 38.2 `ashr` and `lshr` cannot be told apart here
+
+Both print `>>`, so the dump cannot separate them. Nor can a verdict: `-8 ashr 1`
+is `-4` and `-8 lshr 1` is `2147483644`, but a program dividing by
+`(x >> 1) + 4` reports division-by-zero either way. Swapping the two arms leaves
+every dump identical and all 30 tests passing.
+
+The reason is structural: `jimple_type` builds nothing but int, bool, void and
+pointers (§23.1), so the left operand of a shift is always signed, and that is the
+case where the two coincide in everything this frontend can observe. So the
+mapping is pinned by mirroring `migrate_expr`'s arms (`migrate.cpp:1565` and
+`:1725`) and by nothing else -- stated here rather than left as an unexamined pass
+in the test log. The repo has hit this before from the C side, where unsigned types
+make the difference visible.
+
+### 38.3 The test, and three mutations
+
+`github_4715_binop_kinds_01` puts all twenty operators in one method and pins the
+emitted instructions as a single ordered sequence, so each mapping is pinned by
+its own printed form and by its position. Three mutations, each failing that test
+and nothing else: `mod` mapped to `div`, `<=` to `<`, and `bitxor` to `bitor`.
+
+A regex trap, for the next person writing one of these: a raw-string `r";\n"` puts
+a literal backslash and `n` in the pattern, which `rstrip("\n")` does not remove,
+so the pattern ends up requiring a newline before `$` and cannot match anything.
+Build the separators explicitly instead of trimming them off the end.
+
+### 38.4 What still blocks the deletion
+
+One thing. An unsupported operator reaches `jimple_expr::to_expr2t`, whose legacy
+arm produces `ERROR: migrate expr failed: <op>` -- so `jimple_binop::to_exprt`
+remains reachable purely as the error path, and its operand conversions keep every
+expression arm reachable with it.
+
+Closing that means rejecting an unsupported operator in the IREP2 arm, which
+changes the message a user sees and so wants its own change and its own test. After
+it, the twelve expression arms and `jimple_assignment`'s go the way the seven in
+#7786 did.
+
+### 38.4a `and` and `or` were invalid in both representations
+
+CI found this, and no local run could have. `github_4715_binop_kinds_01` aborted
+the assert-enabled `DebugOpt` build at `goto_check.cpp`'s `and_id`/`or_id` arm,
+which asserts the node *and each operand* are bool. The arm here handed
+`and2tc`/`or2tc` two `signed int` operands, because the legacy arm it mirrors
+passed `gen_binary` the left-hand side's type.
+
+The legacy spelling is no better: `migrate_expr`'s `and` arm asserts
+`expr.type().id() == typet::t_bool`, so a jimple `and` over two ints aborted an
+assert build on *either* path. The defect predates the IREP2 arm; what the new
+test did was reach it for the first time, since no corpus program used a Boolean
+binop.
+
+Both operands are now converted with `c_implicit_typecast` and the node is bool,
+so the dump reads `(signed int)((_Bool)$i1 && 1)` where it read
+`(signed int)($i1 && 2)`. That is a deliberate change to the emitted GOTO rather
+than a byte-identical port, and the only one in this slice: the constant folds to
+`1` because `(_Bool)2` is `true`.
+
+The lesson for the campaign's gates: a byte-identical dump comparison under
+`NDEBUG` proves the two paths agree, not that either is *valid*. Two asserts that
+both paths trip stay invisible to it.
+
+### 38.4b Probing for the rest of that class
+
+With the workspace switched to `DebugOpt` (`-O2 -g`, no `-DNDEBUG`, i.e. CI's
+asserts locally) the obvious follow-up was to ask what else aborts. Seven jimple
+probes over shapes the corpus has no instance of: an `If` on a bare `int` symbol,
+a comparison stored into an `int` and then used as a condition, three-level nested
+arithmetic, an `and` of two comparisons, an `and` inside an `If` condition, a
+`bitand` over a comparison, and a shift by a comparison.
+
+Two abort on master, both `and` with operands that are *already* bool, at
+`migrate.cpp:1434` -- the same assertion as §38.4a, reached because master's arm
+covers six operators and sends `and` to the legacy one. Both pass here.
+
+They are kept as `github_4715_and_of_comparisons_01` and
+`github_4715_and_in_condition_01`, and what they pin is worth stating exactly:
+**not** the bool conversion -- their operands are bool already, so dropping the
+conversion leaves them passing -- but that a Boolean binop is handled natively at
+all. `github_4715_binop_kinds_01` is the one that pins the conversion, its `and`
+having `int` operands. The three together cover both halves, and the mutation that
+separates them is what showed which is which.
+
+The other 126 probe runs from `scope-clang-c-irep2.md` §143 and
+`frontends-to-irep2.md` §40-41, re-run under asserts, abort nowhere.
+
+### 38.5 Status
+
+Twenty-eight PRs. B-1 reads 155, one more than §37, and the extra hit is a comment
+mentioning `to_exprt` by name -- the same class of false positive B-2's command has
+(§35.2), now on B-1. The deletion §37.3 promised is one small slice further away
+than that section claimed.
+
+## 39. The expression subtree retires
+
+Two changes, the second only possible because of the first.
+
+### 39.1 Rejecting an unsupported operator where it is built
+
+§38.4 left one caller for the expression `to_exprt` arms: an operator outside the
+twenty reached `jimple_expr::to_expr2t`, whose legacy arm handed it to
+`gen_binary` and then to `migrate_expr`, which rejected it. `jimple_binop::to_expr2t`
+now rejects it directly, with `throw "Unsupported Jimple operator: " + binop` --
+the same mechanism `jimple_type` already uses two files away, so the same handler
+and the same exit code 6.
+
+The user-visible output improves rather than merely moving. Before, `%` produced
+three lines: the irep dump of the node, `migrate expr failed`, and
+`ERROR: migrate expr failed: %`. Now it produces one, naming the operator the
+source actually contained. The partition is unchanged, re-measured across all 29
+candidate spellings: 20 convert, 9 are rejected, same nine.
+
+`github_4715_binop_unsupported_01` pins the message; replacing the throw with a
+silent `add2tc` fails it and nothing else.
+
+### 39.2 Twelve arms, and the argument for each
+
+With that, no live code calls an expression `to_exprt`. Removed:
+`jimple_constant`, `jimple_symbol`, `jimple_binop`, `jimple_cast`,
+`jimple_lengthof`, `jimple_expr_invoke`, `jimple_virtual_invoke`,
+`jimple_newarray`, `jimple_deref`, `jimple_nondet`, `jimple_virtual_member`, and
+`jimple_assignment`'s.
+
+The caller argument is the same shape as §36.2's, and it is now complete because
+the two escape hatches are closed: `jimple_binop`'s (§39.1) and
+`jimple_assignment::to_code2t`'s delegation (§37). Every surviving `to_exprt` was
+checked for operand conversions first -- `jimple_identity`, `jimple_assertion`,
+`jimple_static_member`, `jimple_class_field` and `jimple_throw` are all leaves,
+and `jimple_method` and `jimple_file` reach only `to_code2t` and
+`jimple_class_field` respectively. So nothing that survives can call something
+that was deleted, which matters here because virtual dispatch would have fallen
+back to the base silently rather than failing to compile.
+
+B-1 goes from 155 to 97.
+
+### 39.3 What is left, and why each one is there
+
+| Arm | Why it stays |
+|---|---|
+| `jimple_method`, `jimple_file`, `jimple_class_field` | the class and method conversion path, which is not an expression |
+| `jimple_static_member` | its `to_expr2t` covers two intrinsics and leaves the member access on the default, still marked "Needs OOP members" (§25.2) |
+| `jimple_throw` | live, but its operand conversion is commented out upstream (§31.1) |
+| `jimple_identity`, `jimple_assertion` | unconstructible (§19) -- a different argument from callerless, so left alone as in #7786 |
+
+Three of those seven are the honest remainder of the frontend: the static member
+access, `jimple_throw`, and the two unconstructible classes. None is a mechanical
+port.
+
+### 39.4 Status
+
+Twenty-nine PRs. B-1 is 97, from 202 when §32 opened; B-2 is met (§35). The
+expression and statement migrations are complete and their legacy arms are gone
+except for the four above.

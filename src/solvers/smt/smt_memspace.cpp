@@ -448,6 +448,18 @@ smt_astt smt_solver_baset::init_pointer_obj(
     }
   }
 
+  /* SIG_DFL, SIG_ERR and SIG_IGN compare unequal to the address of any
+   * function (C11 7.14p3). glibc, Darwin and the UCRT spell them 0, -1 and 1;
+   * NULL already owns 0, so keep a function off the other two. */
+  if (type && type->is_code())
+  {
+    assert_expr(greaterthan2tc(start_sym, constant_int2tc(ptr_loc_type, 1)));
+    assert_expr(lessthan2tc(
+      end_sym,
+      constant_int2tc(
+        ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width()))));
+  }
+
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
 

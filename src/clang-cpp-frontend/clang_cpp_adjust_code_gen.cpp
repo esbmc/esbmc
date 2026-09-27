@@ -8,6 +8,16 @@ static exprt gen_vptr_init_rhs(
   const struct_union_typet::componentt &comp,
   const code_typet &ctor_type);
 
+/// A ctor's or dtor's first argument is `this`, so its pointee names the class
+/// the function is declared in. Derived rather than read from the code type's
+/// `#member_name`, which is no part of the IREP2 code type -- 420 observations
+/// over the C++ corpora agree (frontends-to-irep2.md §50).
+static irep_idt ctor_class_id(const code_typet &ctor_type)
+{
+  assert(!ctor_type.arguments().empty());
+  return ctor_type.arguments().front().type().subtype().identifier();
+}
+
 void gen_vptr_initializations(contextt &context, symbolt &symbol)
 {
   /*
@@ -54,7 +64,7 @@ void gen_vptr_initializations(contextt &context, symbolt &symbol)
 
   // get the class' type where this ctor is declared
   const symbolt *ctor_class_symb =
-    namespacet(context).lookup(ctor_type.member_name());
+    namespacet(context).lookup(ctor_class_id(ctor_type));
   assert(ctor_class_symb);
   // get the `components` vector from this class' type
   const struct_typet::componentst &components =
@@ -129,7 +139,9 @@ void gen_vptr_initializations(contextt &context, symbolt &symbol)
   (void)components;
 
   value.need_vptr_init(false);
-  symbol.set_value(std::move(value));
+  expr2tc value2;
+  migrate_expr(value, value2);
+  symbol.set_value(value2);
 }
 
 static exprt gen_vptr_init_rhs(
@@ -147,7 +159,7 @@ static exprt gen_vptr_init_rhs(
 
   // get the corresponding vtable variable symbol
   std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
-                              "@" + ctor_type.member_name().as_string();
+                              "@" + ctor_class_id(ctor_type).as_string();
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 

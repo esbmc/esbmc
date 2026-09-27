@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--clang-cpp-irep2-adjust-only --std c++17
+^VERIFICATION FAILED$
+^  assertion a\.v == 1 && b\.v == 2$

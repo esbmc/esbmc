@@ -257,6 +257,21 @@ def import_module_by_name(
         # Keep legacy error text: regression tests assert this exact line.
         _resolver_error(f"Module '{module_name}' not found.")
         return None
+    except SyntaxError as exc:
+        # Importing compiles the module, so a source ESBMC cannot parse
+        # escapes here and not as an ImportError. It reached the user as a raw
+        # CPython traceback naming files inside the extracted temp directory,
+        # gone by the time anyone reads them (#7678). Non-UTF-8 source arrives
+        # here too: CPython reports it as a SyntaxError carrying the decode
+        # error.
+        _resolver_warning(f"{module_name} module-parse-failed: {exc}")
+        return None
+    except Exception as exc:  # pylint: disable=broad-except
+        # Importing also *runs* the module body, so anything it raises escapes
+        # the same way. The module parsed; it failed executing, so the reason
+        # must not claim otherwise.
+        _resolver_warning(f"{module_name} module-import-failed: {exc}")
+        return None
 
 
 def _collect_import_targets(

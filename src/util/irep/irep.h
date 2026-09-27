@@ -481,20 +481,25 @@ public:
   }
 
   /// Owning class tag of a member function type, e.g. `tag-MyClass`.
-  /// Written by the clang-cpp, Solidity and Python frontends; read by
-  /// clang_cpp_adjust_code_gen to locate a constructor's class symbol.
-  /// Carriage stays on the legacy irep — see
-  /// docs/roadmap/scope-v2-w3-attribute-carriage.md.
+  /// Written by the Solidity and Python frontends; **no reader left in the
+  /// tree**. clang_cpp_adjust_code_gen used to locate a constructor's class
+  /// symbol through it and now derives that from the `this` argument's pointee
+  /// instead (docs/roadmap/frontends-to-irep2.md §50), so the remaining writes
+  /// are dead and can go with their frontends' own slices.
   inline const irep_idt &member_name() const
   {
     return get(a_member_name);
   }
 
   /// Source-level *spelling* of a type, e.g. `signed char`, `long long`.
-  /// Carries what IREP2's closed type system deliberately normalizes away, so
-  /// its three readers are all presentation consumers (counterexample text,
-  /// generated C, exception-id strings) rather than verifier core. Same
-  /// carriage note as member_name().
+  /// Carries what IREP2's closed type system deliberately normalizes away.
+  /// Three readers are presentation consumers (counterexample text, generated
+  /// C, exception-id strings), but a fourth is not: the python frontend's
+  /// `type_utils::is_char_type` asks whether an 8-bit bitvector is a character
+  /// rather than an `int8`, and seven conversion sites branch on the answer, so
+  /// dropping the spelling changes what is verified
+  /// (docs/roadmap/scope-python-irep2.md §8). Carriage stays on the legacy
+  /// irep.
   inline const irep_idt &cpp_type() const
   {
     return get(a_cpp_type);

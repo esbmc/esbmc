@@ -1,20 +1,21 @@
+# pythonfrontend leaves mode_table and the C and Python model entry points for
+# the executable to supply, as esbmc and python2goto do.
+set(PYTHON_TEST_LIBS mode_table_obj pysrclib clibs pythonfrontend)
+
 if(NOT WIN32)
-new_unit_test(python_annotation_test "python_annotation_test.cpp" "pythonfrontend;util_esbmc;bigint;nlohmann_json::nlohmann_json")
+new_unit_test(python_annotation_test "python_annotation_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint;nlohmann_json::nlohmann_json")
 endif()
-new_unit_test(symbol_id_test "symbol_id_test.cpp" "pythonfrontend")
-new_unit_test(python_class_test "python_class_test.cpp" "pythonfrontend")
-new_unit_test(complex_type_test "complex_type_test.cpp" "pythonfrontend;util_esbmc;bigint")
-new_unit_test(irep2_type_roundtrip_test "irep2_type_roundtrip_test.cpp" "pythonfrontend;util_esbmc;bigint")
-# clangcfrontend_stuff provides add_padding (padding.cpp), which
-# python_adjust's S1 adjust_type reuses for byte-identical struct layout.
-new_unit_test(python_adjust_test "python_adjust_test.cpp" "pythonfrontend;clangcfrontend_stuff;util_esbmc;bigint")
-new_unit_test(function_call_cache_test "function_call_cache_test.cpp" "pythonfrontend")
-new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "pythonfrontend")
-# pysrclib carries the operational-model goto binary this reads back.
-new_unit_test(model_goto_blob_test "model_goto_blob_test.cpp" "mode_table_obj;pysrclib;pythonfrontend;clibs;gotoprograms;langapi;util_esbmc;bigint")
-new_unit_test(element_type_registry_test "element_type_registry_test.cpp" "pythonfrontend;util_esbmc;bigint")
+new_unit_test(symbol_id_test "symbol_id_test.cpp" "${PYTHON_TEST_LIBS}")
+new_unit_test(python_class_test "python_class_test.cpp" "${PYTHON_TEST_LIBS}")
+new_unit_test(complex_type_test "complex_type_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
+new_unit_test(irep2_type_roundtrip_test "irep2_type_roundtrip_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
+new_unit_test(python_adjust_test "python_adjust_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
+new_unit_test(function_call_cache_test "function_call_cache_test.cpp" "${PYTHON_TEST_LIBS}")
+new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "${PYTHON_TEST_LIBS}")
+new_unit_test(model_goto_blob_test "model_goto_blob_test.cpp" "${PYTHON_TEST_LIBS};gotoprograms;langapi;util_esbmc;bigint")
+new_unit_test(element_type_registry_test "element_type_registry_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
 if(NOT WIN32)
-new_unit_test(function_call_expr_error_test "function_call_expr_error_test.cpp" "pythonfrontend;util_esbmc;bigint")
+new_unit_test(function_call_expr_error_test "function_call_expr_error_test.cpp" "${PYTHON_TEST_LIBS};util_esbmc;bigint")
 endif()
 
 # Differential model tests: a pytest/hypothesis suite (test_*.py in this directory)

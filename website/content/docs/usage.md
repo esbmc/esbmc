@@ -424,6 +424,32 @@ esbmc file.c --floatbv --round-to-zero
 Only the initial value is rewritten, so a program calling `fesetround()` still
 changes the mode from that point on.
 
+## Floating-point to integer conversion
+
+C11 6.3.1.4p1 and [conv.fpint]/1 make a conversion undefined when the integral
+part of the floating value is not representable in the destination integer type.
+`--overflow-check` now checks it:
+
+```c
+double d = 1e300;
+long long x = (long long)d;      /* undefined */
+```
+
+```
+  FAILED       [main.assertion.1]  line 7  floating-point conversion out of range of signedbv on typecast
+VERIFICATION FAILED
+```
+
+The existing cast check was gated on `--int-encoding`, so the default bitvector
+mode had no check at all and reported `VERIFICATION SUCCESSFUL` here
+([#7622](https://github.com/esbmc/esbmc/pull/7622)). Truncation is toward zero,
+so the representable operands are exactly `[MIN, MAX + 1)`; a NaN operand fails
+both comparisons, which is correct — that conversion is equally undefined.
+
+`--no-fp-conversion-check` turns just this check off and leaves the rest of
+`--overflow-check` in place. The check is disabled under `--sv-comp`, whose
+no-overflow property covers signed-integer arithmetic only.
+
 ## Function-pointer calls with no target
 
 A call through a function pointer whose value matches no function in the program
@@ -665,6 +691,30 @@ exploration continues past the first violation until
 `--multi-property-interleavings` consecutive interleavings decide nothing new; a
 run that stops early states that its report is partial.
 
+### Under the verification strategies
+
+`--multi-property` works with plain BMC and with the k-step strategies; two
+strategies reject it:
+
+| Strategy | Per-property result |
+|---|---|
+| `--unwind N` | Every violated claim `FAILED`, the rest `PASSED` |
+| `--k-induction`, `--incremental-bmc` | `FAILED` at the k where a base case finds the violation, `PASSED` once the forward condition (or, under `--k-induction`, the inductive step) proves the remaining claims, `UNKNOWN` if neither happens by `--max-k-step` |
+| `--falsification` | `FAILED` as above; nothing is proved, so a claim not violated by `--max-k-step` is `UNKNOWN` |
+| `--k-induction-parallel` (except with `--termination`), `--falsify-context-bound` | Rejected with an error |
+
+This holds whether `--multi-property` is given or implied by
+`--parallel-solving` or `--all-witnesses`. Under a k-step strategy the run
+keeps going past a violation and prints one table at the end, with property ids
+that stay the same across k. Running out of k steps after a violation was
+recorded ends `VERIFICATION FAILED` ([#7913](https://github.com/esbmc/esbmc/pull/7913));
+a run that neither violated nor proved anything ends `VERIFICATION UNKNOWN`.
+`--falsification` does not stop after a violation, because a larger k can raise
+claims that no smaller k did; with `--unlimited-k-steps` it runs until killed
+and prints no table, so give it `--max-k-step`. Claims with the same
+comment at the same location still share one row
+([#7900](https://github.com/esbmc/esbmc/discussions/7900)).
+
 ### Enumerating all violating inputs
 
 ```sh
@@ -768,6 +818,16 @@ It hides genuine API misuse the models report, so it is off by default. It also
 leaves the checks ESBMC *generates* inside model code (those are controlled by
 `--no-standard-checks`), renumbers `--claim` indices, and is unsupported for
 Python.
+
+## When an option value swallows another option
+
+`boost::program_options` takes the next token as a value-taking option's value,
+whatever it looks like, so `--witness-output --show-loops` silently made
+`"--show-loops"` the witness path: the swallowed option never ran and the
+witness landed in files literally named `--show-loops.graphml`. ESBMC now warns
+when an option value names a registered option, on the command line and in
+`ESBMC_OPTS` alike ([#7538](https://github.com/esbmc/esbmc/pull/7538)). A bare
+`-` (stdout) is not treated as a match.
 
 ## When ESBMC itself crashes
 

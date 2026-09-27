@@ -277,6 +277,11 @@ STATIC_CAPABILITIES = {
     # materialised through it, so a negative offset is a different constant --
     # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
     "lp64_host",
+    # A `z3` executable is on PATH and the host is POSIX. The smtlib backend
+    # reads model values from a solver it spawns over a pipe
+    # (--smtlib-solver-prog); a build that links z3 need not also ship the
+    # executable, and Windows has no implementation of that pipe at all.
+    "z3_binary",
     # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
     # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
     # where such a test can only ever report a timeout.
@@ -319,6 +324,10 @@ DYNAMIC_CAPABILITY_PROBES = {
     "signed_wchar_host": {
         "source": '_Static_assert((__WCHAR_TYPE__)-1 < 0, "wchar_t is signed");\n'
         "int main() { return 0; }\n",
+    },
+    # The AArch64 builtin __mfp8 parses: an AArch64 target and LLVM 20 or later.
+    "mfp8": {
+        "source": "__mfp8 m; int main() { return 0; }\n",
     },
     # `long double` is the x87 80-bit format (64-bit significand) rather than
     # IEEE binary128. Exact floating-point identities hold in one and not the

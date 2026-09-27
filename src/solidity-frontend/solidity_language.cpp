@@ -16,6 +16,8 @@ CC_DIAGNOSTIC_POP()
 #include <solidity-frontend/solidity_convert.h>
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
+#include <util/irep/migrate.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <c2goto/cprover_library.h>
 #include <util/lang/c_link.h>
@@ -367,9 +369,21 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
       saved_values[s.id.as_string()] = s.get_value();
   });
 
-  clang_cpp_adjust adjuster(new_context);
-  if (adjuster.adjust())
-    return true;
+  // Phase 7's hop-off reaches this frontend too: the adjuster below is
+  // clang_cpp_adjust, so the IREP2 pass replaces it here on the same flag
+  // (docs/roadmap/scope-solidity-irep2.md §2). Default off.
+  if (config.options.get_bool_option("clang-cpp-irep2-adjust-only"))
+  {
+    clang_cpp_adjust_irep2 irep2_adjuster(new_context, true, false);
+    if (irep2_adjuster.adjust())
+      return true;
+  }
+  else
+  {
+    clang_cpp_adjust adjuster(new_context);
+    if (adjuster.adjust())
+      return true;
+  }
 
   // Restore pre-adjusted function bodies from intrinsics and sol64
   for (auto &[id, val] : saved_values)
@@ -382,6 +396,12 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   if (c_link(
         context, new_context, module)) // also populates language_uit::context
     return true;
+
+  // Same census the C++ frontend takes, over one shared definition: it names
+  // each symbol migration cannot represent and keeps walking
+  // (docs/roadmap/scope-solidity-irep2.md §3, step S.2).
+  if (config.options.get_bool_option("clang-cpp-irep2-migrate-census"))
+    migrate_census(context);
 
   return false;
 }

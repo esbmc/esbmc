@@ -39,11 +39,16 @@ std::string model_prog(const optionst &options, const char *name);
 
 /** Run the one-shot solver command on formula_path and parse the verdict from
  *  its standard output. Every %f in cmd is replaced by the (shell-quoted)
- *  formula path; if no %f is present, the path is appended. */
+ *  formula path; if no %f is present, the path is appended.
+ *
+ *  A non-null captured_output collects the solver's entire stdout, not just
+ *  the diagnostic tail, so a caller can parse a model straight out of it
+ *  (see neurosym_conv.cpp). Left null, behaviour is unchanged. */
 smt_resultt run_solver(
   const std::string &cmd,
   const std::string &formula_path,
-  const char *name);
+  const char *name,
+  std::string *captured_output = nullptr);
 } // namespace oneshot_process
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_ONESHOT_PROCESS_H */

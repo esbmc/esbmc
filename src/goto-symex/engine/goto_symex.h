@@ -338,6 +338,13 @@ protected:
    */
   void symex_assert();
 
+public:
+  /// The message of the claim an ASSERT instruction raises for itself, as
+  /// opposed to a check symex raises while evaluating its guard.
+  static std::string
+  assertion_message(const namespacet &ns, const goto_programt::instructiont &i);
+
+protected:
   /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
@@ -1603,6 +1610,11 @@ protected:
    * argumemt may be renamed to constant bool in symex_function_call_code(),
    * while we need to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
+  /** Key the reads the memcpy/memmove/memcmp/memchr intrinsics perform, which
+   * symex carries out internally rather than through a dereference (#7826). */
+  void key_intrinsic_pointer_reads(
+    const code_function_call2t &call,
+    const irep_idt &id);
   friend void build_goto_symex_classes();
 };
 

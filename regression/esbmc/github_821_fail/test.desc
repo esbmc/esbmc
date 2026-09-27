@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-simplify --incremental-bmc --little-endian
+^VERIFICATION FAILED$
+^.*assertion r\[1\] == 6$

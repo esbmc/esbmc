@@ -6,7 +6,7 @@ title: C++ Limitations
 > frontend. Many are actively being addressed — check the
 > [`C++` issue label](https://github.com/esbmc/esbmc/issues?q=is%3Aissue+is%3Aopen+label%3AC%2B%2B)
 > for the latest status. For what *is* supported, see
-> [C++ Support](./supported-features).
+> [C++ Support](/docs/c-cpp/supported-features).
 
 ## Constructor and destructor ordering
 
@@ -28,12 +28,11 @@ should not, or vice versa.
   correctly, and `push_back` converges under `--incremental-bmc`, but the
   element copy-constructor loop that `insert`'s shift runs unwinds indefinitely.
   Use a bounded `--unwind N` run for that case.
-- **`list` and `deque` have no allocator-taking constructors.** Both take the
-  `Allocator` template parameter and expose `get_allocator()`, but a constructor
-  that is *passed* an allocator is not modelled, so `std::list<int, A> c(a)` is
-  a parse error — the same gap `basic_string` has, though not `vector`, whose
-  constructors do take a trailing allocator
-  ([#7493](https://github.com/esbmc/esbmc/issues/7493)).
+- **`deque(iterator, iterator)` has no allocator-taking form.** Every other
+  `list` and `deque` constructor now pairs with one ([list.cons], [deque.cons]),
+  so `std::list<int, A> c(a)` parses. The iterator-pair `deque` constructor is
+  held back because its size has a separate off-by-one: accepting the standard
+  spelling would turn a compile error into a silently wrong answer.
 - **Comparing two `std::list` iterators with `<` is rejected**, as it is against
   libc++: a list iterator is not random-access, so the ordering has to come from
   a user-declared `operator<`. What changed is that such a user-declared
@@ -76,11 +75,24 @@ call shape works.
 ## Standard library
 
 - Headers listed under
-  [Not modelled](./supported-features#not-modelled) — including `<regex>`,
-  `<ranges>`, `<format>`, `<forward_list>` and `<coroutine>` — have no
-  operational model. `--mix-cpp-host-headers` lets an unmodelled include fall
+  [Not modelled](/docs/c-cpp/supported-features#not-modelled) — `<ranges>`,
+  `<format>`, `<print>`, `<coroutine>`, `<generator>`, `<barrier>` and
+  `<stdfloat>` — have no operational model. `--mix-cpp-host-headers` lets an unmodelled include fall
   through to your host header, but ESBMC then has to verify the real
   implementation, which is frequently intractable.
+- Three modelled headers decline to compute what they describe, so a property
+  that depends on the result cannot be proved: `<regex>` answers every match
+  nondeterministically, `<syncstream>` transfers no characters, and `<codecvt>`
+  performs no conversion. `<charconv>` has the integral overloads only, and
+  `<concepts>` omits the cross-type `_with` concepts and the `invocable` family
+  rather than approximate them.
+- `<version>` promises only the eight feature-test macros ESBMC can honour. A
+  program that branches on a macro it leaves undefined takes the
+  feature-unavailable path, which is the conservative answer but not always the
+  one a host build takes.
+- `<latch>`, `<semaphore>` and `<stop_token>` leave out the `constexpr`
+  constructors, the timed acquires (there is no clock to time them against) and
+  `jthread`.
 - Mixing the operational models with host headers can produce ambiguity errors
   for names defined by both, such as `char_traits` and `istream`
   ([#3387](https://github.com/esbmc/esbmc/issues/3387)).
@@ -120,9 +132,9 @@ Calendar and time-zone facilities are absent: the C++20 types
 interleaves at every step, so a sleep would not constrain the schedule it
 explores.
 
-`std::ratio` covers what `<chrono>` needs and no more: `ratio_add`,
-`ratio_subtract` and the comparison aliases (`ratio_equal`, `ratio_less`, …) are
-not declared, nor are the SI aliases outside `nano` / `micro` / `milli`.
+`std::ratio` is complete — `<ratio>` carries [ratio.syn] in full, including
+`ratio_add`, `ratio_subtract`, the six comparison aliases with their C++17 `_v`
+variables, and the SI typedefs from `atto` to `exa`.
 
 ## Standard version
 
@@ -143,3 +155,6 @@ but they shape what a C++ result means:
   `--k-induction` to seek an unbounded proof.
 - ESBMC targets x86_64 by default; other target architectures are not yet
   generically supported ([#1585](https://github.com/esbmc/esbmc/issues/1585)).
+  A target clang no longer maps — `--ppc-macos`, whose triple it rejects as
+  unknown — is reported as `PARSING ERROR` carrying clang's own diagnostic,
+  rather than crashing ESBMC.

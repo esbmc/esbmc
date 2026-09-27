@@ -144,7 +144,9 @@ def _rejection_location(exc: BaseException) -> str | None:
     if located:
         return f"{located[0]}:{located[1]}:{located[2]}"
     if isinstance(exc, SyntaxError) and exc.filename:
-        return f"{exc.filename}:{exc.lineno or '?'}:{exc.offset or '?'}"
+        line = exc.lineno if exc.lineno is not None else "?"
+        col = exc.offset if exc.offset is not None else "?"
+        return f"{exc.filename}:{line}:{col}"
     return ""
 
 

@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-simplify --incremental-bmc --little-endian
+^VERIFICATION SUCCESSFUL$

@@ -910,7 +910,7 @@ bool contains_float(const expr2tc &e)
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
-  ai_baset &,
+  ai_baset &ai,
   const namespacet &ns)
 {
   (void)ns;
@@ -987,12 +987,8 @@ void interval_domaint::transform(
   }
 
   case ASSERT:
-  {
-    // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    if (!contains_float(instruction.guard) && enable_assume_asserts)
-      assume(instruction.guard);
+    assume_assertion(instruction.guard, ai);
     break;
-  }
 
   case FUNCTION_CALL:
   case END_FUNCTION:
@@ -1386,6 +1382,18 @@ void interval_domaint::assume_rec(
   else if (
     is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
     apply_assume_less<interval_domaint::real_intervalt>(lhs, rhs);
+}
+
+void interval_domaint::assume_assertion(
+  const expr2tc &guard,
+  const ai_baset &ai)
+{
+  // There is a bug in Floats that need to be investigated!
+  // regression-float/nextafter
+  if (
+    enable_assume_asserts && !ai.continue_past_failed_assertions &&
+    !contains_float(guard))
+    assume(guard);
 }
 
 void interval_domaint::assume(const expr2tc &cond)

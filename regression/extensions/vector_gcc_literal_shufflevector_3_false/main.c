@@ -1,6 +1,6 @@
 #include <assert.h>
 typedef int v4si __attribute__((__vector_size__(16))); // 4
-typedef char v4si2 __attribute__((__vector_size__(32))); // 8
+typedef int v4si2 __attribute__((__vector_size__(32))); // 8
 
 int main() {
     v4si v1 = (v4si){5, 6, 7, 8};

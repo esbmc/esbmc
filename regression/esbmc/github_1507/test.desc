@@ -1,4 +1,5 @@
 CORE
 main.c
 
-^VERIFICATION SUCCESSFUL$
+^\s*FAILED\s+\[.*\]\s+line\s+[0-9]+\s+array bounds violated: array upper bound$
+^VERIFICATION FAILED$

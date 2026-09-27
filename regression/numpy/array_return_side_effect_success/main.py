@@ -2,16 +2,18 @@ import numpy as np
 
 calls = 0
 
-def side_effect():
+
+def make():
     global calls
     calls = calls + 1
-    return np.array([10, 20, 30])
+    a = np.array([10, 20, 30])
+    return a
 
 
-a = side_effect()
+a1 = make()
 assert calls == 1
-assert a[0] == 10
+assert a1[0] == 10
 
-b = side_effect()
+a2 = make()
 assert calls == 2
-assert b[1] == 20
+assert a2[1] == 20

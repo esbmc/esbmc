@@ -1,0 +1,5 @@
+CORE
+main.c
+--little-endian
+^VERIFICATION FAILED$
+^.*assertion c\[1\] == 6$

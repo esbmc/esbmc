@@ -1,12 +1,8 @@
-/* Reading through a struct's zero-length array member (the GCC extension) drove
- * dereferencet::stitch_together_from_byte_array with num_bytes == 0. Its only
- * guard was an assert, which NDEBUG compiles out of the shipping build, so the
- * stitching loop read bytes[-1] and ESBMC died with SIGSEGV instead of
- * producing a verdict. It now fails loudly in every build.
- *
- * The refusal is not the end state -- clang runs this program and the assertion
- * holds -- but a diagnosable error beats an out-of-bounds read inside the
- * verifier. */
+/* Copying a struct with a zero-length array member (the GCC extension) into a
+ * heap object rebuilds the struct from the object's bytes, member by member.
+ * The member owns no bytes, so the copy writes the header and leaves the
+ * calloc'd tail zero. Stitching the member together from zero bytes used to
+ * stop ESBMC with "cannot read a zero-width object". */
 #include <assert.h>
 #include <stdlib.h>
 
@@ -28,6 +24,7 @@ int main(void)
   if (!p)
     return 0;
   *p = tmpl;
+  assert(p->a == (void *)0x1234);
   assert(((unsigned char *)&p->slots[0])[1] == 0);
   return 0;
 }

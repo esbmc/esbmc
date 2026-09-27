@@ -19,6 +19,8 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 
+#include "float_consts.h"
+
 namespace
 {
 expr2tc testing_array(unsigned count)
@@ -139,6 +141,14 @@ TEST_CASE("expr2t ordering is a strict total order (H-B1)", "[core][irep2]")
     add2tc(u32, c5, c7),
     testing_array(2),
     testing_array(5), // unequal member count
+    float_const(0.0),
+    float_const(0.0),       // equal to element [14], distinct pointer
+    float_const(0.0, true), // -0.0: IEEE-equal to [14], a different literal
+    float_const(1.0),
+    float_nan(),
+    float_nan(), // equal to element [18], though IEEE compares NaNs unequal
+    float_inf(false),
+    float_inf(true),
   };
 
   check_order_laws(corpus);

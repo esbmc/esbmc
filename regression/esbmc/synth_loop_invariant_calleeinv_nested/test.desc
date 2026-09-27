@@ -3,5 +3,6 @@ main.c
 --synthesise-loop-invariants --unwind 6 --multi-property --result-only
 \A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
 ^WARNING: --synthesise-loop-invariants added no invariant: no loop matched the affine counter/accumulator shape, or every match was declined; the run proceeds unchanged$
-^  PASSED       \[main\.assertion\.1\]  line 34  loop invariant base case$
+^  PASSED       \[main\.assertion\.\d+\]  line 34  loop invariant base case \[i <= 4\]$
+^  PASSED       \[main\.assertion\.\d+\]  line 34  loop invariant base case \[return_value\S* == 4\]$
 ^VERIFICATION SUCCESSFUL$

@@ -49,7 +49,11 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-add_executable(esbmc main.cpp
+# Everything the driver does -- option handling, GOTO preparation, the BMC
+# strategies, reporting -- lives in a library so unit tests can reach it. The
+# executable keeps the entry point and the two definitions that only make sense
+# for a real binary: the build ID stamped into it, and the language mode table.
+add_library(esbmc-driver
     parseoptions/bmc_strategy.cpp
     parseoptions/command_line_options.cpp
     parseoptions/driver.cpp
@@ -58,18 +62,21 @@ add_executable(esbmc main.cpp
     parseoptions/k_induction.cpp
     parseoptions/process_goto_program.cpp
     parseoptions/property_monitors.cpp
-    bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
-target_include_directories(esbmc
-    PRIVATE ${CMAKE_BINARY_DIR}/src
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${Boost_INCLUDE_DIRS}
+    bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
+target_include_directories(esbmc-driver
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
+target_link_libraries(esbmc-driver PUBLIC
+                            esbmc_common
+                            ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi
-                            solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS}
+                            solvers clibs gotoalgorithms cache ESBMC::boost goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
+
+add_executable(esbmc main.cpp globals.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+target_link_libraries(esbmc PRIVATE esbmc-driver)
 if(MSVC)
   # Windows counterpart of the large stack main.cpp asks for elsewhere: its
   # default is 1MB, so deeply nested expressions overflow sooner still. The
@@ -93,7 +100,7 @@ if(MIMALLOC_TARGET STREQUAL "mimalloc-obj")
 elseif(MIMALLOC_TARGET)
   # Shared/dynamic libc: the archive override interposes fine. Link last so its
   # malloc/operator new override wins.
-  target_link_libraries(esbmc ${MIMALLOC_TARGET})
+  target_link_libraries(esbmc PRIVATE ${MIMALLOC_TARGET})
 endif()
 install(TARGETS esbmc DESTINATION bin)
 install(FILES ${CMAKE_SOURCE_DIR}/include/esbmc.h DESTINATION include)

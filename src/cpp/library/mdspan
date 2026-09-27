@@ -1,0 +1,399 @@
+#ifndef ESBMC_MDSPAN
+#define ESBMC_MDSPAN
+
+// C++23 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// extents stores every extent, not just the dynamic ones [mdspan.extents] asks
+// it to: extent(r) is the only way to read one back, so the two are
+// indistinguishable from inside a verified program and one array costs less
+// symex than a packed one plus its index map.
+//
+// Not modelled, each failing at compile time: layout_stride, submdspan,
+// layout_left_padded and layout_right_padded, aligned_accessor, the container
+// adaptors (mdarray), and conversion between mdspans of differing extents.
+#if __cplusplus >= 202302L
+
+#  include "cstddef"
+#  include "span" // dynamic_extent
+
+namespace std
+{
+template <class IndexType, size_t... Extents>
+class extents
+{
+public:
+  typedef IndexType index_type;
+  typedef size_t size_type;
+  typedef size_t rank_type;
+
+private:
+  // Rank 0 still needs a storable array, so never size it 0.
+  static const rank_type __n = sizeof...(Extents);
+  static const rank_type __store = __n == 0 ? 1 : __n;
+  index_type __ext[__store];
+
+  static constexpr size_t __static_at(rank_type r) noexcept
+  {
+    const size_t __s[__store] = {Extents...};
+    return __s[r];
+  }
+
+public:
+  static constexpr rank_type rank() noexcept
+  {
+    return __n;
+  }
+
+  static constexpr rank_type rank_dynamic() noexcept
+  {
+    rank_type d = 0;
+    for (rank_type i = 0; i < __n; ++i)
+      if (__static_at(i) == dynamic_extent)
+        ++d;
+    return d;
+  }
+
+  static constexpr size_t static_extent(rank_type r) noexcept
+  {
+    return __static_at(r);
+  }
+
+  constexpr extents() noexcept
+  {
+    for (rank_type i = 0; i < __n; ++i)
+      __ext[i] =
+        __static_at(i) == dynamic_extent ? 0 : (index_type)__static_at(i);
+  }
+
+  // [mdspan.extents.cons]: the pack is either every extent or only the dynamic
+  // ones. They coincide when every extent is dynamic, as for dextents.
+  template <class... OtherIndexTypes>
+  constexpr explicit extents(OtherIndexTypes... exts) noexcept
+  {
+    const index_type __in[sizeof...(OtherIndexTypes)] = {(index_type)exts...};
+    if (sizeof...(OtherIndexTypes) == __n)
+      for (rank_type i = 0; i < __n; ++i)
+      {
+        __ESBMC_assert(
+          __static_at(i) == dynamic_extent ||
+            __in[i] == (index_type)__static_at(i),
+          "extents: value contradicts a static extent");
+        __ext[i] = __in[i];
+      }
+    else
+      for (rank_type i = 0, d = 0; i < __n; ++i)
+        __ext[i] = __static_at(i) == dynamic_extent
+                     ? __in[d++]
+                     : (index_type)__static_at(i);
+  }
+
+  constexpr index_type extent(rank_type r) const noexcept
+  {
+    return __ext[r];
+  }
+
+  friend constexpr bool operator==(const extents &a, const extents &b) noexcept
+  {
+    for (rank_type i = 0; i < __n; ++i)
+      if (a.__ext[i] != b.__ext[i])
+        return false;
+    return true;
+  }
+};
+
+namespace __mdspan_detail
+{
+template <class IndexType, size_t Rank, size_t... Es>
+struct dext : dext<IndexType, Rank - 1, dynamic_extent, Es...>
+{
+};
+
+template <class IndexType, size_t... Es>
+struct dext<IndexType, 0, Es...>
+{
+  typedef extents<IndexType, Es...> type;
+};
+} // namespace __mdspan_detail
+
+template <class IndexType, size_t Rank>
+using dextents = typename __mdspan_detail::dext<IndexType, Rank>::type;
+
+struct layout_right
+{
+  template <class Extents>
+  class mapping
+  {
+  public:
+    typedef Extents extents_type;
+    typedef typename Extents::index_type index_type;
+    typedef typename Extents::rank_type rank_type;
+    typedef layout_right layout_type;
+
+  private:
+    extents_type __e;
+
+  public:
+    constexpr mapping() noexcept
+    {
+    }
+
+    constexpr mapping(const extents_type &e) noexcept : __e(e)
+    {
+    }
+
+    constexpr const extents_type &extents() const noexcept
+    {
+      return __e;
+    }
+
+    // [mdspan.layout.right]: the last index varies fastest.
+    constexpr index_type stride(rank_type r) const noexcept
+    {
+      index_type s = 1;
+      for (rank_type i = r + 1; i < Extents::rank(); ++i)
+        s *= __e.extent(i);
+      return s;
+    }
+
+    constexpr index_type required_span_size() const noexcept
+    {
+      index_type n = 1;
+      for (rank_type i = 0; i < Extents::rank(); ++i)
+        n *= __e.extent(i);
+      return n;
+    }
+
+    template <class... Indices>
+    constexpr index_type operator()(Indices... idx) const noexcept
+    {
+      const index_type __i[sizeof...(Indices)] = {(index_type)idx...};
+      index_type off = 0;
+      for (rank_type r = 0; r < Extents::rank(); ++r)
+        off += __i[r] * stride(r);
+      return off;
+    }
+
+    static constexpr bool is_always_exhaustive() noexcept
+    {
+      return true;
+    }
+
+    constexpr bool is_exhaustive() const noexcept
+    {
+      return true;
+    }
+  };
+};
+
+struct layout_left
+{
+  template <class Extents>
+  class mapping
+  {
+  public:
+    typedef Extents extents_type;
+    typedef typename Extents::index_type index_type;
+    typedef typename Extents::rank_type rank_type;
+    typedef layout_left layout_type;
+
+  private:
+    extents_type __e;
+
+  public:
+    constexpr mapping() noexcept
+    {
+    }
+
+    constexpr mapping(const extents_type &e) noexcept : __e(e)
+    {
+    }
+
+    constexpr const extents_type &extents() const noexcept
+    {
+      return __e;
+    }
+
+    // [mdspan.layout.left]: the first index varies fastest.
+    constexpr index_type stride(rank_type r) const noexcept
+    {
+      index_type s = 1;
+      for (rank_type i = 0; i < r; ++i)
+        s *= __e.extent(i);
+      return s;
+    }
+
+    constexpr index_type required_span_size() const noexcept
+    {
+      index_type n = 1;
+      for (rank_type i = 0; i < Extents::rank(); ++i)
+        n *= __e.extent(i);
+      return n;
+    }
+
+    template <class... Indices>
+    constexpr index_type operator()(Indices... idx) const noexcept
+    {
+      const index_type __i[sizeof...(Indices)] = {(index_type)idx...};
+      index_type off = 0;
+      for (rank_type r = 0; r < Extents::rank(); ++r)
+        off += __i[r] * stride(r);
+      return off;
+    }
+
+    static constexpr bool is_always_exhaustive() noexcept
+    {
+      return true;
+    }
+
+    constexpr bool is_exhaustive() const noexcept
+    {
+      return true;
+    }
+  };
+};
+
+template <class ElementType>
+struct default_accessor
+{
+  typedef ElementType element_type;
+  typedef ElementType &reference;
+  typedef ElementType *data_handle_type;
+  typedef default_accessor offset_policy;
+
+  constexpr reference access(data_handle_type p, size_t i) const noexcept
+  {
+    return p[i];
+  }
+
+  constexpr data_handle_type offset(data_handle_type p, size_t i) const noexcept
+  {
+    return p + i;
+  }
+};
+
+template <
+  class ElementType,
+  class Extents,
+  class LayoutPolicy = layout_right,
+  class AccessorPolicy = default_accessor<ElementType>>
+class mdspan
+{
+public:
+  typedef Extents extents_type;
+  typedef LayoutPolicy layout_type;
+  typedef AccessorPolicy accessor_type;
+  typedef typename LayoutPolicy::template mapping<Extents> mapping_type;
+  typedef ElementType element_type;
+  typedef typename extents_type::index_type index_type;
+  typedef typename extents_type::size_type size_type;
+  typedef typename extents_type::rank_type rank_type;
+  typedef typename accessor_type::data_handle_type data_handle_type;
+  typedef typename accessor_type::reference reference;
+
+private:
+  data_handle_type __p;
+  mapping_type __map;
+  accessor_type __acc;
+
+public:
+  constexpr mdspan() : __p(nullptr)
+  {
+  }
+
+  constexpr mdspan(data_handle_type p, const extents_type &e) : __p(p), __map(e)
+  {
+  }
+
+  // [mdspan.mdspan.cons]: the extents may be spelled as a pack of sizes.
+  template <class... OtherIndexTypes>
+  constexpr explicit mdspan(data_handle_type p, OtherIndexTypes... exts)
+    : __p(p), __map(extents_type(exts...))
+  {
+  }
+
+  constexpr mdspan(data_handle_type p, const mapping_type &m) : __p(p), __map(m)
+  {
+  }
+
+  static constexpr rank_type rank() noexcept
+  {
+    return extents_type::rank();
+  }
+
+  static constexpr rank_type rank_dynamic() noexcept
+  {
+    return extents_type::rank_dynamic();
+  }
+
+  static constexpr size_t static_extent(rank_type r) noexcept
+  {
+    return extents_type::static_extent(r);
+  }
+
+  constexpr index_type extent(rank_type r) const noexcept
+  {
+    return __map.extents().extent(r);
+  }
+
+  constexpr const extents_type &extents() const noexcept
+  {
+    return __map.extents();
+  }
+
+  constexpr size_type size() const noexcept
+  {
+    size_type n = 1;
+    for (rank_type i = 0; i < rank(); ++i)
+      n *= (size_type)extent(i);
+    return n;
+  }
+
+  constexpr bool empty() const noexcept
+  {
+    return size() == 0;
+  }
+
+  constexpr index_type stride(rank_type r) const noexcept
+  {
+    return __map.stride(r);
+  }
+
+  constexpr const mapping_type &mapping() const noexcept
+  {
+    return __map;
+  }
+
+  constexpr const accessor_type &accessor() const noexcept
+  {
+    return __acc;
+  }
+
+  constexpr data_handle_type data_handle() const noexcept
+  {
+    return __p;
+  }
+
+  static constexpr bool is_always_exhaustive() noexcept
+  {
+    return mapping_type::is_always_exhaustive();
+  }
+
+  constexpr bool is_exhaustive() const noexcept
+  {
+    return __map.is_exhaustive();
+  }
+
+  template <class... Indices>
+  constexpr reference operator[](Indices... idx) const
+  {
+    return __acc.access(__p, (size_t)__map(idx...));
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 202302L
+
+#endif // ESBMC_MDSPAN

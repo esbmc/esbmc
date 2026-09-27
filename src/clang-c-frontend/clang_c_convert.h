@@ -41,11 +41,13 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class ValueDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
 class AlignedAttr;
 class InitListExpr;
+class TemplateParamObjectDecl;
 } // namespace clang
 
 std::string
@@ -157,6 +159,14 @@ protected:
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  bool has_dynamic_local_init(const clang::VarDecl &vd) const;
+  void add_init_guard(const symbolt &var);
+  bool get_static_var_init(
+    const clang::VarDecl &vd,
+    symbolt &symbol,
+    const typet &t,
+    const locationt &location_begin,
+    exprt &new_expr);
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
@@ -255,6 +265,11 @@ protected:
    * member-expression lowering, and ctor member-initialiser-list lowering. */
   bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
 
+  /* If `vd` is a flexible array member, give its array type `t` size zero:
+   * C17 6.7.2.1p18 sizes the struct as if the member were omitted. Every site
+   * that lowers a field's type must agree, or members and components differ. */
+  void size_flexible_array_member(const clang::ValueDecl &vd, typet &t);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_base_flattened_inits(
@@ -267,6 +282,14 @@ protected:
 
   bool
   get_binary_operator_expr(const clang::BinaryOperator &binop, exprt &new_expr);
+
+  void get_vector_comparison(
+    const clang::BinaryOperator &binop,
+    irep_idt relation,
+    exprt lhs,
+    exprt rhs,
+    const typet &type,
+    exprt &new_expr);
 
   bool get_compound_assign_expr(
     const clang::CompoundAssignOperator &compop,
@@ -416,6 +439,11 @@ protected:
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
 
+  bool get_mangled_id(const clang::NamedDecl &nd, std::string &id);
+  bool add_template_param_object(
+    const clang::TemplateParamObjectDecl &tpo,
+    const std::string &name,
+    const std::string &id);
   bool get_APValue_expr(
     const clang::APValue &value,
     exprt &new_expr,

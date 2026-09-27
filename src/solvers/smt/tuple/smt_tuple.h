@@ -4,6 +4,24 @@
 #include <solvers/smt/smt_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sort.h>
 
+/** Reject a tuple field index that the AST cannot hold.
+ *
+ *  smt_solver_baset::convert_member and the with_id case of convert_ast take
+ *  the index from the *expression's* struct type, while the AST being indexed
+ *  carries the sort it was built from. Where a frontend leaves the two
+ *  disagreeing, an unchecked index runs off the end of the flattener's vector
+ *  -- a read in project(), a write in update() -- and the process dies far
+ *  from the cause. Both flatteners route every index through here so the
+ *  failure names the tuple, the field and the two sizes instead.
+ *
+ *  @param idx Field index, as computed from the expression's type.
+ *  @param size Number of fields the AST actually holds.
+ *  @param tuple_type The sort's struct/union/complex type, for the message. */
+void check_tuple_field(
+  unsigned int idx,
+  std::size_t size,
+  const type2tc &tuple_type);
+
 // Abstract class defining the interface required for creating tuples.
 class tuple_iface
 {

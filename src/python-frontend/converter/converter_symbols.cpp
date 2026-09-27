@@ -44,9 +44,12 @@ void python_converter::update_symbol(const exprt &expr) const
 
   // Update the type of the symbol and its value.
   const typet &expr_type = expr.type();
-  sym->set_type(expr_type);
+  sym->set_type(migrate_type(expr_type));
   {
     exprt v = sym->get_value();
+    // Stays legacy: this retypes the root only, so migrating eagerly would
+    // build an arith node over operands of the old type and trip
+    // assert_arith_2ops_consistency (docs/roadmap/scope-python-irep2.md §6.2).
     v.type() = expr_type;
     sym->set_value(std::move(v));
   }
@@ -80,7 +83,7 @@ void python_converter::update_symbol(const exprt &expr) const
         exprt new_value = from_integer(int_val, expr_type);
 
         // Assign the new value to the symbol.
-        sym->set_value(new_value);
+        sym->set_value(migrate_expr(new_value));
       }
       catch (const std::exception &e)
       {
@@ -621,7 +624,7 @@ symbolt &python_converter::create_tmp_symbol(
   cl.is_extern = false;
   cl.file_local = true;
   if (symbol_value != exprt())
-    cl.set_value(symbol_value);
+    cl.set_value(migrate_expr(symbol_value));
 
   return cl;
 }

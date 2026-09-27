@@ -1,5 +1,6 @@
 #include <goto-programs/add_race_assertions.h>
 #include <functional>
+#include <goto-programs/exception_globals.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
@@ -8,6 +9,8 @@
 #include <irep2/irep2_guard.h>
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
+#include <util/symtab/symbol_generator.h>
+#include <algorithm>
 #include <map>
 #include <set>
 
@@ -567,12 +570,105 @@ compute_always_atomic_functions(const goto_functionst &goto_functions)
   return always_atomic;
 }
 
+// Whether a call runs a function body at this instruction; rw_sett uses the
+// same test to read a body-less callee's arguments at the call site.
+static bool call_runs_body(const expr2tc &code, const namespacet &ns)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (!is_symbol2t(call.function))
+    return true;
+  return !ns.lookup(to_symbol2t(call.function).thename)->get_value().is_nil();
+}
+
+static bool has_write(const rw_sett &rw_set)
+{
+  return std::any_of(
+    rw_set.entries.begin(), rw_set.entries.end(), [](const auto &entry) {
+      return entry.second.w;
+    });
+}
+
+// For a call that runs a body, rw_sett records a write only for its `ret`.
+static bool stores_call_result_in_shared(
+  const goto_programt::instructiont &instruction,
+  const rw_sett &rw_set,
+  const namespacet &ns)
+{
+  return instruction.is_function_call() &&
+         call_runs_body(instruction.code, ns) && has_write(rw_set);
+}
+
+// A call that runs a body is emitted after the atomic block, like a return or
+// goto: inside it the callee would run under the atomic lock.
+static bool emitted_after_atomic_block(
+  const goto_programt::instructiont &instruction,
+  const namespacet &ns)
+{
+  return instruction.is_return() || instruction.is_goto() ||
+         (instruction.is_function_call() &&
+          call_runs_body(instruction.code, ns));
+}
+
+// The `IF __ESBMC_exc_thrown GOTO dispatch` that remove_exceptions places
+// behind a call.
+static bool
+is_exception_dispatch(const goto_programt::instructiont &instruction)
+{
+  return instruction.is_goto() && is_symbol2t(instruction.guard) &&
+         to_symbol2t(instruction.guard).thename == exception_globals::thrown_id;
+}
+
+// Rewrite `ret = f(...)` as `DECL tmp; tmp = f(...); ret = tmp; DEAD tmp`.
+// The DECL takes the call's place, so a jump to the call still declares tmp.
+// The store goes after the exception-dispatch guards remove_exceptions puts
+// behind the call: a callee that throws does not assign `ret`.
+static void store_call_result_via_local(
+  contextt &context,
+  goto_programt &goto_program,
+  goto_programt::targett call_it,
+  symbol_generator &tmp_sym)
+{
+  goto_programt::instructiont original;
+  original.swap(*call_it);
+
+  const code_function_call2t &call = to_code_function_call2t(original.code);
+  const type2tc type = call.ret->type;
+  const irep_idt tmp_id = tmp_sym.new_symbol(context, type, "call_result$").id;
+  const expr2tc tmp = symbol2tc(type, tmp_id);
+  const expr2tc store = code_assign2tc(call.ret, tmp);
+  original.code = code_function_call2tc(tmp, call.function, call.operands);
+
+  call_it->type = DECL;
+  call_it->code = code_decl2tc(type, tmp_id);
+  call_it->function = original.function;
+  call_it->location = original.location;
+
+  goto_programt::targett next = std::next(call_it);
+  *goto_program.insert(next) = original;
+  while (next != goto_program.instructions.end() &&
+         is_exception_dispatch(*next))
+    ++next;
+
+  goto_programt::targett t = goto_program.insert(next);
+  t->type = ASSIGN;
+  t->code = store;
+  t->function = original.function;
+  t->location = original.location;
+
+  t = goto_program.insert(next);
+  t->type = DEAD;
+  t->code = code_dead2tc(type, tmp_id);
+  t->function = original.function;
+  t->location = original.location;
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
   w_guardst &w_guards,
   const rw_sett::shared_localst &shared_locals,
-  bool body_is_atomic)
+  bool body_is_atomic,
+  symbol_generator &tmp_sym)
 {
   namespacet ns(context);
 
@@ -655,14 +751,7 @@ void add_race_assertions(
     {
       rw_sett rw_set(ns, i_it, instruction.code, &shared_locals);
 
-      bool has_write = false;
-      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
-      {
-        has_write = true;
-        break;
-      }
-
-      if (has_write)
+      if (has_write(rw_set))
       {
         atomic_region_touched_shared = true;
 
@@ -710,6 +799,15 @@ void add_race_assertions(
 
       if (rw_set.entries.empty())
         continue;
+
+      // Storing a call's result into shared memory is instrumented as a write
+      // of its own, after the call: wrapping the call in the atomic block below
+      // would run the callee under the atomic lock and hide its races.
+      if (stores_call_result_in_shared(instruction, rw_set, ns))
+      {
+        store_call_result_via_local(context, goto_program, i_it, tmp_sym);
+        continue;
+      }
 
       goto_programt::instructiont original_instruction;
       original_instruction.swap(instruction);
@@ -768,7 +866,9 @@ void add_race_assertions(
       // We need to keep all instructions before the return,
       // so when we process the return we need add the
       // original instruction at the end
-      if (!original_instruction.is_return() && !original_instruction.is_goto())
+      const bool original_after_block =
+        emitted_after_atomic_block(original_instruction, ns);
+      if (!original_after_block)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -811,7 +911,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if (original_instruction.is_return() || original_instruction.is_goto())
+      if (original_after_block)
       {
         goto_programt::targett t = goto_program.insert(i_it);
         *t = original_instruction;
@@ -877,8 +977,14 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 
   // No call-graph context is available for a single program, so no function
   // can be proven always-atomic; instrument every access normally.
+  symbol_generator tmp_sym("race_check::");
   add_race_assertions(
-    context, goto_program, w_guards, shared_locals, /*body_is_atomic=*/false);
+    context,
+    goto_program,
+    w_guards,
+    shared_locals,
+    /*body_is_atomic=*/false,
+    tmp_sym);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
@@ -888,6 +994,7 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
   namespacet ns(context);
+  symbol_generator tmp_sym("race_check::");
 
   // An escape analysis must see the whole program: a local declared in one
   // function may have its address taken there and be dereferenced in another
@@ -915,7 +1022,8 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
         f_it->second.body,
         w_guards,
         shared_locals,
-        always_atomic.count(f_it->first) > 0);
+        always_atomic.count(f_it->first) > 0,
+        tmp_sym);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

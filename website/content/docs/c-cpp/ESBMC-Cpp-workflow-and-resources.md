@@ -3,11 +3,11 @@ title: C++ Workflow and Resources
 ---
 
 This page is for ESBMC maintainers working on the C++ frontend. For the
-user-facing feature reference, see [C++ Support](./supported-features) and
-[C++ Limitations](./limitations).
+user-facing feature reference, see [C++ Support](/docs/c-cpp/supported-features) and
+[C++ Limitations](/docs/c-cpp/limitations).
 
 For feature support tracking, we have two documentations:
-- Core language features: [C++ Support](./supported-features) for any completed core language feature.
+- Core language features: [C++ Support](/docs/c-cpp/supported-features) for any completed core language feature.
 - Library: https://github.com/esbmc/esbmc/wiki/OM-Workload-Estimate-and-Tracking for any completed library support (i.e. OMs).
 
 For issue tracking, we used the strategies below:

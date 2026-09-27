@@ -208,8 +208,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "represent (Phase 7; read-only, default off)"},
     {"clang-cpp-irep2-adjust-only",
      NULL,
-     "Use the IREP2-native C++ adjuster instead of the legacy adjust pass "
-     "(Phase 7 hop-off; experimental, default off)"}}},
+     "Use the IREP2-native C++ adjuster instead of the legacy adjust pass, in "
+     "the C++ and Solidity frontends (both run it; Phase 7 hop-off; "
+     "experimental, default off)"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
@@ -676,8 +677,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"neurosym-prog",
      boost::program_options::value<std::string>()->value_name("<cmd>"),
      "Command running NeuroSym on an SMT-LIB2 file; every %f is replaced by "
-     "the formula file, appended when absent (default: \"python main.py "
-     "%f\")"},
+     "the formula file, appended when absent (default: "
+     "\"neurosym-cpp-solve %f\")"},
     {"neurosym-model-prog",
      boost::program_options::value<std::string>()->value_name("<cmd>"),
      "Local interactive SMT-LIB2 solver used to build the counterexample "

@@ -90,7 +90,7 @@ public:
    *  for GOTO/function-return/function-pointer paths that will be joined at a
    *  later instruction, so it only keeps the data the merge operation reads:
    *  the SSA renaming state, value set, guard, instruction depth, thread id,
-   *  and current frame's local-variable set.
+   *  and current frame's L1 renaming and local-variable set.
    *
    *  It deliberately does not carry the full thread execution state, such as
    *  the program counter, source location, call stack, loop counters, exception
@@ -105,6 +105,7 @@ public:
     value_sett value_set;
     guard2tc guard;
     unsigned int thread_id;
+    renaming::level1t::current_namest level1_names;
     variable_name_sett local_variables;
     std::shared_ptr<void> interval_snapshot; // interval_domaint::interval_map;
                                              // set in symex_goto.cpp
@@ -116,6 +117,7 @@ public:
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.source.thread_nr),
+        level1_names(s.top().level1.current_names),
         local_variables(s.top().local_variables)
     {
     }
@@ -127,6 +129,7 @@ public:
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.thread_id),
+        level1_names(s.level1_names),
         local_variables(s.local_variables),
         interval_snapshot(s.interval_snapshot)
     {

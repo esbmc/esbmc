@@ -76,6 +76,30 @@ memory-safety properties. The relevant checks are on by default (the flags below
 already-freed pointer ("invalid pointer freed", double free), and freeing
 non-dynamic storage.
 
+A write or a `free` through a pointer the value set cannot resolve exhaustively
+now fails when the pointer is none of the recorded targets, `NULL` included.
+Previously `invalid_pointer(p)` answered from the integer-to-pointer
+reconstruction, which enumerates only the objects registered so far, so a real
+object outside the value set passed the check while symex sent the write to a
+failed symbol and ran the `free` checks only for value-set targets — freed
+globals, stack objects and heap interiors were missed the same way
+([#7773](https://github.com/esbmc/esbmc/pull/7773)). Freeing the start of a live
+allocation stays valid.
+
+The alignment check reads the **object's base alignment** rather than assuming
+the base carries the access width, so a pointer laundered out of a packed struct
+no longer reads as aligned ([#7707](https://github.com/esbmc/esbmc/issues/7707)).
+Where the base is below the access width the claim is decided on the whole
+address instead of the offset, so a program that constrains its own object still
+discharges it.
+
+A flexible array member has size zero, as C17 6.7.2.1p18 requires. It was typed
+as a one-element array, which gave the struct storage it does not have: assigning
+such a struct into a heap object overwrote the bytes after the header, and an
+overflow into the phantom element was missed
+([#5393](https://github.com/esbmc/esbmc/issues/5393)). Dereference rebuilds
+zero-width array members as empty values, which also covers GNU `[0]` members.
+
 Memory-leak detection is enabled with `--memory-leak-check`: a dynamic object
 that is still reachable-but-unfreed (or unreachable, "forgotten memory") at the
 end of `main` is reported. `--no-reachable-memory-leak` keeps only the
