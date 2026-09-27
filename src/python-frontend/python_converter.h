@@ -148,6 +148,10 @@ public:
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
 
+  /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
+  /// handled.
+  typet get_optional_type(const nlohmann::json &slice);
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
