@@ -1942,6 +1942,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
+      if (attr_name == "shape" || attr_name == "ndim" || attr_name == "size")
+      {
+        const typet list_type = type_handler_.get_list_type();
+        if (
+          numpy_array_symbols_.count(symbol->id.as_string()) == 0 &&
+          is_python_list_model_type(symbol->get_type(), list_type, ns))
+          throw std::runtime_error(
+            fmt::format("Cannot resolve attribute: {}", attr_name));
+      }
+
       // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
       // general attribute-access path above.
       if (

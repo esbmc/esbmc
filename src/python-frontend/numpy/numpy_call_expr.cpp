@@ -7579,10 +7579,20 @@ nlohmann::json numpy_call_expr::resolve_searchsorted_space(
       "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
 
   if (sorter_node != nullptr)
-    return apply_searchsorted_sorter(
+  {
+    nlohmann::json sorted_space = apply_searchsorted_sorter(
       arr_arg,
       resolve_searchsorted_sorter(
         *sorter_node, arr_arg, array_name, converter_));
+    if (!is_sorted_numeric_list(
+          sorted_space,
+          "TypeError: numpy.searchsorted() array must contain finite "
+          "numeric values"))
+      throw std::runtime_error(
+        "ValueError: numpy.searchsorted() requires the input array to be "
+        "sorted");
+    return sorted_space;
+  }
 
   if (!is_sorted_numeric_list(
         arr_arg,
