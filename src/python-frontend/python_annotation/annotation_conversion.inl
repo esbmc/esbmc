@@ -1374,6 +1374,17 @@ std::string python_annotation<Json>::get_function_return_type(
           if (return_type == "Subscript")
           {
             functions_in_analysis_.erase(func_name);
+            // Bare "Optional" cannot hold None; leave the target unannotated
+            // so it takes the callee's resolved T*. Not for a primitive T,
+            // whose T* cannot tell a zero value from None.
+            if (
+              returns.contains("value") && returns["value"].contains("id") &&
+              returns["value"]["id"] == "Optional" &&
+              !(returns.contains("slice") && returns["slice"].contains("id") &&
+                (returns["slice"]["id"] == "int" ||
+                 returns["slice"]["id"] == "float" ||
+                 returns["slice"]["id"] == "bool")))
+              return "";
             if (returns.contains("value") && returns["value"].contains("id"))
               return returns["value"]["id"];
             else

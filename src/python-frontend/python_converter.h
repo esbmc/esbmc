@@ -2049,6 +2049,10 @@ private:
 
   /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+  typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
+  typet subscript_annotation_type(
+    const std::string &base,
+    const nlohmann::json &var_node);
 
   // =========================================================================
   // Enum support helpers
