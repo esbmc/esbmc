@@ -97,6 +97,18 @@ extract_constant_char_values(const exprt *array_expr)
   return values;
 }
 
+/// len() of a constant UTF-8 char array: its code points, not its bytes.
+static std::optional<size_t> constant_codepoint_len(const exprt &array_expr)
+{
+  auto chars = extract_constant_char_values(&array_expr);
+  if (!chars)
+    return std::nullopt;
+  std::string bytes;
+  for (const BigInt &c : *chars)
+    bytes.push_back(static_cast<char>(c.to_int64()));
+  return utf8_codepoint_count(bytes);
+}
+
 static constexpr long long kMembershipMaxHaystackContentLen = 256;
 static constexpr long long kMembershipMaxNeedleLen = 64;
 
@@ -2419,6 +2431,14 @@ exprt string_handler::try_handle_len_string_fast_path(
 
   if (exprt fast = try_len_fast_path_from_name_arg(arg_json); !fast.is_nil())
     return fast;
+
+  if (
+    arg_expr.is_constant() && arg_expr.type().is_array() &&
+    arg_expr.type().subtype() == char_type())
+  {
+    if (auto len = constant_codepoint_len(arg_expr))
+      return from_integer(*len, size_type());
+  }
 
   if (arg_expr.is_symbol())
   {
