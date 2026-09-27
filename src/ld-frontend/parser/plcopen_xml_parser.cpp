@@ -8,6 +8,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <set>
 
@@ -241,6 +242,9 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
       elem.counter_fb.CU_var = get_var("CU");
       elem.counter_fb.CD_var = get_var("CD");
       elem.counter_fb.R_var = get_var("R");
+      elem.counter_fb.LD_var = get_var("LD");
+      if (elem.counter_fb.LD_var.empty())
+        elem.counter_fb.LD_var = get_var("LOAD");
       elem.counter_fb.PV_var = get_var("PV");
       elem.counter_fb.Q_var = get_var("Q");
       elem.counter_fb.CV_var = get_var("CV");
@@ -423,6 +427,16 @@ static FBKind fb_kind_of(const std::string &s)
   if (it == table.end())
     throw LdParseError("Unknown FB type: " + s);
   return it->second;
+}
+
+// A bare identifier names a variable; TRUE/FALSE and typed literals do not.
+static bool is_identifier(const std::string &text)
+{
+  if (text.empty() || text == "TRUE" || text == "FALSE")
+    return false;
+  if (!isalpha(static_cast<unsigned char>(text[0])) && text[0] != '_')
+    return false;
+  return text.find('#') == std::string::npos;
 }
 
 static bool is_coil_tag(const std::string &t)
@@ -669,7 +683,7 @@ static bool parse_graphical_ld(
     return inst_name(block_id) + "__" + pin;
   };
 
-  // Resolve a block data pin (PT, PV, R) to a variable name: the declared
+  // Resolve a block data pin (PT, PV) to a variable name: the declared
   // variable it is wired to, or a synthesised constant holding its literal.
   auto resolve_data_pin =
     [&](int block_id, const char *pin, VarKind kind) -> std::string {
@@ -689,11 +703,7 @@ static bool parse_graphical_ld(
     {
       // An <inVariable> may hold a symbol rather than a literal; treat a bare
       // identifier as a variable reference before falling back to a constant.
-      const bool identifier =
-        !src.expression.empty() &&
-        (isalpha(static_cast<unsigned char>(src.expression[0])) ||
-         src.expression[0] == '_');
-      if (identifier)
+      if (is_identifier(src.expression))
         return src.expression;
       std::cerr << "warning: graphical LD: block pin " << pin
                 << " has unrecognised literal '" << src.expression
@@ -837,6 +847,55 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(drive));
   };
 
+  // Resolve a counter's Boolean control pin (R, LD) to the value it carries:
+  // the power flow of a contact or block wired to it, or a variable wired to it
+  // directly. Empty when the pin is unwired.
+  auto control_pin =
+    [&](int block_id, std::initializer_list<const char *> pins) -> std::string {
+    const GNode &g = nodes.at(block_id);
+    for (const char *pin : pins)
+    {
+      auto it = g.in_pins.find(pin);
+      if (it == g.in_pins.end() || !nodes.count(it->second))
+        continue;
+      const int src = it->second;
+      const GNode &s = nodes.at(src);
+      const std::string what = inst_name(block_id) + " pin " + pin;
+      const bool is_block = s.tag == "block" || s.tag == "Block";
+      if (s.tag == "contact" || is_block)
+      {
+        // Unreachable, it would read false in every scan (see step 4).
+        if (!rail_reaches.count(src))
+          throw UnsupportedConstructError(what + " driven by no power", 2);
+        // Only a timer or counter step assigns the Q that pf_name names.
+        if (is_block)
+        {
+          bool steps = false;
+          try
+          {
+            const FBKind k = fb_kind_of(s.type_name);
+            steps = k == FBKind::TON || k == FBKind::TOF || k == FBKind::TP ||
+                    k == FBKind::CTU || k == FBKind::CTD;
+          }
+          catch (const LdParseError &)
+          {
+          }
+          if (!steps)
+            throw UnsupportedConstructError(
+              what + " driven by " + s.type_name, 2);
+        }
+        ensure_pf(src);
+        return pf_name(src);
+      }
+      if (!s.var.empty() && !is_coil_tag(s.tag))
+        return s.var;
+      if (is_identifier(s.expression))
+        return s.expression;
+      throw UnsupportedConstructError(what + " driven by " + s.tag, 2);
+    }
+    return "";
+  };
+
   // Emit a function block: first the rungs driving its enable pin, then the
   // FB step itself.  Blocks feeding this one are emitted first so that their
   // output pins are already assigned when this block reads them.
@@ -893,18 +952,15 @@ static bool parse_graphical_ld(
       e.counter_fb.kind = kind;
       e.counter_fb.instance_name = inst_name(block_id);
       if (kind == FBKind::CTU)
-        e.counter_fb.CU_var = enable_var;
-      else
-        e.counter_fb.CD_var = enable_var;
-      auto reset = g.in_pins.find("R");
-      if (reset != g.in_pins.end() && nodes.count(reset->second))
       {
-        if (!nodes.at(reset->second).var.empty())
-          e.counter_fb.R_var = nodes.at(reset->second).var;
-        else
-          std::cerr << "warning: graphical LD: counter " << inst_name(block_id)
-                    << " has its R pin driven by a contact chain, which is not "
-                    << "modelled; the counter will not reset.\n";
+        e.counter_fb.CU_var = enable_var;
+        e.counter_fb.R_var = control_pin(block_id, {"R"});
+      }
+      else
+      {
+        e.counter_fb.CD_var = enable_var;
+        // IEC 61131-3 names the CTD load pin LD; CODESYS names it LOAD.
+        e.counter_fb.LD_var = control_pin(block_id, {"LD", "LOAD"});
       }
       e.counter_fb.PV_var = resolve_data_pin(block_id, "PV", VarKind::INT);
       e.counter_fb.Q_var =

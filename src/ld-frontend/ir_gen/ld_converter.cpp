@@ -364,7 +364,8 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 
 // CounterStep: IEC 61131-3 §2.5.2.3 — edge-triggered on rising CU/CD.
 //   CTU: if (CU && !CU_prev) CV++;  if (R) CV:=0;  CU_prev:=CU; Q:=(CV>=PV)
-//   CTD: if (CD && !CD_prev) CV--;  CD_prev:=CD; Q:=(CV<=0)
+//   CTD: if (LD) CV:=PV; else if (CD && !CD_prev) CV--;  CD_prev:=CD;
+//        Q:=(CV<=0)
 codet ld_converter::translate_counter(const LdIRNode &n)
 {
   code_blockt blk;
@@ -420,7 +421,21 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       binary_relation_exprt(cv, ">", int_min()));
     cd_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
-    blk.copy_to_operands(cd_step);
+
+    if (n.ctr_LD.empty())
+      blk.copy_to_operands(cd_step);
+    else
+    {
+      const exprt pv =
+        n.ctr_PV.empty() ? zero
+                         : static_cast<exprt>(
+                             typecast_exprt(var_expr(n.ctr_PV), cv.type()));
+      code_ifthenelset load;
+      load.cond() = var_expr(n.ctr_LD);
+      load.then_case() = code_assignt(cv, pv);
+      load.else_case() = cd_step;
+      blk.copy_to_operands(load);
+    }
 
     blk.copy_to_operands(code_assignt(cd_prev, cd));
     blk.copy_to_operands(
