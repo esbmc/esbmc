@@ -1861,3 +1861,9 @@ regression/python/optional_list_call_unannotated_fail
 regression/python/optional_class_module_level
 regression/python/isinstance_tuple_user_class
 regression/python/optional_forward_ref_call_fail
+regression/python/github_7559_literal
+regression/python/github_7559_literal_fail
+regression/python/github_7559_none
+regression/python/github_7559_none_fail
+regression/python/github_7559_nonfinite
+regression/python/github_7559_nonfinite_fail
