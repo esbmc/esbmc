@@ -36,7 +36,7 @@ void set_symbol_type(symbolt &sym, const typet &t)
 
 void set_symbol_type_if_carried(symbolt &sym, const typet &t)
 {
-  if (t.is_nil() || contains_dyn_array(t) || is_python_internal_aggregate(t))
+  if (t.is_nil() || contains_dyn_array(t))
     sym.set_type(t);
   else
     sym.set_type(migrate_type(t));

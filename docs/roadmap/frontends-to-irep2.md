@@ -4564,6 +4564,29 @@ five), fix the reader if the reader is wrong (§78), or change the type model if
 distinct type (`scope-python-irep2.md` §8.1, still open). What settles it is who reads the marker and
 whether their use of it is defensible -- not how easy the carry is.
 
+## 81. Twenty-one of Python's B-2* were not symbol-table writes (2026-09-24)
+
+`bars.py --list` against master `dae0885ed3` printed 52 Python sites, and 21 of them are
+`constant_exprt::set_value` -- the setter for a literal's bit string, as in
+`type_id.set_value(integer2binary(hash, width))` or `none_expr.set_value("NULL")`. B-2 is defined
+over symbol-table writes; these build an expression, which B-1 already counts. They shared the
+spelling `.set_value(` and nothing else.
+
+`bars.py` now skips a write whose receiver is declared `constant_exprt` in the same file, and the raw
+column still reports the §1 grep unchanged. Python B-2* 52 -> 31, repo total 122 -> 101; no other
+frontend moves. `test_bars.py` pins both directions: the constant's bit string does not count, a
+symbol's `set_value(c)` with a constant *argument* still does.
+
+What the 31 are, by §11 of `scope-python-irep2.md` and this file's §57: the funcdef type writes
+(six of which PR #7888 converts), the program-entry and function bodies that must stay legacy, and
+the assignment writes blocked on markers the seam does not carry.
+
+A second over-count of the same kind: `gen_zero`, `gen_one` and `gen_nondet` have a legacy and an IREP2
+overload, so the script counted every call. It now resolves them by their first argument, as it already
+does for a bare name. That removes `jimple-language.cpp:109` (`gen_zero(t, true)` over a
+`const type2tc &t`), which `scope-jimple-irep2.md` §35.2 had already found IREP2 by inspection, so the
+script now agrees jimple meets B-2: jimple B-2* 1 -> 0, total 101 -> 100.
+
 ## 82. `#python_aggregate` crosses the seam (2026-09-25)
 
 The sixth carried attribute, after §80's `#cpp_type`. `irep_idt python_aggregate` on `struct_type2t`,

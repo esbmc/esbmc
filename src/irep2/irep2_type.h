@@ -323,16 +323,23 @@ public:
     const type2tc &ret,
     const std::vector<irep_idt> &names,
     bool e,
-    const std::vector<irep_idt> &base_names = {})
+    const std::vector<irep_idt> &base_names = {},
+    const std::vector<expr2tc> &defaults = {},
+    const irep_idt &exc_kind = irep_idt(),
+    const std::vector<irep_idt> &exc_types = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
       argument_names(names),
       argument_base_names(base_names),
+      argument_defaults(defaults),
+      exception_types(exc_types),
+      exception_kind(exc_kind),
       ellipsis(e)
   {
     assert(args.size() == names.size());
     assert(base_names.empty() || base_names.size() == args.size());
+    assert(defaults.empty() || defaults.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
   unsigned int get_width() const;
@@ -347,6 +354,18 @@ public:
   /// clang_cpp_convert_vft.cpp's thunk argument loop does
   /// (docs/roadmap/frontends-to-irep2.md §44).
   std::vector<irep_idt> argument_base_names;
+  /// The arguments' `#default_value`s, null where an argument has none, and
+  /// empty when none has one. Unreflected: a default is no part of the
+  /// function's type. Carried because Python call lowering fills a missing
+  /// argument from it (converter_funcall.cpp, function_call/expr.cpp).
+  std::vector<expr2tc> argument_defaults;
+  /// A resolved C++ exception specification, as `exception_spec_kind` and
+  /// `exception_spec_types` record it (util/lang/exception_specification.h);
+  /// empty when there is none. Unreflected, like the fields above: two
+  /// signatures differing only here still compare equal. Carried because
+  /// goto_convert_functions decodes it from the function symbol's type.
+  std::vector<irep_idt> exception_types;
+  irep_idt exception_kind;
   bool ellipsis;
 
   static constexpr auto fields = std::make_tuple(
@@ -355,7 +374,8 @@ public:
     &code_type2t::argument_names,
     &code_type2t::ellipsis);
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>);
+    2 * sizeof(std::vector<irep_idt>) + sizeof(std::vector<expr2tc>) +
+    sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 

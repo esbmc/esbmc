@@ -27,6 +27,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
 #include <util/lang/python_types.h>
 #include <util/arith/arith_tools.h>
 #include <chrono>
@@ -1528,6 +1529,95 @@ TEST_CASE("a type keeps its source spelling", "[migrate]")
     REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
     REQUIRE(
       migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
+  }
+}
+
+// An argument's `#default_value` is no part of a function's type, but Python
+// call lowering fills a missing argument from it, so it must survive the seam.
+TEST_CASE("a function type keeps its argument defaults", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  f.arguments().emplace_back(signedbv_typet(64));
+  f.arguments().emplace_back(signedbv_typet(64));
+
+  SECTION("a default round-trips on the argument that has one")
+  {
+    f.arguments()[1].default_value() = from_integer(7, signedbv_typet(64));
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    REQUIRE(!back.arguments()[0].has_default_value());
+    REQUIRE(
+      back.arguments()[1].default_value() == f.arguments()[1].default_value());
+  }
+
+  SECTION("no default gains no key")
+  {
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    for (const auto &arg : back.arguments())
+      REQUIRE(arg.find("#default_value").is_nil());
+  }
+
+  SECTION("a default is no part of the type's identity")
+  {
+    code_typet with = f;
+    with.arguments()[0].default_value() = from_integer(1, signedbv_typet(64));
+    REQUIRE(migrate_type(with) == migrate_type(f));
+    REQUIRE(migrate_type(with)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// A resolved C++ exception specification is no part of a function's type, but
+// goto_convert_functions decodes it from the function symbol's type.
+TEST_CASE("a function type keeps its exception specification", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  auto round_trip = [](const code_typet &t) {
+    return exception_specificationt::from_type(
+      migrate_type_back(migrate_type(t)));
+  };
+
+  SECTION("a dynamic specification round-trips")
+  {
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    irept types;
+    types.get_sub().emplace_back("tag-my_error");
+    f.set(exception_specificationt::types_attribute(), types);
+    const exception_specificationt back = round_trip(f);
+    REQUIRE(back.kind == exception_specificationt::kindt::dynamic);
+    REQUIRE(back.allowed_types == std::vector<irep_idt>{"tag-my_error"});
+  }
+
+  SECTION("noexcept round-trips")
+  {
+    f.set(exception_specificationt::kind_attribute(), "non_throwing");
+    REQUIRE(
+      round_trip(f).kind == exception_specificationt::kindt::non_throwing);
+  }
+
+  SECTION("an unresolved dynamic specification is not carried")
+  {
+    // Carrying only its kind would read back as throw(), which permits nothing.
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    f.add("exception_spec_decl").get_sub().emplace_back("signedbv");
+    REQUIRE(
+      round_trip(f).kind ==
+      exception_specificationt::kindt::potentially_throwing);
+  }
+
+  SECTION("no specification gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(f));
+    REQUIRE(back.find(exception_specificationt::kind_attribute()).is_nil());
+    REQUIRE(back.find(exception_specificationt::types_attribute()).is_nil());
+  }
+
+  SECTION("a specification is no part of the type's identity")
+  {
+    code_typet spec = f;
+    spec.set(exception_specificationt::kind_attribute(), "non_throwing");
+    REQUIRE(migrate_type(spec) == migrate_type(f));
+    REQUIRE(migrate_type(spec)->crc() == migrate_type(f)->crc());
   }
 }
 
