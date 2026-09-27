@@ -257,7 +257,7 @@ code_blockt python_converter::create_capture_cells(
     symbol.lvalue = true;
     symbol.file_local = true;
     symbol.static_lifetime = true;
-    symbol.set_value(init);
+    symbol.set_value(migrate_expr(init));
     symbol_table_.add(symbol);
     return symbol_expr(*symbol_table_.find_symbol(sym_id));
   };
