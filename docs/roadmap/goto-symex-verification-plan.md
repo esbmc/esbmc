@@ -8915,7 +8915,18 @@ full-expression, and the aggregate-initialisation surplus destructor pinned by
 `destroy_n`: the refcount guard `root->dec()` reaches symex through placement
 new into static `aligned_storage` and the atomic model, and does not fold, so
 the dead `delete_deep` branch is explored with a symbolic count. That is a
-completeness cost, not a wrong verdict, and it is the next item for WI-4.
+completeness cost, not a wrong verdict. `--smt-symex-guard`, which asks the
+solver about each guard, prunes it: a bare `immer::map<int, int> m;` then
+verifies in 4 s, and master reports a false FAILED on it, because the freed
+empty node is really deleted there. The unfolded value is the node's `values`
+pointer, stored as `nullptr` through placement new into the static buffer and
+read back as bytes; the same shape written in C folds away completely.
+
+WI-4 itself is still over its gate: with R64 and `--smt-symex-guard`,
+`renaming::level1t l1;` spent more than 20 minutes in symex without unwinding a
+loop, and the only diagnostic is that immer's `uninitialized_copy`
+(`immer/detail/util.hpp:161`) is treated as an allocating `new`, since its
+placement-new address has side effects. That is the next item for WI-4.
 
 ---
 
