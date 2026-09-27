@@ -9,6 +9,15 @@
 #include <util/irep/std_types.h>
 #include <algorithm>
 
+/// Whether a NULL pointer to @p subt is how the frontend spells Python None.
+static bool null_is_none(const type2tc &subt, const namespacet &ns)
+{
+  if (is_empty_type(subt) || is_struct_type(subt) || is_array_type(subt))
+    return true;
+  return is_symbol_type(subt) &&
+         ns.follow(migrate_type_back(subt)).id() == "struct";
+}
+
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
@@ -256,12 +265,9 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
         // Without this, `Class* is None` folded to a constant False below
         // ("None is never equal to non-None"), silently defeating guards like
         // `node is None or node.next is None` and producing spurious NULL
-        // dereferences (QuixBugs detect_cycle).
-        const type2tc &subt = to_pointer_type(side->type).subtype;
-        bool null_is_none = is_empty_type(subt) || is_struct_type(subt);
-        if (!null_is_none && is_symbol_type(subt))
-          null_is_none = ns.follow(migrate_type_back(subt)).id() == "struct";
-        if (null_is_none)
+        // dereferences (QuixBugs detect_cycle). An Optional[str] is a pointer
+        // to its char array, NULL for None, as well.
+        if (null_is_none(to_pointer_type(side->type).subtype, ns))
           return equality2tc(side, gen_zero(side->type));
       }
       return std::nullopt;

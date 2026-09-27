@@ -1260,6 +1260,18 @@ python_annotation<Json>::infer_lambda_return_type(const Json &lambda_elem) const
     return "Any"; // Default for other lambda expressions
 }
 
+/// Whether an Optional[] slice names a non-primitive type by a Name or string.
+template <class Json>
+static bool names_reference_type(const Json &slice)
+{
+  std::string name;
+  if (slice.contains("id"))
+    name = slice["id"].template get<std::string>();
+  else if (slice.contains("value") && slice["value"].is_string())
+    name = slice["value"].template get<std::string>();
+  return !name.empty() && name != "int" && name != "float" && name != "bool";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -1374,6 +1386,15 @@ std::string python_annotation<Json>::get_function_return_type(
           if (return_type == "Subscript")
           {
             functions_in_analysis_.erase(func_name);
+            // Bare "Optional" cannot hold None; leave the target unannotated
+            // so it takes the callee's resolved T*. Only for a T named by a
+            // Name or string: a primitive T's T* cannot tell a zero value
+            // from None, and a subscripted T resolves to no T* at all.
+            if (
+              returns.contains("value") && returns["value"].contains("id") &&
+              returns["value"]["id"] == "Optional" &&
+              names_reference_type(returns.value("slice", Json())))
+              return "";
             if (returns.contains("value") && returns["value"].contains("id"))
               return returns["value"]["id"];
             else
