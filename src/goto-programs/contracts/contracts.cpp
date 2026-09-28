@@ -4206,8 +4206,7 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
         // one-element backing of a C++ `this`, which is real memory but not
         // an extent the contract itself stated (#7057).
         if (
-          extent_it == param_extents.end() || !extent_it->second.justified ||
-          !extent_it->second.from_is_fresh)
+          extent_it == param_extents.end() || !extent_it->second.from_is_fresh)
         {
           log_error(
             "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
@@ -6021,13 +6020,12 @@ void code_contractst::add_pointer_validity_assumptions(
       continue;
     }
 
-    type2tc pointee = ns.follow(to_pointer_type(param_type).subtype);
-
-    // Calling a member function requires `this` to address an object of the
-    // class type ([class.mfct.non.static]), so one element is stated by the
-    // language rather than assumed.
+    // A member function's receiver addresses one object of its class
+    // ([class.mfct.non.static]), so that extent is stated by the language
+    // rather than assumed. Solidity also emits its `this` under mode "C++".
     if (func.mode == "C++" && param.get_base_name() == "this")
     {
+      type2tc pointee = ns.follow(to_pointer_type(param_type).subtype);
       emit_receiver_backing(wrapper, p, name, pointee, func, location);
       param_extents[param.get_identifier()] = {
         type_byte_size_expr(pointee, &ns), true, false};

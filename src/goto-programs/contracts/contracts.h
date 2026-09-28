@@ -183,13 +183,13 @@ public:
   ///
   /// \p justified says whether the harness backing is real enough to read
   /// through: an __ESBMC_is_fresh size, or the one-element stack backing of
-  /// the #6483 carve-out. It is false for a nondet heap extent, which nothing
+  /// a C++ `this`. It is false for a nondet heap extent, which nothing
   /// may dereference. An absent map entry is a third state: the harness never
   /// allocated, so the pointer is the real caller's.
   ///
   /// \p from_is_fresh is narrower: true only when \p bytes came from the
-  /// contract's own __ESBMC_is_fresh(ptr, bytes) clause. The #6483 carve-out
-  /// entry is \p justified (real stack storage genuinely backs one element)
+  /// contract's own __ESBMC_is_fresh(ptr, bytes) clause. The `this` entry
+  /// is \p justified (real stack storage genuinely backs one element)
   /// but NOT \p from_is_fresh (the contract never stated that extent) --
   /// consumers that need the extent to match what the contract actually
   /// claims, not just "some real memory happens to be there", must check
@@ -811,7 +811,7 @@ private:
   /// \param allocated_ptrs Output: snapshots of the heap allocations made
   ///        here, taken at allocation time by retain_allocation_for_free
   ///        rather than the lvalues themselves, which aliasing may reassign.
-  ///        Stack-backed struct params are not appended. Callers use this to
+  ///        A stack-backed `this` is not appended. Callers use this to
   ///        emit matching free() calls at wrapper exit so --memory-leak-check
   ///        does not blame the user's function for wrapper-internal
   ///        allocations (CWE-401).
