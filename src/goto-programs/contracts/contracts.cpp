@@ -1659,10 +1659,6 @@ goto_programt code_contractst::generate_checking_wrapper(
   // diagnostic, so the two producers below must keep agreeing on it.
   std::map<irep_idt, param_extentt> param_extents;
 
-  // is_fresh'd struct pointers, warned about only when the contract uses
-  // __ESBMC_old at all (#6483).
-  std::vector<std::string> is_fresh_struct_ptrs;
-
   // Sequence number for the retained-allocation symbols below. An is_fresh
   // lvalue may be indirect (a->p), so there is no parameter name to build a
   // unique symbol from.
@@ -1688,20 +1684,9 @@ goto_programt code_contractst::generate_checking_wrapper(
         original_func,
         location));
 
+      // The contract asked for this allocation, so its extent is justified.
       if (is_symbol2t(ptr_var) && is_pointer_type(ptr_var->type))
-      {
-        // The contract asked for this allocation, so its extent is justified.
         param_extents[to_symbol2t(ptr_var).thename] = {size_expr, true, true};
-
-        // A struct/union pointee bypasses the stack-backing carve-out and gets
-        // the heap object #6483 makes unsound. Only an __ESBMC_old over that
-        // pointer can trip it, so stay quiet otherwise rather than training
-        // users to ignore the warning.
-        if (is_structure_type(
-              ns.follow(to_pointer_type(ptr_var->type).subtype)))
-          is_fresh_struct_ptrs.push_back(
-            get_pretty_name(id2string(to_symbol2t(ptr_var).thename)));
-      }
 
       // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
       // valid memory block.  Without this, symex_mem's non-deterministic
@@ -1851,13 +1836,6 @@ goto_programt code_contractst::generate_checking_wrapper(
   //    safely dereference pointers that were set up above.
   std::vector<old_snapshot_t> old_snapshots =
     collect_old_snapshots_from_body(original_body);
-
-  if (!old_snapshots.empty() && !is_fresh_struct_ptrs.empty())
-    log_warning(
-      "{}: __ESBMC_is_fresh on struct pointer(s) {} heap-backs them, which can "
-      "silently discharge __ESBMC_old-based ensures clauses (#6483).",
-      location,
-      fmt::join(is_fresh_struct_ptrs, ", "));
 
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
@@ -4225,8 +4203,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
         const irep_idt &ptr_thename = to_symbol2t(original_expr).thename;
         auto extent_it = param_extents.find(ptr_thename);
         // from_is_fresh, not just justified: justified is also true for the
-        // #6483 one-element struct stack backing, which is real memory but
-        // not an extent the contract itself stated (#7057).
+        // one-element backing of a C++ `this`, which is real memory but not
+        // an extent the contract itself stated (#7057).
         if (
           extent_it == param_extents.end() || !extent_it->second.justified ||
           !extent_it->second.from_is_fresh)
@@ -5907,26 +5885,6 @@ void code_contractst::generate_replacement_at_call(
 
 // ========== Pointer validity assumptions support ==========
 
-/// Report the one extent the harness still assumes without the contract saying
-/// so. Deliberately does not suggest __ESBMC_is_fresh: on a struct parameter
-/// that would silently discharge __ESBMC_old-based ensures clauses (#6483).
-static void warn_assumed_struct_extents(
-  const symbolt &func,
-  const locationt &location,
-  const std::vector<std::string> &params)
-{
-  if (params.empty())
-    return;
-
-  log_warning(
-    "{}: {}: struct pointer parameter(s) {} are assumed to address exactly one "
-    "element; the contract states no extent for them. Accesses beyond that are "
-    "caught, but the first element is admitted unjustified (#6212).",
-    location,
-    func.name,
-    fmt::join(params, ", "));
-}
-
 static bool contains_symbol(const expr2tc &e, const irep_idt &name)
 {
   if (is_nil_expr(e))
@@ -6027,7 +5985,7 @@ void code_contractst::add_pointer_validity_assumptions(
 
   // Parameters whose extent the contract leaves unstated, collected so the
   // function gets one warning rather than one per parameter.
-  std::vector<std::string> nondet_extent, assumed_one_element;
+  std::vector<std::string> nondet_extent;
 
   // Pointer parameters this function backs itself, paired with their pretty
   // names. Each is given its own storage below, which would hand the callee a
@@ -6065,16 +6023,14 @@ void code_contractst::add_pointer_validity_assumptions(
 
     type2tc pointee = ns.follow(to_pointer_type(param_type).subtype);
 
-    // See emit_struct_stack_backing for why structs are carved out.
-    // Drop this branch once #6483 is fixed.
-    if (is_structure_type(pointee))
+    // Calling a member function requires `this` to address an object of the
+    // class type ([class.mfct.non.static]), so one element is stated by the
+    // language rather than assumed.
+    if (func.mode == "C++" && param.get_base_name() == "this")
     {
-      emit_struct_stack_backing(wrapper, p, name, pointee, func, location);
-      // Real stack storage, so one element is genuinely dereferenceable even
-      // though the contract never asked for it.
+      emit_receiver_backing(wrapper, p, name, pointee, func, location);
       param_extents[param.get_identifier()] = {
         type_byte_size_expr(pointee, &ns), true, false};
-      assumed_one_element.push_back(name);
       aliasable_params.emplace_back(p, name);
       continue;
     }
@@ -6096,7 +6052,6 @@ void code_contractst::add_pointer_validity_assumptions(
   emit_pointer_param_aliasing(wrapper, func, location, aliasable_params);
 
   warn_unstated_extents(func, location, nondet_extent);
-  warn_assumed_struct_extents(func, location, assumed_one_element);
 }
 
 expr2tc code_contractst::retain_allocation_for_free(
@@ -6226,7 +6181,7 @@ void code_contractst::emit_pointer_param_aliasing(
     fmt::join(may_alias, ", "));
 }
 
-void code_contractst::emit_struct_stack_backing(
+void code_contractst::emit_receiver_backing(
   goto_programt &wrapper,
   const expr2tc &p,
   const std::string &param_name,
@@ -6270,7 +6225,7 @@ void code_contractst::emit_struct_stack_backing(
 
   log_debug(
     "contracts",
-    "emit_struct_stack_backing: stack backing for parameter {}",
+    "emit_receiver_backing: stack backing for parameter {}",
     id2string(to_symbol2t(p).thename));
 }
 

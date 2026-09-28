@@ -799,8 +799,8 @@ private:
   /// only dereferenceable as far as the contract itself justifies via
   /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
   /// contract does not state and mask out-of-bounds accesses in the body
-  /// (GitHub issue #6212). Struct and union params are the exception: they keep
-  /// a one-element stack backing, see emit_struct_stack_backing.
+  /// (GitHub issue #6212). A C++ `this` is the exception, see
+  /// emit_receiver_backing.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
@@ -896,17 +896,8 @@ private:
     const locationt &location,
     const std::vector<std::pair<expr2tc, std::string>> &params);
 
-  /// \brief Back a struct/union pointer param with one stack-allocated element.
-  ///
-  /// This is the normative statement of the #6483 carve-out; other sites point
-  /// here rather than restating it. One element is still an extent the contract
-  /// does not state (#6212), but the alternative is worse: a heap-backed struct
-  /// silently discharges __ESBMC_old-based ensures clauses (#6483), turning
-  /// every such contract into a false negative. Stack backing also gives symex
-  /// proper SSA phi-nodes for conditional field writes, which the heap path
-  /// loses. Route struct params through emit_pointer_param_malloc instead once
-  /// #6483 is fixed.
-  void emit_struct_stack_backing(
+  /// \brief Back a C++ `this` with one stack-allocated object of its class.
+  void emit_receiver_backing(
     goto_programt &wrapper,
     const expr2tc &p,
     const std::string &param_name,
