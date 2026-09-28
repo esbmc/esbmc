@@ -561,13 +561,6 @@ void ld_converter::declare_user_fb_interfaces()
   }
 }
 
-// Execute a user-defined FB body once per scan.  Inputs take the values they
-// are wired to (nondeterministic when unwired), FB-local symbols are
-// instance-scoped, and the body is translated to native codet — crucially the
-// WHILE stays a real loop so a non-terminating Ladder Logic Bomb trips ESBMC's
-// unwinding assertion.
-// On any translation failure the body is over-approximated (skipped), matching
-// the pre-existing "unsupported FB" behaviour (no regression).
 // Translate an FB's Structured Text body into its instance's symbols. Throws
 // when the body uses constructs outside the supported ST subset.
 code_blockt ld_converter::translate_fb_body(const UserFBExec &ex)
@@ -598,6 +591,11 @@ code_blockt ld_converter::translate_fb_body(const UserFBExec &ex)
   return translator.translate(ex.st_body);
 }
 
+// Execute a user-defined FB body once per scan.  Inputs take the values they
+// are wired to (nondeterministic when unwired), FB-local symbols are
+// instance-scoped, and the body is translated to native codet — crucially the
+// WHILE stays a real loop so a non-terminating Ladder Logic Bomb trips ESBMC's
+// unwinding assertion.
 codet ld_converter::translate_user_fb(const UserFBExec &ex)
 {
   const std::string prefix = "ld::" + ex.instance_name + "__";
