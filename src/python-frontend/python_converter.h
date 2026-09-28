@@ -729,6 +729,10 @@ private:
     const nlohmann::json &base_node,
     const std::string &attr_name);
 
+  bool should_reject_numpy_shape_attr_on_symbol(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
   std::optional<exprt> try_get_numpy_bool_mask_rows_shape_attr(
     const exprt &base_expr,
     const typet &base_type,
