@@ -1002,12 +1002,16 @@ below, with what it needs. None converts mechanically.
 | `python_expr_builder.cpp` `set_symbol_type` | always legacy, for the `bytes` tag (#7902) | carry `#cpp_type` on arrays |
 | `python_expr_builder.cpp` `set_symbol_type_if_carried`, `set_function_type` | the fallback arm of a guarded helper | nothing -- the arm is the guard |
 | `converter_util.cpp` `create_symbol` | struct/union and `bytes` arrays | the two rows below |
-| `python_class_builder.cpp` (2) | a class struct's methods and components' `access` | carry them on `struct_type2t`, or derive them |
+| `python_class_builder.cpp` (2) | a class struct's `bases`, which `exception_typeid.cpp` and `base_type.cpp` read; also its methods and components' `access`, which no Python reader needs | carry `bases` on `struct_type2t` |
 | `converter_stmt.cpp` class-object value | the operand-less char-array shape (§14) | a distinct class-object type (§14.3 step 3) |
 | `converter_stmt.cpp` array-to-pointer decay, `converter_funcdef.cpp` mutated-parameter pointer and inferred-return arm | no test reaches them | a reaching test, or removal with a C-Dead proof |
 | `converter_symbols.cpp` root retype | arith node consistency (§6.2) | push the retype through the operands |
 | `converter_funcdef.cpp` function body, `python_converter.cpp` entry bodies (2) | a body names symbols that do not exist yet (§6.1) | move them to the adjust pass |
 | `python_adjust.cpp` patched value | adjust-pass legacy value rewrite | the adjust pass going IREP2-only |
+
+Storing the final class type IREP2-side (measured 2026-09-28) drops `bases`, and `except
+BaseException` then stops matching a `ValueError`: `regression/python/exception_base_class` and
+`github_4352` fail. `python_adjust.cpp` already restores `bases` by hand for the same reason.
 
 The three rows that are not design work are the unreached arms: a C-Dead proof over frontend code for
 arbitrary Python input is not tractable, so each needs either a test that reaches it or an argument
