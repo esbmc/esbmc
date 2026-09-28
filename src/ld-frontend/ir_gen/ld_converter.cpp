@@ -494,6 +494,44 @@ ld_converter::wire_source(const std::string &source, const typet &type) const
   return typecast_exprt(from_integer(value, signedbv_typet(64)), type);
 }
 
+// The value an FB input takes each scan: what its wire carries, or a
+// nondeterministic value when it is unwired or fed by something not modelled.
+exprt ld_converter::input_value(
+  const UserFBExec &ex,
+  const std::string &pin,
+  const typet &type) const
+{
+  auto w = std::find_if(
+    ex.in_wires.begin(), ex.in_wires.end(), [&](const FBInWire &in) {
+      return in.pin == pin;
+    });
+  if (w == ex.in_wires.end() || !w->connected)
+    return side_effect_expr_nondett(type);
+  if (auto bound = wire_source(w->source, type))
+    return *bound;
+  log_warning(
+    "user FB '{}' input {} is fed by something not modelled; sampling it "
+    "nondeterministically.",
+    ex.instance_name,
+    pin);
+  return side_effect_expr_nondett(type);
+}
+
+// Declare every FB instance's interface before any body runs, so a wire from a
+// block that runs later reads that block's previous-scan value (#7580).
+void ld_converter::declare_user_fb_interfaces()
+{
+  for (const auto &ex : ir_.user_fbs)
+  {
+    const std::string prefix = "ld::" + ex.instance_name + "__";
+    for (const auto &v : ex.input_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+    for (const auto &v : ex.local_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+    declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
+  }
+}
+
 // Execute a user-defined FB body once per scan.  Inputs take the values they
 // are wired to (nondeterministic when unwired), FB-local symbols are
 // instance-scoped, and the body is translated to native codet — crucially the
@@ -563,23 +601,7 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
   for (const auto &iv : ex.input_vars)
   {
     symbol_exprt s = resolve(iv.name);
-    exprt value = side_effect_expr_nondett(s.type());
-    auto w = std::find_if(
-      ex.in_wires.begin(), ex.in_wires.end(), [&](const FBInWire &in) {
-        return in.pin == iv.name;
-      });
-    if (w != ex.in_wires.end() && w->connected)
-    {
-      if (auto bound = wire_source(w->source, s.type()))
-        value = *bound;
-      else
-        log_warning(
-          "user FB '{}' input {} is fed by something not modelled; sampling it "
-          "nondeterministically.",
-          ex.instance_name,
-          iv.name);
-    }
-    blk.copy_to_operands(code_assignt(s, value));
+    blk.copy_to_operands(code_assignt(s, input_value(ex, iv.name, s.type())));
   }
   for (const auto &op : body.operands())
     blk.copy_to_operands(static_cast<const codet &>(op));
@@ -671,17 +693,7 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     scan_body.move_to_operands(rung_blk);
   }
 
-  // Declare every FB instance's interface first, so a wire from a block that
-  // runs later reads that block's previous-scan value (#7580).
-  for (const auto &ex : ir_.user_fbs)
-  {
-    const std::string prefix = "ld::" + ex.instance_name + "__";
-    for (const auto &v : ex.input_vars)
-      declare_scoped(prefix + v.name, type_of_kind(v.kind));
-    for (const auto &v : ex.local_vars)
-      declare_scoped(prefix + v.name, type_of_kind(v.kind));
-    declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
-  }
+  declare_user_fb_interfaces();
 
   // Execute user-defined FB bodies (carriers of hidden logic / LLBs).
   for (const auto &ex : ir_.user_fbs)

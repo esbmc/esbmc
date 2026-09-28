@@ -68,6 +68,11 @@ private:
   codet translate_user_fb(const UserFBExec &ex);
   std::optional<exprt>
   wire_source(const std::string &source, const typet &type) const;
+  exprt input_value(
+    const UserFBExec &ex,
+    const std::string &pin,
+    const typet &type) const;
+  void declare_user_fb_interfaces();
 
   void emit_scan_function(const code_blockt &scan_body);
   void emit_main_function();
