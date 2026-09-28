@@ -182,6 +182,9 @@ struct VarDecl
   VarKind kind = VarKind::BOOL;
   bool is_input = false;
   bool is_output = false;
+  // Writable from outside the program (program VAR_IN_OUT or VAR_EXTERNAL,
+  // %M memory): sampled each scan unless --ld-closed-world.
+  bool shared = false;
   // Initial value for numeric variables. Graphical LD wires FB presets from
   // <inVariable> literals rather than declared variables, so the synthesised
   // preset symbol carries the literal here.

@@ -1,0 +1,5 @@
+CORE
+mode.ld
+--ld-props props.yaml --ld-closed-world --incremental-bmc --max-k-step 5
+^LD: --ld-closed-world: assuming only the program writes mode$
+^VERIFICATION UNKNOWN$

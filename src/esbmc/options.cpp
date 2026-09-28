@@ -263,6 +263,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "unsupported constructs (function calls, member access) make the FB body "
      "fall back to a no-op instead of being over-approximated as "
      "nondeterministic (no over-approximation, zero false positives)"},
+    {"ld-closed-world",
+     NULL,
+     "Assume only the program writes its VAR_IN_OUT, VAR_EXTERNAL and %M "
+     "variables; by default they take any value at the start of each scan"},
     {"ld-scan-watchdog",
      NULL,
      "Instrument WHILE loops in user function-block bodies with a "
