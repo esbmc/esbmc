@@ -3075,6 +3075,88 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   return returns;
 }
 
+/// Whether a return in \p stmts (nested blocks included) satisfies \p pred.
+static bool any_return(
+  const nlohmann::json &stmts,
+  const std::function<bool(const nlohmann::json &)> &pred)
+{
+  for (const auto &s : stmts)
+  {
+    if (s["_type"] == "Return" && pred(s["value"]))
+      return true;
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (s.contains(key) && s[key].is_array() && any_return(s[key], pred))
+        return true;
+    if (s.contains("handlers") && s["handlers"].is_array())
+      for (const auto &h : s["handlers"])
+        if (any_return(h["body"], pred))
+          return true;
+  }
+  return false;
+}
+
+/// Whether a return annotation spells a union with None (`T | None`,
+/// `Union[T, None]`).
+static bool annotation_admits_none(const nlohmann::json &returns)
+{
+  if (!returns.is_object())
+    return false;
+  if (returns.value("_type", "") == "BinOp")
+    return type_utils::extract_binop_union_types(returns).has_none;
+  if (
+    returns.value("_type", "") != "Subscript" ||
+    returns["value"].value("id", "") != "Union")
+    return false;
+  const nlohmann::json &slice = returns["slice"];
+  for (const auto &elt : slice.value("elts", nlohmann::json::array()))
+    if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+      return true;
+  return false;
+}
+
+/// Whether a return in \p body yields None: a bare `return`, `return None`, or
+/// a conditional expression with a None arm.
+static bool returns_none(const nlohmann::json &body)
+{
+  // Bignum literals (#4642) carry `_bigint` with a null value; they are ints.
+  auto is_none = [](const nlohmann::json &v) {
+    return v.is_null() || (v.value("_type", "") == "Constant" &&
+                           v["value"].is_null() && !v.contains("_bigint"));
+  };
+  return any_return(body, [&](const nlohmann::json &v) {
+    return is_none(v) || (v.value("_type", "") == "IfExp" &&
+                          (is_none(v["body"]) || is_none(v["orelse"])));
+  });
+}
+
+/// The Optional<T> type a function returns when it can return None but its
+/// declared return type cannot hold it, or an empty type (#8016). Python does
+/// not enforce annotations, so `-> int` with a `return None` path is Optional
+/// too.
+typet python_converter::optional_return_type(
+  const nlohmann::json &function_node,
+  const typet &declared)
+{
+  // An inferred return (flagged by the annotator) and `-> None` (an empty
+  // declared type) count as unannotated.
+  const nlohmann::json &returns =
+    function_node.value("returns", nlohmann::json());
+  const bool unannotated = !returns.is_object() ||
+                           returns.value("_inferred_annotation", false) ||
+                           declared.is_empty();
+  if (!returns_none(function_node["body"]) && !annotation_admits_none(returns))
+    return typet();
+  if (!unannotated)
+    return type_handler_.build_optional_type(declared);
+
+  // Unannotated: the value returns decide T.
+  const TypeFlags flags = infer_types_from_returns(function_node["body"]);
+  if (!flags.has_int && !flags.has_float && !flags.has_bool)
+    return typet();
+  return type_handler_.build_optional_type(
+    type_utils::select_widest_type(flags, long_long_int_type()));
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -3298,68 +3380,16 @@ void python_converter::get_function_definition(
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-  // Pre-scan: detect mixed value+None returns and upgrade return type to
-  // Optional so None checks work correctly at runtime.
-  // This applies even when the function has an explicit return annotation:
-  // Python does not enforce annotations, so `-> int` with `return None` in
-  // the body must be modelled as Optional[int].
-  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
-    std::function<bool(const nlohmann::json &)> scan =
-      [&](const nlohmann::json &stmts) -> bool {
-      for (const auto &s : stmts)
-      {
-        if (s["_type"] == "Return")
-        {
-          if (s["value"].is_null())
-            return true;
-          // Bignum literals (issue #4642) carry `_bigint` with a null value;
-          // they are int returns, not None.
-          if (
-            s["value"]["_type"] == "Constant" &&
-            s["value"]["value"].is_null() && !s["value"].contains("_bigint"))
-            return true;
-        }
-        if (s.contains("body") && s["body"].is_array() && scan(s["body"]))
-          return true;
-        if (s.contains("orelse") && s["orelse"].is_array() && scan(s["orelse"]))
-          return true;
-      }
-      return false;
-    };
-    return scan(body);
-  };
-
   bool already_optional =
     annotation_is_optional || is_user_class_pointer(type.return_type()) ||
     type_handler_.is_tagged_scalar_type(type.return_type()) ||
-    (type.return_type().is_struct() && to_struct_type(type.return_type())
-                                         .tag()
-                                         .as_string()
-                                         .starts_with("tag-Optional_"));
-  if (!already_optional && body_has_none_return(function_node["body"]))
+    type_utils::is_optional_struct(type.return_type());
+  if (!already_optional)
   {
-    if (type.return_type().is_empty())
+    const typet optional_type =
+      optional_return_type(function_node, type.return_type());
+    if (!optional_type.id().empty())
     {
-      // Unannotated function: need full type inference to pick value_type
-      TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
-      bool has_value_return =
-        return_flags.has_int || return_flags.has_float || return_flags.has_bool;
-      if (has_value_return)
-      {
-        typet value_type =
-          type_utils::select_widest_type(return_flags, long_long_int_type());
-        typet optional_type = type_handler_.build_optional_type(value_type);
-        type.return_type() = optional_type;
-        current_element_type = optional_type;
-        python_expr::set_function_type(*added_symbol, type);
-      }
-    }
-    else
-    {
-      // Explicitly-annotated function (e.g., -> int) with return None paths:
-      // upgrade the annotated type to Optional[annotated_type].
-      typet optional_type =
-        type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
       python_expr::set_function_type(*added_symbol, type);
