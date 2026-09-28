@@ -5,6 +5,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <map>
+#include <optional>
 #include <string>
 
 // ld_converter translates LdIR into ESBMC's GOTO IR (irep2 / contextt).
@@ -65,6 +66,8 @@ private:
   codet translate_counter(const LdIRNode &n);
   codet translate_arith(const LdIRNode &n);
   codet translate_user_fb(const UserFBExec &ex);
+  std::optional<exprt>
+  wire_source(const std::string &source, const typet &type) const;
 
   void emit_scan_function(const code_blockt &scan_body);
   void emit_main_function();
