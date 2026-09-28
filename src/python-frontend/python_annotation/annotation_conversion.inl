@@ -1260,16 +1260,16 @@ python_annotation<Json>::infer_lambda_return_type(const Json &lambda_elem) const
     return "Any"; // Default for other lambda expressions
 }
 
-/// Whether an Optional[] slice names a non-primitive type by a Name or string.
+/// Whether a Union[...] slice lists None among its members.
 template <class Json>
-static bool names_reference_type(const Json &slice)
+static bool union_has_none(const Json &slice)
 {
-  std::string name;
-  if (slice.contains("id"))
-    name = slice["id"].template get<std::string>();
-  else if (slice.contains("value") && slice["value"].is_string())
-    name = slice["value"].template get<std::string>();
-  return !name.empty() && name != "int" && name != "float" && name != "bool";
+  if (!slice.is_object() || !slice.contains("elts"))
+    return false;
+  for (const auto &elt : slice["elts"])
+    if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+      return true;
+  return false;
 }
 
 template <class Json>
@@ -1387,13 +1387,13 @@ std::string python_annotation<Json>::get_function_return_type(
           {
             functions_in_analysis_.erase(func_name);
             // Bare "Optional" cannot hold None; leave the target unannotated
-            // so it takes the callee's resolved T*. Only for a T named by a
-            // Name or string: a primitive T's T* cannot tell a zero value
-            // from None, and a subscripted T resolves to no T* at all.
+            // so it takes the callee's resolved type (#8016). Union[T, None]
+            // is the same type.
             if (
               returns.contains("value") && returns["value"].contains("id") &&
-              returns["value"]["id"] == "Optional" &&
-              names_reference_type(returns.value("slice", Json())))
+              (returns["value"]["id"] == "Optional" ||
+               (returns["value"]["id"] == "Union" &&
+                union_has_none(returns.value("slice", Json())))))
               return "";
             if (returns.contains("value") && returns["value"].contains("id"))
               return returns["value"]["id"];

@@ -2056,7 +2056,18 @@ private:
   // =========================================================================
 
   /// Wrap values in Optional
+  typet optional_return_type(
+    const nlohmann::json &function_node,
+    const typet &declared);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+  /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
+  exprt wrap_if_optional(const exprt &value, const typet &type)
+  {
+    return type_utils::is_optional_struct(type) ? wrap_in_optional(value, type)
+                                                : value;
+  }
+  /// A (non-None) literal stored into an Optional<T> variable, wrapped (#8016).
+  exprt wrap_literal_if_optional(const exprt &value, const typet &type);
   typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
   exprt get_return_value(const nlohmann::json &value);
   typet subscript_annotation_type(
@@ -2074,8 +2085,24 @@ private:
     const std::string &class_name,
     const std::string &member_name);
 
-  /// Handle Optional value access
   void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
+
+  /// Handle Optional value access
+  exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt coerce_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt narrow_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt resolve_optional_operands(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element,
+    bool is_none_check);
   exprt unwrap_optional_if_needed(
     const exprt &expr,
     const nlohmann::json &element = nlohmann::json());
