@@ -44,6 +44,9 @@ private:
   // edge contact in the scan compares against the same previous-scan sample,
   // independently of rung order.
   std::map<std::string, symbol_exprt> edge_shadows_;
+  // Translated user-FB bodies by instance; a missing instance did not
+  // translate.
+  std::map<std::string, code_blockt> fb_bodies_;
 
   typet bool_t() const;
   typet int32_t_() const;
@@ -66,6 +69,7 @@ private:
   codet translate_counter(const LdIRNode &n);
   codet translate_arith(const LdIRNode &n);
   codet translate_user_fb(const UserFBExec &ex);
+  code_blockt translate_fb_body(const UserFBExec &ex);
   std::optional<exprt>
   wire_source(const std::string &source, const typet &type) const;
   exprt input_value(
