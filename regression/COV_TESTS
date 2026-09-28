@@ -1892,6 +1892,14 @@ regression/python/github_7966_named_negative_fail
 regression/python/github_7966_negative_fail
 regression/python/github_7966_nolen_fail
 regression/python/github_7966_several_classes_fail
+regression/esbmc/array_of_vector_store
+regression/esbmc/array_of_vector_store_fail
+regression/esbmc/array_of_vector_ops
+regression/esbmc/array_of_vector_trace_fail
+regression/esbmc/array_of_vector_symbolic
+regression/esbmc/array_of_vector_symbolic_fail
+regression/esbmc/array_of_vector_vla
+regression/esbmc/array_of_vector_vla_fail
 regression/python/optional_str_nondet_none_fail
 regression/python/optional_call_unannotated_fail
 regression/python/optional_str_ternary_fail
