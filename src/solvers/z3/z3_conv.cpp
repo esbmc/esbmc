@@ -48,8 +48,7 @@ smt_solver_baset *create_new_z3_solver(
         log_error("--z3-param expects name=value, got '{}'", param);
         abort();
       }
-      z3::set_param(
-        param.substr(0, eq).c_str(), param.substr(eq + 1).c_str());
+      z3::set_param(param.substr(0, eq).c_str(), param.substr(eq + 1).c_str());
     }
 
   z3_convt *conv = new z3_convt(ns, options);

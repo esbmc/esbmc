@@ -19,8 +19,9 @@
 
 extern solver_creator create_new_z3_solver;
 
-SCENARIO("mk_guarded_choice constrains a free variable by implication",
-         "[solvers][guarded-choice]")
+SCENARIO(
+  "mk_guarded_choice constrains a free variable by implication",
+  "[solvers][guarded-choice]")
 {
   config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
@@ -57,8 +58,7 @@ SCENARIO("mk_guarded_choice constrains a free variable by implication",
 
     WHEN("a guard holds")
     {
-      smt_astt out =
-        solver->mk_guarded_choice(s8, "gc_hit::", cases, nullptr);
+      smt_astt out = solver->mk_guarded_choice(s8, "gc_hit::", cases, nullptr);
       solver->assert_ast(k->eq(solver.get(), solver->mk_smt_bv(BigInt(1), s8)));
       solver->assert_ast(solver->mk_not(out->eq(solver.get(), v1)));
 
