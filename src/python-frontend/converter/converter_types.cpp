@@ -348,6 +348,44 @@ typet python_converter::get_union_type_from_annotation(
   return narrow_union_to_member(inner_type);
 }
 
+typet python_converter::get_optional_type(const nlohmann::json &slice)
+{
+  std::string inner_type;
+
+  // Optional[List]: slice is a Name node
+  if (slice.contains("id"))
+    inner_type = slice["id"].get<std::string>();
+  // Optional["List"]: forward reference string; slice is a Constant node
+  else if (
+    slice.contains("_type") && slice["_type"] == "Constant" &&
+    slice.contains("value") && slice["value"].is_string())
+    inner_type = slice["value"].get<std::string>();
+
+  if (!inner_type.empty())
+  {
+    // If inner_type is a user-defined class, return its struct symbol type
+    // rather than a built-in type (e.g., avoid mapping "List" to PyListObj).
+    const typet base_type = json_utils::is_class(inner_type, *ast_json)
+                              ? typet(symbol_typet("tag-" + inner_type))
+                              : type_handler_.get_typet(inner_type);
+    // Always use pointer type for Optional to properly represent None
+    return gen_pointer_type(base_type);
+  }
+
+  // Optional[List[T]] / Optional[Set[T]]: the container is already a
+  // pointer, so NULL represents None.
+  if (slice.value("_type", "") == "Subscript")
+  {
+    const std::string container = slice["value"].value("id", "");
+    if (
+      container == "List" || container == "list" || container == "Set" ||
+      container == "set")
+      return type_handler_.get_list_type();
+  }
+
+  return typet();
+}
+
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
@@ -636,30 +674,9 @@ typet python_converter::get_type_from_annotation(
         annotation_node.contains("slice") &&
         annotation_node["slice"].is_object())
       {
-        const auto &slice = annotation_node["slice"];
-        std::string inner_type;
-
-        // Optional[List]: slice is a Name node
-        if (slice.contains("id"))
-          inner_type = slice["id"].get<std::string>();
-        // Optional["List"]: forward reference string; slice is a Constant node
-        else if (
-          slice.contains("_type") && slice["_type"] == "Constant" &&
-          slice.contains("value") && slice["value"].is_string())
-          inner_type = slice["value"].get<std::string>();
-
-        if (!inner_type.empty())
-        {
-          typet base_type;
-          // If inner_type is a user-defined class, return its struct symbol type
-          // rather than a built-in type (e.g., avoid mapping "List" to PyListObj).
-          if (json_utils::is_class(inner_type, *ast_json))
-            base_type = symbol_typet("tag-" + inner_type);
-          else
-            base_type = type_handler_.get_typet(inner_type);
-          // Always use pointer type for Optional to properly represent None
-          return gen_pointer_type(base_type);
-        }
+        const typet optional_type = get_optional_type(annotation_node["slice"]);
+        if (!optional_type.id().empty())
+          return optional_type;
       }
     }
 
