@@ -292,8 +292,7 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
 // block); each path is a series contact chain (AND) and the paths reaching
 // one sink are alternatives (OR).
 //
-// Rungs are emitted per sink in rightPowerRail order, which is the order in
-// which the vendor tool draws them and therefore the scan execution order.
+// Rungs are emitted per sink in the order Beremiz executes them (step 6).
 // A function block encountered on a path is emitted just before the first
 // sink that consumes it, so a block still observes the values written by the
 // rungs drawn above it.
@@ -899,37 +898,23 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(step));
   };
 
-  // Step 6: order the coils by rightPowerRail order, the order the vendor tool
-  // draws the networks and hence the scan execution order.
-  std::vector<int> coils;
-  std::set<int> coils_seen;
-  for (auto rpr : ld_body.children("rightPowerRail"))
-    for (auto cpi : rpr.select_nodes(".//connection"))
-    {
-      int cid = cpi.node().attribute("refLocalId").as_int(-1);
-      if (
-        cid >= 0 && nodes.count(cid) && is_coil_tag(nodes.at(cid).tag) &&
-        coils_seen.insert(cid).second)
-        coils.push_back(cid);
-    }
-  // Coils the rail does not list (an unwired rail is common in exports) follow
-  // in Beremiz's order (PLCGenerator.SortInstances): by row, where coils less
-  // than 10 apart vertically share a row, then by x. That comparison is not
-  // transitive, so it sorts stably from document order, as Beremiz does;
+  // Step 6: order the coils as Beremiz does (PLCGenerator.SortInstances): by
+  // row, where coils less than 10 apart vertically share a row, then by x. The
+  // rightPowerRail's connection list plays no part in it. That comparison is
+  // not transitive, so it sorts stably from document order, as Beremiz does;
   // `nodes` is unordered, and iterating it made the order depend on hashing
   // (#7352).
-  std::vector<int> unlisted;
+  std::vector<int> coils;
   for (auto &[lid, g] : nodes)
-    if (is_coil_tag(g.tag) && !coils_seen.count(lid))
-      unlisted.push_back(lid);
-  std::sort(unlisted.begin(), unlisted.end(), [&](int a, int b) {
+    if (is_coil_tag(g.tag))
+      coils.push_back(lid);
+  std::sort(coils.begin(), coils.end(), [&](int a, int b) {
     return nodes.at(a).document_order < nodes.at(b).document_order;
   });
-  std::stable_sort(unlisted.begin(), unlisted.end(), [&](int a, int b) {
+  std::stable_sort(coils.begin(), coils.end(), [&](int a, int b) {
     const GNode &ga = nodes.at(a), &gb = nodes.at(b);
     return std::abs(ga.y - gb.y) < 10 ? ga.x < gb.x : ga.y < gb.y;
   });
-  coils.insert(coils.end(), unlisted.begin(), unlisted.end());
 
   // Step 7: emit the coils. Evaluation is sequential, as in the ST Beremiz
   // generates for MATIEC: each coil re-reads its contacts after every earlier
