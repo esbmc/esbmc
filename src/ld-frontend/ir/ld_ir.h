@@ -79,8 +79,6 @@ struct UserFBExec
   std::string instance_name;
   std::vector<FBVarDecl> input_vars; // formal inputs (IN1, IN2, ...) + types
   std::vector<FBVarDecl> local_vars; // FB locals (e.g. "i") + types
-  std::string output_var;
-  VarKind output_kind = VarKind::BOOL;
   std::vector<FBVarDecl> output_vars; // every formal output + types
   std::string in1_var;              // program var feeding IN1 ("" => nondet)
   std::vector<FBOutWire> out_wires; // FB pin -> program variable assignments

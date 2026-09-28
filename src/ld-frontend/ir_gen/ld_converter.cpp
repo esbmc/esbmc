@@ -490,9 +490,10 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
     return declare_scoped(prefix + nm, t);
   };
 
-  // Declare the formal output with its declared type (REAL outputs stay
+  // Declare the formal outputs with their declared types (REAL outputs stay
   // double); other locals are declared on demand by the resolver above.
-  declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
+  for (const auto &v : ex.output_vars)
+    declare_scoped(prefix + v.name, type_of_kind(v.kind));
 
   // Translate the body first.  If it uses constructs outside the supported ST
   // subset (nested FB calls, REAL, MOD, library functions), it throws and we

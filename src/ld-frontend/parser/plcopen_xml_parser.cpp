@@ -1260,19 +1260,19 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
           {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
       return out;
     };
+    // An in/out variable is typed like an input, a temporary like a local.
     def.input_vars = collect("inputVars");
+    const auto in_out = collect("inOutVars");
+    def.input_vars.insert(def.input_vars.end(), in_out.begin(), in_out.end());
     def.local_vars = collect("localVars");
+    const auto temps = collect("tempVars");
+    def.local_vars.insert(def.local_vars.end(), temps.begin(), temps.end());
     def.output_vars = collect("outputVars");
-    if (!def.output_vars.empty())
-    {
-      def.output_var = def.output_vars.front().name;
-      def.output_kind = def.output_vars.front().kind;
-    }
     pugi::xml_node st = pou.select_node(".//body/ST").node();
     if (!st)
       continue; // non-ST body (e.g. graphical FB) — not handled here
     collect_text(st, def.st_body);
-    if (def.output_var.empty() || def.st_body.empty())
+    if (def.output_vars.empty() || def.st_body.empty())
       continue;
     ast.user_fb_defs.push_back(std::move(def));
   }

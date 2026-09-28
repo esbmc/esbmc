@@ -125,8 +125,6 @@ LdIR LdIRBuilder::build(const LdAst &ast)
       ex.instance_name = inst.instance_name;
       ex.input_vars = def.input_vars;
       ex.local_vars = def.local_vars;
-      ex.output_var = def.output_var;
-      ex.output_kind = def.output_kind;
       ex.output_vars = def.output_vars;
       ex.in1_var = inst.in1_var;
       ex.out_wires = inst.out_wires;
