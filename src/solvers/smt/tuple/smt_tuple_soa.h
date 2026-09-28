@@ -1,6 +1,7 @@
 #ifndef SOLVERS_SMT_TUPLE_SMT_TUPLE_SOA_H_
 #define SOLVERS_SMT_TUPLE_SMT_TUPLE_SOA_H_
 
+#include <solvers/smt/array_conv.h>
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <util/symtab/namespace.h>
@@ -24,8 +25,9 @@ class smt_tuple_soa_flattener;
  *     type spells. `arr` is its flattened native array. A row taken out of it
  *     is materialised as a plain backend array, so a leaf never reaches code
  *     outside this flattener -- which calls array_api directly on array terms.
- *  Every other array, including a struct's array member, is the plain backend
- *  array convert_sort describes. */
+ *  A node's scalar member array indexed by few bits is expanded per slot (see
+ *  member_array). Every other array, including a struct's array member, is
+ *  the plain backend array convert_sort describes. */
 class soa_ast : public smt_ast
 {
 public:
@@ -51,6 +53,10 @@ public:
   smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
   void dump() const override;
 
+  /** Row @p idx of a leaf; see smt_tuple_soa_flattener::row. */
+  smt_astt
+  leaf_row(smt_solver_baset *ctx, const expr2tc &idx, bool node_member) const;
+
   bool leaf() const
   {
     return arr != nullptr;
@@ -74,8 +80,11 @@ inline soa_astt to_soa_ast(smt_astt a)
 class smt_tuple_soa_flattener : public tuple_iface
 {
 public:
-  smt_tuple_soa_flattener(smt_solver_baset *_ctx, const namespacet &_ns)
-    : ctx(_ctx), ns(_ns)
+  smt_tuple_soa_flattener(
+    smt_solver_baset *_ctx,
+    const namespacet &_ns,
+    unsigned _eager_bits)
+    : ctx(_ctx), ns(_ns), eager_bits(_eager_bits), small_arrays(_ctx)
   {
   }
 
@@ -100,6 +109,10 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
+  void add_tuple_constraints_for_solving() override;
+  void push_tuple_ctx() override;
+  void pop_tuple_ctx() override;
+
   /** A value of @p type from fresh symbols named after @p name. @p in_node
    *  says it is a member of a node, the only place a leaf is needed. */
   smt_astt build(const std::string &name, const type2tc &type, bool in_node);
@@ -119,15 +132,25 @@ public:
   /** @p a resized to @p w bits. */
   smt_astt resize(smt_astt a, std::size_t w) const;
 
-  /** The backend array of type @p rowtype holding the slots of @p arr from
-   *  position @p start. */
-  smt_astt row(smt_astt arr, smt_astt start, const type2tc &rowtype);
+  /** The array of type @p rowtype holding the slots of @p arr from position
+   *  @p start, represented as a node member if @p node_member, else as a
+   *  struct member. */
+  smt_astt
+  row(smt_astt arr, smt_astt start, const type2tc &rowtype, bool node_member);
 
   /** Constrain every slot of @p node, an array of @p type, to hold @p value. */
   void fill_const(smt_astt node, smt_astt value, const type2tc &type);
 
+  /** A node's scalar member array of sort @p s: expanded into one term per
+   *  slot when its index has at most eager_bits bits, as the node flattener
+   *  does, else a native solver array. Native arrays cost the solver lemmas
+   *  that a handful of slots does not repay. */
+  smt_astt member_array(const std::string &name, smt_sortt s);
+
   smt_solver_baset *ctx;
   const namespacet &ns;
+  unsigned eager_bits;
+  array_convt small_arrays;
 };
 
 #endif /* SOLVERS_SMT_TUPLE_SMT_TUPLE_SOA_H_ */

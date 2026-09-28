@@ -734,6 +734,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"tuple-soa-flattener",
      NULL,
      "Encode arrays of structs as one array per scalar field"},
+    {"tuple-soa-eager-bits",
+     boost::program_options::value<int>()->value_name("nr"),
+     "With --tuple-soa-flattener, expand field arrays indexed by at most nr "
+     "bits into one term per slot instead of solver arrays (default 3)"},
     {"array-flattener", NULL, "Encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,

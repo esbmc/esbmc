@@ -221,7 +221,11 @@ smt_convt *create_solver(
     ctx->set_tuple_iface(tuple_api);
   // Use the struct-of-arrays flattener if specified
   else if (soa_flat)
-    ctx->set_tuple_iface(new smt_tuple_soa_flattener(ctx, ns));
+  {
+    std::string bits = options.get_option("tuple-soa-eager-bits");
+    ctx->set_tuple_iface(new smt_tuple_soa_flattener(
+      ctx, ns, bits.empty() ? 3 : std::stoul(bits)));
+  }
   // Use the concat flattener if specified
   else if (concat_flat)
     ctx->set_tuple_iface(new smt_tuple_concat_flattener(ctx, ns));

@@ -142,19 +142,23 @@ smt_astt smt_tuple_soa_flattener::resize(smt_astt a, std::size_t w) const
 smt_astt smt_tuple_soa_flattener::row(
   smt_astt arr,
   smt_astt start,
-  const type2tc &rowtype)
+  const type2tc &rowtype,
+  bool node_member)
 {
   smt_sortt s = flat_sort(rowtype);
-  smt_astt out = ctx->mk_smt_symbol(ctx->mk_fresh_name("soa_row::"), s);
+  std::string name = ctx->mk_fresh_name("soa_row::");
+  smt_astt out =
+    node_member ? member_array(name, s) : ctx->mk_smt_symbol(name, s);
 
   uint64_t n = extent(rowtype);
   assert(n != 0 && "SoA row of an array without a constant size");
   std::size_t w = arr->sort->get_domain_width();
   for (uint64_t j = 0; j < n; j++)
-    out = ctx->mk_store(
-      out,
-      ctx->mk_smt_bv(BigInt(j), s->get_domain_width()),
-      ctx->mk_select(arr, ctx->mk_bvadd(start, ctx->mk_smt_bv(BigInt(j), w))));
+    out = out->update(
+      ctx,
+      ctx->mk_select(arr, ctx->mk_bvadd(start, ctx->mk_smt_bv(BigInt(j), w))),
+      j,
+      expr2tc());
 
   return out;
 }
@@ -192,7 +196,7 @@ smt_astt smt_tuple_soa_flattener::build(
       return r;
     }
 
-    return ctx->mk_smt_symbol(name, s);
+    return in_node ? member_array(name, s) : ctx->mk_smt_symbol(name, s);
   }
 
   if (is_tuple_ast_type(type))
@@ -288,16 +292,42 @@ void smt_tuple_soa_flattener::fill_const(
   {
     const soa_ast *l = dynamic_cast<const soa_ast *>(value);
     smt_astt a = l != nullptr ? l->arr : value;
-    value = ctx->mk_select(
-      a, ctx->mk_smt_bv(BigInt(0), a->sort->get_domain_width()));
+    value = a->select(
+      ctx,
+      constant_int2tc(
+        unsignedbv_type2tc(a->sort->get_domain_width()), BigInt(0)));
   }
 
   const soa_ast *l = dynamic_cast<const soa_ast *>(node);
   smt_astt target = l != nullptr ? l->arr : node;
-  ctx->assert_ast(ctx->mk_eq(
-    target,
-    ctx->array_api->convert_array_of(
-      value, target->sort->get_domain_width())));
+  std::size_t dw = target->sort->get_domain_width();
+  array_iface *api = dynamic_cast<const array_ast *>(target) != nullptr
+                       ? &small_arrays
+                       : ctx->array_api;
+  ctx->assert_ast(target->eq(ctx, api->convert_array_of(value, dw)));
+}
+
+smt_astt
+smt_tuple_soa_flattener::member_array(const std::string &name, smt_sortt s)
+{
+  if (s->get_domain_width() <= eager_bits)
+    return small_arrays.mk_array_symbol(name, s, s->get_range_sort());
+  return ctx->mk_smt_symbol(name, s);
+}
+
+void smt_tuple_soa_flattener::add_tuple_constraints_for_solving()
+{
+  small_arrays.add_array_constraints_for_solving();
+}
+
+void smt_tuple_soa_flattener::push_tuple_ctx()
+{
+  small_arrays.push_array_ctx();
+}
+
+void smt_tuple_soa_flattener::pop_tuple_ctx()
+{
+  small_arrays.pop_array_ctx();
 }
 
 smt_astt smt_tuple_soa_flattener::tuple_array_of(
@@ -411,15 +441,40 @@ smt_astt soa_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
   {
     soa_ast *r = new soa_ast(flat, ctx, ctx->convert_sort(sub), sub);
     for (smt_astt m : members)
-      r->members.push_back(m->select(ctx, idx));
+    {
+      const soa_ast *l = dynamic_cast<const soa_ast *>(m);
+      /* Selecting from a node of nodes yields a node, whose rows are node
+       * members; selecting a struct yields struct members. */
+      r->members.push_back(
+        l != nullptr && l->leaf() ? l->leaf_row(ctx, idx, is_array_type(sub))
+                                  : m->select(ctx, idx));
+    }
     return r;
   }
 
+  return leaf_row(ctx, idx, false);
+}
+
+smt_astt soa_ast::leaf_row(
+  smt_solver_baset *ctx,
+  const expr2tc &idx,
+  bool node_member) const
+{
+  const type2tc &sub = to_array_type(thetype).subtype;
   std::size_t w = arr->sort->get_domain_width();
   smt_astt start = ctx->mk_bvmul(
     flat.resize(ctx->convert_ast(idx), w),
     ctx->mk_smt_bv(BigInt(flat.extent(sub)), w));
-  return flat.row(arr, start, sub);
+
+  /* A row that still has dimensions of its own is a leaf inside a node, as
+   * build() makes it. */
+  if (node_member && is_array_type(to_array_type(sub).subtype))
+  {
+    soa_ast *r = new soa_ast(flat, ctx, ctx->convert_sort(sub), sub);
+    r->arr = flat.row(arr, start, sub, false);
+    return r;
+  }
+  return flat.row(arr, start, sub, node_member);
 }
 
 smt_astt soa_ast::update(
@@ -463,22 +518,26 @@ smt_astt soa_ast::update(
     return r;
   }
 
-  /* Storing a whole row, a backend array: copy its slots into place. */
+  /* Storing a whole row: copy its slots into place. */
   const type2tc &sub = to_array_type(thetype).subtype;
   uint64_t n = flat.extent(sub);
   assert(n != 0 && "SoA row store into an array without a constant size");
 
   std::size_t w = arr->sort->get_domain_width();
-  std::size_t vw = value->sort->get_domain_width();
   smt_astt start = ctx->mk_bvmul(
     flat.resize(ctx->convert_ast(index), w), ctx->mk_smt_bv(BigInt(n), w));
+
+  /* A row with dimensions of its own is a leaf: read its flattened slots. */
+  const soa_ast *l = dynamic_cast<const soa_ast *>(value);
+  smt_astt src = l != nullptr ? l->arr : value;
+  std::size_t vw = src->sort->get_domain_width();
 
   r->arr = arr;
   for (uint64_t j = 0; j < n; j++)
     r->arr = ctx->mk_store(
       r->arr,
       ctx->mk_bvadd(start, ctx->mk_smt_bv(BigInt(j), w)),
-      ctx->mk_select(value, ctx->mk_smt_bv(BigInt(j), vw)));
+      src->select(ctx, constant_int2tc(unsignedbv_type2tc(vw), BigInt(j))));
   return r;
 }
 
