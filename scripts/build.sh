@@ -40,6 +40,7 @@ ubuntu_setup () {
     PKGS="\
         clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
         python-is-python3 csmith python3 \
+        libbz2-dev liblzma-dev \
         git ccache unzip wget curl libcsmith-dev gperf \
         libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
         libboost-all-dev ninja-build python3-setuptools \
