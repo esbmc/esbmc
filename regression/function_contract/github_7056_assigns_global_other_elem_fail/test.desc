@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract f --function f
+^VERIFICATION FAILED$
+^.*global\[0\] not in assigns clause.*$

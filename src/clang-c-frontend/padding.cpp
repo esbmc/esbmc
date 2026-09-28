@@ -1,100 +1,16 @@
 /// \file
-/// C++ Language Type Checking
+/// Struct/union padding and alignment computation
 
 #include "padding.h"
 
 #include <algorithm>
 
-#include <util/arith_tools.h>
-#include <util/config.h>
-#include <util/type_byte_size.h>
-
-static std::size_t ext_int_representation_bytes(const typet &type)
-{
-  // We represent an ExtInt with the smallest integer type that can hold it
-  // TODO: This should be limited to a maximum of 8 bytes, but pointer analysis
-  // currently expects the fields to be aligned to the least power of 2 greater
-  // than the width in bytes
-  const std::size_t bits = string2integer(type.width().as_string()).to_uint64();
-
-  std::size_t result;
-  for (result = 1; bits > result * config.ansi_c.char_width; result *= 2)
-    ;
-
-  return result;
-}
-
-BigInt alignment(const typet &type, const namespacet &ns)
-{
-  // we need to consider a number of different cases:
-  // - alignment specified in the source, which will be recorded in
-  // "alignment"
-  // - alignment induced by packing ("The alignment of a member will
-  // be on a boundary that is either a multiple of n or a multiple of
-  // the size of the member, whichever is smaller."); both
-  // "alignment" and "packed" will be set
-  // - natural alignment, when neither "alignment" nor "packed"
-  // are set
-  // - dense packing with only "packed" set.
-
-  // is the alignment given?
-  const exprt &given_alignment =
-    static_cast<const exprt &>(type.find("alignment"));
-
-  BigInt a_int = 0;
-
-  // we trust it blindly, no matter how nonsensical
-  if (given_alignment.is_not_nil())
-    a_int = string2integer(given_alignment.cformat().as_string());
-
-  // alignment but no packing
-  if (a_int > 0 && !type.get_bool("packed"))
-    return a_int;
-  // no alignment, packing
-  else if (a_int == 0 && type.get_bool("packed"))
-    return 1;
-
-  // compute default
-  BigInt result = 0;
-
-  if (type.id() == typet::t_array)
-    result = alignment(type.subtype(), ns);
-  else if (type.id() == typet::t_struct || type.id() == typet::t_union)
-  {
-    result = 1;
-
-    // get the max
-    // (should really be the smallest common denominator)
-    for (const auto &c : to_struct_union_type(type).components())
-      result = std::max(result, alignment(c.type(), ns));
-  }
-  else if (type.get_bool("#bitfield"))
-  {
-    // we align these according to the 'underlying type'
-    result = alignment(type.subtype(), ns);
-  }
-  else if (type.get_bool("#extint"))
-    result = ext_int_representation_bytes(type);
-  else if (
-    type.id() == typet::t_unsignedbv || type.id() == typet::t_signedbv ||
-    type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
-    type.id() == typet::t_bool || type.id() == typet::t_pointer)
-  {
-    type2tc thetype = migrate_type(type);
-    result = type_byte_size(thetype);
-  }
-  else if (type.id() == typet::t_symbol)
-    result = alignment(ns.follow(type), ns);
-  else
-    result = 1;
-
-  // if an alignment had been provided and packing was requested, take
-  // the smallest alignment
-  if (a_int > 0 && a_int < result)
-    result = a_int;
-
-  return result;
-}
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
+#include <util/irep/pad_names.h>
 
 static struct_typet::componentst::iterator pad_bit_field(
   struct_typet::componentst &components,
@@ -104,8 +20,8 @@ static struct_typet::componentst::iterator pad_bit_field(
   const unsignedbv_typet padding_type(pad_bits);
 
   std::string index = std::to_string(where - components.begin());
-  struct_typet::componentt component(
-    "anon_bit_field_pad$" + index, "anon_bit_field_pad$" + index, padding_type);
+  std::string name = std::string(pad_bit_field_prefix) + index;
+  struct_typet::componentt component(name, name, padding_type);
 
   component.type().set("#bitfield", true);
   component.set_is_padding(true);
@@ -121,8 +37,8 @@ static struct_typet::componentst::iterator pad_ext_int_after(
   const unsignedbv_typet padding_type(pad_bits);
 
   std::string index = std::to_string(where - components.begin());
-  struct_typet::componentt component(
-    "ext_int_pad$" + index, "anon_ext_int_pad$" + index, padding_type);
+  std::string name = std::string(pad_ext_int_prefix) + index;
+  struct_typet::componentt component(name, name, padding_type);
 
   component.type().set("#extint", true);
   component.set_is_padding(true);
@@ -137,11 +53,55 @@ static struct_typet::componentst::iterator pad(
   const unsignedbv_typet padding_type(pad_bits);
 
   std::string index = std::to_string(where - components.begin());
-  struct_typet::componentt component(
-    "anon_pad$" + index, "anon_pad$" + index, padding_type);
+  std::string name = std::string(pad_prefix) + index;
+  struct_typet::componentt component(name, name, padding_type);
 
   component.set_is_padding(true);
   return std::next(components.insert(where, component));
+}
+
+/* add_padding() must be idempotent: clang_c_adjust::adjust_type() re-runs it
+ * over types that the frontend has already laid out, and re-inserting the
+ * _ExtInt pad would grow the struct on every call. */
+static bool follows_ext_int_padding(
+  struct_typet::componentst::const_iterator where,
+  const struct_typet::componentst &components)
+{
+  struct_typet::componentst::const_iterator next = std::next(where);
+  return next != components.end() && next->get_is_padding() &&
+         next->type().get_bool("#extint");
+}
+
+/* A member's alignment demand as the record's attributes leave it: `packed`
+ * drops it to 1, `#pragma pack(n)` caps it at n bytes (recorded by the frontend
+ * as "max_field_alignment"; absent means uncapped). The record's own alignment
+ * is then the max over its members, which is why capping an aggregate is the
+ * same as capping each of its members. */
+static BigInt
+capped_alignment(const typet &member, const typet &record, const namespacet &ns)
+{
+  if (record.get_bool("packed"))
+    return 1;
+
+  const BigInt a = alignment(member, ns);
+  const std::string &cap = record.get_string("max_field_alignment");
+  if (cap.empty())
+    return a;
+  return std::min(a, string2integer(cap));
+}
+
+/* Read the constant's value, not its `#cformat` text. constant_exprt stores the
+ * value in `value` and a decimal rendering in `#cformat`; the latter is a
+ * presentation attribute that a node built any other way need not carry, and
+ * reading it made an explicit alignment depend on one. */
+static void
+raise_to_explicit_alignment(BigInt &max_alignment, const exprt &alignment)
+{
+  BigInt value = 0;
+  if (to_integer(alignment, value))
+    return;
+  if (value > max_alignment)
+    max_alignment = value;
 }
 
 static void add_padding(struct_typet &type, const namespacet &ns)
@@ -191,7 +151,9 @@ static void add_padding(struct_typet &type, const namespacet &ns)
       }
 
       // Pad out extints that aren't in bitfields
-      if (is_extint && !is_bitfield)
+      if (
+        is_extint && !is_bitfield && !it->get_is_padding() &&
+        !follows_ext_int_padding(it, components))
       {
         assert(bit_field_bits == 0);
 
@@ -231,16 +193,17 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
     if (it_type.get_bool("#bitfield"))
     {
-      a = alignment(it_type, ns);
-
-      // A zero-width bit-field causes alignment to the base-type.
+      // A zero-width bit-field causes alignment to the base-type. Neither
+      // `packed` nor `#pragma pack(n)` relaxes that demand.
       if (string2integer(it_type.width().as_string()) == 0)
       {
+        a = alignment(it_type, ns);
       }
       else
       {
         // Otherwise, ANSI-C says that bit-fields do not get padded!
         // We consider the type for max_alignment, however.
+        a = capped_alignment(it_type, type, ns);
         if (max_alignment < a)
           max_alignment = a;
 
@@ -273,7 +236,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
       a = 1;
     }
     else
-      a = alignment(it_type, ns);
+      a = capped_alignment(it_type, type, ns);
 
     assert(bit_field_bits == 0);
     assert(a > 0);
@@ -323,11 +286,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   // any explicit alignment for the struct?
   const exprt &alignment = static_cast<const exprt &>(type.find("alignment"));
   if (alignment.is_not_nil())
-  {
-    const auto tmp_i = string2integer(alignment.cformat().as_string());
-    if (tmp_i > max_alignment)
-      max_alignment = tmp_i;
-  }
+    raise_to_explicit_alignment(max_alignment, alignment);
   // Is the struct packed, without any alignment specification?
   else if (type.get_bool("packed"))
     return; // done
@@ -362,6 +321,20 @@ static void add_padding(struct_typet &type, const namespacet &ns)
       }
     }
   }
+
+  // Record the struct's effective alignment so the solver can constrain the
+  // base address of objects of this type: an object's address is always a
+  // multiple of its type's alignment ([basic.align], C11 6.2.8). Only types
+  // carrying an "alignment" attribute are constrained in smt_memspace, and so
+  // far that attribute was set only for an explicit struct-level `alignas`.
+  // Aggregates that are merely naturally aligned (e.g. through an over-aligned
+  // member) had no attribute, so `(uintptr_t)&obj % alignof(T) == 0` produced
+  // a spurious counterexample. Packed structs are excluded on purpose (their
+  // alignment is not checked, see the `packed-3` regression test).
+  if (
+    max_alignment > 1 && !type.get_bool("packed") &&
+    type.find("alignment").is_nil())
+    type.set("alignment", constant_exprt(max_alignment, size_type()));
 }
 
 static void add_padding(union_typet &type, const namespacet &ns)
@@ -369,7 +342,8 @@ static void add_padding(union_typet &type, const namespacet &ns)
   /* components only exist for complete types */
   assert(!type.incomplete());
 
-  BigInt max_alignment_bits = alignment(type, ns) * config.ansi_c.char_width;
+  const BigInt union_alignment = capped_alignment(type, type, ns);
+  BigInt max_alignment_bits = union_alignment * config.ansi_c.char_width;
   BigInt size_bits = 0;
 
   // check per component, and ignore those without fixed size
@@ -396,10 +370,18 @@ static void add_padding(union_typet &type, const namespacet &ns)
 
     struct_typet::componentt component;
     component.type() = padding_type;
-    component.set_name("$pad");
+    component.set_name(std::string(pad_union_name));
     component.set_is_padding(true);
 
     type.components().push_back(component);
+  }
+
+  // Record the union's effective alignment for base-address constraints, as
+  // for structs above (see the comment there).
+  if (!type.get_bool("packed") && type.find("alignment").is_nil())
+  {
+    if (union_alignment > 1)
+      type.set("alignment", constant_exprt(union_alignment, size_type()));
   }
 }
 

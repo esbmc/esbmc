@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-graphml - --witness-programfile programfile.c
+^VERIFICATION FAILED$
+key="originfile">[^<]*helper\.h
+<data key="startline">6</data>

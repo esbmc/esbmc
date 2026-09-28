@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 app.c picosat.c --unwind 1 --partial-loops --function picosat_add --32
+REQUIRES arch32
 ^VERIFICATION FAILED$

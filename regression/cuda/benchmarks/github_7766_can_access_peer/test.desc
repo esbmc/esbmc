@@ -1,0 +1,4 @@
+CORE
+main.cu
+--unwind 10
+^VERIFICATION SUCCESSFUL$

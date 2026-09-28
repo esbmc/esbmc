@@ -1,6 +1,6 @@
 # _fail sibling of github_4715_irep2_native_body_py_01 (W1-loc spike Phase C,
 # esbmc/esbmc#4715). Pins the load-bearing half of "byte-identical": under
-# --irep2-native-body the body must STILL be converted (via the fallback until
+# native conversion the body must STILL be converted (via the fallback until
 # the native dispatcher is complete), so a genuine assertion violation is
 # surfaced as VERIFICATION FAILED and not silently suppressed by skipping
 # goto_convert_rec.
@@ -16,7 +16,7 @@ def test():
     while w < 3:
         w += 1
 
-    assert x == 5, "x is 3, not 5 -- must be detected under --irep2-native-body"
+    assert x == 5, "x is 3, not 5 -- must be detected under native conversion"
     assert w == 3
 
 

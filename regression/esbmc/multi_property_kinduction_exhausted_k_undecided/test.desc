@@ -1,0 +1,8 @@
+CORE
+main.c
+--k-induction --multi-property --max-k-step 5
+^Unable to prove or falsify the program, giving up\.$
+^VERIFICATION UNKNOWN$
+^\s+UNKNOWN\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion x != 100 \(inductive step could not prove this claim\)$
+^\*\* 0 of 1 properties failed, 1 unknown$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z

@@ -1,4 +1,30 @@
+#include <esbmc/globals.h>
 #include <langapi/mode.h>
+
+#include <c2goto/cprover_library.h>
+#include <clang-c-frontend/clang_c_language.h>
+#include <clang-cpp-frontend/esbmc_internal_cpp.h>
+#ifdef ENABLE_PYTHON_FRONTEND
+#  include <python-frontend/python_language.h>
+#endif
+
+extern "C" const char buildidstring_buf[];
+extern "C" const unsigned int buildidstring_buf_size;
+
+std::string esbmc_build_id()
+{
+  return {buildidstring_buf, buildidstring_buf_size};
+}
+
+void register_bundled_files()
+{
+  clang_c_languaget::register_bundled();
+  esbmct::register_bundled_cpp();
+  register_bundled_libc();
+#ifdef ENABLE_PYTHON_FRONTEND
+  python_languaget::register_bundled();
+#endif
+}
 
 const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_C,

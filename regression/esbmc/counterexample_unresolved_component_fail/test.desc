@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-slice
+^  h\.p = \{ \.p=&x, \.t=0 \}$
+^  h\.t = 3 \(00000000 00000000 00000000 00000011\)$
+^VERIFICATION FAILED$

@@ -1,0 +1,4 @@
+CORE
+main.c
+--std c23
+^VERIFICATION SUCCESSFUL$

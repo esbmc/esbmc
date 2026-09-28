@@ -99,7 +99,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
   symbolt type_symbol;
   type_symbol.id = dict_type_name;
   type_symbol.name = dict_type_name;
-  type_symbol.set_type(dict_struct);
+  type_symbol.set_type(migrate_type(dict_struct));
   type_symbol.mode = "Python";
   type_symbol.is_type = true;
   symbol_table_.add(type_symbol);

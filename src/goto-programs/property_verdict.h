@@ -1,0 +1,164 @@
+#ifndef CPROVER_GOTO_PROGRAMS_PROPERTY_VERDICT_H
+#define CPROVER_GOTO_PROGRAMS_PROPERTY_VERDICT_H
+
+#include <goto-programs/goto_program.h>
+#include <util/irep/location.h>
+
+#include <atomic>
+#include <cstddef>
+#include <map>
+#include <mutex>
+#include <set>
+#include <string>
+
+class optionst;
+
+/// Outcome of checking one property. Ordered by dominance: when a property is
+/// checked more than once in a run, the numerically greater verdict survives.
+///
+/// NotChecked is the weakest so that seeding the table with the program's whole
+/// property set never masks a real verdict recorded later. It is not a failure
+/// to report it: without --multi-property ESBMC solves one monolithic formula
+/// and stops at the first violation, so the properties it never separated out
+/// have genuinely not been decided, and saying so beats claiming they passed.
+enum class property_verdictt
+{
+  NotChecked = 0,
+  Passed = 1,
+  Unknown = 2,
+  Failed = 3
+};
+
+/// Where a property lives, kept apart from the table key so the report can sort
+/// by source position and print a path once per file rather than once per line.
+struct property_locationt
+{
+  std::string file;
+  std::string function;
+  std::string description;
+  unsigned line = 0;
+  unsigned column = 0;
+  /// The asserting instruction's location_number and condition, when the
+  /// property is that instruction's own assertion: they order and label rows
+  /// of assertions that share a description and a position.
+  unsigned instruction = 0;
+  expr2tc condition;
+};
+
+/// Where the claim \p description raised at \p pc lives, with the assertion's
+/// instruction and condition when the claim is \p pc's own assertion.
+property_locationt property_location(
+  const goto_programt::instructiont &pc,
+  const std::string &description);
+
+/// The table key for the claim \p description raised at \p pc. Two assertions
+/// can share a description and a source position -- `a[i] + a[j]` has two
+/// array bound checks on one column -- so an assertion's key also names its
+/// instruction; without it they share a row, and one's violation skips the
+/// other. Any other claim symex raises there, such as a dereference check in
+/// the asserted expression, keeps description and position only.
+std::string property_key(
+  const goto_programt::instructiont &pc,
+  const std::string &description);
+
+/// A verdict together with where it applies and a note explaining how it was
+/// reached -- that a discharge came from interval analysis rather than the
+/// solver, or that it was vacuous. The note is empty when the verdict needs no
+/// qualification.
+struct property_resultt
+{
+  property_verdictt verdict;
+  std::string note;
+  property_locationt loc;
+};
+
+/// One verdict per property for a whole verification run.
+///
+/// `--multi-property` re-checks every property in every thread interleaving,
+/// and a property can be discharged under one schedule while being violated
+/// under another. Reporting each check as it happens then prints contradictory
+/// verdicts for a single source assertion (esbmc/esbmc discussion #6391).
+/// Recording verdicts here instead lets the run report each property once,
+/// with the dominant verdict.
+class property_verdict_tablet
+{
+public:
+  /// Records \p verdict for \p property at \p loc, annotated with \p note.
+  /// Keeps the dominant verdict when the property has already been checked.
+  /// Safe to call from parallel solver threads.
+  ///
+  /// \p loc is required rather than defaulted: the report sorts and groups on
+  /// it, so a caller that does not know where its property is would silently
+  /// sort to the top of the table with no file or line.
+  void record(
+    const std::string &property,
+    property_verdictt verdict,
+    const property_locationt &loc,
+    const std::string &note = "");
+
+  /// Raises every NotChecked entry recorded since the last begin_round() or
+  /// clear() to Passed. Call only once the run has established that *all*
+  /// properties hold -- a monolithic UNSAT refutes the disjunction of every
+  /// claim violation, so each claim holds -- and never after a merely bounded
+  /// round such as a k-induction base case. Does nothing while
+  /// is_incomplete().
+  void promote_unchecked_to_passed();
+
+  /// Records that a phase stopped before every property reached a verdict,
+  /// disarming proofs until the next round completes.
+  void note_incomplete();
+
+  /// Starts the round of a k-step strategy's next base case, incomplete until
+  /// complete_round(). A row this round never records is not promoted.
+  void begin_round();
+
+  /// Records that the round's base case solved every claim it raised.
+  void complete_round()
+  {
+    incomplete = false;
+  }
+
+  /// Whether a phase since the last clear() or complete_round() stopped short,
+  /// or the round's base case has not completed.
+  bool is_incomplete() const
+  {
+    return incomplete;
+  }
+
+  /// Whether every property in the table reached Passed. A k-step run's
+  /// verdict follows its table (§4 of
+  /// docs/roadmap/multi-property-strategy-plan.md), so a row it could not
+  /// settle, or settled only vacuously, is not a proof of the program.
+  bool all_passed() const;
+
+  /// How many distinct properties have been checked.
+  std::size_t size() const;
+
+  /// Whether any property has been found violated. Lock-free, so it stays
+  /// usable from the SIGALRM timeout handler, which must report an
+  /// already-established violation before _exit() discards it.
+  bool has_violation() const
+  {
+    return violation;
+  }
+
+  /// A copy of the results recorded so far, keyed by property.
+  std::map<std::string, property_resultt> snapshot() const;
+
+  /// Discards all verdicts.
+  void clear();
+
+private:
+  mutable std::mutex mutex;
+  std::map<std::string, property_resultt> results;
+  std::set<std::string> recorded_this_round;
+  std::atomic<bool> violation{false};
+  std::atomic<bool> incomplete{false};
+};
+
+/// Whether a phase must leave a claim it discharges NotChecked rather than
+/// Passed: under a k-step strategy, a base case always, and any other phase
+/// while its round is incomplete.
+bool withholds_proofs(const optionst &options);
+
+#endif

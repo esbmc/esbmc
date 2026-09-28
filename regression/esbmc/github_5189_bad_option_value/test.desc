@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind abc
+^ERROR: Invalid command line: the argument .+for option .--unwind. is invalid

@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION SUCCESSFUL$
+^  PASSED       \[pick\.assertion\.[0-9]+\] +line +2 +uncaught exception: IndexError$

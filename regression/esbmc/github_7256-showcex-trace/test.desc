@@ -1,0 +1,7 @@
+CORE
+main.c
+--k-induction --max-k-step 3 --show-cex
+^VERIFICATION UNKNOWN$
+^Violated property:$
+^  assertion s == n$
+\A(?![\s\S]*FAILED)[\s\S]*\Z

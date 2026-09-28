@@ -1,0 +1,5 @@
+CORE
+main.py
+--replace-call-with-contract double
+^  contract requires$
+^VERIFICATION FAILED$

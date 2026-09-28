@@ -1,0 +1,4 @@
+CORE
+cbmc_libm_rounding_fail.goto
+--binary --unwind 4
+^VERIFICATION FAILED$

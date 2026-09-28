@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/language.h>
+#include <util/lang/language.h>
 #include <ld-frontend/parser/ld_ast.h>
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <string>

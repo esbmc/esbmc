@@ -1,0 +1,24 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: 0f3d1c9a-6b52-4a71-9c0e-2d8f4b1e7a35
+    creation_time: 2026-09-07T00:00:00Z
+    producer:
+      name: esbmc-regression
+      version: n/a
+    task:
+      input_files:
+      - main.c
+      specification: G ! call(reach_error())
+      data_model: LP64
+      language: C
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: main.c
+        line: 12
+        column: 3
+        function: main
+      value: s == i
+      format: c_expression

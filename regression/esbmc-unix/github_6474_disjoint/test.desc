@@ -1,0 +1,4 @@
+CORE
+main.c
+--deadlock-check --unwind 2 --context-bound 3
+^VERIFICATION SUCCESSFUL$

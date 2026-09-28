@@ -1,0 +1,5 @@
+CORE
+main.c
+--neurosym --neurosym-prog mute-neurosym.sh --result-only
+no sat/unsat verdict
+SMT solver failed

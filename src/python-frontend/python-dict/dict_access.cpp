@@ -118,6 +118,7 @@ exprt python_dict_handler::handle_dict_subscript(
     key_check.cond() = key_not_found;
     key_check.then_case() = throw_block;
     key_check.location() = location;
+    key_check.location().property("skipped");
     converter_.add_instruction(key_check);
   }
 
@@ -163,6 +164,35 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt obj_value =
     build_member(deref_obj, "value", pointer_typet(empty_typet()));
 
+  // A tagged value is already a PyObject header, unlike other values whose
+  // item->value points at a nested payload. resolved_type can't be trusted
+  // here: it comes from static inference, which misses dynamic typing.
+  {
+    const std::string dict_id = dict_expr.is_symbol()
+                                  ? dict_expr.identifier().as_string()
+                                  : std::string();
+    const std::string vals_id =
+      dict_id.empty() ? std::string() : get_internal_list_id(dict_id, false);
+    if (!vals_id.empty())
+    {
+      const element_type_registry::entries *entries =
+        converter_.get_element_type_registry().find(
+          vals_id, type_slot::dict_value_types);
+      if (
+        entries && !entries->empty() &&
+        std::all_of(
+          entries->begin(),
+          entries->end(),
+          [this](const element_type_registry::entry &e) {
+            return type_handler_.is_tagged_scalar_type(e.second);
+          }))
+        // element_type was resolved to the struct above; is_tagged_scalar_type
+        // matches on the symbol_typet identity instead.
+        return build_dereference(
+          build_symbol(obj_var), type_handler_.get_tagged_object_type());
+    }
+  }
+
   // Handle dict types
   if (!resolved_type.is_nil() && is_dict_type(resolved_type))
   {
@@ -190,7 +220,7 @@ exprt python_dict_handler::handle_dict_subscript(
     list_assign.location() = location;
     converter_.add_instruction(list_assign);
 
-    // Extract element type and populate list_type_map for correct iteration
+    // Extract element type and record it for correct iteration
     if (dict_expr.is_symbol())
     {
       const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
@@ -216,7 +246,7 @@ exprt python_dict_handler::handle_dict_subscript(
         {
           std::string func_name =
             var_decl["value"]["func"]["id"].get<std::string>();
-          nlohmann::json func_def = json_utils::find_function(
+          nlohmann::json func_def = json_utils::try_find_function(
             converter_.get_ast_json()["body"], func_name);
 
           if (
@@ -239,13 +269,28 @@ exprt python_dict_handler::handle_dict_subscript(
                   value_type["slice"]["id"].get<std::string>();
                 typet elem_type = type_handler_.get_typet(elem_type_str);
 
-                const std::string &list_id = list_result.id.as_string();
-                python_list::list_type_map[list_id].push_back(
-                  std::make_pair("", elem_type));
+                converter_.get_element_type_registry().record(
+                  list_result.id.as_string(), "", elem_type);
               }
             }
           }
         }
+      }
+    }
+
+    // Fallback: element type recorded at construction (literal dict whose
+    // values are lists with a uniform element type).
+    element_type_registry &registry = converter_.get_element_type_registry();
+    if (registry.size(list_result.id.as_string()) == 0 && dict_expr.is_symbol())
+    {
+      const std::string &vals_id =
+        get_internal_list_id(dict_expr.identifier().as_string(), false);
+      if (!vals_id.empty())
+      {
+        const typet uniform = registry.uniform_element_type(
+          vals_id, type_slot::dict_value_list_elems);
+        if (uniform != typet())
+          registry.record(list_result.id.as_string(), std::string(), uniform);
       }
     }
 
@@ -273,7 +318,8 @@ exprt python_dict_handler::handle_dict_subscript(
       dict_id.empty() ? std::string() : get_internal_list_id(dict_id, false);
     if (
       !vals_id.empty() &&
-      python_list::has_mixed_numeric_types(dict_value_types_key(vals_id)))
+      converter_.get_element_type_registry().has_mixed_numeric(
+        vals_id, type_slot::dict_value_types))
     {
       const size_t float_type_id =
         std::hash<std::string>{}(type_handler_.type_to_string(
@@ -417,8 +463,8 @@ void python_dict_handler::handle_dict_subscript_assign(
     const std::string vals_id =
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
-      list_handler.add_type_info(
-        dict_value_types_key(vals_id), std::string(), value.type());
+      converter_.get_element_type_registry().record(
+        vals_id, std::string(), value.type(), type_slot::dict_value_types);
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(
@@ -535,6 +581,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   if_stmt.then_case() = update_block;
   if_stmt.else_case() = insert_block;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
 
   target_block.copy_to_operands(if_stmt);
 }
@@ -700,6 +747,7 @@ void python_dict_handler::handle_dict_delete(
   if_stmt.then_case() = delete_block;
   if_stmt.else_case() = raise_code;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
 
   target_block.copy_to_operands(if_stmt);
 }

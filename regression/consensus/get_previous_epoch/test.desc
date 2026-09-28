@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc --function get_previous_epoch
+^VERIFICATION SUCCESSFUL$

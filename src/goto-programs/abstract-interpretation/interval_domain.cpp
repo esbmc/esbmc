@@ -3,9 +3,9 @@
 // TODO: Ternary operators, lessthan into lessthanequal for integers
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-programs/abstract-interpretation/bitwise_bounds.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/irep/std_expr.h>
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif
@@ -859,7 +859,9 @@ void print_interval(
   out << name;
 
   if (i.upper)
-    out << " <= " << i.get_upper() << "\n";
+    out << " <= " << i.get_upper();
+
+  out << "\n";
 }
 
 // TODO: refactor
@@ -908,7 +910,7 @@ bool contains_float(const expr2tc &e)
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
-  ai_baset &,
+  ai_baset &ai,
   const namespacet &ns)
 {
   (void)ns;
@@ -985,12 +987,8 @@ void interval_domaint::transform(
   }
 
   case ASSERT:
-  {
-    // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    if (!contains_float(instruction.guard) && enable_assume_asserts)
-      assume(instruction.guard);
+    assume_assertion(instruction.guard, ai);
     break;
-  }
 
   case FUNCTION_CALL:
   case END_FUNCTION:
@@ -1029,10 +1027,17 @@ void interval_domaint::transform(
     // Let's do an assignment for all parameters!
     for (size_t i = 0; i < function.arguments.size(); i++)
     {
-      const expr2tc &arg_value = code_function_call.operands[i];
       const type2tc &arg_type = function.arguments[i];
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);
+
+      if (i >= code_function_call.operands.size())
+      {
+        havoc_rec(arg_symbol);
+        continue;
+      }
+
+      const expr2tc &arg_value = code_function_call.operands[i];
 
       // Are we dealing with a recursive function?
       std::unordered_set<expr2tc, irep2_hash> symbols;
@@ -1219,6 +1224,50 @@ bool interval_domaint::join(
   return result;
 }
 
+void interval_domaint::phi_join_with_snapshot(
+  const expr2tc &lhs,
+  const std::shared_ptr<interval_map> &if_snapshot)
+{
+  if (!is_symbol2t(lhs))
+    return;
+  const irep_idt &name = to_symbol2t(lhs).thename;
+  const auto if_it = if_snapshot->find(name);
+
+  copy_if_needed();
+
+  if (if_it == if_snapshot->end())
+  {
+    // JOIN(TOP, else) = TOP
+    intervals->erase(name);
+    return;
+  }
+
+  const auto dst_it = intervals->find(name);
+  if (dst_it == intervals->end())
+    return; // JOIN(if, TOP) = TOP
+
+  const auto &src = if_it->second;
+  auto &dst = dst_it->second;
+  if (src.index() != dst.index())
+    return;
+
+  switch (src.index())
+  {
+  case 0:
+    join_intervals<integer_intervalt>(
+      std::get<0>(src), std::get<0>(dst), false);
+    break;
+  case 1:
+    join_intervals<real_intervalt>(std::get<1>(src), std::get<1>(dst), false);
+    break;
+  case 2:
+    join_intervals<wrapped_interval>(std::get<2>(src), std::get<2>(dst), false);
+    break;
+  default:
+    break;
+  }
+}
+
 void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 {
   assert(is_code_assign2t(expr));
@@ -1244,6 +1293,9 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else if (isfloatbvop && enable_real_intervals)
     apply_assignment<interval_domaint::real_intervalt>(
       c.target, c.source, recursive);
+  else
+    // Unmodelled assignment: the old range must not survive the write.
+    havoc_rec(c.target);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
@@ -1330,6 +1382,18 @@ void interval_domaint::assume_rec(
   else if (
     is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
     apply_assume_less<interval_domaint::real_intervalt>(lhs, rhs);
+}
+
+void interval_domaint::assume_assertion(
+  const expr2tc &guard,
+  const ai_baset &ai)
+{
+  // There is a bug in Floats that need to be investigated!
+  // regression-float/nextafter
+  if (
+    enable_assume_asserts && !ai.continue_past_failed_assertions &&
+    !contains_float(guard))
+    assume(guard);
 }
 
 void interval_domaint::assume(const expr2tc &cond)

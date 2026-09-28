@@ -1,0 +1,6 @@
+CORE
+main.py
+--sarif-output -
+^VERIFICATION FAILED$
+^  FAILED       \[global\.assertion\.[0-9]+\] +line +0 +uncaught exception: ValueError$
+"uri": ".*main\.py"

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: conflicting array shapes inferred for parameter 0 of select\(\) across call sites

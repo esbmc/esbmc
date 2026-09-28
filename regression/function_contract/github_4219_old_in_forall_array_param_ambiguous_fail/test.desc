@@ -1,0 +1,4 @@
+CORE
+main.c
+--function bump --enforce-contract bump --unwind 8
+is used both as a whole-pointer snapshot and as a per-element __ESBMC_old

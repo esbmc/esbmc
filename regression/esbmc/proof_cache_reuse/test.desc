@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property --proof-cache proof-store --claim-fingerprint-dump fp.tsv
+^Proof cache: 1 claim\(s\) reused, 1 solved$
+^\s+PASSED\s+\[main\.assertion\.2\]\s+line 8\s+assertion x \+ 1 > x$
+^VERIFICATION SUCCESSFUL$
+CHECK_FILE fp.tsv contains UNSAT
+CHECK_FILE fp.tsv absent line\s8

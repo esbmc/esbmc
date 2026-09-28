@@ -1,0 +1,10 @@
+properties:
+
+  # The coil is driven by a modellable contact chain, so the resolver must emit
+  # the rung rather than reject it. P1 pins the coil in both directions, so an
+  # undriven coil (which holds its initial false) violates the second conjunct
+  # instead of passing vacuously.
+  - id: P1
+    kind: invariant
+    expression: "(!alarm || (level_high && !inhibit)) && (alarm || !level_high || inhibit)"
+    description: "Alarm is energised exactly when the level is high and not inhibited"

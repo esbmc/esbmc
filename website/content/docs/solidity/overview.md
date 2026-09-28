@@ -14,7 +14,7 @@ Two verification modes are relevant for Solidity:
 - **Bounded model checking (BMC)** — Unrolls loops up to a fixed bound `N` (`--unwind N`) and checks every reachable state for property violations. If a counterexample exists within `N` iterations, ESBMC reports it. If no counterexample exists, the result is "no bug *up to bound N*" — soundness for bug-finding, but not a proof of full correctness beyond `N`.
 - **k-induction** (`--k-induction`) — Combines a base-case BMC check with an inductive step that tries to prove the property holds for *every* iteration, regardless of bound. When successful, this yields a full proof of correctness.
 
-You do not need to choose by hand: BMC is the default, and `--k-induction` opts into the inductive proof rule. See [Usage](./usage) for examples of each.
+You do not need to choose by hand: BMC is the default, and `--k-induction` opts into the inductive proof rule. See [Usage](/docs/solidity/usage) for examples of each.
 
 ## Pipeline
 

@@ -1,3 +1,3 @@
 
-s = nondet_string(5)
+s = nondet_str()
 assert s == "hello"  # FALHA

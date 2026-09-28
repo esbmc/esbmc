@@ -2,8 +2,8 @@
 #define GOTO_PROGRAMS_GOTO_ATOMICITY_CHECK_H_
 
 #include <goto-programs/goto_functions.h>
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 
 /// Post-GOTO-conversion atomicity check instrumentation pass.
 ///

@@ -1,0 +1,4 @@
+CORE
+cbmc_type_named_ident.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 gh-1626-no-free.c
-
+--printf-check
 ^VERIFICATION FAILED$

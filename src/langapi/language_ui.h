@@ -1,8 +1,8 @@
 #ifndef CPROVER_LANGUAGE_UI_H
 #define CPROVER_LANGUAGE_UI_H
 
-#include <util/language.h>
-#include <util/parseoptions.h>
+#include <util/lang/language.h>
+#include <util/config/parseoptions.h>
 
 class language_uit
 {

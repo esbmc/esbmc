@@ -3,5 +3,7 @@ def make_multiplier(k):
         return x * k
     return mul
 
+
 times3 = make_multiplier(3)
-times3(4)   # 12
+# The closure escapes make_multiplier and still reads k == 3 (#6256).
+assert times3(4) == 12

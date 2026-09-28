@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <functional>
 #include <string>
 

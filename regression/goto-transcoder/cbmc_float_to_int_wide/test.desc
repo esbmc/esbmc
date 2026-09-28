@@ -1,0 +1,4 @@
+CORE
+cbmc_float_to_int_wide.goto
+--binary
+^VERIFICATION SUCCESSFUL$

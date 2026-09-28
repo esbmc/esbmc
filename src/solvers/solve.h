@@ -2,9 +2,9 @@
 #define _ESBMC_SOLVERS_SOLVE_H_
 
 #include <string>
-#include <util/config.h>
-#include <util/namespace.h>
-#include <util/message.h>
+#include <util/config/config.h>
+#include <util/symtab/namespace.h>
+#include <util/message/message.h>
 
 class array_iface;
 class fp_convt;

@@ -4,4 +4,5 @@ main.c
 ^Reached Conditions:  6
 ^Short Circuited Conditions:  6
 ^Total Conditions:  12
-^VERIFICATION UNKNOWN$
+^COVERAGE ANALYSIS INCOMPLETE
+reason: the run ended at the maximum k step without proving the program fully unwound

@@ -1,0 +1,4 @@
+CORE
+jbmc_virtual_dispatch.goto
+--binary --force-malloc-success
+^VERIFICATION SUCCESSFUL$

@@ -7,8 +7,8 @@
 #include <memory>
 #include <sstream>
 
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 
 void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
   const
@@ -125,6 +125,8 @@ bool ai_baset::visit(
 
   goto_programt::const_targetst successors;
   goto_program.get_successors(l, successors);
+  if (continue_past_failed_assertions && l->is_assert() && successors.empty())
+    successors.push_back(std::next(l));
 
   for (const auto &to_l : successors)
   {

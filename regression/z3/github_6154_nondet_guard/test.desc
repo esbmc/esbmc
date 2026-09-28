@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --dont-care-about-missing-extensions
+^VERIFICATION SUCCESSFUL$

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 #include <irep2/irep2.h>
 
 /// Detect uses of a fallible call's return value that are not first

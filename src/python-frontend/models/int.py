@@ -9,7 +9,8 @@
 class int:
 
     @classmethod
-    def from_bytes(cls, bytes_data: bytes, big_endian: bool, signed: bool = False) -> int:
+    def from_bytes(cls, bytes_data: bytes, byteorder: bool = True, signed: bool = False) -> int:
+        # The frontend folds CPython's "big"/"little" to True/False.
         result: int = 0
         index: int = 0
         step: int = 1
@@ -17,7 +18,7 @@ class int:
         is_negative: bool = False
 
         ## If little endian
-        if not big_endian:
+        if not byteorder:
             index: int = len(bytes_data) - 1
             step: int = -1
 
@@ -32,7 +33,7 @@ class int:
         # the last byte for little-endian. Index it directly — the model does
         # not support Python negative indexing (bytes_data[-1] read out of
         # bounds), and bytes_data[-1] was also the wrong byte for big-endian.
-        sign_index: int = 0 if big_endian else bytes_len - 1
+        sign_index: int = 0 if byteorder else bytes_len - 1
         if signed and bytes_data[sign_index] & 128 == 128:  # MSB of sign byte
             is_negative: bool = True
 
@@ -59,7 +60,7 @@ class int:
     def bit_length(cls, n: IntWide) -> int:
         length: int = 0
         # Soundness: the literal 512 must be >= kPythonBitLengthCap in
-        # src/python-frontend/type_handler.cpp, which a static_assert ties
+        # src/python-frontend/type/type_handler.cpp, which a static_assert ties
         # to kPythonBignumWidth. The OM is FLAIL-mangled before the C++
         # side is touched, so the literal cannot read the constant — bump
         # both together when widening Python int (#4642). The static_assert

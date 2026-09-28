@@ -1,0 +1,5 @@
+CORE
+cbmc_setjmp_longjmp.goto
+--binary
+^VERIFICATION FAILED$
+assertion r == 3

@@ -1,4 +1,5 @@
 CORE
 main.c
 --overflow-check  --unwind 3 --32
+REQUIRES arch32
 ^VERIFICATION FAILED$

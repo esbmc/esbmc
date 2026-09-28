@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 --multi-property --force-malloc-success --unwind 3
-^Properties\:.*2 failed$
+^\*\* 2 of [0-9]+ properties failed, [0-9]+ passed$

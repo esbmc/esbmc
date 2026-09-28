@@ -1,9 +1,8 @@
-#include <algorithm>
 #include <sstream>
 #include <utility>
 #include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -36,46 +35,65 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   const expr2tc &templ_expr)
 {
   // Special handling for pointer comparisons (both ops are pointers; otherwise
-  // it's obviously broken).
+  // it's obviously broken). Only the relational operators are lowered here;
+  // pointer (in)equality is handled on the equality path of convert_ast, which
+  // compares the full (object, offset) representation directly, so it never
+  // reaches this function.
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
   assert(is_comp_expr(templ_expr));
 
-  /* Compare just the offsets. This is compatible with both C and CHERI-C,
-   * because we already asserted that they point to the same object (unless
-   * --no-pointer-relation-check was specified, in which case the user opted
-   * out of sanity anyway). */
-
-  /* Create a copy of the expression and replace both sides with the respective
-   * typecasted-to-unsigned versions of the offsets. The unsigned comparison is
-   * required because objects could be larger than half the address space, in
-   * which case offsets could flip sign. */
+  /* Compare the (object, offset) pairs lexicographically. Within one object
+   * this is the offset comparison C defines for related pointers, compatible
+   * with both C and CHERI-C. Across objects — reachable only when the
+   * same-object assertion is disabled — it yields an arbitrary but consistent
+   * total order, so the algebraic properties of the operator (e.g.
+   * antisymmetry of <=) still hold; comparing only the offsets would let
+   * p<=q and q<=p be satisfied simultaneously for distinct objects.
+   *
+   * The offsets are compared signed, as the rest of the model reads them:
+   * __ESBMC_POINTER_OFFSET, the bounds checks and pointer subtraction all
+   * treat a pointer below its object's base as a negative offset. Reading them
+   * unsigned here made p >= b hold for p = b - 1, so a reverse iteration never
+   * terminated (R36). An object larger than half the address space still
+   * mis-orders — pointer_struct's offset member is ptraddr_type2(), full
+   * unsigned width, so the signed annotation here is a reading convention and
+   * not a bound — but that costs an 8 EiB allocation, where the unsigned
+   * reading cost every below-base pointer (R37). */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
-  expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc o1 = pointer_object2tc(type, side1);
+  expr2tc o2 = pointer_object2tc(type, side2);
+  expr2tc s1 = pointer_offset2tc(stype, side1);
+  expr2tc s2 = pointer_offset2tc(stype, side2);
+  expr2tc same_obj = equality2tc(o1, o2);
+
+  // Lexicographic step: the object ids decide the order; on a tie the offsets
+  // break it. The object comparison is always strict — equal objects fall
+  // through to the offset comparator, which carries the operator's own
+  // strictness (< vs <=). Encoding this once keeps the four operators
+  // consistent.
+  auto lex = [&](const expr2tc &obj_cmp, const expr2tc &off_cmp) {
+    return or2tc(obj_cmp, and2tc(same_obj, off_cmp));
+  };
+
   expr2tc op;
   switch (templ_expr->expr_id)
   {
-  case expr2t::equality_id:
-    op = equality2tc(s1, s2);
-    break;
-  case expr2t::notequal_id:
-    op = notequal2tc(s1, s2);
-    break;
   case expr2t::lessthan_id:
-    op = lessthan2tc(s1, s2);
+    op = lex(lessthan2tc(o1, o2), lessthan2tc(s1, s2));
     break;
   case expr2t::greaterthan_id:
-    op = greaterthan2tc(s1, s2);
+    op = lex(greaterthan2tc(o1, o2), greaterthan2tc(s1, s2));
     break;
   case expr2t::lessthanequal_id:
-    op = lessthanequal2tc(s1, s2);
+    op = lex(lessthan2tc(o1, o2), lessthanequal2tc(s1, s2));
     break;
   case expr2t::greaterthanequal_id:
-    op = greaterthanequal2tc(s1, s2);
+    op = lex(greaterthan2tc(o1, o2), greaterthanequal2tc(s1, s2));
     break;
   default:
+    // equality/notequal never reach here (see above).
     std::unreachable();
   }
   return convert_ast(op);
@@ -407,20 +425,39 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
 
+  /* An object's address is a multiple of its type's alignment (C11 6.2.8,
+   * [basic.align]), so constrain the base address to it. This covers both an
+   * explicit alignas and the natural alignment every other object has; without
+   * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
+   * yields a spurious counterexample. Types of alignment 1 constrain nothing. */
   if (type)
   {
-    const irept &alignment = type->find("alignment");
-    if (alignment.is_not_nil())
+    /* dereferencet::check_alignment() reads a scalar access as aligned from its
+     * offset alone, so it assumes the base carries the access width; without
+     * the same assumption here the two disagree on whether one pointer can be
+     * misaligned (#6951). object_base_alignment() is that shared assumption --
+     * the deref check consults it too, so a packed object, whose base this
+     * leaves unconstrained, no longer reads as aligned there (#7707). */
+    const BigInt a = object_base_alignment(*type, size, ns);
+
+    if (a > 1)
     {
-      expr2tc alignment2;
-      migrate_expr(static_cast<const exprt &>(alignment), alignment2);
-      assert(is_constant_int2t(alignment2));
-      alignment2 = typecast2tc(ptr_loc_type, alignment2);
-      expr2tc zero = gen_zero(ptr_loc_type);
-      expr2tc mod = modulus2tc(ptr_loc_type, start_sym, alignment2);
-      expr2tc mod_is_zero = equality2tc(mod, zero);
-      assert_expr(mod_is_zero);
+      expr2tc mod =
+        modulus2tc(ptr_loc_type, start_sym, constant_int2tc(ptr_loc_type, a));
+      assert_expr(equality2tc(mod, gen_zero(ptr_loc_type)));
     }
+  }
+
+  /* SIG_DFL, SIG_ERR and SIG_IGN compare unequal to the address of any
+   * function (C11 7.14p3). glibc, Darwin and the UCRT spell them 0, -1 and 1;
+   * NULL already owns 0, so keep a function off the other two. */
+  if (type && type->is_code())
+  {
+    assert_expr(greaterthan2tc(start_sym, constant_int2tc(ptr_loc_type, 1)));
+    assert_expr(lessthan2tc(
+      end_sym,
+      constant_int2tc(
+        ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width()))));
   }
 
   // Generate address space layout constraints.

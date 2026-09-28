@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.sort\(\) currently supports only literal numpy.array inputs

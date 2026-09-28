@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --loop-invariant-check --unwind 5
+^VERIFICATION SUCCESSFUL$
+(?s)\A(?!.*WARNING: Vacuous discharge)

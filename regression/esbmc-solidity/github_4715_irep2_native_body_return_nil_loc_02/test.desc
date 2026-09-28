@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract MyContract --no-irep2-native-body --goto-functions-only
+transfer \(sol:@C@MyContract@F@\$transfer#0\):\n[\s\S]*?// \d+ \n\s+RETURN: 1\n\s+// \d+ \n\s+2: RETURN: 0

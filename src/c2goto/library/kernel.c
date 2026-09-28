@@ -13,7 +13,7 @@
 typedef unsigned int gfp_t;
 
 char user_memory[USER_MEMORY_SPACE];     //mock user memory
-char kernel_memory[KERNEL_MEMORY_SPACE]; //mock user memory
+char kernel_memory[KERNEL_MEMORY_SPACE]; //mock kernel memory
 
 static void check_gfp_flags(gfp_t flags)
 {
@@ -133,21 +133,17 @@ bool spin_lock(spinlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
 
-  int retries = 0;
-  while (retries < SPIN_LIMIT)
-  {
-    __ESBMC_atomic_begin();
-    if (lock->locked == false)
-    {
-      lock->locked = true;
-      __ESBMC_atomic_end();
-      return true;
-    }
-    __ESBMC_atomic_end();
-    retries++;
-  }
+  /* The kernel's spin_lock() spins until it holds the lock and has no failure
+     path -- only spin_trylock() may fail (esbmc/esbmc#1332). Block the same way
+     pthread_mutex_lock_noassert does rather than giving up after a bounded
+     number of retries. The bool result is retained for source compatibility and
+     is always true. */
+  __ESBMC_atomic_begin();
+  __ESBMC_assume(lock->locked == false);
+  lock->locked = true;
+  __ESBMC_atomic_end();
 
-  return false;
+  return true;
 }
 
 void spin_unlock(spinlock_t *lock)

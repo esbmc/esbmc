@@ -1,0 +1,476 @@
+#ifndef ESBMC_FLAT_MAP
+#define ESBMC_FLAT_MAP
+
+// C++23 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// Keys and mapped values live in two sorted-in-step containers, as
+// [flat.map.defn] specifies, so an iterator dereferences to a pair of
+// references into both rather than to a stored pair. Insertion shifts through
+// push_back and operator[] rather than through KeyContainer::insert: ESBMC's
+// vector::insert does not terminate within minutes on a three-element vector,
+// while the shift costs a second.
+//
+// Not modelled, each failing at compile time: flat_multimap and
+// sorted_equivalent_t, the allocator-extended constructors, insert_range and
+// the other range members, emplace, erase(iterator), erase_if, operator==,
+// and the reverse iterators.
+#if __cplusplus >= 202302L
+
+#  include "cstddef"
+#  include "flat_set" // sorted_unique_t
+#  include "functional"
+#  include "initializer_list"
+#  include "stdexcept"
+#  include "utility"
+#  include "vector"
+
+namespace std
+{
+namespace __flat_map_detail
+{
+// What an iterator dereferences to: [flat.map.overview] gives the reference
+// type as pair<const key_type&, mapped_type&>, which is not the value_type.
+template <class Key, class T>
+struct ref_pair
+{
+  const Key &first;
+  T &second;
+
+  ref_pair(const Key &k, T &m) : first(k), second(m)
+  {
+  }
+
+  const ref_pair *operator->() const
+  {
+    return this;
+  }
+};
+
+template <class Key, class Mapped, class KeyContainer, class MappedContainer>
+class iter
+{
+  KeyContainer *__keys;
+  MappedContainer *__values;
+  size_t __i;
+
+public:
+  typedef ref_pair<Key, Mapped> reference;
+  typedef ptrdiff_t difference_type;
+
+  iter() : __keys(nullptr), __values(nullptr), __i(0)
+  {
+  }
+
+  iter(KeyContainer *k, MappedContainer *v, size_t i)
+    : __keys(k), __values(v), __i(i)
+  {
+  }
+
+  // iterator converts to const_iterator, so the two compare and assign.
+  template <class OtherMapped>
+  iter(const iter<Key, OtherMapped, KeyContainer, MappedContainer> &o)
+    : __keys(o.keys_()), __values(o.values_()), __i(o.index())
+  {
+  }
+
+  KeyContainer *keys_() const
+  {
+    return __keys;
+  }
+
+  MappedContainer *values_() const
+  {
+    return __values;
+  }
+
+  size_t index() const
+  {
+    return __i;
+  }
+
+  reference operator*() const
+  {
+    return reference((*__keys)[__i], (*__values)[__i]);
+  }
+
+  reference operator->() const
+  {
+    return **this;
+  }
+
+  iter &operator++()
+  {
+    ++__i;
+    return *this;
+  }
+
+  iter operator++(int)
+  {
+    iter tmp = *this;
+    ++__i;
+    return tmp;
+  }
+
+  iter &operator--()
+  {
+    --__i;
+    return *this;
+  }
+
+  iter operator+(difference_type n) const
+  {
+    return iter(__keys, __values, __i + n);
+  }
+
+  difference_type operator-(const iter &o) const
+  {
+    return (difference_type)__i - (difference_type)o.__i;
+  }
+
+  bool operator==(const iter &o) const
+  {
+    return __i == o.__i;
+  }
+
+  bool operator!=(const iter &o) const
+  {
+    return __i != o.__i;
+  }
+};
+
+} // namespace __flat_map_detail
+
+template <
+  class Key,
+  class T,
+  class Compare = less<Key>,
+  class KeyContainer = vector<Key>,
+  class MappedContainer = vector<T>>
+class flat_map
+{
+public:
+  typedef Key key_type;
+  typedef T mapped_type;
+  typedef pair<Key, T> value_type;
+  typedef Compare key_compare;
+  typedef KeyContainer key_container_type;
+  typedef MappedContainer mapped_container_type;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+  typedef __flat_map_detail::ref_pair<Key, T> reference;
+  typedef __flat_map_detail::iter<Key, T, KeyContainer, MappedContainer>
+    iterator;
+  // [flat.map.overview]: a const_iterator's reference is
+  // pair<const key_type&, const mapped_type&>, so it cannot write the map.
+  typedef __flat_map_detail::iter<Key, const T, KeyContainer, MappedContainer>
+    const_iterator;
+
+  // [flat.map.defn]: extract() hands both containers back together.
+  struct containers
+  {
+    key_container_type keys;
+    mapped_container_type values;
+  };
+
+private:
+  key_container_type __keys;
+  mapped_container_type __values;
+  key_compare __comp;
+
+  size_type __lower_index(const key_type &k) const
+  {
+    size_type lo = 0, hi = __keys.size();
+    while (lo < hi)
+    {
+      size_type mid = lo + (hi - lo) / 2;
+      if (__comp(__keys[mid], k))
+        lo = mid + 1;
+      else
+        hi = mid;
+    }
+    return lo;
+  }
+
+  size_type __upper_index(const key_type &k) const
+  {
+    size_type lo = 0, hi = __keys.size();
+    while (lo < hi)
+    {
+      size_type mid = lo + (hi - lo) / 2;
+      if (__comp(k, __keys[mid]))
+        hi = mid;
+      else
+        lo = mid + 1;
+    }
+    return lo;
+  }
+
+  bool __at(size_type i, const key_type &k) const
+  {
+    return i < __keys.size() && !__comp(k, __keys[i]) && !__comp(__keys[i], k);
+  }
+
+  void __insert_at(size_type pos, const key_type &k, const mapped_type &m)
+  {
+    __keys.push_back(k);
+    __values.push_back(m);
+    for (size_type i = __keys.size() - 1; i > pos; --i)
+    {
+      __keys[i] = __keys[i - 1];
+      __values[i] = __values[i - 1];
+    }
+    __keys[pos] = k;
+    __values[pos] = m;
+  }
+
+  void __erase_at(size_type pos)
+  {
+    for (size_type i = pos + 1; i < __keys.size(); ++i)
+    {
+      __keys[i - 1] = __keys[i];
+      __values[i - 1] = __values[i];
+    }
+    __keys.pop_back();
+    __values.pop_back();
+  }
+
+  iterator __iter_at(size_type i)
+  {
+    return iterator(&__keys, &__values, i);
+  }
+
+  const_iterator __citer_at(size_type i) const
+  {
+    return const_iterator(
+      const_cast<key_container_type *>(&__keys),
+      const_cast<mapped_container_type *>(&__values),
+      i);
+  }
+
+public:
+  flat_map()
+  {
+  }
+
+  explicit flat_map(const key_compare &comp) : __comp(comp)
+  {
+  }
+
+  flat_map(initializer_list<value_type> il)
+  {
+    for (const value_type *p = il.begin(); p != il.end(); ++p)
+      insert(*p);
+  }
+
+  flat_map(
+    sorted_unique_t,
+    key_container_type key_cont,
+    mapped_container_type mapped_cont)
+    : __keys(key_cont), __values(mapped_cont)
+  {
+  }
+
+  iterator begin() noexcept
+  {
+    return __iter_at(0);
+  }
+
+  const_iterator begin() const noexcept
+  {
+    return __citer_at(0);
+  }
+
+  iterator end() noexcept
+  {
+    return __iter_at(__keys.size());
+  }
+
+  const_iterator end() const noexcept
+  {
+    return __citer_at(__keys.size());
+  }
+
+  bool empty() const noexcept
+  {
+    return __keys.empty();
+  }
+
+  size_type size() const noexcept
+  {
+    return __keys.size();
+  }
+
+  void clear() noexcept
+  {
+    __keys.clear();
+    __values.clear();
+  }
+
+  key_compare key_comp() const
+  {
+    return __comp;
+  }
+
+  const key_container_type &keys() const noexcept
+  {
+    return __keys;
+  }
+
+  const mapped_container_type &values() const noexcept
+  {
+    return __values;
+  }
+
+  pair<iterator, bool> insert(const value_type &v)
+  {
+    size_type pos = __lower_index(v.first);
+    if (__at(pos, v.first))
+      return pair<iterator, bool>(__iter_at(pos), false);
+    __insert_at(pos, v.first, v.second);
+    return pair<iterator, bool>(__iter_at(pos), true);
+  }
+
+  pair<iterator, bool> try_emplace(const key_type &k, const mapped_type &m)
+  {
+    size_type pos = __lower_index(k);
+    if (__at(pos, k))
+      return pair<iterator, bool>(__iter_at(pos), false);
+    __insert_at(pos, k, m);
+    return pair<iterator, bool>(__iter_at(pos), true);
+  }
+
+  pair<iterator, bool> insert_or_assign(const key_type &k, const mapped_type &m)
+  {
+    size_type pos = __lower_index(k);
+    if (__at(pos, k))
+    {
+      __values[pos] = m;
+      return pair<iterator, bool>(__iter_at(pos), false);
+    }
+    __insert_at(pos, k, m);
+    return pair<iterator, bool>(__iter_at(pos), true);
+  }
+
+  mapped_type &operator[](const key_type &k)
+  {
+    size_type pos = __lower_index(k);
+    if (!__at(pos, k))
+      __insert_at(pos, k, mapped_type());
+    return __values[pos];
+  }
+
+  mapped_type &at(const key_type &k)
+  {
+    size_type pos = __lower_index(k);
+    if (!__at(pos, k))
+      throw out_of_range();
+    return __values[pos];
+  }
+
+  const mapped_type &at(const key_type &k) const
+  {
+    size_type pos = __lower_index(k);
+    if (!__at(pos, k))
+      throw out_of_range();
+    return __values[pos];
+  }
+
+  size_type erase(const key_type &k)
+  {
+    size_type pos = __lower_index(k);
+    if (!__at(pos, k))
+      return 0;
+    __erase_at(pos);
+    return 1;
+  }
+
+  iterator find(const key_type &k)
+  {
+    size_type pos = __lower_index(k);
+    return __at(pos, k) ? __iter_at(pos) : end();
+  }
+
+  const_iterator find(const key_type &k) const
+  {
+    size_type pos = __lower_index(k);
+    return __at(pos, k) ? __citer_at(pos) : end();
+  }
+
+  size_type count(const key_type &k) const
+  {
+    return __at(__lower_index(k), k) ? 1 : 0;
+  }
+
+  bool contains(const key_type &k) const
+  {
+    return __at(__lower_index(k), k);
+  }
+
+  iterator lower_bound(const key_type &k)
+  {
+    return __iter_at(__lower_index(k));
+  }
+
+  const_iterator lower_bound(const key_type &k) const
+  {
+    return __citer_at(__lower_index(k));
+  }
+
+  iterator upper_bound(const key_type &k)
+  {
+    return __iter_at(__upper_index(k));
+  }
+
+  const_iterator upper_bound(const key_type &k) const
+  {
+    return __citer_at(__upper_index(k));
+  }
+
+  pair<iterator, iterator> equal_range(const key_type &k)
+  {
+    return pair<iterator, iterator>(lower_bound(k), upper_bound(k));
+  }
+
+  pair<const_iterator, const_iterator> equal_range(const key_type &k) const
+  {
+    return pair<const_iterator, const_iterator>(lower_bound(k), upper_bound(k));
+  }
+
+  containers extract() &&
+  {
+    containers out;
+    out.keys = __keys;
+    out.values = __values;
+    __keys.clear();
+    __values.clear();
+    return out;
+  }
+
+  void
+  replace(key_container_type &&key_cont, mapped_container_type &&mapped_cont)
+  {
+    __keys = key_cont;
+    __values = mapped_cont;
+  }
+
+  void swap(flat_map &other) noexcept
+  {
+    key_container_type tmp_k = __keys;
+    __keys = other.__keys;
+    other.__keys = tmp_k;
+    mapped_container_type tmp_v = __values;
+    __values = other.__values;
+    other.__values = tmp_v;
+    key_compare tmp_c = __comp;
+    __comp = other.__comp;
+    other.__comp = tmp_c;
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 202302L
+
+#endif // ESBMC_FLAT_MAP

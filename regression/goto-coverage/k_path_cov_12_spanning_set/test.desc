@@ -5,4 +5,4 @@ main.c
 ^Spanning Set : 8$
 ^Reached : 2$
 ^k-Path Coverage: 25%$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

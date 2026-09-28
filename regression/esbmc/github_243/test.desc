@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 --incremental-bmc --force-malloc-success --32
+REQUIRES arch32
 ^VERIFICATION FAILED$

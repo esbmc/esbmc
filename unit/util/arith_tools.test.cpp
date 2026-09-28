@@ -13,9 +13,9 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/migrate.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/irep/migrate.h>
 
 TEST_CASE(
   "to_integer(expr2tc) extracts bare integer constants",

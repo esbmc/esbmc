@@ -1,0 +1,4 @@
+CORE
+main.py
+--enforce-contract first
+^ERROR: __ESBMC_ensures clause at line 3 contains a subscript

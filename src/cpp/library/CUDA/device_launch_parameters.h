@@ -103,15 +103,14 @@ extern "C"
     __ESBMC_atomic_begin();
 
     unsigned int lookup3Dx[2][2][2] = {{{0, 0}, {0, 0}}, {{0, 1}, {0, 1}}};
-    unsigned int lookup3Dz[2][2][2] = {{{0, 0}, {0, 0}}, {{1, 0}, {1, 0}}};
 
     unsigned int gridDim_index = (unsigned int)(gridDim.x - 1);
     unsigned int blockDim_index = (unsigned int)(blockDim.x - 1);
 
     uint3 thread_index;
 
-    thread_index.z =
-      (unsigned int)(lookup3Dz[id][gridDim_index][blockDim_index]);
+    /* The table only covers blockDim (1|2, 1, 1), so .z is always 0. */
+    thread_index.z = (unsigned int)0;
     thread_index.y = (unsigned int)0;
     thread_index.x =
       (unsigned int)(lookup3Dx[id][gridDim_index][blockDim_index]);

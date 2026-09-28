@@ -1,0 +1,166 @@
+#ifndef ESBMC_SYNCSTREAM
+#define ESBMC_SYNCSTREAM
+
+// C++20 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387). Its contents sit behind _LIBCPP_ENABLE_EXPERIMENTAL there, the way
+// <execution>'s do.
+//
+// Modelled as the wrapper API: which buffer a syncbuf wraps, what a move
+// transfers, and what emit() reports.
+//
+// No characters are transferred, here or anywhere: basic_streambuf declares
+// sputc, sputn and pubsync without defining them, so nothing dispatches to the
+// virtuals a syncbuf could override, and overriding them is dead
+// instrumentation
+// -- a reachability probe on all three generates no claim while the same probe
+// in emit() fires. Overriding sync() is what would give set_emit_on_sync an
+// effect, so the flag is recorded and never read.
+//
+// Not modelled, and failing at compile time rather than silently: the move
+// assignment, basic_syncbuf's allocator-extended constructors, and wsyncbuf's
+// stream half -- ostream is a class here rather than a basic_ostream template,
+// so only the narrow osyncstream is usable.
+//
+// One divergence worth knowing: the osyncstream(ostream&) overload wraps
+// os.rdbuf(), which for cin/cout/cerr/clog is null in this model, since
+// <iostream> default-constructs them and ostream's constructor leaves
+// ios::__streambuf alone (the family that
+// regression/esbmc-cpp/cpp/ios_default_state_knownbug pins). It behaves for a
+// stream the program builds over its own buffer.
+#if __cplusplus >= 202002L
+
+#  include "memory"
+#  include "ostream"
+#  include "streambuf"
+#  include "string"
+
+namespace std
+{
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Allocator = allocator<CharT>>
+class basic_syncbuf : public basic_streambuf<CharT, Traits>
+{
+public:
+  typedef CharT char_type;
+  typedef Traits traits_type;
+  typedef Allocator allocator_type;
+  typedef typename Traits::int_type int_type;
+  typedef typename Traits::pos_type pos_type;
+  typedef typename Traits::off_type off_type;
+  typedef basic_streambuf<CharT, Traits> streambuf_type;
+
+private:
+  streambuf_type *__wrapped;
+  allocator_type __alloc;
+  bool __emit_on_sync;
+
+  basic_syncbuf(const basic_syncbuf &);
+  basic_syncbuf &operator=(const basic_syncbuf &);
+
+public:
+  explicit basic_syncbuf(
+    streambuf_type *obuf = nullptr,
+    const Allocator &a = Allocator())
+    : __wrapped(obuf), __alloc(a), __emit_on_sync(false)
+  {
+  }
+
+  basic_syncbuf(basic_syncbuf &&other)
+    : __wrapped(other.__wrapped),
+      __alloc(other.__alloc),
+      __emit_on_sync(other.__emit_on_sync)
+  {
+    other.__wrapped = nullptr;
+  }
+
+  ~basic_syncbuf()
+  {
+    emit();
+  }
+
+  bool emit()
+  {
+    return __wrapped != nullptr;
+  }
+
+  streambuf_type *get_wrapped() const noexcept
+  {
+    return __wrapped;
+  }
+
+  allocator_type get_allocator() const noexcept
+  {
+    return __alloc;
+  }
+
+  void set_emit_on_sync(bool b) noexcept
+  {
+    __emit_on_sync = b;
+  }
+};
+
+typedef basic_syncbuf<char> syncbuf;
+typedef basic_syncbuf<wchar_t> wsyncbuf;
+
+// [syncstream.osyncstream]. ESBMC's <ostream> models `ostream` as a class
+// rather than a basic_ostream template, so the wide instantiation shares that
+// same narrow base; only osyncstream is usable.
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Allocator = allocator<CharT>>
+class basic_osyncstream : public ostream
+{
+public:
+  typedef CharT char_type;
+  typedef Traits traits_type;
+  typedef Allocator allocator_type;
+  typedef basic_streambuf<CharT, Traits> streambuf_type;
+  typedef basic_syncbuf<CharT, Traits, Allocator> syncbuf_type;
+
+private:
+  syncbuf_type __sb;
+
+  basic_osyncstream(const basic_osyncstream &);
+  basic_osyncstream &operator=(const basic_osyncstream &);
+
+public:
+  explicit basic_osyncstream(
+    streambuf_type *obuf,
+    const Allocator &a = Allocator())
+    : ostream(obuf), __sb(obuf, a)
+  {
+  }
+
+  explicit basic_osyncstream(ostream &os, const Allocator &a = Allocator())
+    : ostream(os.rdbuf()), __sb(os.rdbuf(), a)
+  {
+  }
+
+  void emit()
+  {
+    __sb.emit();
+  }
+
+  streambuf_type *get_wrapped() const noexcept
+  {
+    return __sb.get_wrapped();
+  }
+
+  syncbuf_type *rdbuf() const noexcept
+  {
+    return const_cast<syncbuf_type *>(&__sb);
+  }
+};
+
+typedef basic_osyncstream<char> osyncstream;
+typedef basic_osyncstream<wchar_t> wosyncstream;
+
+} // namespace std
+
+#endif // __cplusplus >= 202002L
+
+#endif // ESBMC_SYNCSTREAM

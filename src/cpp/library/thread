@@ -1,0 +1,167 @@
+#ifndef STL_THREAD
+#define STL_THREAD
+
+#include <functional> /* std::hash, specialized for thread::id below */
+#include <pthread.h>
+#include "OM_compiler_defs.h"
+
+// Model of <thread> (github #6319) over ESBMC's pthread model: a std::thread is
+// a pthread_t, so the spawned function becomes a real interleaved thread and
+// the existing race/deadlock checks apply to it unchanged.
+//
+// The callable is passed straight to pthread_create through a cast rather than
+// through a trampoline: a trampoline would have to be a function template, and
+// the frontend does not convert instantiated bodies of function templates
+// defined in OM headers -- the call would silently return nondet and the thread
+// would never run. ESBMC's symex tolerates the arity/return-type mismatch the
+// cast introduces, and a single argument rides in pthread_create's void* slot.
+//
+// So the constructors take function pointers: `void()`, or `void *(void *)`
+// with pthread_create's argument. A functor, a capturing lambda, or a
+// multi-argument callable is rejected at conversion rather than mismodelled.
+// A *captureless* lambda ought to work via its conversion to a function
+// pointer, but that conversion operator is currently bodyless in the frontend
+// (independently of this header: `void (*f)() = []{ g = 5; }; f();` already
+// loses the write), so it yields a nondet pointer. std::this_thread::sleep_*
+// remain absent: ESBMC has no clock, and it interleaves at every step anyway.
+
+#if __cplusplus >= 201103L
+
+namespace std
+{
+class thread
+{
+  pthread_t __t;
+  bool __joinable;
+
+  thread(const thread &);
+  thread &operator=(const thread &);
+
+public:
+  typedef pthread_t native_handle_type;
+
+  class id
+  {
+    pthread_t __v;
+
+    friend struct hash<id>;
+
+  public:
+    id() OM_NOEXCEPT : __v(0)
+    {
+    }
+    explicit id(pthread_t v) OM_NOEXCEPT : __v(v)
+    {
+    }
+    bool operator==(const id &o) const OM_NOEXCEPT
+    {
+      return __v == o.__v;
+    }
+    bool operator!=(const id &o) const OM_NOEXCEPT
+    {
+      return !(*this == o);
+    }
+  };
+
+  thread() OM_NOEXCEPT : __t(0), __joinable(false)
+  {
+  }
+
+  explicit thread(void (*f)()) : __joinable(true)
+  {
+    pthread_create(&__t, OM_NULLPTR, (void *(*)(void *))f, OM_NULLPTR);
+  }
+
+  thread(void *(*f)(void *), void *arg) : __joinable(true)
+  {
+    pthread_create(&__t, OM_NULLPTR, f, arg);
+  }
+
+  ~thread()
+  {
+    // [thread.thread.destr]/1: terminate() if still joinable. Model it as a
+    // property violation so a forgotten join/detach is reported rather than
+    // silently accepted.
+    __ESBMC_assert(
+      !__joinable,
+      "std::thread destroyed while joinable ([thread.thread.destr])");
+  }
+
+  bool joinable() const OM_NOEXCEPT
+  {
+    return __joinable;
+  }
+
+  void join()
+  {
+    pthread_join(__t, OM_NULLPTR);
+    __joinable = false;
+  }
+
+  void detach()
+  {
+    pthread_detach(__t);
+    __joinable = false;
+  }
+
+  id get_id() const OM_NOEXCEPT
+  {
+    return __joinable ? id(__t) : id();
+  }
+
+  native_handle_type native_handle()
+  {
+    return __t;
+  }
+
+  void swap(thread &o) OM_NOEXCEPT
+  {
+    pthread_t t = __t;
+    bool j = __joinable;
+    __t = o.__t;
+    __joinable = o.__joinable;
+    o.__t = t;
+    o.__joinable = j;
+  }
+
+  static unsigned hardware_concurrency() OM_NOEXCEPT
+  {
+    return 1;
+  }
+};
+
+// [thread.thread.id] p6: the specialization is required, and irep2.h relies on
+// it through std::hash<std::thread::id>.
+template <>
+struct hash<thread::id>
+{
+  typedef thread::id argument_type;
+  typedef size_t result_type;
+
+  size_t operator()(thread::id v) const OM_NOEXCEPT
+  {
+    return (size_t)v.__v;
+  }
+};
+
+namespace this_thread
+{
+inline thread::id get_id() OM_NOEXCEPT
+{
+  return thread::id(pthread_self());
+}
+
+// A scheduling hint rather than a clock operation, so unlike sleep_* it has a
+// faithful model: __ESBMC_yield forces the context switch [thread.thread.this]
+// permits yield to make.
+inline void yield() OM_NOEXCEPT
+{
+  __ESBMC_yield();
+}
+} // namespace this_thread
+
+} // namespace std
+
+#endif // __cplusplus >= 201103L
+
+#endif // STL_THREAD

@@ -1,0 +1,5 @@
+CORE
+main.c
+--32
+^VERIFICATION FAILED$
+object size exceeds PTRDIFF_MAX

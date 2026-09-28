@@ -5,7 +5,7 @@ internal representation for **expressions** (`expr2t`) and **types**
 (`type2t`). It is the data structure every frontend lowers to, every
 transformation rewrites, and every backend (symex, SMT, goto2c) consumes.
 It replaces the older "stringy" `irept` for the verification pipeline;
-conversions live in `util/migrate.{h,cpp}`.
+conversions live in `util/irep/migrate.{h,cpp}`.
 
 ## Design at a glance
 
@@ -55,12 +55,12 @@ conversions live in `util/migrate.{h,cpp}`.
 
 | File | Contents |
 |------|----------|
-| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers; the switch-on-id dispatchers for `cmp`/`lt`/`clone`/etc. |
+| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers. Declares the `cmp`/`lt`/`clone`/etc. virtual entry points; the switch-on-id dispatchers themselves live in `irep2_expr.cpp` / `irep2_type.cpp` (and `irep2_crc.cpp` for `crc`). |
 | `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
 | `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
 | `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, simplification helpers). |
-| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/tostring/clone/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke. Switch dispatchers on `expr2t`/`type2t` route to these. |
+| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/tostring/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke. Switch dispatchers on `expr2t`/`type2t` route to these. (`crc` and `clone` walk the same `K::fields` tuple from `irep2_crc.cpp` / `irep2_expr.cpp` / `irep2_type.cpp`.) |
 | `irep2_crc.cpp` | Iterative postorder CRC traversal and per-field CRC operations. Kept in one translation unit with internal linkage so the compiler sees and optimises the complete CRC path. |
 | `irep2_utils.cpp` | Definitions for the predicates and dispatch-catalogue overloads declared in `irep2_utils.h` and `irep2_dispatch.h`. |
 | `irep2_guard.{h,cpp}` / `guard_seq.h` | Path-condition guard container `guard2tc` — an `expr2tc` carrying a flat conjunct list — and `guard_seq`, the `immer::vector`-backed, oldest-first immutable conjunct sequence it stores (O(1) copy for the deep guard chains symex builds). |
@@ -83,8 +83,9 @@ struct neg2t : expr2t {                          // arithmetic negation, -v
 ```
 
 The generic helpers in `irep2_dispatch.h` walk `K::fields` via
-`std::apply` to implement `cmp`, `lt`, `clone`, `do_crc`, `hash`,
-`tostring`, `get_sub_expr`, and `foreach_operand` once for every kind.
+`std::apply` to implement `cmp`, `lt`, `tostring`, `get_sub_expr`, and
+`foreach_operand` once for every kind; `clone` (`irep2_expr.cpp` /
+`irep2_type.cpp`) and `do_crc` (`irep2_crc.cpp`) walk the same tuple.
 The switch-on-id dispatchers on `expr2t` / `type2t` (driven by the
 `expr_kinds.inc` / `type_kinds.inc` X-macro manifests) route each call
 to the matching `generic_*<K>`.
@@ -148,18 +149,18 @@ Notes:
 3. Add the `field_names` table for the kind in `irep2_expr.cpp` /
    `irep2_type.cpp` — one string per `fields` entry, in tuple order.
 4. If the node has semantics worth modelling, teach `do_simplify`
-   (defined out-of-line in `src/util/expr_simplifier.cpp` for
+   (defined out-of-line in `src/util/expr/expr_simplifier.cpp` for
    non-trivial nodes) and the relevant lowering passes (symex, SMT
    conversion in `src/solvers/`, `goto2c`) about it.
 
 ## Related code
 
-- `util/migrate.{h,cpp}` — bidirectional conversion between legacy
+- `util/irep/migrate.{h,cpp}` — bidirectional conversion between legacy
   string-based `irept`/`exprt` and `irep2tc`/`expr2tc`. Frontends emit
   legacy ireps that get migrated before symex.
 - `src/goto-symex/`, `src/solvers/` — primary consumers; expect to walk
   `expr2tc` trees via `foreach_operand` and the `is_*` / `to_*` accessors.
-- `src/util/std_expr.h`, `src/util/std_types.h` — legacy counterparts on the
+- `src/util/irep/std_expr.h`, `src/util/irep/std_types.h` — legacy counterparts on the
   string-irep side.
 
 ## Abstract grammar
@@ -349,6 +350,9 @@ allockind   ::= "malloc" | "realloc" | "alloca" | "cpp_new" | "cpp_new_arr"
               | "nondet" | "va_arg" | "printf2" | "function_call"
               | "preincrement" | "postincrement" | "predecrement"
               | "postdecrement" | "old_snapshot" | "assigns_target"
+              | "statement_expression" | "temporary_object"
+              | "gcc_conditional_expression" | "cpp_delete"
+              | "cpp_delete_array"
 ```
 
 GOTO statements (`code_*`):
@@ -588,7 +592,7 @@ Listed in `type_kinds.inc` (one `IREP2_TYPE` row per kind); declared in
 | `signedbv` | Signed bitvector of given `width`. |
 | `fixedbv` | Fixed-point bitvector — total width split into integer and fraction bits. |
 | `floatbv` | IEEE-754 floating-point — fraction-bit and exponent-bit counts. |
-| `complex` | C `_Complex` — pair of identical scalar components. Currently stored with the same `members`/`member_names`/... shape as `struct`/`union` so the SMT tuple lowering can treat it uniformly; a follow-up will redesign it as a primitive `subtype` field. |
+| `complex` | C `_Complex` — stores only its element `subtype`; the SMT tuple lowering synthesises the (real, imag) 2-tuple view at the boundary via `struct_union_members` / `struct_union_member_names`. |
 | `cpp_name` | C++ qualified name with template arguments; used transiently by the C++ frontend. |
 
 ## Reference: expressions

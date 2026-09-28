@@ -138,7 +138,7 @@ typedef enum cudnnnanpropagation cudnnNanPropagation_t;
 
 float sigmoidFunction(float u)
 {
-  //lookuptable of sigmoid function variating from -20 to 20 with .00 of resolution
+  // lookup table of the sigmoid function over u in [-20, 20] with 0.01 resolution (4000 entries)
   float lookup[4000] = {
     0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
     0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
@@ -976,7 +976,8 @@ float *universal_img2col(
             int y = h * stride + i - padding;
             int x = w * stride + j - padding;
 
-            // Check if current position is inside padding area
+            // Copy real data if position is inside the image; otherwise it
+            // falls in the padding area
             if (y >= 0 && y < height && x >= 0 && x < width)
             {
               columns[row * output_height * output_width + col] =

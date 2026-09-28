@@ -1,10 +1,10 @@
 #include <clang-c-frontend/typecast.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
 #include <stdexcept>
 #include <sstream>
 #include <clang-c-frontend/clang_c_convert.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 void gen_typecast(const namespacet &ns, exprt &dest, const typet &type)
 {

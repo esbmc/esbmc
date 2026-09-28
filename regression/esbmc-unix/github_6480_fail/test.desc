@@ -1,0 +1,5 @@
+CORE
+main.c
+--deadlock-check --unwind 2
+^VERIFICATION FAILED$
+Deadlocked state in pthread_join

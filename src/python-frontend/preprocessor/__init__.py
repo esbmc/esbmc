@@ -17,8 +17,11 @@ from preprocessor.loop_mixin import LoopMixin
 from preprocessor.module_lifecycle_mixin import ModuleLifecycleMixin
 from preprocessor.module_rewrite_mixin import ModuleRewriteMixin
 from preprocessor.preprocessor_state_mixin import PreprocessorStateMixin
+from preprocessor.rejection import attach_location
 from preprocessor.sequence_iterator_mixin import SequenceIteratorMixin
 from preprocessor.type_inference_mixin import TypeInferenceMixin
+from preprocessor.unittest_mixin import UnittestMixin
+from preprocessor.vararg_mixin import VarargMixin
 
 __all__ = ["Preprocessor"]
 
@@ -38,6 +41,8 @@ class Preprocessor(
         ModuleRewriteMixin,
         ModuleLifecycleMixin,
         SequenceIteratorMixin,
+        UnittestMixin,
+        VarargMixin,
         PreprocessorStateMixin,
         AstUtilsMixin,
         ImportTypingMixin,
@@ -50,3 +55,13 @@ class Preprocessor(
     def __init__(self, module_name: str):
         super().__init__()
         self._init_preprocessor_state(module_name)
+
+    def visit(self, node):
+        # The frame that rejects the program is inside ESBMC, in a temp
+        # directory the run deletes, so a rejection only reaches the user with
+        # a position if a visit attaches one here (#7547).
+        try:
+            return super().visit(node)
+        except (NotImplementedError, TypeError, SyntaxError) as exc:
+            attach_location(exc, node, self.module_name)
+            raise

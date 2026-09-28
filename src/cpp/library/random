@@ -1,5 +1,8 @@
 #pragma once
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include <cstdint>
 
 extern int nondet_int();
@@ -177,3 +180,5 @@ private:
 };
 
 } // namespace std
+
+#endif // __cplusplus >= 201103L

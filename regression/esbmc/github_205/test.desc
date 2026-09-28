@@ -1,4 +1,5 @@
 CORE
 main.c
 --max-k-step 5 --32 -Wno-error=implicit-function-declaration --no-unwinding-assertions --unwind 1
+REQUIRES arch32
 ^VERIFICATION FAILED$

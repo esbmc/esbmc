@@ -1,0 +1,6 @@
+CORE
+main.c
+--symbol-table-only
+^__builtin_va_start\(&ap(\[0\])?[,)]
+^__builtin_va_copy\(&cp(\[0\])?, &ap(\[0\])?[,)]
+^__builtin_va_end\(&ap(\[0\])?[,)]

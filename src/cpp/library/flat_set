@@ -1,0 +1,246 @@
+#ifndef ESBMC_FLAT_SET
+#define ESBMC_FLAT_SET
+
+// C++23 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// The keys live in a sorted KeyContainer, as [flat.set.defn] specifies, and
+// insertion shifts them into place through push_back and operator[] rather
+// than through KeyContainer::insert: ESBMC's vector::insert does not terminate
+// within minutes on a three-element vector, while the shift costs a second.
+//
+// Not modelled, each failing at compile time: flat_multiset and
+// sorted_equivalent_t, the allocator-extended constructors, insert_range and
+// the other range members, emplace, erase(iterator), and erase_if.
+#if __cplusplus >= 202302L
+
+#  include "cstddef"
+#  include "functional"
+#  include "initializer_list"
+#  include "utility"
+#  include "vector"
+
+namespace std
+{
+// [flat.set.defn]: promises the input is sorted and free of duplicates.
+struct sorted_unique_t
+{
+  explicit sorted_unique_t() = default;
+};
+
+inline constexpr sorted_unique_t sorted_unique{};
+
+template <
+  class Key,
+  class Compare = less<Key>,
+  class KeyContainer = vector<Key>>
+class flat_set
+{
+public:
+  typedef Key key_type;
+  typedef Key value_type;
+  typedef Compare key_compare;
+  typedef Compare value_compare;
+  typedef KeyContainer container_type;
+  typedef value_type &reference;
+  typedef const value_type &const_reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+  // [flat.set.overview]: both are constant iterators -- writing a key through
+  // one would break the ordering every search below depends on.
+  typedef typename KeyContainer::const_iterator iterator;
+  typedef typename KeyContainer::const_iterator const_iterator;
+
+private:
+  container_type __c;
+  key_compare __comp;
+
+  // Index of the first key not ordered before k.
+  size_type __lower_index(const key_type &k) const
+  {
+    size_type lo = 0, hi = __c.size();
+    while (lo < hi)
+    {
+      size_type mid = lo + (hi - lo) / 2;
+      if (__comp(__c[mid], k))
+        lo = mid + 1;
+      else
+        hi = mid;
+    }
+    return lo;
+  }
+
+  size_type __upper_index(const key_type &k) const
+  {
+    size_type lo = 0, hi = __c.size();
+    while (lo < hi)
+    {
+      size_type mid = lo + (hi - lo) / 2;
+      if (__comp(k, __c[mid]))
+        hi = mid;
+      else
+        lo = mid + 1;
+    }
+    return lo;
+  }
+
+  bool __at(size_type i, const key_type &k) const
+  {
+    return i < __c.size() && !__comp(k, __c[i]) && !__comp(__c[i], k);
+  }
+
+  void __insert_at(size_type pos, const key_type &k)
+  {
+    __c.push_back(k);
+    for (size_type i = __c.size() - 1; i > pos; --i)
+      __c[i] = __c[i - 1];
+    __c[pos] = k;
+  }
+
+  void __erase_at(size_type pos)
+  {
+    for (size_type i = pos + 1; i < __c.size(); ++i)
+      __c[i - 1] = __c[i];
+    __c.pop_back();
+  }
+
+public:
+  flat_set()
+  {
+  }
+
+  explicit flat_set(const key_compare &comp) : __comp(comp)
+  {
+  }
+
+  flat_set(initializer_list<value_type> il)
+  {
+    for (const value_type *p = il.begin(); p != il.end(); ++p)
+      insert(*p);
+  }
+
+  flat_set(sorted_unique_t, container_type cont) : __c(cont)
+  {
+  }
+
+  const_iterator begin() const noexcept
+  {
+    return __c.begin();
+  }
+  const_iterator end() const noexcept
+  {
+    return __c.end();
+  }
+
+  bool empty() const noexcept
+  {
+    return __c.empty();
+  }
+  size_type size() const noexcept
+  {
+    return __c.size();
+  }
+
+  void clear() noexcept
+  {
+    __c.clear();
+  }
+
+  key_compare key_comp() const
+  {
+    return __comp;
+  }
+  value_compare value_comp() const
+  {
+    return __comp;
+  }
+
+  pair<iterator, bool> insert(const value_type &k)
+  {
+    size_type pos = __lower_index(k);
+    if (__at(pos, k))
+      return pair<iterator, bool>(begin() + pos, false);
+    __insert_at(pos, k);
+    return pair<iterator, bool>(begin() + pos, true);
+  }
+
+  size_type erase(const key_type &k)
+  {
+    size_type pos = __lower_index(k);
+    if (!__at(pos, k))
+      return 0;
+    __erase_at(pos);
+    return 1;
+  }
+
+  const_iterator find(const key_type &k) const
+  {
+    size_type pos = __lower_index(k);
+    return __at(pos, k) ? begin() + pos : end();
+  }
+
+  size_type count(const key_type &k) const
+  {
+    return __at(__lower_index(k), k) ? 1 : 0;
+  }
+
+  bool contains(const key_type &k) const
+  {
+    return __at(__lower_index(k), k);
+  }
+
+  const_iterator lower_bound(const key_type &k) const
+  {
+    return begin() + __lower_index(k);
+  }
+  const_iterator upper_bound(const key_type &k) const
+  {
+    return begin() + __upper_index(k);
+  }
+
+  pair<iterator, iterator> equal_range(const key_type &k) const
+  {
+    return pair<iterator, iterator>(lower_bound(k), upper_bound(k));
+  }
+
+  // [flat.set.modifiers]: extract() moves the container out, leaving the set
+  // empty; replace() takes one whose keys are already sorted and unique.
+  container_type extract() &&
+  {
+    container_type out = __c;
+    __c.clear();
+    return out;
+  }
+
+  void replace(container_type &&cont)
+  {
+    __c = cont;
+  }
+
+  void swap(flat_set &other) noexcept
+  {
+    container_type tmp_c = __c;
+    __c = other.__c;
+    other.__c = tmp_c;
+    key_compare tmp_comp = __comp;
+    __comp = other.__comp;
+    other.__comp = tmp_comp;
+  }
+
+  friend bool operator==(const flat_set &a, const flat_set &b)
+  {
+    if (a.size() != b.size())
+      return false;
+    for (size_type i = 0; i < a.size(); ++i)
+      if (!(a.__c[i] == b.__c[i]))
+        return false;
+    return true;
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 202302L
+
+#endif // ESBMC_FLAT_SET

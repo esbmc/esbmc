@@ -1,6 +1,6 @@
 
-s = nondet_string(3)
-assume(s == "abc")
+s = nondet_str()
+__ESBMC_assume(s == "abc")
 c1 = s[0]
 assert c1 == "a"
 c2 = s[1]

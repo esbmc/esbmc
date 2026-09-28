@@ -3,7 +3,7 @@
 
 #include "../testing-utils/goto_factory.h"
 #include <goto-programs/abstract-interpretation/gcse.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 /* Testing this is almost impossible without having
  * a goto_program generation interface
  *

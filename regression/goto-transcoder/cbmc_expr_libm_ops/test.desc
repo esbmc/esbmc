@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_libm_ops.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -4,7 +4,7 @@ Module: Unit tests for util/cwe_mapping.h
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 
 TEST_CASE("cwe_for matches NULL pointer deref", "[util][cwe_mapping]")
 {
@@ -94,6 +94,30 @@ TEST_CASE("cwe_for matches reachability violation", "[util][cwe_mapping]")
   REQUIRE(cwe_for("unreachable code reached") == std::vector<unsigned>{617});
 }
 
+TEST_CASE(
+  "dead-code advisory uses a dedicated CWE-561 rule",
+  "[util][cwe_mapping]")
+{
+  // The dead-code advisory has its own accessor with the stable id, short
+  // description, and CWE-561.
+  REQUIRE(std::string(dead_code_cwe_rule().sarif_id) == "dead-code");
+  REQUIRE(std::string(dead_code_cwe_rule().short_description) == "Dead code");
+  REQUIRE(dead_code_cwe_rule().cwes == std::vector<unsigned>{561});
+
+  // Regression for issue #4495: "dead code" is deliberately NOT in the
+  // cwe_rule_for() substring table, so an ordinary violation whose comment
+  // merely contains that text is not mislabelled CWE-561 / ruleId dead-code.
+  REQUIRE(cwe_for("assertion failure: dead code should not happen").empty());
+  REQUIRE(
+    std::string(cwe_rule_for("dead code should not happen").sarif_id) ==
+    "esbmc-assertion");
+
+  // Dead code and the CWE-617 reachability check remain distinct rules.
+  REQUIRE(
+    std::string(dead_code_cwe_rule().sarif_id) !=
+    std::string(cwe_rule_for("unreachable code reached").sarif_id));
+}
+
 TEST_CASE("cwe_for matches data race", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("data race on x") == std::vector<unsigned>{362, 366});
@@ -161,6 +185,21 @@ TEST_CASE("cwe_for matches uncontrolled recursion", "[util][cwe_mapping]")
     std::string(cwe_rule_for("uncontrolled recursion in ackermann").sarif_id) ==
     "uncontrolled-recursion");
 }
+TEST_CASE("cwe_for matches excessive allocation size", "[util][cwe_mapping]")
+{
+  REQUIRE(
+    cwe_for("excessive allocation size: malloc") == std::vector<unsigned>{789});
+  REQUIRE(
+    cwe_for("excessive allocation size: operator new[]") ==
+    std::vector<unsigned>{789});
+  REQUIRE(
+    std::string(cwe_rule_for("excessive allocation size: realloc").sarif_id) ==
+    "excessive-allocation");
+  REQUIRE(
+    std::string(
+      cwe_rule_for("excessive allocation size: malloc").short_description) ==
+    "Memory allocation with excessive size");
+}
 
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
@@ -194,6 +233,8 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
   REQUIRE(
     cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
+  REQUIRE(cwe_name(789) == "Memory Allocation with Excessive Size Value");
+  REQUIRE(cwe_name(561) == "Dead Code");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -249,7 +290,8 @@ TEST_CASE(
         "Access to object out of bounds: heap object",
         "dereference failure: memset of memory segment of size 4",
         "dereference failure on memcpy: reading memory segment of size 4",
-        "Same object violation",
+        "Relational comparison between pointers is only valid for pointers to "
+        "the same object",
         "Cast arithmetic overflow",
         "arithmetic overflow",
         "division by zero",

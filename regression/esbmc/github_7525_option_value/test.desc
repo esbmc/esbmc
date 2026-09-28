@@ -1,0 +1,5 @@
+CORE
+main.c
+--smtlib-solver-prog --all-claims --unwind 1
+^WARNING: .--smtlib-solver-prog. takes a value, so .--all-claims. was read as that value
+^VERIFICATION SUCCESSFUL$

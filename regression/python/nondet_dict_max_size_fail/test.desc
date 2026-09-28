@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--unwind 16 --no-standard-checks
+^VERIFICATION FAILED$

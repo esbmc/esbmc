@@ -4,7 +4,7 @@
 # migrate_expr_back, migrate_type_back) per file. This is the migration
 # "scoreboard": each migration PR must show the count strictly DECREASING in the
 # region it targets and increasing nowhere else (the Phase-0 measurable
-# checkpoint from docs/irep2-migration.md "Validation strategy").
+# checkpoint from docs/roadmap/irep2-migration.md "Validation strategy").
 #
 # Usage:
 #   migrate_census.sh [path ...]      # default: src/goto-programs

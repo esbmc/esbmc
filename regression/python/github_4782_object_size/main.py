@@ -3,8 +3,9 @@
 # graph traversal) used to dereference an empty/non-array deref item and crash
 # — SIGSEGV in release, assertion failure in debug. #5658 replaced the crash
 # (and the clean-diagnostic abort that followed it) with a nondet size model,
-# so this case no longer aborts, but the recursive set-based DFS still hits a
-# separate symbolic-list-size symex wall and times out — stays KNOWNBUG.
+# so this case no longer aborts. The recursive set-based DFS then hit a separate
+# symbolic-list-size symex wall and timed out; folding len() to the list's own
+# size closed that, and the case now verifies.
 class Node:
     def __init__(self, value=None, successors=[]):
         self.value = value

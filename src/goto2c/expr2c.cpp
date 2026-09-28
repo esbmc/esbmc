@@ -1,16 +1,17 @@
 #include <goto2c/expr2c.h>
-#include <util/arith_tools.h>
-#include <util/c_misc.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/fixedbv.h>
-#include <util/i2string.h>
-#include <util/ieee_float.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
-#include <util/base_type.h>
-#include <util/type_byte_size.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_misc.h>
+#include <util/irep/pad_names.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/arith/fixedbv.h>
+#include <util/base/i2string.h>
+#include <util/arith/ieee_float.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/expr/base_type.h>
+#include <util/expr/type_byte_size.h>
 #include <irep2/irep2_utils.h>
 #include <algorithm>
 #include <regex>
@@ -28,8 +29,7 @@ std::string expr2ct::get_name_shorthand(std::string fullname)
 
 bool expr2ct::is_padding(std::string tag)
 {
-  return has_prefix(tag, "anon_pad$") || has_prefix(tag, "$pad") ||
-         has_prefix(tag, "anon_bit_field_pad$");
+  return is_padding_name(tag);
 }
 
 bool expr2ct::is_anonymous_member(std::string tag)
@@ -171,7 +171,7 @@ std::string expr2ct::convert_rec(
     // program. If "#cpp_type" is not empty, we try to use
     // this information first, and only resort to inferring the type name
     // from its width otherwise.
-    std::string cpp_type = src.get("#cpp_type").as_string();
+    std::string cpp_type = src.cpp_type().as_string();
     if (!cpp_type.empty() && width % 8 == 0)
     {
       std::replace(cpp_type.begin(), cpp_type.end(), '_', ' ');
@@ -448,7 +448,7 @@ std::string expr2ct::convert_code_assign(const codet &src, unsigned indent)
   dest += "=";
 
   exprt rhs = src.op1();
-  // Form a compound literal if assigning to a struct/union
+  // Form a compound literal if assigning an array/struct/union aggregate
   if (
     src.op1().id() == "array" || src.op1().id() == "array_of" ||
     src.op1().id() == "struct" || src.op1().id() == "union")
@@ -1122,9 +1122,6 @@ std::string expr2ct::convert_struct_union_body(
   std::string tag = struct_union_type.tag().as_string();
 
   dest += "(" + tag + ")";
-
-  //if(struct_union_type.components().size() == 0)
-  //  return dest;
 
   dest += "{";
 

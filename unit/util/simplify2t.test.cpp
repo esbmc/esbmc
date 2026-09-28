@@ -10,8 +10,9 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/c_types.h>
-#include <util/config.h>
+#include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
+#include <util/config/config.h>
 
 namespace
 {
@@ -388,6 +389,52 @@ TEST_CASE("Multiplication constant folding: 4 * 5 = 20", "[arithmetic][mul]")
 
   REQUIRE(is_constant_int2t(result));
   REQUIRE(to_constant_int2t(result).value == 20);
+}
+
+TEST_CASE(
+  "Overflow shortcut: widened same-signed multiply folds to false",
+  "[arithmetic][mul][overflow]")
+{
+  // (u32)a * (u32)b where a, b are u16: 16 + 16 <= 32, and the cast target
+  // matches the overflow's own operand type, so overflow2t::do_simplify()
+  // (#7840) must fold this without a solver query.
+  const expr2tc from1 = symbol2tc(get_uint_type(16), "a");
+  const expr2tc from2 = symbol2tc(get_uint_type(16), "b");
+  const expr2tc side_1 = typecast2tc(get_uint_type(32), from1);
+  const expr2tc side_2 = typecast2tc(get_uint_type(32), from2);
+  const expr2tc mul = mul2tc(get_uint_type(32), side_1, side_2);
+  const expr2tc overflow = overflow2tc(mul);
+
+  const expr2tc result = overflow->do_simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value == false);
+}
+
+TEST_CASE(
+  "Overflow shortcut: mul type mismatching its cast operands declines",
+  "[arithmetic][mul][overflow]")
+{
+  // Same shape as above, but the mul's own declared type (signed int32) is
+  // not the type its casts actually target (unsigned uint32) -- the pattern
+  // migrate.cpp's mul2tc(op0->type, op0, op1) can produce for "overflow-*",
+  // since assert_arith_2ops_consistency asserts only width, never
+  // signedness. Reading from1/from2's signedness against operand->type here
+  // would see two signed 16-bit sources and a signed 32-bit destination and
+  // fold to false, even though the multiply the cast operands actually
+  // compute is unsigned 32-bit, not signed. The type-match guard in
+  // overflow2t::do_simplify() must decline instead.
+  const expr2tc from1 = symbol2tc(get_int_type(16), "a");
+  const expr2tc from2 = symbol2tc(get_int_type(16), "b");
+  const expr2tc side_1 = typecast2tc(get_uint_type(32), from1);
+  const expr2tc side_2 = typecast2tc(get_uint_type(32), from2);
+  const expr2tc mul = mul2tc(get_int_type(32), side_1, side_2);
+  const expr2tc overflow = overflow2tc(mul);
+
+  const expr2tc result = overflow->do_simplify();
+
+  REQUIRE(is_nil_expr(result));
 }
 
 TEST_CASE("Division simplification: x / 1 = x", "[arithmetic][div]")
@@ -1781,7 +1828,168 @@ TEST_CASE(
     REQUIRE_FALSE(result == v);
 }
 
+TEST_CASE("bool->int->bool: (int)b != 0 = b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = notequal2tc(widened, zero)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == b);
+}
+
+TEST_CASE("bool->int->bool: 0 != (int)b = b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = notequal2tc(zero, widened)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == b);
+}
+
+TEST_CASE("bool->int->bool: (int)b == 0 = !b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = equality2tc(widened, zero)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_not2t(result));
+  REQUIRE(to_not2t(result).value == b);
+}
+
+TEST_CASE("bool->int->bool: (_Bool)(int)b = b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+
+  const expr2tc result = typecast2tc(get_bool_type(), widened)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == b);
+}
+
+TEST_CASE("bool->int->bool: an int operand is not a bool", "[typecast][bool]")
+{
+  // (int)(short)i != 0 must keep the comparison: i is not known to be 0 or 1.
+  const expr2tc i = symbol2tc(get_int_type(16), "i");
+  const expr2tc widened = typecast2tc(get_int_type(32), i);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = notequal2tc(widened, zero)->simplify();
+
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(result == i);
+}
+
+TEST_CASE("int->bool->int does not fold", "[typecast][bool]")
+{
+  // (int)(_Bool)i keeps only whether i was non-zero, so it is not i.
+  const expr2tc i = symbol2tc(get_int_type(32), "i");
+  const expr2tc narrowed = typecast2tc(get_bool_type(), i);
+
+  const expr2tc result = typecast2tc(get_int_type(32), narrowed)->simplify();
+
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(result == i);
+}
+
 // TODO: Tests that should be valid but... not yet!
+
+TEST_CASE("Boolean constants compare: true != false", "[relation][bool]")
+{
+  const expr2tc expr = notequal2tc(gen_true_expr(), gen_false_expr());
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value);
+}
+TEST_CASE("Boolean constants compare: true == false", "[relation][bool]")
+{
+  const expr2tc expr = equality2tc(gen_true_expr(), gen_false_expr());
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(!to_constant_bool2t(result).value);
+}
+TEST_CASE("A symbolic boolean comparison is left alone", "[relation][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc expr = notequal2tc(b, gen_false_expr());
+  // simplify() returns nil when it changes nothing.
+  const expr2tc result = expr->simplify();
+  REQUIRE((is_nil_expr(result) || !is_constant_bool2t(result)));
+}
+
+// --- Fixedbv constant-fold pins -------------------------------------------
+// The other cases here reach only the bv and bool arms of the constant-kind
+// dispatch ladders; these pin the fixedbv arm, in both the arithmetic
+// (simplify_arith_2ops) and the by-reference relation (simplify_constant_
+// relation) callers.
+static type2tc q32_32()
+{
+  return fixedbv_type2tc(64, 32); // 64-bit fixedbv, 32 integer bits
+}
+static expr2tc fixedbv_const(const type2tc &t, long v)
+{
+  fixedbvt f(fixedbv_spect(to_fixedbv_type(t)));
+  f.from_integer(BigInt(v));
+  return constant_fixedbv2tc(f);
+}
+
+TEST_CASE("Fixedbv constant fold: 3 + 5 = 8", "[arithmetic][add][fixedbv]")
+{
+  const type2tc fbv = q32_32();
+  const expr2tc expr =
+    add2tc(fbv, fixedbv_const(fbv, 3), fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_fixedbv2t(result));
+  REQUIRE(to_constant_fixedbv2t(result).value.to_integer() == 8);
+}
+
+TEST_CASE(
+  "Fixedbv constant relation: 3 < 5 = true",
+  "[relation][lessthan][fixedbv]")
+{
+  const type2tc fbv = q32_32();
+  const expr2tc expr =
+    lessthan2tc(fixedbv_const(fbv, 3), fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value);
+}
+
+TEST_CASE(
+  "Fixedbv constant relation: 3 == 5 = false",
+  "[relation][equality][fixedbv]")
+{
+  // Distinct operands so the x==x identity shortcut does not pre-empt the
+  // fixedbv relation arm -- this must reach the constant-fold dispatch.
+  const type2tc fbv = q32_32();
+  const expr2tc expr =
+    equality2tc(fixedbv_const(fbv, 3), fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(!to_constant_bool2t(result).value);
+}
+
+TEST_CASE(
+  "Fixedbv symbolic relation is left alone",
+  "[relation][lessthan][fixedbv]")
+{
+  // A symbolic fixedbv operand: the fixedbv relation arm fires but the functor
+  // declines to fold, so the relation is left unchanged.
+  const type2tc fbv = q32_32();
+  const expr2tc s = symbol2tc(fbv, "s");
+  const expr2tc expr = lessthan2tc(s, fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE((is_nil_expr(result) || is_lessthan2t(result)));
+}
 
 #if 0
 TEST_CASE("Division simplification: 0 / x = 0", "[arithmetic][div]")

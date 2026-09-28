@@ -1,13 +1,18 @@
 #pragma once
 
-#include <util/language.h>
-#include <python-frontend/global_scope.h>
+#include <util/lang/language.h>
+#include <python-frontend/module/global_scope.h>
 
 #include <nlohmann/json.hpp>
+
+#include <vector>
 
 class python_languaget : public languaget
 {
 public:
+  /** @brief Registers the bundled parser scripts with file_operations. */
+  static void register_bundled();
+
   bool parse(const std::string &path) override;
 
   bool final(contextt &context) override;
@@ -40,9 +45,18 @@ public:
     return new python_languaget;
   }
 
+  /// Additional positional Python files passed on the command line, beyond
+  /// the first (github #6211). Each entry is a fully parsed and annotated
+  /// module AST, merged into the same program by python_converter.
+  const std::vector<nlohmann::json> &get_extra_asts() const
+  {
+    return extra_asts;
+  }
+
 private:
   std::string ast_output_dir;
   nlohmann::json ast;
+  std::vector<nlohmann::json> extra_asts;
   global_scope global_scope_;
 };
 

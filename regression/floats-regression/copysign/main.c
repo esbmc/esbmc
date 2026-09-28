@@ -12,7 +12,7 @@ int main(void)
 
   __VERIFIER_assert(copysign(INFINITY, -2.0) == -INFINITY);
 
-  double snan = copysign(NAN, -2.0);
-  __VERIFIER_assert(isnan(snan) && signbit(snan));
+  /* The sign of a NaN needs the bit-vector encoding (#7021); it is pinned by
+     regression/bitwuzla/fp2bv_nan_sign. */
 }
 

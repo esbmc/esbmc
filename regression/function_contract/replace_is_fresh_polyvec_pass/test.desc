@@ -1,0 +1,4 @@
+CORE
+main.c
+--function polyvec_reduce --enforce-contract polyvec_reduce --unwind 6 --replace-call-with-contract poly_reduce
+^VERIFICATION SUCCESSFUL$

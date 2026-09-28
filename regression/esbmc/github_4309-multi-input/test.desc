@@ -4,3 +4,5 @@ main.c
 ^VERIFICATION FAILED$
 \[Counterexamples - 16 witnesses\]
 --max-witnesses cap reached
+^  Inputs by witness:$
+^    #1 : \[0\] = 

@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir
+^ERROR: Cannot bitcast a vector to another lane width under --ir$

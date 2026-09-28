@@ -11,9 +11,9 @@
 
 #include <memory>
 #include <iomanip>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_types.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
 #include <fmt/core.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>

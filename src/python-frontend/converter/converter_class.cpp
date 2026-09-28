@@ -1,18 +1,18 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_class_builder.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <set>
@@ -51,8 +51,8 @@ exprt python_converter::make_enum_member_struct_expr(
     symbolt str_sym;
     str_sym.id = str_id;
     str_sym.name = "_name_" + member_name;
-    str_sym.set_type(str_val.type());
-    str_sym.set_value(str_val);
+    str_sym.set_type(migrate_type(str_val.type()));
+    str_sym.set_value(migrate_expr(str_val));
     str_sym.static_lifetime = true;
     str_sym.is_extern = false;
     str_sym.file_local = true;
@@ -599,6 +599,13 @@ void python_converter::get_attributes_from_self(
     }
   }
 
+  auto is_callable_annotation = [](const nlohmann::json &annotation) {
+    return annotation.is_object() &&
+           annotation.value("_type", "") == "Subscript" &&
+           annotation.contains("value") && annotation["value"].is_object() &&
+           annotation["value"].value("id", "") == "Callable";
+  };
+
   for (const auto &stmt : method_body)
   {
     if (
@@ -637,7 +644,18 @@ void python_converter::get_attributes_from_self(
         // or PEP 604 union BinOp like int | None (get_type_from_annotation
         // already maps `T | None` to gen_pointer_type(T), the same shape it
         // produces for Optional[T]).
-        typet type = get_type_from_annotation(stmt["annotation"], stmt);
+        //
+        // `Callable[...]` is mapped here rather than inside
+        // get_type_from_annotation: as a *member* it has to be the function
+        // pointer the bare `Callable` spelling yields, because struct layout
+        // cannot compute the width of the bare code type it otherwise keeps,
+        // and aborts with symbolic_type_excp (#4566). A *parameter* annotated
+        // `Callable[...]` is resolved on a different path that the pointer
+        // form breaks (regression/python/callable4), so the mapping stays
+        // local to members.
+        typet type = is_callable_annotation(stmt["annotation"])
+                       ? get_callable_type(stmt["annotation"], stmt)
+                       : get_type_from_annotation(stmt["annotation"], stmt);
         if (type.is_nil() || type.is_empty())
         {
           log_warning(
@@ -781,6 +799,21 @@ void python_converter::get_attributes_from_self(
           rhs_is_aliased_name && type.id() == "symbol" &&
           json_utils::is_class(annotated_type, *ast_json))
           type = gen_pointer_type(type);
+
+        // A bare `Callable` is what the annotation pass infers for an
+        // unannotated `self.fn = fn`; the signature is lost because the
+        // inference carries a type *name*. Recover it from the parameter the
+        // RHS names, so a call through the member resolves rather than being
+        // reported as an AttributeError (esbmc/esbmc#6640).
+        if (annotated_type == "Callable" && rhs_is_aliased_name)
+        {
+          auto param =
+            param_annotations.find(stmt["value"].value("id", std::string()));
+          if (
+            param != param_annotations.end() &&
+            is_callable_annotation(param->second))
+            type = get_callable_type(param->second, stmt);
+        }
       }
 
       if (!clazz.has_component(attr_name))
@@ -804,6 +837,7 @@ void python_converter::get_attributes_from_self(
       // A member is initialized with something that might be not annotated
       typet type = any_type();
       const std::string &attr_name = stmt["targets"][0]["attr"];
+
       if (!clazz.has_component(attr_name))
       {
         struct_typet::componentt comp = python_frontend::build_component(
@@ -870,5 +904,30 @@ void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
 {
+  // A class symbol is keyed by name alone, with no enclosing-scope component,
+  // so definitions of a name at module, function or method scope share one
+  // symbol: the later registrations are dropped and their constructors are
+  // never run, proving the wrong value (#7541). #6765 already makes is_class
+  // decline such a name; declining does not prevent the collision, so refuse
+  // the program rather than answer it wrongly.
+  const std::string &class_name = class_node["name"].get<std::string>();
+  if (ast_json)
+  {
+    std::vector<int> lines;
+    json_utils::collect_class_definition_lines(
+      (*ast_json)["body"], class_name, lines);
+    if (lines.size() > 1)
+    {
+      std::ostringstream oss;
+      oss << "class '" << class_name << "' is defined " << lines.size()
+          << " times (lines";
+      for (int line : lines)
+        oss << ' ' << line;
+      oss << "); ESBMC keys a class symbol by name alone, so the definitions "
+             "would share one symbol. Rename all but one.";
+      throw std::runtime_error(oss.str());
+    }
+  }
+
   python_class_builder(*this, class_node).build(target_block);
 }

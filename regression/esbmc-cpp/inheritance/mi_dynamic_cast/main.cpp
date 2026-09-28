@@ -44,5 +44,8 @@ int main()
   B1 *b1 = dynamic_cast<B1 *>(b2); // sibling cross-cast B2* -> B1*
   assert(b1 && b1->x == 1);
 
+  B2 *b2b = dynamic_cast<B2 *>(b1); // reverse cross-cast B1* -> B2* (target offset > 0)
+  assert(b2b && b2b->y == 2);
+
   return 0;
 }

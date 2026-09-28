@@ -7,12 +7,20 @@
 __ESBMC_C_CPP_BEGIN
 
 /* Guard against the typedef the C library headers expose under their own
- * macro (glibc uses __ssize_t_defined) so including <sys/types.h> or
- * <unistd.h> alongside this header does not trigger a redefinition. */
-#if !defined(_SSIZE_T_DEFINED) && !defined(__ssize_t_defined)
+ * macro (glibc's __ssize_t_defined, Darwin's _SSIZE_T) so including
+ * <sys/types.h> or <unistd.h> alongside this header does not redefine it,
+ * and spell it as that libc does: pointer-width on glibc, but long at every
+ * data model on Darwin (xnu bsd/i386/_types.h). */
+#if !defined(_SSIZE_T_DEFINED) && !defined(__ssize_t_defined) &&               \
+  !defined(_SSIZE_T)
 #define _SSIZE_T_DEFINED
 #define __ssize_t_defined
+#define _SSIZE_T
+#ifdef __APPLE__
 typedef long ssize_t;
+#else
+typedef __PTRDIFF_TYPE__ ssize_t;
+#endif
 #endif
 
 /* Address families */

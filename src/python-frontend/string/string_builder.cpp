@@ -1,10 +1,10 @@
 #include "string_builder.h"
 #include "python_converter.h"
-#include "type_handler.h"
+#include <python-frontend/type/type_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <util/arith_tools.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
 #include <python-frontend/python_frontend_limits.h>
 #include <optional>
 #include <stdexcept>
@@ -401,7 +401,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
       repeat_type.arguments().push_back(arg1);
       repeat_type.arguments().push_back(arg2);
 
-      new_symbol.set_type(repeat_type);
+      new_symbol.set_type(migrate_type(repeat_type));
       get_symbol_table().add(new_symbol);
       repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
     }
@@ -551,7 +551,7 @@ exprt string_builder::concatenate_strings_via_c_function(
     concat_type.arguments().push_back(arg1);
     concat_type.arguments().push_back(arg2);
 
-    new_symbol.set_type(concat_type);
+    new_symbol.set_type(migrate_type(concat_type));
 
     get_symbol_table().add(new_symbol);
     concat_symbol = get_symbol_table().find_symbol(func_symbol_id);
@@ -583,7 +583,7 @@ exprt string_builder::build_runtime_str_conversion_call(
     code_typet fn_type;
     fn_type.return_type() = gen_pointer_type(char_type());
     fn_type.arguments().push_back(code_typet::argumentt(arg_type));
-    new_symbol.set_type(fn_type);
+    new_symbol.set_type(migrate_type(fn_type));
 
     get_symbol_table().add(new_symbol);
     fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
@@ -618,7 +618,7 @@ exprt string_builder::build_runtime_str_join_call(
     fn_type.return_type() = char_ptr;
     fn_type.arguments().push_back(code_typet::argumentt(char_ptr));
     fn_type.arguments().push_back(code_typet::argumentt(list_ptr));
-    new_symbol.set_type(fn_type);
+    new_symbol.set_type(migrate_type(fn_type));
 
     get_symbol_table().add(new_symbol);
     fn_symbol = get_symbol_table().find_symbol(func_symbol_id);

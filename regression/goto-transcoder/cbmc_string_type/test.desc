@@ -1,0 +1,4 @@
+CORE
+cbmc_string_type.goto
+--binary --function main
+^VERIFICATION SUCCESSFUL$

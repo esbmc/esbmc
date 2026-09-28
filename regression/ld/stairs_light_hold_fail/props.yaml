@@ -1,0 +1,11 @@
+properties:
+
+  # The naive reading of the program: "the light is on only while the PIR is
+  # detecting or a button is latched". The ladder deliberately violates it —
+  # the TOF holds the light on for its full preset after the PIR clears, which
+  # is the point of a stairwell light. Pinned here so a resolver that drops the
+  # timer from the rung path (and so satisfies this) is caught.
+  - id: P1
+    kind: invariant
+    expression: "!stairs_light || stairs_pir_sensor || lights_buttons_state"
+    description: "Light must not be on without PIR detection or button activation"

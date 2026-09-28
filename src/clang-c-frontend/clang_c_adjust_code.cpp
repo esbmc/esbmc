@@ -1,11 +1,38 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+
+// A base-subobject `this` -- a base constructor's or destructor's, or a
+// thunk's -- is the one argument here that still needs expression adjustment:
+// it carries a base-adjustment marker, which only clang_c_adjust::adjust_expr
+// resolves. Search the whole argument rather than the typecast chain
+// gen_typecast happens to wrap today's producers in: an unresolved marker
+// leaves the pointer on the wrong subobject silently, so the test must not
+// depend on where in the expression it sits. See #7025, #3894.
+static bool carries_base_adjustment(const exprt &arg)
+{
+  if (!arg.get("#derived_to_base").empty() || arg.get_bool("#base_to_derived"))
+    return true;
+
+  for (const exprt &op : arg.operands())
+    if (carries_base_adjustment(op))
+      return true;
+
+  return false;
+}
+
+void clang_c_adjust::adjust_call_argument(exprt &arg)
+{
+  if (arg.is_index())
+    adjust_index(to_index_expr(arg));
+  else if (carries_base_adjustment(arg))
+    adjust_expr(arg);
+}
 
 void clang_c_adjust::adjust_code(codet &code)
 {
@@ -42,20 +69,19 @@ void clang_c_adjust::adjust_code(codet &code)
       if (op.is_index())
         adjust_index(to_index_expr(op));
       else if (op.id() == "arguments")
-      {
         for (auto &arg : op.operands())
-        {
-          if (arg.is_index())
-            adjust_index(to_index_expr(arg));
-        }
-      }
+          adjust_call_argument(arg);
     }
   }
   else if (statement == "decl-block")
     adjust_decl_block(code);
   else
   {
-    if (statement == "expression" && is_array_like(code.op0().type()))
+    /* Only an array decays (C11 6.3.2.1p3): a vector is a value, and the last
+     * statement of a statement expression is the one whose value is used, so
+     * decaying one there loses it (#7906). Keep the statement test first --
+     * other kinds reach here with no operand. */
+    if (statement == "expression" && is_decaying_array(code.op0().type()))
     {
       /* An array-type'd statement like "y->ss;" where y is a pointer to
        *

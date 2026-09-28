@@ -1,0 +1,87 @@
+#ifndef ESBMC_LATCH
+#define ESBMC_LATCH
+
+// C++20 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// Modelled over ESBMC's pthread mutex and condvar, like <mutex> and
+// <condition_variable> (#6319), so a waiter blocks with the same semantics the
+// C model already implements.
+//
+// Not modelled: the constructor is constexpr in [thread.latch.class], which
+// pthread_mutex_init cannot be here; and max() reports PTRDIFF_MAX rather than
+// a platform counter limit.
+#if __cplusplus >= 202002L
+
+#  include <pthread.h>
+#  include "cstddef"
+#  include "cstdint"
+
+namespace std
+{
+class latch
+{
+  ptrdiff_t __counter;
+  // wait() and try_wait() are const, and both touch the lock.
+  mutable pthread_mutex_t __m;
+  mutable pthread_cond_t __c;
+
+  latch(const latch &);
+  latch &operator=(const latch &);
+
+public:
+  static constexpr ptrdiff_t max() noexcept
+  {
+    return PTRDIFF_MAX;
+  }
+
+  explicit latch(ptrdiff_t expected) : __counter(expected)
+  {
+    pthread_mutex_init(&__m, nullptr);
+    pthread_cond_init(&__c, nullptr);
+  }
+
+  ~latch()
+  {
+    pthread_cond_destroy(&__c);
+    pthread_mutex_destroy(&__m);
+  }
+
+  void count_down(ptrdiff_t update = 1)
+  {
+    pthread_mutex_lock(&__m);
+    __counter -= update;
+    if (__counter <= 0)
+      pthread_cond_broadcast(&__c);
+    pthread_mutex_unlock(&__m);
+  }
+
+  bool try_wait() const noexcept
+  {
+    pthread_mutex_lock(&__m);
+    bool done = __counter <= 0;
+    pthread_mutex_unlock(&__m);
+    return done;
+  }
+
+  void wait() const
+  {
+    pthread_mutex_lock(&__m);
+    while (__counter > 0)
+      pthread_cond_wait(&__c, &__m);
+    pthread_mutex_unlock(&__m);
+  }
+
+  void arrive_and_wait(ptrdiff_t update = 1)
+  {
+    count_down(update);
+    wait();
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 202002L
+
+#endif // ESBMC_LATCH

@@ -87,14 +87,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-static void
-add_global_static_variable(contextt &ctx, const typet t, std::string name)
+static void add_global_static_variable(
+  contextt &ctx,
+  const type2tc &t,
+  const std::string &name)
 {
   // TODO: Maybe they should be part of Jimple context?
   std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
-  symbol.set_type(std::move(t));
+  symbol.set_type(t);
   symbol.name = name;
   symbol.id = id;
 
@@ -102,26 +104,23 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
   symbol.static_lifetime = true;
   symbol.is_extern = false;
   symbol.file_local = false;
-  {
-    exprt v = gen_zero(t, true);
-    v.zero_initializer(true);
-    symbol.set_value(std::move(v));
-  }
+  // Drops the legacy `#zero_initializer` marker, which no IREP2 node models and
+  // only Solidity's converter reads (#4715).
+  symbol.set_value(gen_zero(t, true));
 
-  symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
-  code_declt decl(symbol_expr(added_symbol));
+  ctx.move_symbol_to_context(symbol);
 }
 
 void jimple_languaget::add_intrinsics(contextt &context)
 {
-  auto type1 = array_typet(bool_type(), exprt("infinity"));
+  const type2tc type1 = array_type2tc(get_bool_type(), expr2tc(), true);
   add_global_static_variable(context, type1, "__ESBMC_alloc");
   add_global_static_variable(context, type1, "__ESBMC_is_dynamic");
 
-  auto type2 = array_typet(size_type(), exprt("infinity"));
+  const type2tc type2 = array_type2tc(size_type2(), expr2tc(), true);
   add_global_static_variable(context, type2, "__ESBMC_alloc_size");
 
-  add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
+  add_global_static_variable(context, int_type2(), "__ESBMC_rounding_mode");
 }
 
 void jimple_languaget::setup_main(contextt &context)
@@ -185,13 +184,16 @@ void jimple_languaget::setup_main(contextt &context)
   // add "main"
   symbolt new_symbol;
 
-  code_typet main_type;
-  main_type.return_type() = empty_typet();
-
   new_symbol.id = "__ESBMC_main";
   new_symbol.name = "__ESBMC_main";
-  new_symbol.set_type(std::move(main_type));
-  new_symbol.set_value(std::move(init_code));
+  new_symbol.set_type(code_type2tc(
+    std::vector<type2tc>{},
+    get_empty_type(),
+    std::vector<irep_idt>{},
+    /*ellipsis=*/false));
+  expr2tc init_code2;
+  migrate_expr(init_code, init_code2);
+  new_symbol.set_value(init_code2);
 
   if (context.move(new_symbol))
   {

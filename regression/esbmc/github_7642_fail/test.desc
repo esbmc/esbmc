@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s*FAILED\s+\[main\.assertion\.1\]\s+line\s+9\s+assertion __atomic_test_and_set\(&flag, __ATOMIC_SEQ_CST\) == 1$
+^VERIFICATION FAILED$

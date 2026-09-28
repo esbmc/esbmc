@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-k-step 4
+^VERIFICATION SUCCESSFUL$
+^Solution found by the inductive step.*$

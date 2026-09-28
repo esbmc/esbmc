@@ -224,10 +224,6 @@ __ESBMC_HIDE:;
   {
     return; // Early exit if str1 is invalid
   }
-  // Free *str1 only if it was previously allocated (non-NULL)
-  // if (*str1 != NULL) {
-  //     free(*str1);
-  // }
 
   // If str2 is NULL, set *str1 to NULL (avoid dangling pointers)
   if (str2 == NULL)
@@ -250,7 +246,6 @@ char *nondet_string()
 {
 __ESBMC_HIDE:;
   size_t len = nondet_uint();
-  // __ESBMC_assume(len < SIZE_MAX);
 
   for (size_t i = 0; i < len; ++i)
   {

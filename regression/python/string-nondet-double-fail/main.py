@@ -1,4 +1,4 @@
 
-s1 = nondet_string(3)
-s2 = nondet_string(3)
+s1 = nondet_str()
+s2 = nondet_str()
 assert s1 == s2  # FALHA

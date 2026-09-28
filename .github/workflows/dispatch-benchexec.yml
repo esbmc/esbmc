@@ -1,0 +1,225 @@
+name: Run Benchexec
+on:
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: 'Timeout for each benchmarks (in seconds)'
+        required: true
+        default: '30'
+      options:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: ''
+      output:
+        description: 'File output name (to keep the logs)'
+        required: false
+        default: ''
+      svbenchmarks:
+        description: 'Git branch, tag, or commit of SV-Benchmarks to use'
+        required: true
+        default: 'main'
+      mode:
+        type: choice
+        description: Benchexec run mode
+        options:
+        - Full
+        - Task
+        - RunSet
+      runset:
+        type: choice
+        description: Run-set to use (be sure to set mode to "RunSet")
+        options:
+        - SV-COMP26_unreach-call
+        - SV-COMP26_no-data-race
+        - SV-COMP26_valid-memcleanup
+        - SV-COMP26_valid-memsafety
+        - SV-COMP26_termination
+        - SV-COMP26_no-overflow
+        - SV-COMP26_ConcurrencySafety
+        - SV-COMP26_unreach-call_demo
+        - SV-COMP26_no-data-race_demo
+        - SV-COMP26_valid-memsafety_demo
+        - SV-COMP26_no-overflow_demo
+        - Custom
+      task:
+        type: choice
+        description: Task to use Run-set to use (be sure to set mode to "Task")
+        options:
+        - ReachSafety-Arrays
+        - ReachSafety-BitVectors
+        - ReachSafety-ControlFlow
+        - ReachSafety-ECA
+        - ReachSafety-Floats
+        - ReachSafety-Heap
+        - ReachSafety-Loops
+        - ReachSafety-ProductLines
+        - ReachSafety-Recursive
+        - ReachSafety-Sequentialized
+        - ReachSafety-XCSP
+        - ReachSafety-Combinations
+        - ReachSafety-Hardware
+        - ReachSafety-Hardness
+        - ReachSafety-Fuzzle
+        - ConcurrencySafety-Main
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-Other-ReachSafety
+        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Intel-TDX-Module-ReachSafety
+        - NoDataRace-Main
+        - MemSafety-MemCleanup
+        - SoftwareSystems-uthash-MemCleanup
+        - MemSafety-Arrays
+        - MemSafety-Heap
+        - MemSafety-LinkedLists
+        - MemSafety-Other
+        - MemSafety-Juliet
+        - SoftwareSystems-coreutils-MemSafety
+        - SoftwareSystems-DeviceDriversLinux64-MemSafety
+        - SoftwareSystems-Other-MemSafety
+        - SoftwareSystems-uthash-MemSafety
+        - ConcurrencySafety-MemSafety
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-NoOverflows
+        - SoftwareSystems-uthash-NoOverflows
+        - ConcurrencySafety-NoOverflows
+        - Termination-BitVectors
+        - Termination-MainControlFlow
+        - Termination-MainHeap
+        - Termination-Other
+        - SoftwareSystems-DeviceDriversLinux64-Termination
+        - ReachSafety-Huawei-Concurrency-Challenges
+        - NoDataRace-Huawei-Concurrency-Challenges
+        - MemSafety-Huawei-Concurrency-Challenges
+        - NoOverflows-Huawei-Concurrency-Challenges
+      validate:
+        description: "Run witness validation after benchexec"
+        required: true
+        type: boolean
+      validator:
+        type: choice
+        description: "Witness validator to use (only used when validate is enabled)"
+        options:
+        - CPAChecker
+        - ESBMC
+      witness:
+        type: choice
+        description: "Witness run mode (only used when validate is enabled)"
+        options:
+        - Full
+        - Correctness
+        - Violation
+
+jobs:
+  build-unix:
+    uses: ./.github/workflows/aux-build.yml
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b Release -e OFF -C'
+      testing: false
+
+  run-benchexec:
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 12000
+    needs: build-unix
+    steps:
+      - name: Setup SV-Benchmarks version
+        run: cd $HOME/sv-benchmarks && git fetch --all --tags --force && git checkout ${{ inputs.svbenchmarks }} && if [ "${{ inputs.svbenchmarks }}" == "main" ]; then git reset --hard origin/main; fi
+      - name: Download Linux Build
+        uses: actions/download-artifact@v8
+        with:
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
+          path: ./
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          path: esbmc-src
+      - name: Set up the custom runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
+        run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Set up the Concurrency runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
+        run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Run Benchexec (Full)
+        if: ${{ inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/benchexec.sh -f
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (ConcurrencyRunSet)
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
+        run: ./esbmc-src/scripts/benchexec.sh -f
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (RunSet)
+        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP26_ConcurrencySafety'}}
+        run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (Task)
+        if: ${{ inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/benchexec.sh -t ${{ inputs.task }}
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Show summary (ESBMC)
+        run: tail $HOME/esbmc-output/*results*.txt
+      - name: Show the marginal band (ESBMC)
+        # Tasks finishing within 5% of the limit flip on any timing change, in
+        # either direction, and read as a regression in the score when they do
+        # (esbmc/esbmc#6831). Report them next to the summary so a score move
+        # can be attributed without re-running the set.
+        continue-on-error: true
+        run: |
+          python3 ./esbmc-src/scripts/competitions/svcomp/marginal_timeouts.py \
+            $HOME/esbmc-output/*results*.xml.bz2
+      - name: Save logs
+        if: ${{ inputs.output != '' }}
+        run: cp $HOME/output.zip $HOME/${{ inputs.output }}
+      - name: Move output
+        run: mv $HOME/output.zip ./output.zip
+      - name: Debug Info
+        run: ls
+      - uses: actions/upload-artifact@v7
+        with:
+          name: esbmc-result
+          path: output.zip
+      - name: Checkout code for validation
+        if: ${{ inputs.validate == true }}
+        uses: actions/checkout@v6
+        with:
+          path: esbmc-src
+      - name: Run Validation (Full)
+        if: ${{ inputs.validate == true && inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/witness.sh -f
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
+      - name: Run Validation (RunSet)
+        if: ${{ inputs.validate == true && inputs.mode == 'RunSet' }}
+        run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
+      - name: Run Validation (Task)
+        if: ${{ inputs.validate == true && inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
+      - name: Move validation output
+        if: ${{ inputs.validate == true }}
+        run: mv $HOME/witness-output.zip ./witness-output.zip
+      - name: Show validation summary
+        if: ${{ inputs.validate == true }}
+        run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.validate == true }}
+        with:
+          name: witness-result
+          path: witness-output.zip

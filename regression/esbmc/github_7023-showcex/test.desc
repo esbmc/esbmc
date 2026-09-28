@@ -1,0 +1,5 @@
+CORE
+main.c
+--result-only --k-induction --show-cex
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*FAILED)[\s\S]*\Z

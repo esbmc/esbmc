@@ -107,7 +107,6 @@ public:
   typedef smt_solver_baset::ast_vec ast_vect;
   typedef std::vector<ast_vect> array_update_vect;
 
-  // Fgasdf
   struct index_map_rec
   {
     expr2tc idx;
@@ -363,7 +362,10 @@ public:
         const array_ast *false_arr_ast; // yolo
         smt_astt cond;
       } i;
-    } u;
+      // No construction site fills the whole union, and inserting into
+      // array_updates copies its object representation ([class.copy.ctor]/16),
+      // which would produce an indeterminate value ([basic.indet]/2).
+    } u{};
     unsigned int ctx_level;
     unsigned int update_level;
     mutable bool converted;

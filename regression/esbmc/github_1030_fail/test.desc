@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 9
+^VERIFICATION FAILED$
+^.*assertion result\[i\] == arr1\[i\] \+ arr2\[i\]$

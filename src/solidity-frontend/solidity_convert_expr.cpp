@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
@@ -1242,6 +1242,16 @@ bool solidity_convertert::get_tuple_expr(
   return false;
 }
 
+// Which Solidity spelling produced a call. `require` and `revert` both lower to
+// __ESBMC_assume, so the symbol does not distinguish them; the name is read off
+// the callee's AST node rather than from an attribute on the type, which IREP2
+// cannot carry (docs/roadmap/scope-solidity-irep2.md §11).
+static std::string sol_builtin_spelling(const nlohmann::json &callee)
+{
+  return callee.contains("name") ? callee["name"].get<std::string>()
+                                 : std::string();
+}
+
 bool solidity_convertert::get_call_expr(
   const nlohmann::json &expr,
   const nlohmann::json &literal_type,
@@ -1354,7 +1364,7 @@ bool solidity_convertert::get_call_expr(
     if (new_expr.is_member() && new_expr.component_name() == "length")
       return false;
 
-    std::string sol_name = get_sol_name(new_expr.type());
+    const std::string sol_name = sol_builtin_spelling(callee_expr_json);
     if (sol_name == "revert")
     {
       // Special case: revert
@@ -1839,7 +1849,7 @@ bool solidity_convertert::get_contract_member_call_expr(
         locationt());
       symbolt &added_old_sender = *move_symbol_to_context(old_sender);
       code_declt old_sender_decl(symbol_expr(added_old_sender));
-      added_old_sender.set_value(msg_sender);
+      added_old_sender.set_value(migrate_expr(msg_sender));
       old_sender_decl.operands().push_back(msg_sender);
       move_to_front_block(old_sender_decl);
 
@@ -2025,7 +2035,7 @@ bool solidity_convertert::get_index_access_expr(
       temp_sym.file_local = true;
       temp_sym.lvalue = true;
       auto &tmp_added_sym = *move_symbol_to_context(temp_sym);
-      tmp_added_sym.set_value(array);
+      tmp_added_sym.set_value(migrate_expr(array));
       code_declt decl(symbol_expr(tmp_added_sym));
       decl.operands().push_back(array);
       move_to_front_block(decl);
@@ -2046,7 +2056,7 @@ bool solidity_convertert::get_index_access_expr(
           get_call);
         get_call.arguments().push_back(address_of_exprt(arg_val));
         get_call.arguments().push_back(pos);
-        added_sym.set_value(get_call);
+        added_sym.set_value(migrate_expr(get_call));
 
         code_declt decl(symbol_expr(added_sym));
         decl.operands().push_back(get_call);
@@ -2090,7 +2100,7 @@ bool solidity_convertert::get_index_access_expr(
         get_call.arguments().push_back(address_of_exprt(arg_val));
         get_call.arguments().push_back(dynamic_pool);
         get_call.arguments().push_back(pos);
-        added_sym.set_value(get_call);
+        added_sym.set_value(migrate_expr(get_call));
 
         code_declt decl(symbol_expr(added_sym));
         decl.operands().push_back(get_call);
@@ -2188,7 +2198,6 @@ bool solidity_convertert::get_new_object_expr(
   {
     callee_expr_json = expr["expression"];
   }
-  // nlohmann::json callee_expr_json = expr["expression"];
   if (callee_expr_json.contains("typeName"))
   {
     // case 1
@@ -2415,7 +2424,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
   // 1. Convert LHS and RHS
   // For "Assignment" expression, it's called "leftHandSide" or "rightHandSide".
-  // For "BinaryOperation" expression, it's called "leftExpression" or "leftExpression"
+  // For "BinaryOperation" expression, it's called "leftExpression" or "rightExpression"
   exprt lhs, rhs;
   nlohmann::json rhs_json;
   locationt l;

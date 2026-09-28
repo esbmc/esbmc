@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <unordered_set>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 
 // do a full inlining
 void goto_inline(

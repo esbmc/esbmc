@@ -1,0 +1,5 @@
+CORE
+main.c
+--smtlib-solver-prog --show-loo --unwind 1
+^WARNING: .--smtlib-solver-prog. takes a value, so .--show-loo. was read as that value
+^VERIFICATION SUCCESSFUL$

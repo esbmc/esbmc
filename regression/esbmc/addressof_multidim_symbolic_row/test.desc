@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^VERIFICATION SUCCESSFUL$
+^Generated [0-9]+ VCC\(s\), 1 remaining after simplification
+assertion \(p == &a\[i\]\[1\]\) == \(i == 0\)

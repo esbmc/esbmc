@@ -1,0 +1,10 @@
+CORE
+../vac2.c
+--falsification --multi-property --max-k-step 12
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+7\s+assertion n != 7$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+10\s+assertion x != 3$
+^\*\* 2 of 2 properties failed$
+^VERIFICATION FAILED$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z
+\A(?![\s\S]*PASSED)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION UNKNOWN)[\s\S]*\Z

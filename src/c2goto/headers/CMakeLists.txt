@@ -9,12 +9,15 @@ set(inputs
            stdlib.h
            string.h
            time.h
+           wchar.h
            __esbmc/stddefs.h
            semaphore.h
 
            # pthreads
            pthread.h
            sched.h
+           # C11 threads, layered on the pthread model (issue #3449)
+           threads.h
            # Glibc
            bits/pthreadtypes.h
            bits/thread-shared-types.h
@@ -42,6 +45,7 @@ set(inputs
            # Socket / network operational models
            sys/socket.h
            sys/select.h
+           sys/time.h
            netinet/in.h
            arpa/inet.h
            # end sockets

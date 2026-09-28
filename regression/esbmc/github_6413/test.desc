@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property --unwind 10
+^VERIFICATION FAILED$
+^ +FAILED .*line +21 +prod: false$
+^ +PASSED .*line +23 +prod_task: done$
+^ +PASSED .*line +39 +cons_task: done$
+\A(?![\s\S]*PASSED .*prod: false)[\s\S]*\Z

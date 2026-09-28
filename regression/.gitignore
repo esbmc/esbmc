@@ -3,3 +3,8 @@
 main
 main.out
 tests.log
+
+# Stray artefacts from a test run started inside the source tree.
+/*.graphml
+/*.yml
+/output

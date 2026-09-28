@@ -1,0 +1,4 @@
+CORE
+main.py
+ --unwind 2
+ERROR: Module member 'no_such_member_zzz' not found in module 'os'

@@ -2,12 +2,29 @@
 #include <goto-programs/goto_program_irep.h>
 #include <goto-programs/read_bin_goto_object.h>
 #include <langapi/mode.h>
-#include <util/base_type.h>
-#include <util/irep_serialization.h>
-#include <util/namespace.h>
-#include <util/symbol_serialization.h>
+#include <util/expr/base_type.h>
+#include <util/irep/irep_serialization.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/symbol_serialization.h>
 
 #define BINARY_VERSION 1
+
+// Makes sure there is an empty function for every function symbol and fixes
+// the function types. A null goto_functions means the caller wants symbols
+// only.
+static void
+declare_empty_function(goto_functionst *goto_functions, const symbolt &symbol)
+{
+  if (!goto_functions || symbol.is_type || !symbol.get_type().is_code())
+    return;
+
+  auto it = goto_functions->function_map.find(symbol.id);
+  if (it == goto_functions->function_map.end())
+    goto_functions->function_map.emplace(symbol.id, goto_functiont());
+  goto_functiont &f = goto_functions->function_map.at(symbol.id);
+  f.type = migrate_symbol_type(symbol);
+  f.exception_spec = exception_specificationt::from_type(symbol.get_type());
+}
 
 bool read_bin_goto_object(
   std::istream &in,
@@ -15,7 +32,7 @@ bool read_bin_goto_object(
   contextt &context,
   contextt &ignored,
   std::unordered_set<std::string> &function_set,
-  goto_functionst &goto_functions)
+  goto_functionst *goto_functions)
 {
   std::ostringstream str;
 
@@ -41,7 +58,7 @@ bool read_bin_goto_object(
             << "\n";
 
       log_error("{}", str.str());
-      abort();
+      return true;
     }
   }
 
@@ -58,7 +75,7 @@ bool read_bin_goto_object(
       str << "The input was compiled with a different version of "
           << "goto-cc, please recompile";
       log_error("{}", str.str());
-      abort();
+      return true;
     }
   }
 
@@ -71,18 +88,7 @@ bool read_bin_goto_object(
     symbolt symbol;
     symbol.from_irep(t);
 
-    if (!symbol.is_type && symbol.get_type().is_code())
-    {
-      // makes sure there is an empty function
-      // for every function symbol and fixes
-      // the function types.
-      auto it = goto_functions.function_map.find(symbol.id);
-      if (it == goto_functions.function_map.end())
-        goto_functions.function_map.emplace(symbol.id, goto_functiont());
-      goto_functiont &f = goto_functions.function_map.at(symbol.id);
-      f.type = migrate_symbol_type(symbol);
-      f.exception_spec = exception_specificationt::from_type(symbol.get_type());
-    }
+    declare_empty_function(goto_functions, symbol);
 
     // Add functions only from the list if there is a whitelist
     if (!function_set.empty())
@@ -105,15 +111,25 @@ bool read_bin_goto_object(
   assert(migrate_namespace_lookup);
 
   count = irepconverter.read_long(in);
+
+  if (!goto_functions)
+  {
+    /* A blob written without goto_convert carries each body in its symbol's
+     * value, to be built later by goto_convert_functions; its function
+     * section is empty by construction. */
+    assert(count == 0);
+    return false;
+  }
+
   for (unsigned i = 0; i < count; i++)
   {
     irept t;
     irep_idt fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
-    auto it = goto_functions.function_map.find(fname);
-    if (it == goto_functions.function_map.end())
-      goto_functions.function_map.emplace(fname, goto_functiont());
-    goto_functiont &f = goto_functions.function_map.at(fname);
+    auto it = goto_functions->function_map.find(fname);
+    if (it == goto_functions->function_map.end())
+      goto_functions->function_map.emplace(fname, goto_functiont());
+    goto_functiont &f = goto_functions->function_map.at(fname);
     convert(t, f.body);
     f.body_available = f.body.instructions.size() > 0;
   }
@@ -132,5 +148,5 @@ bool read_bin_goto_object(
   std::unordered_set<std::string>
     empt_function_set; // empty function filter; no function whitelist
   return read_bin_goto_object(
-    in, filename, context, empt_ignored, empt_function_set, goto_functions);
+    in, filename, context, empt_ignored, empt_function_set, &goto_functions);
 }

@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 3
+^ERROR: calling the lambda parameter 'g' is not supported: higher-order lambda parameters have no inferred signature$

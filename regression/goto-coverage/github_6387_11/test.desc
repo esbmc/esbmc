@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --multi-fail-fast 1 --assertion-coverage
+^COVERAGE ANALYSIS INCOMPLETE: 2 goal\(s\) undecided
+reason: --multi-fail-fast limit reached

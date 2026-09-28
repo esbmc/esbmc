@@ -9,6 +9,8 @@ int add_ptrs(const int *a, const int *b)
 {
   __ESBMC_requires(a != NULL);
   __ESBMC_requires(b != NULL);
+  __ESBMC_requires(__ESBMC_is_fresh(a, sizeof(int)));
+  __ESBMC_requires(__ESBMC_is_fresh(b, sizeof(int)));
   __ESBMC_assigns();
   __ESBMC_ensures(__ESBMC_return_value == *a + *b);
   return *a + *b;

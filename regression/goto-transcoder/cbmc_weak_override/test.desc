@@ -1,0 +1,4 @@
+CORE
+cbmc_weak_override.goto
+--binary --unwind 8
+^VERIFICATION SUCCESSFUL$

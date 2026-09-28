@@ -1,0 +1,4 @@
+CORE
+cbmc_thread_local_fail.goto
+--binary
+^VERIFICATION FAILED$

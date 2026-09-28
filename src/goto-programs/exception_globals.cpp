@@ -1,10 +1,10 @@
 #include <goto-programs/exception_globals.h>
 
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/c_types.h>
-#include <util/std_types.h>
-#include <util/expr_util.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/lang/c_types.h>
+#include <util/irep/std_types.h>
+#include <util/expr/expr_util.h>
 
 namespace
 {
@@ -66,6 +66,7 @@ void create_exception_state_symbols(contextt &context)
   add_global(
     context, exception_globals::value_id, pointer_typet(empty_typet()));
   add_global(context, exception_globals::uncaught_count_id, size_type());
+  add_global(context, exception_globals::site_id, size_type());
   add_global(context, exception_globals::terminate_reason_id, size_type());
 
   code_typet void_fn;

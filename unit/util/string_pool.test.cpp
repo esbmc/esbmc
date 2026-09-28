@@ -4,7 +4,7 @@
 #include <thread>
 #include <vector>
 #include <set>
-#include <util/string_pool.h>
+#include <util/base/string_pool.h>
 #include <mutex>
 
 class StringContainerTest

@@ -1,0 +1,4 @@
+CORE
+main.c
+--function add --enforce-contract add --unwind 8
+^VERIFICATION SUCCESSFUL$

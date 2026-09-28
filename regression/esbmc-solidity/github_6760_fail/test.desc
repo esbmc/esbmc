@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract Doftcoin --unsigned-overflow-check --function mintToken --unwind 1 --no-unwinding-assertions --multi-property
+FAILED +\[mintToken\.invalid-pointer-dereference\.1\] +line +2 +dereference failure: invalid pointer
+FAILED +\[mintToken\.arithmetic-overflow\.1\] +line +2 +arithmetic overflow on add
+^VERIFICATION FAILED$

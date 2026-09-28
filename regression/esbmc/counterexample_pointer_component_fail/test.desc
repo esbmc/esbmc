@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-slice
+^  arr\[0\] = &x$
+^  arr\[1\] = 0$
+^VERIFICATION FAILED$

@@ -1,19 +1,19 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/global_scope.h>
-#include <util/config.h>
-#include <util/context.h>
-#include <util/migrate.h>
-#include <util/c_types.h>
-#include <util/python_types.h>
-#include <util/arith_tools.h>
+#include <python-frontend/module/global_scope.h>
+#include <util/config/config.h>
+#include <util/symtab/context.h>
+#include <util/irep/migrate.h>
+#include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
+#include <util/arith/arith_tools.h>
 
 // Phase 4.0 equivalence harness for the Python frontend → IREP2 migration
-// (docs/irep2-migration.md Part IV §7 Phase 4.0, item 2).
+// (docs/roadmap/irep2-migration.md Part IV §7 Phase 4.0, item 2).
 //
 // This is the *durable contract regression* that Phases 4.3/4.4 validate
 // against: it pins that every typet the Python frontend builds today survives
@@ -26,17 +26,18 @@
 //  (1) IREP2-side stability (the hard contract):
 //        migrate_type(migrate_type_back(migrate_type(t))) == migrate_type(t)
 //      We assert IREP2 round-trip — not legacy byte-equality — because
-//      migrate_type deliberately canonicalises the legacy form (migrate.test.cpp
-//      §header). This is precisely what makes the symbol-store IREP2 cache
-//      lossless, and what Phase 4.3 must not break when it builds type2tc
-//      directly and back-migrates only at the create_symbol seam.
+//      migrate_type deliberately canonicalises the legacy form
+//      (migrate.test.cpp §header). This is precisely what makes the
+//      symbol-store IREP2 cache lossless, and what Phase 4.3 must not break
+//      when it builds type2tc directly and back-migrates only at the
+//      create_symbol seam.
 //
 //  (2) Migration-critical legacy invariants the plan calls out explicitly:
 //        - python_int_typet() width is identical in *both* int-encoding modes
 //          (RP4 / F-P7 / SM1): the 64-bit default and the 512-bit --ir bignum.
 //        - the complex struct_type round-trips component-for-component (Q-P5).
-//        - the str/char "#cpp_type" seam attribute (F-P5): its handling across
-//          the boundary is pinned so Phase 4.5's re-attachment seam is checked.
+//        - the str/char "#cpp_type" seam attribute (F-P5) survives the
+//          boundary.
 
 namespace
 {
@@ -162,8 +163,8 @@ TEST_CASE(
 
   // type_handler::get_typet(str, /*size*/1) tags an 8-bit char with #cpp_type
   // "char" for C-backend compatibility. This attribute is read by shared
-  // downstream passes (F-P5), so the plan keeps it on the *legacy seam node*
-  // rather than migrating it. This test pins how it behaves across the boundary.
+  // downstream passes (F-P5), and get_python_type_category tells a 1-char
+  // string element from an 8-bit int by it.
   typet tagged = char_type();
   type_utils::set_cpp_type(tagged, "char");
   REQUIRE(type_utils::get_cpp_type(tagged) == "char");
@@ -174,15 +175,10 @@ TEST_CASE(
   REQUIRE(back.get_bool("#signed") == tagged.get_bool("#signed"));
   REQUIRE(back.width() == tagged.width());
 
-  // Pinned finding (the reason F-P5 is a seam, not a migration target):
-  // migrate_type/migrate_type_back DROP #cpp_type — IREP2 has no slot for it,
-  // so a round-tripped char carries no #cpp_type. Therefore Phase 4.5 must
-  // RE-ATTACH #cpp_type at the legacy hand-off; it cannot ride through IREP2.
-  // If a future migrate.cpp change ever starts preserving it, this assertion
-  // fires and the §15/Phase-4.5 re-attachment rationale must be revisited.
-  REQUIRE(type_utils::get_cpp_type(back).empty());
-  REQUIRE(
-    type_utils::get_cpp_type(tagged) == "char"); // unchanged on the seam node
+  // The bitvector kinds carry the spelling across the seam
+  // (docs/roadmap/scope-python-irep2.md §10), so a round-tripped char is still
+  // a char and Phase 4.5 need not re-attach it.
+  REQUIRE(type_utils::get_cpp_type(back) == "char");
 }
 
 TEST_CASE(
@@ -215,9 +211,8 @@ TEST_CASE(
   REQUIRE(th.get_typet(std::string("uint256")) == uint256_type());
   REQUIRE(th.get_typet(std::string("BLSFieldElement")) == uint256_type());
 
-  // str/size==1: an 8-bit char carrying #cpp_type "char", re-attached at the
-  // seam (F-P5) since IREP2 cannot carry it. Both the bit-vector and the
-  // re-attached hint must match the legacy builder byte-for-byte.
+  // str/size==1: an 8-bit char carrying #cpp_type "char" (F-P5). Both the
+  // bit-vector and the hint must match the legacy builder byte-for-byte.
   typet expected_char = char_type();
   type_utils::set_cpp_type(expected_char, "char");
   const typet got_char = th.get_typet(std::string("str"), 1);

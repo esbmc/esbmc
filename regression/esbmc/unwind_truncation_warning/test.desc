@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
+^WARNING: the unwinding bound cut a loop short while unwinding checks were disabled

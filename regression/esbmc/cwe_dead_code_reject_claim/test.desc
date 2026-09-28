@@ -1,0 +1,4 @@
+CORE
+main.c
+--dead-code-check --claim 1
+^ERROR: --dead-code-check cannot be combined with --claim$

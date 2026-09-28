@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+^VERIFICATION SUCCESSFUL$
+^  PASSED       \[maybe_throw\.assertion\.[0-9]+\] +line +10 +uncaught exception: struct my_error$

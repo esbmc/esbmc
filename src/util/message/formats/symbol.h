@@ -6,7 +6,7 @@
 #endif
 
 // symbol Specialization
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 template <>
 struct fmt::formatter<symbolt>
 {

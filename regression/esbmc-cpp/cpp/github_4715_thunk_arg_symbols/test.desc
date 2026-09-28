@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --symbol-table-only
+^Symbol\.+: tag-(struct )?Base::thunk::c:@S@Derived@F@f#I#I#::a::0$
+^Symbol\.+: tag-(struct )?Base::thunk::c:@S@Derived@F@f#I#I#::b::1$

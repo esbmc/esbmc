@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^  FAILED       \[check\.assertion\.[0-9]+\] +line +7 +uncaught exception: ValueError$

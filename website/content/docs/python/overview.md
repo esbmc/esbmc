@@ -47,6 +47,29 @@ The JSON below shows the annotated representation of `x: int = 10`:
 
 The final frontend step converts the annotated JSON AST into a symbol table using ESBMC's C++ IRep API. This API builds a control-flow graph (CFG) from the program, modelling assignments, expressions, conditionals, loops, functions, and classes. The result is stored in a context structure that feeds into ESBMC's GOTO conversion process.
 
+## Operational models
+
+The Python operational models — the `int`/`str`/`list`/`dict` behaviour, the
+`math` and `random` models, the exception hierarchy — are **precompiled to a
+GOTO binary at build time**, the way `c2goto` builds the C library. ESBMC used
+to re-convert them from AST JSON, and then lower the same 113 function bodies,
+on every run. A trivial verification dropped from 3.26 s to 1.80 s and the
+Python regression suite from 2952 s to 1932 s
+([#7747](https://github.com/esbmc/esbmc/pull/7747),
+[#7778](https://github.com/esbmc/esbmc/pull/7778)).
+
+Two further costs went with it: a module's AST is parsed on its first lookup
+rather than for every `*.json` in the parser's output directory at startup
+([#7777](https://github.com/esbmc/esbmc/pull/7777)), and model functions the
+program cannot reach are dropped before GOTO conversion, so a program that
+reaches 4 of them no longer lowers 383
+([#7780](https://github.com/esbmc/esbmc/pull/7780)).
+
+Two consequences worth knowing. Models reached through an `import` stay on the
+source path, so a user module of that name can still shadow them. And `--ir`
+falls back to converting from source, because the precompiled models are built
+at one integer width.
+
 ## Backend: Symbolic Execution and SMT
 
 Once the frontend produces the GOTO program, ESBMC's backend performs symbolic execution, generating instructions in Single Static Assignment (SSA) form. These are then encoded as first-order logical formulas and discharged by an SMT solver (Bitwuzla by default; Z3, MathSAT, and others are also supported).

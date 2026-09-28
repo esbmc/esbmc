@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/algorithms.h>
-#include <util/message.h>
+#include <util/ssa/algorithms.h>
+#include <util/message/message.h>
 #include <irep2/irep2.h>
 
 /// Detect reads of uninitialised automatic-storage locals (CWE-457).

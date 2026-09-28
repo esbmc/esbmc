@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --no-abnormal-memory-leak --malloc-zero-is-null --incremental-bmc
+^VERIFICATION FAILED$
+^\s*dereference failure: forgotten memory: dynamic_1_value$

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s+the row.s earlier store must not be dropped$
+^VERIFICATION FAILED$

@@ -16,8 +16,8 @@
 #include "../testing-utils/goto_factory.h"
 #include <goto-programs/exception_typeid.h>
 #include <goto-programs/exception_globals.h>
-#include <util/context.h>
-#include <util/symbol.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
 
 TEST_CASE("single-chain subtype closure", "[exception_typeid]")
 {

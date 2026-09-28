@@ -31,10 +31,6 @@ private:
     const optionst &options,
     const std::string &formula_path);
 
-  /** Run the Mallob mono-mode command on formula_path and parse the verdict
-   *  from its standard output. */
-  smt_resultt run_bitwuzllob();
-
   std::string formula_path;
   bool solved = false;
 };

@@ -1,4 +1,5 @@
 CORE
 main.cpp
---unwind 9 --no-unwinding-assertions --timeout 900
-^ERROR: PARSING ERROR$
+--unwind 40 --no-unwinding-assertions --timeout 900
+^VERIFICATION FAILED$
+uncaught exception: class std::out_of_range

@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_assigns_fail.goto
+--binary --function bump
+^VERIFICATION FAILED$

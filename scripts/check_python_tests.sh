@@ -27,8 +27,19 @@ ignored_dirs=(
   "cover5"
   "concurrency_fail"
   "threading_thread_skip_join_fail"
+  # A data race does not manifest deterministically under CPython, so the
+  # _fail expectation (non-zero exit) cannot be checked there.
+  "threading_thread_increment_race_no_flag_fail"
   "convert-byte-update2"
   "constants"
+  "uint64_pow_fold_recovers"
+  "uint64_pow_fold_recovers_fail"
+  "bytes_param_harness_backing"
+  "bytes_param_harness_backing_fail"
+  # --function harness: CPython never calls f, so the _fail half exits 0.
+  "harness_bytes_param_len_bound_fail"
+  "len_bytes_alias_dispatch"
+  "len_bytes_alias_dispatch_fail"
   "decimal"
   "decimal_fail"
   "decimal4"
@@ -59,6 +70,7 @@ ignored_dirs=(
   "enumerate15_fail"
   "func-no-params-types-fail"
   "function-option-fail"
+  "github_6211_function_multi_fail"
   "github_2843_fail"
   "github_2843_4_fail"
   "github_2908_1"
@@ -92,6 +104,7 @@ ignored_dirs=(
   "github_4666_2d"
   "github_4666_shape"
   "github_5102_nested_list_copy"
+  "github_5937_fail"
   "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
@@ -102,6 +115,8 @@ ignored_dirs=(
   "input3"
   "input5"
   "input6"
+  "github_7377_input_len"
+  "harness_os_listdir"
   "github_3712"
   "github_3713"
   "github_3713_1"
@@ -136,7 +151,9 @@ ignored_dirs=(
   "range19-fail"
   "ternary_symbolic"
   "threading_thread_increment_race_fail"
+  "threading_thread_increment_race_no_flag_fail"
   "threading_thread_race_fail"
+  "threading_thread_subclass_func_scope_race_fail"
   "threading_thread_subclass_race_fail"
   "threading_thread_subclass_run_assert_fail"
   "try-fail"
@@ -159,6 +176,15 @@ ignored_dirs=(
   "string-symbolic-8"
   "complex_str_nonconstant"
   "dataclass_factory_kwarg_ignored"
+  "harness_time_monotonic"
+  "harness_time_monotonic_fail"
+  # Top-level relative imports (`from . import X`) cannot run as a bare
+  # `python3 main.py` script -- CPython raises "attempted relative import with
+  # no known parent package" regardless of file layout. These exercise ESBMC's
+  # relative-import handling and are validated via the ESBMC regression harness.
+  "github_6281"
+  "github_6281_used"
+  "github_6281_fail"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for
@@ -166,6 +192,8 @@ ignored_dirs=(
 ignored_prefixes=(
   "github_4666_"
   "github_4668_"
+  "harness_numpy_"
+  "harness_torch_"
 )
 
 for dir in */; do
@@ -191,7 +219,12 @@ for dir in */; do
   # NameError under direct execution and can only be validated via ESBMC.
   # Detecting them by content means an intrinsic-using test no longer needs a
   # manual ignore-list entry (e.g. github_5104, github_5105).
-  if grep -qE '__ESBMC|__VERIFIER_|nondet_' "$dir/main.py"; then
+  #
+  # Comments are stripped first: a test that only *mentions* an intrinsic while
+  # calling none is plain Python, and matching the mention skipped it silently
+  # -- 22 tests were being reported as "expected" without ever being run.
+  if sed 's/#.*//' "$dir/main.py" |
+    grep -qE '__ESBMC|__VERIFIER_|nondet_'; then
     echo "🚫 IGNORED: $dir (uses ESBMC intrinsics, not runnable under CPython)"
     continue
   fi

@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract f --function f
+^VERIFICATION FAILED$
+must be reported

@@ -1,0 +1,5 @@
+CORE
+main.c
+--partial-loops --falsify-context-bound 1
+^Falsifying with context bound 1$
+^VERIFICATION SUCCESSFUL$
