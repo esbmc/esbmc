@@ -1,6 +1,9 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
 #include <ld-frontend/ir_gen/st_fb_translator.h>
+#include <cctype>
+#include <algorithm>
 #include <util/arith/arith_tools.h>
+#include <util/arith/mp_arith.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
@@ -457,11 +460,45 @@ codet ld_converter::translate_arith(const LdIRNode &n)
   return code_assignt(out, op_expr);
 }
 
-// Execute a user-defined FB body once per scan.  Inputs are sampled
-// nondeterministically (the open-world sensor model: the dataset's FB inputs
-// are program inputs), FB-local symbols are instance-scoped, and the body is
-// translated to native codet — crucially the WHILE stays a real loop so a
-// non-terminating Ladder Logic Bomb trips ESBMC's unwinding assertion.
+// The value an FB input wire carries: a declared symbol (a program variable, or
+// another block's "<inst>__<pin>"), or a BOOL or integer literal.
+std::optional<exprt>
+ld_converter::wire_source(const std::string &source, const typet &type) const
+{
+  if (source.empty())
+    return std::nullopt;
+  const symbolt *sym = context_.find_symbol("ld::" + source);
+  if (sym && !sym->get_type().is_code())
+  {
+    exprt e = symbol_exprt("ld::" + source, sym->get_type());
+    return e.type() == type ? e : typecast_exprt(e, type);
+  }
+  std::string upper;
+  for (char c : source)
+    upper += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  if (upper == "TRUE" || upper == "FALSE")
+  {
+    exprt b = upper == "TRUE" ? exprt(true_exprt()) : exprt(false_exprt());
+    return b.type() == type ? b : typecast_exprt(b, type);
+  }
+  const size_t sign = source[0] == '-' ? 1 : 0;
+  if (
+    source.size() <= sign ||
+    source.find_first_not_of("0123456789", sign) != std::string::npos)
+    return std::nullopt;
+  const BigInt value = string2integer(source);
+  if (!value.is_int64())
+    return std::nullopt;
+  // Built as a 64-bit integer and cast, so a BOOL or REAL pin converts it
+  // rather than receiving a constant from_integer cannot express in its type.
+  return typecast_exprt(from_integer(value, signedbv_typet(64)), type);
+}
+
+// Execute a user-defined FB body once per scan.  Inputs take the values they
+// are wired to (nondeterministic when unwired), FB-local symbols are
+// instance-scoped, and the body is translated to native codet — crucially the
+// WHILE stays a real loop so a non-terminating Ladder Logic Bomb trips ESBMC's
+// unwinding assertion.
 // On any translation failure the body is over-approximated (skipped), matching
 // the pre-existing "unsupported FB" behaviour (no regression).
 codet ld_converter::translate_user_fb(const UserFBExec &ex)
@@ -519,12 +556,30 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
     return code_skipt();
   }
 
-  // Success: sample inputs nondeterministically at scan entry, then run body.
+  // Success: bind each input to what it is wired to, then run the body. An
+  // unwired input, or one fed by something not modelled, is sampled
+  // nondeterministically, which over-approximates it.
   code_blockt blk;
   for (const auto &iv : ex.input_vars)
   {
     symbol_exprt s = resolve(iv.name);
-    blk.copy_to_operands(code_assignt(s, side_effect_expr_nondett(s.type())));
+    exprt value = side_effect_expr_nondett(s.type());
+    auto w = std::find_if(
+      ex.in_wires.begin(), ex.in_wires.end(), [&](const FBInWire &in) {
+        return in.pin == iv.name;
+      });
+    if (w != ex.in_wires.end() && w->connected)
+    {
+      if (auto bound = wire_source(w->source, s.type()))
+        value = *bound;
+      else
+        log_warning(
+          "user FB '{}' input {} is fed by something not modelled; sampling it "
+          "nondeterministically.",
+          ex.instance_name,
+          iv.name);
+    }
+    blk.copy_to_operands(code_assignt(s, value));
   }
   for (const auto &op : body.operands())
     blk.copy_to_operands(static_cast<const codet &>(op));
@@ -614,6 +669,18 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     }
 
     scan_body.move_to_operands(rung_blk);
+  }
+
+  // Declare every FB instance's interface first, so a wire from a block that
+  // runs later reads that block's previous-scan value (#7580).
+  for (const auto &ex : ir_.user_fbs)
+  {
+    const std::string prefix = "ld::" + ex.instance_name + "__";
+    for (const auto &v : ex.input_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+    for (const auto &v : ex.local_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
+    declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
   }
 
   // Execute user-defined FB bodies (carriers of hidden logic / LLBs).
