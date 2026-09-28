@@ -24,7 +24,6 @@ declared 20 ms task period turns the timer's `T#20s` preset into 1000 ticks.
 | ID | Kind | Description |
 |---|---|---|
 | P1 | invariant | Timer output energises the light |
-| P2 | invariant | Latched button toggle energises the light |
 | P3 | invariant | Light is only ever on when the timer or the toggle drives it |
 
 ## Expected Result

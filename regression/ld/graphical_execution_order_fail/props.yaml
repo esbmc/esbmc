@@ -1,8 +1,0 @@
-properties:
-  # Twin of graphical_execution_order_safe. executionOrderId runs the reset last,
-  # so it wins when a and b are both on. Ordering by position, or treating
-  # executionOrderId 0 as a number, runs the set last and makes this hold.
-  - id: P1
-    kind: invariant
-    expression: "!(a && b) || q"
-    description: "Deliberately false: the set path wins when both are energised"

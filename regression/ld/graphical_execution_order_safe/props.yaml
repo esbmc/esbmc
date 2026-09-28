@@ -1,9 +1,0 @@
-properties:
-  # The set coil has executionOrderId 1 and is drawn below the reset coil, whose
-  # executionOrderId 0 means unset. Numbered coils run first, as in Beremiz, so
-  # the reset still wins; ordering by position, or treating 0 as a number, would
-  # run the set last.
-  - id: P1
-    kind: invariant
-    expression: "!b || !q"
-    description: "The reset path, executed last, wins in the scan it is energised"

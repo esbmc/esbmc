@@ -10,7 +10,6 @@
 #include <functional>
 #include <map>
 #include <set>
-#include <tuple>
 
 // -----------------------------------------------------------------------
 // Internal helpers
@@ -314,8 +313,8 @@ struct GNode
   std::string expression;             // inVariable literal text (T#20s, 5, ...)
   std::map<std::string, int> in_pins; // formalParameter -> source localId
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
-  int execution_order = 0; // executionOrderId; 0 is unset, as in Beremiz
-  int x = 0, y = 0;        // <position>
+  int x = 0, y = 0;       // <position>
+  int document_order = 0; // index among the body's children
 };
 
 // Parse an IEC 61131-3 duration literal (T#20s, TIME#1m30s, t#500ms) into
@@ -482,7 +481,6 @@ static bool parse_graphical_ld(
         storage_attr = "reset";
     }
     g.storage = storage_attr;
-    g.execution_order = child.attribute("executionOrderId").as_int(0);
     g.x = child.child("position").attribute("x").as_int(0);
     g.y = child.child("position").attribute("y").as_int(0);
 
@@ -506,6 +504,7 @@ static bool parse_graphical_ld(
     if (t == "inVariable")
       g.expression = child.child_value("expression");
 
+    g.document_order = static_cast<int>(nodes.size());
     nodes[lid] = g;
   }
 
@@ -914,19 +913,21 @@ static bool parse_graphical_ld(
         coils.push_back(cid);
     }
   // Coils the rail does not list (an unwired rail is common in exports) follow
-  // by executionOrderId, then position; `nodes` is unordered, so iterating it
-  // would make the scan order depend on hashing (#7352).
+  // in Beremiz's order (PLCGenerator.SortInstances): by row, where coils less
+  // than 10 apart vertically share a row, then by x. That comparison is not
+  // transitive, so it sorts stably from document order, as Beremiz does;
+  // `nodes` is unordered, and iterating it made the order depend on hashing
+  // (#7352).
   std::vector<int> unlisted;
   for (auto &[lid, g] : nodes)
     if (is_coil_tag(g.tag) && !coils_seen.count(lid))
       unlisted.push_back(lid);
-  auto scan_order = [&](int lid) {
-    const GNode &g = nodes.at(lid);
-    return std::make_tuple(
-      g.execution_order <= 0, g.execution_order, g.y, g.x, lid);
-  };
   std::sort(unlisted.begin(), unlisted.end(), [&](int a, int b) {
-    return scan_order(a) < scan_order(b);
+    return nodes.at(a).document_order < nodes.at(b).document_order;
+  });
+  std::stable_sort(unlisted.begin(), unlisted.end(), [&](int a, int b) {
+    const GNode &ga = nodes.at(a), &gb = nodes.at(b);
+    return std::abs(ga.y - gb.y) < 10 ? ga.x < gb.x : ga.y < gb.y;
   });
   coils.insert(coils.end(), unlisted.begin(), unlisted.end());
 

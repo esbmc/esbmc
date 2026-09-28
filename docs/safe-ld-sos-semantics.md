@@ -326,8 +326,9 @@ before the first sink that consumes it; a block no sink consumes is stepped
 after every sink.
 
 Sinks run in the order the right power rail lists them, the order the vendor
-tool draws them. Coils the rail does not list follow by `executionOrderId`
-(0 is unset), then position, then `localId`.
+tool draws them. Coils the rail does not list follow in Beremiz's order
+(`PLCGenerator.SortInstances`): coils less than 10 apart vertically share a row
+and are ordered by x, other rows by y, sorted stably from document order.
 
 ### 6.3 Sequential evaluation
 
