@@ -257,7 +257,7 @@ code_blockt python_converter::create_capture_cells(
     symbol.lvalue = true;
     symbol.file_local = true;
     symbol.static_lifetime = true;
-    symbol.set_value(init);
+    symbol.set_value(migrate_expr(init));
     symbol_table_.add(symbol);
     return symbol_expr(*symbol_table_.find_symbol(sym_id));
   };
@@ -2850,7 +2850,12 @@ void python_converter::upgrade_param_type_from_default(
   if (param_id.empty())
     return;
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
-    param_sym->set_type(default_type);
+  {
+    if (is_function_pointer)
+      python_expr::set_function_type(*param_sym, default_type);
+    else
+      python_expr::set_symbol_type_if_carried(*param_sym, default_type);
+  }
 }
 
 // `<name> = ...` as a plain, single-target Name assignment. Split out of
