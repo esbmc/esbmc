@@ -5502,9 +5502,12 @@ void clang_c_convertert::get_decl_name(
     /* A local variable's USR is its expansion offset, so two declared by one
      * macro expansion shared a symbol. The spelling offset does not separate
      * an inner macro expanded twice inside one outer expansion, but each
-     * expanded token has its own macro location. */
+     * expanded token has its own macro location. A block-scope extern names
+     * the global, so it keeps the global's id. */
     const auto *vd = llvm::dyn_cast<clang::VarDecl>(&nd);
-    if (vd && vd->isLocalVarDecl() && vd->getLocation().isMacroID())
+    if (
+      vd && vd->isLocalVarDecl() && !vd->hasExternalStorage() &&
+      vd->getLocation().isMacroID())
       id += "_m" + std::to_string(vd->getLocation().getRawEncoding());
     return;
   }
