@@ -728,6 +728,32 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
     base_expr, base_type, attr_name);
 }
 
+void python_converter::reject_numpy_shape_attr_on_nonobject_call_result(
+  const exprt &base_expr,
+  const nlohmann::json &base_node,
+  const std::string &attr_name)
+{
+  if (attr_name != "shape" && attr_name != "ndim" && attr_name != "size")
+    return;
+  if (!base_node.is_object() || base_node.value("_type", "") != "Call")
+    return;
+  if (get_numpy_constructor_shape(base_node))
+    return;
+
+  typet base_type = base_expr.type();
+  if (base_type.is_pointer())
+    base_type = base_type.subtype();
+  if (base_type.id() == "symbol")
+    base_type = ns.follow(base_type);
+
+  const typet list_type = type_handler_.get_list_type();
+  if (
+    base_type.is_array() ||
+    is_python_list_model_type(base_expr.type(), list_type, ns))
+    throw std::runtime_error(
+      fmt::format("Cannot resolve attribute '{}' on Call result", attr_name));
+}
+
 std::optional<exprt> python_converter::try_get_numpy_bool_mask_rows_shape_attr(
   const exprt &base_expr,
   const typet &base_type,
@@ -1645,6 +1671,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
+        reject_numpy_shape_attr_on_nonobject_call_result(
+          base_expr, element["value"], attr_name);
+
         exprt resolved =
           resolve_member_on_base(base_expr, element["value"], attr_name);
         if (!resolved.is_nil())
@@ -1948,12 +1977,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
-      if (
-        (attr_name == "shape" || attr_name == "ndim" || attr_name == "size") &&
-        numpy_array_symbols_.count(symbol->id.as_string()) == 0 &&
-        !python_list::is_bool_mask_rows_type(symbol->get_type()))
-        throw std::runtime_error(
-          fmt::format("Cannot resolve attribute: {}", attr_name));
+      if (attr_name == "shape" || attr_name == "ndim" || attr_name == "size")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+        if (
+          sym_type.is_array() &&
+          numpy_array_symbols_.count(symbol->id.as_string()) == 0 &&
+          !python_list::is_bool_mask_rows_type(symbol->get_type()))
+          throw std::runtime_error(
+            fmt::format("Cannot resolve attribute: {}", attr_name));
+      }
 
       // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
       // general attribute-access path above.
