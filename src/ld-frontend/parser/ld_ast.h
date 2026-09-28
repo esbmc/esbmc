@@ -212,6 +212,7 @@ struct UserFBDef
   std::vector<FBVarDecl> local_vars;   // FB-local variables (e.g. "i") + types
   std::string output_var;              // formal output name (OUT)
   VarKind output_kind = VarKind::BOOL; // OUT declared type
+  std::vector<FBVarDecl> output_vars;  // every formal output + types
   std::string st_body;                 // raw Structured Text body
 };
 

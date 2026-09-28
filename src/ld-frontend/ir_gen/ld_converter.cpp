@@ -491,7 +491,8 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
     declared_kinds[v.name] = v.kind;
   for (const auto &v : ex.local_vars)
     declared_kinds[v.name] = v.kind;
-  declared_kinds[ex.output_var] = ex.output_kind;
+  for (const auto &v : ex.output_vars)
+    declared_kinds[v.name] = v.kind;
 
   st_fb_translator::resolver_t resolve =
     [this, prefix, &declared_kinds](const std::string &nm) -> symbol_exprt {
