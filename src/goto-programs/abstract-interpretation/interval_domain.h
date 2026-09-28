@@ -131,6 +131,8 @@ public:
   void clear_state()
   {
     intervals = get_empty();
+    // get_empty() is shared: the next write must copy it first.
+    copied = false;
   }
 
   // no states
