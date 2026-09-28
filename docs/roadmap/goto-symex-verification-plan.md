@@ -748,6 +748,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED at two dimensions**, §15 M9 (R50); deeper nesting is the open residual | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. The second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program, and so does a `memcpy` between two rows. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,row_alias,row_phi_merge,row_via_pointer,row_memcpy,plane_memcpy,vla_row}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. The gate relaxes to **two** dimensions only: past that, a nested row's leaves are a two-level index chain that `decompose_select_chain` flattens straight past the enclosing `with`, and the same programs abort. **One residual stays open** — the 3-D bound. `expand_row_stores`' element enumeration is quadratic but **is** bounded by R42's cap, at 65,408 stores and 0.67 s, §15 M9 (R50 residual); the belief that the `memcpy` layer bypasses the cap was wrong. A third consequence, **R52**, surfaced while gating the 3-D fix: the propagated chain this row creates is a DAG, and three walks over it were unmemoised. |
 | **R52** | **Medium (no verdict, `--no-simplify`)** — found while gating R51's fix, §15 M9 (R52); **FIXED**, same entry | **A propagated multi-dimensional array is walked as a tree, and it is a DAG.** Each store references the chain twice — once as the `with` source, once inside the `index` of the row it updates — so a walk that does not memoise visits paths exponential in the store count. `int a[8][8]` with 32 element writes under `--no-simplify` does not terminate: 131 s and 18.4 GB and still climbing, against 0.27 s and 84 MB once memoised. The default configuration is unaffected, because the simplifier folds the chain before any of these walks see it. R50's fix is what creates the shape, so this row is its consequence and not a pre-existing defect; R51 only widens which programs reach it. | a store-count ladder against three binaries, §15 M9 (R52); `get_original_name` at `renaming.cpp:347`, `pre_register_addresses` at `symex_target_equation.cpp:30`, `get_value_set_rec` at `value_set.cpp:603`; `regression/esbmc/nested_array_no_simplify_scale{,_fail}` | **H-C2** | Fixed by memoising all three walks. `get_original_name` caches **shared nodes only** — caching every node holds the original alive, which forces `irep_container::detach()` to clone even an unshared one and breaks the in-place rewrite `goto_symex_statet::assignment` relies on. A depth cap is **not** the fix: 2-D at 64 stores and 3-D at 256 stores both exhaust memory, so the wall is the store count, not the nesting. The fourth walk, `migrate_expr_back`, is memoised too, §15 M9 (R52 residual). **One residual stays open**, and it is no longer a walk: the text `--ssa-trace` and `--show-vcc` print is itself exponential in the store count, because the format expands a DAG into a tree. |
 | **R59** | **Medium–High (no verdict, default configuration)** — R44's residual, measured on well-defined C, §15 M9 (R59); **FIXED**, same entry | **A byte-wise walk bounded by another member's address never exits.** `for (char *p = (char *)&s.a[0]; p != (char *)&s.a[1]; ++p)` reads the object representation, which C allows, and has a constant trip count, yet symex unwinds it without end: the guard `(char *)&s.a[0] + k != (char *)&s.a[1]` never folds, because the relation normalisation saw no address under the casts. Walking between two members, over an array of structs, a union or a packed struct fails the same way; `--unwind` or `--smt-symex-guard` decide it at once. | `byte_address_on_root`, `cancel_shared_pointer_base`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/char_walk_{one_member,members,arrays}{,_fail}`, `char_view_through_pointer{,_fail}` | — | **Fixed**: a byte view of a member/index chain over a named struct, union or non-byte array becomes one canonical `(char *)&root` anchor plus a constant byte offset, so both ends cancel, and a bare byte base compares as `base + 0`. |
+| **R64** | **High (a constructor called on no object, and a surplus destructor, default configuration)** — found driving WI-4, §15 M9 (G18, R64, WI-4); **FIXED**, same entry | **A class member initialised from a prvalue of its own class got a second object.** `C impl_ = C::make();` copied a temporary into the member and destroyed it; `C impl_ = C{&x};` called the constructor with no object and copied a nondet temporary in; `M() : impl_{C::make(&x)}` was read as aggregate init, storing the temporary's address. immer's `impl_t impl_ = impl_t::empty();` is the converting-constructor form, and its surplus `~champ` freed the static empty node. | `member_result_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_init_{prvalue_dtor,prvalue_value,braced_prvalue,const_prvalue,functional_cast,elided_copy,converting_ctor}{,_fail}` | — | **Fixed**: the member is the prvalue's result object ([dcl.init]/17.6.1), so the constructor or call builds it directly. |
 | **R62** | **Medium (false FAILED, default configuration)** — R61's residual, §15 M9 (R62, R63); **OPEN**, after R63 | **A VLA size inside a pointer type, or three levels deep, reaches the formula unrenamed.** `rename_type` renames an array-typed expression's size and its direct array subtypes only, so `int (*p)[n] = a + 1; (*p)[1]` and `int b[n1][n2][n3][n4]` leave `n` and `n4` as free L0 symbols, and the solver picks a stride that fails a true assertion. | `rename_type`, `src/goto-symex/state/goto_symex_state.cpp` | — | Open: renaming at any depth is only sound once R63 fixes each size at its declaration, and it also needs `dereference_type_compare` to tolerate renamed sizes inside a pointer subtype (§15). |
 | **R63** | **High (false SUCCESSFUL, default configuration)** — found while fixing R62, §15 M9 (R62, R63); **FIXED**, same entry | **A variably modified type's size was read where it was used, not where it was declared.** C fixes it at the declaration (C11 6.7.6.2p5). `int (*p)[n] = a; n = 5; assert(p[1][0] != 7)` and `typedef int row[n]; n = 5; row x;` gave false SUCCESSFUL, a size changed in a loop gave the next iteration's, and `int a[2][n]; n = 5; a[1][0] = 7;` aborted `assert_type_compat_for_with`. | `snapshot_vla_sizes`, `get_vla_size`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/vla_size_{fixed_pointer,fixed_typedef,fixed_loop,fixed_array,same_declaration,label_goto,loop_pointer}{,_fail}`, `esbmc-cpp/cpp/vla_size_type_alias{,_fail}` | — | **Fixed**: each block-scope declarator's VLA size is bound to a local just before the declarator, and every type that names it reads that local. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
@@ -8869,6 +8870,65 @@ walk tests, which time out on master. `char_view_through_pointer{,_fail}`
 pass on master too; they pin the dereference defect rather than the original
 bug.
 
+### M9 (G18, R64, WI-4) — 2026-09-27, G18 does not reproduce, and WI-4's next wall
+
+**G18 does not reproduce on master.** With `goto-symex/state/goto_symex_state.h`
+included, an empty `main` verifies SUCCESSFUL in 7 s at `a751d4d186`, with and
+without `--no-slice`, and all 2,145 claims simplify away. It is also
+SUCCESSFUL at `b10750981a`, where R53 merged, so no later commit fixed it: the
+violation was measured on #7980's branch with a pre-merge R53 applied.
+
+**WI-4 still misses its gate.** `renaming::level1t l1;` converts, and symex
+never terminates: `level1t`'s destructor reaches immer's `delete_deep` and
+`destroy_n` over the empty map's node, whose count is not constant. A bare
+`immer::map<int, int> m;` does the same. Probing a copy of immer found the
+cause: the static empty node's reference count drops to one before the map is
+destroyed, so the map's own `dec()` frees it. The extra `dec()` came from
+`map`'s default member initializer `impl_t impl_ = impl_t::empty();`, a
+converting constructor from `node_t *` that ESBMC built into a temporary
+`champ`, copied into the member, and destroyed (R64).
+
+**R64, fixed.** A class-typed member initialised from a prvalue of its class is
+that prvalue's result object ([dcl.init]/17.6.1), and clang marks the
+pre-C++17 copy elidable and elides it. `get_member_initializer` converted the
+temporary clang binds the prvalue to, so every such member got a second object:
+`C impl_ = C::make();` copied a temporary in and destroyed it, `C impl_ =
+C{&x};` called the constructor on no object and copied a nondet temporary in,
+and `M() : impl_{C::make(&x)}` was read as aggregate initialisation, storing
+the temporary's address in `p`. `member_result_object` now peels the default
+member initializer, parentheses, the bound temporary, a transparent braced
+list ([dcl.init.list]/3.2), prvalue qualification and converting casts, and an
+elidable copy, so the constructor or call builds the member itself. Review
+found the `const` member, explicit-cast and parenthesised forms missing from
+the first version. The seven pairs
+`member_init_{prvalue_dtor,prvalue_value,braced_prvalue,const_prvalue,functional_cast,elided_copy,converting_ctor}{,_fail}`
+match the native program and are wrong on master, both halves. The C++ suites
+pass apart from local pre-existing failures.
+
+Not fixed, and unchanged by R64: a local `C c = C::make();` under
+`--std c++14` still destroys a surplus copy, members constructed before an
+initializer throws are not destroyed ([except.ctor]/3), mem-initializer
+temporaries die at the end of the constructor rather than of their
+full-expression, and the aggregate-initialisation surplus destructor pinned by
+`aggregate_init_temp_double_destroy` (KNOWNBUG) is a separate path.
+
+**WI-4's next wall.** With R64, the empty node is no longer freed on any path
+(`--unwind 1` passes a probe asserting it), yet the unbounded run still unwinds
+`destroy_n`: the refcount guard `root->dec()` reaches symex through placement
+new into static `aligned_storage` and the atomic model, and does not fold, so
+the dead `delete_deep` branch is explored with a symbolic count. That is a
+completeness cost, not a wrong verdict. `--smt-symex-guard`, which asks the
+solver about each guard, prunes it: a bare `immer::map<int, int> m;` then
+verifies in 4 s, and master reports a false FAILED on it, because the freed
+empty node is really deleted there. The unfolded value is the node's `values`
+pointer, stored as `nullptr` through placement new into the static buffer and
+read back as bytes; the same shape written in C folds away completely.
+
+WI-4 itself is still over its gate: with R64 and `--smt-symex-guard`,
+`renaming::level1t l1;` spent more than 20 minutes in symex without unwinding a
+loop, and the only diagnostic is that immer's `uninitialized_copy`
+(`immer/detail/util.hpp:161`) is treated as an allocating `new`, since its
+placement-new address has side effects. That is the next item for WI-4.
 ### M9 (R62, R63) — 2026-09-27, VLA sizes inside types
 
 R61's review found `m` and `c` of `int a[2][3][u][m][c]` named in the SMT
