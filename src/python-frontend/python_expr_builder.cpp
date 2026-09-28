@@ -42,11 +42,12 @@ void set_symbol_type_if_carried(symbolt &sym, const typet &t)
     sym.set_type(migrate_type(t));
 }
 
-void set_function_type(symbolt &sym, const code_typet &t)
+void set_function_type(symbolt &sym, const typet &t)
 {
   type2tc t2 = migrate_type(t);
-  code_typet expected = t;
-  for (code_typet::argumentt &arg : expected.arguments())
+  typet expected = t;
+  typet &code = expected.is_pointer() ? expected.subtype() : expected;
+  for (code_typet::argumentt &arg : to_code_type(code).arguments())
   {
     arg.remove("identifier");
     arg.remove("#location");

@@ -2239,11 +2239,62 @@ bool clang_cpp_convertert::build_lambda_static_invoker(
   return false;
 }
 
+/* A prvalue of the member's own class initialises the member itself
+ * ([dcl.init]/17.6.1), so the temporary clang binds it to never exists:
+ * converting that binding constructed or copied into a second object and then
+ * destroyed it. Peels a default member initializer, parentheses, a transparent
+ * braced list ([dcl.init.list]/3.2), a prvalue qualification or converting
+ * cast, and the copy clang marks elidable before C++17, which it elides. */
+static const clang::Expr *peel_initializer_wrapper(const clang::Expr *e)
+{
+  if (const auto *dflt = llvm::dyn_cast<clang::CXXDefaultInitExpr>(e))
+    return dflt->getExpr();
+  if (const auto *ewc = llvm::dyn_cast<clang::ExprWithCleanups>(e))
+    return ewc->getSubExpr();
+  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
+    return bind->getSubExpr();
+  if (const auto *paren = llvm::dyn_cast<clang::ParenExpr>(e))
+    return paren->getSubExpr();
+  if (const auto *ile = llvm::dyn_cast<clang::InitListExpr>(e))
+    return ile->isTransparent() ? ile->getInit(0) : nullptr;
+  if (const auto *cast = llvm::dyn_cast<clang::CastExpr>(e))
+    return !cast->isGLValue() &&
+               (cast->getCastKind() == clang::CK_ConstructorConversion ||
+                cast->getCastKind() == clang::CK_NoOp)
+             ? cast->getSubExpr()
+             : nullptr;
+  return nullptr;
+}
+
+static const clang::Expr *peel_elided_copy(const clang::Expr *e)
+{
+  const auto *ctor = llvm::dyn_cast<clang::CXXConstructExpr>(e);
+  if (!ctor || !ctor->isElidable() || ctor->getNumArgs() != 1)
+    return nullptr;
+  const auto *mte = llvm::dyn_cast<clang::MaterializeTemporaryExpr>(
+    ctor->getArg(0)->IgnoreImpCasts());
+  return mte ? mte->getSubExpr()->IgnoreImpCasts() : nullptr;
+}
+
+static const clang::Expr &member_result_object(const clang::Expr &init)
+{
+  const clang::Expr *e = &init;
+  for (const clang::Expr *next = e; next;)
+  {
+    e = next;
+    next = peel_initializer_wrapper(e);
+    if (!next)
+      next = peel_elided_copy(e);
+  }
+  return *e;
+}
+
 bool clang_cpp_convertert::get_member_initializer(
-  const clang::Expr &init,
+  const clang::Expr &member_init,
   const typet &member_type,
   exprt &rhs)
 {
+  const clang::Expr &init = member_result_object(member_init);
   const auto *ctor_expr = llvm::dyn_cast<clang::CXXConstructExpr>(&init);
   if (
     ctor_expr && zero_initialises(init) && ctor_expr->getConstructor() &&
