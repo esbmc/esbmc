@@ -163,6 +163,19 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   return v;
 }
 
+// The variable wired to the first of `ports` a textual block names. CODESYS
+// spells the CTD load pin LOAD where IEC 61131-3 says LD.
+static std::string formal_var(
+  const pugi::xml_node &block,
+  std::initializer_list<const char *> ports)
+{
+  for (const char *port : ports)
+    for (auto var : block.children("variable"))
+      if (std::string(var.attribute("formalParameter").as_string()) == port)
+        return var.child_value();
+  return {};
+}
+
 // -----------------------------------------------------------------------
 // Rung element parsing
 // -----------------------------------------------------------------------
@@ -242,7 +255,7 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
       elem.counter_fb.CU_var = get_var("CU");
       elem.counter_fb.CD_var = get_var("CD");
       elem.counter_fb.R_var = get_var("R");
-      elem.counter_fb.LD_var = get_var("LD");
+      elem.counter_fb.LD_var = formal_var(n, {"LD", "LOAD"});
       elem.counter_fb.PV_var = get_var("PV");
       elem.counter_fb.Q_var = get_var("Q");
       elem.counter_fb.CV_var = get_var("CV");
@@ -314,6 +327,7 @@ struct GNode
   std::string instance_name;          // block instanceName
   std::string expression;             // inVariable literal text (T#20s, 5, ...)
   std::map<std::string, int> in_pins; // formalParameter -> source localId
+  std::map<std::string, std::string> in_pin_source; // formal -> source's pin
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
 };
 
@@ -489,6 +503,15 @@ static std::string control_pin(
       throw UnsupportedConstructError(what + " driven by no power", 2);
     if (is_block && !steps_every_scan(s.type_name))
       throw UnsupportedConstructError(what + " driven by " + s.type_name, 2);
+    // A block's power flow is its Q; ENO, CV or ET read as Q would be wrong.
+    const auto source = block.in_pin_source.find(pin);
+    if (
+      is_block &&
+      (source == block.in_pin_source.end() || source->second != "Q"))
+      throw UnsupportedConstructError(
+        what + " driven by " + s.type_name + " output " +
+          (source == block.in_pin_source.end() ? "" : source->second),
+        2);
     return power_flow(src);
   }
   return "";
@@ -557,7 +580,11 @@ static bool parse_graphical_ld(
         auto conn = pin.select_node(".//connection").node();
         const int src = conn.attribute("refLocalId").as_int(-1);
         if (!formal.empty() && src >= 0)
+        {
           g.in_pins[formal] = src;
+          g.in_pin_source[formal] =
+            conn.attribute("formalParameter").as_string("");
+        }
       }
     }
 
