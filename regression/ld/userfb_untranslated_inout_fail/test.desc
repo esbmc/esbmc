@@ -1,5 +1,5 @@
 CORE
-mask.ld
---ld-props props.yaml --incremental-bmc
+fb.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
 ^WARNING: user FB 'MASK' body not translated.*; its outputs are nondeterministic\.$
 ^VERIFICATION FAILED$

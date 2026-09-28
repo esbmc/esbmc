@@ -503,15 +503,8 @@ exprt ld_converter::input_value(
     });
   if (w == ex.in_wires.end() || !w->connected)
     return side_effect_expr_nondett(type);
-  // An output of a block whose body was not translated is never written.
-  const bool untranslated = std::any_of(
-    ir_.user_fbs.begin(), ir_.user_fbs.end(), [&](const UserFBExec &src) {
-      return !fb_bodies_.count(src.instance_name) &&
-             w->source.rfind(src.instance_name + "__", 0) == 0;
-    });
-  if (!untranslated)
-    if (auto bound = wire_source(w->source, type))
-      return *bound;
+  if (auto bound = wire_source(w->source, type))
+    return *bound;
   log_warning(
     "user FB '{}' input {} is fed by something not modelled; sampling it "
     "nondeterministically.",
@@ -534,33 +527,11 @@ void ld_converter::declare_user_fb_interfaces()
     for (const auto &v : ex.output_vars)
       declare_scoped(prefix + v.name, type_of_kind(v.kind));
   }
-  // Translate every body up front, so a wire from a block whose body cannot be
-  // translated is known to be unmodelled wherever it is read.
-  for (const auto &ex : ir_.user_fbs)
-  {
-    try
-    {
-      fb_bodies_.emplace(ex.instance_name, translate_fb_body(ex));
-    }
-    catch (const std::exception &e)
-    {
-      log_warning(
-        "user FB '{}' body not translated ({}); over-approximating (no-op).",
-        ex.type_name,
-        e.what());
-    }
-    catch (...)
-    {
-      log_warning(
-        "user FB '{}' body not translated; over-approximating (no-op).",
-        ex.type_name);
-    }
-  }
 }
 
-// Translate an FB's Structured Text body into its instance's symbols. Throws
-// when the body uses constructs outside the supported ST subset.
-code_blockt ld_converter::translate_fb_body(const UserFBExec &ex)
+// Translate an FB's Structured Text body into its instance's symbols, or
+// nothing when the body uses constructs outside the supported ST subset.
+std::optional<code_blockt> ld_converter::translate_fb_body(const UserFBExec &ex)
 {
   const std::string prefix = "ld::" + ex.instance_name + "__";
 
@@ -585,8 +556,26 @@ code_blockt ld_converter::translate_fb_body(const UserFBExec &ex)
       (it != declared_kinds.end()) ? type_of_kind(it->second) : int32_t_();
     return declare_scoped(prefix + nm, t);
   };
-  st_fb_translator translator(resolve);
-  return translator.translate(ex.st_body);
+  try
+  {
+    st_fb_translator translator(resolve);
+    return translator.translate(ex.st_body);
+  }
+  catch (const std::exception &e)
+  {
+    log_warning(
+      "user FB '{}' body not translated ({}); its outputs are "
+      "nondeterministic.",
+      ex.type_name,
+      e.what());
+  }
+  catch (...)
+  {
+    log_warning(
+      "user FB '{}' body not translated; its outputs are nondeterministic.",
+      ex.type_name);
+  }
+  return std::nullopt;
 }
 
 // Execute a user-defined FB body once per scan.  Inputs take the values they
@@ -597,26 +586,36 @@ code_blockt ld_converter::translate_fb_body(const UserFBExec &ex)
 codet ld_converter::translate_user_fb(const UserFBExec &ex)
 {
   const std::string prefix = "ld::" + ex.instance_name + "__";
-  // A body outside the supported ST subset (nested FB calls, MOD, library
-  // functions) was reported when it failed to translate, and emits NOTHING,
-  // preserving the pre-existing "unsupported FB" behaviour.
-  const auto translated = fb_bodies_.find(ex.instance_name);
-  if (translated == fb_bodies_.end())
-    return code_skipt();
-  const code_blockt &body = translated->second;
-
-  // Success: bind each input to what it is wired to, then run the body. An
-  // unwired input, or one fed by something not modelled, is sampled
-  // nondeterministically, which over-approximates it.
   code_blockt blk;
-  for (const auto &iv : ex.input_vars)
+  const std::optional<code_blockt> body = translate_fb_body(ex);
+  if (!body)
   {
-    const symbol_exprt s(
-      prefix + iv.name, context_.find_symbol(prefix + iv.name)->get_type());
-    blk.copy_to_operands(code_assignt(s, input_value(ex, iv.name, s.type())));
+    // Skipping the body would leave the outputs, and the in/out pins held in
+    // input_vars, at stale values; any value over-approximates the body.
+    std::vector<FBVarDecl> pins = ex.input_vars;
+    pins.insert(pins.end(), ex.output_vars.begin(), ex.output_vars.end());
+    for (const auto &v : pins)
+    {
+      const symbol_exprt out(
+        prefix + v.name, context_.find_symbol(prefix + v.name)->get_type());
+      blk.copy_to_operands(
+        code_assignt(out, side_effect_expr_nondett(out.type())));
+    }
   }
-  for (const auto &op : body.operands())
-    blk.copy_to_operands(static_cast<const codet &>(op));
+  else
+  {
+    // Bind each input to what it is wired to, then run the body. An unwired
+    // input, or one fed by something not modelled, is sampled
+    // nondeterministically, which over-approximates it.
+    for (const auto &iv : ex.input_vars)
+    {
+      const symbol_exprt s(
+        prefix + iv.name, context_.find_symbol(prefix + iv.name)->get_type());
+      blk.copy_to_operands(code_assignt(s, input_value(ex, iv.name, s.type())));
+    }
+    for (const auto &op : body->operands())
+      blk.copy_to_operands(static_cast<const codet &>(op));
+  }
 
   // Wire FB output pins to the program variables that consume them, so a forged
   // FB output (value/actuator-manipulation bomb) propagates into the program.
