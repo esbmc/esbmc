@@ -2616,6 +2616,11 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "decode")
       return "str";
+    // list.pop() returns an element, never the list (#4797).
+    if (
+      obj_type == "list" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "pop")
+      return "Any";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.
     // When that fails (no default arg supplied, e.g. ``d.get(key)``),
