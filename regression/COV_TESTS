@@ -1924,3 +1924,17 @@ regression/python/github_7559_none
 regression/python/github_7559_none_fail
 regression/python/github_7559_nonfinite
 regression/python/github_7559_nonfinite_fail
+regression/esbmc-cpp/cpp/member_init_prvalue_dtor
+regression/esbmc-cpp/cpp/member_init_prvalue_dtor_fail
+regression/esbmc-cpp/cpp/member_init_prvalue_value
+regression/esbmc-cpp/cpp/member_init_prvalue_value_fail
+regression/esbmc-cpp/cpp/member_init_braced_prvalue
+regression/esbmc-cpp/cpp/member_init_braced_prvalue_fail
+regression/esbmc-cpp/cpp/member_init_const_prvalue
+regression/esbmc-cpp/cpp/member_init_const_prvalue_fail
+regression/esbmc-cpp/cpp/member_init_functional_cast
+regression/esbmc-cpp/cpp/member_init_functional_cast_fail
+regression/esbmc-cpp/cpp/member_init_elided_copy
+regression/esbmc-cpp/cpp/member_init_elided_copy_fail
+regression/esbmc-cpp/cpp/member_init_converting_ctor
+regression/esbmc-cpp/cpp/member_init_converting_ctor_fail
