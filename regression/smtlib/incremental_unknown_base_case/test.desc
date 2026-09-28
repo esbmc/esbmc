@@ -1,0 +1,4 @@
+CORE
+main.c
+--smtlib --smtlib-solver-prog ./failing-solver.sh --incremental-bmc --max-k-step 3
+^VERIFICATION UNKNOWN$

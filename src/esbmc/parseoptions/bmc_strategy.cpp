@@ -314,15 +314,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      // A proof needs the base case to be refuted, not merely not to have
+      // produced a counterexample: a solver that failed leaves it unknown.
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
 
       // if the property is proven violated in the bs, it's unnecessary to further run fw and is
       // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
       if (
-        !is_bcv &&
+        base_case.is_false() &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         if (is_coverage)
@@ -339,8 +342,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
       if (k_step > 1)
       {
         if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+          base_case.is_false() &&
+          is_inductive_step_violated(options, goto_functions, k_step)
+            .is_false())
         {
           if (is_coverage)
             report_coverage(
@@ -463,13 +467,14 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
 
       if (
-        !is_bcv &&
+        base_case.is_false() &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         if (is_coverage)
