@@ -1912,3 +1912,11 @@ regression/python/github_7559_none
 regression/python/github_7559_none_fail
 regression/python/github_7559_nonfinite
 regression/python/github_7559_nonfinite_fail
+regression/esbmc-cpp/cpp/array_new_init_list
+regression/esbmc-cpp/cpp/array_new_init_list_fail
+regression/esbmc-cpp/cpp/array_new_init_list_partial
+regression/esbmc-cpp/cpp/array_new_init_list_partial_fail
+regression/esbmc-cpp/cpp/array_new_init_list_runtime
+regression/esbmc-cpp/cpp/array_new_init_list_runtime_fail
+regression/esbmc-cpp/cpp/array_new_init_list_replaced
+regression/esbmc-cpp/cpp/array_new_init_list_replaced_fail
