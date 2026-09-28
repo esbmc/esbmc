@@ -16,7 +16,10 @@ class host_rounding_mode
 public:
   explicit host_rounding_mode(int mode) : saved(std::fegetround())
   {
-    std::fesetround(mode);
+    if (saved == mode)
+      saved = -1;
+    else
+      std::fesetround(mode);
   }
 
   ~host_rounding_mode()

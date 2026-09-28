@@ -22,6 +22,22 @@ TEST_CASE("host_rounding_mode sets and restores the mode", "[core][util]")
   REQUIRE(std::fegetround() == FE_TONEAREST);
 }
 
+TEST_CASE("host_rounding_mode pins nearest and restores upward", "[core][util]")
+{
+  std::fesetround(FE_UPWARD);
+  {
+    const host_rounding_mode nearest(FE_TONEAREST);
+    REQUIRE(std::fegetround() == FE_TONEAREST);
+    {
+      const host_rounding_mode already_nearest(FE_TONEAREST);
+      REQUIRE(std::fegetround() == FE_TONEAREST);
+    }
+    REQUIRE(std::fegetround() == FE_TONEAREST);
+  }
+  REQUIRE(std::fegetround() == FE_UPWARD);
+  std::fesetround(FE_TONEAREST);
+}
+
 TEST_CASE("host_rounding_mode guards nest", "[core][util]")
 {
   std::fesetround(FE_TONEAREST);

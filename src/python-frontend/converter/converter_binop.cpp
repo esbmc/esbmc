@@ -7,7 +7,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
@@ -249,7 +249,7 @@ std::string py_percent_format(
       // printf rounds %f/%e/%g per the host FP rounding mode, which the
       // pipeline can leave non-default; pin FE_TONEAREST across both snprintf
       // passes so the fold matches CPython's round-half-to-even.
-      const round_to_nearest_guard guard;
+      const host_rounding_mode guard(FE_TONEAREST);
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
