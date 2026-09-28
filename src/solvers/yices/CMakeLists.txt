@@ -82,16 +82,16 @@ if(ENABLE_YICES)
 
     target_include_directories(solveryices
             PRIVATE ${Yices_INCLUDE_DIRS}
-            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(solveryices PUBLIC esbmc_common)
 
     # Hack needed for Ubuntu, since it is not linking with static libs from system
     if(DEFINED GMP_DIR)
         find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a HINTS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
         message(STATUS "Custom gmp found: ${LIBGMP_CUSTOM}")
-        target_link_libraries(solveryices fmt::fmt "${Yices_LIB}" "${LIBGMP_CUSTOM}")
+        target_link_libraries(solveryices PUBLIC fmt::fmt "${Yices_LIB}" "${LIBGMP_CUSTOM}")
     else()
-        target_link_libraries(solveryices fmt::fmt "${Yices_LIB}")
+        target_link_libraries(solveryices PUBLIC fmt::fmt "${Yices_LIB}")
     endif()
 
     target_link_libraries(solvers INTERFACE solveryices)

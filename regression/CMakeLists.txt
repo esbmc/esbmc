@@ -357,6 +357,7 @@ if(APPLE)
                     k-induction
                     k-induction-parallel
                     termination
+                    multi-property-matrix
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_BITWUZLLOB}
@@ -398,6 +399,7 @@ elseif(WIN32)
                     floats
                     k-induction
                     termination
+                    multi-property-matrix
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
@@ -424,6 +426,7 @@ else()
                     floats-regression
                     k-induction
                     termination
+                    multi-property-matrix
                     csmith
                     k-induction-parallel
                     cuda/benchmarks

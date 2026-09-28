@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: len\(\) of a list element is not modelled when the program defines several classes or the index is not a plain read$

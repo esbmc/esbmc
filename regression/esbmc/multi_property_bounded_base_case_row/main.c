@@ -1,6 +1,6 @@
 /* A base case discharges a claim only within k, so --falsification, which
-   never proves anything, must not report x != 3 as passed: it is violated at
-   k = 4. */
+   never proves anything, must not report x != 3 as passed when it stops at
+   k = 3: it is violated at k = 4. */
 #include <assert.h>
 
 int main()

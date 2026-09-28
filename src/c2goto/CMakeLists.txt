@@ -6,13 +6,11 @@ add_subdirectory(headers)
 # needs the real ones.
 add_executable(c2goto c2goto.cpp cprover_blank_library.cpp cprover_libc_sources.cpp)
 target_include_directories(c2goto
-    PRIVATE ${Boost_INCLUDE_DIRS}
-    PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     )
-target_link_libraries(c2goto
-  clangcfrontend clangcppfrontend langapi c2gotoheaders
-  filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS})
+target_link_libraries(c2goto PRIVATE
+  esbmc_common clangcfrontend clangcppfrontend langapi c2gotoheaders
+  filesystem ESBMC::boost ${OS_INCLUDE_LIBS})
 
 
 if(C2GOTO_SYSROOT)
@@ -463,11 +461,9 @@ endif()
 
 add_library(clibs ${mangled_files} cprover_library.cpp cprover_libc_sources.cpp)
 target_include_directories(clibs
-    PRIVATE ${Boost_INCLUDE_DIRS}
-    PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(clibs c2gotoheaders fmt::fmt filesystem)
+target_link_libraries(clibs PUBLIC esbmc_common c2gotoheaders fmt::fmt filesystem)
 if(ENABLE_PYTHON_FRONTEND)
   add_dependencies(clibs gen_python_c_models)
 endif()

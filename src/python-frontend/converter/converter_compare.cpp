@@ -742,18 +742,11 @@ exprt python_converter::handle_type_identity_check(
       // Check if it's a variable holding a type object (e.g., x = int)
       if (expr.is_symbol())
       {
-        const symbol_exprt &sym = to_symbol_expr(expr);
-        const symbolt *symbol = ns.lookup(sym.get_identifier());
-        if (symbol && symbol->get_value().is_constant())
+        const std::string *val = class_object_name(expr.identifier());
+        if (val && type_utils::is_type_identifier(*val))
         {
-          std::string val =
-            to_constant_expr(symbol->get_value()).get_value().as_string();
-
-          if (type_utils::is_type_identifier(val))
-          {
-            out_name = val;
-            return true;
-          }
+          out_name = *val;
+          return true;
         }
       }
     }

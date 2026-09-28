@@ -97,6 +97,18 @@ extract_constant_char_values(const exprt *array_expr)
   return values;
 }
 
+/// len() of a constant UTF-8 char array: its code points, not its bytes.
+static std::optional<size_t> constant_codepoint_len(const exprt &array_expr)
+{
+  auto chars = extract_constant_char_values(&array_expr);
+  if (!chars)
+    return std::nullopt;
+  std::string bytes;
+  for (const BigInt &c : *chars)
+    bytes.push_back(static_cast<char>(c.to_int64()));
+  return utf8_codepoint_count(bytes);
+}
+
 static constexpr long long kMembershipMaxHaystackContentLen = 256;
 static constexpr long long kMembershipMaxNeedleLen = 64;
 
@@ -547,6 +559,12 @@ string_handler::fstring_repr_of_constant(const nlohmann::json &operand)
   if (literal.is_number_integer())
     return std::to_string(literal.get<long long>());
 
+  // A tagged bignum (#4642) or non-finite float is not None.
+  if (
+    literal.is_null() && !operand.contains("_bigint") &&
+    !operand.contains("value_nonfinite"))
+    return "None";
+
   if (!literal.is_string())
     return {};
 
@@ -577,8 +595,22 @@ exprt string_handler::build_repr(const exprt &value, const locationt &location)
       "__python_str_repr function not found in symbol table");
 
   exprt string_copy = value;
-  exprt str_addr =
-    get_array_base_address(ensure_null_terminated_string(string_copy));
+  exprt str = ensure_null_terminated_string(string_copy);
+  // Symex bounds the model's loops only over a named object: a literal's
+  // address does not constant-propagate into the callee (#7559).
+  if (str.type().is_array() && !str.is_symbol())
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(location, "$repr_arg$", str.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(symbol_expr(tmp), str);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    str = symbol_expr(tmp);
+  }
+  exprt str_addr = get_array_base_address(str);
   exprt repr_call =
     build_call_expr(*repr_symbol, pointer_typet(char_type()), {str_addr});
   repr_call.location() = location;
@@ -2413,7 +2445,7 @@ exprt string_handler::try_handle_len_string_fast_path(
     len_cache_scope_id_ = current_scope_id;
   }
 
-  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json);
+  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json, arg_expr);
       !fast.is_nil())
     return fast;
 
@@ -2479,7 +2511,8 @@ exprt string_handler::try_handle_len_string_fast_path(
 }
 
 exprt string_handler::try_len_fast_path_from_constant_arg(
-  const nlohmann::json &arg_json)
+  const nlohmann::json &arg_json,
+  const exprt &arg_expr)
 {
   const std::string arg_type =
     (arg_json.contains("_type") && arg_json["_type"].is_string())
@@ -2491,6 +2524,13 @@ exprt string_handler::try_len_fast_path_from_constant_arg(
   {
     const std::string text = arg_json["value"].get<std::string>();
     return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+  }
+  if (
+    arg_expr.is_constant() && arg_expr.type().is_array() &&
+    arg_expr.type().subtype() == char_type())
+  {
+    if (auto len = constant_codepoint_len(arg_expr))
+      return from_integer(*len, size_type());
   }
   return nil_exprt();
 }

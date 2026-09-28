@@ -508,7 +508,7 @@ public:
     return ptr;
   }
 
-  T &operator*() const
+  typename add_lvalue_reference<T>::type operator*() const
   {
     return *ptr;
   }
@@ -920,7 +920,7 @@ public:
     return __p;
   }
 
-  T &operator*() const
+  typename add_lvalue_reference<T>::type operator*() const
   {
     return *__p;
   }

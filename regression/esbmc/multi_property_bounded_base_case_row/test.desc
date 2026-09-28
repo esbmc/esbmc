@@ -1,6 +1,6 @@
 CORE
 main.c
---falsification --multi-property --max-k-step 10
+--falsification --multi-property --max-k-step 3
 ^VERIFICATION FAILED$
 ^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion n != 7$
 ^\s+UNKNOWN\s+\[main\.assertion\.2\]\s+line\s+13\s+assertion x != 3$

@@ -279,6 +279,10 @@ private:
 
   exprt handle_isinstance() const;
 
+  /// isinstance(obj, type) for a str-typed `obj` that is not a known class
+  /// object: a type object and a string share the char-array model.
+  exprt isinstance_str_as_type(const exprt &obj_expr) const;
+
   exprt handle_hasattr() const;
 
   /*

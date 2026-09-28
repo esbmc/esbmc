@@ -508,8 +508,8 @@ void clang_cpp_adjust_irep2::adjust_symbol_type(symbolt &symbol)
     return;
 
   typet t = symbol.get_type();
-  finalize_exception_specification(ns, t);
-  symbol.set_type(std::move(t));
+  if (finalize_exception_specification(ns, t))
+    symbol.set_type(migrate_type(t));
 }
 
 void clang_cpp_adjust_irep2::hoist_switch_declaration(expr2tc &expr)

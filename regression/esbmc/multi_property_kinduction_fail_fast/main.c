@@ -1,6 +1,7 @@
-/* --multi-fail-fast skips the second claim once the first is violated. The
-   forward condition then proves the program fully unwound, but a claim the
-   run never solved is not thereby proved. */
+/* --multi-fail-fast skips the second claim at k = 1, once the first is
+   violated. The base case at k = 2 solves it, the first being settled, so
+   the forward condition's proof at k = 2 reaches it: what k = 1 skipped
+   does not count against a later k. */
 #include <assert.h>
 
 int main()
