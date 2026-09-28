@@ -1252,19 +1252,21 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         (tag == "derived") ? first.attribute("name").as_string() : tag;
       return var_kind_from_string(type_str);
     };
-    for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
-      def.input_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    for (auto v : pou.select_nodes(".//interface/localVars/variable"))
-      def.local_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    for (auto v : pou.select_nodes(".//interface/outputVars/variable"))
-      def.output_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
+    auto collect = [&](const std::string &section) {
+      std::vector<FBVarDecl> out;
+      for (auto v :
+           pou.select_nodes((".//interface/" + section + "/variable").c_str()))
+        out.push_back(
+          {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
+      return out;
+    };
+    def.input_vars = collect("inputVars");
+    def.local_vars = collect("localVars");
+    def.output_vars = collect("outputVars");
+    if (!def.output_vars.empty())
     {
-      def.output_var = ov.attribute("name").as_string();
-      def.output_kind = fb_var_kind(ov);
+      def.output_var = def.output_vars.front().name;
+      def.output_kind = def.output_vars.front().kind;
     }
     pugi::xml_node st = pou.select_node(".//body/ST").node();
     if (!st)
