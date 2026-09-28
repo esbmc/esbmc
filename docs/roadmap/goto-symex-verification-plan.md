@@ -750,6 +750,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R59** | **Medium–High (no verdict, default configuration)** — R44's residual, measured on well-defined C, §15 M9 (R59); **FIXED**, same entry | **A byte-wise walk bounded by another member's address never exits.** `for (char *p = (char *)&s.a[0]; p != (char *)&s.a[1]; ++p)` reads the object representation, which C allows, and has a constant trip count, yet symex unwinds it without end: the guard `(char *)&s.a[0] + k != (char *)&s.a[1]` never folds, because the relation normalisation saw no address under the casts. Walking between two members, over an array of structs, a union or a packed struct fails the same way; `--unwind` or `--smt-symex-guard` decide it at once. | `byte_address_on_root`, `cancel_shared_pointer_base`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/char_walk_{one_member,members,arrays}{,_fail}`, `char_view_through_pointer{,_fail}` | — | **Fixed**: a byte view of a member/index chain over a named struct, union or non-byte array becomes one canonical `(char *)&root` anchor plus a constant byte offset, so both ends cancel, and a bare byte base compares as `base + 0`. |
 | **R64** | **High (a constructor called on no object, and a surplus destructor, default configuration)** — found driving WI-4, §15 M9 (G18, R64, WI-4); **FIXED**, same entry | **A class member initialised from a prvalue of its own class got a second object.** `C impl_ = C::make();` copied a temporary into the member and destroyed it; `C impl_ = C{&x};` called the constructor with no object and copied a nondet temporary in; `M() : impl_{C::make(&x)}` was read as aggregate init, storing the temporary's address. immer's `impl_t impl_ = impl_t::empty();` is the converting-constructor form, and its surplus `~champ` freed the static empty node. | `member_result_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_init_{prvalue_dtor,prvalue_value,braced_prvalue,const_prvalue,functional_cast,elided_copy,converting_ctor}{,_fail}` | — | **Fixed**: the member is the prvalue's result object ([dcl.init]/17.6.1), so the constructor or call builds it directly. |
 | **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
+| **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
+| **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
 | **R54** | **High (false SUCCESSFUL, default configuration, C and C++)** — found while chasing G18, §15 M9 (R54); **FIXED**, same entry | **Same-named local classes share one record.** A named record takes its id from `getFullyQualifiedName`, which omits the enclosing function, so `struct S` in `f` and `struct S` in `g` are one `tag-struct S`, and the second definition is read through the first's layout. In C, two local `struct S` with their members in opposite orders make `*(int *)&s = 7; return s.a;` return 7 in both functions, and a program that aborts natively reports **SUCCESSFUL** under Bitwuzla and Z3. Other layouts abort in `assert_type_compat_for_with` (`irep2_expr.cpp:333`) or `member2t`. A class template specialised on such a class, `Box<S>`, collides the same way. | `clang_c_convertert::get_decl_name`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/local_struct_{same_tag,nested_macro}{,_fail}`, `regression/esbmc-cpp/cpp/local_{class,enum,member_pointer}_template_arg{,_fail}` | — | **Fixed**: a local record's name gains its enclosing function's id and the definition's line, column and, inside a macro, the raw encoding of its macro location. A record that is, or is a member of, a class template specialisation gains the ids of the function-local declarations among its arguments: records, enums and declaration arguments, through packs, pointers, references, arrays, function types, member pointers and nested specialisations. The suffix is identifier-shaped for goto2c. **Residuals**: locals of blocks and captured regions; two same-named *variables* in one macro expansion, whose clang USRs share the expansion location. |
 | **R55** | **High (false SUCCESSFUL, default configuration, C++)** — the root cause of G18, found by reducing it, §15 M9 (G18, R55); **FIXED**, same entry | **A function-local static's dynamic initializer ran before `main`.** `get_var` hoisted every static initializer into `static_lifetime_init`, which is right for C, where it is a constant expression, and wrong for C++, where it runs on the first pass through the declaration ([stmt.dcl]/3). `int bump() { return ++g; } void n() { static int c = bump(); }` never calls `n`, yet `assert(g == 1)` in `main` reports **SUCCESSFUL**; calling `n` twice made correct programs FAILED, and a class-typed static was constructed before `main` from whatever its arguments held then. | `clang_c_convertert::get_var`, `src/clang-c-frontend/clang_c_convert.cpp`; `goto_convertt::convert_decl`; `regression/esbmc-cpp/cpp/static_local_*` | — | **Fixed**: such a static is zero-initialised, the frontend adds an `<id>$init_guard` symbol, and `convert_decl` lowers the declaration to `atomic { if (!guard) { init; guard = 1; } }`, constructing in place through `convert_decl_initializer`. **Residuals**: arrays keep the hoisted form; `--clang-cpp-irep2-adjust-only` keeps it too; exit-time destructors of statics are not modelled, before or after. |
@@ -8928,6 +8930,88 @@ WI-4 itself is still over its gate: with R64 and `--smt-symex-guard`,
 loop, and the only diagnostic is that immer's `uninitialized_copy`
 (`immer/detail/util.hpp:161`) is treated as an allocating `new`, since its
 placement-new address has side effects. That is the next item for WI-4.
+### M9 (R61) — 2026-09-27, the stride of a flattened VLA
+
+The H-C1 census (default slicing against `--no-slice`) left
+`addressof_multidim_vla_row{,_fail}` aborting under `--no-slice` only. Reduced,
+the declaration `int a[2][m][3]` is enough there, and a symbolic write
+`a[i][j][k] = 7` aborts under default flags as well, on both solvers:
+`assert_arith_2ops_consistency` on a multiplication of mismatched widths.
+`flatten_array_type` took the flattened size in the second level's type, cast
+the outer size to it, and multiplied every deeper size in uncast. The
+frontend keeps a VLA size in its own type and gives a constant level over a
+variably-modified element an `int` (`size_t` otherwise), so any shape whose
+levels disagree reached the mismatch, not only a VLA in the middle.
+
+The first fix cast each deeper size to the product's type. Code review showed
+that the product's type was itself the defect: `int[2][2][m][3]` with
+`6 * m == 2^32 + 2` then made `b[1][0][0][0]` alias `b[0][0][0][2]`, and a
+`long` size of `2^32 + 1` was truncated to 1. Both were false SUCCESSFUL where
+the native program's assertion fails. Master had the same wrap already
+wherever the levels agreed at 32 bits: `int a[2][3][m]` with
+`3 * m == 2^32 + 2` is a false SUCCESSFUL there, and its passing twin a false
+FAILED.
+
+**Fixed** by taking the whole product in `size_t`. The formula changes for any
+array with a size narrower than 64 bits; all-constant arrays already use
+`size_t` and are unchanged. `vla_middle_dim{,_fail}`, `vla_two_dims_flat{,_fail}`,
+`vla_long_size_truncation{,_fail}`, `vla_stride_wrap_middle{,_fail}` and
+`vla_middle_dim_decl{,_fail}` (`--no-slice`) abort on master;
+`vla_stride_wrap_inner{,_fail}` gets both verdicts wrong there. The C,
+k-induction and `cbmc` suites pass, as do all 214 tests with a
+multi-dimensional array in their source.
+
+**Residual, not fixed.** A VLA size deep in an array's type can reach the
+SMT layer unrenamed, as a free L0 symbol. `int a[2][3][u][m][c]` (all `long`),
+read back through a flat pointer, aborts on master and is a false FAILED on
+this branch, with `m` and `c` named in the formula without SSA suffixes; a
+2-D `(*p)[j]` through `p = a + i` is a false FAILED on master already. A
+free size can only add counterexamples, not hide one. Normalising VLA sizes to
+`size_t` in the frontend would also retire the width class of this bug at its
+source. The census's remaining `--no-slice` aborts are
+`irep2_only_union_value_set_fail` (irep2 plan) and `github_562{,_fail}`
+(`--fixedbv`, R16), besides the `github_7907` group that R60 (#8015) fixes.
+### M9 (R60) — 2026-09-27, the H-C1 census reaches arrays of vectors
+
+The H-C1 census compared default slicing with `--no-slice` over 2,492 CORE
+tests in `regression/esbmc`. No verdict flipped. Eight runs aborted under
+`--no-slice` only: `irep2_only_union_value_set_fail` (only under
+`--clang-c-irep2-adjust-only`, left to the irep2 plan), `github_562{,_fail}`
+(`--fixedbv`, excluded by R16), `addressof_multidim_vla_row{,_fail}` (open),
+and `github_7907_pun`/`github_7907_simd{,_fail}`. C-Reduce took the last group
+to four lines that abort under default flags too:
+
+```c
+__attribute__((__vector_size__(16))) int a[1] = {};
+int c = nondet_int();
+if (c) a[0][0] = c;
+assert(a[0][0] == 0);
+```
+
+`flatten_array_type` and the index lowering treat only array levels as
+dimensions, but `get_flattened_array_subtype` descended into the vector, so
+the SMT array's range was an `int` and every store wrote 128 bits. Keeping the
+vector as the range exposed the next two defects in turn: a subscript into
+`a[i]` went through `decompose_select_chain` as if it were a third dimension
+(`mk_eq` width abort), and building a counterexample hit two readers that
+still assumed the old range: `get_by_ast` had no vector case (`Unimplemented
+type'd expression (7)`), and `get_index_value` read one vector of the array as
+a lane (a solver error, then no verdict).
+
+**Fixed** at all four sites. Seven of the eight new `array_of_vector_*` tests
+abort on master. `array_of_vector_ops` passes on master and aborted with only
+the range fix, so it pins the subscript lowering; `array_of_vector_vla_fail`
+fails with the `get_index_value` line reverted. Code review found no change to
+the SMT formula of arrays without vectors (`--smt-formula-only` byte-identical
+on both solvers).
+
+**Residuals, all aborting on master too.** An array of vectors is now a nested
+SMT array, which `--array-flattener` rejects (`Can't create array of arrays`)
+and Boolector presumably also rejects. Aborts that persist on the same
+constructs: `flatten_to_bitvector` has no vector case (a union holding
+`v4i a[2]`), the simplifier drops the lane index pushing a subscript through a
+vector `+` with a non-constant operand (`mk_bvadd` width), and an array of
+structs holding a vector trips `mk_fresh` on Bitwuzla.
 
 ### M9 (R68) — 2026-09-28, the C++ H-C1 census, and a pointer difference's width
 
