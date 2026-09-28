@@ -25,6 +25,7 @@ extern "C"
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
@@ -102,26 +103,74 @@ enum PROCESS_TYPE
 
 struct resultt
 {
-  // Both members are read/written through whole-struct pipe I/O below and
-  // consumed at a_result.type / a_result.k; cppcheck sees them as unused
-  // only in the _WIN32 configuration, where the parallel k-induction body
-  // is compiled out.
   // cppcheck-suppress unusedStructMember
   PROCESS_TYPE type;
   // cppcheck-suppress unusedStructMember
   uint64_t k;
+  // Distinguishes an undecided run from a bug/proof at max_k_step.
+  // cppcheck-suppress unusedStructMember
+  bool conclusive;
+  // Only the base-case child can report a counterexample.
+  // cppcheck-suppress unusedStructMember
+  bool bug;
 };
 
 #ifndef _WIN32
-/** Tell the parent this child reached no answer. max_k_step is the sentinel the
- *  parent initialises solution[] with and tests for a crashed child, so
- *  reporting it keeps a failed run from being read as a completed one. */
-static void report_no_answer(int pipe_fd, resultt &r, uint64_t max_k_step)
+static void report_no_answer(int pipe_fd, resultt &r)
 {
-  r.k = max_k_step;
+  r.conclusive = false;
   auto const len = write(pipe_fd, &r, sizeof(r));
   assert(len == sizeof(r) && "short write");
   (void)len; // ndebug
+}
+
+// Child exit status is not proof: only a received base-case result supplies
+// the certified bound against which a forward or inductive proof is checked.
+static bool report_parallel_verdict(
+  const bool finished[NUM_CHILD_PROCESSES],
+  const bool conclusive[NUM_CHILD_PROCESSES],
+  const uint64_t solution[NUM_CHILD_PROCESSES],
+  bool base_bug)
+{
+  if (finished[BASE_CASE] && conclusive[BASE_CASE] && base_bug)
+  {
+    log_result(
+      "\nBug found by the base case (k = {})\nVERIFICATION FAILED",
+      solution[BASE_CASE]);
+    return true;
+  }
+
+  if (finished[BASE_CASE] && conclusive[BASE_CASE] && !base_bug)
+  {
+    if (
+      finished[FORWARD_CONDITION] && conclusive[FORWARD_CONDITION] &&
+      solution[FORWARD_CONDITION] != 0 &&
+      solution[BASE_CASE] >= solution[FORWARD_CONDITION])
+    {
+      log_success(
+        "\nSolution found by the forward condition; "
+        "all states are reachable (k = {:d})\n"
+        "VERIFICATION SUCCESSFUL",
+        solution[FORWARD_CONDITION]);
+      return false;
+    }
+
+    if (
+      finished[INDUCTIVE_STEP] && conclusive[INDUCTIVE_STEP] &&
+      solution[INDUCTIVE_STEP] != 0 &&
+      solution[BASE_CASE] >= solution[INDUCTIVE_STEP])
+    {
+      log_success(
+        "\nSolution found by the inductive step "
+        "(k = {:d})\n"
+        "VERIFICATION SUCCESSFUL",
+        solution[INDUCTIVE_STEP]);
+      return false;
+    }
+  }
+
+  log_fail("\nVERIFICATION UNKNOWN");
+  return false;
 }
 #endif
 
@@ -240,11 +289,14 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
     struct resultt a_result;
     bool finished[NUM_CHILD_PROCESSES] = {};
+    bool exited[NUM_CHILD_PROCESSES] = {};
     bool intentionally_killed[NUM_CHILD_PROCESSES] = {};
+    bool conclusive[NUM_CHILD_PROCESSES] = {};
+    bool base_bug = false;
+    bool request_sent = false;
     const char *process_name[NUM_CHILD_PROCESSES] = {
       "base case", "forward condition", "inductive step"};
-    uint64_t solution[NUM_CHILD_PROCESSES] = {
-      max_k_step, max_k_step, max_k_step};
+    uint64_t solution[NUM_CHILD_PROCESSES] = {};
 
     // Keep reading until we find an answer
     while (
@@ -263,8 +315,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         if (read_size == 0)
         {
-          // Client hung up; check child status but don't interpret result.
+          // All writers have closed; no queued result can still arrive.
           valid_read = false;
+          std::fill(finished, finished + NUM_CHILD_PROCESSES, true);
         }
         else
         {
@@ -278,7 +331,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Check if any child process has terminated
       for (int i = 0; i < NUM_CHILD_PROCESSES; i++)
       {
-        if (finished[i])
+        if (exited[i])
           continue;
 
         int status;
@@ -286,20 +339,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         if (result <= 0)
           continue;
 
-        if (intentionally_killed[i] || WIFEXITED(status))
-        {
-          finished[i] = true;
-        }
-        else if (WIFSIGNALED(status))
-        {
+        exited[i] = true;
+        if (!intentionally_killed[i] && WIFSIGNALED(status))
           log_warning(
             "{} process was terminated by signal {:d}.",
             process_name[i],
             WTERMSIG(status));
-          std::fill(finished, finished + NUM_CHILD_PROCESSES, true);
-        }
       }
-
       if (!valid_read)
         continue;
 
@@ -310,6 +356,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       case INDUCTIVE_STEP:
         finished[a_result.type] = true;
         solution[a_result.type] = a_result.k;
+        conclusive[a_result.type] = a_result.conclusive;
+        if (a_result.type == BASE_CASE)
+          base_bug = a_result.bug;
         break;
 
       default:
@@ -317,119 +366,53 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         abort();
       }
 
-      // If either the base case found a bug or the forward condition
-      // finds a solution, present the result
-      if (
-        finished[BASE_CASE] && (solution[BASE_CASE] != 0) &&
-        (solution[BASE_CASE] != max_k_step))
+      // A base-case bug takes precedence over any proof.
+      if (finished[BASE_CASE] && conclusive[BASE_CASE] && base_bug)
         break;
 
-      // If the either the forward condition or inductive step finds a
-      // solution, first check if base case couldn't find a bug in that code,
-      // if there is no bug, inductive step can present the result
-      if (
-        finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
-        (solution[FORWARD_CONDITION] != max_k_step))
+      const bool forward_proof = finished[FORWARD_CONDITION] &&
+                                 conclusive[FORWARD_CONDITION] &&
+                                 solution[FORWARD_CONDITION] != 0;
+      const bool inductive_proof = finished[INDUCTIVE_STEP] &&
+                                   conclusive[INDUCTIVE_STEP] &&
+                                   solution[INDUCTIVE_STEP] != 0;
+      if (forward_proof || inductive_proof)
       {
-        // If base case finished, then we can present the result
         if (finished[BASE_CASE])
           break;
 
-        // Otherwise, kill the inductive step process
-        intentionally_killed[INDUCTIVE_STEP] = true;
-        kill(children_pid[INDUCTIVE_STEP], SIGKILL);
+        const PROCESS_TYPE other =
+          forward_proof ? INDUCTIVE_STEP : FORWARD_CONDITION;
+        if (!intentionally_killed[other] && !exited[other])
+        {
+          intentionally_killed[other] = true;
+          kill(children_pid[other], SIGKILL);
+        }
 
-        // And ask base case for a solution
-
-        // Struct to keep the result
-        struct resultt r = {process_type, 0};
-
-        r.k = solution[FORWARD_CONDITION];
-
-        // Write result
-        auto const len = write(backward_pipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; //ndebug
-      }
-
-      else if (
-        finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
-        (solution[INDUCTIVE_STEP] != max_k_step))
-      {
-        // If base case finished, then we can present the result
-        if (finished[BASE_CASE])
-          break;
-
-        // Otherwise, kill the forward condition process
-        intentionally_killed[FORWARD_CONDITION] = true;
-        kill(children_pid[FORWARD_CONDITION], SIGKILL);
-
-        // And ask base case for a solution
-
-        // Struct to keep the result
-        struct resultt r = {process_type, 0};
-
-        r.k = solution[INDUCTIVE_STEP];
-
-        // Write result
-        auto const len = write(backward_pipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; //ndebug
+        // The base child may have exited after writing its answer, before
+        // the parent read it. In that case wait for the queued answer rather
+        // than writing into a pipe whose reader has already closed.
+        if (!exited[BASE_CASE] && !request_sent)
+        {
+          struct resultt request = {
+            PARENT,
+            forward_proof ? solution[FORWARD_CONDITION]
+                          : solution[INDUCTIVE_STEP],
+            true,
+            false};
+          auto const len = write(backward_pipe[1], &request, sizeof(request));
+          assert(len == sizeof(request) && "short write");
+          request_sent = true;
+          (void)len; // ndebug
+        }
       }
     }
 
-    for (int i : children_pid)
-      kill(i, SIGKILL);
+    for (int i = 0; i < NUM_CHILD_PROCESSES; ++i)
+      if (!exited[i])
+        kill(children_pid[i], SIGKILL);
 
-    // Check if a solution was found by the base case
-    if (
-      finished[BASE_CASE] && (solution[BASE_CASE] != 0) &&
-      (solution[BASE_CASE] != max_k_step))
-    {
-      log_result(
-        "\nBug found by the base case (k = {})\nVERIFICATION FAILED",
-        solution[BASE_CASE]);
-      return true;
-    }
-
-    // Check if a solution was found by the forward condition
-    if (
-      finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
-      (solution[FORWARD_CONDITION] != max_k_step))
-    {
-      // A proof requires a completed, conclusive base case. An unknown base
-      // case (or a crashed child) reports max_k_step instead of zero.
-      if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
-      {
-        log_success(
-          "\nSolution found by the forward condition; "
-          "all states are reachable (k = {:d})\n"
-          "VERIFICATION SUCCESSFUL",
-          solution[FORWARD_CONDITION]);
-        return false;
-      }
-    }
-
-    // Check if a solution was found by the inductive step
-    if (
-      finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
-      (solution[INDUCTIVE_STEP] != max_k_step))
-    {
-      // An unknown base case cannot establish the prefix needed for induction.
-      if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
-      {
-        log_success(
-          "\nSolution found by the inductive step "
-          "(k = {:d})\n"
-          "VERIFICATION SUCCESSFUL",
-          solution[INDUCTIVE_STEP]);
-        return false;
-      }
-    }
-
-    // Couldn't find a bug or a proof for the current depth
-    log_fail("\nVERIFICATION UNKNOWN");
-    return false;
+    return report_parallel_verdict(finished, conclusive, solution, base_bug);
   }
 
   case BASE_CASE:
@@ -447,17 +430,12 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     close(backward_pipe[1]);
 
     // Struct to keep the result
-    struct resultt r = {process_type, 0};
+    struct resultt r = {process_type, 0, true, false};
+    uint64_t last_conclusive_k = 0;
+    bool has_conclusive_base = false;
 
-    /* The parent reads back its own max_k_step as "this child gave no answer"
-     * (see the crash check beside solution[FORWARD_CONDITION]). The loop below
-     * raises max_k_step when the parent asks for a larger k, so snapshot the
-     * value the parent still holds -- reporting the raised one is read as a
-     * bug at that k. */
-    const uint64_t no_answer_k = max_k_step;
-
-    // Run bmc until a bug is found, every base-case bound is UNSAT, or a
-    // bound cannot be decided. A later UNSAT cannot certify an earlier unknown.
+    // An UNSAT base run at a later bound covers all earlier bounds, even
+    // when the solver could not decide one of those earlier checks.
     for (uint64_t k_step = k_step_base; k_step <= max_k_step;
          k_step += k_step_inc)
     {
@@ -474,16 +452,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
       catch (...)
       {
-        /* break would fall through to the "no answer" report below, which the
-         * parent reads as a completed run. */
-        report_no_answer(forward_pipe[1], r, no_answer_k);
+        report_no_answer(forward_pipe[1], r);
         return false;
       }
 
-      // Send information to parent if no bug was found
+      // A counterexample is conclusive even after an earlier unknown bound.
       if (res == P_SATISFIABLE)
       {
         r.k = k_step;
+        r.bug = true;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -494,12 +471,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         return true;
       }
 
-      if (res == P_ERROR || res == P_SMTLIB)
+      if (res == P_UNSATISFIABLE)
       {
-        // Neither result establishes the base case at this bound. Stop now
-        // rather than treating a later UNSAT as proof of the whole prefix.
-        report_no_answer(forward_pipe[1], r, no_answer_k);
-        return false;
+        last_conclusive_k = k_step;
+        has_conclusive_base = true;
       }
 
       // Check if the parent process is asking questions
@@ -537,18 +512,16 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // We only receive messages from the parent
       assert(a_result.type == PARENT);
 
-      // If the value being asked is greater or equal the current step,
-      // then we can stop the base case. It can be equal, because we
-      // have just checked the current value of k
-      if (a_result.k < k_step)
+      // A request is satisfied only once a conclusive base run covers its
+      // proof bound. If this check was unknown, keep trying later bounds.
+      if (has_conclusive_base && last_conclusive_k >= a_result.k)
         break;
-
-      // Otherwise, we just need to check the base case for k = a_result.k
-      max_k_step = a_result.k + k_step_inc;
     }
 
-    // Send information to parent that a bug was not found
-    r.k = 0;
+    // Report the actual certified bound; the parent may have another proof
+    // candidate at a higher k than the one that prompted this response.
+    r.k = last_conclusive_k;
+    r.conclusive = has_conclusive_base;
 
     auto const len = write(forward_pipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
@@ -574,7 +547,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     close(backward_pipe[1]);
 
     // Struct to keep the result
-    struct resultt r = {process_type, 0};
+    struct resultt r = {process_type, 0, true, false};
 
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
@@ -597,7 +570,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         /* break would fall through to the "no answer" report below, which the
          * parent reads as a completed run. */
-        report_no_answer(forward_pipe[1], r, max_k_step);
+        report_no_answer(forward_pipe[1], r);
         return false;
       }
 
@@ -645,7 +618,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     close(backward_pipe[1]);
 
     // Struct to keep the result
-    struct resultt r = {process_type, 0};
+    struct resultt r = {process_type, 0, true, false};
 
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
@@ -669,7 +642,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         /* break would fall through to the "no answer" report below, which the
          * parent reads as a completed run. */
-        report_no_answer(forward_pipe[1], r, max_k_step);
+        report_no_answer(forward_pipe[1], r);
         return false;
       }
 

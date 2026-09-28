@@ -167,6 +167,11 @@ protected:
   bool is_coverage;
 
 private:
+  void emit_remaining_strategy_formulas(
+    optionst &options,
+    goto_functionst &goto_functions,
+    uint64_t k_step,
+    bool include_inductive_step);
   bool resolve_color_option() const;
   void close_file(FILE *f)
   {

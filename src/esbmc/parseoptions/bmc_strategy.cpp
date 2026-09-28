@@ -224,6 +224,17 @@ static bool ends_at_violation(optionst &options, bool &any_violation_found)
   return !options.get_bool_option("multi-property");
 }
 
+void esbmc_parseoptionst::emit_remaining_strategy_formulas(
+  optionst &options,
+  goto_functionst &goto_functions,
+  uint64_t k_step,
+  bool include_inductive_step)
+{
+  (void)does_forward_condition_hold(options, goto_functions, k_step);
+  if (include_inductive_step && k_step > 1)
+    (void)is_inductive_step_violated(options, goto_functions, k_step);
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -305,6 +316,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   };
 
+  auto conclude_proof = [&]() -> int
+  {
+    if (is_coverage)
+      report_coverage(
+        options,
+        goto_functions.reached_claims,
+        goto_functions.reached_mul_claims,
+        pytest_gen,
+        ctest_gen);
+    return conclude();
+  };
+
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   uint64_t last_k_step = k_step_base;
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
@@ -326,9 +349,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // rather than treating P_SMTLIB as a failed base case and skipping them.
       if (options.get_bool_option("smt-formula-only"))
       {
-        (void)does_forward_condition_hold(options, goto_functions, k_step);
-        if (k_step > 1)
-          (void)is_inductive_step_violated(options, goto_functions, k_step);
+        emit_remaining_strategy_formulas(options, goto_functions, k_step, true);
         continue;
       }
 
@@ -338,14 +359,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
         base_case.is_false() &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
-        if (is_coverage)
-          report_coverage(
-            options,
-            goto_functions.reached_claims,
-            goto_functions.reached_mul_claims,
-            pytest_gen,
-            ctest_gen);
-        return conclude();
+        return conclude_proof();
       }
 
       // Don't run inductive step for k_step == 1
@@ -356,14 +370,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
           is_inductive_step_violated(options, goto_functions, k_step)
             .is_false())
         {
-          if (is_coverage)
-            report_coverage(
-              options,
-              goto_functions.reached_claims,
-              goto_functions.reached_mul_claims,
-              pytest_gen,
-              ctest_gen);
-          return conclude();
+          return conclude_proof();
         }
       }
     }
@@ -487,7 +494,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // was not solved (P_SMTLIB).
       if (options.get_bool_option("smt-formula-only"))
       {
-        (void)does_forward_condition_hold(options, goto_functions, k_step);
+        emit_remaining_strategy_formulas(
+          options, goto_functions, k_step, false);
         continue;
       }
 
@@ -495,14 +503,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
         base_case.is_false() &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
-        if (is_coverage)
-          report_coverage(
-            options,
-            goto_functions.reached_claims,
-            goto_functions.reached_mul_claims,
-            pytest_gen,
-            ctest_gen);
-        return conclude();
+        return conclude_proof();
       }
     }
     // falsification
