@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --incremental-bmc
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +assertion s != q \+ 1$

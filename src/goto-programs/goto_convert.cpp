@@ -714,6 +714,39 @@ void goto_convertt::generate_dynamic_size_vla(
   t_s_s->location = loc;
 }
 
+/// A C++ function-local static with a dynamic initializer is initialized the
+/// first time control passes its declaration, and concurrent callers wait for
+/// it ([stmt.dcl]/3): `atomic { if (!guard) { init; guard = 1; } }`. The guard
+/// is set after the initializer, so one that exits by an exception is retried.
+/// The frontend creates @p guard only for such a static.
+void goto_convertt::convert_dynamic_static_init(
+  const codet &decl,
+  const symbolt &s,
+  const symbolt &guard,
+  goto_programt &dest)
+{
+  const exprt flag = symbol_exprt(guard.id, guard.get_type());
+  expr2tc flag2;
+  migrate_expr(flag, flag2);
+
+  dest.add_instruction(ATOMIC_BEGIN)->location = decl.location();
+  goto_programt::targett skip = dest.add_instruction();
+  skip->location = decl.location();
+
+  const exprt var = decl.op0();
+  exprt initializer = decl.op1();
+  codet new_code(decl);
+  convert_decl_initializer(var, initializer, new_code, s, dest);
+
+  code_assignt set(flag, true_exprt());
+  set.location() = decl.location();
+  copy(set, ASSIGN, dest);
+
+  goto_programt::targett end = dest.add_instruction(ATOMIC_END);
+  end->location = decl.location();
+  skip->make_goto(end, flag2);
+}
+
 /// Lower the initializer of a declaration into @p dest. Kept out of
 /// convert_decl so that neither exceeds the complexity gate.
 void goto_convertt::convert_decl_initializer(
@@ -833,7 +866,14 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   // A static variable will be declared in the global scope and
   // a code type means a function declaration, we ignore both
   if (s->static_lifetime || s->get_type().is_code())
+  {
+    if (new_code.operands().size() == 2)
+      if (
+        const symbolt *guard =
+          context.find_symbol(s->id.as_string() + "$init_guard"))
+        convert_dynamic_static_init(new_code, *s, *guard, dest);
     return; // this is a SKIP!
+  }
 
   // Check if is an VLA declaration and rewrite the declaration
   bool is_vla = rewrite_vla_decl(var.type(), dest);

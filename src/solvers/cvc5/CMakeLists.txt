@@ -19,9 +19,8 @@ if(ENABLE_CVC5)
 
     add_library(solvercvc5 cvc5_conv.cpp)
     target_include_directories(solvercvc5
-            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solvercvc5 PUBLIC fmt::fmt cvc5::cvc5)
+    target_link_libraries(solvercvc5 PUBLIC esbmc_common fmt::fmt cvc5::cvc5)
 
     # cvc5's exported target names its own dependencies (cadical, picpoly, ...)
     # as bare -l flags, so every consumer needs cvc5's lib/ on the link path.

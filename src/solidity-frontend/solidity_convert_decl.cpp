@@ -11,6 +11,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
+#include <irep2/irep2_utils.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/arith/mp_arith.h>
@@ -662,7 +663,9 @@ bool solidity_convertert::get_var_decl(
     arr_s.file_local = true;
     arr_s.lvalue = true;
     auto &add_added_s = *move_symbol_to_context(arr_s);
-    add_added_s.set_value(gen_zero(get_complete_type(arr_t, ns), true));
+    const expr2tc arr_zero =
+      gen_zero(migrate_type(get_complete_type(arr_t, ns)), true);
+    add_added_s.set_value(arr_zero);
 
     // 2. construct mapping_t struct instance's value
     typet map_t;
@@ -715,7 +718,7 @@ bool solidity_convertert::get_var_decl(
   {
     if (get_init_expr(init_value, literal_type, t, val))
       return true;
-    added_symbol.set_value(val);
+    added_symbol.set_value(migrate_expr(val));
     decl.operands().push_back(val);
   }
 

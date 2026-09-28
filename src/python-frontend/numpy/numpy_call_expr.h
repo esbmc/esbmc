@@ -23,8 +23,47 @@ public:
 
   exprt get() override;
 
+  // The construction site's own entry point (function_call_builder::build):
+  // applies try_hoist_call_arg_for_view_method ahead of get() the same way
+  // get() itself used to, but from outside the class so the check's own
+  // decision point is attributed to this small new function instead of
+  // inflating get()'s already far-over-threshold decision count (see
+  // numpy_call_expr.cpp for the full rationale).
+  static exprt build_result(
+    const symbol_id &function_id,
+    const nlohmann::json &call,
+    python_converter &converter);
+
 private:
   exprt create_expr_from_call();
+
+  // transpose()/flatten()/ravel() and every other descriptor-materialized
+  // dispatch (sum/mean/min/max/argsort/searchsorted) over a raw Call
+  // argument (e.g. `np.eye(3).transpose()`, rewritten to
+  // `np.transpose(np.eye(3))`): hoists it into a temp so the rest of get()
+  // sees the already-correct Name case. nullopt (not this shape, or
+  // hoisting declined) when get()'s normal dispatch should run unchanged.
+  // See numpy_call_expr.cpp for the full rationale, including which methods
+  // had to stay excluded (their own Name-argument resolution walks the
+  // source AST rather than the descriptor map, so it can't see a temp that
+  // exists only in the GOTO IR).
+  std::optional<exprt>
+  try_hoist_call_arg_for_view_method(const std::string &function);
+
+  // A dispatch whose result shape the static annotator cannot model (e.g.
+  // ravel()/flatten(), always 1-D of size = product of the input's dims)
+  // reaches an assignment target still carrying the annotator's guess --
+  // typically Any/void* -- instead of the concrete type just computed.
+  // Retyping the target in place here, the same fixup transpose's own
+  // dispatch applies inline (try_transpose_name_arg), is what makes an
+  // assignment store the array value directly instead of decaying it to a
+  // pointer to match the stale declared type; every subsequent subscript on
+  // it would otherwise resolve as a symbolic NONDET rather than the actual
+  // element. A separate function (not inlined into get()'s own flatten/
+  // ravel branch) so this decision point is attributed here instead of
+  // adding to get()'s already far-over-threshold count.
+  static exprt
+  retype_current_lhs_and_return(python_converter &converter, exprt value);
 
   // np.arange(...) with constant, small arguments materialized to a literal
   // list, falling back to the operational model for genuinely non-constant
@@ -39,6 +78,18 @@ private:
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
   size_t get_dtype_size() const;
+
+  // `*_like`'s element type from dtype= (an override) or the base array's
+  // own type. Split out of get() to keep that function's own decision count
+  // from growing further.
+  typet resolve_like_element_type(const typet &base_type);
+
+  // full()/eye()/identity()/linspace()'s literal list, cast to a dtype=
+  // keyword the same way np.array()'s own dispatch already does
+  // (cast_numpy_literal_to_dtype); a no-op when dtype= is absent. Split out
+  // of get() to keep that function's own decision count from growing
+  // further.
+  nlohmann::json apply_constructor_dtype(nlohmann::json node);
 
   // Looks up a keyword argument by name in the call's "keywords" array (e.g.
   // offset=/axis1=/dtype=), or nullptr if absent. Shared by every 2-D-only
@@ -172,6 +223,75 @@ private:
     nlohmann::json arr_arg,
     const std::string &function_name,
     bool inline_only = false);
+
+  // Resolves `raw_arg` -- a Name already bound to a concrete numpy array, or
+  // a call to a user function returning one (direct, or via a local
+  // variable) -- through the same descriptor-materialization path
+  // sort()/argsort() already use for a Name, instead of searchsorted's own
+  // AST-literal-tracing-only resolution. See numpy_call_expr.cpp for the
+  // full rationale.
+  std::optional<std::vector<exprt>>
+  resolve_searchsorted_array_via_descriptor(const nlohmann::json &raw_arg);
+
+  // sorter=argsort(<the same array>) over a descriptor-resolved array: an
+  // exprt-level stable-sort gather (bubble_sort_numpy_paired) over
+  // resolve_searchsorted_array_via_descriptor's elements, since they are
+  // index expressions into a local array and almost never compile-time
+  // constant the way a genuine AST literal's elements would be. nullopt for
+  // anything else (a different array's argsort, a literal index array, an
+  // array the descriptor path itself can't resolve). See numpy_call_expr.cpp
+  // for the full rationale.
+  std::optional<std::vector<exprt>>
+  resolve_searchsorted_sorted_values_via_descriptor(
+    const nlohmann::json &raw_arg,
+    const nlohmann::json &sorter_node,
+    const std::string &array_name);
+
+  // Evaluates `call_node` (a call to a user function) exactly once by
+  // synthesizing `<temp> = call_node` and converting it through the normal
+  // assignment pipeline, so side effects execute once and the temp's numpy
+  // array metadata is registered like any other local-array-return
+  // assignment. Returns a Name node referencing the temp; nullopt when
+  // there is no current block to emit into.
+  std::optional<nlohmann::json>
+  hoist_call_argument_into_temp(const nlohmann::json &call_node);
+
+  // handle_searchsorted_call's dispatch once its array argument resolved via
+  // resolve_searchsorted_array_via_descriptor (no sorter= given -- see that
+  // function). Split out to keep handle_searchsorted_call's own decision
+  // count down.
+  exprt handle_searchsorted_call_over_descriptor(
+    std::vector<exprt> values,
+    bool right);
+
+  // A same-shaped placeholder for handle_searchsorted_call's array argument
+  // when it is a user function call reached during a discarded type-probe
+  // pass (hoisting would evaluate it an extra time); nullopt otherwise. See
+  // numpy_call_expr.cpp for the full rationale.
+  std::optional<exprt> try_searchsorted_probe_placeholder();
+
+  // The AST-literal resolution only, declining (nullopt) rather than
+  // throwing. See numpy_call_expr.cpp for the full rationale.
+  std::optional<nlohmann::json>
+  try_resolve_searchsorted_literal_array(const std::string &function);
+
+  // resolve_searchsorted_array_via_descriptor plus the dispatch to
+  // handle_searchsorted_call_over_descriptor, as a single nullopt-on-decline
+  // step.
+  std::optional<exprt> try_searchsorted_call_over_descriptor(bool right);
+
+  // Validates `arr_arg`'s shape and applies `sorter_node`/sortedness,
+  // returning the space handle_searchsorted_call_over_literal searches. See
+  // numpy_call_expr.cpp for the full rationale.
+  nlohmann::json resolve_searchsorted_space(
+    nlohmann::json arr_arg,
+    const nlohmann::json *sorter_node,
+    const std::string &array_name);
+
+  // handle_searchsorted_call's final step over an AST-literal `search_space`.
+  exprt handle_searchsorted_call_over_literal(
+    nlohmann::json search_space,
+    bool right);
 
   // np.sum(identity(x))/np.argmin(identity(x)): a reducer's argument reaches
   // get() as a raw Call node when it is itself a nested call, never through

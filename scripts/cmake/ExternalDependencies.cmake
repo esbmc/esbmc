@@ -54,11 +54,11 @@ endif()
 if(ESBMC_CHERI_CLANG)
   include(FetchContent)
   fetchcontent_declare(cheri_compressed_cap
-    GIT_REPOSITORY https://github.com/CTSRD-CHERI/cheri-compressed-cap.git)
-  fetchcontent_getproperties(cheri_compressed_cap)
-  if(NOT cheri_compressed_cap_POPULATED)
-    set(HAVE_UBSAN FALSE CACHE INTERNAL "")
-    fetchcontent_populate(cheri_compressed_cap)
+    GIT_REPOSITORY https://github.com/CTSRD-CHERI/cheri-compressed-cap.git
+    SOURCE_SUBDIR do-not-configure-cheri)
+  set(HAVE_UBSAN FALSE CACHE INTERNAL "")
+  fetchcontent_makeavailable(cheri_compressed_cap)
+  if(NOT TARGET cheri_compressed_cap)
     add_subdirectory(${cheri_compressed_cap_SOURCE_DIR}
                      ${cheri_compressed_cap_BINARY_DIR}
                      EXCLUDE_FROM_ALL)

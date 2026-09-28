@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2 --big-endian
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +assertion e\.key == &k$

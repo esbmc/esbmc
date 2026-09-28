@@ -1260,6 +1260,18 @@ python_annotation<Json>::infer_lambda_return_type(const Json &lambda_elem) const
     return "Any"; // Default for other lambda expressions
 }
 
+/// Whether an Optional[] slice names a non-primitive type by a Name or string.
+template <class Json>
+static bool names_reference_type(const Json &slice)
+{
+  std::string name;
+  if (slice.contains("id"))
+    name = slice["id"].template get<std::string>();
+  else if (slice.contains("value") && slice["value"].is_string())
+    name = slice["value"].template get<std::string>();
+  return !name.empty() && name != "int" && name != "float" && name != "bool";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -1374,6 +1386,15 @@ std::string python_annotation<Json>::get_function_return_type(
           if (return_type == "Subscript")
           {
             functions_in_analysis_.erase(func_name);
+            // Bare "Optional" cannot hold None; leave the target unannotated
+            // so it takes the callee's resolved T*. Only for a T named by a
+            // Name or string: a primitive T's T* cannot tell a zero value
+            // from None, and a subscripted T resolves to no T* at all.
+            if (
+              returns.contains("value") && returns["value"].contains("id") &&
+              returns["value"]["id"] == "Optional" &&
+              names_reference_type(returns.value("slice", Json())))
+              return "";
             if (returns.contains("value") && returns["value"].contains("id"))
               return returns["value"]["id"];
             else
@@ -1951,7 +1972,7 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
 template <class Json>
 std::string python_annotation<Json>::method_return_type(
   const Json &member,
-  const std::string &method_name)
+  const std::string &class_name)
 {
   if (member.contains("returns") && !member["returns"].is_null())
   {
@@ -1963,9 +1984,22 @@ std::string python_annotation<Json>::method_return_type(
       ret.contains("value") && ret["value"].contains("id"))
       return ret["value"]["id"].template get<std::string>();
   }
+  std::string inferred = infer_method_return_type(member, class_name);
+  return inferred.empty() ? "Any" : inferred;
+}
+
+template <class Json>
+std::string python_annotation<Json>::infer_method_return_type(
+  const Json &member,
+  const std::string &class_name)
+{
+  const std::string method_name = member["name"].template get<std::string>();
+  const std::string saved_ctx = current_func_name_context_;
+  current_func_name_context_ = class_name + "@C@" + method_name;
   std::string inferred =
     infer_from_return_statements(member["body"], method_name);
-  return inferred.empty() ? "Any" : inferred;
+  current_func_name_context_ = saved_ctx;
+  return inferred;
 }
 
 template <class Json>
@@ -2141,7 +2175,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         {
           if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
             continue;
-          return method_return_type(member, attr_name);
+          return method_return_type(member, base_name);
         }
       }
     }
@@ -2170,7 +2204,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       {
         if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
           continue;
-        return method_return_type(member, attr_name);
+        return method_return_type(member, cls);
       }
       // Not defined in this class — continue up the first base, as super() does.
       cls.clear();
@@ -2471,22 +2505,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               if (
                 method["_type"] == "FunctionDef" &&
                 method["name"] == method_name)
-              {
-                if (method.contains("returns") && !method["returns"].is_null())
-                {
-                  const auto &ret = method["returns"];
-                  if (ret.contains("id"))
-                    return ret["id"].template get<std::string>();
-                  if (
-                    ret.contains("_type") && ret["_type"] == "Subscript" &&
-                    ret.contains("value") && ret["value"].contains("id"))
-                    return ret["value"]["id"].template get<std::string>();
-                }
-                // Infer return type from return statements when no annotation
-                std::string inferred =
-                  infer_from_return_statements(method["body"], method_name);
-                return inferred.empty() ? "Any" : inferred;
-              }
+                return method_return_type(method, current_type);
             }
           }
           // Chain resolved but method not in final class
@@ -2536,7 +2555,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type =
-            infer_from_return_statements(member["body"], method_name);
+            infer_method_return_type(member, obj);
           if (!inferred_type.empty())
             return inferred_type;
         }
@@ -4694,16 +4713,15 @@ void python_annotation<Json>::annotate_function(Json &function_element)
   const std::string &func_name =
     function_element["name"].template get<std::string>();
 
-  // Build hierarchical path ONLY if we're not inside a class
-  if (!current_class_name_.empty())
+  if (!saved_func_name_context.empty())
   {
-    // We're inside a class - do NOT accumulate hierarchical context
-    current_func_name_context_ = func_name;
-  }
-  else if (!saved_func_name_context.empty())
-  {
-    // Nested function outside a class - accumulate context
+    // Nested function, including one inside a method - accumulate context
     current_func_name_context_ = saved_func_name_context + "@F@" + func_name;
+  }
+  else if (!current_class_name_.empty())
+  {
+    // Method: scope it by its class so same-named methods stay distinct
+    current_func_name_context_ = current_class_name_ + "@C@" + func_name;
   }
   else
   {
@@ -4816,6 +4834,7 @@ void python_annotation<Json>::annotate_class(Json &class_element)
   std::string saved_context = current_func_name_context_;
 
   current_class_name_ = class_element["name"].template get<std::string>();
+  current_func_name_context_.clear();
 
   for (Json &class_member : class_element["body"])
   {

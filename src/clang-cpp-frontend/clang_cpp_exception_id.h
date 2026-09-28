@@ -20,14 +20,14 @@ void convert_exception_id(
 /// Resolve a function type's dynamic exception specification. The converter
 /// stashes the declared types of a `throw(T...)` under "exception_spec_decl";
 /// this turns them into exception ids and stores the list under
-/// exception_specificationt's types_attribute(). A no-op for any other kind of
-/// specification.
+/// exception_specificationt's types_attribute(), returning whether it did. A
+/// no-op for any other kind of specification.
 ///
 /// Shared for the same reason convert_exception_id is: the IREP2 C++ pass has
 /// to reach the same answer, and this reads nothing but the namespace. Left
 /// unresolved, the spec permits nothing and every throw through such a function
 /// reports "exception specification violated"
 /// (docs/roadmap/scope-clang-cpp-irep2.md §7.7).
-void finalize_exception_specification(const namespacet &ns, typet &type);
+bool finalize_exception_specification(const namespacet &ns, typet &type);
 
 #endif

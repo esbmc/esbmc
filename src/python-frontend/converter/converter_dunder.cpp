@@ -390,6 +390,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"float", "__float__"},
     {"int", "__int__"},
     {"index", "__index__"},
+    {"len", "__len__"},
     {"str", "__str__"},
   };
   auto it = unary_dunder_map.find(op);

@@ -27,6 +27,8 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/lang/python_types.h>
 #include <util/arith/arith_tools.h>
 #include <chrono>
 #include <utility>
@@ -1527,5 +1529,144 @@ TEST_CASE("a type keeps its source spelling", "[migrate]")
     REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
     REQUIRE(
       migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
+  }
+}
+
+// An argument's `#default_value` is no part of a function's type, but Python
+// call lowering fills a missing argument from it, so it must survive the seam.
+TEST_CASE("a function type keeps its argument defaults", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  f.arguments().emplace_back(signedbv_typet(64));
+  f.arguments().emplace_back(signedbv_typet(64));
+
+  SECTION("a default round-trips on the argument that has one")
+  {
+    f.arguments()[1].default_value() = from_integer(7, signedbv_typet(64));
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    REQUIRE(!back.arguments()[0].has_default_value());
+    REQUIRE(
+      back.arguments()[1].default_value() == f.arguments()[1].default_value());
+  }
+
+  SECTION("no default gains no key")
+  {
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    for (const auto &arg : back.arguments())
+      REQUIRE(arg.find("#default_value").is_nil());
+  }
+
+  SECTION("a default is no part of the type's identity")
+  {
+    code_typet with = f;
+    with.arguments()[0].default_value() = from_integer(1, signedbv_typet(64));
+    REQUIRE(migrate_type(with) == migrate_type(f));
+    REQUIRE(migrate_type(with)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// A resolved C++ exception specification is no part of a function's type, but
+// goto_convert_functions decodes it from the function symbol's type.
+TEST_CASE("a function type keeps its exception specification", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  auto round_trip = [](const code_typet &t) {
+    return exception_specificationt::from_type(
+      migrate_type_back(migrate_type(t)));
+  };
+
+  SECTION("a dynamic specification round-trips")
+  {
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    irept types;
+    types.get_sub().emplace_back("tag-my_error");
+    f.set(exception_specificationt::types_attribute(), types);
+    const exception_specificationt back = round_trip(f);
+    REQUIRE(back.kind == exception_specificationt::kindt::dynamic);
+    REQUIRE(back.allowed_types == std::vector<irep_idt>{"tag-my_error"});
+  }
+
+  SECTION("noexcept round-trips")
+  {
+    f.set(exception_specificationt::kind_attribute(), "non_throwing");
+    REQUIRE(
+      round_trip(f).kind == exception_specificationt::kindt::non_throwing);
+  }
+
+  SECTION("an unresolved dynamic specification keeps its declared types")
+  {
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    f.add("exception_spec_decl").get_sub().push_back(signedbv_typet(32));
+    const typet back = migrate_type_back(migrate_type(f));
+    REQUIRE(back.get(exception_specificationt::kind_attribute()) == "dynamic");
+    const auto &decl = back.find("exception_spec_decl").get_sub();
+    REQUIRE(decl.size() == 1);
+    REQUIRE(static_cast<const typet &>(decl[0]) == signedbv_typet(32));
+  }
+
+  SECTION("a constructor and a destructor keep their pseudo return types")
+  {
+    code_typet ctor = f, dtor = f;
+    ctor.return_type() = typet("constructor");
+    ctor.return_type().set("#implicit_union_copy_move_constructor", true);
+    dtor.return_type() = typet("destructor");
+    const typet ctor_back =
+      to_code_type(migrate_type_back(migrate_type(ctor))).return_type();
+    REQUIRE(ctor_back.id() == "constructor");
+    REQUIRE(ctor_back.get_bool("#implicit_union_copy_move_constructor"));
+    REQUIRE(
+      to_code_type(migrate_type_back(migrate_type(dtor))).return_type().id() ==
+      "destructor");
+  }
+
+  SECTION("no specification gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(f));
+    REQUIRE(back.find(exception_specificationt::kind_attribute()).is_nil());
+    REQUIRE(back.find(exception_specificationt::types_attribute()).is_nil());
+  }
+
+  SECTION("a specification is no part of the type's identity")
+  {
+    code_typet spec = f;
+    spec.set(exception_specificationt::kind_attribute(), "non_throwing");
+    REQUIRE(migrate_type(spec) == migrate_type(f));
+    REQUIRE(migrate_type(spec)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// `#python_aggregate` marks a Python model struct (tuple, dict, Optional).
+// Unreflected -- the tag already names the type -- but `in` dispatches on it,
+// and a user class can share a tuple's tag prefix, so it cannot be derived
+// from the tag (docs/roadmap/scope-python-irep2.md §10.4).
+TEST_CASE("a struct keeps its Python aggregate kind", "[migrate]")
+{
+  struct_typet tuple;
+  tuple.components().emplace_back("element_0", "element_0", signedbv_typet(64));
+  tuple.tag("tag-tuple_signedbv");
+
+  SECTION("the kind round-trips")
+  {
+    set_python_aggregate_kind(tuple, "tuple");
+    REQUIRE(
+      python_aggregate_kind(migrate_type_back(migrate_type(tuple))) ==
+      irep_idt("tuple"));
+  }
+
+  SECTION("an unmarked struct gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(tuple));
+    REQUIRE(back.find(PYTHON_AGGREGATE_ATTR).is_nil());
+    REQUIRE(full_eq(back, tuple));
+  }
+
+  SECTION("the kind is no part of the type's identity")
+  {
+    struct_typet marked = tuple;
+    set_python_aggregate_kind(marked, "tuple");
+    REQUIRE(migrate_type(marked) == migrate_type(tuple));
+    REQUIRE(migrate_type(marked)->crc() == migrate_type(tuple)->crc());
   }
 }

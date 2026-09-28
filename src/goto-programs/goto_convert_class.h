@@ -195,6 +195,11 @@ protected:
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  void convert_dynamic_static_init(
+    const codet &decl,
+    const symbolt &s,
+    const symbolt &guard,
+    goto_programt &dest);
   void schedule_array_element_destructors(const exprt &base, const typet &type);
 
   void convert_decl_block(const codet &code, goto_programt &dest);

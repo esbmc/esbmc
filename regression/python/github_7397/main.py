@@ -1,6 +1,6 @@
-# A class tag is keyed by name alone, so the local Shape never got its own
-# symbol: every use bound to the imported one and `s.total()` read `sides`,
-# reporting VERIFICATION FAILED on an assertion CPython holds (#7397).
+# The imported module's Shape used to share the local Shape's symbol; the
+# parser now converts it as Shape$shapes, so the local class keeps its own
+# methods (#7397).
 import shapes
 
 

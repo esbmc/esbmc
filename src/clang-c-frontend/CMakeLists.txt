@@ -8,14 +8,11 @@ add_library(clangcfrontend_stuff clang_c_language.cpp clang_c_convert.cpp
             clang_c_lexer.cpp clang_ast_dump.cpp clang_c_adjust_irep2.cpp
             builtin_names.cpp clang_c_base_layout.cpp)
 target_include_directories(clangcfrontend_stuff
-    PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CLANG_INCLUDE_DIRS}
-    PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_compile_definitions(clangcfrontend_stuff PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
-target_link_libraries(clangcfrontend_stuff gotoprograms ${cheaders_lib} ${ESBMC_CLANG_LIBS})
+target_link_libraries(clangcfrontend_stuff PUBLIC esbmc_common gotoprograms ${cheaders_lib} ${ESBMC_CLANG_LIBS})
 
 add_library(clangcfrontend INTERFACE)
 target_link_libraries(clangcfrontend INTERFACE clangcfrontend_stuff clangcfrontendast)

@@ -1,9 +1,6 @@
 add_library(abstract-interpretation ai.cpp ai_domain.cpp interval_domain.cpp interval_analysis.cpp gcse.cpp)
-target_include_directories(abstract-interpretation
-        PUBLIC ${Boost_INCLUDE_DIRS})
 
+target_link_libraries(abstract-interpretation PUBLIC esbmc_common pointeranalysis gotoprograms PRIVATE fmt::fmt)
 if(ENABLE_GOTO_CONTRACTOR)
-    target_link_libraries(abstract-interpretation PUBLIC pointeranalysis gotoprograms PRIVATE gotocontractor fmt::fmt)
-else()
-    target_link_libraries(abstract-interpretation PUBLIC pointeranalysis gotoprograms PRIVATE fmt::fmt)
+    target_link_libraries(abstract-interpretation PRIVATE gotocontractor)
 endif()

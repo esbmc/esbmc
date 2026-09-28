@@ -4016,12 +4016,78 @@ static expr2tc flatten_nested_index_address(const address_of2t &ao)
   return is_nil_expr(simplified) ? flat : simplified;
 }
 
+/// `(char *)&root.m[i]`, or a byte member's own `&root.c`, as
+/// `(char *)&root + byte offset`: a byte-wise walk
+/// and its bound then share one base whichever member or element each end
+/// names, as the relation folds below need. Nil unless the pointee is a byte,
+/// the chain is rooted at a symbol, and its offset is constant.
+/// The named object a member/index chain @p obj lives in, or nil when the
+/// chain passes anything else: a dereference would root it at the pointer
+/// variable instead of the pointee.
+static const expr2tc *byte_view_root(const expr2tc &obj)
+{
+  const expr2tc *root = &obj;
+  while (is_member2t(*root) || is_index2t(*root))
+    root = is_index2t(*root) ? &to_index2t(*root).source_value
+                             : &to_member2t(*root).source_value;
+  return is_symbol2t(*root) ? root : nullptr;
+}
+
+/// One anchor for every byte view of @p root, so both ends compare equal: a
+/// cast the frontend wrote and one built here need not. An array is anchored
+/// at its first element, since a pointer to the whole array can have a width
+/// get_width() rejects (alloca_ptrdiff_max); a byte array is left to the index
+/// path, where the cast would be a no-op. Nil for any other root.
+static expr2tc byte_view_anchor(const expr2tc &root, const type2tc &to)
+{
+  const type2tc &t = root->type;
+  if (is_struct_type(t) || is_union_type(t))
+    return typecast2tc(to, address_of2tc(t, root));
+  if (!is_array_type(t) || is_byte_type(to_array_type(t).subtype))
+    return expr2tc();
+  const type2tc &elem = to_array_type(t).subtype;
+  return typecast2tc(
+    to,
+    address_of2tc(
+      elem, index2tc(elem, root, constant_int2tc(index_type2(), BigInt(0)))));
+}
+
+static expr2tc byte_address_on_root(const expr2tc &e)
+{
+  if (
+    !is_pointer_type(e->type) ||
+    !is_byte_type(to_pointer_type(e->type).subtype))
+    return expr2tc();
+  const expr2tc &from = is_typecast2t(e) ? to_typecast2t(e).from : e;
+  if (!is_address_of2t(from))
+    return expr2tc();
+  const expr2tc &obj = to_address_of2t(from).ptr_obj;
+  const expr2tc *root = byte_view_root(obj);
+  if (!root)
+    return expr2tc();
+  const expr2tc anchor = byte_view_anchor(*root, e->type);
+  if (is_nil_expr(anchor))
+    return expr2tc();
+  if (root == &obj)
+    return is_typecast2t(e) && e != anchor ? anchor : expr2tc();
+
+  expr2tc offset = compute_pointer_offset(obj);
+  if (expr2tc folded = offset->simplify(); !is_nil_expr(folded))
+    offset = folded;
+  if (!is_constant_int2t(offset))
+    return expr2tc();
+  return add2tc(e->type, anchor, offset);
+}
+
 /// Reach the address_of under pointer arithmetic: an induction variable
 /// started at `&a[1][0]` arrives here as `&a[1][0] + k` and has to be put on
 /// the same base as the bound it is compared against. Nil when nothing nested
 /// was found, so the single-subscript path below stays as it was.
 static expr2tc flatten_addressof_under_add(const expr2tc &e)
 {
+  if (expr2tc byte = byte_address_on_root(e); !is_nil_expr(byte))
+    return byte;
+
   if (is_address_of2t(e))
   {
     const address_of2t &ao = to_address_of2t(e);
@@ -4081,6 +4147,28 @@ static expr2tc normalize_addressof_operands(
   return is_nil_expr(simplified) ? rebuilt : simplified;
 }
 
+/// A bare byte base is `base + 0`: `(char *)&o < (char *)&o + 12` is
+/// `0 < 12`. Bytes only, since with a zero-sized pointee `p` and `p + 1` are
+/// one address. @p base_first says which side of the relation @p base was.
+template <typename constructor>
+static expr2tc compare_with_bare_base(
+  const type2tc &type,
+  const expr2tc &base,
+  const expr2tc &sum,
+  bool base_first)
+{
+  if (
+    !is_byte_type(to_pointer_type(base->type).subtype) || !is_add2t(sum) ||
+    to_add2t(sum).side_1 != base || !is_constant(to_add2t(sum).side_2))
+    return expr2tc();
+  expr2tc c = to_add2t(sum).side_2;
+  expr2tc zero = gen_zero(c->type);
+  return typecast_check_return(
+    type,
+    base_first ? make_irep<constructor>(zero, c)
+               : make_irep<constructor>(c, zero));
+}
+
 /// `(&x + c1) ~ (&x + c2)` reduces to `c1 ~ c2`: when the bases match,
 /// comparing addresses is comparing offsets. Split out of simplify_relations
 /// to keep its decision count off the complexity gate.
@@ -4090,10 +4178,13 @@ static expr2tc cancel_shared_pointer_base(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if (
-    !is_add2t(side_1) || !is_add2t(side_2) || !is_pointer_type(side_1) ||
-    !is_pointer_type(side_2))
+  if (!is_pointer_type(side_1) || !is_pointer_type(side_2))
     return expr2tc();
+
+  if (!is_add2t(side_1))
+    return compare_with_bare_base<constructor>(type, side_1, side_2, true);
+  if (!is_add2t(side_2))
+    return compare_with_bare_base<constructor>(type, side_2, side_1, false);
 
   const add2t &lhs = to_add2t(side_1);
   const add2t &rhs = to_add2t(side_2);

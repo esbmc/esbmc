@@ -3728,7 +3728,8 @@ exprt python_list::handle_index_access(
           converter_.ast());
         if (!base_decl.is_null() && base_decl.contains("annotation"))
         {
-          nlohmann::json drilled = base_decl["annotation"];
+          nlohmann::json drilled =
+            unwrap_optional_annotation(base_decl["annotation"]);
           for (size_t k = 0; k < subscript_depth; ++k)
           {
             if (

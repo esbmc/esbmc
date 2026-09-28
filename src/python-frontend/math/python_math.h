@@ -47,10 +47,6 @@ private:
   /// symbolic encoding rather than fabricating a bogus constant (issue #5915).
   std::optional<BigInt> try_fold_int_constant(const exprt &expr) const;
 
-  /// Resolve a constant-like expression (constant or constant-valued symbol)
-  /// to a host double when possible.
-  std::optional<double> try_resolve_constant_double(const exprt &operand) const;
-
   /// Promote operand to double if needed, preserving the original expression
   /// when already floating-point.
   exprt promote_to_double_if_needed(exprt operand) const;
@@ -68,6 +64,10 @@ private:
   get_c_math_symbol_cached(const char *symbol_id, const char *display_name);
 
 public:
+  /// Resolve a constant-like expression (constant or constant-valued symbol)
+  /// to a host double when possible.
+  std::optional<double> try_resolve_constant_double(const exprt &operand) const;
+
   /**
    * @brief Constructor
    * @param conv Reference to the parent python_converter

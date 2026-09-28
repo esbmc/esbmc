@@ -163,6 +163,61 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+// The types of the nullptr template arguments in @p args, which print as a
+// bare `nullptr` whatever their type.
+static bool print_nullptr_arg_types(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  llvm::raw_ostream &os)
+{
+  bool found = false;
+  for (const clang::TemplateArgument &arg : args)
+    if (arg.getKind() == clang::TemplateArgument::Pack)
+      found |= print_nullptr_arg_types(arg.getPackAsArray(), os);
+    else if (arg.getKind() == clang::TemplateArgument::NullPtr)
+    {
+      os << "(nullptr:" << arg.getNullPtrType().getCanonicalType().getAsString()
+         << ")";
+      found = true;
+    }
+  return found;
+}
+
+// clang's USR spells a member-pointer type and a nullptr template argument as
+// nothing, so f<int A::*> and f<long B::*>, the members of W<int A::*> and
+// W<long B::*>, overloads f(int A::*) and f(long B::*), and g<(int *)nullptr>
+// and g<(long *)nullptr> share one id and the last body converted wins.
+static std::string
+usr_gap_suffix(const clang::Decl &decl, const clang::ASTContext &ctx)
+{
+  std::string args;
+  llvm::raw_string_ostream os(args);
+  const clang::PrintingPolicy policy = ctx.getPrintingPolicy();
+  bool has_nullptr = false;
+  auto print = [&](llvm::ArrayRef<clang::TemplateArgument> list) {
+    clang::printTemplateArgumentList(os, list, policy);
+    has_nullptr |= print_nullptr_arg_types(list, os);
+  };
+  for (const clang::Decl *d = &decl; !llvm::isa<clang::TranslationUnitDecl>(d);
+       d = clang::Decl::castFromDeclContext(d->getDeclContext()))
+  {
+    if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
+    {
+      if (const auto *targs = fd->getTemplateSpecializationArgs())
+        print(targs->asArray());
+      os << "(" << fd->getType().getCanonicalType().getAsString(policy) << ")";
+    }
+    else if (
+      const auto *cs =
+        llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(d))
+      print(cs->getTemplateArgs().asArray());
+    else if (
+      const auto *vs = llvm::dyn_cast<clang::VarTemplateSpecializationDecl>(d))
+      print(vs->getTemplateArgs().asArray());
+  }
+  os.flush();
+  return has_nullptr || args.find("::*") != std::string::npos ? "#" + args : "";
+}
+
 void clang_cpp_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -256,6 +311,8 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    if (id.rfind("c:", 0) == 0)
+      id += usr_gap_suffix(nd, *ASTContext);
     /* A lambda's operator(), __invoke and conversion-operator USRs name the
      * enclosing specialisation but not the closure, so siblings in one
      * instantiation share an id and the last body converted wins (#7499); the
@@ -274,9 +331,12 @@ void clang_cpp_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str() + id_suffix;
+    id = DeclUSR.str().str() + usr_gap_suffix(nd, *ASTContext) + id_suffix;
     return;
   }
+
+  if (get_mangled_id(nd, id))
+    return;
 
   // Otherwise, abort
   std::ostringstream oss;
@@ -2240,11 +2300,62 @@ bool clang_cpp_convertert::build_lambda_static_invoker(
   return false;
 }
 
+/* A prvalue of the member's own class initialises the member itself
+ * ([dcl.init]/17.6.1), so the temporary clang binds it to never exists:
+ * converting that binding constructed or copied into a second object and then
+ * destroyed it. Peels a default member initializer, parentheses, a transparent
+ * braced list ([dcl.init.list]/3.2), a prvalue qualification or converting
+ * cast, and the copy clang marks elidable before C++17, which it elides. */
+static const clang::Expr *peel_initializer_wrapper(const clang::Expr *e)
+{
+  if (const auto *dflt = llvm::dyn_cast<clang::CXXDefaultInitExpr>(e))
+    return dflt->getExpr();
+  if (const auto *ewc = llvm::dyn_cast<clang::ExprWithCleanups>(e))
+    return ewc->getSubExpr();
+  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
+    return bind->getSubExpr();
+  if (const auto *paren = llvm::dyn_cast<clang::ParenExpr>(e))
+    return paren->getSubExpr();
+  if (const auto *ile = llvm::dyn_cast<clang::InitListExpr>(e))
+    return ile->isTransparent() ? ile->getInit(0) : nullptr;
+  if (const auto *cast = llvm::dyn_cast<clang::CastExpr>(e))
+    return !cast->isGLValue() &&
+               (cast->getCastKind() == clang::CK_ConstructorConversion ||
+                cast->getCastKind() == clang::CK_NoOp)
+             ? cast->getSubExpr()
+             : nullptr;
+  return nullptr;
+}
+
+static const clang::Expr *peel_elided_copy(const clang::Expr *e)
+{
+  const auto *ctor = llvm::dyn_cast<clang::CXXConstructExpr>(e);
+  if (!ctor || !ctor->isElidable() || ctor->getNumArgs() != 1)
+    return nullptr;
+  const auto *mte = llvm::dyn_cast<clang::MaterializeTemporaryExpr>(
+    ctor->getArg(0)->IgnoreImpCasts());
+  return mte ? mte->getSubExpr()->IgnoreImpCasts() : nullptr;
+}
+
+static const clang::Expr &member_result_object(const clang::Expr &init)
+{
+  const clang::Expr *e = &init;
+  for (const clang::Expr *next = e; next;)
+  {
+    e = next;
+    next = peel_initializer_wrapper(e);
+    if (!next)
+      next = peel_elided_copy(e);
+  }
+  return *e;
+}
+
 bool clang_cpp_convertert::get_member_initializer(
-  const clang::Expr &init,
+  const clang::Expr &member_init,
   const typet &member_type,
   exprt &rhs)
 {
+  const clang::Expr &init = member_result_object(member_init);
   const auto *ctor_expr = llvm::dyn_cast<clang::CXXConstructExpr>(&init);
   if (
     ctor_expr && zero_initialises(init) && ctor_expr->getConstructor() &&
@@ -3211,7 +3322,7 @@ bool clang_cpp_convertert::annotate_class_method(
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if (fd_symb)
     {
-      fd_symb->set_type(component_type);
+      fd_symb->set_type(migrate_type(component_type));
       /*
        * We indicate the need for vptr initializations in the ctor/dtor;
        * they are added in the adjuster.

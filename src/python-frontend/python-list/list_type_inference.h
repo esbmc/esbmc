@@ -19,6 +19,9 @@ bool is_empty_user_class_object_type(const typet &type, const namespacet &ns);
 
 int get_list_compare_depth();
 
+// T for an Optional[T] annotation, otherwise the annotation itself.
+const nlohmann::json &unwrap_optional_annotation(const nlohmann::json &ann);
+
 // Extract element type from a variable/parameter annotation node.
 typet get_elem_type_from_annotation(
   const nlohmann::json &node,

@@ -1,0 +1,5 @@
+CORE
+main.c
+--gcse --goto-functions-only
+ASSIGN \*cse_symbol\$\d+=5;
+ASSIGN a\[cse_symbol\$\d+\]=7;(\n\s*(//|ASSERT)[^\n]*)*\n\s*ASSIGN a\[cse_symbol\$\d+\]=8;

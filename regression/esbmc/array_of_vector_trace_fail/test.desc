@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 5 --no-slice
+^  x = \{ 20, 21, 22, 23 \}$
+^VERIFICATION FAILED$

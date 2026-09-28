@@ -112,12 +112,12 @@ void convert_exception_id(
   append_cpp_spelling_and_fallback(type, suffix, ids);
 }
 
-void finalize_exception_specification(const namespacet &ns, typet &type)
+bool finalize_exception_specification(const namespacet &ns, typet &type)
 {
   if (
     type.get(exception_specificationt::kind_attribute()) != "dynamic" ||
     type.find("exception_spec_decl").is_nil())
-    return;
+    return false;
 
   // Only the leading id per declared type: base classes are expanded at the
   // throw site, as they are for a handler.
@@ -137,4 +137,5 @@ void finalize_exception_specification(const namespacet &ns, typet &type)
 
   type.set(exception_specificationt::types_attribute(), resolved);
   type.remove("exception_spec_decl");
+  return true;
 }
