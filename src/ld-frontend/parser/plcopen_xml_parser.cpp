@@ -876,8 +876,6 @@ static bool parse_graphical_ld(
         ensure_pf(src);
         return pf_name(src);
       }
-      if (!s.var.empty() && !is_coil_tag(s.tag))
-        return s.var;
       if (is_identifier(s.expression))
         return s.expression;
       throw UnsupportedConstructError(what + " driven by " + s.tag, 2);
