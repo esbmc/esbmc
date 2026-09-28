@@ -1121,6 +1121,34 @@ static bool names_builtin(
   return !json_utils::is_class(spelling, ast);
 }
 
+static bool is_scalar_pointee(const typet &ptr)
+{
+  const typet &sub = ptr.subtype();
+  return sub.id() == "signedbv" || sub.id() == "unsignedbv" ||
+         sub.id() == "floatbv" || sub.id() == "fixedbv" || sub.is_bool();
+}
+
+/// The type of a Subscript annotation whose base names it only partly, or an
+/// empty type.
+typet python_converter::subscript_annotation_type(
+  const std::string &base,
+  const nlohmann::json &var_node)
+{
+  // Preserve concrete tuple element types for Tuple[...] annotations instead
+  // of resolving to the typing.Tuple class type.
+  if (base == "Tuple" || base == "tuple")
+    return get_type_from_annotation(var_node["annotation"], var_node);
+
+  // Optional[T] over a reference type is the T* a function returning it has,
+  // NULL for None; the bare "Optional" placeholder cannot hold None. A
+  // primitive T keeps the placeholder: its T* encoding cannot tell a zero
+  // value from None.
+  if (base != "Optional")
+    return typet();
+  typet t = get_type_from_annotation(var_node["annotation"], var_node);
+  return t.is_pointer() && !is_scalar_pointee(t) ? t : typet();
+}
+
 std::pair<std::string, typet>
 python_converter::extract_type_info(const nlohmann::json &var_node)
 {
@@ -1144,13 +1172,9 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
         ann["value"]["_type"] == "Attribute" && ann["value"].contains("attr"))
         var_type_str = ann["value"]["attr"];
 
-      // Preserve concrete tuple element types for Tuple[...] annotations
-      // instead of resolving to the typing.Tuple class type.
-      if (var_type_str == "Tuple" || var_type_str == "tuple")
-      {
-        var_typet = get_type_from_annotation(ann, var_node);
-        return {var_type_str, var_typet};
-      }
+      if (typet t = subscript_annotation_type(var_type_str, var_node);
+          !t.id().empty())
+        return {var_type_str, t};
     }
     else if (
       ann.contains("_type") && ann["_type"] == "Attribute" &&
@@ -6676,11 +6700,9 @@ void python_converter::get_var_assign(
   }
   else
   {
-    {
-      exprt v = gen_zero(current_element_type, true);
-      v.zero_initializer(true);
-      lhs_symbol->set_value(std::move(v));
-    }
+    // No Python reader wants #zero_initializer; only Solidity's converter
+    // reads it, on its own values.
+    lhs_symbol->set_value(migrate_expr(gen_zero(current_element_type, true)));
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
@@ -6938,7 +6960,7 @@ void python_converter::get_compound_assign(
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
         {
-          symbol->set_value(concatenated);
+          symbol->set_value(migrate_expr(concatenated));
         }
       }
     }
@@ -7090,6 +7112,36 @@ exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
   exprt result = store_call_result(bool_call, location, "cond_bool");
   result.location() = location;
   return result;
+}
+
+/// Type the arms of `T if c else None` (or the mirror) in place and return the
+/// ternary's type. A target over a reference T holds T*, NULL for None;
+/// otherwise the result is the Optional[T] struct.
+typet python_converter::optional_ternary_type(
+  exprt &then,
+  exprt &else_expr,
+  bool then_is_none)
+{
+  const typet &value_type = then_is_none ? else_expr.type() : then.type();
+  const bool reference_value = value_type.is_array() || value_type.is_pointer();
+  const typet &target =
+    current_lhs ? current_lhs->type() : ternary_return_target_;
+  if (!reference_value || !target.is_pointer())
+  {
+    typet result_type = type_handler_.build_optional_type(value_type);
+    then = wrap_in_optional(then, result_type);
+    else_expr = wrap_in_optional(else_expr, result_type);
+    return result_type;
+  }
+
+  const typet result_type = target;
+  exprt &value = then_is_none ? else_expr : then;
+  if (value.type().is_array())
+    value = string_handler_.get_array_base_address(value);
+  if (value.type() != result_type)
+    value = typecast_exprt(value, result_type);
+  (then_is_none ? then : else_expr) = gen_zero(result_type);
+  return result_type;
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -7627,14 +7679,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
     typet result_type;
     if (then_is_none != else_is_none)
-    {
-      // One branch is None, the other is T → Optional[T] models Python's T |
-      // None
-      typet concrete_type = then_is_none ? else_expr.type() : then.type();
-      result_type = type_handler_.build_optional_type(concrete_type);
-      then = wrap_in_optional(then, result_type);
-      else_expr = wrap_in_optional(else_expr, result_type);
-    }
+      result_type = optional_ternary_type(then, else_expr, then_is_none);
     else
     {
       // Resolve result type based on branch types
@@ -7792,6 +7837,18 @@ exprt python_converter::box_value_on_heap(
   return heap_ptr;
 }
 
+/// A returned `T if c else None` takes the declared return type as its
+/// target, as an assigned one takes the variable's.
+exprt python_converter::get_return_value(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "IfExp")
+    return get_expr(value);
+  ternary_return_target_ = current_func_return_type_;
+  exprt result = get_expr(value);
+  ternary_return_target_ = typet();
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7895,7 +7952,7 @@ void python_converter::get_return_statements(
     }
   }
 
-  exprt return_value = get_expr(ast_node["value"]);
+  exprt return_value = get_return_value(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type

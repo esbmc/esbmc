@@ -1,8 +1,10 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/type/python_typechecking.h>
@@ -1482,7 +1484,7 @@ void python_converter::refine_any_param_to_list(
   if (param_id.empty())
     return;
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
-    param_sym->set_type(param_arg.type());
+    python_expr::set_symbol_type_if_carried(*param_sym, param_arg.type());
   if (elem_type != typet())
     element_type_registry_.record(param_id, "", elem_type);
 }
@@ -3349,7 +3351,7 @@ void python_converter::get_function_definition(
         typet optional_type = type_handler_.build_optional_type(value_type);
         type.return_type() = optional_type;
         current_element_type = optional_type;
-        added_symbol->set_type(type);
+        python_expr::set_function_type(*added_symbol, type);
       }
     }
     else
@@ -3360,7 +3362,7 @@ void python_converter::get_function_definition(
         type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
-      added_symbol->set_type(type);
+      python_expr::set_function_type(*added_symbol, type);
     }
   }
 
@@ -3382,7 +3384,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       current_element_type = inferred_type;
-      added_symbol->set_type(type);
+      python_expr::set_function_type(*added_symbol, type);
     }
   }
 
@@ -3432,7 +3434,7 @@ void python_converter::get_function_definition(
                                   : type_handler_.get_typet(nondet_suffix);
 
     type.return_type() = natural_type;
-    added_symbol->set_type(type);
+    python_expr::set_function_type(*added_symbol, type);
 
     exprt nondet_value("sideeffect", natural_type);
     nondet_value.statement("nondet");
@@ -3460,7 +3462,11 @@ void python_converter::get_function_definition(
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;
-      added_symbol->set_type(type); // Update the symbol's type
+      // Left legacy: no test in the suite reaches this arm, and its guard
+      // re-runs the same infer_return_type_from_body the arm 90 lines above
+      // already ran, so it is a C-Dead candidate rather than a conversion
+      // (docs/roadmap/scope-python-irep2.md §11.4).
+      added_symbol->set_type(type);
     }
   }
 
@@ -3516,7 +3522,7 @@ void python_converter::get_function_definition(
     if (ret_type)
     {
       type.return_type() = *ret_type;
-      added_symbol->set_type(type);
+      python_expr::set_function_type(*added_symbol, type);
     }
   }
 
@@ -3539,7 +3545,7 @@ void python_converter::get_function_definition(
     !is_importing_module && !function_is_generator(function_node))
   {
     type.return_type() = none_type();
-    added_symbol->set_type(type);
+    python_expr::set_function_type(*added_symbol, type);
 
     code_returnt implicit_none;
     implicit_none.return_value() = gen_zero(none_type());
