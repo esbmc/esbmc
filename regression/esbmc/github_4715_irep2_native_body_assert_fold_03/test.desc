@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto-functions-only --multi-property
+^\s+IF !\(c == 2\) THEN GOTO \d+$
+^\s+ASSERT 0 // j$
+^\s+ASSIGN g=1;$

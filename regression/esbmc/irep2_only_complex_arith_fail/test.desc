@@ -1,0 +1,5 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only
+^  assertion __imag__ z == 99\.0$
+^VERIFICATION FAILED$

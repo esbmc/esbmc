@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --termination
+^ERROR: --loop-invariant-check cannot be combined with --termination$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

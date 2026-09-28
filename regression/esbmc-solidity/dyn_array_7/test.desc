@@ -1,4 +1,5 @@
 THOROUGH
 contract.solast
 --sol contract.sol --contract A --unwind 3 --no-unwinding-assertions --no-standard-checks --32 --fixedbv --z3
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

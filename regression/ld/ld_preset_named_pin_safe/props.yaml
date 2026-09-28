@@ -1,0 +1,10 @@
+properties:
+
+  # The unparsable initial value must be diagnosed and defaulted, not crash the
+  # process. literal_to_ticks relied on catching std::stoll's std::invalid_
+  # argument, which never reached a handler, so this file used to terminate
+  # ESBMC and the warning branch below it was unreachable.
+  - id: P1
+    kind: invariant
+    expression: "!q || a"
+    description: "The coil follows its contact within the scan"

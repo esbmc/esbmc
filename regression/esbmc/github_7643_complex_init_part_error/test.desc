@@ -1,0 +1,5 @@
+CORE
+main.c
+--color never
+^ERROR: Unknown Atomic expression$
+^ERROR: CONVERSION ERROR$

@@ -1,0 +1,4 @@
+CORE
+symex_ssa_00_probe.c
+-DSYMEX_HARNESS_PROBE --overflow-check --unsigned-overflow-check --memory-leak-check
+^VERIFICATION FAILED$

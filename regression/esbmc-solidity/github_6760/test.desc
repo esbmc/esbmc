@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Doftcoin --no-standard-checks --goto-functions-only
+mintToken \(sol:@C@Doftcoin@F@mintToken#283\):\n(\s+// \d+ file [^\n]*contract\.sol line 2 function mintToken\n[^\n]+\n){12}

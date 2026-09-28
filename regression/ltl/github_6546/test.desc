@@ -1,0 +1,6 @@
+CORE
+prog.c
+--ltl safety.c -DLTL_PREFIX_BOUND=6
+^Final lowest outcome: LTL_BAD$
+^VERIFICATION FAILED$
+\A(?![\s\S]*monitor has no __ESBMC_switch_from_monitor)[\s\S]*\Z

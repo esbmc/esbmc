@@ -38,7 +38,7 @@ public:
   void pop_ctx() override;
   smt_resultt dec_solve() override;
 
-  bool get_bool(smt_astt a) override;
+  tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   ieee_floatt get_fpbv(smt_astt a) override;
   bool
@@ -135,6 +135,7 @@ public:
   smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs) override;
   smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
   smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 

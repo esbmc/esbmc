@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.arange\(\) range exceeds the supported element limit of 10000$

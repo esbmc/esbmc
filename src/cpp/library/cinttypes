@@ -1,0 +1,18 @@
+#pragma once
+
+#include <cstdint>
+#include <inttypes.h>
+
+// [cinttypes.syn]: <cinttypes> includes <cstdint> and declares the C
+// greatest-width integer functions in namespace std.
+namespace std
+{
+using ::imaxdiv_t;
+
+using ::imaxabs;
+using ::imaxdiv;
+using ::strtoimax;
+using ::strtoumax;
+using ::wcstoimax;
+using ::wcstoumax;
+} // namespace std

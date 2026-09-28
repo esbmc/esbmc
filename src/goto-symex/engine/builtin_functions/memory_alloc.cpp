@@ -1,0 +1,1036 @@
+#include <cassert>
+#include <goto-programs/destructor.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <string>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <irep2/irep2.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
+#include <util/expr/type_byte_size.h>
+#include <util/symtab/base_subobject.h>
+#include <utility>
+#include <vector>
+#include <algorithm>
+
+// Largest request malloc may succeed for. PTRDIFF_MAX, as glibc >= 2.30: above
+// it pointer subtraction overflows, and an object's offset -- stored in
+// ptraddr_type2() but read signed by the bounds checks, pointer subtraction and
+// the relational comparator -- becomes indistinguishable from a below-base
+// pointer (R37). alloca bounds a symbolic request by assumption and reports a
+// constant one; realloc joins the cap to its failure condition (R38, R39).
+static BigInt max_object_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
+}
+
+// Largest object smt_memspace.cpp can lay out at all: it places each object at
+// [start, start + size] over ptraddr_type2 and asserts the sum does not wrap.
+static BigInt max_layable_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width()) -
+         config.ansi_c.max_alignment();
+}
+
+// Collect the byte offset and class type of every (transitively) nested base
+// subobject of `t`, relative to the start of `t`.
+static void collect_base_subobject_offsets(
+  const type2tc &t,
+  const namespacet &ns,
+  const BigInt &base,
+  std::vector<std::pair<BigInt, type2tc>> &out)
+{
+  if (is_nil_type(t))
+    return;
+
+  const type2tc ft = ns.follow(t);
+  if (!is_struct_type(ft))
+    return;
+
+  const struct_type2t &st = to_struct_type(ft);
+  for (std::size_t i = 0; i < st.members.size(); ++i)
+  {
+    const std::string name = st.member_names[i].as_string();
+    if (
+      name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) != 0)
+      continue;
+
+    const BigInt off = base + member_offset(ft, st.member_names[i], &ns);
+    out.emplace_back(off, st.members[i]);
+    collect_base_subobject_offsets(st.members[i], ns, off, out);
+  }
+}
+
+// True iff the class `t` (a base-subobject type) has a virtual destructor.
+// Deleting through a base pointer is only well-defined ([expr.delete]p3) when
+// the pointer's static (base) type has a virtual destructor: only then does the
+// virtual deleting destructor adjust an interior subobject pointer back to the
+// complete object before calling operator delete. Absent one the destructor is
+// statically bound and operator delete receives the unadjusted subobject
+// pointer -- a genuine bad-free -- so that offset must not be admitted.
+static bool base_has_virtual_destructor(const type2tc &t, const namespacet &ns)
+{
+  const type2tc ft = ns.follow(t);
+  if (!is_struct_type(ft))
+    return false;
+
+  const irep_idt &tag = to_struct_type(ft).name;
+  if (tag.empty())
+    return false;
+
+  const symbolt *sym = ns.lookup("tag-" + id2string(tag));
+  if (sym == nullptr || sym->get_type().id() != "struct")
+    return false;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, to_struct_type(sym->get_type()));
+  return dtor != nullptr && dtor->get_bool("is_virtual");
+}
+
+expr2tc goto_symext::symex_malloc(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guard2tc &guard)
+{
+  return symex_mem(true, lhs, code, guard);
+}
+
+expr2tc goto_symext::symex_alloca(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guard2tc &guard)
+{
+  return symex_mem(false, lhs, code, guard);
+}
+
+expr2tc goto_symext::create_dynamic_memory_symbol(
+  const type2tc &elem_type,
+  const expr2tc &size_expr,
+  const std::string &name_prefix)
+{
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  symbolt symbol;
+  symbol.name = name_prefix + "_" + i2string(dynamic_counter) + "_array";
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+  symbol.lvalue = true;
+  symbol.mode = "C";
+
+  typet renamedtype = ns.follow(migrate_type_back(elem_type));
+  {
+    typet t(typet::t_array);
+    t.subtype() = renamedtype;
+    t.size(migrate_expr_back(size_expr));
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
+
+  new_context.add(symbol);
+  type2tc new_type = migrate_symbol_type(symbol);
+  return symbol2tc(new_type, symbol.id);
+}
+
+void goto_symext::copy_memory_content(
+  const expr2tc &old_base_array,
+  const expr2tc &new_array,
+  const expr2tc &old_elem_count,
+  const expr2tc &new_elem_count,
+  const type2tc &elem_type,
+  bool old_is_array,
+  const guard2tc &guard)
+{
+  if (
+    is_nil_expr(old_base_array) || is_nil_expr(old_elem_count) ||
+    is_nil_expr(new_elem_count))
+    return;
+
+  type2tc new_elem_type = to_array_type(new_array->type).subtype;
+
+  expr2tc copy_count = if2tc(
+    size_type2(),
+    lessthan2tc(old_elem_count, new_elem_count),
+    old_elem_count,
+    new_elem_count);
+  do_simplify(copy_count);
+
+  // default value
+  uint64_t max_symbolic_copy = 128;
+  std::string option_value = options.get_option("max-symbolic-realloc-copy");
+  if (!option_value.empty())
+    max_symbolic_copy = std::stoull(option_value);
+
+  if (is_constant_int2t(copy_count))
+  {
+    uint64_t const_copy_count = to_constant_int2t(copy_count).value.to_uint64();
+    uint64_t actual_copy_count = std::min(const_copy_count, max_symbolic_copy);
+
+    for (uint64_t i = 0; i < actual_copy_count; i++)
+    {
+      expr2tc idx = constant_int2tc(size_type2(), BigInt(i));
+      copy_single_element(
+        old_base_array,
+        new_array,
+        idx,
+        elem_type,
+        new_elem_type,
+        old_is_array,
+        guard);
+    }
+  }
+  else
+  {
+    for (uint64_t i = 0; i < max_symbolic_copy; i++)
+    {
+      expr2tc idx = constant_int2tc(size_type2(), BigInt(i));
+      expr2tc should_copy = lessthan2tc(idx, copy_count);
+      guard2tc copy_guard = guard;
+      copy_guard.add(should_copy);
+
+      if (!copy_guard.is_false())
+        copy_single_element(
+          old_base_array,
+          new_array,
+          idx,
+          elem_type,
+          new_elem_type,
+          old_is_array,
+          copy_guard);
+    }
+  }
+}
+
+void goto_symext::copy_single_element(
+  const expr2tc &old_base_array,
+  const expr2tc &new_array,
+  const expr2tc &idx,
+  const type2tc &elem_type,
+  const type2tc &new_elem_type,
+  bool old_is_array,
+  const guard2tc &guard)
+{
+  expr2tc old_elem =
+    old_is_array ? index2tc(elem_type, old_base_array, idx) : old_base_array;
+  expr2tc new_elem = index2tc(new_elem_type, new_array, idx);
+
+  cur_state->rename(old_elem);
+  symex_assign(code_assign2tc(new_elem, old_elem), false, guard);
+}
+
+void goto_symext::symex_realloc(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guard2tc &guard)
+{
+  expr2tc src_ptr = code.operand;
+  expr2tc realloc_size = code.size; // This is in bytes
+  cur_state->rename(realloc_size);
+
+  // ===== handle reallocC(ptr, 0) - free and return NULL =====
+  if (handle_realloc_zero_size(lhs, code, guard, realloc_size))
+    return;
+
+  // Nil unless the request can exceed max_object_size(); see R38. Under
+  // --force-realloc-success the cap is not applied at all, for the reason the
+  // symbolic malloc arm gives: assuming it away would prune
+  // realloc(p, (size_t)negative) vacuously.
+  expr2tc over_cap;
+  if (
+    !options.get_bool_option("force-realloc-success") &&
+    is_unsignedbv_type(realloc_size->type) &&
+    realloc_size->type->get_width() >= ptraddr_type2()->get_width())
+  {
+    expr2tc fits = lessthanequal2tc(
+      realloc_size, constant_int2tc(realloc_size->type, max_object_size()));
+    over_cap = not2tc(fits);
+    // Zero size on the failing branch keeps the object layable; the request
+    // fails through alloc_fail below, leaving the old object untouched as
+    // C17 7.22.3.5 requires.
+    realloc_size = if2tc(
+      realloc_size->type, fits, realloc_size, gen_zero(realloc_size->type));
+  }
+
+  // ===== determine element type and old object info =====
+  type2tc elem_type;
+  expr2tc old_base_array;
+  bool old_is_array = false;
+  expr2tc old_elem_count;
+
+  if (!analyze_old_object(
+        src_ptr, elem_type, old_base_array, old_is_array, old_elem_count))
+  {
+    // Fallback element type determination
+    elem_type = determine_fallback_element_type(code, lhs);
+  }
+
+  // calculate new element count
+  expr2tc elem_size = type_byte_size_expr(elem_type);
+  cur_state->rename(elem_size);
+  do_simplify(elem_size);
+
+  expr2tc new_elem_count = calculate_element_count(realloc_size, elem_size);
+
+  // allocate new memory
+  expr2tc new_array =
+    create_dynamic_memory_symbol(elem_type, realloc_size, "realloc");
+
+  // copy data
+  copy_memory_content(
+    old_base_array,
+    new_array,
+    old_elem_count,
+    new_elem_count,
+    elem_type,
+    old_is_array,
+    guard);
+
+  // create result and handle failure modelling
+  expr2tc result = create_result_pointer(new_array, lhs->type);
+  result = model_allocation_failure(result, code.operand, guard, over_cap);
+
+  // finalize assignment and tracking
+  finalize_realloc_result(lhs, result, new_array, guard, realloc_size);
+}
+
+bool goto_symext::handle_realloc_zero_size(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guard2tc &guard,
+  const expr2tc &realloc_size)
+{
+  expr2tc zero_size = gen_zero(realloc_size->type);
+  expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
+  // Classify unconditionally: --no-simplify selects a formula representation,
+  // it must not decide whether realloc(p, 0) frees p and returns NULL.
+  simplify(is_zero_size);
+
+  if (is_true(is_zero_size))
+  {
+    symex_free(code_free2tc(code.operand));
+    expr2tc null_ptr = gen_zero(lhs->type);
+    symex_assign(code_assign2tc(lhs, null_ptr), true, guard);
+    return true;
+  }
+  return false;
+}
+
+bool goto_symext::analyze_old_object(
+  const expr2tc &src_ptr,
+  type2tc &elem_type,
+  expr2tc &old_base_array,
+  bool &old_is_array,
+  expr2tc &old_elem_count)
+{
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_uint8_type(), src_ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  if (internal_deref_items.empty())
+    return false;
+
+  expr2tc old_obj = internal_deref_items.front().object;
+
+  // Determine element type and base array from old object
+  if (is_index2t(old_obj))
+  {
+    old_base_array = to_index2t(old_obj).source_value;
+    old_is_array = is_array_type(old_base_array->type);
+    elem_type = old_is_array ? to_array_type(old_base_array->type).subtype
+                             : old_base_array->type;
+  }
+  else if (is_array_type(old_obj->type))
+  {
+    old_base_array = old_obj;
+    old_is_array = true;
+    elem_type = to_array_type(old_obj->type).subtype;
+  }
+  else
+  {
+    old_base_array = old_obj;
+    old_is_array = false;
+    elem_type = old_obj->type;
+  }
+
+  // Calculate old element count
+  old_elem_count =
+    calculate_old_element_count(old_base_array, elem_type, old_is_array);
+
+  return true;
+}
+
+type2tc goto_symext::determine_fallback_element_type(
+  const sideeffect2t &code,
+  const expr2tc &lhs)
+{
+  if (!is_nil_type(code.alloctype) && !is_empty_type(code.alloctype))
+    return code.alloctype;
+  else if (is_pointer_type(lhs->type))
+  {
+    type2tc subtype = to_pointer_type(lhs->type).subtype;
+    if (is_empty_type(subtype))
+      return get_uint8_type();
+    return subtype;
+  }
+  else
+    return get_uint8_type();
+}
+
+expr2tc goto_symext::calculate_element_count(
+  const expr2tc &size_bytes,
+  const expr2tc &elem_size)
+{
+  if (
+    is_constant_int2t(elem_size) &&
+    to_constant_int2t(elem_size).value.to_uint64() > 0)
+  {
+    expr2tc count = div2tc(size_type2(), size_bytes, elem_size);
+    cur_state->rename(count);
+    do_simplify(count);
+    return count;
+  }
+  return expr2tc(); // nil expr for invalid cases
+}
+
+expr2tc goto_symext::calculate_old_element_count(
+  const expr2tc &old_base_array,
+  const type2tc &elem_type,
+  bool old_is_array)
+{
+  if (old_is_array && is_array_type(old_base_array->type))
+  {
+    const array_type2t &arr_type = to_array_type(old_base_array->type);
+    if (!is_nil_expr(arr_type.array_size))
+    {
+      expr2tc size_bytes = arr_type.array_size;
+      cur_state->rename(size_bytes);
+      do_simplify(size_bytes);
+
+      expr2tc elem_size = type_byte_size_expr(elem_type);
+      cur_state->rename(elem_size);
+      do_simplify(elem_size);
+
+      return calculate_element_count(size_bytes, elem_size);
+    }
+  }
+  else if (!old_is_array)
+  {
+    return constant_int2tc(size_type2(), BigInt(1));
+  }
+
+  return expr2tc(); // nil expr for unhandled cases
+}
+
+expr2tc goto_symext::create_result_pointer(
+  const expr2tc &new_array,
+  const type2tc &lhs_type)
+{
+  type2tc new_elem_type = to_array_type(new_array->type).subtype;
+  expr2tc idx_val = gen_long(size_type2(), 0L);
+  expr2tc idx = index2tc(new_elem_type, new_array, idx_val);
+  expr2tc result = address_of2tc(new_elem_type, idx);
+
+  if (result->type != lhs_type)
+    result = typecast2tc(lhs_type, result);
+
+  cur_state->rename(result);
+  return result;
+}
+
+expr2tc goto_symext::model_allocation_failure(
+  const expr2tc &result,
+  const expr2tc &old_ptr,
+  const guard2tc &guard,
+  const expr2tc &over_cap)
+{
+  if (!options.get_bool_option("force-realloc-success"))
+  {
+    expr2tc alloc_fail = sideeffect2tc(
+      get_bool_type(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(alloc_fail);
+
+    // The cap joins the failure condition rather than nulling the result
+    // afterwards: update_pointer_validity keys the old object's validity on
+    // alloc_fail, so a result nulled past that point would leave the old
+    // object invalidated on a branch where the allocation failed.
+    if (!is_nil_expr(over_cap))
+      alloc_fail = or2tc(alloc_fail, over_cap);
+
+    expr2tc null_ptr = symbol2tc(result->type, "NULL");
+    expr2tc conditional_result =
+      if2tc(result->type, alloc_fail, null_ptr, result);
+
+    // Update validity array conditionally
+    update_pointer_validity(old_ptr, alloc_fail, guard);
+
+    return conditional_result;
+  }
+  else
+  {
+    // Always free old pointer when forced success
+    symex_free(code_free2tc(old_ptr));
+  }
+
+  return result;
+}
+
+void goto_symext::update_pointer_validity(
+  const expr2tc &old_ptr,
+  const expr2tc &alloc_fail,
+  const guard2tc &guard)
+{
+  expr2tc old_ptr_obj = pointer_object2tc(pointer_type2(), old_ptr);
+  dereference(old_ptr_obj, dereferencet::READ);
+
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
+  expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
+  expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, old_ptr_obj);
+
+  // If realloc fails (alloc_fail=true), keep old pointer valid (true)
+  // If realloc succeeds (alloc_fail=false), invalidate old pointer (false)
+  expr2tc new_validity =
+    if2tc(get_bool_type(), alloc_fail, gen_true_expr(), gen_false_expr());
+  symex_assign(code_assign2tc(valid_index_expr, new_validity), true, guard);
+}
+
+void goto_symext::finalize_realloc_result(
+  const expr2tc &lhs,
+  const expr2tc &result,
+  const expr2tc &new_array,
+  const guard2tc &guard,
+  const expr2tc &realloc_size)
+{
+  expr2tc result_copy(result);
+
+  // Assign result to lhs
+  symex_assign(code_assign2tc(lhs, result), true, guard);
+
+  // Track the new pointer
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
+  track_new_pointer(ptr_obj, new_array->type, guard, realloc_size);
+
+  // Add to dynamic memory tracking
+  guard2tc alloc_guard = cur_state->guard;
+  alloc_guard.append(guard);
+
+  unsigned int dynamic_counter = get_dynamic_counter();
+  std::string symbol_name = "dynamic_" + i2string(dynamic_counter) + "_array";
+  dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
+}
+
+expr2tc goto_symext::symex_mem_inf(
+  const expr2tc &lhs,
+  const type2tc &base_type,
+  const guard2tc &guard)
+{
+  if (is_nil_expr(lhs))
+    return expr2tc(); // ignore
+
+  type2tc type = base_type;
+
+  assert(!is_nil_type(base_type));
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) + "_inf_array";
+
+  symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+
+  {
+    typet t = array_typet(renamedtype, exprt("infinity", size_type()));
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
+  symbol.mode = "C";
+  new_context.add(symbol);
+
+  type2tc new_type = migrate_symbol_type(symbol);
+
+  type2tc rhs_type;
+  expr2tc rhs_ptr_obj;
+
+  type2tc subtype = migrate_type(symbol.get_type().subtype());
+  expr2tc sym = symbol2tc(new_type, symbol.id);
+  expr2tc idx_val = gen_long(size_type2(), 0L);
+  expr2tc idx = index2tc(subtype, sym, idx_val);
+  do_simplify(idx);
+  rhs_type = migrate_type(symbol.get_type().subtype());
+  rhs_ptr_obj = idx;
+
+  expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guard2tc alloc_guard = cur_state->guard;
+
+  if (rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+
+  track_new_pointer(ptr_obj, new_type, guard, gen_one(size_type2()));
+
+  alloc_guard.append(guard);
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, true, symbol.name.as_string());
+
+  return to_address_of2t(rhs_addrof).ptr_obj;
+}
+
+void goto_symext::offer_malloc_zero_null(
+  const expr2tc &size,
+  expr2tc &rhs,
+  guard2tc &alloc_guard)
+{
+  if (!options.get_bool_option("malloc-zero-is-null"))
+    return;
+
+  expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
+  simplify(nonzero);
+  if (is_true(nonzero))
+    return;
+
+  // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a pointer
+  // that may be freed but not used to access an object. Offer both -- forcing
+  // NULL makes the assume(p != NULL) that environment models emit after a
+  // zero-sized request unsatisfiable, pruning every execution under test
+  // (#5398).
+  expr2tc may_alloc = gen_nondet(get_bool_type());
+  replace_nondet(may_alloc);
+
+  expr2tc choice = or2tc(nonzero, may_alloc);
+  simplify(choice);
+  alloc_guard.add(choice);
+  rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
+}
+
+void goto_symext::bound_dynamic_object_size(const code_assign2t &code)
+{
+  if (!is_dynamic_size2t(code.target))
+    return;
+
+  // --no-vla-size-check is "do not check whether the size of VLAs overflows the
+  // available address space", which is what this bound does, one pass after the
+  // guards goto_convert emits at the declaration. Honour it here too: under
+  // --32 a three-dimensional VLA exceeds a 2 GiB PTRDIFF_MAX legitimately, and
+  // SV-COMP runs those tasks with this flag set (#7306).
+  if (options.get_bool_option("no-vla-size-check"))
+    return;
+
+  expr2tc bound_on = code.source;
+  cur_state->rename(bound_on);
+  simplify(bound_on);
+
+  if (
+    !is_unsignedbv_type(bound_on->type) ||
+    bound_on->type->get_width() < ptraddr_type2()->get_width())
+    return;
+
+  if (is_constant_int2t(bound_on))
+  {
+    // An assumption would be identically false here and would prove the whole
+    // program rather than bound it, so report the declaration instead. R39's
+    // principle at R40's site.
+    if (to_constant_int2t(bound_on).value > max_object_size())
+      claim(gen_false_expr(), "object size exceeds PTRDIFF_MAX");
+    return;
+  }
+
+  // Above the cap the object's upper offsets read negative in the pointer
+  // comparator (R37). A declaration has no failure outcome to report, so the
+  // bound is an assumption, as alloca's is. R40.
+  assume(lessthanequal2tc(
+    bound_on, constant_int2tc(bound_on->type, max_object_size())));
+}
+
+expr2tc goto_symext::symex_mem(
+  const bool is_malloc,
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guard2tc &guard)
+{
+  if (is_nil_expr(lhs))
+    return expr2tc(); // ignore
+
+  // size
+  type2tc type = code.alloctype;
+  expr2tc size = code.size;
+  bool size_is_one = false;
+  // Nil unless a symbolic size needs bounding at max_object_size().
+  expr2tc fits;
+
+  if (is_nil_type(type))
+    type = char_type2();
+
+  if (is_nil_expr(size))
+    size_is_one = true;
+  else
+  {
+    cur_state->rename(size);
+
+    // Classify the request on unconditionally simplified copies: --no-simplify
+    // must not blind the checks below, because an unsatisfiable request that
+    // reaches the address-space model is encoded as a contradiction rather
+    // than as a failed allocation, which silently proves the whole program.
+    bool is_negative_size = false;
+    if (is_typecast2t(size))
+    {
+      // Detect a negative request before the fold to typecast(size_t, -N)
+      // erases the sign; to_uint64() below discards it, so malloc(-1) would
+      // otherwise be mistaken for a 1-byte allocation.
+      expr2tc inner = to_typecast2t(size).from;
+      simplify(inner);
+      is_negative_size = is_constant_int2t(inner) &&
+                         to_constant_int2t(inner).value.is_negative();
+    }
+
+    expr2tc folded = size;
+    simplify(folded);
+
+    if (is_constant_int2t(folded))
+    {
+      const BigInt &val = to_constant_int2t(folded).value;
+      if (is_negative_size || val.is_negative() || val > max_object_size())
+      {
+        // A constant request cannot be bounded by assumption the way a symbolic
+        // one is: the assumption is identically false, so every execution is
+        // pruned and the whole program is proved. Report the request instead --
+        // an over-large alloca is undefined, not a failure C defines. R39.
+        if (!is_malloc)
+          claim(gen_false_expr(), "alloca: size exceeds PTRDIFF_MAX");
+        // Return NULL even under --force-malloc-success, matching real OS
+        // behaviour.
+        expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
+        if (null_sym->type != lhs->type)
+          null_sym = typecast2tc(lhs->type, null_sym);
+        symex_assign(code_assign2tc(lhs, null_sym), true, guard);
+        return null_sym;
+      }
+    }
+
+    do_simplify(size);
+    if (is_constant_int2t(size))
+    {
+      if (to_constant_int2t(size).value == 1)
+        size_is_one = true;
+    }
+    else if (
+      is_unsignedbv_type(size->type) &&
+      size->type->get_width() >= ptraddr_type2()->get_width())
+    {
+      // A symbolic request can exceed the bound too, and the layout constraints
+      // are asserted unconditionally, so leaving it unbounded makes the formula
+      // UNSAT — silently pruning the executions the program asked about instead
+      // of failing the allocation.
+      if (!is_malloc)
+        // alloca has no failure outcome to report -- C leaves an over-large
+        // request undefined, and stdlib.c's getenv writes through the result
+        // without checking it -- so bound it by assumption. R38.
+        assume(lessthanequal2tc(
+          size, constant_int2tc(size->type, max_object_size())));
+      else if (options.get_bool_option("force-malloc-success"))
+        // Only layability, and by assumption: branching to NULL costs
+        // 21 s -> >400 s on github_1352-success-32bit, and assuming
+        // max_object_size() instead would prune malloc((size_t)negative)
+        // vacuously (github_1631_nondet_compact). R38 covers the gap.
+        assume(lessthanequal2tc(
+          size, constant_int2tc(size->type, max_layable_size())));
+      else
+      {
+        fits = lessthanequal2tc(
+          size, constant_int2tc(size->type, max_object_size()));
+        // Zero size on the failing branch keeps the object layable; NULL is
+        // handed back below.
+        size = if2tc(size->type, fits, size, gen_zero(size->type));
+      }
+    }
+  }
+
+  unsigned int &dynamic_counter = get_dynamic_counter();
+  dynamic_counter++;
+
+  // value
+  symbolt symbol;
+
+  symbol.name = "dynamic_" + i2string(dynamic_counter) +
+                (size_is_one ? "_value" : "_array");
+
+  symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
+              id2string(symbol.name);
+  symbol.lvalue = true;
+
+  typet renamedtype = ns.follow(migrate_type_back(type));
+  {
+    typet t;
+    if (size_is_one)
+      t = renamedtype;
+    else
+    {
+      t = typet(typet::t_array);
+      t.subtype() = renamedtype;
+      t.size(migrate_expr_back(size));
+    }
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
+
+  symbol.mode = "C";
+
+  new_context.add(symbol);
+
+  // Without a record at the branch point phi_function skips this object, so a
+  // write inside a branch would apply on both paths (#6798).
+  expr2tc dyn_l1_sym = symbol2tc(get_empty_type(), symbol.id);
+  cur_state->top().level1.get_ident_name(dyn_l1_sym);
+  cur_state->level2.declare(
+    renaming::level2t::name_record(to_symbol2t(dyn_l1_sym)));
+
+  type2tc new_type = migrate_symbol_type(symbol);
+
+  type2tc rhs_type;
+  expr2tc rhs_ptr_obj;
+
+  if (size_is_one)
+  {
+    rhs_type = migrate_symbol_type(symbol);
+    rhs_ptr_obj = symbol2tc(new_type, symbol.id);
+  }
+  else
+  {
+    type2tc subtype = migrate_type(symbol.get_type().subtype());
+    expr2tc sym = symbol2tc(new_type, symbol.id);
+    expr2tc idx_val = gen_long(size->type, 0L);
+    expr2tc idx = index2tc(subtype, sym, idx_val);
+    do_simplify(idx);
+    rhs_type = migrate_type(symbol.get_type().subtype());
+    rhs_ptr_obj = idx;
+  }
+
+  expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
+  do_simplify(rhs_addrof);
+
+  expr2tc rhs = rhs_addrof;
+  expr2tc ptr_rhs = rhs;
+  guard2tc alloc_guard = cur_state->guard;
+
+  if (!is_nil_expr(fits))
+  {
+    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
+    alloc_guard.add(fits);
+    rhs = if2tc(rhs->type, fits, rhs, null_sym);
+    ptr_rhs = rhs;
+  }
+
+  // alloca has no NULL outcome to explore: C17 7.22.3p1 is about malloc.
+  if (is_malloc)
+    offer_malloc_zero_null(size, rhs, alloc_guard);
+
+  if (!options.get_bool_option("force-malloc-success") && is_malloc)
+  {
+    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
+    expr2tc choice = sideeffect2tc(
+      get_bool_type(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(choice);
+
+    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+    alloc_guard.add(choice);
+
+    ptr_rhs = rhs;
+  }
+
+  if (rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
+
+  cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
+
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+
+  if (size_is_one)
+    track_new_pointer(ptr_obj, new_type, guard);
+  else
+    track_new_pointer(ptr_obj, new_type, guard, size);
+
+  alloc_guard.append(guard);
+  dynamic_memory.emplace_back(
+    rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+
+  return to_address_of2t(rhs_addrof).ptr_obj;
+}
+
+void goto_symext::track_new_pointer(
+  const expr2tc &ptr_obj,
+  const type2tc &new_type,
+  const guard2tc &guard,
+  const expr2tc &size)
+{
+  // Simplify ptr_obj before using it in any expressions
+  expr2tc simplified_ptr_obj = ptr_obj;
+  do_simplify(simplified_ptr_obj);
+
+  // Also update all the accounting data.
+
+  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
+  expr2tc sym = symbol2tc(sym_type, dyn_info_arr_name);
+
+  expr2tc idx = index2tc(get_bool_type(), sym, ptr_obj);
+  expr2tc truth = gen_true_expr();
+  symex_assign(code_assign2tc(idx, truth), true, guard);
+
+  expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
+  expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, ptr_obj);
+  truth = gen_true_expr();
+  symex_assign(code_assign2tc(valid_index_expr, truth), true, guard);
+
+  type2tc sz_sym_type = array_type2tc(size_type2(), expr2tc(), true);
+  expr2tc sz_sym = symbol2tc(sz_sym_type, alloc_size_arr_name);
+  expr2tc sz_index_expr = index2tc(size_type2(), sz_sym, ptr_obj);
+
+  expr2tc object_size_exp =
+    is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
+
+  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true, guard);
+}
+
+void goto_symext::symex_free(const expr2tc &expr)
+{
+  // expr is any 1-op code kind: code_free (from symex_other) or
+  // code_cpp_delete / code_cpp_del_array (delegated via symex_cpp_delete).
+  // All have exactly one sub-expression — the pointer being freed.
+  assert(
+    is_code_free2t(expr) || is_code_cpp_delete2t(expr) ||
+    is_code_cpp_del_array2t(expr));
+  const expr2tc &operand = *expr->get_sub_expr(0);
+
+  // Trigger 'free'-mode dereference of this pointer. Should generate various
+  // dereference failure callbacks.
+  expr2tc tmp = operand;
+  dereference(tmp, dereferencet::FREE);
+
+  // Don't rely on the output of dereference in free mode; instead fetch all
+  // the internal dereference state for pointed at objects, and creates claims
+  // that if pointed at, their offset is zero.
+  internal_deref_items.clear();
+  tmp = operand;
+
+  // Create temporary, dummy, dereference
+  tmp = dereference2tc(get_uint8_type(), tmp);
+  dereference(tmp, dereferencet::INTERNAL);
+
+  // Only add assertions to check pointer offset if pointer check is enabled
+  if (!options.get_bool_option("no-pointer-check"))
+  {
+    // Get all dynamic objects allocated using alloca
+    std::vector<allocated_obj> allocad;
+    for (auto const &item : dynamic_memory)
+      if (item.auto_deallocd)
+        allocad.push_back(item);
+
+    for (auto const &item : internal_deref_items)
+    {
+      guard2tc g = cur_state->guard;
+      g.add(item.guard);
+
+      // Check if the offset of the object being freed is zero
+      expr2tc offset = item.offset;
+      expr2tc eq = equality2tc(offset, gen_ulong(0));
+
+      // C++ permits `delete p` where p points at a *base subobject* of the
+      // complete object *only when that base has a virtual destructor* -- the
+      // virtual deleting destructor adjusts the interior pointer back to the
+      // complete object before freeing. Under the nested base-subobject model
+      // such an upcast pointer legitimately carries a non-zero offset. The
+      // deallocation below keys on pointer_object(), so it already clears the
+      // right allocation; only this assertion needs to admit those offsets.
+      // A base with no virtual destructor is statically bound: operator delete
+      // then receives the unadjusted subobject pointer, a genuine bad-free
+      // ([expr.delete]p3), so its offset stays rejected. Arbitrary interior
+      // pointers (delete (p+1), delete &arr[1]) are also still rejected, and C
+      // free() is unaffected. See #1866, #3894, #6263.
+      if (is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr))
+      {
+        std::vector<std::pair<BigInt, type2tc>> base_offsets;
+        collect_base_subobject_offsets(
+          item.object->type, ns, BigInt(0), base_offsets);
+        for (const auto &bo : base_offsets)
+          if (bo.first != 0 && base_has_virtual_destructor(bo.second, ns))
+            eq =
+              or2tc(eq, equality2tc(offset, gen_ulong(bo.first.to_uint64())));
+      }
+
+      g.guard_expr(eq);
+      if (options.get_bool_option("conv-assert-to-assume"))
+        assume(eq);
+      else
+        claim(eq, "Operand of free must have zero pointer offset");
+
+      // Check if we are not freeing an dynamic object allocated using alloca
+      for (auto const &a : allocad)
+      {
+        expr2tc alloc_obj = get_base_object(a.obj);
+        while (is_if2t(alloc_obj))
+        {
+          const if2t &the_if = to_if2t(alloc_obj);
+          assert(is_symbol2t(the_if.false_value));
+          assert(to_symbol2t(the_if.false_value).thename == "NULL");
+          alloc_obj = get_base_object(the_if.true_value);
+        }
+        assert(is_symbol2t(alloc_obj));
+        const irep_idt &id_alloc_obj = to_symbol2t(alloc_obj).thename;
+        const irep_idt &id_item_obj = to_symbol2t(item.object).thename;
+        // Check if the object allocated with alloca is the same
+        // as given in the free function
+        if (id_alloc_obj == id_item_obj)
+        {
+          expr2tc noteq = notequal2tc(alloc_obj, item.object);
+          g.guard_expr(noteq);
+          if (options.get_bool_option("conv-assert-to-assume"))
+            assume(noteq);
+          else
+            claim(noteq, "dereference failure: invalid pointer freed");
+        }
+      }
+    }
+  }
+
+  // Clear the alloc bit.
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), operand);
+  dereference(ptr_obj, dereferencet::READ);
+
+  expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
+  expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, ptr_obj);
+  expr2tc falsity = gen_false_expr();
+  symex_assign(code_assign2tc(valid_index_expr, falsity), true);
+}

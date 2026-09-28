@@ -1,0 +1,4 @@
+CORE
+cbmc_widening_mul_fail.goto
+--binary
+^VERIFICATION FAILED$

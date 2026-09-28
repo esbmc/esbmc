@@ -1,4 +1,6 @@
-FUTURE
+THOROUGH
 main.py
 --force-malloc-success --unwind 9
 ^VERIFICATION FAILED$
+^  file .*main\.py line 14 column 0
+^  FAILED +\[global\.assertion\.\d+\] +line +14 +assertion .* == 3$

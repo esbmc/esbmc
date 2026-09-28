@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract bump --goto-functions-only
+old_region_i_bump_call_\d+ < 5

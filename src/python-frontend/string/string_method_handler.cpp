@@ -1,43 +1,43 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/exception_utils.h>
-#include <python-frontend/python_int_overflow.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/tuple_handler.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/string/string_builder.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/type.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/irep/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <climits>
 #include <iomanip>
 #include <limits>
 #include <optional>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <vector>
 
-#include <util/message.h>
+#include <util/message/message.h>
 
 using namespace python_expr;
 
@@ -107,26 +107,6 @@ static char to_upper_char(char c)
   return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 }
 
-// Render a constant float as CPython's str() / empty-"{}" field does. A
-// whole-number float below 1e16 renders as its integer digits plus ".0"
-// (str(1.0) == "1.0", str(1000000.0) == "1000000.0"); the default ostream
-// format drops the ".0" and switches to exponential at 1e6, so fold that case
-// exactly. Every other float keeps the ostream behaviour, which already matches
-// CPython's exponential form for |x| >= 1e16 and |x| < 1e-4.
-static std::string format_float_value(double d)
-{
-  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
-  {
-    std::string s = std::to_string(static_cast<long long>(d));
-    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
-      s.insert(s.begin(), '-');
-    return s + ".0";
-  }
-  std::ostringstream oss;
-  oss << d;
-  return oss.str();
-}
-
 static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
@@ -151,7 +131,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (ov.is_boolean())
       return ov.get<bool>() ? "-1" : "0";
     if (ov.is_number_float())
-      return format_float_value(-ov.get<double>());
+      return string_handler::cpython_float_str(-ov.get<double>());
   }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
@@ -170,7 +150,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (arg["value"].is_number_integer())
       return std::to_string(arg["value"].get<long long>());
     if (arg["value"].is_number_float())
-      return format_float_value(arg["value"].get<double>());
+      return string_handler::cpython_float_str(arg["value"].get<double>());
     throw std::runtime_error("format() unsupported constant type");
   }
 
@@ -490,9 +470,41 @@ using string_call_utils::required_arg_node_or_throw;
 using string_call_utils::required_constant_int_arg;
 using string_call_utils::resolve_positional_or_keyword_arg;
 
+// Fold subject.replace(old, new[, count]) when every operand is a
+// compile-time constant str. Without it the call reaches
+// __python_str_replace with all arguments constant and the model's bounded
+// scan-and-copy loops unwind against --unwind rather than the known length.
+static std::optional<exprt> fold_constant_replace(
+  const nlohmann::json &call_json,
+  const std::function<exprt()> &get_receiver_expr,
+  python_converter &converter)
+{
+  exprt recv = get_receiver_expr();
+  if (recv.is_symbol())
+  {
+    const symbolt *sym =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (sym && !sym->get_value().is_nil())
+      recv = sym->get_value();
+  }
+
+  // bytes are modelled as an int array; folding one through the char-array
+  // string builder would retype it.
+  const typet &recv_type = recv.type();
+  if (!recv_type.is_array() || recv_type.subtype() != char_type())
+    return std::nullopt;
+
+  std::string folded;
+  if (!string_handler::extract_constant_string(call_json, converter, folded))
+    return std::nullopt;
+
+  return converter.get_string_builder().build_string_literal(folded);
+}
+
 std::optional<exprt> dispatch_replace_method(
   string_handler &self,
   const std::string &method_name,
+  const nlohmann::json &call_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,
@@ -501,6 +513,11 @@ std::optional<exprt> dispatch_replace_method(
 {
   if (method_name != "replace")
     return std::nullopt;
+
+  if (
+    std::optional<exprt> folded =
+      fold_constant_replace(call_json, get_receiver_expr, converter))
+    return folded;
 
   ensure_allowed_keywords(method_name, keyword_values, {"old", "new", "count"});
   if (args.size() > 3)
@@ -911,10 +928,61 @@ static search_args_parsedt parse_string_search_args(
   return parsed;
 }
 
+// Fold subject.find/rfind/index/rindex(sub) when both operands are
+// compile-time constant str. Otherwise the call reaches __python_str_find with
+// two constant arrays and the model's bounded scan loops unwind against
+// --unwind rather than the known length.
+//
+// index/rindex raise ValueError when the needle is absent, so a miss falls
+// through to the model rather than being folded to a value here.
+static std::optional<exprt> fold_constant_search(
+  const std::string &method_name,
+  const nlohmann::json &receiver_json,
+  const nlohmann::json &args,
+  const exprt &receiver,
+  python_converter &converter)
+{
+  exprt recv = receiver;
+  if (recv.is_symbol())
+  {
+    const symbolt *sym =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (sym && !sym->get_value().is_nil())
+      recv = sym->get_value();
+  }
+
+  // bytes are an int array and carry their own literal fold; only str here.
+  const typet &recv_type = recv.type();
+  if (!recv_type.is_array() || recv_type.subtype() != char_type())
+    return std::nullopt;
+
+  std::string haystack, needle;
+  if (
+    args.size() != 1 ||
+    !string_handler::extract_constant_string(
+      receiver_json, converter, haystack) ||
+    !string_handler::extract_constant_string(args[0], converter, needle))
+    return std::nullopt;
+
+  const bool reverse = (method_name == "rfind" || method_name == "rindex");
+  const std::size_t hit =
+    reverse ? haystack.rfind(needle) : haystack.find(needle);
+
+  if (hit == std::string::npos)
+  {
+    if (method_name == "index" || method_name == "rindex")
+      return std::nullopt;
+    return from_integer(-1, int_type());
+  }
+
+  return from_integer(static_cast<long long>(hit), int_type());
+}
+
 std::optional<exprt> dispatch_search_string_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
+  const nlohmann::json &receiver_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,
@@ -927,6 +995,11 @@ std::optional<exprt> dispatch_search_string_methods(
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
+
+  if (
+    std::optional<exprt> folded = fold_constant_search(
+      method_name, receiver_json, args, obj_expr, converter))
+    return folded;
   search_args_parsedt parsed =
     parse_string_search_args(method_name, args, keyword_values, converter);
 
@@ -1165,9 +1238,14 @@ std::optional<exprt> dispatch_decode_join_method(
 
   if (method_name == "join")
   {
-    ensure_allowed_keywords(method_name, keyword_values, {});
+    // str.join takes exactly one iterable, so any other arity is not a string
+    // method at all. Decline instead of throwing, or an object with its own
+    // join() -- queue.Queue.join(), threading's Thread.join() -- never reaches
+    // instance dispatch, because every attribute call is offered to the string
+    // handler first (#6639).
     if (args.size() != 1)
-      throw std::runtime_error("join() takes exactly one argument");
+      return std::nullopt;
+    ensure_allowed_keywords(method_name, keyword_values, {});
     return self.handle_str_join(call_json);
   }
 
@@ -2444,6 +2522,7 @@ exprt string_handler::build_string_index_result(
   if_stmt.cond() = not_found;
   if_stmt.then_case() = raise_code;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(find_result);
@@ -3290,10 +3369,7 @@ exprt string_handler::build_partition_tuple(
     tuple_type.tag(tag);
     set_python_aggregate_kind(tuple_type, "tuple");
 
-    // V.3: build the tuple struct value in IREP2, back-migrating once, then
-    // restore the full type -- migrate_type drops the frontend-only
-    // aggregate-kind marker read by the `in`/membership/subscript dispatch
-    // (see tuple_handler::get_tuple_expr).
+    // V.3: build the tuple struct value in IREP2, back-migrating once.
     std::vector<expr2tc> members;
     members.reserve(elems.size());
     for (const exprt *e : elems)
@@ -3304,7 +3380,6 @@ exprt string_handler::build_partition_tuple(
     }
     exprt tuple_expr =
       migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
-    tuple_expr.type() = tuple_type;
     tuple_expr.location() = location;
     return tuple_expr;
   };

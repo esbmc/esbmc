@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ValueError: cannot select an axis to squeeze out which has size not equal to one

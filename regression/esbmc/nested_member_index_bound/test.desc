@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 8
+^VERIFICATION SUCCESSFUL$
+^Generated 35 VCC\(s\), 1 remaining after simplification

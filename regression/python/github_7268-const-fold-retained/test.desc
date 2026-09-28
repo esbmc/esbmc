@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto-functions-only
+ASSERT 1 // assertion proven by constant evaluation

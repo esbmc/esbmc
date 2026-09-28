@@ -1,5 +1,6 @@
-KNOWNBUG
+CORE
 main.cpp
 --unwind 4 --no-unwinding-assertions --std c++17
 
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
+^  file .*main\.cpp line 64 column 5 function main$

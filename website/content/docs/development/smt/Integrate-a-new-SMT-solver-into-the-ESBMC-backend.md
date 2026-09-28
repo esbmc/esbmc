@@ -158,10 +158,10 @@ depth of the existing Z3/Bitwuzla entries.
 
 ## 9. CI integration
 
-- [`build.yml`](https://github.com/esbmc/esbmc/blob/master/.github/workflows/build.yml)
+- [`aux-build.yml`](https://github.com/esbmc/esbmc/blob/master/.github/workflows/aux-build.yml)
   — add a matrix entry that installs `NewSolver`, configures with
   `-DENABLE_NEWSOLVER=On`, and runs the regression label subset against it.
-- [`release.yml`](https://github.com/esbmc/esbmc/blob/master/.github/workflows/release.yml)
+- [`ci-release.yml`](https://github.com/esbmc/esbmc/blob/master/.github/workflows/ci-release.yml)
   — ensure the released artifact links/bundles the library (and installs the DLL
   on Windows, cf. the Z3 `install(FILES …)` block). Decide and document
   static-vs-dynamic linking. **Watch for static-link symbol clashes**: the

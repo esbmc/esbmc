@@ -1,12 +1,12 @@
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_functions.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/prefix.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/base/prefix.h>
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,

@@ -1,0 +1,5 @@
+CORE
+main.c
+--64
+^\s*FAILED\s+\[.*\]\s+line\s+[0-9]+\s+dereference failure: Access to object out of bounds$
+^VERIFICATION FAILED$

@@ -1,0 +1,11 @@
+properties:
+
+  # A TON on a graphical rung path must delay the coil: the enable can be held
+  # while the coil is still off, because the timer has not yet reached PT. A
+  # resolver that wired the coil straight to the contact (dropping the block from
+  # the path) would make q track a, and this state would be unreachable.
+  - id: P1
+    kind: reachability
+    expression: "a && !q"
+    description: "Enable held while the on-delay has not yet elapsed"
+    justification: "Only an on-delay timer on the path can hold the coil off while its enable is high"

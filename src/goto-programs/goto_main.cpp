@@ -1,5 +1,5 @@
 #include <goto-programs/goto_convert_class.h>
-#include <util/rename.h>
+#include <util/symtab/rename.h>
 
 void goto_convertt::new_name(symbolt &symbol)
 {

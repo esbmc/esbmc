@@ -1,7 +1,7 @@
 #pragma once
 
 #include "irep2/irep2_expr.h"
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 
 namespace smt_fp_rounding_utils
 {

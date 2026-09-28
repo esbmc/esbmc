@@ -1,0 +1,278 @@
+#include <util/arith/bitvector.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
+
+exprt gen_zero(const typet &type)
+{
+  return gen_zero(type, false);
+}
+
+exprt gen_zero(const typet &type, bool array_as_array_of)
+{
+  exprt result;
+
+  const std::string type_id = type.id_string();
+
+  result = exprt("constant", type);
+
+  if (type_id == "complex")
+  {
+    const typet &base = to_complex_type(type).base_type();
+    result = struct_exprt(type);
+    result.copy_to_operands(gen_zero(base, array_as_array_of));
+    result.copy_to_operands(gen_zero(base, array_as_array_of));
+  }
+  else if (
+    type_id == "unsignedbv" || type_id == "signedbv" || type_id == "floatbv" ||
+    type_id == "fixedbv" || type_id == "c_enum")
+  {
+    std::string value;
+    unsigned width = bv_width(type);
+
+    for (unsigned i = 0; i < width; i++)
+      value += '0';
+
+    result.value(value);
+  }
+  else if (type_id == "bool")
+  {
+    result.make_false();
+  }
+  else if (type_id == "pointer")
+  {
+    result.value("NULL");
+  }
+  else if (type_id == "struct")
+  {
+    result = struct_exprt(type);
+    for (auto const &comp : to_struct_type(type).components())
+      result.copy_to_operands(gen_zero(comp.type(), array_as_array_of));
+  }
+  else if (type_id == "array")
+  {
+    if (array_as_array_of || to_array_type(type).size().id() == "infinity")
+    {
+      result = array_of_exprt(gen_zero(type.subtype(), true), type);
+    }
+    else
+    {
+      array_typet arr_type = to_array_type(type);
+
+      BigInt size = string2integer(arr_type.size().value().as_string(), 2);
+      for (uint64_t i = 0; i < size.to_uint64(); i++)
+        result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
+    }
+  }
+  else if (type_id == "vector")
+  {
+    vector_typet vec = to_vector_type(type);
+    BigInt size = string2integer(vec.size().value().as_string(), 2);
+    for (uint64_t i = 0; i < size.to_uint64(); i++)
+      result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
+  }
+  else if (type_id == "union")
+  {
+    union_exprt new_result(type);
+    if (to_union_type(type).components().size() > 0)
+    {
+      new_result.set_component_name(
+        to_union_type(type).components().begin()->name());
+
+      new_result.copy_to_operands(gen_zero(
+        to_union_type(type).components().begin()->type(), array_as_array_of));
+    }
+
+    result = new_result;
+  }
+  else
+    result.make_nil();
+
+  return result;
+}
+
+exprt gen_one(const typet &type)
+{
+  const std::string &type_id = type.id_string();
+  exprt result = exprt("constant", type);
+
+  if (type_id == "bool")
+  {
+    result.value("1");
+  }
+  else if (type_id == "complex")
+  {
+    const typet &base = to_complex_type(type).base_type();
+    result = struct_exprt(type);
+    result.copy_to_operands(gen_one(base));
+    result.copy_to_operands(gen_zero(base));
+  }
+  else if (type_id == "unsignedbv" || type_id == "signedbv")
+  {
+    std::string value;
+    for (int i = 0; i < atoi(type.width().c_str()) - 1; i++)
+      value += '0';
+    value += '1';
+    result.value(value);
+  }
+  else if (type_id == "fixedbv")
+  {
+    fixedbvt fixedbv;
+    fixedbv.spec = to_fixedbv_type(type);
+    fixedbv.from_integer(1);
+    result = fixedbv.to_expr();
+  }
+  else if (type_id == "floatbv")
+  {
+    ieee_floatt ieee_float;
+    ieee_float.spec = to_floatbv_type(type);
+    ieee_float.from_integer(1);
+    result = ieee_float.to_expr();
+  }
+  else
+    result.make_nil();
+
+  return result;
+}
+
+exprt gen_not(const exprt &op)
+{
+  exprt result("not", typet("bool"));
+  result.copy_to_operands(op);
+  return result;
+}
+
+exprt boolean_negate(const exprt &src)
+{
+  if (src.id() == "not" && src.operands().size() == 1)
+    return src.op0();
+
+  if (src.is_true())
+    return false_exprt();
+
+  if (src.is_false())
+    return true_exprt();
+
+  return not_exprt(src);
+}
+
+exprt gen_binary(
+  const std::string &id,
+  const typet &type,
+  const exprt &op1,
+  const exprt &op2)
+{
+  exprt result(id, type);
+  result.copy_to_operands(op1, op2);
+  return result;
+}
+
+exprt gen_binary(
+  irep_idt &id,
+  const typet &type,
+  const exprt &op1,
+  const exprt &op2)
+{
+  exprt result(id, type);
+  result.copy_to_operands(op1, op2);
+  return result;
+}
+
+exprt gen_and(const exprt &op1, const exprt &op2)
+{
+  return gen_binary("and", typet("bool"), op1, op2);
+}
+
+exprt gen_and(const exprt &op1, const exprt &op2, const exprt &op3)
+{
+  exprt result("and", typet("bool"));
+  result.copy_to_operands(op1, op2, op3);
+  return result;
+}
+
+exprt gen_or(const exprt &op1, const exprt &op2)
+{
+  return gen_binary("or", typet("bool"), op1, op2);
+}
+
+exprt gen_or(const exprt &op1, const exprt &op2, const exprt &op3)
+{
+  exprt result("or", typet("bool"));
+  result.copy_to_operands(op1, op2, op3);
+  return result;
+}
+
+void gen_binary(exprt &expr, const std::string &id, bool default_value)
+{
+  if (expr.operands().size() == 0)
+  {
+    if (default_value)
+      expr.make_true();
+    else
+      expr.make_false();
+  }
+  else if (expr.operands().size() == 1)
+  {
+    exprt tmp;
+    tmp.swap(expr.op0());
+    expr.swap(tmp);
+  }
+  else
+  {
+    expr.id(id);
+    expr.type() = typet("bool");
+  }
+}
+
+void gen_and(exprt &expr)
+{
+  gen_binary(expr, "and", true);
+}
+
+void gen_or(exprt &expr)
+{
+  gen_binary(expr, "or", false);
+}
+
+exprt symbol_expr(const symbolt &symbol)
+{
+  exprt tmp("symbol", symbol.get_type());
+  tmp.identifier(symbol.id);
+  tmp.name(symbol.name);
+  return tmp;
+}
+
+pointer_typet gen_pointer_type(const typet &subtype)
+{
+  pointer_typet tmp;
+  tmp.subtype() = subtype;
+  return tmp;
+}
+
+exprt gen_address_of(const exprt &op)
+{
+  exprt tmp("address_of", gen_pointer_type(op.type()));
+  tmp.copy_to_operands(op);
+  return tmp;
+}
+
+exprt gen_boolean(bool value)
+{
+  exprt expr("constant", typet("bool"));
+
+  if (value == true)
+    expr.make_true();
+  else
+    expr.make_false();
+
+  return expr;
+}
+
+bool expr_has_floatbv(const exprt &src)
+{
+  auto t = src.type();
+  return t.is_vector() ? to_vector_type(t).subtype().is_floatbv()
+                       : t.is_floatbv();
+}

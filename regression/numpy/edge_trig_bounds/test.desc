@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
---incremental-bmc
+--incremental-bmc --fp2bv
 ^VERIFICATION SUCCESSFUL$

@@ -1,6 +1,6 @@
-# An escaping return/break/continue in the else clause of a try/finally would
-# bypass the appended finally, so this shape is refused with a clean diagnostic
-# rather than a silently-wrong verdict. (Valid Python; refused, not verified.)
+# An escaping return in the else clause of a try/finally gets the finally
+# copied in front of it, so it no longer bypasses it. The else clause runs on
+# the no-exception path, so f() returns 3 as under CPython (issue #7076).
 def f():
     try:
         pass

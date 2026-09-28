@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*module-file-not-found)[\s\S]*\Z

@@ -1,0 +1,8 @@
+CORE
+main.c
+--k-induction --multi-property --max-k-step 8
+^Solution found by the inductive step \(k = 2\)$
+^VERIFICATION SUCCESSFUL$
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+9\s+assertion i <= n$
+^\*\* 0 of 1 properties failed, 1 passed$
+^No bug has been found in the base case$

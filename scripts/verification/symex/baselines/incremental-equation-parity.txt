@@ -1,0 +1,8 @@
+# H-B8 (--smt-during-symex) known divergences.
+# See the header of simplify-parity.txt for the baseline policy.
+
+# R19 -- with --multi-property, a violable claim that is not the last property
+# is individually reported as PASSED (I13, runtime_encoded_equationt ctx stack).
+github_1408
+github_1890_1
+github_2629

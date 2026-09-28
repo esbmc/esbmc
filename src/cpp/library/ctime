@@ -1,1 +1,23 @@
+#pragma once
+
 #include <time.h>
+
+// [ctime.syn]: <ctime> declares the C time facilities in namespace std.
+// Mirrors the cstring/cstdlib models.
+namespace std
+{
+using ::clock_t;
+using ::size_t;
+using ::time_t;
+using ::tm;
+
+using ::asctime;
+using ::clock;
+using ::ctime;
+using ::difftime;
+using ::gmtime;
+using ::localtime;
+using ::mktime;
+using ::strftime;
+using ::time;
+} // namespace std

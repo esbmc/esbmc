@@ -5,9 +5,9 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <ld-frontend/property/property_encoder.h>
-#include <util/c_expr2string.h>
-#include <util/config.h>
-#include <util/message.h>
+#include <util/lang/c_expr2string.h>
+#include <util/config/config.h>
+#include <util/message/message.h>
 #include <iostream>
 
 languaget *new_ld_language()

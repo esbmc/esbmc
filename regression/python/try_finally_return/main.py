@@ -1,12 +1,33 @@
-# A return/break/continue that escapes a try with a finally is rejected: the
-# current lowering appends the finally on the fall-through path, which such a
-# jump would bypass. ESBMC refuses it rather than return an unsound verdict.
-# (This is valid Python, so it runs cleanly under CPython.)
-def h() -> int:
+# `return` inside a try/finally runs the finally on its way out, and the
+# returned expression is evaluated before the finally does. Issue #7076: this
+# used to be refused during conversion.
+
+
+class Box:
+    def __init__(self) -> None:
+        self.v: int = 0
+
+
+def cleanup_runs(b: Box) -> int:
     try:
         return 1
     finally:
-        pass
+        b.v = 7
 
 
-print(h())
+def value_is_evaluated_first() -> int:
+    x: int = 1
+    try:
+        return x
+    finally:
+        x = 2
+
+
+def main() -> None:
+    b = Box()
+    assert cleanup_runs(b) == 1
+    assert b.v == 7
+    assert value_is_evaluated_first() == 1
+
+
+main()

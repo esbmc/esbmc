@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_ensures_fail.goto
+--binary --function twice
+^VERIFICATION FAILED$

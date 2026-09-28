@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--data-races-check
+^VERIFICATION FAILED$
+^.*assertion g == 6$

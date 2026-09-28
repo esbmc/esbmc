@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property --assertion-coverage --k-induction --base-k-step 2 --max-k-step 4
+^Coverage goals: 1 ✓ 1 reached$
+^COVERAGE ANALYSIS INCOMPLETE
+reason: the run ended at the maximum k step
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z

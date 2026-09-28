@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 13
+^VERIFICATION SUCCESSFUL$
+^Symex completed in: [0-9.]+s \([0-9]{1,4} assignments\)$

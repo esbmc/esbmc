@@ -177,7 +177,7 @@ bool assign_params_as_non_det::runOnFunction(
       ASSIGN,
       l);
 
-    // Wrap the four instructions just inserted (DECL flag, ASSIGN flag, DECL
+    // Wrap the six instructions just inserted (DECL flag, ASSIGN flag, DECL
     // obj, ASSIGN obj, ASSUME, ASSIGN addr) so they are guarded by the flag.
     //! hack: we use !flag (forward jump over the body) so the condition is not
     //! counted in goto_coverage.

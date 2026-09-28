@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Generate the ESBMC Doxygen API reference from the single .doxygen config.
+# Generate the ESBMC Doxygen API reference from the single .config/Doxyfile config.
 #
 # Usage: scripts/build-docs.sh [OUTPUT_DIRECTORY [HTML_OUTPUT]]
 #
@@ -20,7 +20,7 @@ version=$(sed -nE 's/^set\(ESBMC_VERSION_(MAJOR|MINOR|PATCH) ([0-9]+)\).*/\2/p' 
 if [ $# -ge 1 ]; then mkdir -p "$1"; fi
 
 {
-  cat .doxygen
+  cat .config/Doxyfile
   echo "PROJECT_NUMBER = $version"
   if [ $# -ge 1 ]; then echo "OUTPUT_DIRECTORY = $1"; fi
   if [ $# -ge 2 ]; then echo "HTML_OUTPUT = $2"; fi

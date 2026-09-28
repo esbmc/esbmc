@@ -60,6 +60,15 @@ int get_list_compare_depth()
   return DEFAULT_LIST_COMPARE_DEPTH;
 }
 
+const nlohmann::json &unwrap_optional_annotation(const nlohmann::json &ann)
+{
+  if (
+    ann.is_object() && ann.contains("value") && ann["value"].is_object() &&
+    ann["value"].value("id", "") == "Optional" && ann.contains("slice"))
+    return ann["slice"];
+  return ann;
+}
+
 // Extract element type from annotation
 typet get_elem_type_from_annotation(
   const nlohmann::json &node,
@@ -104,7 +113,7 @@ typet get_elem_type_from_annotation(
   if (!node.contains("annotation") || !node["annotation"].is_object())
     return typet();
 
-  const auto &annotation = node["annotation"];
+  const auto &annotation = unwrap_optional_annotation(node["annotation"]);
 
   // Case 1: Direct subscript annotation like list[str]
   if (annotation.is_object() && annotation.contains("slice"))
@@ -179,7 +188,7 @@ typet infer_elem_type_from_call_return(
   if (func["_type"] == "Name" && func.contains("id") && func["id"].is_string())
   {
     nlohmann::json function_node =
-      json_utils::find_function(ast["body"], func["id"].get<std::string>());
+      json_utils::try_find_function(ast["body"], func["id"].get<std::string>());
     return get_elem_type_from_return_annotation(function_node, type_handler_);
   }
 
@@ -204,7 +213,7 @@ typet infer_elem_type_from_call_return(
         json_utils::find_class(ast["body"], class_name);
       if (!class_node.is_null() && class_node.contains("body"))
       {
-        nlohmann::json function_node = json_utils::find_function(
+        nlohmann::json function_node = json_utils::try_find_function(
           class_node["body"], func["attr"].get<std::string>());
         return get_elem_type_from_return_annotation(
           function_node, type_handler_);
@@ -216,3 +225,36 @@ typet infer_elem_type_from_call_return(
 }
 
 } // namespace python_list_detail
+
+typet python_list::infer_literal_element_type(
+  const nlohmann::json &list_literal)
+{
+  nlohmann::json first_elem = json_utils::get_list_element(list_literal, 0);
+  if (first_elem.is_null() || first_elem.empty())
+    return typet();
+
+  const type_handler &th = converter_.get_type_handler();
+
+  // A heterogeneous int/float literal is promoted to a homogeneous double list
+  // at construction (python_list::get, promote_ints), so every element is a
+  // double in __ESBMC_float_buf. Read it as a double regardless of which
+  // element the index selects; the first element's int type misreads the bits.
+  if (
+    list_literal["_type"] == "List" && list_literal.contains("elts") &&
+    list_literal["elts"].is_array())
+  {
+    bool has_int = false, has_float = false;
+    for (const auto &e : list_literal["elts"])
+    {
+      const typet t = th.get_typet(e);
+      if (t.is_floatbv())
+        has_float = true;
+      else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
+        has_int = true;
+    }
+    if (has_int && has_float)
+      return double_type();
+  }
+
+  return th.get_typet(first_elem);
+}

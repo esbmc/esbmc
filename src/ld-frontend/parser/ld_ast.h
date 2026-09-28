@@ -22,9 +22,20 @@ enum class ContactKind
   NormallyClosed // --[/]--
 };
 
+// IEC 61131-3 §2.5.1.1 transition-sensing contacts. An edge contact conducts
+// for exactly one scan: the scan in which the operand takes the sensed
+// transition, measured against its value at the previous scan.
+enum class ContactEdge
+{
+  None,
+  Rising, // --[P]--
+  Falling // --[N]--
+};
+
 struct ContactNode
 {
   ContactKind kind = ContactKind::NormallyOpen;
+  ContactEdge edge = ContactEdge::None;
   std::string variable; // PLCopen XML identifier
   LdLocation loc;
 };
@@ -171,6 +182,10 @@ struct VarDecl
   VarKind kind = VarKind::BOOL;
   bool is_input = false;
   bool is_output = false;
+  // Initial value for numeric variables. Graphical LD wires FB presets from
+  // <inVariable> literals rather than declared variables, so the synthesised
+  // preset symbol carries the literal here.
+  long long init_value = 0;
   LdLocation loc;
 };
 

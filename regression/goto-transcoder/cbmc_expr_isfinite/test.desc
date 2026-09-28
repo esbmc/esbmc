@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_isfinite.goto
+--binary
+^VERIFICATION SUCCESSFUL$

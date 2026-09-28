@@ -1,0 +1,4 @@
+CORE
+main.jimple
+--irep2-bodies --force-malloc-success --goto-functions-only
+^ +ASSIGN \$i0=7;\n +// \d+ file OriginalKt\.jimple function main_0\n +ASSIGN \$i1=NONDET\(signed int\);\n +// \d+ no location\n +ASSIGN @parameter0=\$i0;\n +// \d+ no location\n +FUNCTION_CALL:  \$i2=twice_1\(\$i0\)\n +// \d+ no location\n +END_FUNCTION$

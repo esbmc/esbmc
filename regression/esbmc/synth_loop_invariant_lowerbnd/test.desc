@@ -1,0 +1,5 @@
+CORE
+main.c
+--synthesise-loop-invariants --unwind 12
+^Synthesised loop invariants for 1 loop$
+^VERIFICATION SUCCESSFUL$

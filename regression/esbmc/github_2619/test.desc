@@ -1,4 +1,4 @@
 CORE
 main.c
 --parallel-solving --k-induction
-2 failed$
+^\*\* 2 of 2 properties failed$

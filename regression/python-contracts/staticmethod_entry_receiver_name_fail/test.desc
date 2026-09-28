@@ -1,0 +1,4 @@
+CORE
+main.py
+--enforce-contract add --function add
+^ERROR: --function: 'add' is a @staticmethod taking a parameter named 'self', which the frontend binds to the enclosing class; rename it to harness this function$

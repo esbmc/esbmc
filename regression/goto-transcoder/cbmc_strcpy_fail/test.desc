@@ -1,0 +1,5 @@
+CORE
+cbmc_strcpy_fail.goto
+--binary --unwind 10
+^VERIFICATION FAILED$
+assertion

@@ -1,0 +1,5 @@
+CORE
+st.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(ST body of POU 'Mutex', tier=2\)$
+^ERROR: PARSING ERROR$

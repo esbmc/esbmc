@@ -2,7 +2,7 @@
 
 Tooling for the legacy-IREP → IREP2 migration of the goto-program pipeline.
 This was **Phase 0** of the migration recorded in
-[`docs/irep2-migration.md`](../../docs/irep2-migration.md); the migration
+[`docs/roadmap/irep2-migration.md`](../../docs/roadmap/irep2-migration.md); the migration
 itself completed under tracking issue
 [esbmc/esbmc#4715](https://github.com/esbmc/esbmc/issues/4715) (closed).
 The harness is retained as the differential goto-binary diff and surface-ratio
@@ -103,7 +103,7 @@ Therefore:
   regression-verdict comparison** instead: capture the pass/fail set on a clean
   baseline build, then confirm the post-change build yields an identical set
   (verdicts are unaffected by model symbol-naming nondeterminism). See
-  `docs/irep2-migration.md` §8.1 for the full rationale and procedure.
+  `docs/roadmap/irep2-migration.md` §8.1 for the full rationale and procedure.
 - If you must diff across builds, first extend `irep2_canon` to mask the loci
   above **and** the host's actual `$TMPDIR` shape (the current rules cover
   `/tmp/esbmc-…` and `/var/folders/…/T/esbmc…` but not a nested

@@ -3,4 +3,4 @@ main.c
 --branch-coverage --no-slice
 \ba = 1\b
 \bb = 2\b
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

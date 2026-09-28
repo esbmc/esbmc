@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow --unwind 1 --memory-leak-check --no-unwinding-assertions --gcse
+dereference failure: NULL pointer
+^VERIFICATION FAILED$

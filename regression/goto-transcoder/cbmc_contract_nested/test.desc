@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_nested.goto
+--binary --function caller
+^VERIFICATION SUCCESSFUL$

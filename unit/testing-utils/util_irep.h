@@ -1,7 +1,7 @@
 // Helper to generate types, expressions
 #pragma once
-#include <util/expr.h>
-#include <util/std_types.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_types.h>
 
 enum class Builtin_Type
 {

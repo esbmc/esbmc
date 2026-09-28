@@ -1,4 +1,17 @@
 # example_14_concurrency.py
+#
+# KNOWNBUG (#4566). The frontend gaps this test was filed against are closed:
+# threading.Thread, queue.Queue, callables stored in instance fields and
+# random.choice all convert now, and the program reaches symex instead of being
+# rejected at parse time. What is left is convergence -- --incremental-bmc does
+# not terminate on it.
+#
+# Do not "fix" this by switching to a bounded run. `--unwind N` reports
+# VERIFICATION FAILED at every N tried (1..4), but the violated property is
+# `unwinding assertion loop 192` at run_guarded_commands, not the
+# `assert number < 100` this test exists to catch -- a vacuous pass of the
+# expected-FAILED contract. Adding --no-unwinding-assertions to reach the real
+# assertion does not converge either.
 import random
 import threading
 import time

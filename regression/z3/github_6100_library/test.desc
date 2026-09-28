@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--z3
+^VERIFICATION FAILED$

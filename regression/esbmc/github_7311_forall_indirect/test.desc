@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line \d+\s+all zero$

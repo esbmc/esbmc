@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 12 --no-standard-checks --bitwuzla
+^VERIFICATION SUCCESSFUL$

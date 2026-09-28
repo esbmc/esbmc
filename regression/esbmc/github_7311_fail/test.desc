@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 800
+^VERIFICATION FAILED$
+assertion c\.buf\[c\.buflen - 1\] != 0

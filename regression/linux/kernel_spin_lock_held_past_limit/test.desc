@@ -1,0 +1,4 @@
+CORE
+test.c
+--unwind 400 --context-bound 2
+^VERIFICATION SUCCESSFUL$

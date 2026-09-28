@@ -1,0 +1,4 @@
+CORE
+main.jimple
+--irep2-bodies --force-malloc-success --goto-functions-only
+^ +ASSIGN \$i0=\(signed int\)\(\$i1 > 1 && \$i1 < 5\);$

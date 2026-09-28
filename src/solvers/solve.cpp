@@ -20,6 +20,7 @@ solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
 solver_creator create_new_bitwuzla_solver;
 solver_creator create_new_bitwuzllob_solver;
+solver_creator create_new_neurosym_solver;
 
 static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #ifdef SMTLIB
@@ -50,15 +51,20 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
   {"bitwuzla", create_new_bitwuzla_solver},
 #endif
 #ifdef BITWUZLLOB
-  {"bitwuzllob", create_new_bitwuzllob_solver}
+  {"bitwuzllob", create_new_bitwuzllob_solver},
+#endif
+#ifdef NEUROSYM
+  {"neurosym", create_new_neurosym_solver}
 #endif
 };
 
-// Order encodes default priority: first compiled-in entry (excluding smtlib)
-// is selected when no solver is explicitly requested.
+// Order encodes default priority: the first compiled-in entry that is not
+// smtlib, bitwuzllob or neurosym is selected when no solver is explicitly
+// requested (those three depend on external programs; see pick_default_solver).
 static const std::string all_solvers[] = {
   "smtlib",
   "bitwuzllob",
+  "neurosym",
   "bitwuzla",
   "boolector",
   "z3",
@@ -72,9 +78,11 @@ static std::string pick_default_solver()
 {
   for (const std::string &name : all_solvers)
   {
-    // smtlib and bitwuzllob depend on external programs the user must
-    // configure, so they are never picked implicitly.
-    if (name == "smtlib" || name == "bitwuzllob" || !esbmc_solvers.count(name))
+    // smtlib, bitwuzllob and neurosym depend on external programs the user
+    // must configure, so they are never picked implicitly.
+    if (
+      name == "smtlib" || name == "bitwuzllob" || name == "neurosym" ||
+      !esbmc_solvers.count(name))
       continue;
     log_status("No solver specified; defaulting to {}", name);
     return name;
@@ -163,7 +171,7 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (
     options.get_bool_option("int-encoding") &&
     (solver_name == "bitwuzla" || solver_name == "bitwuzllob" ||
-     solver_name == "boolector"))
+     solver_name == "neurosym" || solver_name == "boolector"))
   {
     log_error(
       "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "

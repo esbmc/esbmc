@@ -1,0 +1,6 @@
+CORE
+main.c
+--z3 --unwind 13 --no-standard-checks
+^VERIFICATION FAILED$
+^Violated property:$
+\A(?![\s\S]*Can't get boolean value)[\s\S]*\Z

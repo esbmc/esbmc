@@ -18,11 +18,13 @@
 #     found for which ESBMC reports SUCCESSFUL while CPython's assertion fails.
 #     Pinned by regression/python/github_5931_float_knownbug.
 #   str: sound but loud, in both directions. Pinned by github_5931_str_knownbug.
-#   tuple: UNSOUND. The frontend types tuple elements as int, so the heap layout
-#     comes out wrong and ESBMC can report SUCCESSFUL on a program CPython
-#     rejects. This is a pre-existing frontend defect, not a property of this
-#     model -- it reproduces identically against the previous model. Pinned by
-#     github_5931_tuple_knownbug_fail.
+#   tuple: modelled. The `list[int]` annotation above is overridden by the
+#     caller's actual element type (GitHub #5936), so a tuple-keyed heap --
+#     `heappush(h, (priority, task))`, the canonical idiom -- comes out with the
+#     right layout. Pinned by github_5931_tuple_fail. One heap element type per
+#     program: the frontend emits one GOTO function per Python function, so a
+#     program that heapifies tuples *and* pops from an int heap leaves this
+#     annotation in place and stays unsound (github_5931_mixed_heap_knownbug_fail).
 
 
 def _siftdown(heap: list[int], startpos: int, pos: int) -> None:

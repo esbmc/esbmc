@@ -12,6 +12,7 @@
 int fst(const int vec[SIZE])
 {
   __ESBMC_requires(vec != NULL);
+  __ESBMC_requires(__ESBMC_is_fresh(vec, SIZE * sizeof(int)));
   __ESBMC_requires(0 < SIZE);
   __ESBMC_assigns();
   __ESBMC_ensures(__ESBMC_return_value == vec[0]);

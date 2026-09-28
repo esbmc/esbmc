@@ -1,0 +1,11 @@
+properties:
+
+  # 18 fully-connected 2-wide stages: 2**18 simple rail-to-coil paths, but only
+  # 37 nodes. A resolver that enumerated paths spent 112s of GOTO-creation time
+  # here and needed a search bound to reject the program outright; per-node
+  # power-flow accumulation is linear in the network and resolves it in ~0.1s.
+  # The coil is reachable, so the invariant is violated rather than vacuous.
+  - id: P1
+    kind: invariant
+    expression: "!out"
+    description: "Coil never energises"

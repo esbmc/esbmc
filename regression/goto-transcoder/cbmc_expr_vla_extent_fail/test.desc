@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_vla_extent_fail.goto
+--binary --unwind 10
+^VERIFICATION FAILED$

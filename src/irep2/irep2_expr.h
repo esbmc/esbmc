@@ -1,11 +1,11 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
-#include <util/config.h>
-#include <util/c_types.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
-#include <util/location.h>
+#include <util/config/config.h>
+#include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -49,7 +49,7 @@ enum class constant_string_kindt
  *                       across functions).
  *   - level2_global   — like level2, but for a globally-scoped symbol.
  *
- * See src/goto-symex/renaming.cpp for the exact transitions. */
+ * See src/goto-symex/state/renaming.cpp for the exact transitions. */
 enum class symbol_renaming_level
 {
   level0,
@@ -60,7 +60,8 @@ enum class symbol_renaming_level
 };
 
 /** Debug-only consistency check for arith_2ops operands and result type.
- *  Called from add2t/sub2t/mul2t/div2t/modulus2t constructors; no-op in Release. */
+ *  Called from add2t/sub2t/mul2t/div2t/modulus2t constructors; no-op in
+ * Release. */
 void assert_arith_2ops_consistency(
   const type2tc &t,
   expr2t::expr_ids id,
@@ -161,6 +162,7 @@ irep_typedefs(ieee_add);
 irep_typedefs(ieee_sub);
 irep_typedefs(ieee_mul);
 irep_typedefs(ieee_div);
+irep_typedefs(ieee_rem);
 irep_typedefs(ieee_fma);
 irep_typedefs(ieee_sqrt);
 irep_typedefs(modulus);
@@ -281,13 +283,23 @@ class constant_int2t : public expr2t
 {
 public:
   BigInt value;
+  /// How the literal was written in the source, as `#cformat` records it.
+  /// Unreflected: two constants of the same value and type are the same
+  /// constant however they were spelled, so this must not reach hashing or
+  /// equality. Kept because `c_expr2string` prefers it over deriving the text
+  /// from the type, and dropping it re-renders every printed literal
+  /// (docs/roadmap/frontends-to-irep2.md §63).
+  irep_idt cformat;
 
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
    */
-  constant_int2t(const type2tc &type, const BigInt &input)
-    : expr2t(type, constant_int_id), value(input)
+  constant_int2t(
+    const type2tc &type,
+    const BigInt &input,
+    const irep_idt &fmt = irep_idt())
+    : expr2t(type, constant_int_id), value(input), cformat(fmt)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -299,6 +311,7 @@ public:
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_int2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -311,8 +324,7 @@ class constant_fixedbv2t : public expr2t
 public:
   fixedbvt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value fixedbvt object containing number we'll be operating on
    */
   constant_fixedbv2t(const fixedbvt &value)
@@ -333,19 +345,25 @@ class constant_floatbv2t : public expr2t
 {
 public:
   ieee_floatt value;
+  /// The literal's source spelling; see constant_int2t::cformat. Unreflected
+  /// for the same reason, and load-bearing for the same printer, which derives
+  /// an `f`/`l` suffix when it is absent.
+  irep_idt cformat;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
-  constant_floatbv2t(const ieee_floatt &value)
-    : expr2t(value.spec.get_type(), constant_floatbv_id), value(value)
+  constant_floatbv2t(const ieee_floatt &value, const irep_idt &fmt = irep_idt())
+    : expr2t(value.spec.get_type(), constant_floatbv_id),
+      value(value),
+      cformat(fmt)
   {
   }
   constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &constant_floatbv2t::value);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -453,9 +471,10 @@ public:
     // carry: the Python frontend stores class instances with a by-name
     // symbol_type and resolves it lazily, so migrating a constant aggregate
     // before the IREP2-native adjuster has followed the type would otherwise
-    // abort here. The adjuster re-establishes the strong invariant before symex;
-    // no frontend builds a constant_struct2t pre-adjust today, so this disjunct
-    // is staged enabling infra exercised by the --python-irep2-adjust path.
+    // abort here. The adjuster re-establishes the strong invariant before
+    // symex; no frontend builds a constant_struct2t pre-adjust today, so this
+    // disjunct is staged enabling infra exercised by the --python-irep2-adjust
+    // path.
     assert(
       type->type_id == type2t::struct_id ||
       type->type_id == type2t::complex_id ||
@@ -475,6 +494,12 @@ public:
  *  to the members described in the type. However, it seems the values pumped
  *  at us by CBMC only ever have one member (at position 0) representing the
  *  most recent value written to the union.
+ *
+ *  The one exception is a union type with no members, which occupies no
+ *  storage and so has no member to initialise: gen_zero answers with a
+ *  zero-member constant here. Such a constant is a zero-width value and must
+ *  not reach dereference, whose constant_union2t arm asserts the single
+ *  initialiser this comment describes.
  */
 class constant_union2t : public expr2t
 {
@@ -494,7 +519,15 @@ public:
       datatype_members(members),
       init_field(std::move(if_))
   {
-    assert(is_union_type(type));
+    // A symbol_id type is permitted on the same terms constant_struct2t
+    // permits it above: a transient pre-resolution state. migrate_expr builds
+    // a union literal from `constant_union2tc(migrate_type(expr.type()), ...)`
+    // (migrate.cpp:923), and a frontend whose union tag is still by-name at
+    // that point yields symbol_type2t rather than union_type2t -- which aborted
+    // here for 12 of regression/esbmc's tests under --clang-c-irep2-adjust,
+    // while the identical shape passed for structs. The asymmetry was an
+    // oversight, not a rule: NDEBUG builds already construct these nodes.
+    assert(is_union_type(type) || type->type_id == type2t::symbol_id);
     // smt_conv.cpp's counterexample reconstruction intentionally builds unions
     //  with multiple members (see TODO in get_by_ast), so we can't check if the
     // union has at most 1 member initializer, with
@@ -537,10 +570,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant array.
- *  Contains a vector of array elements, pretty self explanatory. Only valid if
- *  its type has a constant sized array, can't have constant arrays of dynamic
- *  or infinitely sized arrays.
+/** Constant vector.
+ *  Holds one expression per lane of a vector-typed literal (the vector
+ *  analogue of constant_array2t).
  */
 class constant_vector2t : public expr2t
 {
@@ -548,8 +580,8 @@ public:
   std::vector<expr2tc> datatype_members;
 
   /** Primary constructor.
-   *  @param type Type of this array, must be a constant sized array
-   *  @param membrs Vector of elements in this array
+   *  @param type Vector type of this literal
+   *  @param members Vector of per-lane element expressions
    */
   constant_vector2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr2t(type, constant_vector_id), datatype_members(members)
@@ -623,8 +655,8 @@ public:
   {
     /* At some point in the past, symbols named "NULL" and "0" were equivalent.
      * The symbol called "0" should no longer be created for uniformity reasons.
-     * Confirm that here, since support for it has been removed from smt_solver_baset.
-     * No other reason to disallow "0" as a symbol. */
+     * Confirm that here, since support for it has been removed from
+     * smt_solver_baset. No other reason to disallow "0" as a symbol. */
     assert(init != "0");
   }
 
@@ -699,6 +731,18 @@ public:
   expr2tc from;
   expr2tc rounding_mode;
 
+  /// The base class this cast converts to, when the frontend could not route
+  /// the conversion through a `@base@` component and the displacement has to
+  /// be applied once the layout is padded (clang_c_adjust_expr.cpp, #7025).
+  /// Empty on every other cast. Carried because an IREP2 adjust pass cannot
+  /// otherwise tell such a cast apart, and reading the base subobject without
+  /// the displacement silently proves false assertions
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+  irep_idt derived_to_base;
+
+  /// The mirror: a downcast whose operand points at a base subobject.
+  bool base_to_derived;
+
   /** Primary constructor.
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
@@ -707,8 +751,14 @@ public:
   typecast2t(
     const type2tc &type,
     const expr2tc &from_,
-    const expr2tc &rounding_mode_)
-    : expr2t(type, typecast_id), from(from_), rounding_mode(rounding_mode_)
+    const expr2tc &rounding_mode_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
+    : expr2t(type, typecast_id),
+      from(from_),
+      rounding_mode(rounding_mode_),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -717,10 +767,16 @@ public:
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
    */
-  typecast2t(const type2tc &type, const expr2tc &from_)
+  typecast2t(
+    const type2tc &type,
+    const expr2tc &from_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
     : expr2t(type, typecast_id),
       from(from_),
-      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
+      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode")),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -730,7 +786,9 @@ public:
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
     &typecast2t::from,
-    &typecast2t::rounding_mode);
+    &typecast2t::rounding_mode,
+    &typecast2t::derived_to_base,
+    &typecast2t::base_to_derived);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1117,7 +1175,8 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 #undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
 
 /** `code_*` declaration carrying `(type, irep_idt name)`. Used for
- *  `code_decl`/`code_dead`. */
+ *  `code_dead`. (code_decl2t is defined separately below because it also
+ *  carries an initializer.) */
 #define ESBMC_DEFINE_CODE_DECL(name)                                           \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1255,6 +1314,10 @@ ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_add);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_sub);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_mul);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
+/** IEEE 754 remainder (SMT-LIB fp.rem, C's remainder()): x - n*y with
+ *  n = rne(x/y). Exact for every input, so the rounding mode the macro
+ *  carries is ignored; it exists only to share the 2-op plumbing. */
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_rem);
 #undef ESBMC_DEFINE_IEEE_ARITH_2OP
 
 /** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
@@ -1272,7 +1335,7 @@ public:
    *  @param type Type of this expr.
    *  @param v1 First operand.
    *  @param v2 Second operand.
-   *  @param v3 Second operand.
+   *  @param v3 Third operand.
    *  @param rm rounding mode. */
   ieee_fma2t(
     const type2tc &type,
@@ -1327,8 +1390,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Same-object operation. Checks whether two operands with pointer type have the
- *  same pointer object or not. Always has boolean result.
+/** Same-object operation. Checks whether two operands with pointer type have
+ * the same pointer object or not. Always has boolean result.
  * */
 class same_object2t : public expr2t
 {
@@ -1353,8 +1416,8 @@ public:
 };
 
 /** Extract pointer offset. From an expression of pointer type, produce the
- *  number of bytes difference between where this pointer points to and the start
- *  of the object it points at. */
+ *  number of bytes difference between where this pointer points to and the
+ * start of the object it points at. */
 class pointer_offset2t : public expr2t
 {
 public:
@@ -1391,8 +1454,22 @@ public:
    *         expr is a pointer to this subtype. This is slightly unintuitive,
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
-  address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : expr2t(pointer_type2tc(subtype), address_of_id), ptr_obj(ptrobj)
+  /// Set when the frontend synthesised this address-of rather than the program
+  /// spelling it: the `&f` sugar clang_c_adjust inserts for a function
+  /// designator. clang_c_adjust reads it back to tell `f(x)` (strip the sugar)
+  /// from `(&f)(x)` (a call through a user-written function pointer) -- the two
+  /// carry the same shape and differ only in provenance
+  /// (docs/roadmap/scope-clang-c-irep2.md §35).
+  bool implicit;
+
+  address_of2t(
+    const type2tc &subtype,
+    const expr2tc &ptrobj,
+    bool is_implicit = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : expr2t(pointer_type2tc(subtype, false, rk), address_of_id),
+      ptr_obj(ptrobj),
+      implicit(is_implicit)
   {
     assert(ptrobj->expr_id != expr2t::constant_int_id);
     assert(ptrobj->expr_id != expr2t::address_of_id);
@@ -1401,8 +1478,10 @@ public:
 
   expr2tc do_simplify() const override;
 
-  static constexpr auto fields =
-    std::make_tuple(&expr2t::type, &address_of2t::ptr_obj);
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &address_of2t::ptr_obj,
+    &address_of2t::implicit);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1447,9 +1526,9 @@ public:
 };
 
 /** Update byte. Takes a data object and updates the value of a particular
- *  byte in its byte representation, at a particular offset into the data object.
- *  Output of expression is a new copy of the source object, with the updated
- *  value. */
+ *  byte in its byte representation, at a particular offset into the data
+ * object. Output of expression is a new copy of the source object, with the
+ * updated value. */
 class byte_update2t : public expr2t
 {
 public:
@@ -1505,8 +1584,8 @@ public:
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
    *  @param source Data object to update.
-   *  @param field Field to update - a constant string naming the field if source
-   *         is a struct/union, or an integer index if source is an array. */
+   *  @param field Field to update - a constant string naming the field if
+   * source is a struct/union, or an integer index if source is an array. */
   with2t(
     const type2tc &type,
     const expr2tc &source,
@@ -1559,16 +1638,39 @@ public:
        builds member2t pre-adjust (all go through migrate at goto-convert, which
        is post-adjust), so this disjunct is staged enabling infra, exercised
        once the V.1k converter/adjuster pilot lands. */
+    /* A `pointer_id` source is the same transient state index2t already
+       permits, and for the same reason: a legacy `member` over a pointer base
+       is what the C adjuster's adjust_member rewrites to
+       `member(dereference(base))`, so migrating a symbol value before that arm
+       has run hands one here. index2t's sibling comment names this pairing; the
+       relaxation had been applied there and not here. An `array_id` source is
+       the same thing for adjust_member other branch, which rewrites an array
+       base to `member(index(base, 0))`. */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
       source->type->type_id == type2t::complex_id ||
-      source->type->type_id == type2t::symbol_id);
-    /* member must exist exactly once in the parent struct/union — only checkable
-       once the source type is resolved (skipped for the transient symbol case) */
-    assert(
       source->type->type_id == type2t::symbol_id ||
-      struct_union_get_component_number(source->type, memb).has_value());
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id);
+    /* member must exist exactly once in the parent struct/union — only
+       checkable once the source type is resolved (skipped for the transient
+       cases above; the lookup throws on an unresolved source -- without that
+       guard `python2goto` cannot build the Python OM library, §162.2).
+
+       A code-typed member is the exception, and it is checked the other way
+       round: it names a method, methods are no part of a struct_type2t, so it
+       must NOT resolve to a component. What verifies such a member exists at
+       all is upstream, where a namespace is in hand --
+       clang_cpp_adjust_irep2::adjust_cpp_member looks it up by name and asserts
+       the symbol is code (docs/roadmap/frontends-to-irep2.md §76). */
+    if (
+      source->type->type_id != type2t::symbol_id &&
+      source->type->type_id != type2t::pointer_id &&
+      source->type->type_id != type2t::array_id)
+      assert(
+        struct_union_get_component_number(source->type, memb).has_value() ==
+        (type->type_id != type2t::code_id));
 #endif
   }
   member2t(const member2t &ref) = default;
@@ -1640,12 +1742,16 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
     : expr2t(type, index_id), source_value(source), index(idx)
   {
-    /* A `symbol_id` source is permitted only as a transient pre-resolution
-       state (V.1k two-phase source invariant, see member2t above); the
-       IREP2-native adjuster resolves it to an array/vector before symex. */
+    /* A `symbol_id` or `pointer_id` source is permitted only as a transient
+       pre-resolution state (V.1k two-phase source invariant, see member2t
+       above); the IREP2-native adjuster resolves a symbol source to an
+       array/vector and rewrites a pointer source `p[i]` to `*(p+i)` before
+       symex. A pointer source arises when a legacy `index` over a decayed
+       array (a Python string, char*) is migrated via get_value2(). */
     assert(
       is_array_type(source) || is_vector_type(source) ||
-      source->type->type_id == type2t::symbol_id);
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id);
   }
   index2t(const index2t &ref) = default;
 
@@ -1730,7 +1836,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
+/** Record a dynamicly allocated object. Exclusively for use in pointer
+ * analysis.
  * */
 class dynamic_object2t : public expr2t
 {
@@ -1806,25 +1913,52 @@ public:
   type2tc alloctype;
   sideeffect_allockind kind;
 
+  /// This call constructs an object. The converter's `#constructor` marker,
+  /// which has nowhere else to live in IREP2 -- the callee's `constructor`
+  /// return type migrates to empty (migrate.cpp) and cannot be restored from
+  /// it. clang_cpp_maint::adjust_init reads the marker *after* this pass, so a
+  /// body written back without it loses a global's construction
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.17).
+  ///
+  /// Declared next to `kind`, where it packs into existing padding, and *not*
+  /// reflected: listing it in `fields` makes the primary constructor's
+  /// parameter order stop matching the field order (`location` sits between),
+  /// which is what supports_with_type_v tests -- with_type then rejects every
+  /// side effect at run time. Like `location`, it is therefore carried but not
+  /// compared, and dropped by a with_type rebuild, which reconstructs from
+  /// `fields` alone.
+  bool constructor;
+
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
   /** Primary constructor.
    *  @param t Type this side-effect evaluates to.
    *  @param operand Not really certain. Sometimes turns up in string-irep.
    *  @param sz Size of dynamic allocation to make.
    *  @param alloct Type of piece of data to allocate.
-   *  @param a Vector of arguments to function call. */
+   *  @param a Vector of arguments to function call.
+   *  @param loc Source position of the side effect itself. A call in a
+   *  sub-expression is the case that needs it: the enclosing statement's
+   *  location names the statement, not the callee, so a consumer that falls
+   *  back to it reports the wrong column (scope-clang-c-irep2.md §110.3). */
   sideeffect2t(
     const type2tc &t,
     const expr2tc &oper,
     const expr2tc &sz,
     const std::vector<expr2tc> &a,
     const type2tc &alloct,
-    sideeffect_allockind k)
+    sideeffect_allockind k,
+    const locationt &loc = locationt(),
+    bool ctor = false)
     : expr2t(t, sideeffect_id),
       operand(oper),
       size(sz),
       arguments(a),
       alloctype(alloct),
-      kind(k)
+      kind(k),
+      constructor(ctor),
+      location(loc)
   {
     if (k == sideeffect_allockind::alloca)
       assert(oper->type == sz->type);
@@ -2381,6 +2515,25 @@ class sideeffect_assign2t : public expr2t
 {
 public:
   irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
+
+  /// This assignment is a constructor's member initialiser. The C++ adjust
+  /// pass leaves such an lhs alone: a reference member is being *bound* here,
+  /// and reading it through would copy the referent instead
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.16). The converter marks the lhs
+  /// with `#member_init`, which has nowhere else to live in IREP2.
+  ///
+  /// Declared next to `op` deliberately: it packs into that field's padding, so
+  /// the class does not grow and fields_cover_class's slack is unaffected.
+  /// Placed after `location` the compiler packs it into the location's padding
+  /// and the invariant underflows instead.
+  ///
+  /// Not reflected, for the reason `sideeffect2t::constructor` is not: listing
+  /// it makes the field order stop matching the primary constructor's parameter
+  /// order (`location` sits between), which is what supports_with_type_v tests,
+  /// and every with_type on an assignment then aborts (§7.2). A with_type
+  /// rebuild carries it through the specialization in irep2_expr.cpp.
+  bool member_init;
+
   expr2tc lhs;
   expr2tc rhs;
   locationt location; // not reflected: source loc travels with the stmt
@@ -2391,8 +2544,14 @@ public:
     const irep_idt &o,
     const expr2tc &l,
     const expr2tc &r,
-    const locationt &loc = locationt())
-    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r), location(loc)
+    const locationt &loc = locationt(),
+    bool member_init_ = false)
+    : expr2t(t, sideeffect_assign_id),
+      op(o),
+      member_init(member_init_),
+      lhs(l),
+      rhs(r),
+      location(loc)
   {
   }
   sideeffect_assign2t(const sideeffect_assign2t &ref) = default;

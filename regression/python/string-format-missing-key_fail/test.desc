@@ -1,3 +1,4 @@
 CORE
 main.py
-^VERIFICATION FAILED$
+
+^ERROR: format\(\) missing keyword argument$

@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --claim-fingerprint-dump -
+^CLAIM-FP [0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9]+\s+UNSAT\s
+^VERIFICATION SUCCESSFUL$

@@ -267,7 +267,7 @@ exprt python_list::build_split_list(
     symbolt new_symbol;
     new_symbol.name = func_name;
     new_symbol.id = func_name;
-    new_symbol.set_type(func_type);
+    new_symbol.set_type(migrate_type(func_type));
     new_symbol.mode = "C";
     new_symbol.module = "python";
     new_symbol.location = location;
@@ -322,8 +322,8 @@ exprt python_list::build_split_list(
 
   // Record element type as string to ensure correct comparisons on parts[i].
   typet elem_type = converter.get_type_handler().build_array(char_type(), 0);
-  list_type_map[split_list.id.as_string()].push_back(
-    std::make_pair(std::string(), elem_type));
+  converter.get_element_type_registry().record(
+    split_list.id.as_string(), std::string(), elem_type);
 
   return build_symbol(split_list);
 }

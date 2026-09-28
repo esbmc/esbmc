@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc --function is_power_of_two
+^VERIFICATION SUCCESSFUL$

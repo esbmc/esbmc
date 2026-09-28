@@ -1,0 +1,5 @@
+CORE
+main.c
+--falsify-context-bound 2
+^Falsifying with context bound 2$
+^VERIFICATION FAILED$

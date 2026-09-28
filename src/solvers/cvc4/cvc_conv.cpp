@@ -1,5 +1,5 @@
-#include <util/c_types.h>
-#include <util/mp_arith.h>
+#include <util/lang/c_types.h>
+#include <util/arith/mp_arith.h>
 #include <cvc_conv.h>
 
 #define new_ast new_solver_ast<cvc_smt_ast>
@@ -45,11 +45,11 @@ smt_resultt cvc_convt::dec_solve()
   return P_UNSATISFIABLE;
 }
 
-bool cvc_convt::get_bool(smt_astt a)
+tvt cvc_convt::get_bool(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
   CVC4::Expr e = smt.getValue(ca->a);
-  return e.getConst<bool>();
+  return tvt(e.getConst<bool>());
 }
 
 ieee_floatt cvc_convt::get_fpbv(smt_astt a)
@@ -441,6 +441,16 @@ smt_astt cvc_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
     em.mkExpr(
       CVC4::kind::FLOATINGPOINT_DIV,
       to_solver_smt_ast<cvc_smt_ast>(rm)->a,
+      to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
+      to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt cvc_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    em.mkExpr(
+      CVC4::kind::FLOATINGPOINT_REM,
       to_solver_smt_ast<cvc_smt_ast>(lhs)->a,
       to_solver_smt_ast<cvc_smt_ast>(rhs)->a),
     lhs->sort);

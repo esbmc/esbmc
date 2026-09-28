@@ -1,4 +1,5 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
+#include <clang-c-frontend/clang_c_adjust_irep2.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
@@ -12,14 +13,14 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <sstream>
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
 #include <clang-c-frontend/clang_c_lexer.h>
-#include <util/yaml_parser.h>
+#include <util/base/yaml_parser.h>
 
 #include <ac_config.h>
 
@@ -87,6 +88,12 @@ void clang_c_languaget::build_compiler_args(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
     compiler_args.emplace_back("-Dsem_wait=sem_wait_check");
+    // Only the blocking acquisitions need renaming: pthread_rwlock_unlock's
+    // waiter release is inert when nothing registered a waiter.
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
@@ -215,6 +222,11 @@ void clang_c_languaget::build_compiler_args(
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
+  // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
+  // include/esbmc.h so including it anywhere else is an error rather than a
+  // pile of undefined intrinsics (#4610).
+  compiler_args.emplace_back("-D__ESBMC_execution");
+
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
@@ -253,24 +265,25 @@ void clang_c_languaget::build_compiler_args(
     // No longer show compiler warnings for SV-COMP
     compiler_args.push_back("-w");
     compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-    // clang 15+ promotes -Wint-conversion to a hard error by default, which
-    // rejects GCC-acceptable implicit int<->pointer conversions common in
-    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
-    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
-    // typecast logic, so downgrading the diagnostic does not affect semantics.
-    compiler_args.push_back("-Wno-int-conversion");
   }
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
-  // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
-  // of __leaf__ attributes that we don't care about
+  // Suppress -Wunknown-attributes: GCC-preprocessed files carry a bunch of
+  // __leaf__ etc. attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
   // Suppress incompatible-pointer-types universally; became a hard error in
   // LLVM 22 and trips on system headers across all platforms.
   compiler_args.emplace_back("-Wno-incompatible-pointer-types");
+
+  // Likewise int-conversion, which clang 15+ promotes to a hard error while GCC
+  // still accepts it: preprocessed kernel/CIL sources write sentinel pointers
+  // as integer constants (0xffffffffffffffffUL), so erroring out rejects input
+  // a mainstream toolchain compiles. ESBMC models the conversion in its
+  // typecast logic, so downgrading the diagnostic does not affect semantics.
+  compiler_args.emplace_back("-Wno-int-conversion");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */
@@ -308,6 +321,13 @@ write_witness_tmp(const std::string &content)
   std::fwrite(content.c_str(), 1, content.size(), tmp.file());
   std::fflush(tmp.file());
   return tmp;
+}
+
+// Clang returns no unit, rather than one with errors, when it cannot set up the
+// compilation (e.g. an unknown target triple); its diagnostic is already out.
+static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
+{
+  return !unit || unit->getDiagnostics().hasErrorOccurred();
 }
 
 bool clang_c_languaget::parse(const std::string &path)
@@ -392,8 +412,7 @@ bool clang_c_languaget::parse(const std::string &path)
   // Generate ASTUnit and add to our vector
   auto newAST = buildASTs(intrinsics, new_compiler_args);
 
-  // Use diagnostics to find errors, rather than the return code.
-  if (newAST->getDiagnostics().hasErrorOccurred())
+  if (ast_failed(newAST))
     return true;
 
   if (!AST)
@@ -444,9 +463,41 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context);
-  if (adjuster.adjust())
-    return true;
+  // Phase 6 hop-off: with --clang-c-irep2-adjust-only the IREP2-native pass
+  // *replaces* clang_c_adjust rather than shadowing it, mirroring
+  // --python-irep2-adjust-only. §60 shows the dispatcher's arms are one
+  // strongly-coupled component, so they cannot move singly; the divergence
+  // count under this flag is the metric for how much of it has moved
+  // (docs/roadmap/scope-clang-c-irep2.md §66). Default off.
+  const bool irep2_only =
+    config.options.get_bool_option("clang-c-irep2-adjust-only");
+
+  if (!irep2_only)
+  {
+    clang_c_adjust adjuster(new_context);
+    if (config.options.get_bool_option("clang-c-irep2-adjust"))
+      adjuster.set_irep2_owns_arms();
+    if (adjuster.adjust())
+      return true;
+  }
+
+  // Phase 6 C.3. Two modes, and only the second is read-only:
+  // --clang-c-irep2-adjust-only skipped the legacy pass above, so this walk
+  // *is* the adjust pass and writes back every value it changes -- which is why
+  // the divergence count under that flag is the phase's metric, not a
+  // tautology.
+  // --clang-c-irep2-adjust runs both, with set_irep2_owns_arms() ceding the
+  // ported arms, and there the walk only migrates every value through
+  // get_value2(), which aborts on a construct migrate_expr cannot represent.
+  if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
+  {
+    clang_c_adjust_irep2 irep2_adjuster(
+      new_context,
+      irep2_only,
+      config.options.get_bool_option("clang-c-irep2-adjust-writeback-all"));
+    if (irep2_adjuster.adjust())
+      return true;
+  }
 
   return c_link(context, new_context, module);
 }
@@ -458,10 +509,6 @@ void clang_c_languaget::show_parse(std::ostream &)
 
 bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
 {
-// TODO: Check the preprocess situation.
-#if 0
-  return c_preprocess(path, outstream, false);
-#endif
   return false;
 }
 
@@ -505,13 +552,29 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+/* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
+ * names are implicitly declared as int-returning functions and havoc'd, so a
+ * program written against CBMC verifies against nondet rather than against the
+ * memory model. Bodies live in src/c2goto/library/builtin_libs.c. */
+__SIZE_TYPE__ __CPROVER_POINTER_OBJECT(const void *);
+__PTRDIFF_TYPE__ __CPROVER_POINTER_OFFSET(const void *);
+_Bool __CPROVER_same_object(const void *, const void *);
+__SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *);
+_Bool __CPROVER_DYNAMIC_OBJECT(const void *);
+_Bool __CPROVER_LIVE_OBJECT(const void *);
+_Bool __CPROVER_WRITEABLE_OBJECT(const void *);
+_Bool __CPROVER_r_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_w_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_rw_ok(const void *, __SIZE_TYPE__);
+
 // Contract predicate: indicates that a pointer points to freshly allocated memory
-// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
-// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// Signature: __ESBMC_is_fresh(p, size)
+// - p: The pointer itself, passed bare. const so that const-qualified pointer
+//      params are accepted, which C++ overload resolution otherwise rejects.
 // - size: Size in bytes of the memory region
 // Returns: true when memory is successfully allocated (in contract enforcement mode)
 // Note: Used in requires clauses to specify fresh memory allocation requirements
-_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+_Bool __ESBMC_is_fresh(const void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 
@@ -604,7 +667,14 @@ _Noreturn void __ESBMC_unreachable();
  * int i = 0;
  * __ESBMC_forall(&i, i < 0);
  *
- * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0" */
+ * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0"
+ *
+ * The body may call functions built from local declarations, straight-line
+ * assignments, if/else, and loops with a statically constant trip count: such a
+ * callee is summarized (loops unrolled, branches muxed) into a single pure
+ * expression (GitHub #6154).  Functions with a data-dependent trip count,
+ * pointer/array writes, recursion, or other non-summarizable shapes are still
+ * rejected inside a quantifier. */
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);
@@ -637,9 +707,17 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
 #define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
 #define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
 
+/* offsetof has to be an integer constant expression (C23 7.21p3,
+ * [support.types.layout]/1) and this expansion is not, so under it no constexpr
+ * or non-type template argument may be spelt with offsetof. clang's
+ * OffsetOfExpr is lowered in clang_c_convert.cpp and agrees with the expansion
+ * on every layout in regression/esbmc-cpp/cpp/offsetof_layout_parity. C keeps
+ * the expansion because dropping it there exposes #7127, a void*-arithmetic
+ * dereference defect that regression/esbmc/github_2512_* stands on. */
+#ifndef __cplusplus
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
-
+#endif
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)

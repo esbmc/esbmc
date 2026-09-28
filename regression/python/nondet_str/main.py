@@ -1,5 +1,5 @@
-# defined by --nondet-str-length (default = 16). The last character is always
-# the null terminator. The visible string length is therefore <= max_len - 1.
+# defined by --nondet-str-length (default = 16). The NUL terminator gets a byte
+# of its own, so the visible string length is in [0, max_len].
 
 def test_length_is_non_negative():
     s = nondet_str()
@@ -10,8 +10,8 @@ test_length_is_non_negative()
 
 def test_length_respects_upper_bound():
     s = nondet_str()
-    # If max_str_length is N, usable chars are in [0, N-1)
-    assert len(s) < 16  # default max_len = 16 → max visible length = 15
+    # If max_str_length is N, the visible length is in [0, N]
+    assert len(s) <= 16  # default max_len = 16 → max visible length = 16
 
 
 test_length_respects_upper_bound()

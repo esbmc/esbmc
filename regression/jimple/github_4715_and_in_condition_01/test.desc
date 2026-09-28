@@ -1,0 +1,4 @@
+CORE
+main.jimple
+--irep2-bodies --force-malloc-success --goto-functions-only
+^ +IF \$i1 > 1 && \$i1 < 5 THEN GOTO \d+$

@@ -1,0 +1,10 @@
+properties:
+
+  # CV starts at the INT maximum, as a retained counter value would after a long
+  # run. An unsaturated CV+1 overflows on the first rising edge, which is UB and
+  # wraps CV negative so that Q drops back to false. With saturation neither the
+  # overflow VCC nor P1 is violated, so no counterexample is found.
+  - id: P1
+    kind: invariant
+    expression: "CUQ"
+    description: "A counter at its maximum stays at or above any preset"

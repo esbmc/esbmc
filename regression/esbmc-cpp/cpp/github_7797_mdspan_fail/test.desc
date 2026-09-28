@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++23 --unwind 8
+^VERIFICATION FAILED$
+^.*assertion m.stride\(0\) == 1$

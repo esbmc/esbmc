@@ -45,7 +45,8 @@ void printer_init(Printer *self) {
 void fib_reaction_timer(Fib *self, int *out) {
     __ESBMC_requires(self != NULL);
     __ESBMC_requires(out != NULL);
-    
+    __ESBMC_requires(__ESBMC_is_fresh(out, sizeof(int)));
+
     __ESBMC_assigns(self->result, *out);
     // Case 1: if N < 2, then result == 1
     __ESBMC_ensures(__ESBMC_old(self->N) >= 2 || self->result == 1);

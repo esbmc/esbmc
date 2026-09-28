@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3 --context-bound 3 --all-runs
+^Number of generated interleavings: 38$
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+uncaught exception: AttributeError
+^VERIFICATION FAILED$

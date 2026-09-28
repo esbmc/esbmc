@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--clang-cpp-irep2-adjust-only --std c++17
+^VERIFICATION FAILED$
+^  assertion \*a\[0\]\.p == 2 && \*b\[0\]\[0\]\.p == 1$

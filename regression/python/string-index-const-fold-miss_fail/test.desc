@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 16
+^VERIFICATION FAILED$
+^ *FAILED .*ValueError

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line \d+\s+assertion a == 0 && b == 0$
+^VERIFICATION FAILED$

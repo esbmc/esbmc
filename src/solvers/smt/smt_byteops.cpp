@@ -1,5 +1,5 @@
 #include <solvers/smt/smt_solver.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 smt_astt smt_solver_baset::convert_byte_extract(const expr2tc &expr)
 {
@@ -138,11 +138,20 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
+  // ESBMC's own byte_extract2t is byte-granular (an 8-bit result), but a
+  // migrated CBMC byte_extract_little_endian may reinterpret a wider value
+  // The result is data.type wide; when the target isn't a plain bitvector
+  // (pointer/float/aggregate) the extracted bits are reinterpreted into its
+  // sort via a bitcast. For the ubiquitous 8-bit bitvector case out_width is 8
+  // and this collapses to the original single-byte extraction.
+  const unsigned out_width = data.type->get_width();
+  const bool bv_result = is_bv_type(data.type) || is_fixedbv_type(data.type);
+
   if (!is_constant_int2t(offs))
   {
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
-    // bottom byte.
+    // bottom out_width bits.
     if (offs->type->get_width() != src_width)
       offs = typecast2tc(source->type, data.source_offset);
 
@@ -159,9 +168,10 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
     offs = mul2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(8)));
 
     expr2tc shr = lshr2tc(source->type, source, offs);
-    smt_astt ext = convert_ast(shr);
-    smt_astt res = mk_extract(ext, 7, 0);
-    return res;
+    if (bv_result)
+      return mk_extract(convert_ast(shr), out_width - 1, 0);
+    expr2tc bits = extract2tc(get_uint_type(out_width), shr, out_width - 1, 0);
+    return convert_ast(bitcast2tc(data.type, bits));
   }
 
   const constant_int2t &intref = to_constant_int2t(offs);
@@ -172,17 +182,15 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   unsigned int upper, lower;
   if (!data.big_endian)
   {
-    upper = ((intref.value.to_uint64() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = intref.value.to_uint64() * 8;             //i*w;
+    lower = intref.value.to_uint64() * 8; //i*8
+    upper = lower + out_width - 1;        //i*8 + w - 1
   }
   else
   {
     unsigned int max = width - 1;
-    upper = max - (intref.value.to_uint64() * 8);           //max-(i*w);
-    lower = max - ((intref.value.to_uint64() + 1) * 8 - 1); //max-((i+1)*w-1);
+    upper = max - (intref.value.to_uint64() * 8); //max-(i*8)
+    lower = upper - (out_width - 1);              //upper-(w-1)
   }
-
-  smt_astt source_ast = convert_ast(source);
 
   if (width <= upper)
   {
@@ -190,7 +198,10 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
     return mk_smt_symbol("out_of_bounds_byte_extract", s);
   }
 
-  return mk_extract(source_ast, upper, lower);
+  if (bv_result)
+    return mk_extract(convert_ast(source), upper, lower);
+  expr2tc bits = extract2tc(get_uint_type(out_width), source, upper, lower);
+  return convert_ast(bitcast2tc(data.type, bits));
 }
 
 expr2tc
@@ -400,6 +411,19 @@ expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
   return result;
 }
 
+expr2tc byte_update_bit_offset(const byte_update2t &data)
+{
+  const type2tc t = get_uint_type(data.source_value->type->get_width());
+  expr2tc offs = typecast2tc(t, data.source_offset);
+
+  // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+  // offset distance. The rest of these calculations will still apply.
+  if (data.big_endian)
+    offs = sub2tc(t, constant_int2tc(t, type_byte_size(t) - 1), offs);
+
+  return mul2tc(t, offs, constant_int2tc(t, BigInt(8)));
+}
+
 smt_astt
 smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 {
@@ -431,19 +455,7 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
       source = bitcast2tc(get_uint_type(src_width), source);
     }
 
-    expr2tc offs = data.source_offset;
-    if (!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
-      offs = typecast2tc(get_uint_type(src_width), offs);
-
-    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
-    // offset distance. The rest of these calculations will still apply.
-    if (data.big_endian)
-    {
-      auto data_size = type_byte_size(source->type);
-      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
-      expr2tc sub = sub2tc(source->type, data_size_expr, offs);
-      offs = sub;
-    }
+    expr2tc offs = byte_update_bit_offset(data);
 
     expr2tc update = data.update_value;
     if (!is_unsignedbv_type(update) || update->type->get_width() != src_width)
@@ -453,9 +465,7 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 
     // The approach: mask, shift and or. Quite inefficient.
 
-    expr2tc eight = constant_int2tc(get_uint_type(src_width), BigInt(8));
-    expr2tc effs = constant_int2tc(eight->type, BigInt(255));
-    offs = mul2tc(eight->type, offs, eight);
+    expr2tc effs = constant_int2tc(offs->type, BigInt(255));
 
     expr2tc shl = shl2tc(offs->type, effs, offs);
     expr2tc noteffs = bitnot2tc(effs->type, shl);

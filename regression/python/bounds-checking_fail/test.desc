@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 --no-pointer-check  --ir
-^\s*index\s*<\s*l->size\s*$
+^\s*uncaught exception: IndexError\s*$

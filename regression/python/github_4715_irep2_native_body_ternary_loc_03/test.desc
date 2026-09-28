@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 2 --goto-functions-only
+\* #location:\s*\n\s+\* file: [^\n]*main\.py\n\s+\* line: 9\n\s+\* function: in_return
+\* #location:\s*\n\s+\* file: [^\n]*main\.py\n\s+\* line: 13\n\s+\* function: in_statement
+\* #location:\s*\n\s+\* file: [^\n]*main\.py\n\s+\* line: 17\n\s+\* function: in_argument

@@ -1,0 +1,4 @@
+CORE
+cbmc_assume_contradiction.goto
+--binary
+^VERIFICATION SUCCESSFUL$

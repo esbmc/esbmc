@@ -8,7 +8,7 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 #pragma once
 #include <string>
 #include <type_traits>
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 
 CC_DIAGNOSTIC_PUSH()
 // Clang has no support for nonnull-compare warning

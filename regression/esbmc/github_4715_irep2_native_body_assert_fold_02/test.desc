@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto-functions-only
+ASSERT !\(c == 1\) // x
+ASSERT c == 2 // y

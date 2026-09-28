@@ -117,6 +117,69 @@ OutputIterator partial_sum(
   return result;
 }
 
+#if __cplusplus >= 201103L
+// [numeric.iota]
+template <class ForwardIterator, class T>
+void iota(ForwardIterator first, ForwardIterator last, T value)
+{
+  for (; first != last; ++first, ++value)
+    *first = value;
+}
+#endif
+
+#if __cplusplus >= 201703L
+/* [numeric.ops.gcd] / [numeric.ops.lcm]: both are defined on the *absolute*
+ * values, and gcd(0,0) is 0. lcm is written as (|m| / gcd) * |n| so the
+ * division happens before the multiplication, which keeps the intermediate
+ * inside the result type. */
+template <class M, class N>
+constexpr auto gcd(M m, N n) -> decltype(m + n)
+{
+  /* [numeric.ops.gcd] returns common_type_t<M,N>; both operands are required to
+   * be integer types, for which decltype(m + n) is that same type under the
+   * usual arithmetic conversions -- and it does not require <type_traits>. */
+  typedef decltype(m + n) R;
+  R a = m < 0 ? (R)-(R)m : (R)m;
+  R b = n < 0 ? (R)-(R)n : (R)n;
+  while (b != 0)
+  {
+    R t = a % b;
+    a = b;
+    b = t;
+  }
+  return a;
+}
+
+template <class M, class N>
+constexpr auto lcm(M m, N n) -> decltype(m + n)
+{
+  typedef decltype(m + n) R;
+  if (m == 0 || n == 0)
+    return 0;
+  R a = m < 0 ? (R)-(R)m : (R)m;
+  R b = n < 0 ? (R)-(R)n : (R)n;
+  return (a / gcd(a, b)) * b;
+}
+
+// [numeric.ops.reduce]: accumulate with an unspecified order; the model folds
+// left, which is a valid order and keeps the result deterministic.
+template <class InputIterator, class T>
+T reduce(InputIterator first, InputIterator last, T init)
+{
+  for (; first != last; ++first)
+    init = init + *first;
+  return init;
+}
+
+template <class InputIterator, class T, class BinaryOperation>
+T reduce(InputIterator first, InputIterator last, T init, BinaryOperation op)
+{
+  for (; first != last; ++first)
+    init = op(init, *first);
+  return init;
+}
+#endif
+
 } // namespace std
 
 #endif

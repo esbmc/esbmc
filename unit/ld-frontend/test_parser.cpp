@@ -69,6 +69,57 @@ TEST_CASE("unknown rung element throws UnsupportedConstructError", "[parser]")
     parser.parse(fixture("unknown_element.ld")), UnsupportedConstructError);
 }
 
+// Assert the reason, not just the type: parse_rung_element throws the same
+// exception, so the type alone would not distinguish a wrong rejection.
+TEST_CASE("untranslated POU body throws UnsupportedConstructError", "[parser]")
+{
+  auto [file, reason] = GENERATE(
+    std::make_pair("st_program_body.ld", "ST body of POU 'StBody'"),
+    std::make_pair("fbd_program_body.ld", "FBD body of POU 'FbdBody'"),
+    std::make_pair("sfc_with_ld_action.ld", "SFC body of POU 'SfcBody'"));
+
+  PlcopenXmlParser parser;
+  REQUIRE_THROWS_WITH(parser.parse(fixture(file)), Catch::Contains(reason));
+}
+
+// <addData> and <documentation> nest a <body> that is not a POU body.
+TEST_CASE("vendor addData and documentation bodies are ignored", "[parser]")
+{
+  PlcopenXmlParser parser;
+  LdAst ast = parser.parse(fixture("vendor_extension_bodies.ld"));
+
+  REQUIRE(ast.networks.size() == 1);
+  REQUIRE(ast.networks[0].rungs.size() == 1);
+}
+
+// parse() collects no network from a transition body (#7354).
+TEST_CASE("ladder in a transition body is rejected", "[parser]")
+{
+  PlcopenXmlParser parser;
+  REQUIRE_THROWS_WITH(
+    parser.parse(fixture("ld_in_transition.ld")),
+    Catch::Contains("LD body of transition 'T1'"));
+}
+
+TEST_CASE("ladderDiagram body is accepted", "[parser]")
+{
+  PlcopenXmlParser parser;
+  LdAst ast = parser.parse(fixture("ladder_diagram_body.ld"));
+
+  REQUIRE(ast.networks.size() == 1);
+  REQUIRE(ast.networks[0].rungs.size() == 1);
+}
+
+TEST_CASE("empty LD body parses but carries no rung", "[parser]")
+{
+  PlcopenXmlParser parser;
+  LdAst ast = parser.parse(fixture("empty_ld_body.ld"));
+
+  REQUIRE(ast.networks.size() == 1);
+  REQUIRE(ast.networks[0].rungs.empty());
+  REQUIRE(ast.user_fb_instances.empty());
+}
+
 // -----------------------------------------------------------------------
 // TypeChecker tests
 // -----------------------------------------------------------------------
@@ -137,6 +188,19 @@ TEST_CASE("empty coil variable rejected by type checker", "[type_checker]")
 {
   TypeChecker tc;
   REQUIRE_THROWS_AS(tc.check(make_coil_ast("", true)), TypeCheckError);
+}
+
+// An empty scan cycle makes every property vacuous (#7354).
+TEST_CASE("empty scan cycle rejected by type checker", "[type_checker]")
+{
+  LdAst ast;
+  ast.source_file = "<test>";
+  NetworkNode net;
+  net.name = "main";
+  ast.networks.push_back(net);
+
+  TypeChecker tc;
+  REQUIRE_THROWS_AS(tc.check(ast), TypeCheckError);
 }
 
 static LdAst make_timer_ast(bool omit_et)

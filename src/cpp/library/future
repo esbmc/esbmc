@@ -1,0 +1,122 @@
+#ifndef STL_FUTURE
+#define STL_FUTURE
+
+#include <pthread.h>
+#include <mutex>
+#include <condition_variable>
+#include "OM_compiler_defs.h"
+
+// Model of the promise/future half of <future> (github #6319) over ESBMC's
+// pthread model, so a value published by one thread and consumed by another
+// goes through the same lock/wait machinery the rest of the concurrency models
+// use.
+//
+// Not modelled: std::async and packaged_task (both need to launch a callable
+// returning a value, which the <thread> model's function-pointer constructors
+// cannot express), shared_future, exception propagation through
+// set_exception, and the timed waits -- ESBMC has no clock.
+
+#if __cplusplus >= 201103L
+
+namespace std
+{
+template <class T>
+struct __future_state
+{
+  T __v;
+  bool __ready;
+  pthread_mutex_t __m;
+  pthread_cond_t __c;
+};
+
+template <class T>
+class future
+{
+  __future_state<T> *__s;
+
+  template <class U>
+  friend class promise;
+
+  future(const future &);
+  future &operator=(const future &);
+
+public:
+  future() OM_NOEXCEPT : __s(OM_NULLPTR)
+  {
+  }
+
+  future(future &&o) OM_NOEXCEPT : __s(o.__s)
+  {
+    o.__s = OM_NULLPTR;
+  }
+
+  future &operator=(future &&o) OM_NOEXCEPT
+  {
+    __s = o.__s;
+    o.__s = OM_NULLPTR;
+    return *this;
+  }
+
+  bool valid() const OM_NOEXCEPT
+  {
+    return __s != OM_NULLPTR;
+  }
+
+  void wait() const
+  {
+    pthread_mutex_lock(&__s->__m);
+    while (!__s->__ready)
+      pthread_cond_wait(&__s->__c, &__s->__m);
+    pthread_mutex_unlock(&__s->__m);
+  }
+
+  T get()
+  {
+    wait();
+    return __s->__v;
+  }
+};
+
+template <class T>
+class promise
+{
+  __future_state<T> *__s;
+
+  promise(const promise &);
+  promise &operator=(const promise &);
+
+public:
+  promise() : __s(new __future_state<T>)
+  {
+    __s->__ready = false;
+    pthread_mutex_init(&__s->__m, OM_NULLPTR);
+    pthread_cond_init(&__s->__c, OM_NULLPTR);
+  }
+
+  promise(promise &&o) OM_NOEXCEPT : __s(o.__s)
+  {
+    o.__s = OM_NULLPTR;
+  }
+
+  future<T> get_future()
+  {
+    future<T> f;
+    f.__s = __s;
+    return f;
+  }
+
+  void set_value(const T &v)
+  {
+    pthread_mutex_lock(&__s->__m);
+    __s->__v = v;
+    __s->__ready = true;
+    pthread_cond_broadcast(&__s->__c);
+    pthread_mutex_unlock(&__s->__m);
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 201103L
+
+#endif // STL_FUTURE

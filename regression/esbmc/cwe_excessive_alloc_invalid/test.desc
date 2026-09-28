@@ -1,0 +1,4 @@
+CORE
+main.c
+--excessive-alloc-check=0 --incremental-bmc
+^ERROR: --excessive-alloc-check=K requires K >= 1 \(got 0\)$

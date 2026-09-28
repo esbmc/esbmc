@@ -1,0 +1,4 @@
+CORE
+wide.ld
+--ld-props props.yaml --incremental-bmc --unwind 4
+^VERIFICATION FAILED$

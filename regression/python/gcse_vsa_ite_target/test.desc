@@ -1,0 +1,5 @@
+CORE
+main.py
+--gcse
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*Unable to compute VSA)[\s\S]*\Z

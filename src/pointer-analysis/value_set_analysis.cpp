@@ -1,8 +1,8 @@
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/cprover_prefix.h>
-#include <util/prefix.h>
-#include <util/xml_irep.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/base/prefix.h>
+#include <util/irep/xml_irep.h>
 
 void value_set_analysist::initialize(const goto_programt &goto_program)
 {
@@ -191,23 +191,6 @@ void value_set_analysist::convert(
     {
       xmlt &var = i.new_element("variable");
       var.new_element("identifier").data = value.first.as_string();
-
-#if 0
-      const value_sett::expr_sett &expr_set=
-        v_it->second.expr_set();
-
-      for(value_sett::expr_sett::const_iterator
-          e_it=expr_set.begin();
-          e_it!=expr_set.end();
-          e_it++)
-      {
-        std::string value_str=
-          from_expr(ns, identifier, *e_it);
-
-        var.new_element("value").data=
-          xmlt::escape(value_str);
-      }
-#endif
     }
   }
 }

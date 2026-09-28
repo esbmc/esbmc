@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract flip
+^  contract ensures$
+^VERIFICATION FAILED$

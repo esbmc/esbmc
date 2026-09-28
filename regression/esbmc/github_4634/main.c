@@ -11,7 +11,7 @@
 // constraint at globals only, so the intermediate schedule where the
 // thread is suspended between `A->next = new_node` and the splice
 // back-link was reported as a forgotten-memory violation whenever the
-// `main_thread_ended` throttle was bypassed (e.g. `--data-races-check`).
+// main-thread interleaving throttle was bypassed (e.g. `--data-races-check`).
 
 #include <pthread.h>
 #include <stdlib.h>

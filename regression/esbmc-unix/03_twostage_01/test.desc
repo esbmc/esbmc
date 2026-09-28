@@ -1,4 +1,5 @@
 CORE
 main.c
 --no-slice --context-bound 3 --32 --incremental-bmc --force-malloc-success
+REQUIRES arch32
 ^VERIFICATION FAILED$

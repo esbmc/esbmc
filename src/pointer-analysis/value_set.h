@@ -1,13 +1,17 @@
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
+#include <tuple>
+#include <map>
 #include <pointer-analysis/value_sets.h>
+#include <optional>
 #include <set>
 #include <irep2/irep2.h>
-#include <util/mp_arith.h>
-#include <util/namespace.h>
-#include <util/numbering.h>
-#include <util/type_byte_size.h>
+#include <util/arith/mp_arith.h>
+#include <util/symtab/namespace.h>
+#include <util/base/numbering.h>
+#include <util/expr/type_byte_size.h>
+#include <util/persistent_map.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
@@ -36,8 +40,8 @@
  *
  *  The only data element stored is a map from l1 variable names (as strings)
  *  to a record of what objects are stored. Data objects are numbered, with the
- *  mapping for that stored in a global variable, value_sett::object_numbering,
- *  (which will explode into multithreaded death cakes in the future). The
+ *  mapping for that stored in the thread-local static
+ *  value_sett::object_numbering. The
  *  primary interfaces to the value_sett object itself are the 'assign' method
  *  (for interpreting a variable assignment) and the get_value_set method, that
  *  takes a variable and returns the set of things it might point at.
@@ -58,6 +62,8 @@ public:
   {
   }
 
+  /* rec_cache is deliberately not copied: it points into the stack frame of an
+   * in-progress query, and a copy can only be taken between queries. */
   value_sett(const value_sett &ref)
     : location_number(ref.location_number),
       values(ref.values),
@@ -74,11 +80,11 @@ public:
     xchg_name = ref.xchg_name;
     xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
-    // Msg will not change as well
     return *this;
   }
 
-  //*********************************** Types ************************************
+  //*********************************** Types
+  //************************************
 
   /** A type for a set of expressions */
   typedef std::set<expr2tc> expr_sett;
@@ -121,7 +127,6 @@ public:
     {
       assert(offset_set);
       offset_alignment = 1;
-      // offset_set = offset_set;
     }
 
     /** Record of the explicit offset into the object. Only valid when
@@ -141,6 +146,16 @@ public:
     bool offset_is_zero() const
     {
       return offset_is_set && offset.is_zero();
+    }
+    bool operator==(const objectt &o) const
+    {
+      return offset_is_set == o.offset_is_set &&
+             offset_alignment == o.offset_alignment &&
+             (!offset_is_set || offset == o.offset);
+    }
+    bool operator!=(const objectt &o) const
+    {
+      return !(*this == o);
     }
   };
 
@@ -241,12 +256,28 @@ public:
       : identifier(std::move(_identifier)), suffix(_suffix)
     {
     }
+
+    /* Value equality so the persistent map can be structurally diffed
+     * (immer::diff). Only invoked on entries the diff cannot skip by
+     * pointer identity, i.e. the divergent leaves. */
+    bool operator==(const entryt &e) const
+    {
+      return identifier == e.identifier && suffix == e.suffix &&
+             object_map == e.object_map;
+    }
+    bool operator!=(const entryt &e) const
+    {
+      return !(*this == e);
+    }
   };
 
-  /** Type of the value-set containing structure. A hash map mapping variables
-   *  to an entryt, storing the value set of objects a variable might point
-   *  at. */
-  typedef std::unordered_map<irep_idt, entryt, irep_id_hash> valuest;
+  /** Maps each variable to the entryt holding the set of objects it may
+   *  point at. Persistent (structurally shared): symex snapshots the whole
+   *  map at every goto for the later merge, so a std::unordered_map would
+   *  copy O(N) per branch and make symex quadratic in the tracked-symbol
+   *  count on branch-heavy inputs. immer's HAMT makes the snapshot O(1) —
+   *  the same pattern level1 renaming and guard_seq use. */
+  typedef persistent_map<irep_idt, entryt, irep_id_hash> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -315,7 +346,9 @@ public:
     std::pair<object_mapt::iterator, bool> res =
       dest.insert(object_mapt::value_type(it->first, it->second));
 
-    // If element already existed, overwrite.
+    // An entry already present for this object number is left untouched:
+    // the assignment below runs only for freshly inserted elements, where
+    // it is a no-op.
     if (res.second)
       res.first->second = it->second;
   }
@@ -412,7 +445,7 @@ public:
    *  @return True when the erase succeeds, false otherwise. */
   bool erase(const std::string &name)
   {
-    return (values.erase(name) == 1);
+    return values.erase(name);
   }
 
   /** Get the set of things that an expression might point at. Interprets the
@@ -447,12 +480,12 @@ public:
    *  given record already exists. */
   void add_var(const std::string &id, const std::string &suffix)
   {
-    get_entry(id, suffix);
+    touch_entry(entryt(id, suffix));
   }
 
   void add_var(const entryt &e)
   {
-    get_entry(e.identifier, e.suffix);
+    touch_entry(e);
   }
 
   /** Delete the value set for the given variable name and suffix. */
@@ -466,32 +499,59 @@ public:
     values.erase(concat_key(id, suffix));
   }
 
-  /** Look up the value set for the given variable name and suffix. */
-  entryt &get_entry(const std::string &id, const std::string &suffix)
+  /** The map key is `identifier + suffix`. The suffix is empty on the
+   *  overwhelming majority of calls, so avoid building the
+   *  concatenated temporary in that case and key directly off the
+   *  identifier. */
+  static irep_idt entry_key(const entryt &e)
   {
-    return get_entry(entryt(id, suffix));
+    if (e.suffix.empty())
+      return e.identifier;
+    return concat_key(e.identifier, e.suffix);
   }
 
-  /** Look upt he value set for the variable name and suffix stored in the
-   *  given entryt. */
-  entryt &get_entry(const entryt &e)
+  /** Ensure a record exists for the given entry, without changing an
+   *  existing one. The persistent map's values are immutable, so a mutation
+   *  is a read-modify-set via update_object_map(). */
+  void touch_entry(const entryt &e)
   {
-    // The map key is `identifier + suffix`. The suffix is empty on the
-    // overwhelming majority of calls (every plain l1 variable; suffixes
-    // only appear for array/struct-member pointer tracking), so avoid
-    // building the concatenated temporary string in that case and key
-    // directly off the identifier.
-    if (e.suffix.empty())
+    irep_idt key = entry_key(e);
+    if (values.find(key) == nullptr)
+      values.set(key, e);
+  }
+
+  /** Overwrite (merge=false) or union-into (merge=true) the object map
+   *  recorded for the given entry. Only a genuine change writes the map, so a
+   *  no-op update never breaks the record's structural sharing. */
+  bool update_object_map(const entryt &e, const object_mapt &om, bool merge)
+  {
+    irep_idt key = entry_key(e);
+    const entryt *cur = values.find(key);
+    if (cur == nullptr)
     {
-      std::pair<valuest::iterator, bool> r =
-        values.insert(std::pair<irep_idt, entryt>(e.identifier, e));
-      return r.first->second;
+      entryt fresh(e.identifier, e.suffix);
+      fresh.object_map = om;
+      values.set(key, std::move(fresh));
+      return true;
     }
-
-    std::pair<valuest::iterator, bool> r = values.insert(
-      std::pair<irep_idt, entryt>(concat_key(e.identifier, e.suffix), e));
-
-    return r.first->second;
+    // Rebuild the record from its keys only — the old object_map is either
+    // superseded (overwrite) or unioned into a fresh copy (merge), so copying
+    // it off `cur` would be wasted.
+    entryt upd(cur->identifier, cur->suffix);
+    if (merge)
+    {
+      upd.object_map = cur->object_map;
+      if (!make_union(upd.object_map, om))
+        return false;
+    }
+    else
+    {
+      if (cur->object_map == om)
+        return false;
+      upd.object_map = om;
+    }
+    values.set(key, std::move(upd));
+    return true;
   }
 
   /** Compose the `identifier + suffix` map key into a single pre-sized
@@ -554,6 +614,12 @@ public:
    *         pointer set for lhs. Otherwise, overwrite it. Used for the static
    *         analysis. */
   void assign(const expr2tc &lhs, const expr2tc &rhs, bool add_to_sets = false);
+  /** assign()'s struct/union arm, split out to keep assign() one dispatch. */
+  void assign_struct_union(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const type2tc &lhs_type,
+    bool add_to_sets);
 
   /** Interpret a function call during static analysis. Looks up the given
    *  function, and simulates the assignment of all the arguments to the
@@ -609,17 +675,108 @@ public:
    *         This only affects how constants are interpreted: if enabled, the
    *         expression 0 becomes a null_object2t reference in the value-set,
    *         while other constants are invalid2t/unknown2t; when disabled,
-   *         constant expressions do not generate any references in the
-   *         value-set.
+   *         constant expressions generate no references, except that a member
+   *         of a constant aggregate is still selected, since navigating to it
+   *         inserts nothing by itself.
    */
-  void get_value_set_rec(
+  /// Stop an operand whose set is only `unknown` from vetoing the other's;
+  /// the `unknown` moves into @p dest. See
+  /// docs/design/pointer-integer-provenance.md.
+  void retire_objectless_operand(
+    object_mapt &op0_set,
+    object_mapt &op1_set,
+    object_mapt &dest) const;
+
+  /** The entry point for the recursive value-set walk: memoises, then calls
+   *  get_value_set_rec. Call this rather than the recursion itself -- a
+   *  propagated multi-dimensional array reaches here as a DAG, and walking it
+   *  unmemoised costs paths exponential in the number of stores it carries.
+   *  The recursion is private so that cannot be bypassed. */
+  void get_value_set_rec_cached(
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
     const type2tc &original_type,
     bool under_deref = true) const;
 
+private:
+  /** What one get_value_set_rec_cached query contributed, keyed by its
+   * arguments. Shared subexpressions make a value query a DAG walk, so without
+   * this the walk costs paths exponential in the number of stores a propagated
+   * array carries. The key's expr and type are held alongside the result so a
+   * freed node's address cannot be recycled into a false hit. */
+  using rec_cache_keyt =
+    std::tuple<const expr2t *, std::string, const type2t *, bool>;
+  using rec_cachet =
+    std::map<rec_cache_keyt, std::tuple<expr2tc, type2tc, object_mapt>>;
+
+  /** Owned by the outermost get_value_set_rec_cached call, and null outside
+   * one, so nothing is carried across queries that `values` may have changed
+   *  between. */
+  mutable rec_cachet *rec_cache = nullptr;
+
+  /** One step of the walk. Its own recursive calls go through
+   *  get_value_set_rec_cached, which is what makes the memo effective. */
+  void get_value_set_rec(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
 protected:
+  /** The byte offset a constant operand of pointer arithmetic contributes,
+   *  already signed by @p subtracting; nullopt when the operand is not a
+   *  compile-time constant or its element size is not statically known. */
+  std::optional<BigInt> constant_pointer_arith_offset(
+    const expr2tc &non_ptr_op,
+    const type2tc &subtype,
+    bool subtracting) const;
+
+  /** Fold @p total_offs into every object of @p pointer_expr_set, tracking
+   *  alignment where the offset or the object's own offset is nondet, and
+   *  store the results into @p dest. */
+  void offset_pointer_arith_objects(
+    const object_mapt &pointer_expr_set,
+    const expr2tc &ptr_op,
+    const std::optional<BigInt> &total_offs,
+    object_mapt &dest) const;
+
+  /** What @p sym points at: the values keyed under the path the read spells,
+   *  falling back to the paths a union arm it crosses aliases. Returns whether
+   *  anything was found. */
+  bool get_symbol_value_set(
+    const symbol2t &sym,
+    const expr2tc &expr,
+    const std::string &suffix,
+    const type2tc &original_type,
+    object_mapt &dest) const;
+
+  /** The constant cases of get_value_set_rec: what a value reaches this code
+   *  as once constant propagation has substituted it. */
+  void get_constant_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  /** The two aggregate literals of get_constant_value_set. Each consumes the
+   *  one suffix component naming the member it holds, since a literal has no
+   *  suffixed symbol name for the symbol case to look up. */
+  void get_constant_struct_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  void get_constant_union_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(
@@ -651,7 +808,7 @@ protected:
    *  @param values_rhs The value set of the right hand side of the assignment,
    *         i.e. all the things the rhs points at.
    *  @param suffix Accumulated suffix of the lhs up to this point. See docs for
-   *         @ref entryt and @get_value_set_rec.
+   *         @ref entryt and @get_value_set_rec_cached.
    *  @param add_to_sets See @ref assign. */
   void assign_rec(
     const expr2tc &lhs,
@@ -677,8 +834,10 @@ protected:
   static void obj_numbering_deref(unsigned int num);
 
 public:
-  //********************************** Members ***********************************
-  /** Some crazy static analysis tool. */
+  //********************************** Members
+  //***********************************
+  /** Location number of the instruction this value set is attached to;
+   *  used to identify allocation sites for dynamic objects. */
   unsigned location_number;
   /** Object to assign numbers to objects -- i.e., the numbers in the map of
    *  a @ref object_mapt.

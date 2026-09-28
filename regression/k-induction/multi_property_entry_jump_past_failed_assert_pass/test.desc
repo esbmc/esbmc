@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-induction --multi-property
+^\s+PASSED\s+\[main\.assertion\.\d+\]\s+line\s+14\s+bound$
+^Solution found by the inductive step \(k = 2\)$
+^VERIFICATION SUCCESSFUL$

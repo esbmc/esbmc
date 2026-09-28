@@ -1,4 +1,4 @@
 CORE
 main.c
 --no-simplify --multi-property
-^Properties: 15 verified \✓ 6 passed, \✗ 9 failed$
+^\*\* 9 of 15 properties failed, 6 passed$

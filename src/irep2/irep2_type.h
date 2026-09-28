@@ -108,14 +108,22 @@ public:
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
     const irep_idt &_name,
-    bool _packed = false)
+    bool _packed = false,
+    const std::vector<irep_idt> &memb_base_names = {},
+    const BigInt &_alignment = 0,
+    const irep_idt &_python_aggregate = irep_idt())
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
       member_pretty_names(memb_pretty_names),
+      member_base_names(memb_base_names),
       name(_name),
-      packed(_packed)
+      packed(_packed),
+      alignment(_alignment),
+      python_aggregate(_python_aggregate)
   {
+    assert(
+      memb_base_names.empty() || memb_base_names.size() == _members.size());
   }
   struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const;
@@ -123,8 +131,30 @@ public:
   std::vector<type2tc> members;
   std::vector<irep_idt> member_names;
   std::vector<irep_idt> member_pretty_names;
+  /// The components' plain `base_name`s -- a different field from the
+  /// `#base_name` that code_type2t::argument_base_names carries. Unreflected: a
+  /// member's spelling is no part of the struct's identity, so two otherwise
+  /// identical structs must still compare equal
+  /// (docs/roadmap/frontends-to-irep2.md §46).
+  std::vector<irep_idt> member_base_names;
   irep_idt name;
   bool packed;
+
+  /// An explicit `alignas`, in bytes; zero when the record has none. IREP2 does
+  /// not otherwise represent it, and add_padding reads it to decide a record's
+  /// trailing padding -- an over-aligned empty struct occupies its alignment,
+  /// so without it the back-migrated type gets no pad member and a literal of
+  /// it stays shorter than its own type (§7.4). Not reflected: two records that
+  /// differ only here would otherwise stop comparing equal, which is a wider
+  /// change than this repair.
+  BigInt alignment;
+
+  /// The Python model-aggregate kind ("tuple", "dict", "optional") that
+  /// `#python_aggregate` records; empty for any other struct. Unreflected, like
+  /// `alignment`: the tag already names the type. Carried because `in` and
+  /// membership dispatch read it, and a user class may share a tuple's tag
+  /// prefix (docs/roadmap/scope-python-irep2.md §10.4).
+  irep_idt python_aggregate;
 
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,
@@ -132,6 +162,12 @@ public:
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
+  /// Covers the three deliberately unreflected members: `member_base_names` (a
+  /// member's spelling is no part of the struct's identity), `alignment` (two
+  /// records differing only in `alignas` must still compare equal) and
+  /// `python_aggregate`.
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(std::vector<irep_idt>) + sizeof(BigInt) + sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -188,7 +224,14 @@ class unsignedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  unsignedbv_type2t(unsigned int w) : type2t(unsignedbv_id), width(w)
+  unsignedbv_type2t(
+    unsigned int w,
+    bool qualified = false,
+    const irep_idt &cpp = irep_idt())
+    : type2t(unsignedbv_id),
+      width(w),
+      cpp_type(cpp),
+      constant_qualified(qualified)
   {
     // assert(w != 0 && "Must have nonzero width for integer type");
     // XXX -- zero sized bitfields are permissible. Oh my.
@@ -197,8 +240,31 @@ public:
   unsigned int get_width() const;
 
   unsigned int width;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected: a spelling is no part of the type's identity, so two
+  /// bitvectors of the same width are the same type however they were spelled.
+  /// Carried because a consumer reads it back -- `python_converter::
+  /// get_python_type_category` distinguishes a 1-char string element from an
+  /// 8-bit int by it (docs/roadmap/scope-python-irep2.md §9).
+  irep_idt cpp_type;
+  /// Whether the source qualified this `const`, as `#constant` records it.
+  /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
+  /// integers of the same width are the same type whether or not one was
+  /// qualified (docs/roadmap/scope-clang-c-irep2.md §158).
+  bool constant_qualified;
 
   static constexpr auto fields = std::make_tuple(&unsignedbv_type2t::width);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(irep_idt) + sizeof(bool);
+  /// `cpp_type` pushes `constant_qualified` into a fresh slot, so this class
+  /// now carries four bytes of trailing padding and `fields_cover_class` has no
+  /// margin left: a further unreflected field would fit in the hole unnoticed.
+  /// Pin the size so the next one has to come here first.
+  static_assert(
+    sizeof(unsigned int) + sizeof(irep_idt) + sizeof(bool) <=
+      2 * sizeof(void *),
+    "unsignedbv_type2t's reflected + excluded fields no longer fit the pinned "
+    "layout; re-check fields_cover_class's margin before adding a field");
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -210,15 +276,41 @@ class signedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  signedbv_type2t(signed int w) : type2t(signedbv_id), width(w)
+  signedbv_type2t(
+    signed int w,
+    bool qualified = false,
+    const irep_idt &cpp = irep_idt())
+    : type2t(signedbv_id),
+      width(w),
+      cpp_type(cpp),
+      constant_qualified(qualified)
   {
   }
   signedbv_type2t(const signedbv_type2t &ref) = default;
   unsigned int get_width() const;
 
   unsigned int width;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected, for the reason given on unsignedbv_type2t.
+  irep_idt cpp_type;
+  /// Whether the source qualified this `const`, as `#constant` records it.
+  /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
+  /// integers of the same width are the same type whether or not one was
+  /// qualified (docs/roadmap/scope-clang-c-irep2.md §158).
+  bool constant_qualified;
 
   static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(irep_idt) + sizeof(bool);
+  /// `cpp_type` pushes `constant_qualified` into a fresh slot, so this class
+  /// now carries four bytes of trailing padding and `fields_cover_class` has no
+  /// margin left: a further unreflected field would fit in the hole unnoticed.
+  /// Pin the size so the next one has to come here first.
+  static_assert(
+    sizeof(unsigned int) + sizeof(irep_idt) + sizeof(bool) <=
+      2 * sizeof(void *),
+    "signedbv_type2t's reflected + excluded fields no longer fit the pinned "
+    "layout; re-check fields_cover_class's margin before adding a field");
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -230,14 +322,30 @@ public:
     const std::vector<type2tc> &args,
     const type2tc &ret,
     const std::vector<irep_idt> &names,
-    bool e)
+    bool e,
+    const std::vector<irep_idt> &base_names = {},
+    const std::vector<expr2tc> &defaults = {},
+    const irep_idt &exc_kind = irep_idt(),
+    const std::vector<irep_idt> &exc_types = {},
+    const irep_idt &ret_marker = irep_idt(),
+    bool implicit_union_copy_move = false,
+    const std::vector<type2tc> &exc_decl = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
       argument_names(names),
-      ellipsis(e)
+      argument_base_names(base_names),
+      argument_defaults(defaults),
+      exception_types(exc_types),
+      exception_decl(exc_decl),
+      exception_kind(exc_kind),
+      return_marker(ret_marker),
+      ellipsis(e),
+      implicit_union_copy_move(implicit_union_copy_move)
   {
     assert(args.size() == names.size());
+    assert(base_names.empty() || base_names.size() == args.size());
+    assert(defaults.empty() || defaults.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
   unsigned int get_width() const;
@@ -245,13 +353,46 @@ public:
   std::vector<type2tc> arguments;
   type2tc ret_type;
   std::vector<irep_idt> argument_names;
+  /// The arguments' `#base_name`s, carried across the migrate seam but *not*
+  /// reflected: C11 6.7.6.3p15 makes a parameter's spelling no part of the
+  /// function type, so two signatures differing only here are the same type and
+  /// must hash and compare equal. Kept because a consumer reads it back --
+  /// clang_cpp_convert_vft.cpp's thunk argument loop does
+  /// (docs/roadmap/frontends-to-irep2.md §44).
+  std::vector<irep_idt> argument_base_names;
+  /// The arguments' `#default_value`s, null where an argument has none, and
+  /// empty when none has one. Unreflected: a default is no part of the
+  /// function's type. Carried because Python call lowering fills a missing
+  /// argument from it (converter_funcall.cpp, function_call/expr.cpp).
+  std::vector<expr2tc> argument_defaults;
+  /// A resolved C++ exception specification, as `exception_spec_kind` and
+  /// `exception_spec_types` record it (util/lang/exception_specification.h);
+  /// empty when there is none. Unreflected, like the fields above: two
+  /// signatures differing only here still compare equal. Carried because
+  /// goto_convert_functions decodes it from the function symbol's type.
+  std::vector<irep_idt> exception_types;
+  /// A dynamic specification's declared types before
+  /// finalize_exception_specification resolves them to `exception_types`.
+  std::vector<type2tc> exception_decl;
+  irep_idt exception_kind;
+  /// A C++ constructor's or destructor's pseudo return type ("constructor" /
+  /// "destructor"), which ret_type models as empty; and whether it is an
+  /// implicit copy/move constructor of a union. Unreflected, like the fields
+  /// above. Carried because vptr initialisation and the union copy/move
+  /// synthesis read them (docs/roadmap/frontends-to-irep2.md §50.2,
+  /// scope-clang-cpp-irep2.md §12).
+  irep_idt return_marker;
   bool ellipsis;
+  bool implicit_union_copy_move;
 
   static constexpr auto fields = std::make_tuple(
     &code_type2t::arguments,
     &code_type2t::ret_type,
     &code_type2t::argument_names,
     &code_type2t::ellipsis);
+  static constexpr std::size_t excluded_field_bytes =
+    2 * sizeof(std::vector<irep_idt>) + sizeof(std::vector<expr2tc>) +
+    sizeof(std::vector<type2tc>) + 2 * sizeof(irep_idt) + sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -362,9 +503,8 @@ class vector_type2t : public type2t
 {
 public:
   /** Primary constructor.
-   *  @param subtype Type of elements in this array.
-   *  @param size Size of this array.
-   *  @param inf Whether or not this array is infinitely sized
+   *  @param _subtype Type of elements in this vector.
+   *  @param size Number of lanes.
    */
   vector_type2t(const type2tc &_subtype, const expr2tc &size)
     : type2t(vector_id),
@@ -395,15 +535,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** How the source spelled a pointer. The irept form keeps this in the
+ *  `#reference` / `#rvalue_reference` attributes, which have no equivalent
+ *  here, so a round trip used to erase it. */
+enum class pointer_ref_kindt
+{
+  NONE,
+  LVALUE,
+  RVALUE
+};
+
 /** Pointer type.
- *  Simply has a subtype, of what it points to. No other attributes.
+ *  Simply has a subtype, of what it points to, and how the source spelled it.
  */
 class pointer_type2t : public type2t
 {
 public:
   /** Primary constructor. @param subtype Subtype of this pointer */
-  pointer_type2t(const type2tc &st, const bool &p = false)
-    : type2t(pointer_id), subtype(st), carry_provenance(p)
+  pointer_type2t(
+    const type2tc &st,
+    const bool &p = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : type2t(pointer_id), subtype(st), carry_provenance(p), ref_kind(rk)
   {
   }
   pointer_type2t(const pointer_type2t &ref) = default;
@@ -411,10 +564,12 @@ public:
 
   type2tc subtype;
   bool carry_provenance;
+  pointer_ref_kindt ref_kind;
 
   static constexpr auto fields = std::make_tuple(
     &pointer_type2t::subtype,
-    &pointer_type2t::carry_provenance);
+    &pointer_type2t::carry_provenance,
+    &pointer_type2t::ref_kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -455,8 +610,11 @@ public:
    *  @param fraction Number of fraction bits in this type of floatbv
    *  @param exponent Number of exponent bits in this type of floatbv
    */
-  floatbv_type2t(unsigned int f, unsigned int e)
-    : type2t(floatbv_id), fraction(f), exponent(e)
+  floatbv_type2t(
+    unsigned int f,
+    unsigned int e,
+    const irep_idt &cpp = irep_idt())
+    : type2t(floatbv_id), fraction(f), exponent(e), cpp_type(cpp)
   {
   }
   floatbv_type2t(const floatbv_type2t &ref) = default;
@@ -464,9 +622,13 @@ public:
 
   unsigned int fraction;
   unsigned int exponent;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected, for the reason given on unsignedbv_type2t.
+  irep_idt cpp_type;
 
   static constexpr auto fields =
     std::make_tuple(&floatbv_type2t::fraction, &floatbv_type2t::exponent);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 

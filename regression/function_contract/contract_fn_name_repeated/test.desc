@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract f --replace-call-with-contract g
+^VERIFICATION FAILED$
+^Replacing calls with contracts for 2 function\(s\)$

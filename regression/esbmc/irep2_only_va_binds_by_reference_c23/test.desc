@@ -1,0 +1,4 @@
+CORE
+main.c
+--std c23 --clang-c-irep2-adjust-only --symbol-table-only
+^__builtin_c23_va_start\(&ap(\[0\])?[,)]

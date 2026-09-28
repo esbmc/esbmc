@@ -2,4 +2,4 @@ CORE
 main.c
 --bitwuzllob --smt-formula-only
 \(check-sat\)
-SMT formula dumped successfully
+SMT formula written to standard output

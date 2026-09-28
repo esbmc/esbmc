@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^.*dereference failure: Misaligned access to struct field$

@@ -4,4 +4,4 @@ main.c
 ^Reached Conditions:  12
 ^Short Circuited Conditions:  10
 ^Total Conditions:  22
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

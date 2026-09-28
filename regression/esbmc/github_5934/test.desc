@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property --smt-formula-only --z3
+^Solving claim 'b
+^\(check-sat\)$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z

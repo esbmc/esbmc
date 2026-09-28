@@ -4,7 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <pointer-analysis/dereference.h>
 #include <pointer-analysis/value_sets.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 class goto_program_dereferencet : protected dereference_callbackt
 {

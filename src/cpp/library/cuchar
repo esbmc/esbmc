@@ -1,0 +1,25 @@
+#pragma once
+
+#include <uchar.h>
+
+// [cuchar.syn]: <cuchar> declares the C Unicode conversion functions in
+// namespace std. The functions exist only where the C library has <uchar.h>.
+namespace std
+{
+using ::mbstate_t;
+using ::size_t;
+
+#ifdef __ESBMC_C_UCHAR_H
+using ::c16rtomb;
+using ::c32rtomb;
+using ::mbrtoc16;
+using ::mbrtoc32;
+// glibc declares the char8_t pair from 2.36 on, only when char8_t exists.
+#  if defined(__cpp_char8_t) && defined(__GLIBC__)
+#    if __GLIBC_PREREQ(2, 36)
+using ::c8rtomb;
+using ::mbrtoc8;
+#    endif
+#  endif
+#endif
+} // namespace std

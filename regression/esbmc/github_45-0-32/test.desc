@@ -1,5 +1,6 @@
 CORE
 gh-45-0.c
 --32 -Wno-error=implicit-function-declaration --no-unwinding-assertions --unwind 1
+REQUIRES arch32
 ^VERIFICATION FAILED$
 \barray size in bytes overflows address space size$
