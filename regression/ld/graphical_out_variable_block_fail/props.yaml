@@ -1,0 +1,7 @@
+properties:
+  # a AND b sets flag, and flag drives q. Dropping the block leaves flag at
+  # FALSE, so this would hold; the block must be refused instead.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Deliberately false: a AND b sets flag, which drives q"
