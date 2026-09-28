@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Callable, TypeAlias, TypedDict
 
+try:
+    # pylint: disable=deprecated-module  # `parser` also names a removed stdlib module
+    from .class_collision import separate_colliding_classes
+except ImportError:
+    from class_collision import separate_colliding_classes
+
 __all__ = [
     "ResolverCallbacks",
     "detect_and_process_submodules",
@@ -458,7 +464,9 @@ def ensure_default_helper_imports(tree: ast.AST) -> None:
         ast.fix_missing_locations(node)
 
 
-def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> None:
+def process_collected_imports(output_dir: str,
+                              callbacks: ResolverCallbacks,
+                              entry_tree: ast.Module | None = None) -> None:
     """Emit collected imports after transitive discovery converges.
 
     Callback parameters wire parser-owned routines (parse, rewrite propagation,
@@ -496,8 +504,7 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
 
     callbacks.propagate_range_aliases(parsed_trees)
 
-    for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
-        preprocessor.finalize_module(tree)
+    _finalize_parsed_trees(parsed_trees, entry_tree)
 
     # Each module was preprocessed in isolation, so it only knows its own call
     # signatures. Publish them, now that every body has been visited, for the
@@ -518,6 +525,24 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
             default_helper_exports[module_name] = set(preprocessor.hoisted_default_names)
 
     _emit_collected_import_json(parsed_trees, output_dir, callbacks)
+
+
+def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
+    for tree, _filename, preprocessor in parsed_trees.values():
+        preprocessor.finalize_module(tree)
+    if entry_tree is not None:
+        _separate_colliding_classes(entry_tree, parsed_trees)
+
+
+def _separate_colliding_classes(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:
+    trees = {name: tree for name, (tree, _filename, _pp) in parsed_trees.items()}
+    models = [name for name in trees if is_imported_model(name)]
+    for module_name, renames in separate_colliding_classes(entry_tree, trees, models).items():
+        names = module_imports[module_name]['specific_names']
+        for old, new in renames.items():
+            if old in names:
+                names.discard(old)
+                names.add(new)
 
 
 def _emit_collected_import_json(
