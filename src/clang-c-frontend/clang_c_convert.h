@@ -46,6 +46,7 @@ class EnumConstantDecl;
 class APValue;
 class AlignedAttr;
 class InitListExpr;
+class TemplateParamObjectDecl;
 } // namespace clang
 
 std::string
@@ -135,6 +136,14 @@ protected:
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  bool has_dynamic_local_init(const clang::VarDecl &vd) const;
+  void add_init_guard(const symbolt &var);
+  bool get_static_var_init(
+    const clang::VarDecl &vd,
+    symbolt &symbol,
+    const typet &t,
+    const locationt &location_begin,
+    exprt &new_expr);
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
@@ -403,6 +412,11 @@ protected:
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
 
+  bool get_mangled_id(const clang::NamedDecl &nd, std::string &id);
+  bool add_template_param_object(
+    const clang::TemplateParamObjectDecl &tpo,
+    const std::string &name,
+    const std::string &id);
   bool get_APValue_expr(
     const clang::APValue &value,
     exprt &new_expr,

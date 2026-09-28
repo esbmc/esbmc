@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +assertion s\.a\[0\] == &k$

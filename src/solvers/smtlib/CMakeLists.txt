@@ -18,12 +18,10 @@ add_library(smtlib smtlib_conv.cpp oneshot_process.cpp ${CMAKE_CURRENT_BINARY_DI
 # oneshot_process.cpp calls file_operations, so name filesystem here rather
 # than leaving each consumer to list it after smtlib: with static archives a
 # consumer that lists it first drops the symbols before smtlib asks for them.
-target_link_libraries(smtlib fmt::fmt filesystem)
+target_link_libraries(smtlib PUBLIC esbmc_common filesystem fmt::fmt PRIVATE smt smtfp)
 target_include_directories(smtlib
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
-    PRIVATE ${CMAKE_BINARY_DIR}/src
-    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 
 # The smtlib backend needs a larger-than-default stack size (at least in Debug

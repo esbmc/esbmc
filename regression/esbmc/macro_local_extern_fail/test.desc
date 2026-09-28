@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  p1 written$
+^VERIFICATION FAILED$

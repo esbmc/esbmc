@@ -304,6 +304,32 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+// Whether a class object is an instance of isinstance's second argument: only
+// `type` and `object` admit one, alone or in a tuple.
+static bool admits_class_object(const nlohmann::json &type_arg)
+{
+  auto admits = [](const nlohmann::json &node) {
+    return node["_type"] == "Name" &&
+           (node["id"] == "type" || node["id"] == "object");
+  };
+  if (type_arg["_type"] != "Tuple")
+    return admits(type_arg);
+  const auto &elts = type_arg["elts"];
+  return std::any_of(elts.begin(), elts.end(), admits);
+}
+
+exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
+{
+  // A class object is a char-array constant with no operands; a string
+  // literal's chars are operands.
+  if (obj_expr.is_constant())
+    return gen_boolean(obj_expr.operands().empty());
+
+  exprt unknown("sideeffect", bool_type());
+  unknown.statement("nondet");
+  return unknown;
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -319,40 +345,12 @@ exprt function_call_expr::handle_isinstance() const
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
-  if (obj_arg["_type"] == "Name")
+  if (obj_arg["_type"] == "Name" && obj_expr.is_symbol())
   {
-    const std::string &obj_name = obj_arg["id"];
-
-    // Check if this variable holds a type object by checking the symbol
-    std::string lookup_name = obj_name;
-    if (obj_expr.is_symbol())
-    {
-      const symbol_exprt &sym_expr = to_symbol_expr(obj_expr);
-      lookup_name = sym_expr.get_identifier().as_string();
-    }
-
-    const symbolt *var_symbol = converter_.ns.lookup(lookup_name);
-    if (var_symbol && var_symbol->get_value().is_constant())
-    {
-      const constant_exprt &const_val =
-        to_constant_expr(var_symbol->get_value());
-      std::string value_str = const_val.get_value().as_string();
-      // Check if this constant value is a type name
-      if (type_utils::is_type_identifier(value_str))
-      {
-        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
-          const std::string node_type = node["_type"];
-          if (node_type == "Name")
-            return node["id"];
-          return "";
-        };
-        std::string type_name = extract_type_name(type_arg);
-        if (type_name == "type")
-          return true_exprt();
-        else
-          return false_exprt();
-      }
-    }
+    const std::string *name =
+      converter_.class_object_name(obj_expr.identifier());
+    if (name && type_utils::is_type_identifier(*name))
+      return gen_boolean(admits_class_object(type_arg));
   }
 
   // Extract type name from various AST node formats
@@ -476,7 +474,8 @@ exprt function_call_expr::handle_isinstance() const
       if (
         (obj_type.is_array() && obj_type.subtype() == char_type()) ||
         (obj_type.is_pointer() && obj_type.subtype() == char_type()))
-        return true_exprt();
+        return type_name == "type" ? isinstance_str_as_type(obj_expr)
+                                   : true_exprt();
     }
 
     exprt t;

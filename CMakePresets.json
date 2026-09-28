@@ -1,0 +1,108 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "DOWNLOAD_DEPENDENCIES": "On",
+        "ENABLE_PYTHON_FRONTEND": "On",
+        "ENABLE_Z3": "On",
+        "BUILD_TESTING": "On",
+        "ENABLE_REGRESSION": "On"
+      }
+    },
+    {
+      "name": "default",
+      "inherits": "base",
+      "displayName": "Default (RelWithDebInfo)",
+      "description": "Optimised with debug info; what a contributor wants day to day",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release (LTO)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_IPO": "On"
+      }
+    },
+    {
+      "name": "asan",
+      "inherits": "base",
+      "displayName": "AddressSanitizer",
+      "description": "Instrumentation is independent of build type; see Sanitizers.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Sanitizer",
+        "ENABLE_SANITIZERS": "address"
+      }
+    },
+    {
+      "name": "coverage",
+      "inherits": "base",
+      "displayName": "Coverage (Clang only)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "ENABLE_COVERAGE": "On",
+        "CORE_REGRESSION_ONLY": "On"
+      }
+    },
+    {
+      "name": "ci-full",
+      "inherits": "base",
+      "displayName": "All frontends and solvers that need no manual download",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ENABLE_SOLIDITY_FRONTEND": "On",
+        "ENABLE_JIMPLE_FRONTEND": "On",
+        "ENABLE_BITWUZLA": "On",
+        "ENABLE_WERROR": "On"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "coverage", "configurePreset": "coverage" },
+    { "name": "ci-full", "configurePreset": "ci-full" }
+  ],
+  "testPresets": [
+    {
+      "name": "unit",
+      "configurePreset": "default",
+      "description": "Unit tests only; excludes the regression label",
+      "filter": { "exclude": { "label": "regression" } },
+      "execution": { "timeout": 60 },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "regression",
+      "configurePreset": "default",
+      "filter": { "include": { "label": "regression" } },
+      "execution": { "timeout": 120 },
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

@@ -2064,10 +2064,7 @@ exprt python_converter::handle_tuple_operations(
 
     // V.3: build the concatenated tuple value in IREP2. Each component is the
     // exact round-trip of a member_exprt over the migrated operand; the struct
-    // literal is assembled via constant_struct2tc and back-migrated once, then
-    // the full struct type is re-attached -- migrate_type drops the frontend-only
-    // aggregate-kind marker the `in`/membership/subscript dispatch reads with no
-    // tag fallback (mirrors tuple_handler::get_tuple_expr).
+    // literal is assembled via constant_struct2tc and back-migrated once.
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
@@ -2080,7 +2077,6 @@ exprt python_converter::handle_tuple_operations(
 
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -2128,7 +2124,6 @@ exprt python_converter::handle_tuple_operations(
 
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
