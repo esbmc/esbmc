@@ -397,8 +397,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
       (solution[FORWARD_CONDITION] != max_k_step))
     {
-      // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, solution will be max_k_step)
+      // A proof requires a completed, conclusive base case. An unknown base
+      // case (or a crashed child) reports max_k_step instead of zero.
       if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
@@ -415,8 +415,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
       (solution[INDUCTIVE_STEP] != max_k_step))
     {
-      // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, solution will be max_k_step)
+      // An unknown base case cannot establish the prefix needed for induction.
       if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
@@ -457,9 +456,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
      * bug at that k. */
     const uint64_t no_answer_k = max_k_step;
 
-    // Run bmc and only send results in two occasions:
-    // 1. A bug was found, we send the step where it was found
-    // 2. It couldn't find a bug
+    // Run bmc until a bug is found, every base-case bound is UNSAT, or a
+    // bound cannot be decided. A later UNSAT cannot certify an earlier unknown.
     for (uint64_t k_step = k_step_base; k_step <= max_k_step;
          k_step += k_step_inc)
     {
@@ -494,6 +492,14 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
         log_status("Base case process finished (bug found).\n");
         return true;
+      }
+
+      if (res == P_ERROR || res == P_SMTLIB)
+      {
+        // Neither result establishes the base case at this bound. Stop now
+        // rather than treating a later UNSAT as proof of the whole prefix.
+        report_no_answer(forward_pipe[1], r, no_answer_k);
+        return false;
       }
 
       // Check if the parent process is asking questions

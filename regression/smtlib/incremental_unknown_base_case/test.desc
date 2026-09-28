@@ -1,4 +1,5 @@
 CORE
 main.c
---smtlib --smtlib-solver-prog ./failing-solver.sh --incremental-bmc --max-k-step 3
+--smtlib --smtlib-solver-prog "z3 -in -smt2 rlimit=1" --incremental-bmc --max-k-step 3
+REQUIRES z3_binary
 ^VERIFICATION UNKNOWN$

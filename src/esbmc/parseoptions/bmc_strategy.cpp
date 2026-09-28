@@ -322,6 +322,16 @@ int esbmc_parseoptionst::do_bmc_strategy(
         base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
 
+      // Emission has no solver verdict: still produce the FC and IS formulas
+      // rather than treating P_SMTLIB as a failed base case and skipping them.
+      if (options.get_bool_option("smt-formula-only"))
+      {
+        (void)does_forward_condition_hold(options, goto_functions, k_step);
+        if (k_step > 1)
+          (void)is_inductive_step_violated(options, goto_functions, k_step);
+        continue;
+      }
+
       // if the property is proven violated in the bs, it's unnecessary to further run fw and is
       // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
       if (
@@ -472,6 +482,14 @@ int esbmc_parseoptionst::do_bmc_strategy(
       if (
         base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
+
+      // Emit the forward-condition formula even though the base-case formula
+      // was not solved (P_SMTLIB).
+      if (options.get_bool_option("smt-formula-only"))
+      {
+        (void)does_forward_condition_hold(options, goto_functions, k_step);
+        continue;
+      }
 
       if (
         base_case.is_false() &&

@@ -699,6 +699,11 @@ smt_resultt smtlib_convt::read_check_sat_response()
   {
     return P_UNSATISFIABLE;
   }
+  else if (smtlib_output->token == TOK_KW_UNKNOWN)
+  {
+    log_error("SMTLIB solver returned unknown for check-sat");
+    return P_ERROR;
+  }
   else if (smtlib_output->token == TOK_KW_ERROR)
   {
     log_error("SMTLIB solver returned: \"{}\"", smtlib_output->data);

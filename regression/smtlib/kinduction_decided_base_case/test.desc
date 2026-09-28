@@ -1,0 +1,5 @@
+CORE
+main.c
+--smtlib --smtlib-solver-prog "z3 -in -smt2" --k-induction --max-k-step 3
+REQUIRES z3_binary
+^VERIFICATION SUCCESSFUL$
