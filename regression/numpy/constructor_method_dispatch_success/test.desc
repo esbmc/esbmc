@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---incremental-bmc --no-standard-checks
+--no-standard-checks
 ^VERIFICATION SUCCESSFUL$
