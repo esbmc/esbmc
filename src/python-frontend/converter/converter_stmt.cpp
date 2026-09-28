@@ -1241,6 +1241,22 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// A list element that may be a string or a number is read as a tagged
+/// scalar; the variable it is stored in becomes one too, whatever type an
+/// annotation (or the loop lowering's inferred one) gave it (#4797).
+void python_converter::adopt_tagged_element(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    !lhs_symbol || !type_handler_.is_tagged_scalar_type(rhs.type()) ||
+    type_handler_.is_tagged_scalar_type(lhs_symbol->get_type()))
+    return;
+  lhs_symbol->set_type(migrate_type(rhs.type()));
+  lhs.type() = rhs.type();
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -6486,6 +6502,8 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
+
+    adopt_tagged_element(lhs_symbol, lhs, rhs);
 
     // Handle type adjustments
     handle_assignment_type_adjustments(

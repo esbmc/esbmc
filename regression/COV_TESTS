@@ -1960,3 +1960,5 @@ regression/esbmc-cpp/cpp/member_init_elided_copy
 regression/esbmc-cpp/cpp/member_init_elided_copy_fail
 regression/esbmc-cpp/cpp/member_init_converting_ctor
 regression/esbmc-cpp/cpp/member_init_converting_ctor_fail
+regression/python/list_mixed_str_number_isinstance
+regression/python/list_mixed_str_number_isinstance_fail

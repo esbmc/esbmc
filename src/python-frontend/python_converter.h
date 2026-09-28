@@ -1142,6 +1142,10 @@ private:
     size_t param_index);
 
   /// Recovers a bare `list` parameter's element type from its call sites.
+  bool seed_mixed_call_site_elements(
+    const std::string &param_id,
+    const std::string &func_name,
+    size_t param_index);
   bool infer_list_elem_type_from_call_sites(
     const std::string &func_name,
     size_t param_index,
@@ -2071,6 +2075,7 @@ private:
     const std::string &member_name);
 
   /// Handle Optional value access
+  void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
   exprt unwrap_optional_if_needed(
     const exprt &expr,
     const nlohmann::json &element = nlohmann::json());
