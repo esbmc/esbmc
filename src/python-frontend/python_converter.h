@@ -148,6 +148,10 @@ public:
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
 
+  /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
+  /// handled.
+  typet get_optional_type(const nlohmann::json &slice);
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
@@ -2049,6 +2053,11 @@ private:
 
   /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+  typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
+  exprt get_return_value(const nlohmann::json &value);
+  typet subscript_annotation_type(
+    const std::string &base,
+    const nlohmann::json &var_node);
 
   // =========================================================================
   // Enum support helpers
@@ -2129,6 +2138,9 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// The target of a ternary that is itself a return value; see
+  /// optional_ternary_type.
+  typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;

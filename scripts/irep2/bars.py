@@ -60,7 +60,8 @@ BASE_NAME = re.compile(r"[.\[(>-]")
 # legacy namesake: `gen_zero`, `gen_one` and `gen_nondet` are declared for both
 # `typet` and `type2tc` (util/expr/expr_util.h, irep2/irep2_utils.h), so their
 # spelling cannot say which was called; OVERLOADED_HELPER decides them.
-IREP2_HELPER = re.compile(r"^(?:gen_true_expr|gen_false_expr|gen_long|gen_ulong)\s*\(")
+IREP2_HELPER = re.compile(r"^(?:gen_true_expr|gen_false_expr|gen_long|gen_ulong|get_bool_type|"
+                          r"get_empty_type|get_u?int(?:8|16|32|64)?_type)\s*\(")
 # The overloaded helpers resolve by their first argument, so they are IREP2 when
 # that argument is a name the file declares IREP2.
 OVERLOADED_HELPER = re.compile(r"^(?:gen_zero|gen_one|gen_nondet)\s*\(\s*([A-Za-z_]\w*)\s*[,)]")

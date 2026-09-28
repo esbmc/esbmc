@@ -74,6 +74,11 @@ inline bool is_tuple_ast_type(const type2tc &t)
          is_complex_type(t);
 }
 
+/** The bit a byte update with a symbolic offset writes at, in bit-vector mode:
+ *  the offset scaled to bits, in the width of the updated value. */
+expr2tc byte_update_bit_offset(const byte_update2t &data);
+class ra_apit;
+
 inline bool is_tuple_ast_type(const expr2tc &e)
 {
   return is_tuple_ast_type(e->type);
@@ -740,12 +745,10 @@ public:
   smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
-   *  and rebuild it from one. Both record the pointer so that later flattened
-   *  pointers are tied to it; see the comment on the definitions in
+   *  and rebuild it from one; see the comment on the definitions in
    *  smt_bitcast.cpp. */
   smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
   smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
-  void record_flattened_pointer(smt_astt address, smt_astt pointer);
   /** True when @p ptr_type's representation occupies @p bv_type exactly, so
    *  the bits read back are the bits that were written. */
   bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
@@ -1210,18 +1213,45 @@ public:
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter;
 
-  /** One pointer flattened to, or rebuilt from, its machine representation by
-   *  a bitcast. See convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  /** One pointer flattened to its machine representation by a bitcast. See
+   *  convert_bitcast()'s helpers in smt_bitcast.cpp. */
   struct ptr_flatten_entry
   {
     smt_astt address;
     smt_astt pointer;
+    /** The flattening step's guard: an unexecuted step can flatten any
+     *  pointer. */
+    smt_astt guard;
     unsigned int level;
+    size_t id;
   };
-  /** Every such pointer in this context, tied pairwise so that two flattened
-   *  pointers sharing an address are the same pointer. Pruned on pop_ctx like
+  /** Every flattened pointer in this context. Pruned on pop_ctx like
    *  uf_ackermann_history, whose asts have the same lifetime. */
   std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The most flattens one rebuilt pointer is defined over; see
+   *  decode_pointer_repr(). */
+  static constexpr size_t max_rebuild_sources = 32;
+  /** Each flattening bitcast converted so far, for steps that hit it in the
+   *  conversion cache. */
+  std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  void record_flattened_pointer(smt_astt address, smt_astt pointer);
+
+  /** The SSA step being converted: its guard, the flattens its operands may
+   *  hold (all a rebuild in it reads), those it makes, and the symbol it
+   *  assigns. Null and empty outside a step. */
+  smt_astt step_guard = {};
+  std::set<size_t> step_sources;
+  std::set<size_t> step_flattens;
+  std::string step_assigned;
+  expr2tc step_overwritten;
+  size_t flatten_count = 0;
+  /** The flattens each SSA symbol's value may hold, and the context level it
+   *  was recorded at. */
+  std::unordered_map<std::string, std::pair<unsigned int, std::set<size_t>>>
+    ptr_flow;
+  void begin_step(const expr2tc &guard, const expr2tc &cond);
+  void note_assignment(const expr2tc &lhs, const expr2tc &rhs);
+  void end_step();
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier

@@ -167,6 +167,12 @@ protected:
     const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
     const goto_programt::const_targett &to,
     std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const;
+  /// Like replace_max_sub_expr, but only in the value operands of an lvalue
+  void replace_in_lvalue(
+    expr2tc &lhs,
+    const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
+    const goto_programt::const_targett &to,
+    std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const;
 
   symbolt
   create_cse_symbol(const type2tc &t, const goto_programt::const_targett &to);
