@@ -296,22 +296,6 @@ void insert_markers(
   body.insert_swap(at, markers);
 }
 
-void collect_symbols(
-  const expr2tc &e,
-  std::unordered_set<expr2tc, irep2_hash> &out,
-  std::unordered_set<const expr2t *> &seen)
-{
-  if (is_nil_expr(e) || !seen.insert(e.get()).second)
-    return;
-  if (is_symbol2t(e))
-  {
-    out.insert(e);
-    return;
-  }
-  e->foreach_operand([&](const expr2tc &op)
-                     { collect_symbols(op, out, seen); });
-}
-
 int marker_index(const expr2tc &lhs, const std::string &kind)
 {
   if (!is_symbol2t(lhs))
@@ -357,7 +341,6 @@ bool extract_transition_system(
   const goto_functionst &goto_functions,
   contextt &context,
   const optionst &options,
-  bool live_filter,
   transition_systemt &ts)
 {
   if (options.get_bool_option("disable-inductive-step"))
@@ -642,73 +625,9 @@ bool extract_transition_system(
       return false;
     }
 
-  // Cone of influence: keep what the properties, assumptions, back-edge guard
-  // and invariants depend on, following a state variable's head value to its
-  // value at the back edge and on entry. Unsliced, ESBMC's memory-model
-  // bookkeeping stays in the formula.
-  std::vector<bool> live(n, !live_filter);
-  if (live_filter)
-  {
-    std::unordered_map<expr2tc, expr2tc, irep2_hash> def_of;
-    for (const auto *defs : {&ts.prefix_defs, &ts.body_defs})
-      for (const auto &e : *defs)
-        def_of.emplace(to_equality2t(e).side_1, to_equality2t(e).side_2);
-    std::unordered_map<expr2tc, unsigned, irep2_hash> state_of;
-    for (unsigned k = 0; k < n; k++)
-      state_of.emplace(pre[k], k);
-
-    std::unordered_set<expr2tc, irep2_hash> needed;
-    std::unordered_set<const expr2t *> visited;
-    std::vector<expr2tc> work;
-    auto need = [&](const expr2tc &e)
-    {
-      std::unordered_set<expr2tc, irep2_hash> syms;
-      collect_symbols(e, syms, visited);
-      for (const auto &s : syms)
-        if (needed.insert(s).second)
-          work.push_back(s);
-    };
-    for (const auto *roots :
-         {&ts.body_assumes, &ts.invariants, &ts.prefix_assumes})
-      for (const auto &e : *roots)
-        need(e);
-    for (const auto *props : {&ts.bad, &ts.prefix_bad})
-      for (const auto &p : *props)
-        need(p.violated);
-    need(ts.back_guard);
-    while (!work.empty())
-    {
-      expr2tc s = work.back();
-      work.pop_back();
-      auto d = def_of.find(s);
-      if (d != def_of.end())
-        need(d->second);
-      auto st = state_of.find(s);
-      if (st != state_of.end())
-      {
-        live[st->second] = true;
-        need(post[st->second]);
-        need(init[st->second]);
-      }
-    }
-    auto keep = [&](std::vector<expr2tc> &defs)
-    {
-      defs.erase(
-        std::remove_if(
-          defs.begin(),
-          defs.end(),
-          [&](const expr2tc &e)
-          { return !needed.count(to_equality2t(e).side_1); }),
-        defs.end());
-    };
-    keep(ts.prefix_defs);
-    keep(ts.body_defs);
-  }
-
   for (unsigned k = 0; k < n; k++)
-    if (live[k])
-      ts.states.push_back(
-        {from_expr(ns, "", shape.havoc_vars[k]), init[k], pre[k], post[k]});
+    ts.states.push_back(
+      {from_expr(ns, "", shape.havoc_vars[k]), init[k], pre[k], post[k]});
 
   std::set<std::string> input_names;
   for (const auto &s : eq->SSA_steps)
