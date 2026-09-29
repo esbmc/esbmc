@@ -50,6 +50,17 @@ void cse_domaint::transform(
     make_expression_available(cr.operand);
     break;
   }
+  case OTHER:
+    // A read of the freed object must be recomputed so that its dereference
+    // check still runs (#8006).
+    if (is_code_free2t(instruction.code))
+    {
+      expr2tc ptr = to_code_free2t(instruction.code).operand;
+      while (is_typecast2t(ptr))
+        ptr = to_typecast2t(ptr).from;
+      havoc_expr(dereference2tc(to_pointer_type(ptr->type).subtype, ptr), to);
+    }
+    break;
   case FUNCTION_CALL:
   {
     const code_function_call2t &func =
