@@ -2022,3 +2022,5 @@ regression/python/list_mixed_str_number_isinstance
 regression/python/list_mixed_str_number_isinstance_fail
 regression/python/list_pop_result_as_argument
 regression/python/list_pop_result_as_argument_fail
+regression/esbmc-cpp/cpp/new_multidim_class
+regression/esbmc-cpp/cpp/new_multidim_class_fail

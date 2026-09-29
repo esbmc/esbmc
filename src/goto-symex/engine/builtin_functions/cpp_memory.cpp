@@ -2,6 +2,7 @@
 #include <goto-symex/engine/goto_symex.h>
 #include <string>
 #include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
@@ -32,8 +33,10 @@ void goto_symext::symex_cpp_new(
   symbol.mode = "C++";
 
   const pointer_type2t &ptr_ref = to_pointer_type(code.type);
-  type2tc renamedtype2 =
-    migrate_type(ns.follow(migrate_type_back(ptr_ref.subtype)));
+  // Resolve every level, not only the outermost: dereference sees a class
+  // element of `new S[2][2]` as a struct only if it is spelled as one.
+  type2tc renamedtype2 = ptr_ref.subtype;
+  base_type(renamedtype2, ns);
 
   type2tc newtype = do_array
                       ? type2tc(array_type2tc(renamedtype2, code.size, false))
