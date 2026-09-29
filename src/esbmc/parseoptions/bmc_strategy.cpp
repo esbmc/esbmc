@@ -224,6 +224,17 @@ static bool ends_at_violation(optionst &options, bool &any_violation_found)
   return !options.get_bool_option("multi-property");
 }
 
+void esbmc_parseoptionst::emit_remaining_strategy_formulas(
+  optionst &options,
+  goto_functionst &goto_functions,
+  uint64_t k_step,
+  bool include_inductive_step)
+{
+  (void)does_forward_condition_hold(options, goto_functions, k_step);
+  if (include_inductive_step && k_step > 1)
+    (void)is_inductive_step_violated(options, goto_functions, k_step);
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -305,6 +316,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   };
 
+  auto conclude_proof = [&]() -> int
+  {
+    if (is_coverage)
+      report_coverage(
+        options,
+        goto_functions.reached_claims,
+        goto_functions.reached_mul_claims,
+        pytest_gen,
+        ctest_gen);
+    return conclude();
+  };
+
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   uint64_t last_k_step = k_step_base;
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
@@ -314,42 +337,40 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      // A proof needs the base case to be refuted, not merely not to have
+      // produced a counterexample: a solver that failed leaves it unknown.
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
+
+      // Emission has no solver verdict: still produce the FC and IS formulas
+      // rather than treating P_SMTLIB as a failed base case and skipping them.
+      if (options.get_bool_option("smt-formula-only"))
+      {
+        emit_remaining_strategy_formulas(options, goto_functions, k_step, true);
+        continue;
+      }
 
       // if the property is proven violated in the bs, it's unnecessary to further run fw and is
       // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
       if (
-        !is_bcv &&
+        base_case.is_false() &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
-        if (is_coverage)
-          report_coverage(
-            options,
-            goto_functions.reached_claims,
-            goto_functions.reached_mul_claims,
-            pytest_gen,
-            ctest_gen);
-        return conclude();
+        return conclude_proof();
       }
 
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
         if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+          base_case.is_false() &&
+          is_inductive_step_violated(options, goto_functions, k_step)
+            .is_false())
         {
-          if (is_coverage)
-            report_coverage(
-              options,
-              goto_functions.reached_claims,
-              goto_functions.reached_mul_claims,
-              pytest_gen,
-              ctest_gen);
-          return conclude();
+          return conclude_proof();
         }
       }
     }
@@ -463,23 +484,26 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
 
+      // Emit the forward-condition formula even though the base-case formula
+      // was not solved (P_SMTLIB).
+      if (options.get_bool_option("smt-formula-only"))
+      {
+        emit_remaining_strategy_formulas(
+          options, goto_functions, k_step, false);
+        continue;
+      }
+
       if (
-        !is_bcv &&
+        base_case.is_false() &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
-        if (is_coverage)
-          report_coverage(
-            options,
-            goto_functions.reached_claims,
-            goto_functions.reached_mul_claims,
-            pytest_gen,
-            ctest_gen);
-        return conclude();
+        return conclude_proof();
       }
     }
     // falsification

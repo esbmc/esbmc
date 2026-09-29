@@ -1,0 +1,6 @@
+CORE
+main.c
+--smtlib --smt-formula-only --output phase.smt2 --k-induction --max-k-step 3
+(?s)Checking forward condition, k = 1(?:(?!Checking (?:base case|inductive step), k =).)*SMT formula written to output file phase\.smt2
+(?s)Checking inductive step, k = 2(?:(?!Checking (?:base case|forward condition), k =).)*SMT formula written to output file phase\.smt2
+CHECK_FILE phase.smt2 contains \(check-sat\)

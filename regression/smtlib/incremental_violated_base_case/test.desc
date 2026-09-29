@@ -1,0 +1,4 @@
+CORE
+main.c
+--incremental-bmc --max-k-step 3
+^VERIFICATION FAILED$
