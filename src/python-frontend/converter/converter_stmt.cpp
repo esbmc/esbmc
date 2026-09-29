@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <numeric>
 #include <stdexcept>
 
@@ -791,18 +792,19 @@ std::optional<std::size_t> numpy_flat_index(
 std::optional<std::vector<long long>>
 numpy_unravel_index(std::size_t flat, const std::vector<std::size_t> &shape)
 {
-  if (shape.empty() || shape.size() > 2)
+  if (shape.empty())
     return std::nullopt;
 
-  if (shape.size() == 1)
-    return std::vector<long long>{static_cast<long long>(flat)};
-
-  if (shape[1] == 0)
-    return std::nullopt;
-
-  return std::vector<long long>{
-    static_cast<long long>(flat / shape[1]),
-    static_cast<long long>(flat % shape[1])};
+  std::vector<long long> indices(shape.size(), 0);
+  for (std::size_t axis = shape.size(); axis > 0; --axis)
+  {
+    const std::size_t dim = shape[axis - 1];
+    if (dim == 0)
+      return std::nullopt;
+    indices[axis - 1] = static_cast<long long>(flat % dim);
+    flat /= dim;
+  }
+  return indices;
 }
 
 std::optional<std::vector<long long>> numpy_shape_view_source_indices(
@@ -2585,22 +2587,25 @@ python_converter::build_numpy_nditer_logical_elements(
 
   std::optional<std::vector<std::size_t>> shape =
     get_numpy_nditer_logical_shape(root_id);
-  if (!shape || shape->empty() || shape->size() > 2)
+  if (!shape || shape->empty())
     return std::nullopt;
 
   std::vector<nlohmann::json> result;
-  if (shape->size() == 1)
-  {
-    for (std::size_t i = 0; i < (*shape)[0]; ++i)
-      result.push_back(
-        numpy_subscript_node(root_name, std::vector<std::size_t>{i}));
-    return result;
-  }
+  std::vector<std::size_t> indices(shape->size(), 0);
+  std::function<void(std::size_t)> append_elements = [&](std::size_t axis) {
+    if (axis == shape->size())
+    {
+      result.push_back(numpy_subscript_node(root_name, indices));
+      return;
+    }
 
-  for (std::size_t i = 0; i < (*shape)[0]; ++i)
-    for (std::size_t j = 0; j < (*shape)[1]; ++j)
-      result.push_back(
-        numpy_subscript_node(root_name, std::vector<std::size_t>{i, j}));
+    for (std::size_t i = 0; i < (*shape)[axis]; ++i)
+    {
+      indices[axis] = i;
+      append_elements(axis + 1);
+    }
+  };
+  append_elements(0);
   return result;
 }
 
@@ -2623,16 +2628,25 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
   if (!nested || shape.size() == 1)
     return list.build_list_from_exprs(elems);
 
-  std::vector<exprt> rows;
-  const std::size_t cols = shape[1];
-  for (std::size_t row = 0; row < shape[0]; ++row)
-  {
-    const auto first = elems.begin() + static_cast<std::ptrdiff_t>(row * cols);
-    const auto last = first + static_cast<std::ptrdiff_t>(cols);
-    const std::vector<exprt> row_elems(first, last);
-    rows.push_back(list.build_list_from_exprs(row_elems));
-  }
-  return list.build_list_from_exprs(rows);
+  std::function<exprt(std::size_t, std::size_t &)> build_nested =
+    [&](std::size_t axis, std::size_t &offset) -> exprt {
+    if (axis + 1 == shape.size())
+    {
+      const auto first = elems.begin() + static_cast<std::ptrdiff_t>(offset);
+      offset += shape[axis];
+      const auto last = elems.begin() + static_cast<std::ptrdiff_t>(offset);
+      return list.build_list_from_exprs(std::vector<exprt>(first, last));
+    }
+
+    std::vector<exprt> children;
+    children.reserve(shape[axis]);
+    for (std::size_t i = 0; i < shape[axis]; ++i)
+      children.push_back(build_nested(axis + 1, offset));
+    return list.build_list_from_exprs(children);
+  };
+
+  std::size_t offset = 0;
+  return build_nested(0, offset);
 }
 
 std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
@@ -2651,7 +2665,7 @@ python_converter::build_numpy_descriptor_materialized_elements(
     get_numpy_nditer_logical_shape(root_id);
   if (!shape)
     return std::nullopt;
-  if (shape->empty() || shape->size() > 2)
+  if (shape->empty())
     throw std::runtime_error(unsupported_rank_error);
 
   if (
@@ -2803,11 +2817,6 @@ python_converter::get_numpy_nditer_logical_shape(
   // view branch above eventually does for its source. This is what lets
   // .tolist()/.any()/.all() reuse the exact same descriptor materialization
   // path for a bare `np.array(...)` instead of needing one of their own.
-  // Rank is capped at 2 to match that path's own scope -- without it, a
-  // 3-D+ array would get a shape here instead of declining, and reach the
-  // descriptor path's "rank 1 or 2" rejection instead of this family's own
-  // "constant numeric inputs only" one (regression/numpy/
-  // sum_constructor_non_numeric_fail pins the latter).
   if (numpy_array_symbols_.count(root_id) == 0)
     return std::nullopt;
 
@@ -2818,7 +2827,7 @@ python_converter::get_numpy_nditer_logical_shape(
   const namespacet ns(symbol_table_);
   std::vector<std::size_t> shape =
     numpy_shape_from_type(ns, ns.follow(plain->get_type()));
-  if (shape.empty() || shape.size() > 2)
+  if (shape.empty())
     return std::nullopt;
   return shape;
 }
