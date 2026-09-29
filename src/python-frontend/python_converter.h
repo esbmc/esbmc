@@ -1087,6 +1087,27 @@ private:
     const std::string &method_name,
     bool is_ctor) const;
 
+  using mro_memo =
+    std::map<std::string, std::optional<std::vector<std::string>>>;
+
+  /// The C3 method resolution order of class @p class_name in the file being
+  /// converted. Only classes that file binds once, by their class statement,
+  /// take part, each base named plainly; anything else (an import, a
+  /// rebinding, a qualified base) yields nothing.
+  std::optional<std::vector<std::string>>
+  class_mro(const std::string &class_name) const;
+  std::optional<std::vector<std::string>>
+  class_mro(const std::string &class_name, mro_memo &memo) const;
+  static std::optional<std::vector<std::string>>
+  c3_merge(std::vector<std::vector<std::string>> seqs);
+  /// The class statement that alone binds @p name in the file being
+  /// converted, or null.
+  const nlohmann::json *sole_class_binding(const std::string &name) const;
+  /// Whether the body of class @p class_name may bind @p name, hiding any
+  /// base's @p name.
+  bool class_binds_name(const std::string &class_name, const std::string &name)
+    const;
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
