@@ -114,16 +114,17 @@ exprt python_converter::compare_constants_internal(
       lhs.type().subtype() == char_type() &&
       rhs.type().subtype() == char_type())
     {
-      // Type-identifier constants (e.g. from `x = int`) have no operands and
-      // store the name in get_value(). String literals have individual char
-      // operands and an empty get_value(). These represent different Python
-      // objects (int != "int"), so comparing across formats is always unequal;
-      // an ordered comparison across them is meaningless, so fall through.
-      bool lhs_is_type_id = lhs.operands().empty();
-      bool rhs_is_type_id = rhs.operands().empty();
-      if (lhs_is_type_id != rhs_is_type_id)
-        return (op == "Eq" || op == "NotEq") ? gen_bool(op == "NotEq")
-                                             : nil_exprt();
+      // A class object shares a string's char-array model but never equals
+      // one (int != "int"), and orders against nothing.
+      if (is_class_object(lhs) || is_class_object(rhs))
+      {
+        if (op != "Eq" && op != "NotEq")
+          throw std::runtime_error(
+            "TypeError: ordered comparison of a class object");
+        const bool same_class = is_class_object(lhs) && is_class_object(rhs) &&
+                                lhs.get("value") == rhs.get("value");
+        return gen_bool(same_class == (op == "Eq"));
+      }
 
       // Extract string values and compare lexicographically (Python orders
       // strings by code point; for the char-array model this is byte-wise,
