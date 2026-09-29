@@ -336,7 +336,11 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
-    if (cmdline.isset("gcse"))
+    // The available-expressions analysis is sequential: another thread may
+    // write between two reads it treats as equal (#8007).
+    if (cmdline.isset("gcse") && spawns_threads(goto_functions))
+      log_warning("--gcse is ignored: the program may create threads");
+    else if (cmdline.isset("gcse"))
     {
       auto andersen = std::make_shared<andersent>();
       log_status("Computing points-to analysis (Andersen)");

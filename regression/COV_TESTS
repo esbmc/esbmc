@@ -1857,6 +1857,8 @@ regression/esbmc/vla_long_size_truncation_fail
 regression/esbmc/vla_middle_dim_decl
 regression/esbmc/vla_middle_dim_decl_fail
 regression/esbmc/github_7992
+regression/esbmc/github_8007
+regression/esbmc/github_8007_safe
 regression/esbmc/gcse_typecast_lvalue_kill
 regression/esbmc/gcse_index_alias_direct
 regression/esbmc/gcse_union_member_alias
