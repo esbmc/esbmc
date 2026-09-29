@@ -332,6 +332,168 @@ std::size_t numpy_shape_element_count(const std::vector<std::size_t> &shape)
     shape.begin(), shape.end(), std::size_t{1}, std::multiplies<>());
 }
 
+std::optional<std::vector<std::size_t>>
+numpy_raw_shape_sequence(const nlohmann::json &shape_arg)
+{
+  if (shape_arg.value("_type", "") == "Constant")
+  {
+    std::optional<long long> dim = literal_int_value(shape_arg);
+    if (!dim || *dim < 0)
+      return std::nullopt;
+    return std::vector<std::size_t>{static_cast<std::size_t>(*dim)};
+  }
+
+  if (!shape_arg.contains("elts"))
+    return std::nullopt;
+
+  std::vector<std::size_t> shape;
+  for (const auto &dim_node : shape_arg["elts"])
+  {
+    std::optional<long long> dim = literal_int_value(dim_node);
+    if (!dim || *dim < 0)
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(*dim));
+  }
+  return shape;
+}
+
+std::optional<std::vector<std::size_t>>
+numpy_literal_array_shape(const nlohmann::json &node)
+{
+  if (!node.contains("elts") || !node["elts"].is_array())
+    return std::nullopt;
+
+  std::vector<std::size_t> shape{node["elts"].size()};
+  if (node["elts"].empty())
+    return shape;
+
+  const nlohmann::json &first = node["elts"][0];
+  if (
+    !first.is_object() ||
+    (first.value("_type", "") != "List" && first.value("_type", "") != "Tuple"))
+    return shape;
+
+  std::optional<std::vector<std::size_t>> row_shape =
+    numpy_literal_array_shape(first);
+  if (!row_shape)
+    return std::nullopt;
+
+  for (std::size_t i = 1; i < node["elts"].size(); ++i)
+  {
+    const nlohmann::json &row = node["elts"][i];
+    if (!row.is_object() || row.value("_type", "") != first.value("_type", ""))
+      return std::nullopt;
+    if (numpy_literal_array_shape(row) != row_shape)
+      return std::nullopt;
+  }
+
+  shape.insert(shape.end(), row_shape->begin(), row_shape->end());
+  return shape;
+}
+
+static bool get_numpy_constructor_call(
+  const nlohmann::json &node,
+  std::string &ctor,
+  const nlohmann::json *&args)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Call" ||
+    !node.contains("func") || !node["func"].is_object() ||
+    node["func"].value("_type", "") != "Attribute" || !node.contains("args") ||
+    !node["args"].is_array())
+    return false;
+
+  ctor = node["func"].value("attr", "");
+  args = &node["args"];
+  return true;
+}
+
+static std::optional<std::vector<std::size_t>>
+numpy_shape_from_shape_arg(const nlohmann::json &args)
+{
+  if (args.empty())
+    return std::nullopt;
+  return numpy_raw_shape_sequence(args[0]);
+}
+
+static const nlohmann::json *
+numpy_keyword_value(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.contains("keywords") || !node["keywords"].is_array())
+    return nullptr;
+
+  for (const auto &kw : node["keywords"])
+    if (
+      kw.is_object() && kw.value("arg", std::string()) == name &&
+      kw.contains("value"))
+      return &kw["value"];
+  return nullptr;
+}
+
+static std::optional<std::vector<std::size_t>> numpy_eye_or_identity_shape(
+  const nlohmann::json &node,
+  const nlohmann::json &args,
+  bool has_cols_arg)
+{
+  if (args.empty())
+    return std::nullopt;
+
+  std::optional<long long> rows = literal_int_value(args[0]);
+  if (!rows || *rows < 0)
+    return std::nullopt;
+
+  long long cols = *rows;
+  const nlohmann::json *cols_arg =
+    has_cols_arg ? numpy_keyword_value(node, "M") : nullptr;
+  if (has_cols_arg && !cols_arg && args.size() > 1)
+    cols_arg = &args[1];
+  if (cols_arg)
+  {
+    std::optional<long long> parsed_cols = literal_int_value(*cols_arg);
+    if (!parsed_cols || *parsed_cols < 0)
+      return std::nullopt;
+    cols = *parsed_cols;
+  }
+
+  return std::vector<std::size_t>{
+    static_cast<std::size_t>(*rows), static_cast<std::size_t>(cols)};
+}
+
+static std::optional<std::vector<std::size_t>>
+numpy_linspace_shape(const nlohmann::json &args)
+{
+  if (args.size() < 3)
+    return std::vector<std::size_t>{50};
+
+  std::optional<long long> num = literal_int_value(args[2]);
+  if (!num || *num < 0)
+    return std::nullopt;
+  return std::vector<std::size_t>{static_cast<std::size_t>(*num)};
+}
+
+std::optional<std::vector<std::size_t>>
+numpy_constructor_shape(const nlohmann::json &node)
+{
+  std::string ctor;
+  const nlohmann::json *args = nullptr;
+  if (!get_numpy_constructor_call(node, ctor, args))
+    return std::nullopt;
+
+  if (ctor == "array")
+    return args->empty() ? std::nullopt : numpy_literal_array_shape((*args)[0]);
+
+  if (ctor == "zeros" || ctor == "ones" || ctor == "full" || ctor == "empty")
+    return numpy_shape_from_shape_arg(*args);
+
+  if (ctor == "eye" || ctor == "identity")
+    return numpy_eye_or_identity_shape(node, *args, ctor == "eye");
+
+  if (ctor == "linspace")
+    return numpy_linspace_shape(*args);
+
+  return std::nullopt;
+}
+
 std::optional<std::vector<long long>>
 numpy_raw_reshape_sequence(const nlohmann::json &shape_arg)
 {
@@ -886,6 +1048,14 @@ struct retype_alias_scope_guard
 
 } // namespace
 
+std::optional<std::vector<std::size_t>>
+python_converter::get_numpy_constructor_shape(const nlohmann::json &node) const
+{
+  if (!is_numpy_array_constructor_expr(node))
+    return std::nullopt;
+  return numpy_constructor_shape(node);
+}
+
 // External linkage: shared with numpy_call_expr.cpp (declared in
 // python_converter.h) so both can verify a Name/Attribute receiver actually
 // resolves to the imported numpy module.
@@ -1121,6 +1291,34 @@ static bool names_builtin(
   return !json_utils::is_class(spelling, ast);
 }
 
+static bool is_scalar_pointee(const typet &ptr)
+{
+  const typet &sub = ptr.subtype();
+  return sub.id() == "signedbv" || sub.id() == "unsignedbv" ||
+         sub.id() == "floatbv" || sub.id() == "fixedbv" || sub.is_bool();
+}
+
+/// The type of a Subscript annotation whose base names it only partly, or an
+/// empty type.
+typet python_converter::subscript_annotation_type(
+  const std::string &base,
+  const nlohmann::json &var_node)
+{
+  // Preserve concrete tuple element types for Tuple[...] annotations instead
+  // of resolving to the typing.Tuple class type.
+  if (base == "Tuple" || base == "tuple")
+    return get_type_from_annotation(var_node["annotation"], var_node);
+
+  // Optional[T] takes the type a function returning it has: T* for a
+  // reference T (NULL for None), the Optional<T> struct for a scalar one. The
+  // bare "Optional" placeholder cannot hold None.
+  if (base != "Optional")
+    return typet();
+  typet t = get_type_from_annotation(var_node["annotation"], var_node);
+  return t.is_struct() || (t.is_pointer() && !is_scalar_pointee(t)) ? t
+                                                                    : typet();
+}
+
 std::pair<std::string, typet>
 python_converter::extract_type_info(const nlohmann::json &var_node)
 {
@@ -1144,13 +1342,9 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
         ann["value"]["_type"] == "Attribute" && ann["value"].contains("attr"))
         var_type_str = ann["value"]["attr"];
 
-      // Preserve concrete tuple element types for Tuple[...] annotations
-      // instead of resolving to the typing.Tuple class type.
-      if (var_type_str == "Tuple" || var_type_str == "tuple")
-      {
-        var_typet = get_type_from_annotation(ann, var_node);
-        return {var_type_str, var_typet};
-      }
+      if (typet t = subscript_annotation_type(var_type_str, var_node);
+          !t.id().empty())
+        return {var_type_str, t};
     }
     else if (
       ann.contains("_type") && ann["_type"] == "Attribute" &&
@@ -1217,6 +1411,22 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// A list element that may be a string or a number is read as a tagged
+/// scalar; the variable it is stored in becomes one too, whatever type an
+/// annotation (or the loop lowering's inferred one) gave it (#4797).
+void python_converter::adopt_tagged_element(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    !lhs_symbol || !type_handler_.is_tagged_scalar_type(rhs.type()) ||
+    type_handler_.is_tagged_scalar_type(lhs_symbol->get_type()))
+    return;
+  lhs_symbol->set_type(migrate_type(rhs.type()));
+  lhs.type() = rhs.type();
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1231,6 +1441,8 @@ void python_converter::handle_assignment_type_adjustments(
   // Don't rewrite lhs_symbol's type for a subscript target.
   if (assignment_target_is_subscript(ast_node))
     return;
+
+  rhs = wrap_literal_if_optional(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -3752,6 +3964,114 @@ void python_converter::mirror_numpy_transpose_assignment_from_targets(
     ast_node["targets"][0], rhs, location, target_block);
 }
 
+bool python_converter::preserve_conditional_numpy_alias_shape(
+  const std::string &lhs_id,
+  const std::string &rhs_id,
+  bool unconditional_assignment)
+{
+  if (unconditional_assignment)
+    return false;
+
+  if (
+    numpy_ambiguous_shape_symbols_.count(rhs_id) != 0 ||
+    numpy_param_shapes_.count(rhs_id) != 0)
+    numpy_ambiguous_shape_symbols_.insert(lhs_id);
+  else
+    numpy_ambiguous_shape_symbols_.erase(lhs_id);
+  numpy_param_shapes_.erase(lhs_id);
+  return true;
+}
+
+void python_converter::copy_numpy_alias_shape_state(
+  const std::string &lhs_id,
+  const std::string &rhs_id)
+{
+  if (numpy_ambiguous_shape_symbols_.count(rhs_id) != 0)
+    numpy_ambiguous_shape_symbols_.insert(lhs_id);
+  else
+    numpy_ambiguous_shape_symbols_.erase(lhs_id);
+
+  if (auto rhs_shape = numpy_param_shapes_.find(rhs_id);
+      rhs_shape != numpy_param_shapes_.end())
+    numpy_param_shapes_[lhs_id] = rhs_shape->second;
+  else
+    numpy_param_shapes_.erase(lhs_id);
+}
+
+void python_converter::reject_conditional_numpy_alias_rebind(
+  const exprt &lhs,
+  const nlohmann::json &ast_node) const
+{
+  if (
+    block_nesting_ == function_body_depth_ + 1 || !lhs.is_symbol() ||
+    !ast_node.contains("value") || !ast_node["value"].is_object())
+    return;
+
+  const nlohmann::json &rhs_node = ast_node["value"];
+  if (rhs_node.value("_type", "") != "Name" || !rhs_node.contains("id"))
+    return;
+
+  const std::string rhs_id =
+    resolve_name_symbol_id(rhs_node["id"].get<std::string>());
+  if (numpy_array_symbols_.count(rhs_id) != 0)
+    throw std::runtime_error(
+      "TypeError: numpy array shape is ambiguous across control-flow "
+      "branches");
+}
+
+bool python_converter::update_numpy_array_binding_from_name(
+  const exprt &lhs,
+  const std::string &lhs_id,
+  const nlohmann::json &rhs_node,
+  bool unconditional_assignment)
+{
+  if (rhs_node.value("_type", "") != "Name" || !rhs_node.contains("id"))
+    return false;
+
+  const std::string rhs_id =
+    resolve_name_symbol_id(rhs_node["id"].get<std::string>());
+  if (rhs_id == lhs_id)
+    return true;
+
+  if (rhs_node.value("_numpy_copy_method", false))
+  {
+    clear_numpy_array_storage_aliases_for(lhs_id);
+    clear_numpy_view_copy(lhs);
+    numpy_array_symbols_.insert(lhs_id);
+    if (preserve_conditional_numpy_alias_shape(
+          lhs_id, rhs_id, unconditional_assignment))
+      return true;
+    copy_numpy_alias_shape_state(lhs_id, rhs_id);
+    return true;
+  }
+
+  auto view_it = numpy_view_copy_sources_.find(rhs_id);
+  if (view_it != numpy_view_copy_sources_.end())
+  {
+    clear_numpy_array_storage_aliases_for(lhs_id);
+    numpy_param_shapes_.erase(lhs_id);
+    if (!unconditional_assignment)
+      numpy_ambiguous_shape_symbols_.insert(lhs_id);
+    else
+      numpy_ambiguous_shape_symbols_.erase(lhs_id);
+    numpy_view_copy_sources_[lhs_id] = view_it->second;
+    numpy_array_symbols_.insert(lhs_id);
+    return true;
+  }
+
+  if (numpy_array_symbols_.count(rhs_id) == 0)
+    return false;
+
+  clear_numpy_view_copy(lhs);
+  numpy_array_symbols_.insert(lhs_id);
+  bind_numpy_array_storage_alias(lhs_id, rhs_id);
+  if (preserve_conditional_numpy_alias_shape(
+        lhs_id, rhs_id, unconditional_assignment))
+    return true;
+  copy_numpy_alias_shape_state(lhs_id, rhs_id);
+  return true;
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3760,41 +4080,17 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
-
-  if (rhs_node.value("_type", "") == "Name" && rhs_node.contains("id"))
-  {
-    const std::string rhs_id =
-      resolve_name_symbol_id(rhs_node["id"].get<std::string>());
-    if (rhs_id == lhs_id)
-      return;
-
-    if (rhs_node.value("_numpy_copy_method", false))
-    {
-      clear_numpy_array_storage_aliases_for(lhs_id);
-      clear_numpy_view_copy(lhs);
-      numpy_array_symbols_.insert(lhs_id);
-      return;
-    }
-
-    auto view_it = numpy_view_copy_sources_.find(rhs_id);
-    if (view_it != numpy_view_copy_sources_.end())
-    {
-      clear_numpy_array_storage_aliases_for(lhs_id);
-      numpy_view_copy_sources_[lhs_id] = view_it->second;
-      numpy_array_symbols_.insert(lhs_id);
-      return;
-    }
-    if (numpy_array_symbols_.count(rhs_id) != 0)
-    {
-      clear_numpy_view_copy(lhs);
-      numpy_array_symbols_.insert(lhs_id);
-      bind_numpy_array_storage_alias(lhs_id, rhs_id);
-      return;
-    }
-  }
+  const bool unconditional_assignment =
+    block_nesting_ == function_body_depth_ + 1;
+  if (update_numpy_array_binding_from_name(
+        lhs, lhs_id, rhs_node, unconditional_assignment))
+    return;
 
   clear_numpy_transpose_views_of(lhs_id);
   clear_numpy_array_storage_aliases_for(lhs_id);
+  numpy_param_shapes_.erase(lhs_id);
+  if (unconditional_assignment)
+    numpy_ambiguous_shape_symbols_.erase(lhs_id);
 
   if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
     return;
@@ -3808,8 +4104,6 @@ void python_converter::update_numpy_array_binding(
     return;
   }
 
-  const bool unconditional_assignment =
-    block_nesting_ == function_body_depth_ + 1;
   if (unconditional_assignment || numpy_view_copy_sources_.count(lhs_id) == 0)
     clear_numpy_view_copy(lhs);
 
@@ -3821,9 +4115,29 @@ void python_converter::update_numpy_array_binding(
   if (
     is_numpy_array_constructor_expr(rhs_node) ||
     is_array_returning_call_expr(rhs_node, lhs))
+  {
     numpy_array_symbols_.insert(lhs_id);
+    if (unconditional_assignment)
+    {
+      if (
+        std::optional<std::vector<std::size_t>> shape =
+          get_numpy_constructor_shape(rhs_node))
+        numpy_param_shapes_[lhs_id] = *shape;
+      else
+        numpy_param_shapes_.erase(lhs_id);
+    }
+    else
+    {
+      if (get_numpy_constructor_shape(rhs_node))
+        numpy_ambiguous_shape_symbols_.insert(lhs_id);
+      numpy_param_shapes_.erase(lhs_id);
+    }
+  }
   else
+  {
     numpy_array_symbols_.erase(lhs_id);
+    numpy_param_shapes_.erase(lhs_id);
+  }
 }
 
 bool python_converter::is_array_returning_call_expr(
@@ -6463,6 +6777,8 @@ void python_converter::get_var_assign(
       return;
     }
 
+    adopt_tagged_element(lhs_symbol, lhs, rhs);
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -6574,6 +6890,8 @@ void python_converter::get_var_assign(
       return;
     }
 
+    reject_conditional_numpy_alias_rebind(lhs, effective_ast_node);
+
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation. A subscript store rebinds an element,
@@ -6676,11 +6994,9 @@ void python_converter::get_var_assign(
   }
   else
   {
-    {
-      exprt v = gen_zero(current_element_type, true);
-      v.zero_initializer(true);
-      lhs_symbol->set_value(std::move(v));
-    }
+    // No Python reader wants #zero_initializer; only Solidity's converter
+    // reads it, on its own values.
+    lhs_symbol->set_value(migrate_expr(gen_zero(current_element_type, true)));
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
@@ -6938,7 +7254,7 @@ void python_converter::get_compound_assign(
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
         {
-          symbol->set_value(concatenated);
+          symbol->set_value(migrate_expr(concatenated));
         }
       }
     }
@@ -7059,6 +7375,15 @@ exprt python_converter::apply_bool_dunder_for_not(
 
 exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
 {
+  // An optional is truthy when it holds a truthy value (#8016).
+  if (type_utils::is_optional_struct(cond.type()))
+  {
+    const exprt base = materialize_optional(cond, nlohmann::json());
+    return and_exprt(
+      not_exprt(member_exprt(base, "is_none", bool_type())),
+      typecast_exprt(unwrap_optional_if_needed(base), bool_type()));
+  }
+
   typet value_type = ns.follow(cond.type());
   if (value_type.is_pointer())
     value_type = ns.follow(value_type.subtype());
@@ -7090,6 +7415,36 @@ exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
   exprt result = store_call_result(bool_call, location, "cond_bool");
   result.location() = location;
   return result;
+}
+
+/// Type the arms of `T if c else None` (or the mirror) in place and return the
+/// ternary's type. A target over a reference T holds T*, NULL for None;
+/// otherwise the result is the Optional[T] struct.
+typet python_converter::optional_ternary_type(
+  exprt &then,
+  exprt &else_expr,
+  bool then_is_none)
+{
+  const typet &value_type = then_is_none ? else_expr.type() : then.type();
+  const bool reference_value = value_type.is_array() || value_type.is_pointer();
+  const typet &target =
+    current_lhs ? current_lhs->type() : ternary_return_target_;
+  if (!reference_value || !target.is_pointer())
+  {
+    typet result_type = type_handler_.build_optional_type(value_type);
+    then = wrap_in_optional(then, result_type);
+    else_expr = wrap_in_optional(else_expr, result_type);
+    return result_type;
+  }
+
+  const typet result_type = target;
+  exprt &value = then_is_none ? else_expr : then;
+  if (value.type().is_array())
+    value = string_handler_.get_array_base_address(value);
+  if (value.type() != result_type)
+    value = typecast_exprt(value, result_type);
+  (then_is_none ? then : else_expr) = gen_zero(result_type);
+  return result_type;
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
@@ -7627,14 +7982,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
     typet result_type;
     if (then_is_none != else_is_none)
-    {
-      // One branch is None, the other is T → Optional[T] models Python's T |
-      // None
-      typet concrete_type = then_is_none ? else_expr.type() : then.type();
-      result_type = type_handler_.build_optional_type(concrete_type);
-      then = wrap_in_optional(then, result_type);
-      else_expr = wrap_in_optional(else_expr, result_type);
-    }
+      result_type = optional_ternary_type(then, else_expr, then_is_none);
     else
     {
       // Resolve result type based on branch types
@@ -7792,6 +8140,18 @@ exprt python_converter::box_value_on_heap(
   return heap_ptr;
 }
 
+/// A returned `T if c else None` takes the declared return type as its
+/// target, as an assigned one takes the variable's.
+exprt python_converter::get_return_value(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "IfExp")
+    return get_expr(value);
+  ternary_return_target_ = current_func_return_type_;
+  exprt result = get_expr(value);
+  ternary_return_target_ = typet();
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7895,7 +8255,7 @@ void python_converter::get_return_statements(
     }
   }
 
-  exprt return_value = get_expr(ast_node["value"]);
+  exprt return_value = get_return_value(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
@@ -8104,14 +8464,7 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
-    // Wrap return value in Optional if the function returns Optional
-    if (current_func_return_type_.is_struct())
-    {
-      const struct_typet &st = to_struct_type(current_func_return_type_);
-      if (st.tag().as_string().starts_with("tag-Optional_"))
-        return_value =
-          wrap_in_optional(return_value, current_func_return_type_);
-    }
+    return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
 
@@ -8120,6 +8473,35 @@ void python_converter::get_return_statements(
     return_code.location() = location;
     target_block.copy_to_operands(return_code);
   }
+}
+
+/// \p value as the current function returns it (#8016): wrapped when the
+/// function returns Optional; when it cannot hold None, an optional's value,
+/// with None reported rather than read as zero.
+exprt python_converter::coerce_optional_return(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  if (type_utils::is_optional_struct(current_func_return_type_))
+    return wrap_in_optional(value, current_func_return_type_);
+  if (!type_utils::is_optional_struct(value.type()))
+    return value;
+  return narrow_optional_return(value, location, target_block);
+}
+
+exprt python_converter::narrow_optional_return(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  const exprt base = materialize_optional(value, nlohmann::json());
+  code_assertt not_none(not_exprt(member_exprt(base, "is_none", bool_type())));
+  not_none.location() = location;
+  not_none.location().comment(
+    "None returned from a function whose return type cannot hold None");
+  target_block.copy_to_operands(not_none);
+  return unwrap_optional_if_needed(base);
 }
 
 exprt python_converter::get_block(

@@ -1260,6 +1260,18 @@ python_annotation<Json>::infer_lambda_return_type(const Json &lambda_elem) const
     return "Any"; // Default for other lambda expressions
 }
 
+/// Whether a Union[...] slice lists None among its members.
+template <class Json>
+static bool union_has_none(const Json &slice)
+{
+  if (!slice.is_object() || !slice.contains("elts"))
+    return false;
+  for (const auto &elt : slice["elts"])
+    if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+      return true;
+  return false;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_function_return_type(
   const std::string &func_name,
@@ -1374,6 +1386,15 @@ std::string python_annotation<Json>::get_function_return_type(
           if (return_type == "Subscript")
           {
             functions_in_analysis_.erase(func_name);
+            // Bare "Optional" cannot hold None; leave the target unannotated
+            // so it takes the callee's resolved type (#8016). Union[T, None]
+            // is the same type.
+            if (
+              returns.contains("value") && returns["value"].contains("id") &&
+              (returns["value"]["id"] == "Optional" ||
+               (returns["value"]["id"] == "Union" &&
+                union_has_none(returns.value("slice", Json())))))
+              return "";
             if (returns.contains("value") && returns["value"].contains("id"))
               return returns["value"]["id"];
             else
@@ -2595,6 +2616,11 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "decode")
       return "str";
+    // list.pop() returns an element, never the list (#4797).
+    if (
+      obj_type == "list" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "pop")
+      return "Any";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.
     // When that fails (no default arg supplied, e.g. ``d.get(key)``),

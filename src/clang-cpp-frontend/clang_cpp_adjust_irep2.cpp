@@ -508,10 +508,8 @@ void clang_cpp_adjust_irep2::adjust_symbol_type(symbolt &symbol)
     return;
 
   typet t = symbol.get_type();
-  // Legacy: the seam drops a ctor/dtor's pseudo return type, which the vptr
-  // initialisation reads (docs/roadmap/scope-clang-cpp-irep2.md §11).
   if (finalize_exception_specification(ns, t))
-    symbol.set_type(std::move(t));
+    symbol.set_type(migrate_type(t));
 }
 
 void clang_cpp_adjust_irep2::hoist_switch_declaration(expr2tc &expr)

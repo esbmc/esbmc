@@ -2524,6 +2524,88 @@ mixes the features, where the corpus's 3 095 rows do.
 What remains for this frontend is therefore not more probing of the adjust pass.
 It is `clang_cpp_convert.cpp` and the 639 legacy type mentions
 (`frontends-to-irep2.md` §43), which the phase list puts last for every frontend.
+## 7. The three remaining B-2 writes, characterised (2026-09-17)
+
+Phase 7's B-2* residue is three, and they were the last undocumented ones in any frontend. None is a
+conversion waiting to be made.
+
+### 7.1 `clang_cpp_adjust_expr.cpp:85` -- meaningless while the adjuster is legacy
+
+This is `clang_cpp_adjust::adjust_symbol`'s own `symbol.set_type(std::move(t))`, i.e. the legacy
+read-modify-write that `scope-solidity-irep2.md` §19 identified as reverting *every* converter-side IREP2
+write in every frontend that runs this pass. Converting the adjuster's own write changes nothing while
+the pass around it is legacy: it would store IREP2 and then the next legacy arm would overwrite it. It
+converts when the pass does, not before.
+
+### 7.2 `clang_cpp_convert.cpp:3185` -- a chain of two losses, and the reader cannot derive its way out
+
+The write carries a marker the seam drops:
+
+```cpp
+exprt v = fd_symb->get_value();
+v.need_vptr_init(needs_vptr_init);   // a_need_vptr_init, a legacy comment flag
+fd_symb->set_value(std::move(v));    // <- the residue
+```
+
+`grep -c need_vptr_init src/util/irep/migrate.cpp` is **0**, and the reader is
+`clang_cpp_adjust_code_gen.cpp:43`, which decides whether to emit vptr initialisation at all. So
+converting this write would drop the flag and silently skip vtable setup -- the same shape as
+`scope-python-irep2.md` §12's `bases`, but on a soundness-relevant path rather than an exception-id one.
+
+§80's reader route looks available at first glance: there is exactly one reader, in the same frontend,
+and the flag is *derived* rather than primitive -- `:3170-3180` computes it by scanning the class's
+components for one with `is_vtptr`. A reader that scanned for itself would need no marker.
+
+It does not work, because the derivation depends on a second dropped attribute:
+`grep -c is_vtptr src/util/irep/migrate.cpp` is **0** too. `is_vtptr` is a component attribute, and §46
+established that an arbitrary component attribute does not cross -- only the base name has a field. So
+the reader cannot recompute what the writer computed, and the chain is two deep.
+
+That makes this the seventh marker found not to survive the seam, and the first where both the marker
+*and* the input to its derivation are lost. The routes are: carry `is_vtptr` per component (a second
+unreflected vector on `struct_type2t`, beside `member_base_names`), or model the vtable pointer
+structurally so that "has a vptr" is a question about the component list rather than about an attribute
+on it. The second is the same choice §12.3 poses for Python's `bases`, and for the same reason -- an
+attribute is being used where structure would answer the question.
+
+### 7.3 `clang_cpp_convert.cpp:3156` -- blocked, and the cheap probe said otherwise
+
+`fd_symb->set_type(component_type)` syncs a ctor/dtor's function symbol to its component in the class
+type. Converting it fails **27 of the 142** C++ tests that use a destructor or `virtual`; the same 142
+are 142/142 on base, so the attribution is exact.
+
+The static reason was visible before the measurement and is worth stating, because the first probe
+contradicted it. `migrate_type` collapses both marker return types to nothing:
+
+```cpp
+// migrate.cpp:407-418
+if (type.id() == "destructor")  return get_empty_type();   // "Which is nil."
+if (type.id() == "constructor") return get_empty_type();
+```
+
+and three readers test that id to tell one from the other -- `clang_cpp_adjust_code_gen.cpp:61`,
+`clang_cpp_convert_vft.cpp:547`, and an `assert` at `clang_cpp_adjust_expr.cpp:271`. The site's own
+comment says as much: *"the adjuster reads the return type back to tell a ctor from a dtor"*.
+
+**The probe that nearly closed this wrongly.** A hand-written `struct S { S(); ~S(); }` verifies
+successfully with the conversion applied. On that evidence the write looked convertible, and §7.3's first
+draft said so. It is a false negative: the sync leaves the *component's* type legacy, so a program simple
+enough to read only that never notices, and it takes an inheritance or virtual-dispatch shape to reach a
+reader that consults the function symbol. A narrow probe passing is not evidence of safety -- the
+corpus-by-property subset is, and choosing the subset by "uses a destructor or `virtual`" is what found
+it in 142 tests rather than 1065.
+
+So this is the eighth marker not to survive the seam, and unusually it is a *type id* rather than an
+attribute: `constructor` and `destructor` are legacy type kinds with no IREP2 counterpart. The routes are
+the same three, and the structural one is again the interesting answer -- a ctor/dtor is not a function
+whose return type is a special id, it is a function with a role, and the role could be a field on
+`code_type2t` rather than a spelling of its return type.
+
+### 7.4 So all three stay legacy
+
+`:85` converts when the adjuster does. `:3185` is blocked two deep. `:3156` is blocked on the ctor/dtor
+return-type ids. Phase 7's B-2* residue of three is complete and none of it is a conversion waiting to be
+made, which is what "characterised" means here.
 
 ## 11. The exception specification crosses the seam, and the ctor/dtor marker still does not (2026-09-25)
 
@@ -2550,3 +2632,57 @@ With the carry disabled while the writes were IREP2-side, ten `regression/esbmc-
 failed (e.g. `exception_spec_dynamic_violation_fail`); `unit/util/migrate.test.cpp` pins the round
 trip, the unresolved case, that no specification adds no key, and that a specification is no part of
 the type's identity.
+
+## 12. The ctor/dtor marker crosses the seam (2026-09-25)
+
+`frontends-to-irep2.md` §50.2 found the ctor/dtor function-type write blocked on the pseudo return
+type: `migrate_type` maps `"constructor"` and `"destructor"` to `empty`, and vptr initialisation tests
+for exactly those ids. §11 hit the same wall from the exception-specification side.
+
+`code_type2t` now carries the marker (`return_marker`) and `#implicit_union_copy_move_constructor`
+(`implicit_union_copy_move`) as unreflected fields, and `migrate_type_back` restores the pseudo return
+type from them. With it, three writes store IREP2: `clang_cpp_convert.cpp`'s ctor/dtor
+`fd_symb->set_type` (§50.2's 254 failures of 1 061) and §11's two exception-specification writes.
+clang-cpp B-2* 4 -> 1; the last is `need_vptr_init` on the value.
+
+Two further things the carry exposed, each measured:
+
+- **An unresolved dynamic specification must cross too.** The converter's write runs before
+  `finalize_exception_specification`, so a `throw(T...)` spec still holds `exception_spec_decl`.
+  §11 dropped such a spec whole, which made `X() throw() { throw 5; }` potentially throwing, a false
+  proof in `try_catch/try-catch_decl_10_bug`; its kind now always crosses. `exception_decl` carries the
+  declared types, and finalize resolves them after the round trip:
+  `try_catch/ctor_throw_spec_declared_types` fails without it (its `_fail` twin cannot, since losing
+  the types only makes the specification stricter).
+- **A constructor call that already passes its object.** In the IREP2 adjust pass a declined VLA
+  construction keeps its initialiser, a constructor call whose first argument is the object.
+  `goto_sideeffects` lowered every call to a `"constructor"`-typed callee by adding a temporary `this`,
+  which it only ever saw once the marker survived; it now adds one only when the call is short of the
+  constructor's parameters (`cpp/irep2_array_vla_construction` failed without it).
+
+What the round trip still drops from a ctor/dtor type, from diffing `--symbol-table-only`: `#inlined`
+on the code type, `#constant` on a reference parameter's pointee, and an implicit parameter's
+`#location`, `name` and plain `identifier`. The one reader found is `c_link.cpp:193`, where `#inlined`
+silences a duplicate-definition warning across translation units; a two-file probe with inline
+ctors and dtors raised none. The argument-count rule in `goto_sideeffects` also cannot tell a variadic
+constructor called without its object from one called with it; no probe reaches that shape.
+
+`esbmc-cpp/{cpp,try_catch}` 1 333 of 1 339 pass, and the six failures (`github_7433*`, `ch8_5`) are the
+exception-type spelling pins another branch updates; the rest of `esbmc-cpp` (1 927) passes apart from
+seven tests at the 120 s cap that take the same time on the base binary.
+
+## 13. The last write: `need_vptr_init` is a one-shot pending flag (2026-09-25)
+
+After §12 clang-cpp's B-2* is 1: `clang_cpp_convert.cpp`'s `fd_symb->set_value(v)` that only sets
+`#need_vptr_init` on a ctor/dtor body. Its value is the class's "has a vptr component" -- the converter
+already falls back to reading `is_vtptr` off the class symbol, "exactly as the adjuster does" -- so the
+fact itself is derivable in `gen_vptr_initializations`.
+
+The flag carries a second meaning, though. `gen_vptr_initializations` clears it once it has inserted
+the assignments and stores the body IREP2-side, so a later pass over the same symbol inserts nothing.
+A derived condition is true every time it is asked. Deleting the write therefore needs somewhere else
+to record "done" -- or a proof that `adjust_symbol` runs once per symbol, which the multi-TU fallback
+above suggests is not something to assume. Converting the write instead needs the body migrated at
+conversion time, which `scope-python-irep2.md` §6.1's rule forbids until every symbol it names exists.
+
+So the write stays until one of those is settled; neither is a mechanical change.
