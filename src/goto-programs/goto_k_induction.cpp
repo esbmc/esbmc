@@ -164,21 +164,6 @@ bool get_entry_cond_rec(
   return false;
 }
 
-/// The slot insert_swap writes the havoc block to. Every edge that reaches
-/// this instruction crosses the block — insert_swap keeps jumps pinned to
-/// the iterator and leaves the original content in the block's fall-through
-/// path — and no other edge does.
-goto_programt::targett
-havoc_slot(goto_functiont &goto_function, goto_programt::targett loop_head)
-{
-  if (
-    loop_head->is_assert() &&
-    loop_head != goto_function.body.instructions.begin() &&
-    std::prev(loop_head)->is_goto())
-    --loop_head;
-  return loop_head;
-}
-
 /// loop_varst is an unordered_set hashed by irep2_hash, which folds in
 /// irep_idt::hash() -- the string's interning sequence number, not its text.
 /// Iteration order therefore depends on what else has been interned earlier in
@@ -214,12 +199,8 @@ void add_havoc_assigns(
 void make_nondet_assign(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  goto_programt::targett slot,
   const std::vector<expr2tc> &vars)
 {
-  const goto_programt::targett original_loop_head = loop_head;
-  loop_head = slot;
-
   goto_programt dest;
   add_havoc_assigns(dest, vars, loop_head->location);
   goto_function.body.insert_swap(loop_head, dest);
@@ -229,10 +210,7 @@ void make_nondet_assign(
   // "walk while inductive_step_instruction" heuristic, which also swallowed an
   // ASSUME a previous pass had left after the head and so retargeted the back
   // edge past the loop's exit IF.
-  if (slot != original_loop_head)
-    loop_head = original_loop_head;
-  else
-    std::advance(loop_head, vars.size());
+  std::advance(loop_head, vars.size());
 }
 
 bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
@@ -410,14 +388,13 @@ bool reaches_back_edge(
   return false;
 }
 
-/// The unconditional jumps that enter the loop somewhere the legacy havoc
-/// placement does not cover: a rotated (bottom-test) loop is entered at its
-/// test rather than at its head, and a switch dispatches through trampolines
-/// that jump past the head into the middle of the body. Without a havoc on
-/// those edges the inductive step symexes the concrete initial state and
-/// truncates at k instead of inducting (#7565). @p slot itself, and every jump
-/// to it, is already covered: insert_swap pins those to the block it writes
-/// there.
+/// The unconditional jumps that enter the loop somewhere other than its head: a
+/// rotated (bottom-test) loop is entered at its test rather than at its head,
+/// and a switch dispatches through trampolines that jump past the head into the
+/// middle of the body. Without a havoc on those edges the inductive step
+/// symexes the concrete initial state and truncates at k instead of inducting
+/// (#7565). Jumps to the head are already covered: insert_swap pins those to
+/// the havoc block it writes there.
 ///
 /// Only unconditional jumps qualify. The havocs go in front of the jump
 /// itself, so every execution reaching them goes on to enter the loop; a
@@ -431,7 +408,6 @@ bool reaches_back_edge(
 std::vector<goto_programt::targett> collect_entry_jumps(
   goto_programt &body,
   const loopst &loop,
-  goto_programt::const_targett slot,
   bool continue_past_failed_assertions)
 {
   std::unordered_set<const instructiont *> loop_range;
@@ -448,13 +424,11 @@ std::vector<goto_programt::targett> collect_entry_jumps(
   std::vector<goto_programt::targett> jumps;
   for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
   {
-    if (
-      loop_range.count(&*it) || it == slot || !it->is_goto() ||
-      !is_true(it->guard))
+    if (loop_range.count(&*it) || !it->is_goto() || !is_true(it->guard))
       continue;
     for (const auto &target : it->targets)
       if (
-        target != slot && loop_range.count(&*target) &&
+        target != loop.get_original_loop_head() && loop_range.count(&*target) &&
         reaches_back_edge(
           body, target, loop_range, back_edge, continue_past_failed_assertions))
       {
@@ -480,7 +454,7 @@ void havoc_entry_jumps(
 {
   for (const goto_programt::targett &jump : jumps)
   {
-    // Only the slot is insert_swapped between collection and here, and
+    // Only the loop head is insert_swapped between collection and here, and
     // collect_entry_jumps excluded it, so the iterator still holds the GOTO.
     assert(jump->is_goto() && is_true(jump->guard));
     goto_programt havocs;
@@ -500,13 +474,11 @@ void transform_loop(
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  goto_programt::targett const slot = havoc_slot(goto_function, loop_head);
-
   // Collected here, applied last: splicing a havoc block displaces the GOTO
   // onto a fresh instruction whose location_number is 0, which is what
   // adjust_loop_head_and_exit keys its loop-exit test on.
   const std::vector<goto_programt::targett> entry_jumps = collect_entry_jumps(
-    goto_function.body, loop, slot, continue_past_failed_assertions);
+    goto_function.body, loop, continue_past_failed_assertions);
   const std::vector<expr2tc> vars = ordered_modified_vars(loop);
 
   // Loop-scoped cache for get_entry_cond_rec. Nested loops in the same
@@ -528,7 +500,7 @@ void transform_loop(
   // and the ASSUME ends up between the havocs and the IF.
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, slot, vars);
+  make_nondet_assign(goto_function, loop_head, vars);
 
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
