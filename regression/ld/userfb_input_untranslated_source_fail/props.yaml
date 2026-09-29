@@ -1,0 +1,8 @@
+properties:
+  # bad0 is not translated, so its OUT is never written. Binding p0.A to it would
+  # keep A, and so Y, at FALSE and make this hold; the front end instead treats
+  # the wire as unmodelled and samples A nondeterministically.
+  - id: P1
+    kind: invariant
+    expression: "!Y"
+    description: "Unprovable: A is not bound to a never-written output"

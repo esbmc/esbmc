@@ -5,6 +5,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <map>
+#include <optional>
 #include <string>
 
 // ld_converter translates LdIR into ESBMC's GOTO IR (irep2 / contextt).
@@ -43,6 +44,9 @@ private:
   // edge contact in the scan compares against the same previous-scan sample,
   // independently of rung order.
   std::map<std::string, symbol_exprt> edge_shadows_;
+  // Translated user-FB bodies by instance; a missing instance did not
+  // translate.
+  std::map<std::string, code_blockt> fb_bodies_;
 
   typet bool_t() const;
   typet int32_t_() const;
@@ -63,6 +67,14 @@ private:
   codet translate_counter(const LdIRNode &n);
   codet translate_arith(const LdIRNode &n);
   codet translate_user_fb(const UserFBExec &ex);
+  code_blockt translate_fb_body(const UserFBExec &ex);
+  std::optional<exprt>
+  wire_source(const std::string &source, const typet &type) const;
+  exprt input_value(
+    const UserFBExec &ex,
+    const std::string &pin,
+    const typet &type) const;
+  void declare_user_fb_interfaces();
 
   void emit_scan_function(const code_blockt &scan_body);
   void emit_main_function();
