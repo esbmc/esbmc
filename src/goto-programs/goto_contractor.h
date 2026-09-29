@@ -17,6 +17,7 @@
 #include <ibex/ibex_Expr.h>
 #include <ibex/ibex_Ctc.h>
 #include <irep2/irep2.h>
+#include <util/base/host_rounding_mode.h>
 #include <util/expr/type_byte_size.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <limits>
@@ -618,6 +619,10 @@ private:
 //-----------------------------------------------------------------------------------------------------------------
 class interval_analysis_ibex_contractor
 {
+  /* Declared first so it is set before, and restored after, every other member
+   * touches ibex. */
+  host_rounding_mode ibex_rounding{FE_UPWARD};
+
 public:
   double parse_time{}, apply_time{}, mod_time{}, cpy_time{};
 

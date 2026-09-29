@@ -97,9 +97,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   // Interval-based assertion pruning (--interval-symex-assert). Evaluate the
   // pre-rename expression (the domain keys on original names). Skip when the
   // domain is bottom — empty intervals vacuously don't contain 0, which would
-  // let every query succeed. Only prune on TRUE, never FALSE: the shared,
-  // non-forked domain may carry assume() residue from sibling branches, and
-  // pruning on a contaminated FALSE would silently drop real bugs.
+  // let every query succeed. Only prune on TRUE: a FALSE verdict still needs
+  // the solver to produce a counterexample.
   if (
     options.get_bool_option("interval-symex-assert") && interval_domain_state &&
     !interval_domain_state->is_bottom() &&
