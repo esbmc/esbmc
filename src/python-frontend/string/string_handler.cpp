@@ -3,7 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <algorithm>
@@ -95,6 +95,18 @@ extract_constant_char_values(const exprt *array_expr)
   }
 
   return values;
+}
+
+/// len() of a constant UTF-8 char array: its code points, not its bytes.
+static std::optional<size_t> constant_codepoint_len(const exprt &array_expr)
+{
+  auto chars = extract_constant_char_values(&array_expr);
+  if (!chars)
+    return std::nullopt;
+  std::string bytes;
+  for (const BigInt &c : *chars)
+    bytes.push_back(static_cast<char>(c.to_int64()));
+  return utf8_codepoint_count(bytes);
 }
 
 static constexpr long long kMembershipMaxHaystackContentLen = 256;
@@ -772,7 +784,7 @@ std::string string_handler::float_to_string(
   // std::pow/std::round and the ostream conversion below honour the host FP
   // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
   // so the decimal fold matches CPython regardless of the host's mode.
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
   double val = 0.0;
 
   if (width == 32 && float_bits.length() == 32)
@@ -2433,7 +2445,7 @@ exprt string_handler::try_handle_len_string_fast_path(
     len_cache_scope_id_ = current_scope_id;
   }
 
-  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json);
+  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json, arg_expr);
       !fast.is_nil())
     return fast;
 
@@ -2499,7 +2511,8 @@ exprt string_handler::try_handle_len_string_fast_path(
 }
 
 exprt string_handler::try_len_fast_path_from_constant_arg(
-  const nlohmann::json &arg_json)
+  const nlohmann::json &arg_json,
+  const exprt &arg_expr)
 {
   const std::string arg_type =
     (arg_json.contains("_type") && arg_json["_type"].is_string())
@@ -2511,6 +2524,13 @@ exprt string_handler::try_len_fast_path_from_constant_arg(
   {
     const std::string text = arg_json["value"].get<std::string>();
     return from_integer(BigInt(utf8_codepoint_count(text)), size_type());
+  }
+  if (
+    arg_expr.is_constant() && arg_expr.type().is_array() &&
+    arg_expr.type().subtype() == char_type())
+  {
+    if (auto len = constant_codepoint_len(arg_expr))
+      return from_integer(*len, size_type());
   }
   return nil_exprt();
 }

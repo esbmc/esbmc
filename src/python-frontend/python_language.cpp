@@ -4,7 +4,7 @@
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python_adjust.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message/message.h>
@@ -169,11 +169,10 @@ bool python_languaget::parse(const std::string &path)
   nlohmann::json parsed_ast;
   try
   {
-    // Parse under FE_TONEAREST: nlohmann converts float literals with the
-    // host strtod, and a leftover non-default rounding mode (e.g. gaol's
-    // static init leaves FE_UPWARD on goto-contractor builds) would store a
-    // double one ulp away from CPython's value for the same literal.
-    const round_to_nearest_guard rounding_guard;
+    // Parse under FE_TONEAREST: nlohmann converts float literals with host
+    // strtod, so a non-default rounding mode set by another stage would store
+    // a double one ulp away from CPython's value for the same literal.
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     parsed_ast = nlohmann::json::parse(ast_json);
   }
   catch (const nlohmann::json::exception &e)
@@ -239,11 +238,11 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // constants with host floating point (numpy scalar folds, complex-string
   // strtod, str/format rendering), and those folds must agree bit-for-bit
   // with the AST float literals, which are parsed under FE_TONEAREST (see
-  // parse() above). A leftover mode like gaol's FE_UPWARD on goto-contractor
-  // builds would otherwise skew only the folded side of a comparison by one
-  // ulp and flip verdicts (regression/numpy/round_decimals,
+  // parse() above). A non-default mode set by another stage would otherwise
+  // skew only the folded side of a comparison by one ulp and flip verdicts
+  // (regression/numpy/round_decimals,
   // regression/python/complex_constructor_extended on the DebugOpt CI).
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
 
   // Load c models. The C++ handled-stack exception OM (push/pop_handled,
   // rethrow_current) is deliberately NOT pulled in for Python: it drags the full
