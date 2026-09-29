@@ -50,6 +50,7 @@ struct LdIRNode
   std::string ctr_CU;
   std::string ctr_CD;
   std::string ctr_R;
+  std::string ctr_LD;
   std::string ctr_CV;
   std::string ctr_PV;
   std::string ctr_Q;

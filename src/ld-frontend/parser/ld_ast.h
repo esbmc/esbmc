@@ -105,7 +105,8 @@ struct CounterFBNode
   std::string instance_name;
   std::string CU_var; // count-up input variable
   std::string CD_var; // count-down input variable (CTD only)
-  std::string R_var;  // reset variable
+  std::string R_var;  // reset variable (CTU only)
+  std::string LD_var; // load variable (CTD only)
   std::string PV_var; // preset value variable
   std::string Q_var;  // output variable
   std::string CV_var; // counter value variable

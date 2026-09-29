@@ -72,6 +72,7 @@ LdIRNode LdIRBuilder::lower_element(const RungElement &elem)
     node.ctr_CU = elem.counter_fb.CU_var;
     node.ctr_CD = elem.counter_fb.CD_var;
     node.ctr_R = elem.counter_fb.R_var;
+    node.ctr_LD = elem.counter_fb.LD_var;
     node.ctr_CV = elem.counter_fb.CV_var;
     node.ctr_PV = elem.counter_fb.PV_var;
     node.ctr_Q = elem.counter_fb.Q_var;
