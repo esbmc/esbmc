@@ -173,13 +173,9 @@ havoc_slot(goto_functiont &goto_function, goto_programt::targett loop_head)
 {
   if (
     loop_head->is_assert() &&
-    loop_head != goto_function.body.instructions.begin())
-  {
+    loop_head != goto_function.body.instructions.begin() &&
+    std::prev(loop_head)->is_goto())
     --loop_head;
-    // We add instructions before a GOTO instruction
-    // So we ensure we have one here
-    assert(loop_head->is_goto());
-  }
   return loop_head;
 }
 
