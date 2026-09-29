@@ -257,7 +257,7 @@ protected:
   /// Records that the object \p lhs designates may hold any address, storing
   /// through the pointer when \p lhs is a dereference.  The escape hatch for
   /// an assignment whose source this frontend cannot model.
-  void assign_top(const expr2tc &lhs);
+  void assign_top(const expr2tc &lhs, unsigned loc);
 
   /// Lowers an OTHER instruction: the ones that only read are dropped, the
   /// rest may write through any pointer operand.
