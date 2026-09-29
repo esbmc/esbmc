@@ -466,6 +466,43 @@ static FBKind fb_kind_of(const std::string &s)
   return it->second;
 }
 
+static std::string trim(const std::string &text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos)
+    return "";
+  return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+}
+
+// What each input pin of a block is wired to: an <inVariable>'s expression, or
+// another block's output pin named as the graphical resolver names it.
+static std::vector<FBInWire> input_wires(const pugi::xml_node &blk)
+{
+  std::vector<FBInWire> wires;
+  for (auto pin : blk.child("inputVariables").children("variable"))
+  {
+    FBInWire w;
+    w.pin = pin.attribute("formalParameter").as_string();
+    auto conn = pin.select_node(".//connection").node();
+    w.connected = static_cast<bool>(conn);
+    auto src = blk.parent().find_child_by_attribute(
+      "localId", conn.attribute("refLocalId").as_string("-"));
+    const std::string src_tag = src.name();
+    const std::string src_pin = conn.attribute("formalParameter").as_string();
+    if (src_tag == "inVariable")
+      w.source = trim(src.child_value("expression"));
+    else if (src_tag == "block" && !src_pin.empty())
+    {
+      std::string src_inst = src.attribute("instanceName").as_string();
+      if (src_inst.empty())
+        src_inst = std::string("blk") + src.attribute("localId").as_string();
+      w.source = src_inst + "__" + src_pin;
+    }
+    wires.push_back(w);
+  }
+  return wires;
+}
+
 // A bare identifier names a variable; TRUE/FALSE and typed literals do not.
 static bool is_identifier(const std::string &text)
 {
@@ -1479,6 +1516,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         inst.type_name = tn;
         inst.instance_name = blk.attribute("instanceName").as_string();
         inst.block_id = blk.attribute("localId").as_string();
+        inst.in_wires = input_wires(blk);
         inst.out_wires = out_wires_of(blk, ast);
         inst.loc = {source_file_, 0, 0};
         ast.user_fb_instances.push_back(std::move(inst));
