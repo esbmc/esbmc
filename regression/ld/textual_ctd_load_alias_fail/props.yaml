@@ -1,0 +1,8 @@
+properties:
+  # Twin of textual_ctd_load_alias_safe. A load through LOAD puts CV at the preset
+  # (2) and takes Empty low. A parser that read only LD would never reload, so
+  # Empty would hold in every scan and this invariant would pass.
+  - id: P1
+    kind: invariant
+    expression: "Empty"
+    description: "Deliberately false: a load clears Empty"

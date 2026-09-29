@@ -716,6 +716,28 @@ private:
   std::optional<exprt>
   try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
 
+  std::optional<std::vector<std::size_t>>
+  get_numpy_constructor_shape(const nlohmann::json &node) const;
+
+  std::optional<exprt> try_get_numpy_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  void reject_numpy_shape_attr_on_nonobject_call_result(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  bool should_reject_numpy_shape_attr_on_symbol(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  std::optional<exprt> try_get_numpy_bool_mask_rows_shape_attr(
+    const exprt &base_expr,
+    const typet &base_type,
+    const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -1621,6 +1643,25 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  bool update_numpy_array_binding_from_name(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
+  bool preserve_conditional_numpy_alias_shape(
+    const std::string &lhs_id,
+    const std::string &rhs_id,
+    bool unconditional_assignment);
+
+  void copy_numpy_alias_shape_state(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  void reject_conditional_numpy_alias_rebind(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node) const;
+
   bool record_numpy_view_copy_from_returned_argument(
     const exprt &lhs,
     const std::string &lhs_id,
@@ -2290,6 +2331,7 @@ private:
   // and the array-consuming numpy calls (transpose, sort/argsort/
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
+  std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
