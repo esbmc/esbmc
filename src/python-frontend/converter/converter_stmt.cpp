@@ -3470,6 +3470,13 @@ void python_converter::record_numpy_view_copy(
   }
 
   const std::string lhs_id = lhs.identifier().as_string();
+  if (numpy_pointer_view_info_.count(lhs_id) != 0)
+  {
+    clear_numpy_view_copy(lhs);
+    numpy_array_symbols_.insert(lhs_id);
+    return;
+  }
+
   numpy_view_copy_sources_[lhs_id] = storage_id;
   numpy_array_symbols_.insert(lhs_id);
 }
@@ -4118,6 +4125,13 @@ void python_converter::update_numpy_array_binding(
   if (record_numpy_shape_stride_view(lhs, rhs_node))
     return;
 
+  if (numpy_pointer_view_info_.count(lhs_id) != 0)
+  {
+    clear_numpy_view_copy(lhs);
+    numpy_array_symbols_.insert(lhs_id);
+    return;
+  }
+
   if (is_numpy_view_copy_expr(rhs_node))
   {
     record_numpy_view_copy(lhs, rhs_node);
@@ -4377,91 +4391,27 @@ typet python_converter::resolve_any_subscript_array_type(
   if (!probed_type.is_array())
     return current_type;
 
-  // A supported N-D mixed slice/index tuple (exactly one full-slice axis `:`
-  // and every other axis a literal/resolvable integer, e.g. `a[:, 0, 0]` -
-  // see build_mixed_slice_tuple_select) legitimately produces a 1-D result
-  // from a 3-D+ source, so it must skip the depth check below rather than be
-  // rejected just because the source is deep.
-  bool is_supported_mixed_slice_tuple = false;
-  if (
-    ast_node["value"].contains("slice") &&
-    ast_node["value"]["slice"].value("_type", "") == "Tuple" &&
-    ast_node["value"]["slice"].contains("elts"))
-  {
-    auto is_full_slice = [](const nlohmann::json &node) {
-      if (node.value("_type", "") != "Slice")
-        return false;
-      auto absent = [&](const char *k) {
-        return !node.contains(k) || node[k].is_null();
-      };
-      return absent("lower") && absent("upper") && absent("step");
-    };
-    auto is_literal_int = [](const nlohmann::json &node) {
-      if (
-        node.value("_type", "") == "Constant" && node.contains("value") &&
-        node["value"].is_number_integer())
-        return true;
-      return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
-             node["op"].value("_type", "") == "USub" &&
-             node.contains("operand") &&
-             node["operand"].value("_type", "") == "Constant" &&
-             node["operand"].contains("value") &&
-             node["operand"]["value"].is_number_integer();
-    };
-    auto is_supported_slice = [&](const nlohmann::json &node) {
-      if (is_full_slice(node))
-        return true;
-      for (const char *key : {"lower", "upper", "step"})
-        if (
-          node.contains(key) && !node[key].is_null() &&
-          !is_literal_int(node[key]))
-          return false;
-      return true;
-    };
-
-    std::size_t slice_count = 0;
-    bool all_slices_supported = true;
-    for (const auto &elt : ast_node["value"]["slice"]["elts"])
-    {
-      if (elt.value("_type", "") != "Slice")
-        continue;
-      ++slice_count;
-      if (!is_supported_slice(elt))
-        all_slices_supported = false;
-    }
-    is_supported_mixed_slice_tuple = slice_count != 0 && all_slices_supported;
-  }
-
-  // Reject a source array of more than 2 dimensions: n-D indexing is out of
-  // scope, and the resulting slice's nesting depth alone can't be told apart
-  // from a legitimate 2-D row/column/fancy/mask selection (both are a
-  // 2-level nested array), so the check has to look at the source instead.
   const nlohmann::json &source_node = ast_node["value"]["value"];
   exprt source_probe = get_expr(source_node);
-  if (!contains_cpp_throw(source_probe) && !is_supported_mixed_slice_tuple)
+  if (!contains_cpp_throw(source_probe))
   {
-    std::size_t source_depth = 0;
     typet source_type = ns.follow(source_probe.type());
-    // A numpy array crossing a function boundary is pointer-to-array (e.g.
-    // int (*)[N][M]), not a plain array_typet; peel the pointer so the depth
-    // walk below still sees through to the real dimensionality instead of
-    // stopping at 0 and silently letting a 3-D+ source slip past.
     if (source_type.is_pointer())
       source_type = ns.follow(source_type.subtype());
-    while (source_type.is_array())
+
+    std::size_t source_depth = 0;
+    typet depth_type = source_type;
+    while (depth_type.is_array())
     {
       ++source_depth;
-      source_type = ns.follow(to_array_type(source_type).subtype());
+      depth_type = ns.follow(to_array_type(depth_type).subtype());
     }
+
     if (source_depth > 2)
     {
-      std::ostringstream msg;
-      msg << "TypeError: assigning a 3-D+ array-typed subscript result to "
-             "a variable is not supported";
-      const locationt loc = get_location_from_decl(ast_node);
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
+      any_subscript_array_needs_copy_ = false;
+      has_cached_any_subscript_rhs_ = false;
+      return pointer_typet(ns.follow(to_array_type(probed_type).subtype()));
     }
   }
 

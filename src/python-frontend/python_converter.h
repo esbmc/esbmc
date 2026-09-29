@@ -727,9 +727,27 @@ private:
   try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
 
   std::optional<std::vector<std::size_t>>
+  tracked_numpy_shape_from_name(const std::string &name) const;
+
+  std::optional<std::vector<std::size_t>>
+  numpy_shape_from_indexed_decl(const std::string &name) const;
+
+  exprt numpy_shape_attr_expr(
+    const std::vector<std::size_t> &shape,
+    const std::string &attr_name);
+
+  std::optional<std::vector<std::size_t>>
   get_numpy_constructor_shape(const nlohmann::json &node) const;
 
   std::optional<exprt> try_get_numpy_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  std::optional<exprt>
+  try_get_numpy_shape_subscript(const nlohmann::json &element) const;
+
+  std::optional<exprt> try_get_numpy_tracked_value_shape_attr(
     const exprt &base_expr,
     const nlohmann::json &base_node,
     const std::string &attr_name);
@@ -2330,6 +2348,7 @@ private:
     std::size_t length;
     long long stride;
     bool readonly;
+    std::vector<std::size_t> shape;
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;

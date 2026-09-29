@@ -751,6 +751,26 @@ bool can_build_scalar_pointer_view(
          is_numpy_array;
 }
 
+std::optional<std::vector<std::size_t>>
+get_fixed_array_shape(const typet &type, const contextt &symbol_table)
+{
+  const namespacet ns(symbol_table);
+  std::vector<std::size_t> shape;
+  typet current = ns.follow(type);
+  if (current.is_pointer())
+    current = ns.follow(current.subtype());
+  while (current.is_array())
+  {
+    const array_typet &array_type = to_array_type(current);
+    if (array_type.size().is_nil() || !array_type.size().is_constant())
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(
+      binary2integer(array_type.size().value().c_str(), false).to_int64()));
+    current = ns.follow(array_type.subtype());
+  }
+  return shape;
+}
+
 struct fixed_2d_shape_info
 {
   typet elem_type;
@@ -1648,7 +1668,11 @@ std::optional<exprt> python_list::build_scalar_pointer_view(
     build_add(base_ptr, from_integer(offset, size_type()), view_ptr_type);
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
-  converter_.numpy_pointer_view_info_[lhs_id] = {length, stride, readonly};
+  python_converter::numpy_scalar_pointer_view_infot info{
+    length, stride, readonly, {length}};
+  converter_.numpy_pointer_view_info_[lhs_id] = info;
+  if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
+    converter_.numpy_pointer_view_info_[lhs_symbol->id.as_string()] = info;
   return view_ptr;
 }
 
@@ -1724,6 +1748,106 @@ std::optional<exprt> python_list::try_build_row_pointer_view(
     static_cast<std::size_t>(info->col_count),
     1,
     false);
+}
+
+std::optional<exprt> python_list::try_build_nd_subarray_pointer_view(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  if (!can_build_scalar_pointer_view(
+        array,
+        converter_.current_lhs,
+        converter_.numpy_array_symbols_.count(array.identifier().as_string()) !=
+          0))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(slice_node, literal_index))
+    return std::nullopt;
+
+  const namespacet ns(converter_.symbol_table());
+  const typet array_type = ns.follow(array.type());
+  typet storage_type = array_type;
+  if (storage_type.is_pointer())
+    storage_type = ns.follow(storage_type.subtype());
+  std::optional<std::vector<std::size_t>> shape =
+    get_fixed_array_shape(storage_type, converter_.symbol_table());
+  if (!shape || shape->size() < 3)
+    return std::nullopt;
+
+  long long index = literal_index.to_int64();
+  const long long outer = static_cast<long long>((*shape)[0]);
+  if (index < 0)
+    index += outer;
+  if (index < 0 || index >= outer)
+    return std::nullopt;
+
+  const typet selected_type = ns.follow(to_array_type(storage_type).subtype());
+  const typet view_type = ns.follow(to_array_type(selected_type).subtype());
+  std::vector<std::size_t> view_shape(shape->begin() + 1, shape->end());
+  const std::size_t length = view_shape.front();
+  const std::string lhs_id = converter_.current_lhs->identifier().as_string();
+  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
+    return std::nullopt;
+
+  const typet view_ptr_type = pointer_typet(view_type);
+  exprt base_ptr = array_type.is_pointer() ? array : build_address_of(array);
+  base_ptr = build_typecast(base_ptr, view_ptr_type);
+  exprt view_ptr = build_add(
+    base_ptr,
+    from_integer(index * static_cast<long long>(length), size_type()),
+    view_ptr_type);
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  python_converter::numpy_scalar_pointer_view_infot info{
+    length, 1, false, view_shape};
+  converter_.numpy_pointer_view_info_[lhs_id] = info;
+  converter_.numpy_param_shapes_[lhs_id] = view_shape;
+  if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
+  {
+    const std::string resolved_id = lhs_symbol->id.as_string();
+    converter_.numpy_pointer_view_info_[resolved_id] = info;
+    converter_.numpy_param_shapes_[resolved_id] = view_shape;
+  }
+  return view_ptr;
+}
+
+std::optional<exprt> python_list::try_build_pointer_array_index(
+  const exprt &array,
+  const exprt &pos_expr,
+  const nlohmann::json &slice_node)
+{
+  if (!array.type().is_pointer())
+    return std::nullopt;
+
+  const typet pointee = converter_.ns.follow(array.type().subtype());
+  if (!pointee.is_array())
+    return std::nullopt;
+
+  exprt guarded_pos =
+    guard_numpy_pointer_view_index(array, pos_expr, slice_node);
+  return build_index(array, guarded_pos, pointee);
+}
+
+exprt python_list::build_numpy_array_index_access(
+  const exprt &array,
+  const exprt &pos_expr,
+  const nlohmann::json &slice_node)
+{
+  if (
+    std::optional<exprt> subarray_view =
+      try_build_nd_subarray_pointer_view(array, slice_node))
+    return *subarray_view;
+  if (
+    std::optional<exprt> pointer_index =
+      try_build_pointer_array_index(array, pos_expr, slice_node))
+    return *pointer_index;
+
+  exprt guarded_pos =
+    guard_numpy_pointer_view_index(array, pos_expr, slice_node);
+  guarded_pos = guard_numpy_static_array_index(array, guarded_pos, slice_node);
+  return try_build_row_pointer_view(array, slice_node)
+    .value_or(build_index(array, guarded_pos, array.type().subtype()));
 }
 
 // `col = a[:, j]` (single literal column of a fixed 2-D array): a pointer
@@ -4198,12 +4322,7 @@ exprt python_list::handle_index_access(
     return slice_call;
   }
 
-  // Handle static arrays
-  exprt guarded_pos =
-    guard_numpy_pointer_view_index(array, pos_expr, slice_node);
-  guarded_pos = guard_numpy_static_array_index(array, guarded_pos, slice_node);
-  return try_build_row_pointer_view(array, slice_node)
-    .value_or(build_index(array, guarded_pos, array.type().subtype()));
+  return build_numpy_array_index_access(array, pos_expr, slice_node);
 }
 
 exprt python_list::extract_pyobject_value(
