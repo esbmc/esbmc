@@ -736,6 +736,8 @@ private:
     const exprt &array,
     const nlohmann::json &slice_node);
 
+  std::optional<exprt> try_build_chained_subarray_pointer_view();
+
   std::optional<exprt> try_build_pointer_array_index(
     const exprt &array,
     const exprt &pos_expr,

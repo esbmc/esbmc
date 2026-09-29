@@ -1812,6 +1812,105 @@ std::optional<exprt> python_list::try_build_nd_subarray_pointer_view(
   return view_ptr;
 }
 
+struct chained_subarray_literal_indices
+{
+  std::string root_name;
+  BigInt first;
+  BigInt second;
+};
+
+std::optional<chained_subarray_literal_indices>
+get_chained_subarray_literal_indices(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Subscript" ||
+    !node.contains("value") || !node["value"].is_object())
+    return std::nullopt;
+
+  const nlohmann::json &inner = node["value"];
+  if (
+    inner.value("_type", "") != "Subscript" || !inner.contains("value") ||
+    !inner["value"].is_object() || inner["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  BigInt first;
+  BigInt second;
+  if (!try_get_literal_int(inner["slice"], first))
+    return std::nullopt;
+  if (!try_get_literal_int(node["slice"], second))
+    return std::nullopt;
+
+  return chained_subarray_literal_indices{
+    inner["value"].value("id", ""), first, second};
+}
+
+std::optional<std::pair<long long, long long>>
+normalize_chained_subarray_indices(
+  const std::vector<std::size_t> &shape,
+  const chained_subarray_literal_indices &indices)
+{
+  if (shape.size() < 3)
+    return std::nullopt;
+
+  long long first = indices.first.to_int64();
+  long long second = indices.second.to_int64();
+  const long long first_dim = static_cast<long long>(shape[0]);
+  const long long second_dim = static_cast<long long>(shape[1]);
+  if (first < 0)
+    first += first_dim;
+  if (second < 0)
+    second += second_dim;
+  if (first < 0 || first >= first_dim || second < 0 || second >= second_dim)
+    return std::nullopt;
+  return std::make_pair(first, second);
+}
+
+std::optional<exprt> python_list::try_build_chained_subarray_pointer_view()
+{
+  std::optional<chained_subarray_literal_indices> indices =
+    get_chained_subarray_literal_indices(list_value_);
+  if (!indices)
+    return std::nullopt;
+
+  nlohmann::json root_node;
+  root_node["_type"] = "Name";
+  root_node["id"] = indices->root_name;
+  exprt root = converter_.get_expr(root_node);
+  if (!can_build_scalar_pointer_view(
+        root,
+        converter_.current_lhs,
+        converter_.numpy_array_symbols_.count(root.identifier().as_string()) !=
+          0))
+    return std::nullopt;
+
+  const namespacet ns(converter_.symbol_table());
+  const typet root_type = ns.follow(root.type());
+  std::optional<std::vector<std::size_t>> shape =
+    get_fixed_array_shape(root_type, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  std::optional<std::pair<long long, long long>> normalized =
+    normalize_chained_subarray_indices(*shape, *indices);
+  if (!normalized)
+    return std::nullopt;
+
+  std::size_t inner_block = 1;
+  for (std::size_t axis = 2; axis < shape->size(); ++axis)
+    inner_block *= (*shape)[axis];
+  const long long offset =
+    (normalized->first * static_cast<long long>((*shape)[1]) +
+     normalized->second) *
+    static_cast<long long>(inner_block);
+
+  typet selected_type = root_type;
+  for (std::size_t axis = 0; axis < 2; ++axis)
+    selected_type = ns.follow(to_array_type(selected_type).subtype());
+  const typet view_type = ns.follow(to_array_type(selected_type).subtype());
+  return build_scalar_pointer_view(
+    root, view_type, offset, (*shape)[2], /*stride=*/1, false);
+}
+
 std::optional<exprt> python_list::try_build_pointer_array_index(
   const exprt &array,
   const exprt &pos_expr,
@@ -1834,6 +1933,10 @@ exprt python_list::build_numpy_array_index_access(
   const exprt &pos_expr,
   const nlohmann::json &slice_node)
 {
+  if (
+    std::optional<exprt> chained_view =
+      try_build_chained_subarray_pointer_view())
+    return *chained_view;
   if (
     std::optional<exprt> subarray_view =
       try_build_nd_subarray_pointer_view(array, slice_node))

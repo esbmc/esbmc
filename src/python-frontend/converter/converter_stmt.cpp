@@ -4230,6 +4230,40 @@ void python_converter::bind_numpy_array_storage_alias(
     resolve_numpy_array_storage_alias_id(rhs_id);
 }
 
+static std::optional<std::string>
+nested_subscript_root_name(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Subscript" ||
+    !node.contains("value") || !node["value"].is_object())
+    return std::nullopt;
+
+  const nlohmann::json &inner = node["value"];
+  if (
+    inner.value("_type", "") != "Subscript" || !inner.contains("value") ||
+    !inner["value"].is_object() || inner["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  if (
+    !is_literal_int_node(inner["slice"]) || !is_literal_int_node(node["slice"]))
+    return std::nullopt;
+  return inner["value"].value("id", "");
+}
+
+static std::size_t fixed_array_depth(const typet &type, const namespacet &ns)
+{
+  std::size_t depth = 0;
+  typet current = ns.follow(type);
+  if (current.is_pointer())
+    current = ns.follow(current.subtype());
+  while (current.is_array())
+  {
+    ++depth;
+    current = ns.follow(to_array_type(current).subtype());
+  }
+  return depth;
+}
+
 bool python_converter::should_rebuild_cached_numpy_row_subscript_rhs(
   const nlohmann::json &rhs_node) const
 {
@@ -4237,6 +4271,15 @@ bool python_converter::should_rebuild_cached_numpy_row_subscript_rhs(
     !has_cached_any_subscript_rhs_ ||
     rhs_node.value("_type", "") != "Subscript")
     return false;
+
+  if (
+    std::optional<std::string> root_name = nested_subscript_root_name(rhs_node))
+  {
+    const std::string source_id = resolve_name_symbol_id(*root_name);
+    const symbolt *source = symbol_table_.find_symbol(source_id);
+    return source && numpy_array_symbols_.count(source_id) != 0 &&
+           fixed_array_depth(source->get_type(), ns) > 2;
+  }
 
   if (
     !rhs_node.contains("value") ||
@@ -4392,6 +4435,22 @@ typet python_converter::resolve_any_subscript_array_type(
     return current_type;
 
   const nlohmann::json &source_node = ast_node["value"]["value"];
+  if (
+    std::optional<std::string> root_name =
+      nested_subscript_root_name(ast_node["value"]))
+  {
+    const std::string root_id = resolve_name_symbol_id(*root_name);
+    const symbolt *root_symbol = symbol_table_.find_symbol(root_id);
+    if (
+      root_symbol && numpy_array_symbols_.count(root_id) != 0 &&
+      fixed_array_depth(root_symbol->get_type(), ns) > 2)
+    {
+      any_subscript_array_needs_copy_ = false;
+      has_cached_any_subscript_rhs_ = false;
+      return pointer_typet(ns.follow(to_array_type(probed_type).subtype()));
+    }
+  }
+
   exprt source_probe = get_expr(source_node);
   if (!contains_cpp_throw(source_probe))
   {
