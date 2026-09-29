@@ -5665,19 +5665,35 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   return call;
 }
 
-/// The base-class declaration of a ClassMethod call the derived class does not
-/// declare itself, or a null pointer when there is none (#7546).
+/// The declaration a ClassMethod call resolves to when the called class's own
+/// symbol does not exist, or a null pointer when there is none. Throws when
+/// the declaration the MRO selects has no converted symbol (#7546).
 const symbolt *function_call_expr::find_inherited_classmethod(
   const std::string &func_symbol_id) const
 {
   if (function_type_ != FunctionType::ClassMethod)
     return nullptr;
 
+  const std::string &method = function_id_.get_function();
+  if (const auto mro = converter_.class_mro(function_id_.get_class()))
+    for (const std::string &cls : *mro)
+    {
+      if (!converter_.class_binds_name(cls, method))
+        continue;
+      if (
+        const symbolt *declared = converter_.symbol_table().find_symbol(
+          symbol_id(converter_.python_file(), cls, method).to_string()))
+        return declared;
+      // No function symbol: the call precedes the definition in the source, or
+      // the binding is not one converted to a function. Binding a declaration
+      // further along the MRO would prove that one's result instead.
+      throw std::runtime_error(
+        "calling " + cls + "." + method +
+        " without a converted definition is not yet supported");
+    }
+
   return converter_.find_function_in_base_classes(
-    function_id_.get_class(),
-    func_symbol_id,
-    function_id_.get_function(),
-    false);
+    function_id_.get_class(), func_symbol_id, method, false);
 }
 
 /// A forward-reference call for `Class.__post_init__(...)`, which a dataclass's

@@ -1681,8 +1681,8 @@ void python_converter::handle_assignment_type_adjustments(
       lhs.type() = rhs.type();
     }
 
-    // Legacy: migrate_expr turns a class-object value (`x = int`) into an empty
-    // array constant, and isinstance folds on it
+    // Legacy: migrate_expr drops the `value` that marks a class object
+    // (`x = int`), and isinstance folds on it
     // (docs/roadmap/scope-python-irep2.md §10.4).
     if (!rhs.type().is_empty() && !is_ctor_call)
       set_assigned_value(*lhs_symbol, rhs);
@@ -1692,9 +1692,7 @@ void python_converter::handle_assignment_type_adjustments(
 void python_converter::set_assigned_value(symbolt &symbol, const exprt &rhs)
 {
   symbol.set_value(rhs);
-  // A class object is a char-array constant with its name in `value` and no
-  // operands.
-  if (rhs.is_constant() && rhs.operands().empty() && rhs.type().is_array())
+  if (is_class_object(rhs))
     class_object_names_[symbol.id] = rhs.get_string("value");
   else
     class_object_names_.erase(symbol.id);
