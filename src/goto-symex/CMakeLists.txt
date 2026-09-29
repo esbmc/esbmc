@@ -49,7 +49,7 @@ add_library(symex
   symex_invariant.cpp)
 
 target_link_libraries(symex
-  PUBLIC  esbmc_common smt gotoprograms pointeranalysis abstract-interpretation
+  PUBLIC  esbmc_common solvers gotoprograms pointeranalysis abstract-interpretation
   PRIVATE nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt usr_utils
 )
 

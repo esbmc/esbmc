@@ -39,7 +39,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <sstream>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
@@ -235,7 +235,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   if (options.get_bool_option("smt-during-symex"))
   {
-    runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    runtime_solver = create_solver(ns, options);
 
     symex = std::make_unique<reachability_treet>(
       funcs,
@@ -481,9 +481,7 @@ void bmct::generate_smt_from_equation(
 
   if (!options.get_bool_option("int-encoding"))
   {
-    logic = "bit-vector";
-    logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
-    logic += "arithmetic";
+    logic = "bit-vector/floating-point arithmetic";
   }
   else
     logic = "integer/real arithmetic";
@@ -547,6 +545,7 @@ smt_resultt bmct::run_decision_procedure(
       {
         // Print to stdout
         fprintf(stdout, "%s", smt_formula.c_str());
+        fflush(stdout);
       }
       else
       {
@@ -633,7 +632,7 @@ void bmct::report_violation()
 smt_resultt
 bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
 {
-  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  std::unique_ptr<smt_convt> solver = create_solver(ns, options);
   local_eq.convert(
     *solver, symex_target_equationt::assertion_modet::Satisfiable);
   return solver->dec_solve();
@@ -657,7 +656,7 @@ smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
   // Re-encode in vacuity mode: each kept assertion contributes its path
   // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
   // The result is UNSAT iff the path to every kept claim is unreachable.
-  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  std::unique_ptr<smt_convt> solver = create_solver(ns, options);
   local_eq.convert(
     *solver, symex_target_equationt::assertion_modet::PathReachable);
   return solver->dec_solve();
@@ -2551,8 +2550,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if (!options.get_bool_option("smt-during-symex"))
     {
-      runtime_solver =
-        std::unique_ptr<smt_convt>(create_solver("", ns, options));
+      runtime_solver = create_solver(ns, options);
     }
 
     if (
@@ -2668,7 +2666,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
     std::unique_ptr<smt_convt> smt_conv;
     if (num_asserts != 0)
     {
-      smt_conv.reset(create_solver("", ns, options));
+      smt_conv = create_solver(ns, options);
       solver_result = run_decision_procedure(*smt_conv, equation);
     }
 
@@ -3177,7 +3175,7 @@ smt_resultt bmct::multi_property_check(
     std::unique_ptr<smt_convt> new_solver;
     if (!options.get_bool_option("smt-during-symex"))
     {
-      new_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+      new_solver = create_solver(ns, options);
       solver_ptr = new_solver.get();
     }
 

@@ -5,7 +5,7 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <util/base/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -1183,8 +1183,8 @@ bool find_nondet_in_expr(const expr2tc &expr)
 // matching constant_* for an aggregate type, we re-resolve it via
 // get_by_ast on the root expression — that AST-based path goes through
 // the tuple_get / get_array machinery which recurses through nested
-// tuple-selects and produces fully materialised leaves, and (unlike
-// get_by_type) accepts a non-symbol root such as a member access. This keeps
+// tuple-selects and produces fully materialised leaves, and accepts a
+// non-symbol root such as a member access. This keeps
 // the multi-witness blocking clause sound: make_blocking_expr builds
 // equalities against value_expr, so any unresolved subterm there
 // would block nothing.

@@ -1,6 +1,6 @@
 CORE
 main.c
---all-witnesses --max-witnesses 4 --floatbv
+--all-witnesses --max-witnesses 4
 ^VERIFICATION FAILED$
 \[Counterexamples - 4 witnesses\]
 --max-witnesses cap reached

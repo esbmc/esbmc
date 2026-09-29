@@ -1,43 +1,11 @@
-#if @ESBMC_ENABLE_z3@
-#define Z3
-#endif
+/* Which solver backends were built in. Named ESBMC_ENABLE_* rather than bare
+ * Z3/SMTLIB/... because those bare names collide with camada's SMTBackendKind
+ * enumerators wherever both headers are visible, which made the include order
+ * in solve.cpp load-bearing. */
 
-#if @ESBMC_ENABLE_minisat@
-#define MINISAT
-#endif
-
-#if @ESBMC_ENABLE_boolector@
-#define BOOLECTOR
-#endif
-
-#if @ESBMC_ENABLE_cvc4@
-#define USECVC
-#endif
-
-#if @ESBMC_ENABLE_cvc5@
-#define USECVC5
-#endif
-
-#if @ESBMC_ENABLE_mathsat@
-#define MATHSAT
-#endif
-
-#if @ESBMC_ENABLE_yices@
-#define YICES
-#endif
-
-#if @ESBMC_ENABLE_bitwuzla@
-#define BITWUZLA
-#endif
-
-#if @ESBMC_ENABLE_smtlib@
-#define SMTLIB
-#endif
-
-#if @ESBMC_ENABLE_bitwuzllob@
-#define BITWUZLLOB
-#endif
-
-#if @ESBMC_ENABLE_neurosym@
-#define NEUROSYM
-#endif
+#define ESBMC_ENABLE_z3 @ESBMC_ENABLE_z3@
+#define ESBMC_ENABLE_cvc5 @ESBMC_ENABLE_cvc5@
+#define ESBMC_ENABLE_mathsat @ESBMC_ENABLE_mathsat@
+#define ESBMC_ENABLE_yices @ESBMC_ENABLE_yices@
+#define ESBMC_ENABLE_bitwuzla @ESBMC_ENABLE_bitwuzla@
+#define ESBMC_ENABLE_smtlib @ESBMC_ENABLE_smtlib@

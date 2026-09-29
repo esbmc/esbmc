@@ -6,17 +6,21 @@ fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
 {
   integer_bits = type.get_integer_bits();
   width = type.get_width();
+  is_signed = type.get("#esbmc_unsigned") != "1";
+  is_saturating = type.get("#esbmc_saturating") == "1";
 }
 
 fixedbv_spect::fixedbv_spect(const fixedbv_type2t &type)
 {
   integer_bits = type.integer_bits;
   width = type.get_width();
+  is_signed = type.is_signed;
+  is_saturating = type.is_saturating;
 }
 
 type2tc fixedbv_spect::get_type() const
 {
-  return fixedbv_type2tc(width, integer_bits);
+  return fixedbv_type2tc(width, integer_bits, is_signed, is_saturating);
 }
 
 fixedbvt::fixedbvt() : v(0)
@@ -35,7 +39,7 @@ fixedbvt::fixedbvt(const constant_exprt &expr)
 void fixedbvt::from_expr(const constant_exprt &expr)
 {
   spec = to_fixedbv_type(expr.type());
-  v = binary2integer(id2string(expr.get_value()), true);
+  v = binary2integer(id2string(expr.get_value()), spec.is_signed);
 }
 
 void fixedbvt::from_integer(const BigInt &i)
@@ -54,6 +58,10 @@ constant_exprt fixedbvt::to_expr() const
   fixedbv_typet type;
   type.set_width(spec.width);
   type.set_integer_bits(spec.integer_bits);
+  if (!spec.is_signed)
+    type.set("#esbmc_unsigned", "1");
+  if (spec.is_saturating)
+    type.set("#esbmc_saturating", "1");
   constant_exprt expr(type);
   assert(spec.width != 0);
   expr.set_value(integer2binary(v, spec.width));
@@ -71,41 +79,27 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
     result = v * power(2, new_fraction_bits - old_fraction_bits);
   else if (new_fraction_bits < old_fraction_bits)
   {
-    // may need to round
+    // Narrowing rounds down (floor), matching Clang's fixed-point
+    // multiplication and format-conversion semantics (llvm.smul.fix et al.,
+    // pinned by the execution oracle). BigInt division truncates toward
+    // zero, so adjust negative inexact quotients.
     BigInt p = power(2, old_fraction_bits - new_fraction_bits);
     BigInt div = v / p;
     BigInt rem = v % p;
-    if (rem < 0)
-      rem = -rem;
-
-    if (rem * 2 >= p)
-    {
-      if (v < 0)
-        --div;
-      else
-        ++div;
-    }
+    if (!rem.is_zero() && v.is_negative())
+      --div;
 
     result = div;
   }
 
-  unsigned old_integer_bits = spec.integer_bits;
-  unsigned new_integer_bits = dest_spec.integer_bits;
-
-  if (old_integer_bits > new_integer_bits)
-  {
-    // Need to cut off some higher bits.
-    fixedbvt tmp;
-    tmp.spec = dest_spec;
-
-    // Make a number that's 2^integer_bits
-    BigInt aval(2);
-    aval = power(aval, new_integer_bits);
-    tmp.from_integer(aval);
-
-    // Now modulus that up.
-    result = result % tmp.v;
-  }
+  if (spec.integer_bits > dest_spec.integer_bits)
+    // Cut off the high bits, keeping the destination's two's-complement
+    // reading. BigInt's % truncates toward zero rather than wrapping, so it
+    // could leave a value outside the destination's range -- a constant that
+    // disagrees with the encoder's mkBVExtract and flips verdicts under
+    // --no-simplify.
+    result = binary2integer(
+      integer2binary(result, dest_spec.width), dest_spec.is_signed);
 
   // Increasing integer bits requires no additional changes to representation.
 
@@ -134,8 +128,14 @@ fixedbvt &fixedbvt::operator*=(const fixedbvt &o)
 
 fixedbvt &fixedbvt::operator/=(const fixedbvt &o)
 {
+  // Division rounds down (floor), matching Clang / llvm.sdiv.fix (pinned by
+  // the execution oracle). BigInt division truncates toward zero, so adjust
+  // inexact quotients whose remainder sign differs from the divisor's.
   v *= power(2, o.spec.get_fraction_bits());
+  BigInt rem = v % o.v;
   v /= o.v;
+  if (!rem.is_zero() && rem.is_negative() != o.v.is_negative())
+    --v;
 
   return *this;
 }

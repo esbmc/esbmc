@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---fixedbv --incremental-bmc --ir --z3
-^VERIFICATION FAILED$

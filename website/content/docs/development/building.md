@@ -26,7 +26,7 @@ For a build with several solvers, or CHERI/fuzzing support, see
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build git bison flex python3 libboost-all-dev g++-multilib
+sudo apt-get install -y build-essential cmake ninja-build git python3 libboost-all-dev g++-multilib
 ```
 
 LLVM/Clang, Z3 and the libraries fmt, nlohmann-json, yaml-cpp and immer are
@@ -71,7 +71,7 @@ For Python, Solidity or IBEX support see
 ### Install prerequisites
 
 ```sh
-sudo dnf install gcc-c++ cmake ninja-build git bison flex python3 boost-devel z3-devel glibc-devel.i686 libstdc++-devel.i686
+sudo dnf install gcc-c++ cmake ninja-build git python3 boost-devel z3-devel glibc-devel.i686 libstdc++-devel.i686
 ```
 
 LLVM/Clang, fmt, nlohmann-json, yaml-cpp and immer are fetched by
@@ -112,7 +112,7 @@ For Python, Solidity or IBEX support see
 ### Install prerequisites
 
 ```sh
-brew install llvm@21 z3 boost cmake ninja python bison
+brew install llvm@21 z3 boost cmake ninja python
 ```
 
 > [!NOTE] On macOS, `-DDOWNLOAD_DEPENDENCIES` must be combined with `-DLLVM_DIR`
@@ -138,7 +138,7 @@ ninja -C build
 
 {{% details title="Easiest: use the helper script" closed="true" %}} The
 repository ships `scripts/build-esbmc-mac.sh`, which creates the build folder,
-optionally installs Boolector/Bitwuzla, and installs `esbmc` globally:
+optionally installs Bitwuzla, and installs `esbmc` globally:
 
 ```sh
 ./scripts/build-esbmc-mac.sh
@@ -163,7 +163,7 @@ A build that ends up with no SDK fails while generating the libc models, with
 ### Install prerequisites
 
 ```sh
-pkg install git cmake ninja python3 z3 bison flex boost-all
+pkg install git cmake ninja python3 z3 boost-all
 ```
 
 ESBMC needs 32-bit libraries on FreeBSD — make sure the `lib32` set is
@@ -207,7 +207,7 @@ ninja -C build
 
 ```bat
 vcpkg.exe install boost-filesystem:x64-windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
-choco install winflexbison gnuwin32-coreutils.portable
+choco install gnuwin32-coreutils.portable
 ```
 
 Also obtain [Z3](https://github.com/Z3Prover/z3/releases) and a prebuilt
@@ -264,8 +264,6 @@ building LLVM from source.
 | clang     | yes      | 18.0.0          |
 | boost     | yes      | 1.77            |
 | CMake     | yes      | 3.18.0          |
-| Boolector | no       | 3.2.2           |
-| CVC4      | no       | 1.8             |
 | CVC5      | no       | 1.1.2           |
 | MathSAT   | no       | 5.5.4           |
 | Yices     | no       | 2.6.4 (2.7 also supported) |
@@ -335,15 +333,15 @@ alongside ESBMC (requires `doxygen` and `graphviz`). See the
 
 ## Building with all solvers
 
-ESBMC supports **Bitwuzla**, **Boolector**, **CVC4**, **CVC5**, **MathSAT**,
-**Yices 2** and **Z3**. All are optional, but without at least one solver ESBMC
-cannot verify most programs. For a single-solver build, the platform tabs above
-are enough.
+ESBMC supports **Bitwuzla**, **CVC5**, **MathSAT**, **Yices 2** and **Z3**. All
+are optional, but without at least one solver ESBMC cannot verify most
+programs. For a single-solver build, the platform tabs above are enough.
 
-ESBMC can additionally drive **Bitwuzllob** — Bitwuzla running on the massively
-parallel [Mallob](https://satres.kikit.kit.edu/) platform — as an external
-process; see [Using Bitwuzllob](#using-bitwuzllob) below. It needs no build-time
-setup (the backend is enabled by default, `-DENABLE_BITWUZLLOB=ON`).
+Solvers ESBMC does not link against can still be driven over SMT-LIB2 — either
+interactively or as a one-shot external process; see
+[Using external solvers](#using-external-solvers) below. That needs no
+build-time setup beyond the SMT-LIB backend, which is on by default
+(`-DENABLE_SMTLIB=ON`).
 
 The recipe below mirrors the multi-solver build used in ESBMC's CI: build each
 solver into the project directory, then point the configure step at them. Build
@@ -401,14 +399,6 @@ fresh build directory — a stale `CMakeCache.txt` keeps the old paths.
 
 ### Build the solvers
 
-{{% details title="Boolector" closed="true" %}}
-
-```sh
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd ../..
-```
-
-{{% /details %}}
-
 {{% details title="Z3" closed="true" %}}
 
 ```sh
@@ -426,14 +416,6 @@ brew install z3 && cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
 
 ```sh
 git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install && cd ../..
-```
-
-{{% /details %}}
-
-{{% details title="CVC4 (Linux only)" closed="true" %}}
-
-```sh
-pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install && cd ../..
 ```
 
 {{% /details %}}
@@ -475,9 +457,9 @@ skipped.
 ```sh
 cd esbmc && cmake -GNinja -Bbuild -DBUILD_TESTING=On -DENABLE_REGRESSION=On \
   $ESBMC_CLANG -DBUILD_STATIC=${ESBMC_STATIC:-ON} \
-  -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 \
+  -DENABLE_Z3=On -DZ3_DIR=$PWD/../z3 \
   -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../mathsat \
-  -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 \
+  -DENABLE_YICES=On -DYices_DIR=$PWD/../yices \
   -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release \
   -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
 ninja -C build && ninja -C build install
@@ -488,31 +470,58 @@ enable ESBMC's internal assertions.
 
 {{% /steps %}}
 
-## Using Bitwuzllob
+## Using external solvers
 
-Bitwuzllob (Schreiber, Niemetz, Preiner — TACAS'26) integrates Bitwuzla into
-the massively parallel Mallob platform, distributing the bit-blasted SAT
-queries across hundreds of cores. Mallob is an MPI program that cannot be
-linked into ESBMC, so the `--bitwuzllob` backend writes the verification
-condition to an SMT-LIB2 file and runs Mallob's one-shot *mono* mode on it as
-an external process. Notes:
+The SMT-LIB backend drives any solver ESBMC is not linked against. Two shapes:
 
-- **Linux only** (Mallob supports x86/ARM Linux). Build Mallob with the SMT
-  application engine following the artifact of the TACAS'26 paper
-  (https://doi.org/10.5281/zenodo.17478480), and make sure the `mallob` binary
-  and its MPI runtime are available.
-- The command is configurable via `--bitwuzllob-prog`; every `%f` is replaced
-  by the formula file (default: `mallob -mono=%f -mono-app=SMT`). For example:
-  `esbmc file.c --bitwuzllob --bitwuzllob-prog "mpirun -np 8 mallob -mono=%f -mono-app=SMT"`.
-- A terminated mono process cannot answer model queries, so building a
-  counterexample additionally needs a local interactive SMT-LIB2 solver via
-  `--bitwuzllob-model-prog` (e.g. `"z3 -in"` or `"bitwuzla"`); it replays the
-  same formula and serves the `(get-value ...)` queries. Alternatively pass
-  `--result-only` to skip the counterexample.
-- One-shot mono mode serves a single `(check-sat)`, so incremental strategies
+**Interactive.** `--smtlib --smtlib-solver-prog "z3 -in"` pipes the script to a
+solver that speaks SMT-LIB2 on stdin and stays alive to answer model queries.
+The command is executed directly, not through a shell, so quotes and shell
+metacharacters in it are not interpreted.
+
+**One-shot.** `--smtlib --smtlib-oneshot-prog CMD` writes the formula to a file
+and runs `CMD` on it once, reading the verdict from its output. This suits
+solvers that cannot be linked in or driven interactively. Every `%f` in `CMD`
+is replaced by the formula file (appended when absent), and the command *is*
+run through a shell, so do not build it from untrusted input.
+
+Two examples of solvers used this way:
+
+- **Bitwuzllob** (Schreiber, Niemetz, Preiner — TACAS'26) integrates Bitwuzla
+  into the massively parallel [Mallob](https://satres.kikit.kit.edu/) platform,
+  distributing the bit-blasted SAT queries across hundreds of cores. Mallob is
+  an MPI program, Linux-only; build it with the SMT application engine
+  following the artifact of the TACAS'26 paper
+  (https://doi.org/10.5281/zenodo.17478480):
+
+  ```sh
+  esbmc file.c --smtlib \
+    --smtlib-oneshot-prog "mpirun -np 8 mallob -mono=%f -mono-app=SMT"
+  ```
+
+- **NeuroSym**, a neural-guided solver (a GAN proposes candidate models, with a
+  Z3 fallback preserving soundness), parses only QF_BV and QF_LIA, so name the
+  fragment explicitly:
+
+  ```sh
+  esbmc file.c --smtlib --smtlib-oneshot-prog "python main.py %f" \
+    --smtlib-logic QF_BV
+  ```
+
+Notes that apply to any one-shot solver:
+
+- The process exits with its verdict and cannot answer `(get-value ...)`, so
+  building a counterexample additionally needs a local interactive SMT-LIB2
+  solver via `--smtlib-oneshot-model-prog` (e.g. `"z3 -in"`); it replays the
+  same formula and serves the model queries. Alternatively pass `--result-only`
+  to skip the counterexample.
+- A single `(check-sat)` is served, so incremental strategies
   (`--incremental-bmc`, `--k-induction`, ...) are rejected — use a linked
-  solver such as `--bitwuzla` for those. Like Bitwuzla, Bitwuzllob is
-  bit-vector-only and cannot serve `--ir`/`--ir-ieee`.
+  solver such as `--bitwuzla` for those.
+- `--smtlib-logic` overrides the logic ESBMC derives from the encoding. One
+  without the array or floating-point sorts (`QF_BV`, say) also makes ESBMC
+  flatten both away before serializing, and cannot serve `--ir`/`--ir-ieee`.
+- The SMT-LIB backend is never selected implicitly; it must be asked for.
 
 ## Advanced
 
@@ -523,7 +532,7 @@ Debian-based image that builds ESBMC with Z3, letting
 ```dockerfile
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential cmake ninja-build git bison flex \
+      build-essential cmake ninja-build git \
       python3 libboost-all-dev g++-multilib \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth=1 https://github.com/esbmc/esbmc.git /esbmc

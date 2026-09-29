@@ -1,4 +1,4 @@
 CORE
 main.c
---array-flattener
+--force-camada-array
 ^VERIFICATION SUCCESSFUL$

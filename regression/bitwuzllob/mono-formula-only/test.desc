@@ -1,5 +1,5 @@
 CORE
 main.c
---bitwuzllob --smt-formula-only
+--smtlib --smtlib-oneshot-prog "mallob -mono=%f -mono-app=SMT" --smt-formula-only
 \(check-sat\)
 SMT formula written to standard output

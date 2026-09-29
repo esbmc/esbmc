@@ -22,8 +22,7 @@ extern "C"
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
-#include <solvers/smt/smt_result.h>
-#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>

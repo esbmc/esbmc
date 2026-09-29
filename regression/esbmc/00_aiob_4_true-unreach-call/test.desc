@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---floatbv --z3 --no-pointer-check --no-bounds-check --error-label ERROR --unwind 48
+--z3 --no-pointer-check --no-bounds-check --error-label ERROR --unwind 48
 ^VERIFICATION SUCCESSFUL$

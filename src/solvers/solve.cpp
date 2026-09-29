@@ -1,243 +1,194 @@
 #include <solve.h>
+#include <solvers/smt_conv.h>
+#include <solvers/smt_solver.h>
 #include <solver_config.h>
-#include <solvers/smt/array_conv.h>
-#include <solvers/smt/fp/fp_conv.h>
-#include <solvers/smt/smt_array.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_solver.h>
-#include <solvers/smt/tuple/smt_tuple_node.h>
-#include <solvers/smt/tuple/smt_tuple_sym.h>
 
-#include <unordered_map>
-
-solver_creator create_new_smtlib_solver;
-solver_creator create_new_z3_solver;
-solver_creator create_new_minisat_solver;
-solver_creator create_new_boolector_solver;
-solver_creator create_new_cvc_solver;
-solver_creator create_new_cvc5_solver;
-solver_creator create_new_mathsat_solver;
-solver_creator create_new_yices_solver;
-solver_creator create_new_bitwuzla_solver;
-solver_creator create_new_bitwuzllob_solver;
-solver_creator create_new_neurosym_solver;
-
-static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
-#ifdef SMTLIB
-  {"smtlib", create_new_smtlib_solver},
-#endif
-#ifdef Z3
-  {"z3", create_new_z3_solver},
-#endif
-#ifdef MINISAT
-  {"minisat", create_new_minisat_solver},
-#endif
-#ifdef BOOLECTOR
-  {"boolector", create_new_boolector_solver},
-#endif
-#ifdef USECVC
-  {"cvc4", create_new_cvc_solver},
-#endif
-#ifdef USECVC5
-  {"cvc5", create_new_cvc5_solver},
-#endif
-#ifdef MATHSAT
-  {"mathsat", create_new_mathsat_solver},
-#endif
-#ifdef YICES
-  {"yices", create_new_yices_solver},
-#endif
-#ifdef BITWUZLA
-  {"bitwuzla", create_new_bitwuzla_solver},
-#endif
-#ifdef BITWUZLLOB
-  {"bitwuzllob", create_new_bitwuzllob_solver},
-#endif
-#ifdef NEUROSYM
-  {"neurosym", create_new_neurosym_solver}
-#endif
+namespace
+{
+struct backendt
+{
+  /** Flag and --default-solver spelling. */
+  const char *name;
+  /** How the solver names itself in user-facing messages. */
+  const char *display_name;
+  bool built_in;
+  /** Which camada solver to build; null for smtlib, whose factory branches. */
+  camada_buildert build;
+  /** Supports the Int/Real sorts that --ir and --ir-ieee emit. */
+  bool int_real;
+  /** Needs an external program the user must name, so it is never chosen
+   *  implicitly. */
+  bool needs_config;
 };
 
-// Order encodes default priority: the first compiled-in entry that is not
-// smtlib, bitwuzllob or neurosym is selected when no solver is explicitly
-// requested (those three depend on external programs; see pick_default_solver).
-static const std::string all_solvers[] = {
-  "smtlib",
-  "bitwuzllob",
-  "neurosym",
-  "bitwuzla",
-  "boolector",
-  "z3",
-  "minisat",
-  "cvc4",
-  "cvc5",
-  "mathsat",
-  "yices"};
+/* Order is default priority: the first built-in backend that can be chosen
+ * implicitly wins when the user names no solver. */
+const backendt backends[] = {
+  {"smtlib", "SMTLIB", ESBMC_ENABLE_smtlib, nullptr, true, true},
+  {"bitwuzla",
+   "bitwuzla",
+   ESBMC_ENABLE_bitwuzla,
+   create_esbmc_bitwuzla_solver,
+   false,
+   false},
+  {"z3", "Z3", ESBMC_ENABLE_z3, create_esbmc_z3_solver, true, false},
+  {"cvc5", "CVC5", ESBMC_ENABLE_cvc5, create_esbmc_cvc5_solver, true, false},
+  {"mathsat",
+   "MathSAT",
+   ESBMC_ENABLE_mathsat,
+   create_esbmc_mathsat_solver,
+   true,
+   false},
+  {"yices",
+   "Yices",
+   ESBMC_ENABLE_yices,
+   create_esbmc_yices_solver,
+   true,
+   false}};
 
-static std::string pick_default_solver()
+const backendt *find_backend(const std::string &name)
 {
-  for (const std::string &name : all_solvers)
-  {
-    // smtlib, bitwuzllob and neurosym depend on external programs the user
-    // must configure, so they are never picked implicitly.
-    if (
-      name == "smtlib" || name == "bitwuzllob" || name == "neurosym" ||
-      !esbmc_solvers.count(name))
-      continue;
-    log_status("No solver specified; defaulting to {}", name);
-    return name;
-  }
+  for (const backendt &b : backends)
+    if (name == b.name)
+      return &b;
+  return nullptr;
+}
+
+[[noreturn]] void not_built_in(const std::string &name)
+{
   log_error(
-    "No solver backends built into ESBMC; please either build "
-    "some in, or explicitly configure the smtlib backend");
+    "The {} solver has not been built into this version of ESBMC, sorry", name);
   abort();
 }
 
-// Determine the solver the user explicitly asked for, returning "" if none.
-// Aborts if the user requested more than one solver flag simultaneously.
-static std::string resolve_user_solver_choice(const optionst &options)
+/** The solver the user asked for, or "" if they did not. The flags are
+ *  mutually exclusive. */
+std::string user_choice(const optionst &options)
 {
-  std::string solver_name;
-  for (const std::string &name : all_solvers)
-    if (options.get_bool_option(name))
+  std::string chosen;
+  for (const backendt &b : backends)
+    if (options.get_bool_option(b.name))
     {
-      if (!solver_name.empty())
+      if (!chosen.empty())
       {
         log_error("Please only specify one solver");
         abort();
       }
-      solver_name = name;
+      chosen = b.name;
     }
 
-  if (solver_name.empty())
-    solver_name = options.get_option("default-solver");
-
-  return solver_name;
+  return chosen.empty() ? options.get_option("default-solver") : chosen;
 }
 
-void check_solver_availability(const optionst &options)
+const backendt &pick_solver(const optionst &options)
 {
-  std::string solver_name = resolve_user_solver_choice(options);
-  // No explicit choice — pick_default_solver() will choose from what's built
-  // in when the solver is actually needed.
-  if (solver_name.empty())
-    return;
-  if (esbmc_solvers.count(solver_name))
-    return;
-  log_error(
-    "The {} solver has not been built into this version of ESBMC, sorry",
-    solver_name);
-  abort();
-}
+  const bool int_encoding = options.get_bool_option("int-encoding");
+  std::string name = user_choice(options);
 
-static solver_creator &
-pick_solver(std::string &solver_name, const optionst &options)
-{
-  if (solver_name == "")
-    solver_name = resolve_user_solver_choice(options);
-
-  // --ir and --ir-ieee both request integer/real arithmetic (both set the
-  // "int-encoding" option). Default to Z3, which supports the Int/Real sorts,
-  // when no solver was chosen. Keying off "int-encoding" rather than the raw
-  // "ir" flag is what lets --ir-ieee auto-select too (issue #5179).
-  if (solver_name == "" && options.get_bool_option("int-encoding"))
+  /* --ir and --ir-ieee both set int-encoding; keying off that rather than the
+   * raw flag is what lets --ir-ieee auto-select too (issue #5179). */
+  if (name.empty() && int_encoding)
   {
-#ifdef Z3
-    if (esbmc_solvers.count("z3"))
-    {
-      log_status("Using integer/real arithmetic mode; defaulting to Z3");
-      solver_name = "z3";
-    }
-    else
-    {
+    for (const backendt &b : backends)
+      if (b.built_in && !b.needs_config && b.int_real)
+      {
+        log_status(
+          "Using integer/real arithmetic mode; defaulting to {}",
+          b.display_name);
+        name = b.name;
+        break;
+      }
+    if (name.empty())
       log_warning(
-        "Z3 not available for integer/real arithmetic mode; using default "
-        "solver");
-    }
-#else
-    log_warning(
-      "Z3 not built into this version of ESBMC; using default solver for "
-      "integer/real mode");
-#endif
+        "No integer/real-capable solver built into this version of ESBMC; "
+        "using default solver for integer/real mode");
   }
-  if (solver_name == "")
-    solver_name = pick_default_solver();
 
-  // Integer/real encoding is incompatible with bit-vector-only backends
-  // (Bitwuzla, Boolector). Fail with a clear message and a clean exit instead
-  // of letting the backend abort() at construction time (issue #5179). This is
-  // reachable when Z3 is not built in, or when a bit-vector-only solver is
-  // forced via --default-solver together with --ir / --ir-ieee.
-  if (
-    options.get_bool_option("int-encoding") &&
-    (solver_name == "bitwuzla" || solver_name == "bitwuzllob" ||
-     solver_name == "neurosym" || solver_name == "boolector"))
+  if (name.empty())
+    for (const backendt &b : backends)
+      if (b.built_in && !b.needs_config)
+      {
+        log_status("No solver specified; defaulting to {}", b.display_name);
+        name = b.name;
+        break;
+      }
+
+  if (name.empty())
+  {
+    log_error(
+      "No solver backends built into ESBMC; please either build "
+      "some in, or explicitly configure the smtlib backend");
+    abort();
+  }
+
+  const backendt *b = find_backend(name);
+  if (!b || !b->built_in)
+    not_built_in(name);
+
+  /* Fail with a clear message instead of letting the backend abort() at
+   * construction time (issue #5179). Reachable when a bit-vector-only solver
+   * is forced via --default-solver together with --ir / --ir-ieee. */
+  if (int_encoding && !b->int_real)
   {
     log_error(
       "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "
       "supports the Int/Real sorts (e.g. Z3); the '{}' backend is "
       "bit-vector-only. Re-run with an integer/real-capable solver, or build "
       "Z3 into ESBMC.",
-      solver_name);
+      name);
     exit(1);
   }
 
-  auto it = esbmc_solvers.find(solver_name);
-  if (it != esbmc_solvers.end())
-    return *it->second;
+  /* --smtlib-logic names the fragment the external solver accepts; a
+   * quantifier-free bit-vector one cannot express the Int sorts --ir emits.
+   * Reject the combination rather than hand the solver a script it will not
+   * parse. */
+  if (int_encoding && name == "smtlib")
+  {
+    const std::string logic = options.get_option("smtlib-logic");
+    if (!logic.empty() && logic.find('I') == std::string::npos)
+    {
+      log_error(
+        "Integer/real arithmetic (--ir / --ir-ieee) needs a logic with the "
+        "Int sort, but --smtlib-logic is '{}'. Drop --smtlib-logic to let the "
+        "encoding pick one, or name an integer-capable logic.",
+        logic);
+      exit(1);
+    }
+  }
 
-  log_error(
-    "The {} solver has not been built into this version of ESBMC, sorry",
-    solver_name);
-  abort();
+  return *b;
+}
+} // namespace
+
+void check_solver_availability(const optionst &options)
+{
+  /* Without an explicit choice, pick_solver() selects from whatever is built
+   * in at solver-creation time. */
+  const std::string name = user_choice(options);
+  if (name.empty())
+    return;
+
+  const backendt *b = find_backend(name);
+  if (!b || !b->built_in)
+    not_built_in(name);
 }
 
-smt_convt *create_solver(
-  std::string solver_name,
-  const namespacet &ns,
-  const optionst &options)
+std::unique_ptr<smt_convt>
+create_solver(const namespacet &ns, const optionst &options)
 {
-  tuple_iface *tuple_api = nullptr;
-  array_iface *array_api = nullptr;
-  fp_convt *fp_api = nullptr;
-
-  solver_creator &factory = pick_solver(solver_name, options);
-  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
-
-  bool node_flat = options.get_bool_option("tuple-node-flattener");
-  bool sym_flat = options.get_bool_option("tuple-sym-flattener");
-  bool array_flat = options.get_bool_option("array-flattener");
-  bool fp_to_bv = options.get_bool_option("fp2bv");
-
-  // Pick a tuple flattener to use. If the solver has native support, and no
-  // options were given, use that by default
-  if (tuple_api != nullptr && !node_flat && !sym_flat)
-    ctx->set_tuple_iface(tuple_api);
-  // Use the node flattener if specified
-  else if (node_flat)
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
-  // Use the symbol flattener if specified
-  else if (sym_flat)
-    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
-  // Default: node flattener
-  else
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
-
-  // Pick an array flattener to use. Again, pick the solver native one by
-  // default, or the one specified, or if none of the above then use the built
-  // in arrays -> to BV flattener.
-  if (array_api != nullptr && !array_flat)
-    ctx->set_array_iface(array_api);
-  else if (array_flat)
-    ctx->set_array_iface(new array_convt(ctx));
-  else
-    ctx->set_array_iface(new array_convt(ctx));
-
-  if (fp_api == nullptr || fp_to_bv)
-    ctx->set_fp_conv(new fp_convt(ctx));
-  else
-    ctx->set_fp_conv(fp_api);
+  /* The backend implements tuples, arrays and floating-point itself. Camada
+     uses the solver's own theories where it has them and lowers otherwise, so
+     there is no ESBMC-side flattener to install and nothing to select here.
+     --fp2bv still forces FPEncoding::BV, because bit-blasting floats is a
+     semantic choice a caller may need (see fp_encoding). */
+  const backendt &backend = pick_solver(options);
+  /* smtlib is the only backend whose construction branches; the rest differ
+   * only in which camada solver they build. */
+  std::unique_ptr<smt_solver_baset> ctx =
+    backend.build ? create_linked_solver(options, ns, backend.build)
+                  : create_new_smtlib_solver(options, ns);
 
   ctx->smt_post_init();
-  return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
+  return std::make_unique<smt_convt>(std::move(ctx));
 }

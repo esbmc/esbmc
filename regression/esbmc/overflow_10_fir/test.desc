@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwind 34 --overflow-check --boolector
+--unwind 34 --overflow-check
 ^VERIFICATION SUCCESSFUL$
