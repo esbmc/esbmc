@@ -69,6 +69,17 @@ const nlohmann::json &unwrap_optional_annotation(const nlohmann::json &ann)
   return ann;
 }
 
+/// The name a nested container element resolves by: its base, or the whole
+/// "Optional[T]", whose Optional<T> struct a bare "Optional" does not name
+/// (#8016).
+static std::string container_spelling(const nlohmann::json &slice)
+{
+  const std::string base = slice["value"]["id"].get<std::string>();
+  if (base == "Optional" && slice["slice"].contains("id"))
+    return base + "[" + slice["slice"]["id"].get<std::string>() + "]";
+  return base;
+}
+
 // Extract element type from annotation
 typet get_elem_type_from_annotation(
   const nlohmann::json &node,
@@ -104,7 +115,7 @@ typet get_elem_type_from_annotation(
       slice.contains("value") && slice["value"].is_object() &&
       slice["value"].contains("id") && slice["value"]["id"].is_string())
     {
-      return type_handler_.get_typet(slice["value"]["id"].get<std::string>());
+      return type_handler_.get_typet(container_spelling(slice));
     }
 
     return typet();
