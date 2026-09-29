@@ -48,18 +48,6 @@ exprt ld_converter::int_const(long long value) const
   return from_integer(BigInt(value), int32_t_());
 }
 
-// Saturation bounds for CV, taken from the configured integer width rather than
-// assumed to be 32-bit.
-exprt ld_converter::int_max() const
-{
-  return to_signedbv_type(int32_t_()).largest_expr();
-}
-
-exprt ld_converter::int_min() const
-{
-  return to_signedbv_type(int32_t_()).smallest_expr();
-}
-
 static std::string ld_name(const std::string &var)
 {
   return "ld::" + var;
@@ -363,27 +351,32 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 }
 
 // CounterStep: IEC 61131-3 §2.5.2.3 — edge-triggered on rising CU/CD.
-//   CTU: if (CU && !CU_prev) CV++;  if (R) CV:=0;  CU_prev:=CU; Q:=(CV>=PV)
-//   CTD: if (LD) CV:=PV; else if (CD && !CD_prev) CV--;  CD_prev:=CD;
+//   CTU: if (CU && !CU_prev && CV<PV) CV++;  if (R) CV:=0;  CU_prev:=CU;
+//        Q:=(CV>=PV)
+//   CTD: if (LD) CV:=PV; else if (CD && !CD_prev && CV>0) CV--;  CD_prev:=CD;
 //        Q:=(CV<=0)
+// The bounds are MATIEC's (lib/counter.txt): CV stops at PV and at 0.
 codet ld_converter::translate_counter(const LdIRNode &n)
 {
   code_blockt blk;
   exprt one = gen_one(int32_t_());
   exprt zero = gen_zero(int32_t_());
+  symbol_exprt cv = var_expr(n.ctr_CV);
+  symbol_exprt q = var_expr(n.ctr_Q);
+  const exprt pv =
+    n.ctr_PV.empty()
+      ? zero
+      : static_cast<exprt>(typecast_exprt(var_expr(n.ctr_PV), cv.type()));
 
   if (n.ctr_kind == FBKind::CTU)
   {
     symbol_exprt cu = var_expr(n.ctr_CU);
-    symbol_exprt cv = var_expr(n.ctr_CV);
-    symbol_exprt q = var_expr(n.ctr_Q);
     symbol_exprt cu_prev =
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cu_step;
     cu_step.cond() = and_exprt(
-      and_exprt(cu, not_exprt(cu_prev)),
-      binary_relation_exprt(cv, "<", int_max()));
+      and_exprt(cu, not_exprt(cu_prev)), binary_relation_exprt(cv, "<", pv));
     cu_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
     blk.copy_to_operands(cu_step);
@@ -399,26 +392,18 @@ codet ld_converter::translate_counter(const LdIRNode &n)
 
     blk.copy_to_operands(code_assignt(cu_prev, cu));
 
-    if (!n.ctr_PV.empty())
-      blk.copy_to_operands(
-        code_assignt(q, binary_relation_exprt(cv, ">=", var_expr(n.ctr_PV))));
-    else
-      blk.copy_to_operands(
-        code_assignt(q, binary_relation_exprt(cv, ">=", zero)));
+    blk.copy_to_operands(code_assignt(q, binary_relation_exprt(cv, ">=", pv)));
   }
   else // CTD
   {
     symbol_exprt cd = var_expr(n.ctr_CD);
-    symbol_exprt cv = var_expr(n.ctr_CV);
-    symbol_exprt q = var_expr(n.ctr_Q);
     exprt neg_one = from_integer(BigInt(-1), int32_t_());
     symbol_exprt cd_prev =
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cd_step;
     cd_step.cond() = and_exprt(
-      and_exprt(cd, not_exprt(cd_prev)),
-      binary_relation_exprt(cv, ">", int_min()));
+      and_exprt(cd, not_exprt(cd_prev)), binary_relation_exprt(cv, ">", zero));
     cd_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
 
@@ -426,10 +411,6 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       blk.copy_to_operands(cd_step);
     else
     {
-      const exprt pv =
-        n.ctr_PV.empty()
-          ? zero
-          : static_cast<exprt>(typecast_exprt(var_expr(n.ctr_PV), cv.type()));
       code_ifthenelset load;
       load.cond() = var_expr(n.ctr_LD);
       load.then_case() = code_assignt(cv, pv);
