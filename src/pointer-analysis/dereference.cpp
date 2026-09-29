@@ -2291,6 +2291,11 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc offs_is_zero =
         and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
       output.emplace_back(offs_is_zero, tmp);
+
+      // An exact match is the whole object: a member can then only compare
+      // as a base class of it, and taking one would downcast it.
+      if (tmp == value)
+        return;
     }
 
     // It's not compatible, but a subtype may be. Iterate over all of them.
