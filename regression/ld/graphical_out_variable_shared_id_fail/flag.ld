@@ -2,9 +2,9 @@
 <project xmlns="http://www.plcopen.org/xml/tc6_0200">
   <fileHeader companyName="SAFE-LD" productName="Probe" productVersion="1" creationDateTime="2026-09-28T00:00:00" />
   <contentHeader name="and_flag" />
-  <!-- #7389: the AND block shares localId 13 with a CALC instance in another
-       program; localIds are unique per body only, so the outVariable must
-       still be refused rather than wired to CALC. -->
+  <!-- #7389: the AND block shares localId 13 with a CALC instance in an action
+       of the same program; localIds are unique per body only, so the
+       outVariable must still be refused rather than wired to CALC. -->
   <types><dataTypes /><pous><pou name="main" pouType="program">
     <interface>
       <inputVars>
@@ -13,7 +13,21 @@
       </inputVars>
       
       <outputVars><variable name="flag"><type><BOOL /></type></variable><variable name="q"><type><BOOL /></type></variable></outputVars>
+      <localVars><variable name="z"><type><BOOL /></type></variable></localVars>
     </interface>
+    <actions><action name="aux"><body><LD>
+      <leftPowerRail localId="0"><position x="0" y="0" /><connectionPointOut formalParameter="none" /></leftPowerRail>
+      <block localId="13" typeName="CALC" instanceName="c0"><position x="120" y="40" />
+        <inputVariables><variable formalParameter="IN"><connectionPointIn /></variable></inputVariables>
+        <inOutVariables />
+        <outputVariables><variable formalParameter="OUT"><connectionPointOut /></variable></outputVariables>
+      </block>
+      <contact localId="20" negated="false" storage="none" edge="none"><position x="20" y="120" />
+        <connectionPointIn><connection refLocalId="0" /></connectionPointIn><connectionPointOut /><variable>z</variable></contact>
+      <coil localId="21" negated="false" storage="none"><position x="60" y="120" />
+        <connectionPointIn><connection refLocalId="20" /></connectionPointIn><connectionPointOut /><variable>z</variable></coil>
+      <rightPowerRail localId="2147483646"><position x="300" y="0" /><connectionPointIn /></rightPowerRail>
+    </LD></body></action></actions>
     <body><LD>
       <leftPowerRail localId="0"><position x="0" y="0" /><connectionPointOut formalParameter="none" /></leftPowerRail>
       <inVariable localId="11"><position x="20" y="40" /><connectionPointOut /><expression>a</expression></inVariable>
@@ -50,22 +64,6 @@
 OUT := FALSE;
 ]]></ST></body>
   </pou>
-  <pou name="other" pouType="program">
-    <interface><localVars><variable name="z"><type><BOOL /></type></variable></localVars></interface>
-    <body><LD>
-      <leftPowerRail localId="0"><position x="0" y="0" /><connectionPointOut formalParameter="none" /></leftPowerRail>
-      <block localId="13" typeName="CALC" instanceName="c0"><position x="120" y="40" />
-        <inputVariables><variable formalParameter="IN"><connectionPointIn /></variable></inputVariables>
-        <inOutVariables />
-        <outputVariables><variable formalParameter="OUT"><connectionPointOut /></variable></outputVariables>
-      </block>
-      <contact localId="20" negated="false" storage="none" edge="none"><position x="20" y="120" />
-        <connectionPointIn><connection refLocalId="0" /></connectionPointIn><connectionPointOut /><variable>z</variable></contact>
-      <coil localId="21" negated="false" storage="none"><position x="60" y="120" />
-        <connectionPointIn><connection refLocalId="20" /></connectionPointIn><connectionPointOut /><variable>z</variable></coil>
-      <rightPowerRail localId="2147483646"><position x="300" y="0" /><connectionPointIn /></rightPowerRail>
-    </LD></body>
-  </pou>
-  </pous></types>
+</pous></types>
   <instances><configurations><configuration name="Config0"><resource name="Res0"><task name="t" interval="T#10ms" priority="0"><pouInstance name="inst0" typeName="main" /></task></resource></configuration></configurations></instances>
 </project>
