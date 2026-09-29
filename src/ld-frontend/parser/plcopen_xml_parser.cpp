@@ -1252,22 +1252,27 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         (tag == "derived") ? first.attribute("name").as_string() : tag;
       return var_kind_from_string(type_str);
     };
-    for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
-      def.input_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    for (auto v : pou.select_nodes(".//interface/localVars/variable"))
-      def.local_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
-    {
-      def.output_var = ov.attribute("name").as_string();
-      def.output_kind = fb_var_kind(ov);
-    }
+    auto collect = [&](const std::string &section) {
+      std::vector<FBVarDecl> out;
+      for (auto v :
+           pou.select_nodes((".//interface/" + section + "/variable").c_str()))
+        out.push_back(
+          {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
+      return out;
+    };
+    // An in/out variable is typed like an input, a temporary like a local.
+    def.input_vars = collect("inputVars");
+    const auto in_out = collect("inOutVars");
+    def.input_vars.insert(def.input_vars.end(), in_out.begin(), in_out.end());
+    def.local_vars = collect("localVars");
+    const auto temps = collect("tempVars");
+    def.local_vars.insert(def.local_vars.end(), temps.begin(), temps.end());
+    def.output_vars = collect("outputVars");
     pugi::xml_node st = pou.select_node(".//body/ST").node();
     if (!st)
       continue; // non-ST body (e.g. graphical FB) — not handled here
     collect_text(st, def.st_body);
-    if (def.output_var.empty() || def.st_body.empty())
+    if (def.output_vars.empty() || def.st_body.empty())
       continue;
     ast.user_fb_defs.push_back(std::move(def));
   }
