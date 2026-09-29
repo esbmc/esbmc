@@ -4,7 +4,7 @@
 #include <iostream>
 #include <util/ssa/goto_expr_factory.h>
 #include <goto-programs/goto_functions.h>
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 #include <util/message/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_no_op.h>
