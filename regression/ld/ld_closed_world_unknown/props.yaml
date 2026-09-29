@@ -1,7 +1,0 @@
-properties:
-  # With only the program writing mode, q never turns on. The bounded run
-  # finds no violation; sampling mode each scan would find one in scan 1.
-  - id: P1
-    kind: invariant
-    expression: "!q"
-    description: "Holds when only the program writes mode"

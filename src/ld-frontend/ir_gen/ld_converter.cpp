@@ -647,7 +647,9 @@ report_shared(const std::vector<VarDecl> &variables, bool closed_world)
 {
   std::string names;
   for (const auto &v : variables)
-    if (v.shared && names.find(" " + v.name + ",") == std::string::npos)
+    if (
+      v.shared && !v.is_input &&
+      names.find(" " + v.name + ",") == std::string::npos)
       names += " " + v.name + ",";
   if (names.empty())
     return;
@@ -779,6 +781,13 @@ void ld_converter::emit_scan_function(const code_blockt &scan_body)
   loop.body() = scan_body;
 
   code_blockt body;
+  // Even when only the program writes them, the value a caller or the
+  // configuration gives these variables is not in the file.
+  if (config.options.get_bool_option("ld-closed-world"))
+    for (const auto &v : ir_.variables)
+      if (v.shared && !v.is_input)
+        body.copy_to_operands(code_assignt(
+          var_expr(v.name), side_effect_expr_nondett(var_expr(v.name).type())));
   body.copy_to_operands(loop);
   scan_sym.set_value(body);
   context_.move_symbol_to_context(scan_sym);
