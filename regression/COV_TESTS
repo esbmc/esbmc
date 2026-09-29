@@ -1842,6 +1842,8 @@ regression/esbmc/char_walk_arrays
 regression/esbmc/char_walk_arrays_fail
 regression/esbmc/char_walk_symbolic_bound
 regression/esbmc/char_walk_symbolic_bound_fail
+regression/esbmc/header_static_per_tu
+regression/esbmc/header_static_per_tu_fail
 regression/esbmc/vla_middle_dim
 regression/esbmc/vla_middle_dim_fail
 regression/esbmc/vla_two_dims_flat
