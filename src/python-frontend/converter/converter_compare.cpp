@@ -20,6 +20,21 @@ exprt gen_bool(bool v)
 {
   return migrate_expr_back(v ? gen_true_expr() : gen_false_expr());
 }
+
+// A class object shares a string's char-array model but never equals one
+// (int != "int"), and orders against nothing.
+exprt compare_class_objects(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (op != "Eq" && op != "NotEq")
+    throw std::runtime_error("TypeError: ordered comparison of a class object");
+  const bool same_class = python_converter::is_class_object(lhs) &&
+                          python_converter::is_class_object(rhs) &&
+                          lhs.get("value") == rhs.get("value");
+  return gen_bool(same_class == (op == "Eq"));
+}
 } // namespace
 
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
@@ -114,17 +129,8 @@ exprt python_converter::compare_constants_internal(
       lhs.type().subtype() == char_type() &&
       rhs.type().subtype() == char_type())
     {
-      // A class object shares a string's char-array model but never equals
-      // one (int != "int"), and orders against nothing.
       if (is_class_object(lhs) || is_class_object(rhs))
-      {
-        if (op != "Eq" && op != "NotEq")
-          throw std::runtime_error(
-            "TypeError: ordered comparison of a class object");
-        const bool same_class = is_class_object(lhs) && is_class_object(rhs) &&
-                                lhs.get("value") == rhs.get("value");
-        return gen_bool(same_class == (op == "Eq"));
-      }
+        return compare_class_objects(op, lhs, rhs);
 
       // Extract string values and compare lexicographically (Python orders
       // strings by code point; for the char-array model this is byte-wise,
