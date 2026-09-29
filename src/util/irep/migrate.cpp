@@ -4,10 +4,13 @@
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/lang/python_types.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
+#include <util/arith/arith_tools.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <set>
@@ -106,6 +109,24 @@ static struct_union_typet::componentst migrate_components_back(
   return comps;
 }
 
+static code_typet::argumentst migrate_arguments_back(const code_type2t &ref2)
+{
+  code_typet::argumentst args;
+  for (std::size_t i = 0; i < ref2.arguments.size(); i++)
+  {
+    args.emplace_back(migrate_type_back(ref2.arguments[i]));
+    args.back().set_identifier(ref2.argument_names[i]);
+    // Unreflected, so it may be absent on a type built by a frontend rather
+    // than by migrate_type (§44).
+    if (i < ref2.argument_base_names.size())
+      args.back().cmt_base_name(ref2.argument_base_names[i]);
+    if (i < ref2.argument_defaults.size() && ref2.argument_defaults[i])
+      args.back().default_value() =
+        migrate_expr_back(ref2.argument_defaults[i]);
+  }
+  return args;
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -168,6 +189,84 @@ static pointer_ref_kindt pointer_ref_kind(const typet &type)
   return pointer_ref_kindt::NONE;
 }
 
+/// An explicit `alignas` in bytes, or zero when the record has none. It travels
+/// as an `alignment` sub-irep and add_padding reads it back to size a record's
+/// trailing pad (docs/roadmap/scope-clang-cpp-irep2.md §7.4).
+static BigInt explicit_alignment(const typet &type)
+{
+  const irept &a = type.find("alignment");
+  if (a.is_nil())
+    return 0;
+
+  BigInt v;
+  if (to_integer(static_cast<const exprt &>(a), v))
+    return 0;
+
+  return v;
+}
+
+/// Type ids that carry no storage and so migrate to the empty type: an unset
+/// or nil id; an ellipsis, which is not a type at all; clang's BoundMember,
+/// the type of `obj.*pmf` before it is called, which is a placeholder rather
+/// than storage -- clang_c_adjust::adjust_ptr_mem replaces the whole node with
+/// the member function, and a ptr_mem2t typed empty is exactly that
+/// placeholder, a pointer-to-*data*-member selection carrying the member's own
+/// type (docs/roadmap/scope-clang-cpp-irep2.md §7.5); and the return types of a
+/// destructor and of a constructor, which is a void method on an existing
+/// object rather than something that returns a value.
+static bool migrates_to_empty(const typet &type)
+{
+  return type.id().as_string().empty() || type.id() == "nil" ||
+         type.id() == "ellipsis" || type.id() == typet::t_ptrmem ||
+         type.id() == "destructor" || type.id() == "constructor";
+}
+
+static std::vector<irep_idt> struct_bases(const typet &type)
+{
+  std::vector<irep_idt> bases;
+  for (const irept &b : type.find("bases").get_sub())
+    bases.push_back(b.id());
+  return bases;
+}
+
+static irep_idt ctor_dtor_marker(const typet &ret)
+{
+  return ret.id() == "constructor" || ret.id() == "destructor" ? ret.id()
+                                                               : irep_idt();
+}
+
+// A dynamic specification is resolved by finalize_exception_specification;
+// until then it lists its declared types under "exception_spec_decl".
+static void migrate_exception_spec(
+  const typet &type,
+  irep_idt &kind,
+  std::vector<irep_idt> &types,
+  std::vector<type2tc> &decl)
+{
+  const irept &k = type.find(exception_specificationt::kind_attribute());
+  if (k.is_nil())
+    return;
+  kind = k.id();
+  for (const irept &t :
+       type.find(exception_specificationt::types_attribute()).get_sub())
+    types.push_back(t.id());
+  for (const irept &t : type.find("exception_spec_decl").get_sub())
+    decl.push_back(migrate_type(static_cast<const typet &>(t)));
+}
+
+static std::vector<expr2tc>
+migrate_arg_defaults(const code_typet::argumentst &old_args)
+{
+  std::vector<expr2tc> defaults;
+  for (std::size_t i = 0; i < old_args.size(); i++)
+    if (old_args[i].has_default_value())
+    {
+      defaults.resize(old_args.size());
+      migrate_expr(old_args[i].default_value(), defaults[i]);
+    }
+  return defaults;
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -184,14 +283,14 @@ static type2tc migrate_type0(const typet &type)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return signedbv_type2tc(iwidth);
+    return signedbv_type2tc(iwidth, type.cmt_constant(), type.cpp_type());
   }
 
   if (type.id() == typet::t_unsignedbv)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return unsignedbv_type2tc(iwidth);
+    return unsignedbv_type2tc(iwidth, type.cmt_constant(), type.cpp_type());
   }
 
   if (type.id() == "c_enum" || type.id() == "incomplete_c_enum")
@@ -286,7 +385,16 @@ static type2tc migrate_type0(const typet &type)
     bool packed = type.get_bool("packed");
 
     return struct_type2tc(
-      members, names, pretty_names, name, packed, base_names);
+      members,
+      names,
+      pretty_names,
+      name,
+      packed,
+      base_names,
+      explicit_alignment(type),
+      python_aggregate_kind(type),
+      type.find("bases").is_not_nil(),
+      struct_bases(type));
   }
 
   if (type.id() == typet::t_union)
@@ -325,7 +433,7 @@ static type2tc migrate_type0(const typet &type)
     unsigned int frac_bits = to_floatbv_type(type).get_f();
     unsigned int expo_bits = to_floatbv_type(type).get_e();
 
-    return floatbv_type2tc(frac_bits, expo_bits);
+    return floatbv_type2tc(frac_bits, expo_bits, type.cpp_type());
   }
 
   if (type.id() == typet::t_complex)
@@ -368,7 +476,24 @@ static type2tc migrate_type0(const typet &type)
       ret_type = migrate_type(static_cast<const typet &>(type.return_type()));
     }
 
-    return code_type2tc(args, ret_type, arg_names, ellipsis, arg_base_names);
+    irep_idt exc_kind;
+    std::vector<irep_idt> exc_types;
+    std::vector<type2tc> exc_decl;
+    migrate_exception_spec(type, exc_kind, exc_types, exc_decl);
+
+    const typet &ret = ref.return_type();
+    return code_type2tc(
+      args,
+      ret_type,
+      arg_names,
+      ellipsis,
+      arg_base_names,
+      migrate_arg_defaults(old_args),
+      exc_kind,
+      exc_types,
+      ctor_dtor_marker(ret),
+      ret.get_bool("#implicit_union_copy_move_constructor"),
+      exc_decl);
   }
 
   if (type.id() == "cpp-name")
@@ -394,29 +519,8 @@ static type2tc migrate_type0(const typet &type)
     return cpp_name_type2tc(name, template_args);
   }
 
-  if (type.id().as_string().size() == 0 || type.id() == "nil")
-  {
+  if (migrates_to_empty(type))
     return get_empty_type();
-  }
-
-  if (type.id() == "ellipsis")
-  {
-    // Eh? Ellipsis isn't a type. It's a special case.
-    return get_empty_type();
-  }
-
-  if (type.id() == "destructor")
-  {
-    // This is a destructor return type. Which is nil.
-    return get_empty_type();
-  }
-
-  if (type.id() == "constructor")
-  {
-    // New operator returns something; constructor is a void method on an
-    // existing object.
-    return get_empty_type();
-  }
 
   if (type.id() == "incomplete_array")
   {
@@ -483,9 +587,11 @@ type2tc migrate_symbol_type(const symbolt &sym)
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 {
   // The IREP2 form is the source of truth on `symbolt`; get_value2() returns
-  // it directly (lazily populated if a legacy-side setter wrote last). Kept
-  // as a named chokepoint so the round-trip cross-check below runs on every
-  // real symbol value the pipeline reads.
+  // it directly (lazily populated if a legacy-side setter wrote last). Note
+  // this is NOT the chokepoint its type counterpart is: it has one caller
+  // (contracts.cpp), against 34 for migrate_symbol_type, because symbol values
+  // are read through get_value()/get_value2() directly. The cross-check below
+  // therefore covers one C contract path, not the pipeline at large.
   dest = sym.get_value2();
 #ifndef NDEBUG
   // Cross-check: assert the IREP2 value form is stable under the
@@ -1216,7 +1322,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    new_expr_ref = constant_int2tc(type, val);
+    new_expr_ref = constant_int2tc(type, val, expr.cformat());
     return;
   }
 
@@ -1226,7 +1332,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     uint64_t enumval = atoi(expr.value().as_string().c_str());
 
-    new_expr_ref = constant_int2tc(type, BigInt(enumval));
+    new_expr_ref = constant_int2tc(type, BigInt(enumval), expr.cformat());
     return;
   }
 
@@ -1267,7 +1373,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     ieee_floatt bv(to_constant_expr(expr));
 
-    new_expr_ref = constant_floatbv2tc(bv);
+    new_expr_ref = constant_floatbv2tc(bv, expr.cformat());
     return;
   }
 
@@ -2444,7 +2550,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = sideeffect2tc(
-      plaintype, operand, thesize, args, cmt_type, t, expr.location());
+      plaintype,
+      operand,
+      thesize,
+      args,
+      cmt_type,
+      t,
+      expr.location(),
+      expr.get_bool("constructor"));
     return;
   }
 
@@ -3109,6 +3222,47 @@ void migrate_type_back_cache_clear()
   back_cache.clear();
 }
 
+static void migrate_struct_bases_back(const struct_type2t &ref, typet &type)
+{
+  if (!ref.has_bases)
+    return;
+  irept::subt &bases = type.add("bases").get_sub();
+  for (const irep_idt &b : ref.bases)
+    bases.emplace_back(b);
+}
+
+static void
+migrate_ctor_dtor_marker_back(const code_type2t &ref, code_typet &code)
+{
+  if (ref.return_marker.empty())
+    return;
+  code.return_type() = typet(ref.return_marker);
+  if (ref.implicit_union_copy_move)
+    code.return_type().set("#implicit_union_copy_move_constructor", true);
+}
+
+static void
+migrate_exception_spec_back(const code_type2t &ref, code_typet &code)
+{
+  if (ref.exception_kind.empty())
+    return;
+  code.set(exception_specificationt::kind_attribute(), ref.exception_kind);
+  if (ref.exception_kind != "dynamic")
+    return;
+  // An unresolved throw() comes back resolved, which means the same.
+  if (!ref.exception_decl.empty())
+  {
+    irept &decl = code.add("exception_spec_decl");
+    for (const type2tc &t : ref.exception_decl)
+      decl.get_sub().push_back(migrate_type_back(t));
+    return;
+  }
+  irept types;
+  for (const irep_idt &id : ref.exception_types)
+    types.get_sub().emplace_back(id);
+  code.set(exception_specificationt::types_attribute(), types);
+}
+
 static typet migrate_type_back_uncached(const type2tc &ref);
 
 typet migrate_type_back(const type2tc &ref)
@@ -3129,6 +3283,20 @@ typet migrate_type_back(const type2tc &ref)
     back_cache.clear();
   back_cache.emplace(ref.get(), std::make_pair(ref, result));
   return result;
+}
+
+/// `#constant` and `#cpp_type` are comment fields: writing them when unset
+/// still inserts the key, which the printer then reads back as a qualifier or a
+/// spelling (§158).
+static void restore_type_comments(
+  typet &t,
+  bool constant_qualified,
+  const irep_idt &cpp_type)
+{
+  if (constant_qualified)
+    t.cmt_constant(true);
+  if (!cpp_type.empty())
+    t.cpp_type(cpp_type);
 }
 
 static typet migrate_type_back_uncached(const type2tc &ref)
@@ -3157,6 +3325,11 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     thetype.set("tag", ref2.name);
     if (ref2.packed)
       thetype.set("packed", true);
+    if (ref2.alignment != 0)
+      thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
+    if (!ref2.python_aggregate.empty())
+      set_python_aggregate_kind(thetype, ref2.python_aggregate);
+    migrate_struct_bases_back(ref2, thetype);
     return thetype;
   }
   case type2t::union_id:
@@ -3177,21 +3350,11 @@ static typet migrate_type_back_uncached(const type2tc &ref)
 
     assert(ref2.arguments.size() == ref2.argument_names.size());
 
-    code_typet::argumentst args;
-    unsigned int i = 0;
-    for (auto const &it : ref2.arguments)
-    {
-      args.emplace_back(migrate_type_back(it));
-      args.back().set_identifier(ref2.argument_names[i]);
-      // Unreflected, so it may be absent on a type built by a frontend rather
-      // than by migrate_type (§44).
-      if (i < ref2.argument_base_names.size())
-        args.back().cmt_base_name(ref2.argument_base_names[i]);
-      i++;
-    }
-
-    code.arguments() = args;
+    code.arguments() = migrate_arguments_back(ref2);
     code.return_type() = ret_type;
+
+    migrate_exception_spec_back(ref2, code);
+    migrate_ctor_dtor_marker_back(ref2, code);
 
     if (ref2.ellipsis)
       code.make_ellipsis();
@@ -3244,13 +3407,17 @@ static typet migrate_type_back_uncached(const type2tc &ref)
   {
     const unsignedbv_type2t &ref2 = to_unsignedbv_type(ref);
 
-    return unsignedbv_typet(ref2.width);
+    unsignedbv_typet t(ref2.width);
+    restore_type_comments(t, ref2.constant_qualified, ref2.cpp_type);
+    return t;
   }
   case type2t::signedbv_id:
   {
     const signedbv_type2t &ref2 = to_signedbv_type(ref);
 
-    return signedbv_typet(ref2.width);
+    signedbv_typet t(ref2.width);
+    restore_type_comments(t, ref2.constant_qualified, ref2.cpp_type);
+    return t;
   }
   case type2t::fixedbv_id:
   {
@@ -3268,6 +3435,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     floatbv_typet thetype;
     thetype.set_f(ref2.fraction);
     thetype.set_width(ref2.get_width());
+    restore_type_comments(thetype, false, ref2.cpp_type);
     return thetype;
   }
   case type2t::complex_id:
@@ -3502,8 +3670,21 @@ static exprt back_sideeffect(const expr2tc &ref)
     size = migrate_expr_back(ref2.size);
   back_sideeffect_operands(ref2, theexpr);
 
-  theexpr.cmt_type(cmttype);
-  theexpr.cmt_size(size);
+  // Only when there is something to say. Writing these unconditionally gives a
+  // node that never had them a `#type: empty` and a `#size: nil`, which is
+  // invisible to irept::operator== -- comments are not compared -- but shows up
+  // in every printed symbol table and goto program (§155). Keyed off the source
+  // fields rather than off the locals: a default-constructed `typet` has an
+  // empty id, and `is_not_nil()` reports that as present, which is the same
+  // third state the `size` comment above warns about.
+  // Nil *and* empty: `side_effect_function_call2tc` stores `get_empty_type()`
+  // as the canonical alloctype because that is what round-trips (:533), but the
+  // legacy node it came from carries no `#type` at all, so writing the empty
+  // type back invents one (§157.1).
+  if (!is_nil_type(ref2.alloctype) && !is_empty_type(ref2.alloctype))
+    theexpr.cmt_type(cmttype);
+  if (!is_nil_expr(ref2.size))
+    theexpr.cmt_size(size);
 
   // For cpp_new[] also restore the "size" field the frontend uses. Under
   // --irep2-bodies this back-migration feeds the legacy conversion pipeline,
@@ -3516,15 +3697,27 @@ static exprt back_sideeffect(const expr2tc &ref)
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
 
-  // ref2.location is deliberately *not* restored onto the legacy node.
-  // goto_convert falls back to the enclosing statement's location for a side
-  // effect carrying none, so writing this one back moves the instruction's
-  // column on the default path -- measured at 126 of 131 goto programs over a
-  // stride-16 sample of regression/esbmc. That is very likely the more
-  // faithful column, but it is a user-visible change to counterexamples and
-  // witnesses, so it needs its own PR and an SV-COMP run
-  // (scope-clang-c-irep2.md §136.3).
+  // Read after the frontend by clang_cpp_maint::adjust_init; see sideeffect2t.
+  if (ref2.constructor)
+    theexpr.set("constructor", true);
+
+  // Restored. goto_convert falls back to the enclosing statement's location for
+  // a side effect carrying none, so a call's instruction took the statement's
+  // column rather than its own; carrying the location back gives it the call's
+  // (scope-clang-c-irep2.md §156).
+  if (ref2.location.is_not_nil())
+    theexpr.location() = ref2.location;
   return theexpr;
+}
+
+/// Restores `#cformat` only when there is one: it is a comment field, but an
+/// empty one still makes c_expr2string prefer it over deriving the text, so it
+/// would print nothing at all (§63).
+static exprt with_cformat(exprt e, const irep_idt &cformat)
+{
+  if (!cformat.empty())
+    e.cformat(cformat);
+  return e;
 }
 
 static exprt migrate_expr_back_dispatch(const expr2tc &ref);
@@ -4430,7 +4623,7 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
-    return theexpr;
+    return with_cformat(std::move(theexpr), ref2.cformat);
   }
   case expr2t::sizeof_id:
   {
@@ -4448,7 +4641,8 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   }
   case expr2t::constant_floatbv_id:
   {
-    return to_constant_floatbv2t(ref).value.to_expr();
+    const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
+    return with_cformat(ref2.value.to_expr(), ref2.cformat);
   }
   case expr2t::constant_bool_id:
   {

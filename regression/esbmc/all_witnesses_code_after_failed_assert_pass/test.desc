@@ -1,0 +1,5 @@
+CORE
+main.c
+--all-witnesses
+^\s+PASSED\s+\[main\.assertion\.\d+\]\s+line\s+12\s+w$
+^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line\s+8\s+v$

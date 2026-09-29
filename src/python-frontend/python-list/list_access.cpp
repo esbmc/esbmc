@@ -7,66 +7,6 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
-namespace
-{
-// Structural equality of two AST JSON nodes, ignoring source-location keys
-// (lineno/col_offset/...). Two textually distinct occurrences of the same
-// expression — e.g. the `l[i+1:]` on each side of `l[i+1:] = reversed(l[i+1:])`
-// — differ only in their location fields, so a raw `==` would wrongly report
-// them as different. Used to prove the read-slice and write-slice are the same
-// before collapsing the reverse-in-place idiom.
-bool ast_equal_ignoring_location(
-  const nlohmann::json &a,
-  const nlohmann::json &b)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto is_loc_key = [&](const std::string &k) {
-    for (const char *lk : loc_keys)
-      if (k == lk)
-        return true;
-    return false;
-  };
-
-  if (a.type() != b.type())
-    return false;
-
-  if (a.is_object())
-  {
-    // Compare the non-location keys of both objects symmetrically.
-    for (auto it = a.begin(); it != a.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (
-        !b.contains(it.key()) ||
-        !ast_equal_ignoring_location(it.value(), b[it.key()]))
-        return false;
-    }
-    for (auto it = b.begin(); it != b.end(); ++it)
-    {
-      if (is_loc_key(it.key()))
-        continue;
-      if (!a.contains(it.key()))
-        return false;
-    }
-    return true;
-  }
-
-  if (a.is_array())
-  {
-    if (a.size() != b.size())
-      return false;
-    for (size_t i = 0; i < a.size(); ++i)
-      if (!ast_equal_ignoring_location(a[i], b[i]))
-        return false;
-    return true;
-  }
-
-  return a == b;
-}
-} // namespace
-
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
@@ -1655,7 +1595,7 @@ const symbolt &python_list::get_str_slice_sym()
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
-    new_symbol.set_type(slice_type);
+    new_symbol.set_type(migrate_type(slice_type));
     converter_.symbol_table().add(new_symbol);
     sym = converter_.symbol_table().find_symbol(id);
   }
@@ -3039,7 +2979,7 @@ void python_list::handle_slice_assignment(
       list_value_["value"].value("_type", "") == "Name" &&
       arg["value"].value("id", "") == list_value_["value"].value("id", "") &&
       // Same slice bounds (ignoring source locations).
-      ast_equal_ignoring_location(arg["slice"], slice_node);
+      json_utils::ast_equal_ignoring_location(arg["slice"], slice_node);
 
     if (arg_is_same_slice)
     {
@@ -3344,15 +3284,24 @@ std::optional<exprt> python_list::resolve_nested_list_element(
 typet python_list::tagged_elem_type_or(
   const exprt &array,
   bool constant_index,
+  const nlohmann::json &list_node,
   const typet &fallback) const
 {
-  if (constant_index || !array.is_symbol())
+  // A constant index into a literal-backed list already read its own
+  // element's type; into anything else it fell back to one type.
+  const bool literal_backed =
+    list_node.is_object() && list_node.contains("value") &&
+    list_node["value"].is_object() && list_node["value"].contains("elts");
+  if ((constant_index && literal_backed) || !array.is_symbol())
     return fallback;
-  const typet uniform =
-    elem_types().uniform_element_type(array.identifier().as_string());
-  return converter_.get_type_handler().is_tagged_scalar_type(uniform)
-           ? uniform
-           : fallback;
+  // A list mixing strings and numbers has no single static element type
+  // either: read its element as a tagged scalar too (#4797).
+  const std::string id = array.identifier().as_string();
+  const type_handler &th = converter_.get_type_handler();
+  if (elem_types().mixes_str_and_number(id))
+    return th.get_tagged_object_type();
+  const typet uniform = elem_types().uniform_element_type(id);
+  return th.is_tagged_scalar_type(uniform) ? uniform : fallback;
 }
 
 bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
@@ -3788,7 +3737,8 @@ exprt python_list::handle_index_access(
           converter_.ast());
         if (!base_decl.is_null() && base_decl.contains("annotation"))
         {
-          nlohmann::json drilled = base_decl["annotation"];
+          nlohmann::json drilled =
+            unwrap_optional_annotation(base_decl["annotation"]);
           for (size_t k = 0; k < subscript_depth; ++k)
           {
             if (
@@ -4030,7 +3980,8 @@ exprt python_list::handle_index_access(
     // the generic `*(long *)item->value` unwrap and read 8 bytes out of a
     // payload that is 2 for "a". Narrowed to the tagged case: every other
     // element kind keeps whatever the code above resolved.
-    elem_type = tagged_elem_type_or(array, constant_index, elem_type);
+    elem_type =
+      tagged_elem_type_or(array, constant_index, list_node, elem_type);
 
     // A float-typed element read must dispatch on the stored type_id even for a
     // constant index into a statically "pure-float" list: a list[float]

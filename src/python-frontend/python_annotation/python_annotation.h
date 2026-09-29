@@ -158,6 +158,20 @@ private:
   std::string get_type_from_ifexp(const Json &ifexp_node, const Json &body);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
+  // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
+  // is one of the array-shape constructors whose numpy.py signature is a
+  // generic `list[float]` the converter later replaces with a concrete
+  // array type. Scopes infer_type's Attribute-Call branch decline to
+  // exactly the calls that can hit the array_return_local_* gap.
+  bool is_numpy_array_ctor_call(const Json &call_value) const;
+  // True when the function currently being annotated (current_func) returns
+  // `name` directly as its own trailing statement -- `return name`, or
+  // identically through both arms of a trailing if/else. Mirrors
+  // get_function_definition's local_var_numpy_array_return on the converter
+  // side, at the granularity infer_type's decline needs (it only has to
+  // know whether the name being assigned right now is the one at risk, not
+  // reconstruct the whole pattern).
+  bool current_func_returns_name_directly(const std::string &name) const;
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast);
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
@@ -171,7 +185,11 @@ private:
   // Return type of a FunctionDef @p member: its declared `-> T` (or `-> T[...]`)
   // annotation, else the type inferred from its return statements, else "Any".
   std::string
-  method_return_type(const Json &member, const std::string &method_name);
+  method_return_type(const Json &member, const std::string &class_name);
+  // Type inferred from the return statements of @p member, a method of
+  // @p class_name, resolving names in the method's own scope, or empty.
+  std::string
+  infer_method_return_type(const Json &member, const std::string &class_name);
   void collect_return_types(
     const Json &body,
     const std::string &func_name,

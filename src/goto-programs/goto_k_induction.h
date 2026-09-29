@@ -17,6 +17,12 @@
 /// true only when such a write cannot be resolved (callee parameter,
 /// unknown/heap pointee); the caller must then disable the inductive step,
 /// the conservative Phase 1 behaviour (issue #5224).
-bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns);
+/// @p continue_past_failed_assertions is set when claims past a violation are
+/// still checked (--multi-property, coverage), so that a path through a failed
+/// assertion still counts as entering the loop (#7900).
+bool goto_k_induction(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  bool continue_past_failed_assertions);
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

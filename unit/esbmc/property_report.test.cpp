@@ -175,6 +175,41 @@ TEST_CASE("a row with no location falls back to its key", "[property-report]")
   CHECK(build_property_rows(verdicts, {})[0].description == "unnamed claim");
 }
 
+TEST_CASE(
+  "assertions sharing a position are told apart by condition",
+  "[property-report]")
+{
+  auto assertion = [](unsigned instruction, const expr2tc &condition) {
+    property_resultt r =
+      result(property_verdictt::Passed, "a.c", "main", 5, "same check");
+    r.loc.instruction = instruction;
+    r.loc.condition = condition;
+    return r;
+  };
+  const auto render = [](const expr2tc &e) {
+    return std::string(is_true(e) ? "p" : "q");
+  };
+
+  const std::map<std::string, property_resultt> differ{
+    {"x", assertion(7, gen_false_expr())},
+    {"y", assertion(3, gen_true_expr())}};
+  // Without a renderer the rows stay as they are.
+  const std::vector<property_rowt> plain = build_property_rows(differ, {});
+  CHECK(plain[0].description == "same check");
+  CHECK(plain[1].description == "same check");
+  // The lower instruction number sorts first, whatever the key.
+  const std::vector<property_rowt> told =
+    build_property_rows(differ, {}, render);
+  CHECK(told[0].description == "same check [p]");
+  CHECK(told[1].description == "same check [q]");
+
+  const std::map<std::string, property_resultt> same{
+    {"x", assertion(7, gen_true_expr())}, {"y", assertion(3, gen_true_expr())}};
+  // A condition both rows share tells nothing apart, so none is printed.
+  for (const auto &row : build_property_rows(same, {}, render))
+    CHECK(row.description == "same check");
+}
+
 TEST_CASE("surrounding whitespace is trimmed off", "[property-report]")
 {
   const std::map<std::string, property_resultt> verdicts{

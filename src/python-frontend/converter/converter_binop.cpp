@@ -7,7 +7,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
@@ -249,7 +249,7 @@ std::string py_percent_format(
       // printf rounds %f/%e/%g per the host FP rounding mode, which the
       // pipeline can leave non-default; pin FE_TONEAREST across both snprintf
       // passes so the fold matches CPython's round-half-to-even.
-      const round_to_nearest_guard guard;
+      const host_rounding_mode guard(FE_TONEAREST);
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
@@ -685,24 +685,26 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
 
   return bin_expr;
 }
+
+void python_converter::convert_function_call_to_side_effect(exprt &expr)
+{
+  if (!expr.is_function_call())
+    return;
+  side_effect_expr_function_callt side_effect;
+  code_function_callt &code = static_cast<code_function_callt &>(expr);
+  side_effect.function() = code.function();
+  side_effect.location() = code.location();
+  side_effect.type() = code.type();
+  side_effect.arguments() = code.arguments();
+  expr = side_effect;
+}
+
 void python_converter::convert_function_calls_to_side_effects(
   exprt &lhs,
   exprt &rhs)
 {
-  auto to_side_effect_call = [](exprt &expr) {
-    side_effect_expr_function_callt side_effect;
-    code_function_callt &code = static_cast<code_function_callt &>(expr);
-    side_effect.function() = code.function();
-    side_effect.location() = code.location();
-    side_effect.type() = code.type();
-    side_effect.arguments() = code.arguments();
-    expr = side_effect;
-  };
-
-  if (lhs.is_function_call())
-    to_side_effect_call(lhs);
-  if (rhs.is_function_call())
-    to_side_effect_call(rhs);
+  convert_function_call_to_side_effect(lhs);
+  convert_function_call_to_side_effect(rhs);
 }
 
 /// Handle chained comparisons
@@ -1034,12 +1036,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return type_identity_result;
 
   // Handle None comparisons (don't unwrap optionals for identity checks)
-  bool is_none_check = handle_none_check_setup(op, lhs, rhs);
-  if (!is_none_check)
-  {
-    lhs = unwrap_optional_if_needed(lhs, element);
-    rhs = unwrap_optional_if_needed(rhs, element);
-  }
+  // Optionals are unwrapped here, except for an identity check against None.
+  if (exprt optional_result = resolve_optional_operands(
+        op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
+      optional_result.is_not_nil())
+    return optional_result;
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
   {
@@ -1700,6 +1701,48 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   return bin_expr;
 }
 
+/// Replace Optional<T> operands by their values (#8016). `==`/`!=` also compare
+/// the None flags, so None equals only None. Returns the finished comparison,
+/// or nil once \p lhs and \p rhs hold plain values.
+exprt python_converter::resolve_optional_operands(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element,
+  bool is_none_check)
+{
+  if (is_none_check)
+    return nil_exprt();
+  auto none_flag = [&](exprt &operand) -> exprt {
+    if (!type_utils::is_optional_struct(operand.type()))
+      return false_exprt();
+    operand = materialize_optional(operand, element);
+    exprt flag = member_exprt(operand, "is_none", bool_type());
+    operand = unwrap_optional_if_needed(operand, element);
+    return flag;
+  };
+  const bool any_optional = type_utils::is_optional_struct(lhs.type()) ||
+                            type_utils::is_optional_struct(rhs.type());
+  const exprt lhs_none = none_flag(lhs);
+  const exprt rhs_none = none_flag(rhs);
+  if (!any_optional || (op != "Eq" && op != "NotEq"))
+    return nil_exprt();
+
+  auto is_scalar = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t.is_bool();
+  };
+  if (!is_scalar(lhs.type()) || !is_scalar(rhs.type()))
+    return nil_exprt();
+  const exprt values_equal =
+    equality_exprt(lhs, typecast_exprt(rhs, lhs.type()));
+  const exprt equal = or_exprt(
+    and_exprt(lhs_none, rhs_none),
+    and_exprt(
+      and_exprt(not_exprt(lhs_none), not_exprt(rhs_none)), values_equal));
+  return op == "Eq" ? equal : exprt(not_exprt(equal));
+}
+
 bool python_converter::handle_none_check_setup(
   const std::string &op,
   const exprt &lhs,
@@ -1715,6 +1758,44 @@ bool python_converter::handle_none_check_setup(
   }
 
   return is_none_check;
+}
+
+exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
+{
+  const typet &lhs_type = lhs.type();
+  const typet &rhs_type = rhs.type();
+  if (lhs_type.subtype() != rhs_type.subtype())
+    return nil_exprt();
+
+  const exprt &lhs_size_expr = to_array_type(lhs_type).size();
+  const exprt &rhs_size_expr = to_array_type(rhs_type).size();
+  if (!lhs_size_expr.is_constant() || !rhs_size_expr.is_constant())
+    return nil_exprt();
+
+  const BigInt lhs_size_big =
+    binary2integer(to_constant_expr(lhs_size_expr).value().c_str(), true);
+  const BigInt rhs_size_big =
+    binary2integer(to_constant_expr(rhs_size_expr).value().c_str(), true);
+  if (lhs_size_big < 0 || rhs_size_big < 0)
+    return nil_exprt();
+
+  const long long lhs_size = lhs_size_big.to_int64();
+  const long long rhs_size = rhs_size_big.to_int64();
+  const typet &elem_type = lhs_type.subtype();
+  typet result_type = type_handler_.build_array(elem_type, lhs_size + rhs_size);
+  // Tag the result `bytes` too, so a chained concatenation (`a + b + c`) keeps
+  // recognising its left operand as bytes on the second `+`.
+  type_utils::set_cpp_type(result_type, "bytes");
+
+  exprt result("array", result_type);
+  for (long long i = 0; i < lhs_size; ++i)
+    result.copy_to_operands(
+      python_expr::build_index(lhs, from_integer(i, size_type())));
+  for (long long i = 0; i < rhs_size; ++i)
+    result.copy_to_operands(
+      python_expr::build_index(rhs, from_integer(i, size_type())));
+
+  return result;
 }
 
 exprt python_converter::handle_array_operations(
@@ -1741,6 +1822,18 @@ exprt python_converter::handle_array_operations(
       throw std::runtime_error(msg.str());
     }
     return nil_exprt();
+  }
+
+  // `bytes + bytes` is concatenation (bytes.__add__). Route it here early,
+  // since bytes and a numpy array share the same underlying
+  // `array of long_long_int_type` representation.
+  if (
+    op == "Add" && type_utils::is_bytes_array(lhs.type()) &&
+    type_utils::is_bytes_array(rhs.type()))
+  {
+    exprt concatenated = build_bytes_concat(lhs, rhs);
+    if (!concatenated.is_nil())
+      return concatenated;
   }
 
   // Check for zero-length array comparisons
@@ -2012,10 +2105,7 @@ exprt python_converter::handle_tuple_operations(
 
     // V.3: build the concatenated tuple value in IREP2. Each component is the
     // exact round-trip of a member_exprt over the migrated operand; the struct
-    // literal is assembled via constant_struct2tc and back-migrated once, then
-    // the full struct type is re-attached -- migrate_type drops the frontend-only
-    // aggregate-kind marker the `in`/membership/subscript dispatch reads with no
-    // tag fallback (mirrors tuple_handler::get_tuple_expr).
+    // literal is assembled via constant_struct2tc and back-migrated once.
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
@@ -2028,7 +2118,6 @@ exprt python_converter::handle_tuple_operations(
 
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -2076,7 +2165,6 @@ exprt python_converter::handle_tuple_operations(
 
     exprt result =
       migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);

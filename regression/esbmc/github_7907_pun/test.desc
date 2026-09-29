@@ -1,0 +1,4 @@
+CORE
+main.c
+--little-endian --unwind 17
+^VERIFICATION SUCCESSFUL$

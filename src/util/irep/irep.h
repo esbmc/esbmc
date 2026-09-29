@@ -492,10 +492,14 @@ public:
   }
 
   /// Source-level *spelling* of a type, e.g. `signed char`, `long long`.
-  /// Carries what IREP2's closed type system deliberately normalizes away, so
-  /// its three readers are all presentation consumers (counterexample text,
-  /// generated C, exception-id strings) rather than verifier core. Same
-  /// carriage note as member_name().
+  /// Carries what IREP2's closed type system deliberately normalizes away.
+  /// Three readers are presentation consumers (counterexample text, generated
+  /// C, exception-id strings), but a fourth is not: the python frontend's
+  /// `type_utils::is_char_type` asks whether an 8-bit bitvector is a character
+  /// rather than an `int8`, and seven conversion sites branch on the answer, so
+  /// dropping the spelling changes what is verified
+  /// (docs/roadmap/scope-python-irep2.md §8). Carriage stays on the legacy
+  /// irep.
   inline const irep_idt &cpp_type() const
   {
     return get(a_cpp_type);

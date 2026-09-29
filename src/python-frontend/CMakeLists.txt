@@ -85,23 +85,20 @@ add_library(pythonfrontend STATIC
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_BINARY_DIR}/src/python-frontend
-    PUBLIC ${CMAKE_SOURCE_DIR}/src
-    PUBLIC ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(pythonfrontend PUBLIC nlohmann_json::nlohmann_json PRIVATE fmt::fmt bigint)
+target_link_libraries(pythonfrontend PUBLIC esbmc_common nlohmann_json::nlohmann_json
+  PRIVATE fmt::fmt bigint clangcfrontend_stuff clangcppfrontend)
 
 add_executable(python2goto python2goto.cpp)
 target_include_directories(python2goto
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    PRIVATE ${CMAKE_BINARY_DIR}/src
-    PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_sources(python2goto PRIVATE python_blank_library.cpp)
-target_link_libraries(python2goto
-  pythonfrontend clangcfrontend clangcppfrontend symex langapi
+target_link_libraries(python2goto PRIVATE
+  esbmc_common pythonfrontend clangcfrontend clangcppfrontend symex langapi
   solvers clibs gotoalgorithms cache goto2c
-  filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS}
+  filesystem ESBMC::boost ${OS_INCLUDE_LIBS}
   nlohmann_json::nlohmann_json)
 
 set(pysrc_goto ${CMAKE_CURRENT_BINARY_DIR}/pysrc64.goto)
@@ -130,7 +127,5 @@ add_custom_command(OUTPUT ${pysrc_c}
 
 add_library(pysrclib ${pysrc_c} python_library.cpp)
 target_include_directories(pysrclib
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    PUBLIC ${CMAKE_SOURCE_DIR}/src
-    PRIVATE ${Boost_INCLUDE_DIRS})
-target_link_libraries(pysrclib PRIVATE fmt::fmt)
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pysrclib PUBLIC esbmc_common PRIVATE fmt::fmt)

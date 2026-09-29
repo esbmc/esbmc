@@ -6,6 +6,7 @@
 #include <util/irep/std_types.h>
 #include <util/irep/std_code.h>
 #include <util/expr/expr_util.h>
+#include <util/lang/python_types.h>
 
 namespace python_expr
 {
@@ -23,11 +24,50 @@ bool contains_dyn_array(const typet &t)
   return false;
 }
 
+void set_symbol_type(symbolt &sym, const typet &t)
+{
+  // symbolt::set_type(const typet&) caches t as the legacy type directly; the
+  // type2tc overload stores it as an IREP2 type instead, so a later
+  // sym.get_type() re-derives the legacy type via migrate_type_back, which
+  // drops #cpp_type (the `bytes` tag). Always use the legacy overload so the
+  // exact type, tag included, is what a later read sees.
+  sym.set_type(t);
+}
+
+void set_symbol_type_if_carried(symbolt &sym, const typet &t)
+{
+  if (t.is_nil() || contains_dyn_array(t))
+    sym.set_type(t);
+  else
+    sym.set_type(migrate_type(t));
+}
+
+void set_function_type(symbolt &sym, const typet &t)
+{
+  type2tc t2 = migrate_type(t);
+  typet expected = t;
+  typet &code = expected.is_pointer() ? expected.subtype() : expected;
+  for (code_typet::argumentt &arg : to_code_type(code).arguments())
+  {
+    arg.remove("identifier");
+    arg.remove("#location");
+  }
+  if (full_eq(migrate_type_back(t2), expected))
+    sym.set_type(t2);
+  else
+    sym.set_type(t);
+}
+
 exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))
     return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
+  exprt result = migrate_expr_back(symbol_expr2tc(sym));
+  // migrate_type drops #cpp_type (e.g. the `bytes` tag on an otherwise-plain
+  // array type). Restore the symbol's declared type exactly, matching
+  // build_typecast below.
+  result.type() = sym.get_type();
+  return result;
 }
 
 exprt build_typecast(const exprt &from, const typet &t)
@@ -37,7 +77,8 @@ exprt build_typecast(const exprt &from, const typet &t)
   expr2tc from2;
   migrate_expr(from, from2);
   exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // migrate_type carries #cpp_type (§10) but not every attribute; restore the
+  // exact target type
   // so legacy typecast_exprt(from, t) is reproduced faithfully.
   result.type() = t;
   return result;
@@ -68,7 +109,8 @@ exprt build_dereference(const exprt &ptr, const typet &t)
   expr2tc ptr2;
   migrate_expr(ptr, ptr2);
   exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // migrate_type carries #cpp_type (§10) but not every attribute; restore the
+  // exact target type
   // so legacy dereference_exprt(t)+op0=ptr is reproduced faithfully.
   result.type() = t;
   return result;
@@ -87,7 +129,8 @@ exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
     is_symbol_type(base2->type))
   {
     exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    // migrate_type does not round-trip #cpp_type; restore the exact member type.
+    // migrate_type carries #cpp_type (§10) but not every attribute; restore the
+    // exact member type.
     result.type() = t;
     return result;
   }
@@ -109,7 +152,7 @@ exprt build_deref_member(
 
 // index2t needs an array/vector/symbol source; fall back to the legacy node
 // otherwise (and for dyn-array source/result types -- string indexing relies on
-// the #cpp_type attribute that migrate_type drops, hence result.type() = t).
+// attributes migrate_type drops, hence result.type() = t).
 exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
 {
   if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
@@ -172,8 +215,8 @@ exprt migrate_binary(const exprt &a, const exprt &b, Make make)
   return migrate_expr_back(make(a2, b2));
 }
 
-// As migrate_binary, for a typed node make(migrate_type(t), a, b). Also restores
-// the exact result type, which migrate_type drops (e.g. #cpp_type).
+// As migrate_binary, for a typed node make(migrate_type(t), a, b). Also
+// restores the exact result type, whose attributes migrate_type may drop.
 template <typename Make>
 exprt migrate_typed_binary(
   const exprt &a,
@@ -309,7 +352,7 @@ exprt build_if(const exprt &cond, const exprt &then_, const exprt &else_)
   if (then2->type->type_id != else2->type->type_id)
     return if_exprt(cond, then_, else_);
   exprt result = migrate_expr_back(if2tc(then2->type, cond2, then2, else2));
-  // migrate_type drops type attributes (e.g. #cpp_type); restore the exact type.
+  // migrate_type drops some type attributes; restore the exact type.
   result.type() = then_.type();
   return result;
 }

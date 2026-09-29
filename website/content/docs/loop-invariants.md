@@ -51,6 +51,12 @@ regardless of how large the loop bound is.
 > **Note:** `--loop-invariant` implicitly enables k-induction. No extra
 > flags are required.
 
+`do`-`while` loops are verified by this mode. A `do`-`while` head is the first
+instruction of the body rather than a guard, so the verification branch used to
+copy an empty body and discharge the inductive step against no iteration at all
+— every invariant passed, including a plainly wrong one, and a false post-loop
+assertion was proved ([#7497](https://github.com/esbmc/esbmc/pull/7497)).
+
 **How it works — two-branch transformation:**
 
 ```
@@ -120,21 +126,38 @@ Three caveats:
   VERIFICATION UNKNOWN
   ```
 
-  Strengthen the invariant until it entails the property. **This mode cannot
-  report a bug after an annotated loop**; plain BMC and `--k-induction`, whose
-  base case keeps the original loop, remain the modes that refute. What keeps
-  reporting `FAILED` is a claim *ahead* of every havoc, the invariant's own
-  inductive step and its assigns-compliance check, and a loop the schema
-  declined. An **outermost** loop's base case does too, since no havoc precedes
-  it; an inner loop's base case sits inside the outer body, downstream of the
-  outer havoc, so it is downgraded with everything else there.
-- The schema **declines a loop it cannot havoc soundly** instead of claiming a
-  proof: a body (or a callee) that writes only through a pointer, where the
-  guard reads nothing the havoc covers, leaves nothing for the modified-variable
-  analysis to record. Such a loop is left to the unwinder, with a warning —
-  `loop invariant at <location> not checked beyond its base case: the loop
-  writes through a pointer the havoc cannot cover` — and its base case is still
-  checked, since that runs from the concrete pre-loop state.
+  Strengthen the invariant until it entails the property.
+
+  The downgrade is not unconditional. Before reporting `UNKNOWN`, ESBMC asks the
+  solver whether the claim can hold at all on a feasible abstract path. If that
+  probe is UNSAT, *no* abstract state satisfies the claim; the concrete states
+  are a subset of the abstract ones, so the violation is real and the claim is
+  reported `FAILED`. An invariant strong enough to pin the counterexample —
+  `sn == (i - 1) * a` over an accumulator loop — therefore refutes a false
+  post-loop assertion in this mode, which it could not do before
+  ([#7626](https://github.com/esbmc/esbmc/pull/7626)). What is downgraded is the
+  case the probe leaves open: the abstraction admits the claim holding *and*
+  admits it failing, so the counterexample is the abstraction's and not the
+  program's.
+
+  What reports `FAILED` regardless of the probe is a claim *ahead* of every
+  havoc, the invariant's own inductive step and its assigns-compliance check,
+  and a loop the schema declined. An **outermost** loop's base case does too,
+  since no havoc precedes it; an inner loop's base case sits inside the outer
+  body, downstream of the outer havoc, so it is treated with everything else
+  there.
+- Storage a loop writes **through a dereference** has no symbol for the
+  modified-variable analysis to name, so the pointee is havocked *through the
+  pointer* and symex resolves it against its own value set. That covers a stack,
+  heap or `__ESBMC_is_fresh` pointee alike, including one written by a callee
+  ([#7518](https://github.com/esbmc/esbmc/pull/7518)). Before this, `(*p)--` in
+  the body left `p`'s pointee at its pre-loop value, and an assertion about it
+  after the loop was decided against state the loop had overwritten.
+- Where even that leaves nothing to havoc, the schema **declines the loop**
+  instead of claiming a proof. Such a loop is left to the unwinder, with a
+  warning — `loop invariant at <location> not checked beyond its base case: the
+  loop writes through a pointer the havoc cannot cover` — and its base case is
+  still checked, since that runs from the concrete pre-loop state.
 - Cutting the loop establishes **partial correctness** only: termination is not
   proved. Use `--termination` separately if you need it.
 
@@ -232,10 +255,12 @@ or strengthen inductive invariants:
 nested loops with multiple invariants. State management between inner and outer
 loops requires further refinement.
 
-**Manual Invariant Specification:** Users must manually specify correct loop
-invariants. ESBMC will not infer or validate invariants before verification. An
-incorrect invariant will lead to a failed base-case assertion in
-`--loop-invariant` mode, or an undecided claim in `--loop-invariant-check` mode.
+**Manual Invariant Specification:** Outside
+[`--synthesise-loop-invariants`](#synthesising-invariants-for-affine-loops),
+which covers one loop shape, users must write the invariants themselves. ESBMC
+does not infer or validate an invariant before verification. An incorrect
+invariant leads to a failed base-case assertion in `--loop-invariant` mode, or
+an undecided claim in `--loop-invariant-check` mode.
 
 > **Note:** `--loop-invariant-check` havocs every loop-modified variable, so an
 > invariant that does not constrain them enough leaves the claims after the loop
@@ -254,10 +279,114 @@ back across the fork
 |                          | Unrolls the loop | Exit reasoning | Weak invariant           |
 | ------------------------ | ---------------- | -------------- | ------------------------ |
 | `--loop-invariant`       | yes              | no             | falls back to unrolling  |
-| `--loop-invariant-check` | no               | yes            | reports `UNKNOWN`        |
+| `--loop-invariant-check` | no               | yes            | reports `UNKNOWN` unless the invariant refutes the claim |
 
 Programs without loop invariant annotations continue to use the standard
 k-induction unwinding approach under either flag.
+
+## Synthesising Invariants for Affine Loops
+
+```sh
+esbmc file.c --synthesise-loop-invariants
+```
+
+k-induction cannot prove a property that needs a *relation* between a loop
+counter and an accumulator. The interval domain is non-relational, so at the
+loop head it knows the counter's range and nothing tying the accumulator to it.
+`--synthesise-loop-invariants` recognises affine counter/accumulator loops and
+emits the closed form as a `LOOP_INVARIANT`, which the existing
+`--loop-invariant-check` schema then discharges.
+
+```c
+#include <stdint.h>
+#include <assert.h>
+
+int main(void) {
+    uint64_t i = 1, sn = 0;
+    uint32_t n;
+    uint64_t a;
+    __ESBMC_assume(n >= 1);
+
+    while (i <= n) {
+        sn = sn + a;
+        i++;
+    }
+
+    assert(sn == (uint64_t)n * a);
+    return 0;
+}
+```
+
+The loop bound `n` is symbolic, so there is no `k` at which unwinding closes
+this, and the inductive step has nothing relating `sn` to `i`.
+`--k-induction` runs for over 300 s without reaching a verdict.
+`--synthesise-loop-invariants` derives `sn == (i - 1) * a` and finishes in under
+a second:
+
+```
+Synthesised loop invariants for 1 loop
+...
+** 0 of 3 properties failed, 3 passed
+Solver: Bitwuzla 0.9.1 • Decision procedure total time: 0.007s
+VERIFICATION SUCCESSFUL
+```
+
+At this width only Bitwuzla — ESBMC's default — discharges the exit obligation,
+which is a multiplier-equivalence miter; the program above is pinned as
+`regression/bitwuzla/synth_loop_invariant_sum64`, and
+`regression/esbmc/synth_loop_invariant_sum` carries the same shape at narrower
+widths so that every platform runs it.
+
+**The synthesised invariant is checked, not assumed.** It goes through the same
+assert / havoc-assume / assert schema a hand-written one does, so a wrong
+candidate fails a claim rather than producing an unsound proof. The failure mode
+of synthesis is a spurious failure or a useless invariant, never a false proof.
+
+**It trades bug-finding for proving.** Cutting the loop removes the bounded
+traces a plain BMC run would search. Measured over
+`regression/{esbmc,esbmc-unix,k-induction,loop-invariants}`, synthesis fires on
+87 of 2716 files, of which 9 (10%) lose a bug that bounded BMC finds; no file
+gains a false proof or a false alarm. It is opt-in and off by default for that
+reason.
+
+The flag implies `--loop-invariant-check`, `--check-vacuity`, and
+`--multi-property` unless a k-induction phase is selected. Because
+`--check-vacuity` applies to the whole run rather than only to loops the
+synthesis reached, a program with no loop at all can report `UNKNOWN` where it
+reported `SUCCESSFUL`; `--no-vacuity-check` turns that back off.
+
+### What it recognises, and what it declines
+
+The recognised shape is a loop whose head is `IF !(i <op> B) GOTO exit` with a
+straight-line body containing a unit-step counter `i = i + 1` and an accumulator
+`s = s + e` whose addend `e` is free of loop-modified variables. From those it
+emits the accumulator's closed form and a two- or three-disjunct counter bound.
+
+Two regimes, and the restrictions follow from the cost of discharging the exit
+obligation rather than from the recogniser:
+
+| Addend | Counter | Why |
+| --- | --- | --- |
+| symbolic | unsigned, entering at 0 or 1 | The bound must stay at two disjuncts: a third arm leaves the solver proving two 64-bit multiplier circuits equivalent, which does not terminate. Two disjuncts discharge in ~1s; three do not finish in 120s. |
+| literal | signed or unsigned, any literal entry | With no symbolic multiplier there is nothing to miter, so the extra arms are free and establishment is unconditional. |
+
+Declined outright:
+
+- **Any program that can reach `__ESBMC_spawn_thread`.** Cutting a loop deletes
+  its interleaving points, so a claim only another thread could violate is no
+  longer reachable in the cut program and would be reported passed.
+- **A loop the user has already annotated**, and synthesis anywhere inside a
+  function a user invariant's expression calls, transitively — otherwise the
+  user's own marker reads a havoc-abstracted return value.
+- **Every loop under `--unsigned-overflow-check`**, and a signed loop whose
+  weaker bound is observable (a body that asserts, or signed overflow checking
+  on). The synthesised guards are themselves instrumented by `goto_check`, so a
+  closed form emitted at a watched type would draw overflow claims on arithmetic
+  the user never wrote.
+
+Decrementing loops and comparisons other than `<` / `<=` are not recognised. The
+restrictions and the design constraint they follow from are documented in
+`src/goto-programs/goto_invariant_synthesis.h`.
 
 ## Loop Frame Rule (`--loop-frame-rule`)
 

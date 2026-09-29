@@ -1,0 +1,6 @@
+CORE
+main.c
+--falsification --max-k-step 10
+^Bug found \(k = 1\)$
+^VERIFICATION FAILED$
+\A(?![\s\S]*Checking base case, k = 2)[\s\S]*\Z

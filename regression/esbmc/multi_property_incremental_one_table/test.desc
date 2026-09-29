@@ -1,0 +1,8 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 10
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+9\s+assertion n != 7$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+12\s+assertion x != 3$
+^\*\* 2 of 2 properties failed$
+\A(?![\s\S]*VERIFICATION SUCCESSFUL)[\s\S]*\Z

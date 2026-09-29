@@ -910,7 +910,7 @@ bool contains_float(const expr2tc &e)
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
-  ai_baset &,
+  ai_baset &ai,
   const namespacet &ns)
 {
   (void)ns;
@@ -987,12 +987,8 @@ void interval_domaint::transform(
   }
 
   case ASSERT:
-  {
-    // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    if (!contains_float(instruction.guard) && enable_assume_asserts)
-      assume(instruction.guard);
+    assume_assertion(instruction.guard, ai);
     break;
-  }
 
   case FUNCTION_CALL:
   case END_FUNCTION:
@@ -1228,48 +1224,20 @@ bool interval_domaint::join(
   return result;
 }
 
-void interval_domaint::phi_join_with_snapshot(
-  const expr2tc &lhs,
-  const std::shared_ptr<interval_map> &if_snapshot)
+void interval_domaint::join_snapshot(
+  const std::shared_ptr<interval_map> &snapshot)
 {
-  if (!is_symbol2t(lhs))
+  if (is_bottom())
+  {
+    bottom = false;
+    intervals = snapshot;
+    copied = false;
     return;
-  const irep_idt &name = to_symbol2t(lhs).thename;
-  const auto if_it = if_snapshot->find(name);
-
+  }
+  if (intervals == snapshot)
+    return;
   copy_if_needed();
-
-  if (if_it == if_snapshot->end())
-  {
-    // JOIN(TOP, else) = TOP
-    intervals->erase(name);
-    return;
-  }
-
-  const auto dst_it = intervals->find(name);
-  if (dst_it == intervals->end())
-    return; // JOIN(if, TOP) = TOP
-
-  const auto &src = if_it->second;
-  auto &dst = dst_it->second;
-  if (src.index() != dst.index())
-    return;
-
-  switch (src.index())
-  {
-  case 0:
-    join_intervals<integer_intervalt>(
-      std::get<0>(src), std::get<0>(dst), false);
-    break;
-  case 1:
-    join_intervals<real_intervalt>(std::get<1>(src), std::get<1>(dst), false);
-    break;
-  case 2:
-    join_intervals<wrapped_interval>(std::get<2>(src), std::get<2>(dst), false);
-    break;
-  default:
-    break;
-  }
+  join(*intervals, *snapshot, false);
 }
 
 void interval_domaint::assign(const expr2tc &expr, const bool recursive)
@@ -1386,6 +1354,18 @@ void interval_domaint::assume_rec(
   else if (
     is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
     apply_assume_less<interval_domaint::real_intervalt>(lhs, rhs);
+}
+
+void interval_domaint::assume_assertion(
+  const expr2tc &guard,
+  const ai_baset &ai)
+{
+  // There is a bug in Floats that need to be investigated!
+  // regression-float/nextafter
+  if (
+    enable_assume_asserts && !ai.continue_past_failed_assertions &&
+    !contains_float(guard))
+    assume(guard);
 }
 
 void interval_domaint::assume(const expr2tc &cond)

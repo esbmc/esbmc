@@ -1,24 +1,21 @@
 add_library(algorithms ssa/algorithms.cpp)
-target_include_directories(algorithms
-    PRIVATE ${Boost_INCLUDE_DIRS}
-    )
+target_link_libraries(algorithms PUBLIC esbmc_common)
 
 add_library(cache ssa/cache.cpp ssa/fingerprint.cpp ssa/proof_cache.cpp)
 # fingerprint.cpp digests SSA steps, so cache now depends on irep2 and the
 # util core. Declared here rather than at each consumer: without it the Linux
 # linker, which does not revisit an archive, leaves the irep2 vtables and
 # irept::remove_ref undefined in anything that links cache.
-target_link_libraries(cache algorithms irep2 util_esbmc)
+target_link_libraries(cache PUBLIC algorithms irep2 util_esbmc esbmc_common)
 
 add_library(filesystem base/filesystem.cpp)
-target_include_directories(filesystem
-    PRIVATE ${Boost_INCLUDE_DIRS}
-    )
-target_link_libraries(filesystem PUBLIC ${Boost_LIBRARIES})
+target_link_libraries(filesystem PUBLIC esbmc_common ESBMC::boost)
 
 add_library(string_pool base/string_pool.cpp)
+target_link_libraries(string_pool PUBLIC esbmc_common)
 
 add_library(usr_utils base/usr_utils.cpp)
+target_link_libraries(usr_utils PUBLIC esbmc_common)
 
 add_library(util_esbmc irep/xml_irep.cpp base/xml.cpp
         arith/arith_tools.cpp expr/base_type.cpp config/cmdline.cpp config/config.cpp config/config_file.cpp symtab/context.cpp
@@ -43,15 +40,13 @@ add_library(util_esbmc irep/xml_irep.cpp base/xml.cpp
         message/message.cpp base/encoding.cpp irep/expr.cpp irep/irep.cpp irep/type.cpp base/yaml_parser.cpp
         )
 
-# Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc
-        PUBLIC ${CMAKE_BINARY_DIR}/src
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
-        PUBLIC ${Boost_INCLUDE_DIRS}
         lib
         )
 
-target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
-target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_pool yaml-cpp::yaml-cpp ${Boost_LIBRARIES} PRIVATE langapi)
+target_link_libraries(util_esbmc
+        PUBLIC esbmc_common irep2 fmt::fmt string_pool yaml-cpp::yaml-cpp ESBMC::boost
+        PRIVATE langapi)
 
 target_link_libraries(algorithms PUBLIC gotoprograms)

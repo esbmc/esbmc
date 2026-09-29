@@ -372,6 +372,27 @@ void show_state_header(
   }
 }
 
+/* The values a violated claim reads through a pointer into an object the
+ * program never wrote. No assignment step carries them, so without this the
+ * witness names every local but not what made the property fail, and a
+ * validator cannot replay it (#7858). */
+static std::string
+format_nondet_reads(const namespacet &ns, const goto_trace_stept &step)
+{
+  std::string assumptions;
+  for (const auto &[lvalue, value] : step.nondet_reads)
+  {
+    std::string one =
+      from_expr(ns, "", lvalue, presentationt::WITNESS) +
+      " == " + from_expr(ns, "", value, presentationt::WITNESS) + ";";
+    std::replace(one.begin(), one.end(), '$', '_');
+    check_replace_invalid_assignment(one);
+    if (!one.empty())
+      assumptions += assumptions.empty() ? one : " " + one;
+  }
+  return assumptions;
+}
+
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -403,6 +424,7 @@ void violation_graphml_goto_trace(
 
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
+        violation_edge.assumption = format_nondet_reads(ns, step);
         violation_edge.origin_file =
           witness_origin_file(step.pc->location, graph.verified_file);
         violation_edge.start_line =

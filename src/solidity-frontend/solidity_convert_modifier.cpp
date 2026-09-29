@@ -175,7 +175,7 @@ bool solidity_convertert::get_function_definition(
     }
   }
 
-  added_symbol.set_type(type);
+  added_symbol.set_type(migrate_type(type));
 
   // 11.3 Declare named return parameters as local variables.
   // Solidity allows `returns (uint result) { result = 42; }` where `result`
@@ -584,7 +584,7 @@ bool solidity_convertert::get_func_modifier(
         return true;
       aux_type.arguments().push_back(arg);
     }
-    a_sym.set_type(aux_type);
+    a_sym.set_type(migrate_type(aux_type));
     move_builtin_to_contract(c_name, symbol_expr(a_sym), "internal", true);
 
     // same as origin function body

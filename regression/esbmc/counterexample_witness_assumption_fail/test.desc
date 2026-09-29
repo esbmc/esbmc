@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-slice --witness-output-graphml -
+^      <data key="assumption">p\.in == 7;</data>$
+^      <data key="assumption">q-&gt;out == 21;</data>$
+^VERIFICATION FAILED$

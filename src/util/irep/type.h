@@ -188,5 +188,8 @@ bool is_number(const typet &type);
  * @return false
  */
 bool is_array_like(const typet &type);
+/// Types that decay to a pointer in C11 6.3.2.1p3 -- an array, but not a
+/// vector, which is a value.
+bool is_decaying_array(const typet &type);
 
 #endif

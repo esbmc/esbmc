@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-slice
+^VERIFICATION FAILED$
+^\s+assertion x \* 2 != 4$

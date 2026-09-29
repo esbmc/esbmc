@@ -2450,7 +2450,11 @@ void goto_convertt::remove_function_call(
 
   goto_programt tmp_program;
   const typet &ftype = call.function().type();
-  if (ftype.return_type().id() == "constructor")
+  // A call that already passes the object (the IREP2 C++ adjust pass builds
+  // those) needs no temporary `this`.
+  if (
+    ftype.return_type().id() == "constructor" &&
+    call.arguments().size() < to_code_type(ftype).arguments().size())
   {
     // for constructor, we need to add the implicit `this` as the first argument,
     // so convert to:

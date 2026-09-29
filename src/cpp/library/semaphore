@@ -1,0 +1,87 @@
+#ifndef ESBMC_SEMAPHORE
+#define ESBMC_SEMAPHORE
+
+// C++20 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// Modelled over ESBMC's pthread mutex and condvar, like <mutex> and
+// <condition_variable> (#6319), so acquire() blocks with the same semantics the
+// C model already implements.
+//
+// Not modelled: try_acquire_for and try_acquire_until, which ESBMC has no clock
+// to block against, as in <mutex>'s timed members; and the constructor is
+// constexpr in [thread.sema.cnt], which pthread_mutex_init cannot be here.
+#if __cplusplus >= 202002L
+
+#  include <pthread.h>
+#  include "cstddef"
+#  include "cstdint"
+
+namespace std
+{
+template <ptrdiff_t least_max_value = PTRDIFF_MAX>
+class counting_semaphore
+{
+  ptrdiff_t __count;
+  pthread_mutex_t __m;
+  pthread_cond_t __c;
+
+  counting_semaphore(const counting_semaphore &);
+  counting_semaphore &operator=(const counting_semaphore &);
+
+public:
+  static constexpr ptrdiff_t max() noexcept
+  {
+    return least_max_value;
+  }
+
+  explicit counting_semaphore(ptrdiff_t desired) : __count(desired)
+  {
+    pthread_mutex_init(&__m, nullptr);
+    pthread_cond_init(&__c, nullptr);
+  }
+
+  ~counting_semaphore()
+  {
+    pthread_cond_destroy(&__c);
+    pthread_mutex_destroy(&__m);
+  }
+
+  void release(ptrdiff_t update = 1)
+  {
+    pthread_mutex_lock(&__m);
+    __count += update;
+    // One waiter per unit released, but which ones wake is unspecified, so a
+    // broadcast is as good as counting signals and keeps the model simpler.
+    pthread_cond_broadcast(&__c);
+    pthread_mutex_unlock(&__m);
+  }
+
+  void acquire()
+  {
+    pthread_mutex_lock(&__m);
+    while (__count <= 0)
+      pthread_cond_wait(&__c, &__m);
+    --__count;
+    pthread_mutex_unlock(&__m);
+  }
+
+  bool try_acquire() noexcept
+  {
+    pthread_mutex_lock(&__m);
+    bool got = __count > 0;
+    if (got)
+      --__count;
+    pthread_mutex_unlock(&__m);
+    return got;
+  }
+};
+
+using binary_semaphore = counting_semaphore<1>;
+
+} // namespace std
+
+#endif // __cplusplus >= 202002L
+
+#endif // ESBMC_SEMAPHORE

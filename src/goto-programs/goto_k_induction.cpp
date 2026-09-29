@@ -384,11 +384,14 @@ void adjust_loop_head_and_exit(
 /// over-approximates the loop body: a block that only jumps out of the loop
 /// can sit inside the range, and havocing an edge into that block would
 /// clobber the loop's variables on a path that never runs the loop.
+/// @p continue_past_failed_assertions follows a path through a false ASSERT,
+/// which get_successors ends; set it when claims past a violation are checked.
 bool reaches_back_edge(
   const goto_programt &body,
   goto_programt::const_targett from,
   const std::unordered_set<const instructiont *> &loop_range,
-  const instructiont *back_edge)
+  const instructiont *back_edge,
+  bool continue_past_failed_assertions)
 {
   std::unordered_set<const instructiont *> seen;
   std::vector<goto_programt::const_targett> work{from};
@@ -403,6 +406,9 @@ bool reaches_back_edge(
 
     goto_programt::const_targetst successors;
     body.get_successors(it, successors);
+    if (
+      continue_past_failed_assertions && it->is_assert() && successors.empty())
+      successors.push_back(std::next(it));
     work.insert(work.end(), successors.begin(), successors.end());
   }
   return false;
@@ -429,7 +435,8 @@ bool reaches_back_edge(
 std::vector<goto_programt::targett> collect_entry_jumps(
   goto_programt &body,
   const loopst &loop,
-  goto_programt::const_targett slot)
+  goto_programt::const_targett slot,
+  bool continue_past_failed_assertions)
 {
   std::unordered_set<const instructiont *> loop_range;
   for (goto_programt::targett it = loop.get_original_loop_head();
@@ -452,7 +459,8 @@ std::vector<goto_programt::targett> collect_entry_jumps(
     for (const auto &target : it->targets)
       if (
         target != slot && loop_range.count(&*target) &&
-        reaches_back_edge(body, target, loop_range, back_edge))
+        reaches_back_edge(
+          body, target, loop_range, back_edge, continue_past_failed_assertions))
       {
         jumps.push_back(it);
         break;
@@ -488,7 +496,10 @@ void havoc_entry_jumps(
 /// Per-loop k-induction transformation: havoc each loop's modified
 /// variables and inject an ASSUME of the loop entry condition right
 /// before the loop head.
-void transform_loop(goto_functiont &goto_function, loopst &loop)
+void transform_loop(
+  goto_functiont &goto_function,
+  loopst &loop,
+  bool continue_past_failed_assertions)
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -498,8 +509,8 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
   // Collected here, applied last: splicing a havoc block displaces the GOTO
   // onto a fresh instruction whose location_number is 0, which is what
   // adjust_loop_head_and_exit keys its loop-exit test on.
-  const std::vector<goto_programt::targett> entry_jumps =
-    collect_entry_jumps(goto_function.body, loop, slot);
+  const std::vector<goto_programt::targett> entry_jumps = collect_entry_jumps(
+    goto_function.body, loop, slot, continue_past_failed_assertions);
   const std::vector<expr2tc> vars = ordered_modified_vars(loop);
 
   // Loop-scoped cache for get_entry_cond_rec. Nested loops in the same
@@ -658,7 +669,10 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 }
 } // namespace
 
-bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
+bool goto_k_induction(
+  goto_functionst &goto_functions,
+  const namespacet &,
+  bool continue_past_failed_assertions)
 {
   // Build the points-to fixpoint once, up front, on the pristine program, not
   // lazily from inside the loop (an earlier plain loop would already have been
@@ -703,7 +717,7 @@ bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
 
       if (loop.get_modified_loop_vars().empty())
         continue;
-      transform_loop(it->second, loop);
+      transform_loop(it->second, loop, continue_past_failed_assertions);
     }
   }
   goto_functions.update();

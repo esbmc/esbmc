@@ -116,6 +116,17 @@ if(ESBMC_SIZEOF_LONG EQUAL 8)
     list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
 endif()
 
+# A `z3` executable is on PATH. The smtlib backend reads model values from a
+# solver it spawns over a pipe (--smtlib-solver-prog), which it implements on
+# POSIX only -- see the _WIN32 arm of smtlib_convt::smtlib_convt. A linked z3
+# is not enough: the test names the program for a shell to look up.
+if(NOT WIN32)
+    find_program(ESBMC_TEST_Z3_BINARY z3)
+    if(ESBMC_TEST_Z3_BINARY)
+        list(APPEND ESBMC_TEST_CAPABILITIES z3_binary)
+    endif()
+endif()
+
 # The per-test budget is long enough for a test that takes minutes to solve.
 # ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
 # short leg allows has no way to ask for more; without this it is reported as
@@ -346,6 +357,7 @@ if(APPLE)
                     k-induction
                     k-induction-parallel
                     termination
+                    multi-property-matrix
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_BITWUZLLOB}
@@ -387,6 +399,7 @@ elseif(WIN32)
                     floats
                     k-induction
                     termination
+                    multi-property-matrix
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
@@ -413,6 +426,7 @@ else()
                     floats-regression
                     k-induction
                     termination
+                    multi-property-matrix
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
@@ -742,6 +756,7 @@ set(_slow_regression_tests
     # armv8 leg green meanwhile.
     "regression/floats-regression/nn-tanh_5_unsafe"
     "regression/consensus/get_subtree_index"
+    "regression/consensus/compute_shuffled_index"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")

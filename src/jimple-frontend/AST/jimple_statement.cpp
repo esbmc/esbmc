@@ -6,19 +6,23 @@
 #include <util/arith/arith_tools.h>
 #include "util/lang/c_typecast.h"
 
-void jimple_identity::from_json(const json &j)
-{
-  j.at("identifier").get_to(at_identifier);
-  j.at("name").get_to(local_name);
-  j.at("type").get_to(type);
-}
-
+// Restored: PR #7841 measured this arm unreached over the jimple tests and
+// deleted it, but nothing gives the class a native to_code2t, so the default
+// reaches it and the base's code_skipt was returned instead. No test builds
+// this statement, which is why the deletion was invisible
+// (docs/roadmap/scope-jimple-irep2.md §44).
 exprt jimple_identity::to_exprt(
   contextt &ctx,
   const std::string &,
   const std::string &) const
 {
   // TODO: Symbol-table / Typecast
+  // This arm crashes: find_symbol is given the bare jimple local, where every
+  // other lookup in this frontend qualifies it through get_symbol_name, so the
+  // lookup misses and the dereference below is on null. Reproducer and the
+  // reason it was never noticed:
+  // regression/jimple/github_4715_identity_crash_01 and
+  // docs/roadmap/scope-jimple-irep2.md §47.
   exprt val("at_identifier");
   symbolt &added_symbol = *ctx.find_symbol(local_name);
   symbolt rhs;
@@ -27,6 +31,14 @@ exprt jimple_identity::to_exprt(
   code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
   return assign;
 }
+
+void jimple_identity::from_json(const json &j)
+{
+  j.at("identifier").get_to(at_identifier);
+  j.at("name").get_to(local_name);
+  j.at("type").get_to(type);
+}
+
 std::string jimple_identity::to_string() const
 {
   std::ostringstream oss;
@@ -218,49 +230,6 @@ void jimple_assertion::from_json(const json &j)
   j.at("equals").at("value").get_to(value);
 }
 
-exprt jimple_assertion::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << class_name << ":" << function_name << "@" << variable;
-
-  // TODO: move this from here
-  std::string id, name;
-  id = "__ESBMC_assert";
-  name = "__ESBMC_assert";
-
-  auto symbol = create_jimple_symbolt(
-    code_type2tc(
-      std::vector<type2tc>{},
-      get_empty_type(),
-      std::vector<irep_idt>{},
-      /*ellipsis=*/false),
-    class_name,
-    name,
-    id,
-    function_name);
-
-  symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
-
-  call.function() = symbol_expr(added_symbol);
-
-  symbolt &test = *ctx.find_symbol(oss.str());
-  int as_number = std::stoi(value);
-  exprt value_operand = from_integer(as_number, int_type());
-
-  equality_exprt ge(symbol_expr(test), value_operand);
-  not_exprt qwe(ge);
-  call.arguments().push_back(qwe);
-
-  array_of_exprt arr;
-  // TODO: Create binop operation between symbol and value
-  return call;
-}
-
 std::string jimple_invoke::to_string() const
 {
   std::ostringstream oss;
@@ -353,17 +322,15 @@ void jimple_throw::from_json(const json &j)
   expr = jimple_expr::get_expression(j.at("expr"));
 }
 
-exprt jimple_throw::to_exprt(
+expr2tc jimple_throw::to_code2t(
   contextt &,
   const std::string &,
-  const std::string &) const
+  const std::string &,
+  const locationt &loc) const
 {
-  codet p = codet("cpp-throw");
   // TODO: throw
-  // Since the implementation of Throw isn't complete,
-  // the expression shouldn't be used.
-
-  // auto to_add = expr->to_exprt(ctx, class_name, function_name);
-  // p.move_to_operands(to_add);
-  return p;
+  // Since the implementation of Throw isn't complete, neither the thrown
+  // operand nor the exception list is populated -- the legacy arm this replaces
+  // built a bare codet("cpp-throw") for the same reason.
+  return code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>(), loc);
 }

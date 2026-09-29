@@ -52,6 +52,7 @@ reachability_treet::reachability_treet(
   readonly_global_opt =
     options.get_bool_option("cswitch-skip-readonly-globals");
   scan_program_writes();
+  scan_address_taken();
 }
 
 /* Insert `name` into `out` if it names a storage-bearing user global. */
@@ -104,42 +105,52 @@ static void collect_write_targets(
   });
 }
 
-/* Descend an lvalue to the named global it denotes, stopping at a dereference
- * (the address of `*p` exposes no statically-named global). */
-static void collect_object_globals(
+/* Descend an lvalue to the named object it denotes, stopping at a dereference
+ * (the address of `*p` exposes no statically-named object), and record it in
+ * `globals` or, for a non-static local, in `locals`. */
+static void collect_object_root(
   const expr2tc &e,
   const namespacet &ns,
-  std::unordered_set<irep_idt, irep_id_hash> &out)
+  std::unordered_set<irep_idt, irep_id_hash> &globals,
+  std::unordered_set<irep_idt, irep_id_hash> &locals)
 {
   if (is_nil_expr(e) || is_dereference2t(e))
     return;
   if (is_index2t(e))
-    return collect_object_globals(to_index2t(e).source_value, ns, out);
+    return collect_object_root(to_index2t(e).source_value, ns, globals, locals);
   if (is_member2t(e))
-    return collect_object_globals(to_member2t(e).source_value, ns, out);
+    return collect_object_root(
+      to_member2t(e).source_value, ns, globals, locals);
   if (is_typecast2t(e))
-    return collect_object_globals(to_typecast2t(e).from, ns, out);
-  if (is_symbol2t(e))
-    add_if_global(to_symbol2t(e).thename, ns, out);
+    return collect_object_root(to_typecast2t(e).from, ns, globals, locals);
+  if (!is_symbol2t(e))
+    return;
+  const symbolt *s = ns.lookup(to_symbol2t(e).thename);
+  if (s && !reachability_treet::has_shared_lifetime(*s))
+    locals.insert(s->id);
+  else
+    add_if_global(to_symbol2t(e).thename, ns, globals);
 }
 
-/* Walk e; for every address_of(obj) sub-expression record the named global
+/* Walk e; for every address_of(obj) sub-expression record the named object
  * whose address escapes. ESBMC lowers all array/function decay into an
- * explicit address_of, so this captures every way a global can enter a
+ * explicit address_of, so this captures every way an object can enter a
  * pointer's value set. */
 static void collect_address_taken(
   const expr2tc &e,
   const namespacet &ns,
-  std::unordered_set<irep_idt, irep_id_hash> &out)
+  std::unordered_set<irep_idt, irep_id_hash> &globals,
+  std::unordered_set<irep_idt, irep_id_hash> &locals)
 {
   if (is_nil_expr(e))
     return;
 
   if (is_address_of2t(e))
-    collect_object_globals(to_address_of2t(e).ptr_obj, ns, out);
+    collect_object_root(to_address_of2t(e).ptr_obj, ns, globals, locals);
 
-  e->foreach_operand(
-    [&](const expr2tc &sub) { collect_address_taken(sub, ns, out); });
+  e->foreach_operand([&](const expr2tc &sub) {
+    collect_address_taken(sub, ns, globals, locals);
+  });
 }
 
 /* Name of the function a FUNCTION_CALL targets, or an empty id when the callee
@@ -296,20 +307,20 @@ void reachability_treet::scan_program_writes()
       }
     }
   }
+}
 
-  // Second pass: record every global whose address is taken anywhere in the
-  // program, scanning all functions — including __ESBMC_main, where file-scope
-  // initialisers such as `int *gp = &g;` live. Only an address-taken global
-  // can be the target of a write through an unresolved pointer, so this lets
-  // never-address-taken globals stay optimisable even when any_indirect_write.
+void reachability_treet::scan_address_taken()
+{
+  // Scan all functions, including __ESBMC_main, where file-scope initialisers
+  // such as `int *gp = &g;` live.
   Forall_goto_functions (f_it, goto_functions)
-  {
     for (const auto &ins : f_it->second.body.instructions)
     {
-      collect_address_taken(ins.code, ns, address_taken_globals);
-      collect_address_taken(ins.guard, ns, address_taken_globals);
+      collect_address_taken(
+        ins.code, ns, address_taken_globals, address_taken_locals);
+      collect_address_taken(
+        ins.guard, ns, address_taken_globals, address_taken_locals);
     }
-  }
 }
 
 void reachability_treet::setup_for_new_explore()

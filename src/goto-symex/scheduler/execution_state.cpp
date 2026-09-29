@@ -922,7 +922,8 @@ void execution_statet::analyze_args(const expr2tc &expr)
 expr2tc execution_statet::resolve_pointer_target(
   const namespacet &ns,
   const expr2tc &ptr,
-  bool &to_global)
+  bool &to_global,
+  bool through_deref)
 {
   expr2tc tmp = ptr;
   /* Rename it so that it can be dereferenced in current state */
@@ -954,7 +955,8 @@ expr2tc execution_statet::resolve_pointer_target(
     if (is_esbmc_internal_symbol(n))
       continue;
 
-    to_global = s->static_lifetime || s->get_type().is_dynamic_set();
+    to_global = through_deref ? art1->is_shared_storage(*s)
+                              : reachability_treet::has_shared_lifetime(*s);
     found = to_object_descriptor2t(obj).object;
     /* Distinguish the elements of a lock array. Both `&m[0]` and `&m[1]`
      * resolve to the base symbol `m`, which makes MPOR treat every lock in the
@@ -1076,7 +1078,7 @@ void execution_statet::record_aggregate_held_target(
     return;
 
   bool to_global = false;
-  expr2tc target = resolve_pointer_target(ns, ptr, to_global);
+  expr2tc target = resolve_pointer_target(ns, ptr, to_global, true);
   if (is_nil_expr(target) || !to_global)
     return;
 
@@ -1088,7 +1090,8 @@ void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
   std::set<expr2tc> &globals_list,
-  access_kindt kind)
+  access_kindt kind,
+  bool under_deref)
 {
   if (options.get_bool_option("data-races-check-only"))
     return;
@@ -1126,7 +1129,7 @@ void execution_statet::get_expr_globals(
     std::vector<expr2tc> deeper_targets;
     if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
-      p = resolve_pointer_target(ns, expr, point_to_global);
+      p = resolve_pointer_target(ns, expr, point_to_global, under_deref);
       if (is_nil_expr(p))
         p = expr;
 
@@ -1143,7 +1146,8 @@ void execution_statet::get_expr_globals(
              seen.insert(to_symbol2t(cursor).thename.as_string()).second)
       {
         bool deeper_is_global = false;
-        expr2tc next = resolve_pointer_target(ns, cursor, deeper_is_global);
+        expr2tc next =
+          resolve_pointer_target(ns, cursor, deeper_is_global, under_deref);
         if (is_nil_expr(next))
           break;
         if (deeper_is_global)
@@ -1173,9 +1177,7 @@ void execution_statet::get_expr_globals(
     // MPOR limiters tracked in #4584 also need to be loosened before
     // assertion-based race tests like increment_race flip to FAILED.
     const bool python_global = symbol->mode == "Python" && !symbol->file_local;
-    if (
-      symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
-      point_to_global || python_global)
+    if (art1->is_shared_storage(*symbol) || point_to_global || python_global)
       record_access_key(p, globals_list, kind);
 
     // Objects further along the chain are shared on their own merit, so they
@@ -1206,9 +1208,7 @@ void execution_statet::get_expr_globals(
       expr2tc i = idx.index;
       cur_state->rename(i);
       simplify(i);
-      if (
-        s && (s->static_lifetime || s->get_type().is_dynamic_set()) &&
-        is_constant_int2t(i))
+      if (s && art1->is_shared_storage(*s) && is_constant_int2t(i))
       {
         src = idx.source_value;
         cur_state->top().level1.rename(src);
@@ -1219,9 +1219,11 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns, kind](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list, kind);
-  });
+  under_deref = under_deref || is_dereference2t(expr);
+  expr->foreach_operand(
+    [this, &globals_list, &ns, kind, under_deref](const expr2tc &e) {
+      get_expr_globals(ns, e, globals_list, kind, under_deref);
+    });
 }
 
 // Rules given on page 13 of MPOR paper, although they don't appear to
@@ -1486,8 +1488,12 @@ std::size_t execution_statet::generate_hash() const
   for (const auto &it : threads_state)
   {
     esbmct::hash_combine(h, it.source.pc->location_number);
-    for (const auto &frame : it.call_stack)
-      esbmct::hash_combine(h, frame.calling_location.pc->location_number);
+    // Frame 0 is the thread's entry, whose calling_location is its own
+    // end_of_function (goto_symex_statet::initialize): past-the-end, so its
+    // location_number is whatever memory follows the list.
+    for (std::size_t i = 1; i < it.call_stack.size(); ++i)
+      esbmct::hash_combine(
+        h, it.call_stack[i].calling_location.pc->location_number);
   }
 
   return h;

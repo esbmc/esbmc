@@ -64,6 +64,12 @@ public:
   std::string claim_msg;
   std::string claim_loc;
   std::string claim_cstr;
+  /// The kept claim's key in the verdict table and skip set, and its row.
+  /// Coverage goals keep claim_cstr, which their reports print.
+  std::string claim_key;
+  /// The instruction the kept claim was raised at.
+  const goto_programt::instructiont *claim_instruction = nullptr;
+  property_locationt claim_ploc;
   std::string claim_property;
   /// The kept claim's description and source position, for the property
   /// report.

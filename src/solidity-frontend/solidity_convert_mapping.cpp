@@ -427,7 +427,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     get_call.arguments().push_back(address_of_exprt(array));
     get_call.arguments().push_back(pos);
     solidity_gen_typecast(ns, get_call, aux_type);
-    added_sym.set_value(get_call);
+    added_sym.set_value(migrate_expr(get_call));
     decl.operands().push_back(get_call);
     move_to_front_block(decl);
 

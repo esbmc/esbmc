@@ -1,0 +1,5 @@
+CORE
+main.c
+--condition-coverage-claims --no-cov-asserts
+REACHED: 'a == 1 at file \S*main\.c line 8 column 3 function main'$
+^Total Conditions:  8$

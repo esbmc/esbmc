@@ -3,6 +3,26 @@
 #include <util/irep/std_types.h>
 #include <irep2/irep2_utils.h>
 
+static unsigned float_fraction_bits(unsigned width)
+{
+  switch (width)
+  {
+  case 16:
+    /* IEEE 754 binary16: 1 sign, 5 exponent, 10 significand (#7896). */
+    return 10;
+  case 32:
+    return 23;
+  case 64:
+    return 52;
+  case 96:
+    return 80;
+  case 128:
+    return 112;
+  }
+  assert(false);
+  return 0;
+}
+
 typet build_float_type(unsigned width)
 {
   if (config.ansi_c.use_fixed_for_float)
@@ -14,28 +34,7 @@ typet build_float_type(unsigned width)
   }
   floatbv_typet result;
   result.set_width(width);
-
-  switch (width)
-  {
-  case 16:
-    result.set_f(11);
-    break;
-  case 32:
-    result.set_f(23);
-    break;
-  case 64:
-    result.set_f(52);
-    break;
-  case 96:
-    result.set_f(80);
-    break;
-  case 128:
-    result.set_f(112);
-    break;
-  default:
-    assert(false);
-  }
-
+  result.set_f(float_fraction_bits(width));
   return result;
 }
 
@@ -44,28 +43,7 @@ type2tc build_float_type2(unsigned width)
   if (config.ansi_c.use_fixed_for_float)
     return fixedbv_type2tc(width, width / 2);
 
-  unsigned fraction = 0;
-  switch (width)
-  {
-  case 16:
-    fraction = 11;
-    break;
-  case 32:
-    fraction = 23;
-    break;
-  case 64:
-    fraction = 52;
-    break;
-  case 96:
-    fraction = 80;
-    break;
-  case 128:
-    fraction = 112;
-    break;
-  default:
-    assert(false);
-  }
-
+  const unsigned fraction = float_fraction_bits(width);
   return floatbv_type2tc(fraction, width - fraction - 1);
 }
 
@@ -233,6 +211,20 @@ type2tc char_type2()
 typet half_float_type()
 {
   return build_float_type(config.ansi_c.short_int_width);
+}
+
+/* bfloat16 is 16 bits wide like binary16, but truncates float's significand
+ * instead of narrowing its exponent, so build_float_type(16) has the wrong
+ * floatbv layout for it. */
+typet bfloat16_type()
+{
+  if (config.ansi_c.use_fixed_for_float)
+    return build_float_type(16);
+
+  floatbv_typet result;
+  result.set_width(16);
+  result.set_f(7);
+  return result;
 }
 
 typet float_type()

@@ -19,6 +19,24 @@ expr2tc expr2t::do_simplify() const
   return expr2tc();
 }
 
+namespace
+{
+/** do_simplify() gets one shot on the still-unsimplified overflow node: it
+ *  only recognises a structural pattern (widened-operand multiply) where the
+ *  result is provably decisive, so it can't be fooled by the arithmetic
+ *  reassociation that gates overflow out of the operands-first walk in
+ *  expr2t::simplify(). Returns nil when no shortcut applies. Split out to
+ *  keep expr2t::simplify() inside the complexity gate. */
+expr2tc try_overflow_shortcut(const expr2t &node)
+{
+  expr2tc shortcut = node.do_simplify();
+  if (is_nil_expr(shortcut))
+    return expr2tc();
+  simplification_check::verify_node_rewrite(node, shortcut);
+  return shortcut;
+}
+} // namespace
+
 expr2tc expr2t::simplify() const
 {
   return simplify(/*suppress_reassoc=*/false);
@@ -44,10 +62,12 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     if (expr_id == address_of_id) // unlikely
       return expr2tc();
 
-    // And overflows too. We don't wish an add to distribute itself, for example,
-    // when we're trying to work out whether or not it's going to overflow.
+    // And overflows too. We don't wish an add to distribute itself, for
+    // example, when we're trying to work out whether or not it's going to
+    // overflow. try_overflow_shortcut() gives do_simplify() one shot at the
+    // still-unsimplified operand first — see its comment above.
     if (expr_id == overflow_id)
-      return expr2tc();
+      return try_overflow_shortcut(*this);
 
     // Short-circuit pre-pass for and/or/if. do_simplify() runs only the
     // node-local peepholes — it never recurses into operands — so calling
@@ -1015,18 +1035,18 @@ expr2tc sub2t::do_simplify() const
 
   if (is_bv_type(type))
   {
-    // Recognize (base + X) - X = base pattern. bv-only: for pointer types,
-    // returning add.side_2 (an integer offset) when add.side_1 == side_2
-    // would yield a value with the wrong type — sub2t of two pointers has
-    // ptrdiff type, but the offset's type is whatever the original add used.
+    // Recognize (base + X) - X = base pattern. A pointer difference is
+    // bv-typed too, but `(a + k) - a` leaves the offset k in the add's own
+    // type, not ptrdiff's, so cast it to the result type (both count
+    // elements).
     if (is_add2t(side_1))
     {
       const add2t &add = to_add2t(side_1);
 
       if (add.side_2 == side_2)
-        return add.side_1;
+        return typecast_check_return(type, add.side_1);
       if (add.side_1 == side_2)
-        return add.side_2;
+        return typecast_check_return(type, add.side_2);
     }
 
     // -1 - x -> ~x
@@ -1039,24 +1059,25 @@ expr2tc sub2t::do_simplify() const
     if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
       return sub2tc(type, to_bitnot2t(side_2).value, to_bitnot2t(side_1).value);
 
-    // x - (x - y) -> y
+    // x - (x - y) -> y, cast like the (base + X) - X arm above
     if (is_sub2t(side_2))
     {
       const sub2t &sub = to_sub2t(side_2);
 
       if (sub.side_1 == side_1)
-        return sub.side_2;
+        return typecast_check_return(type, sub.side_2);
     }
 
-    // x - (x + y) -> -y and x - (y + x) -> -y
+    // x - (x + y) -> -y and x - (y + x) -> -y; cast before negating, or an
+    // unsigned offset is negated in its own width and then zero-extended
     if (is_add2t(side_2))
     {
       const add2t &add = to_add2t(side_2);
 
       if (add.side_1 == side_1)
-        return neg2tc(type, add.side_2);
+        return neg2tc(type, typecast_check_return(type, add.side_2));
       if (add.side_2 == side_1)
-        return neg2tc(type, add.side_1);
+        return neg2tc(type, typecast_check_return(type, add.side_1));
     }
 
     if (expr2tc folded = fold_common_addend(side_1, side_2, type);
@@ -1320,6 +1341,10 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+
+    // The functor edits a copy of the operand, so the folded value would keep
+    // the operand's source spelling, which c_expr2string prints in its place.
+    to_constant_floatbv2t(simpl_res).cformat = irep_idt();
   }
   else
     return expr2tc();
@@ -1427,6 +1452,13 @@ static bool same_value_and_sign(const expr2tc &a, const expr2tc &b)
   return a == b && float_signs_agree(a, b);
 }
 
+/* An index may be out of bounds. That's an error in the program, but not in
+ * the model we're generating, so permit it. Can't simplify it though. */
+static bool index_outside(const constant_int2t &index, size_t size)
+{
+  return index.value.is_negative() || index.value >= size;
+}
+
 expr2tc with2t::do_simplify() const
 {
   // with(with(s, f, v_old), f, v_new) -> with(s, f, v_new). Two writes to
@@ -1485,12 +1517,7 @@ expr2tc with2t::do_simplify() const
     const constant_array2t &array = to_constant_array2t(source_value);
     const constant_int2t &index = to_constant_int2t(update_field);
 
-    // Index may be out of bounds. That's an error in the program, but not in
-    // the model we're generating, so permit it. Can't simplify it though.
-    if (index.value.is_negative())
-      return expr2tc();
-
-    if (index.value >= array.datatype_members.size())
+    if (index_outside(index, array.datatype_members.size()))
       return expr2tc();
 
     if (same_value_and_sign(
@@ -1501,17 +1528,13 @@ expr2tc with2t::do_simplify() const
     arr.datatype_members[index.as_ulong()] = update_value;
     return constant_array2tc(std::move(arr));
   }
-  else if (is_constant_vector2t(source_value))
+  else if (
+    is_constant_vector2t(source_value) && is_constant_int2t(update_field))
   {
     const constant_vector2t &vec = to_constant_vector2t(source_value);
     const constant_int2t &index = to_constant_int2t(update_field);
 
-    // Index may be out of bounds. That's an error in the program, but not in
-    // the model we're generating, so permit it. Can't simplify it though.
-    if (index.value.is_negative())
-      return expr2tc();
-
-    if (index.value >= vec.datatype_members.size())
+    if (index_outside(index, vec.datatype_members.size()))
       return expr2tc();
 
     if (same_value_and_sign(
@@ -1578,6 +1601,37 @@ static expr2tc fold_union_member_read(
   return val;
 }
 
+/// The selected member of a struct literal, or nil when the fold does not
+/// apply.
+///
+/// member2t's constructor asserts that the member resolves exactly once in the
+/// source's type, but only in debug builds; a release build reached the
+/// `.value()` this replaces and threw bad_optional_access, and an operand count
+/// short of the type's components read past the end of the vector. Both are the
+/// shape of the tuple-projection bound (#7758): decline, which is always sound,
+/// rather than trust the invariant (docs/roadmap/scope-clang-cpp-irep2.md
+/// §7.4).
+static expr2tc fold_struct_member_read(
+  const constant_struct2t &lit,
+  const irep_idt &member,
+  const type2tc &type)
+{
+  const std::optional<unsigned int> no =
+    struct_union_get_component_number(lit.type, member);
+  if (!no.has_value() || *no >= lit.datatype_members.size())
+    return expr2tc();
+
+  const expr2tc &s = lit.datatype_members[*no];
+  // Be defensive: if member extraction type doesn't match, skip
+  // simplification instead of aborting in the simplifier.
+  if (
+    !is_pointer_type(type) &&
+    !base_type_eq(type, s->type, *migrate_namespace_lookup))
+    return expr2tc();
+
+  return s;
+}
+
 expr2tc member2t::do_simplify() const
 {
   if (is_constant_union2t(source_value))
@@ -1586,18 +1640,8 @@ expr2tc member2t::do_simplify() const
 
   if (is_constant_struct2t(source_value))
   {
-    unsigned no =
-      struct_union_get_component_number(source_value->type, member).value();
-
-    expr2tc s = to_constant_struct2t(source_value).datatype_members[no];
-    // Be defensive: if member extraction type doesn't match, skip
-    // simplification instead of aborting in the simplifier.
-    if (
-      !is_pointer_type(type) &&
-      !base_type_eq(type, s->type, *migrate_namespace_lookup))
-      return expr2tc();
-
-    return s;
+    return fold_struct_member_read(
+      to_constant_struct2t(source_value), member, type);
   }
   else if (is_with2t(source_value))
   {
@@ -3401,6 +3445,12 @@ expr2tc bitcast2t::do_simplify() const
   // and offset components (without it, every pointer-as-pointer use stays
   // an array index, which generates a much larger case-split tree).
 
+  /* A pointer bitcast must stay a bitcast: it reinterprets the bits ESBMC
+   * stored, which convert_bitcast() models as an injection, while a typecast
+   * means the numeric address, which does not identify a pointer (#7855). */
+  if (is_pointer_type(type) || is_pointer_type(from->type))
+    return expr2tc();
+
   // This should be fine, just use typecast
   if (
     !is_floatbv_type(type) && !is_floatbv_type(from->type) &&
@@ -3967,12 +4017,80 @@ static expr2tc flatten_nested_index_address(const address_of2t &ao)
   return is_nil_expr(simplified) ? flat : simplified;
 }
 
+/// `(char *)&root.m[i]`, or a byte member's own `&root.c`, as
+/// `(char *)&root + byte offset`: a byte-wise walk
+/// and its bound then share one base whichever member or element each end
+/// names, as the relation folds below need. Nil unless the pointee is a byte,
+/// the chain is rooted at a symbol, and its offset is constant.
+/// The named object a member/index chain @p obj lives in, or nil when the
+/// chain passes anything else: a dereference would root it at the pointer
+/// variable instead of the pointee.
+static const expr2tc *byte_view_root(const expr2tc &obj)
+{
+  const expr2tc *root = &obj;
+  while (is_member2t(*root) || is_index2t(*root))
+    root = is_index2t(*root) ? &to_index2t(*root).source_value
+                             : &to_member2t(*root).source_value;
+  return is_symbol2t(*root) ? root : nullptr;
+}
+
+/// One anchor for every byte view of @p root, so both ends compare equal: a
+/// cast the frontend wrote and one built here need not. An array is anchored
+/// at its first element, since a pointer to the whole array can have a width
+/// get_width() rejects (alloca_ptrdiff_max); a byte array is left to the index
+/// path, where the cast would be a no-op. Nil for any other root.
+static expr2tc byte_view_anchor(const expr2tc &root, const type2tc &to)
+{
+  const type2tc &t = root->type;
+  if (is_struct_type(t) || is_union_type(t))
+    return typecast2tc(to, address_of2tc(t, root));
+  if (!is_array_type(t) || is_byte_type(to_array_type(t).subtype))
+    return expr2tc();
+  const type2tc &elem = to_array_type(t).subtype;
+  return typecast2tc(
+    to,
+    address_of2tc(
+      elem, index2tc(elem, root, constant_int2tc(index_type2(), BigInt(0)))));
+}
+
+static expr2tc byte_address_on_root(const expr2tc &e)
+{
+  if (
+    !is_pointer_type(e->type) ||
+    !is_byte_type(to_pointer_type(e->type).subtype))
+    return expr2tc();
+  const expr2tc &from = is_typecast2t(e) ? to_typecast2t(e).from : e;
+  if (!is_address_of2t(from))
+    return expr2tc();
+  const expr2tc &obj = to_address_of2t(from).ptr_obj;
+  const expr2tc *root = byte_view_root(obj);
+  if (!root)
+    return expr2tc();
+  const expr2tc anchor = byte_view_anchor(*root, e->type);
+  // The anchor of an array of byte arrays is its first row's address, a byte
+  // view of that row: rewriting it again to anchor + 0 never terminates.
+  if (is_nil_expr(anchor) || e == anchor)
+    return expr2tc();
+  if (root == &obj)
+    return is_typecast2t(e) ? anchor : expr2tc();
+
+  expr2tc offset = compute_pointer_offset(obj);
+  if (expr2tc folded = offset->simplify(); !is_nil_expr(folded))
+    offset = folded;
+  if (!is_constant_int2t(offset))
+    return expr2tc();
+  return add2tc(e->type, anchor, offset);
+}
+
 /// Reach the address_of under pointer arithmetic: an induction variable
 /// started at `&a[1][0]` arrives here as `&a[1][0] + k` and has to be put on
 /// the same base as the bound it is compared against. Nil when nothing nested
 /// was found, so the single-subscript path below stays as it was.
 static expr2tc flatten_addressof_under_add(const expr2tc &e)
 {
+  if (expr2tc byte = byte_address_on_root(e); !is_nil_expr(byte))
+    return byte;
+
   if (is_address_of2t(e))
   {
     const address_of2t &ao = to_address_of2t(e);
@@ -4032,6 +4150,28 @@ static expr2tc normalize_addressof_operands(
   return is_nil_expr(simplified) ? rebuilt : simplified;
 }
 
+/// A bare byte base is `base + 0`: `(char *)&o < (char *)&o + 12` is
+/// `0 < 12`. Bytes only, since with a zero-sized pointee `p` and `p + 1` are
+/// one address. @p base_first says which side of the relation @p base was.
+template <typename constructor>
+static expr2tc compare_with_bare_base(
+  const type2tc &type,
+  const expr2tc &base,
+  const expr2tc &sum,
+  bool base_first)
+{
+  if (
+    !is_byte_type(to_pointer_type(base->type).subtype) || !is_add2t(sum) ||
+    to_add2t(sum).side_1 != base || !is_constant(to_add2t(sum).side_2))
+    return expr2tc();
+  expr2tc c = to_add2t(sum).side_2;
+  expr2tc zero = gen_zero(c->type);
+  return typecast_check_return(
+    type,
+    base_first ? make_irep<constructor>(zero, c)
+               : make_irep<constructor>(c, zero));
+}
+
 /// `(&x + c1) ~ (&x + c2)` reduces to `c1 ~ c2`: when the bases match,
 /// comparing addresses is comparing offsets. Split out of simplify_relations
 /// to keep its decision count off the complexity gate.
@@ -4041,10 +4181,13 @@ static expr2tc cancel_shared_pointer_base(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if (
-    !is_add2t(side_1) || !is_add2t(side_2) || !is_pointer_type(side_1) ||
-    !is_pointer_type(side_2))
+  if (!is_pointer_type(side_1) || !is_pointer_type(side_2))
     return expr2tc();
+
+  if (!is_add2t(side_1))
+    return compare_with_bare_base<constructor>(type, side_1, side_2, true);
+  if (!is_add2t(side_2))
+    return compare_with_bare_base<constructor>(type, side_2, side_1, false);
 
   const add2t &lhs = to_add2t(side_1);
   const add2t &rhs = to_add2t(side_2);
@@ -5239,12 +5382,46 @@ expr2tc overflow_cast2t::do_simplify() const
 
 expr2tc overflow2t::do_simplify() const
 {
-  // expr2t::simplify gates `overflow_id` and never reaches this method via
-  // the operands-first walker (see expr_simplifier.cpp around line 34) — the
-  // inner arith op must keep its un-simplified shape so the SMT layer can
-  // see whether the operation itself overflows. This do_simplify is therefore
-  // only reachable through direct try_simplification calls. No callers do
-  // that today; leave as a stub rather than add code that would not run.
+  // `(wideT)a * (wideT)b`: a same-signedness w1-bit and w2-bit value always
+  // produce a product that fits in w1+w2 bits of that signedness, so a
+  // destination at least that wide can never overflow. Without this, the SMT
+  // encoding (smt_overflow.cpp, mul_id) doubles the destination width and
+  // asks the solver to prove UNSAT over that wide a multiplier — a classic
+  // hard case for bit-blasting solvers (#7840).
+  if (!is_mul2t(operand))
+    return expr2tc();
+
+  const mul2t &mul = to_mul2t(operand);
+  if (!is_typecast2t(mul.side_1) || !is_typecast2t(mul.side_2))
+    return expr2tc();
+
+  // The cast target is what the multiply actually operates on; require it to
+  // match the multiply's own declared type. assert_arith_2ops_consistency
+  // (irep2_expr.cpp) only checks width, never signedness, and some
+  // constructions (e.g. migrate.cpp's `mul2tc(op0->type, op0, op1)` for
+  // "overflow-*") set a mul's type from one operand alone. Without this
+  // check, from1/from2's signedness could be read against a destination type
+  // that isn't actually the type the multiplication is evaluated at.
+  if (mul.side_1->type != operand->type || mul.side_2->type != operand->type)
+    return expr2tc();
+
+  const expr2tc &from1 = to_typecast2t(mul.side_1).from;
+  const expr2tc &from2 = to_typecast2t(mul.side_2).from;
+
+  const bool both_signed = is_signedbv_type(from1) && is_signedbv_type(from2) &&
+                           is_signedbv_type(operand->type);
+  const bool both_unsigned = is_unsignedbv_type(from1) &&
+                             is_unsignedbv_type(from2) &&
+                             is_unsignedbv_type(operand->type);
+  if (!both_signed && !both_unsigned)
+    return expr2tc();
+
+  unsigned int w1 = from1->type->get_width();
+  unsigned int w2 = from2->type->get_width();
+  unsigned int dest_width = operand->type->get_width();
+  if (w1 + w2 <= dest_width)
+    return gen_false_expr();
+
   return expr2tc();
 }
 

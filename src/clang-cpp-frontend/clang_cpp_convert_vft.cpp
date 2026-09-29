@@ -539,12 +539,16 @@ void clang_cpp_convertert::add_thunk_method_body(
   exprt adjusted_this = typecast_exprt(base_this, derived_ptr_type);
   adjusted_this.set("#base_to_derived", true);
 
+  // Both arms store an IREP2 body, and migrate_expr resolves the called method
+  // and the thunk's own arguments through this thread-local namespace (§53).
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
   if (
     code_type.return_type().id() != "empty" &&
     code_type.return_type().id() != "destructor")
     add_thunk_method_body_return(thunk_func_symb, component, adjusted_this);
   else
     add_thunk_method_body_no_return(thunk_func_symb, component, adjusted_this);
+  migrate_namespace_lookup = old_ns;
 }
 
 void clang_cpp_convertert::add_thunk_method_body_return(
@@ -579,7 +583,9 @@ void clang_cpp_convertert::add_thunk_method_body_return(
   code_returnt code_return;
   code_return.return_value() = expr_call;
 
-  thunk_func_symb.set_value(code_return);
+  expr2tc body;
+  migrate_expr(code_return, body);
+  thunk_func_symb.set_value(body);
 }
 
 void clang_cpp_convertert::add_thunk_method_body_no_return(
@@ -608,7 +614,9 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
       symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
   }
 
-  thunk_func_symb.set_value(code_func);
+  expr2tc body;
+  migrate_expr(code_func, body);
+  thunk_func_symb.set_value(body);
 }
 
 void clang_cpp_convertert::add_thunk_component_to_type(

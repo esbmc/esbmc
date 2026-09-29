@@ -10,6 +10,7 @@
 #include <mutex>
 #include <set>
 #include <utility>
+#include <unordered_map>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
@@ -94,6 +95,10 @@
 class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
+
+/** The bit a byte update with a symbolic offset writes at, in bit-vector mode:
+ *  the offset scaled to bits, in the width of the updated value. */
+expr2tc byte_update_bit_offset(const byte_update2t &data);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
@@ -832,6 +837,21 @@ public:
   smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
+  /** The pointer, floating-point and struct legs of convert_bitcast, split
+   *  out so the dispatcher stays readable. Each returns null when it does not
+   *  apply. */
+  smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
+  smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
+  smt_astt
+  convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
+  /** Flatten a pointer to the machine representation a bitcast reinterprets,
+   *  and rebuild it from one; see the comment on the definitions in
+   *  smt_bitcast.cpp. */
+  smt_astt encode_pointer_repr(const expr2tc &ptr, const type2tc &to_type);
+  smt_astt decode_pointer_repr(const expr2tc &repr, const type2tc &to_type);
+  /** True when @p ptr_type's representation occupies @p bv_type exactly, so
+   *  the bits read back are the bits that were written. */
+  bool pointer_repr_applies(const type2tc &ptr_type, const type2tc &bv_type);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
   /** Record every division's operand pair in @p expr, recursively.
@@ -1033,6 +1053,13 @@ public:
    *  by the boolean smt_ast pointer (solver ASTs are hash-consed, so
    *  identical pointer ⇒ identical term ⇒ identical model value). */
   std::unordered_map<smt_astt, tvt> l_get_cache;
+  /** Model-value cache for get_by_ast(), on the same terms and with the same
+   *  invalidation as l_get_cache. The pointer key is safe because pop_ctx
+   *  clears this map before deleting any smt_ast, so an address cannot be
+   *  reused while an entry for it survives. The stored type gates reuse
+   *  rather than keying it: the same bit-vector reads differently as signed
+   *  or unsigned. */
+  std::unordered_map<smt_astt, std::pair<type2tc, expr2tc>> get_ast_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -1083,6 +1110,46 @@ public:
     uf_ackermann_history;
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
   size_t uf_ackermann_counter = 0;
+
+  /** One pointer flattened to its machine representation by a bitcast. See
+   *  convert_bitcast()'s helpers in smt_bitcast.cpp. */
+  struct ptr_flatten_entry
+  {
+    smt_astt address;
+    smt_astt pointer;
+    /** The flattening step's guard: an unexecuted step can flatten any
+     *  pointer. */
+    smt_astt guard;
+    unsigned int level;
+    size_t id;
+  };
+  /** Every flattened pointer in this context. Pruned on pop_ctx like
+   *  uf_ackermann_history, whose asts have the same lifetime. */
+  std::vector<ptr_flatten_entry> ptr_flatten_history;
+  /** The most flattens one rebuilt pointer is defined over; see
+   *  decode_pointer_repr(). */
+  static constexpr size_t max_rebuild_sources = 32;
+  /** Each flattening bitcast converted so far, for steps that hit it in the
+   *  conversion cache. */
+  std::unordered_map<expr2tc, ptr_flatten_entry, irep2_hash> flattened;
+  void record_flattened_pointer(smt_astt address, smt_astt pointer);
+
+  /** The SSA step being converted: its guard, the flattens its operands may
+   *  hold (all a rebuild in it reads), those it makes, and the symbol it
+   *  assigns. Null and empty outside a step. */
+  smt_astt step_guard = nullptr;
+  std::set<size_t> step_sources;
+  std::set<size_t> step_flattens;
+  std::string step_assigned;
+  expr2tc step_overwritten;
+  size_t flatten_count = 0;
+  /** The flattens each SSA symbol's value may hold, and the context level it
+   *  was recorded at. */
+  std::unordered_map<std::string, std::pair<unsigned int, std::set<size_t>>>
+    ptr_flow;
+  void begin_step(const expr2tc &guard, const expr2tc &cond);
+  void note_assignment(const expr2tc &lhs, const expr2tc &rhs);
+  void end_step();
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
@@ -1143,6 +1210,8 @@ public:
   smt_astt int_shift_op_array;
 
 private:
+  expr2tc get_by_ast_uncached(const type2tc &type, smt_astt a);
+
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);

@@ -835,10 +835,13 @@ void dereferencet::check_pointer_alignment(
   if (mode.unaligned)
     return;
 
-  // Only check alignment for scalar read/write operations (excluding code and pointer types)
+  // Only check alignment for scalar and vector read/write operations (excluding
+  // code and pointer types). A vector's lanes are only checked at their own
+  // width (#7907).
   if (
-    !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||
-    is_code_type(type) || is_pointer_type(type))
+    !(is_read(mode) || is_write(mode)) ||
+    !(is_scalar_type(type) || is_vector_type(type)) || is_code_type(type) ||
+    is_pointer_type(type))
   {
     return;
   }
@@ -1135,7 +1138,8 @@ enum target_flags
  * - s: scalar
  * - S: struct
  * - U: union
- * - A: array or string
+ * - A: array or string; as a source, also a vector
+ * - V: vector, as a destination
  * - c: code
  *
  *   src | dst | off | method                                         | note
@@ -1144,6 +1148,7 @@ enum target_flags
  *    *  |  c  |  *  | <none>                                         |
  *  -----+-----+-----+------------------------------------------------+---------
  *    *  |  A  |  *  | <unsupported>: "Can't construct rvalue ref..." |
+ *    *  |  V  |  *  | construct_vector_ref                           | rec
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  s  |  c  | construct_from_const_offset                    | st
  *    S  |  s  |  c  | construct_from_const_struct_offset             | rec
@@ -1175,6 +1180,41 @@ enum target_flags
  *    U  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  *    A  |  U  |  d  | construct_struct_ref_from_dyn_offset           | rec, st
  */
+
+/// Which row of build_reference_rec's table the destination type selects.
+static int dst_flag_of(const type2tc &type)
+{
+  if (is_struct_type(type))
+    return flag_dst_struct;
+  if (is_union_type(type))
+    return flag_dst_union;
+  if (is_scalar_type(type))
+    return flag_dst_scalar;
+  if (is_array_type(type))
+  {
+    log_error(
+      "Can't construct rvalue reference to array type during dereference\n"
+      "(It isn't allowed by C anyway)\n");
+    abort();
+  }
+  log_error("Unrecognized dest type during dereference\n{}", *type);
+  abort();
+}
+
+/// Which column the source value selects.
+static int src_flag_of(const expr2tc &value)
+{
+  if (is_struct_type(value))
+    return flag_src_struct;
+  if (is_union_type(value))
+    return flag_src_union;
+  if (is_scalar_type(value))
+    return flag_src_scalar;
+  if (is_array_or_vector_type(value))
+    return flag_src_array;
+  log_error("Unrecognized src type during dereference\n{}", *value->type);
+  abort();
+}
 
 void dereferencet::build_reference_rec(
   expr2tc &value,
@@ -1211,38 +1251,17 @@ void dereferencet::build_reference_rec(
     return;
   }
 
-  if (is_struct_type(type))
-    flags |= flag_dst_struct;
-  else if (is_union_type(type))
-    flags |= flag_dst_union;
-  else if (is_scalar_type(type))
-    flags |= flag_dst_scalar;
-  else if (is_array_type(type))
+  /* A vector destination is a value, not an array of lanes to be indexed:
+   * construct_vector_ref answers it whole or lane by lane, so it needs no row
+   * in the table below (#7907). */
+  if (is_vector_type(type))
   {
-    log_error(
-      "Can't construct rvalue reference to array type during dereference\n"
-      "(It isn't allowed by C anyway)\n");
-    abort();
-  }
-  else
-  {
-    log_error("Unrecognized dest type during dereference\n{}", *type);
-    abort();
+    construct_vector_ref(value, offset, type, guard, mode, alignment);
+    return;
   }
 
-  if (is_struct_type(value))
-    flags |= flag_src_struct;
-  else if (is_union_type(value))
-    flags |= flag_src_union;
-  else if (is_scalar_type(value))
-    flags |= flag_src_scalar;
-  else if (is_array_type(value))
-    flags |= flag_src_array;
-  else
-  {
-    log_error("Unrecognized src type during dereference\n{}", *value->type);
-    abort();
-  }
+  flags |= dst_flag_of(type);
+  flags |= src_flag_of(value);
 
   // Consider the myriad of reference construction cases here
   switch (flags)
@@ -1411,12 +1430,11 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
-  assert(is_array_type(value));
+  assert(is_array_or_vector_type(value));
 
-  const array_type2t arr_type = to_array_type(value->type);
-  type2tc arr_subtype = arr_type.subtype;
+  type2tc arr_subtype = array_or_vector_subtype(value->type);
 
-  if (is_array_type(arr_subtype))
+  if (is_array_or_vector_type(arr_subtype))
   {
     construct_from_multidir_array(value, offset, type, guard, alignment, mode);
     return;
@@ -1506,8 +1524,9 @@ void dereferencet::construct_from_array(
   {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
-    if (arr_type.array_size && arr_type.array_size->type != div->type)
-      div = typecast2tc(arr_type.array_size->type, div);
+    const expr2tc &arr_size = array_or_vector_size(value->type);
+    if (arr_size && arr_size->type != div->type)
+      div = typecast2tc(arr_size->type, div);
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
   }
@@ -1543,6 +1562,62 @@ void dereferencet::construct_from_array(
       extract_bits_from_byte_array(
         value, offset_bits, type_byte_size_bits(type).to_uint64()));
   }
+}
+
+/* Unlike an array, a vector is a value, read and written whole. Unless the
+ * object already is one of this type, each lane is a scalar access at its own
+ * offset, so every object shape the scalar paths handle is handled here, and a
+ * write goes through the lanes too (#7907). */
+void dereferencet::construct_vector_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  if (
+    is_constant_int2t(offset) && to_constant_int2t(offset).value == 0 &&
+    dereference_type_compare(value, type))
+    return;
+
+  // An element of an array of such vectors, when the pointer's alignment
+  // puts it on one, as a SIMD loop over the array has it.
+  const BigInt vec_bits = type_byte_size_bits(type);
+  if (
+    is_array_type(value) && to_array_type(value->type).subtype == type &&
+    alignment >= vec_bits)
+  {
+    expr2tc elem =
+      div2tc(offset->type, offset, gen_long(offset->type, vec_bits));
+    value = index2tc(type, value, typecast2tc(index_type2(), elem));
+    return;
+  }
+
+  const vector_type2t &vec_type = to_vector_type(type);
+  const BigInt lane_bits = type_byte_size_bits(vec_type.subtype);
+  // Each lane sits at a multiple of its power-of-two width from the start.
+  const unsigned long lane_alignment =
+    std::min<unsigned long>(alignment, lane_bits.to_uint64());
+
+  const uint64_t num_lanes =
+    to_constant_int2t(vec_type.array_size).value.to_uint64();
+  std::vector<expr2tc> lanes;
+  lanes.reserve(num_lanes);
+  for (uint64_t i = 0; i < num_lanes; i++)
+  {
+    expr2tc lane = value;
+    expr2tc lane_offset = add2tc(
+      offset->type, offset, constant_int2tc(offset->type, lane_bits * i));
+    simplify(lane_offset);
+    build_reference_rec(
+      lane, lane_offset, vec_type.subtype, guard, mode, lane_alignment);
+    // As for a scalar access there: a free value, and a write goes nowhere.
+    lanes.push_back(
+      is_nil_expr(lane) ? make_failed_symbol(vec_type.subtype) : lane);
+  }
+
+  value = constant_vector2tc(type, std::move(lanes));
 }
 
 void dereferencet::construct_from_const_offset(
@@ -1933,15 +2008,17 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
 {
   const constant_int2t &intref = to_constant_int2t(offset);
 
-  assert(is_array_type(value->type));
-  const type2tc &base_subtype = get_base_array_subtype(value->type);
+  assert(is_array_or_vector_type(value));
 
   // All in all: we don't care what's being accessed at this level, unless
   // this struct is being constructed out of a byte array. If that's
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduces us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
-  if (!is_byte_type(base_subtype))
+  // A vector of bytes takes that handler too: it stitches the bytes itself.
+  if (
+    is_vector_type(value->type) ||
+    !is_byte_type(get_base_array_subtype(value->type)))
   {
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;

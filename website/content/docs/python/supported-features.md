@@ -12,7 +12,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Logical operations**: `and`, `or`, `not`
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
 - **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment. Unpacking targets may be subscripts or attributes (`a[i], b.x = ...`), and may be **nested** (`(a, b), c = ((1, 2), 3)`, including over a runtime right-hand side such as a for-loop element or function return: `for (u, v), w in items:`).
-- **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. Use inside `and`/`or` operands and `while`-loop conditions is refused with a clear diagnostic (see [Limitations](./limitations#walrus-operator)).
+- **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. Use inside `and`/`or` operands and `while`-loop conditions is refused with a clear diagnostic (see [Limitations](/docs/python/limitations#walrus-operator)).
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
 - **Context managers**: `with` and `async with` statements via preprocessor desugaring into explicit `__enter__`/`__exit__` calls:
@@ -54,7 +54,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
 - **Explicit base-class `__init__`**: unbound parent-constructor calls of the form `Base.__init__(self, ...)` (the pre-`super()` idiom) are dispatched to the base constructor with `self` bound correctly
-- **`@staticmethod` and `@classmethod`**: receiver binding is taken from the method's decorator list rather than guessed from the first parameter's name. A `@staticmethod` receives no implicit receiver (so `M.twice(6)` binds `6` to the first real parameter), and a `@classmethod`'s `cls` parameter is typed against the enclosing class, so `cls.<attr>` resolves
+- **`@staticmethod` and `@classmethod`**: receiver binding is taken from the method's decorator list rather than guessed from the first parameter's name. A `@staticmethod` receives no implicit receiver (so `M.twice(6)` binds `6` to the first real parameter), and a `@classmethod`'s `cls` parameter is typed against the enclosing class, so `cls.<attr>` resolves. The decorator lookup walks the base classes, stopping at the first class that declares the method, so an **inherited** `@staticmethod` called through an instance (`D().add(10, 4)`, where `add` is on `D`'s base) binds its arguments to the right slots and a derived override still wins
 - **`@property` getters**: reading a `@property`-decorated attribute (`obj.area`) invokes the decorated getter method rather than looking up a struct field; inherited properties resolve through the base class
 - **`__bool__` truth-testing**: a class's `__bool__` is called in every truth context — `if obj:`, `while obj:`, ternaries, `bool(obj)`, and also `not obj` and a bare `assert obj`, so `assert falsy_obj` fails exactly as CPython raises
 - **Constructor temporaries**: calling a method directly on a fresh instance (`C().get()`) works without binding the instance to a name first — `__init__` runs on the temporary, its own methods win over same-named ones from other classes, and dunder methods (e.g. `C() == x`, `len(C())`) dispatch on it
@@ -216,7 +216,7 @@ Byte sequences and integer class methods:
 ## Error Handling
 
 - **`try`/`except`** blocks with multiple handlers and `except ExceptionType as var` binding
-- **`try`/`finally`** blocks: the `finally` body runs on normal completion, after a caught exception, when an exception propagates uncaught (run `finally`, then re-raise), and on the `return` / `break` / `continue` edges that escape the `try`, a handler, or the `finally` itself. A returned expression is spilled to a temporary before the `finally` runs, as CPython evaluates it first. Bare `try`/`finally` (no `except`) is supported. Shapes that cannot be lowered soundly are refused with a clean diagnostic (see [Limitations](./limitations#exception-handling))
+- **`try`/`finally`** blocks: the `finally` body runs on normal completion, after a caught exception, when an exception propagates uncaught (run `finally`, then re-raise), and on the `return` / `break` / `continue` edges that escape the `try`, a handler, or the `finally` itself. A returned expression is spilled to a temporary before the `finally` runs, as CPython evaluates it first. Bare `try`/`finally` (no `except`) is supported. Shapes that cannot be lowered soundly are refused with a clean diagnostic (see [Limitations](/docs/python/limitations#exception-handling))
 - **`raise`** statements with exception instantiation and custom messages, including an f-string message that interpolates a symbolic value (`raise ValueError(f"bad {x}")`); bare `raise` re-raises the active exception inside an `except` handler
 - **`assert`** statements for property verification
 - **`__ESBMC_assume`** for constraining non-deterministic inputs
@@ -373,7 +373,7 @@ Supported on a tagged variable:
   type across an `if`/`else` reconciles both branches into one tagged return
   type, instead of the type of whichever `return` was reached first.
 
-See [Limitations](./limitations#dynamic-typing) for what a tag cannot hold.
+See [Limitations](/docs/python/limitations#dynamic-typing) for what a tag cannot hold.
 
 ## Strict Type Checking
 
@@ -495,7 +495,7 @@ All functions are modelled using nondeterministic values with appropriate constr
 - `random.shuffle(lst)` → under-approximation; leaves the list untouched
 - `random.seed(a=0)` → no-op; nondet outputs already cover any seed-dependent outcome
 
-See also: [Random Operational Model](./random-operational-model)
+See also: [Random Operational Model](/docs/python/random-operational-model)
 
 ## Collections Module (`collections`)
 
@@ -631,7 +631,7 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 
 **Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
 
-**Complex elements**: element-wise complex arithmetic (`add`/`subtract`/`multiply`/`divide`) on complex scalars and arrays, plus `np.conjugate(z)` and `.real`/`.imag` on complex results; division by zero is reported. Complex determinants are rejected (see [Limitations](./limitations#numpy-module))
+**Complex elements**: element-wise complex arithmetic (`add`/`subtract`/`multiply`/`divide`) on complex scalars and arrays, plus `np.conjugate(z)` and `.real`/`.imag` on complex results; division by zero is reported. Complex determinants are rejected (see [Limitations](/docs/python/limitations#numpy-module))
 
 **Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.rint(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.remainder(x, y)`, `np.nextafter(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.tan(x)`, `np.arcsin(x)`, `np.arctan(x)`, `np.arccos(x)`, `np.sinh(x)`, `np.cosh(x)`, `np.tanh(x)`, `np.exp(x)`, `np.log(x)`, `np.log2(x)`, `np.log10(x)`, `np.isclose(a, b)` on scalar or literal list-backed 1D/2D inputs. `np.arccos` additionally lowers a runtime 1D array through the libm operational model; a runtime 2D `arccos` is still rejected. The two-output helpers `np.modf(x)` → `(frac, int)` and `np.frexp(x)` → `(mantissa, exponent)` are also supported.
 

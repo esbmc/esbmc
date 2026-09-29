@@ -13,5 +13,5 @@ def process(arr):
 
 
 result = process(make_array())
-# Wrong assertion: if called twice, call_count would be 2
+# Wrong assertion: side effect should run exactly once, not twice
 assert call_count == 2

@@ -547,42 +547,6 @@ void jimple_static_member::from_json(const json &j)
   type = std::make_shared<jimple_type>(t);
 }
 
-exprt jimple_static_member::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto result = gen_zero(type->to_typet(ctx));
-  // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
-  if (from == "kotlin._Assertions" && field == "ENABLED")
-  {
-    result.make_true();
-    return result;
-  }
-
-  if (from == "Main" && field == "$assertionsDisabled")
-  {
-    result.make_false();
-    return result;
-  }
-
-  // TODO: Needs OOP members
-
-  // 1. Look over the local scope
-  auto symbol_name = get_symbol_name(class_name, function_name, from);
-  symbolt &s = *ctx.find_symbol(symbol_name);
-  member_exprt op(symbol_expr(s), "tag-" + field, s.get_type());
-  exprt &base = op.struct_op();
-  if (base.type().is_pointer())
-  {
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  return op;
-};
-
 expr2tc jimple_virtual_member::to_expr2t(
   contextt &ctx,
   const std::string &class_name,

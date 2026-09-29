@@ -1,4 +1,5 @@
 #include <python-frontend/type/type_handler.h>
+#include <clang-c-frontend/padding.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
@@ -44,7 +45,8 @@ static_assert(
 
 // Phase 4.3 seam (Part IV §5/§6): lower an internally-built IREP2 type to the
 // legacy `typet` the symbol table and shared downstream passes consume,
-// re-attaching the `#cpp_type` hint IREP2 cannot carry (F-P5). The elementary
+// re-attaching attributes the seam still drops (`#cpp_type` itself is now
+// carried, §10). The elementary
 // builders construct `type2tc` via typed factories and pass through here, so
 // the legacy bytes reaching `create_symbol` stay byte-identical to before.
 typet lower_to_seam(const type2tc &t, const irep_idt &cpp_type = irep_idt())
@@ -470,6 +472,23 @@ static void throw_if_unmodelled_builtin_result(const std::string &ast_type)
 /// References:
 /// - Python 3 type system: https://docs.python.org/3/library/stdtypes.html
 /// - ESBMC irep type system: src/util/type.h
+/// The type a generic spelling `Base[...]` names: its base type, except that
+/// "Optional[T]" spelled as one name (a preprocessor-generated or inferred
+/// annotation) resolves like the Optional[T] subscript does (#8016).
+typet type_handler::get_generic_typet(
+  const std::string &ast_type,
+  size_t bracket_pos,
+  size_t type_size) const
+{
+  const std::string base_type = ast_type.substr(0, bracket_pos);
+  const std::string inner =
+    ast_type.substr(bracket_pos + 1, ast_type.size() - bracket_pos - 2);
+  if (base_type == "Optional" && inner.find('[') == std::string::npos)
+    if (const typet t = get_typet(inner); type_utils::is_optional_scalar(t))
+      return build_optional_type(t);
+  return get_typet(base_type, type_size);
+}
+
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
@@ -486,8 +505,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   size_t bracket_pos = ast_type.find('[');
   if (bracket_pos != std::string::npos)
   {
-    std::string base_type = ast_type.substr(0, bracket_pos);
-    return get_typet(base_type, type_size);
+    return get_generic_typet(ast_type, bracket_pos, type_size);
   }
 
   // type: represents Python type objects (int, str, float, bool, etc.)
@@ -585,7 +603,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       symbolt type_symbol;
       type_symbol.id = complex_type_id;
       type_symbol.name = "complex";
-      type_symbol.set_type(get_complex_struct_type());
+      type_symbol.set_type(migrate_type(get_complex_struct_type()));
       type_symbol.mode = "Python";
       type_symbol.is_type = true;
       symbol_table.move_symbol_to_context(type_symbol);
@@ -603,7 +621,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bytes")
   {
     // TODO: Refactor to model using unsigned/signed char
-    return build_array(long_long_int_type(), type_size);
+    typet t = build_array(long_long_int_type(), type_size);
+    // Tags this array as `bytes` so `+` on it is recognised as
+    // concatenation (see type_utils::is_bytes_array).
+    type_utils::set_cpp_type(t, "bytes");
+    return t;
   }
 
   // bytearray — the mutable counterpart of bytes — is not modeled. Reject it
@@ -644,7 +666,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     if (type_size == 1)
     {
       // 8-bit char built IREP2-internal; #cpp_type "char" is re-attached at the
-      // seam for C-backend compatibility (F-P5 — IREP2 cannot carry it).
+      // seam for C-backend compatibility (F-P5; the seam carries it since §10).
       const type2tc char_t = config.ansi_c.char_is_unsigned
                                ? unsignedbv_type2tc(config.ansi_c.char_width)
                                : signedbv_type2tc(config.ansi_c.char_width);
@@ -1527,7 +1549,7 @@ size_t type_handler::get_type_width(const typet &type) const
   return 32;
 }
 
-typet type_handler::build_optional_type(const typet &base_type)
+typet type_handler::build_optional_type(const typet &base_type) const
 {
   // Create a struct with two fields:
   // 1. is_none: bool - indicates if value is None
@@ -1547,7 +1569,11 @@ typet type_handler::build_optional_type(const typet &base_type)
   value_field.set_access("public");
   optional_type.components().push_back(value_field);
 
-  return optional_type;
+  // Padded here, once: clang_cpp_adjust pads a variable's copy of this inline
+  // struct but not a parameter's, and base_type_eq then rejects the call.
+  typet padded = optional_type;
+  add_padding(padded, converter_.ns);
+  return padded;
 }
 
 bool type_handler::class_derives_from(

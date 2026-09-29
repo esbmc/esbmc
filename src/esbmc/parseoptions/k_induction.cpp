@@ -898,6 +898,13 @@ void esbmc_parseoptionst::diagnose_unknown_properties(
   goto_functionst &goto_functions,
   const uint64_t k_step)
 {
+  // Only the multi-property k-induction path leaves per-claim outcomes
+  // undecided at the last k; every other strategy has already concluded.
+  if (
+    !options.get_bool_option("multi-property") ||
+    !options.get_bool_option("k-induction"))
+    return;
+
   if (options.get_bool_option("disable-inductive-step"))
     return;
 

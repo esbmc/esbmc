@@ -267,7 +267,7 @@ exprt python_list::build_split_list(
     symbolt new_symbol;
     new_symbol.name = func_name;
     new_symbol.id = func_name;
-    new_symbol.set_type(func_type);
+    new_symbol.set_type(migrate_type(func_type));
     new_symbol.mode = "C";
     new_symbol.module = "python";
     new_symbol.location = location;
