@@ -105,7 +105,8 @@ struct CounterFBNode
   std::string instance_name;
   std::string CU_var; // count-up input variable
   std::string CD_var; // count-down input variable (CTD only)
-  std::string R_var;  // reset variable
+  std::string R_var;  // reset variable (CTU only)
+  std::string LD_var; // load variable (CTD only)
   std::string PV_var; // preset value variable
   std::string Q_var;  // output variable
   std::string CV_var; // counter value variable
@@ -209,8 +210,7 @@ struct UserFBDef
   std::string type_name;               // e.g. "EQ_0"
   std::vector<FBVarDecl> input_vars;   // formal inputs (IN1, IN2, ...) + types
   std::vector<FBVarDecl> local_vars;   // FB-local variables (e.g. "i") + types
-  std::string output_var;              // formal output name (OUT)
-  VarKind output_kind = VarKind::BOOL; // OUT declared type
+  std::vector<FBVarDecl> output_vars;  // every formal output + types
   std::string st_body;                 // raw Structured Text body
 };
 

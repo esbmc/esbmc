@@ -33,6 +33,8 @@ bool python_dict_handler::handle_subscript_assignment_check(
   converter.set_converting_rhs(true);
   exprt rhs = converter.get_expr(ast_node["value"]);
   converter.set_converting_rhs(false);
+  rhs = converter.wrap_if_optional(
+    rhs, resolve_expected_type_for_dict_subscript(container_expr));
 
   handle_dict_subscript_assign(
     container_expr,
