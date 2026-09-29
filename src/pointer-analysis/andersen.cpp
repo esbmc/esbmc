@@ -379,17 +379,29 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
   return t;
 }
 
-void andersent::assign_top(const expr2tc &lhs, unsigned loc)
+void andersent::assign_node(const expr2tc &lhs, node_id src, unsigned loc)
 {
+  // Field- and index-insensitivity means the destination of `s.f = q` and
+  // `p->f = q` is decided entirely by the base object.
   const expr2tc target = base_object(lhs);
 
-  if (is_dereference2t(target))
+  if (is_if2t(target))
+  {
+    assign_node(to_if2t(target).true_value, src, loc);
+    assign_node(to_if2t(target).false_value, src, loc);
+  }
+  else if (is_dereference2t(target))
     add_constraint(
       constraint_kindt::STORE,
       eval_rhs(to_dereference2t(target).value, loc),
-      top_source());
+      src);
   else
-    points_to_top(get_node(target));
+    add_constraint(constraint_kindt::COPY, get_node(target), src);
+}
+
+void andersent::assign_top(const expr2tc &lhs, unsigned loc)
+{
+  assign_node(lhs, top_source(), loc);
 }
 
 void andersent::handle_assign(
@@ -421,34 +433,7 @@ void andersent::handle_assign(
     return;
   }
 
-  // Field- and index-insensitivity means the destination of `s.f = q` and
-  // `p->f = q` is decided entirely by the base object.
-  const expr2tc target = base_object(lhs);
-
-  if (is_dereference2t(target))
-  {
-    add_constraint(
-      constraint_kindt::STORE,
-      eval_rhs(to_dereference2t(target).value, loc),
-      eval_rhs(rhs, loc));
-    return;
-  }
-
-  const node_id l = get_node(target);
-
-  // The dominant shape gets a constraint directly rather than through a
-  // temporary, which keeps the node count close to the variable count.
-  if (is_address_of2t(r))
-  {
-    const expr2tc obj = base_object(to_address_of2t(r).ptr_obj);
-    if (!is_dereference2t(obj))
-    {
-      add_constraint(constraint_kindt::ADDRESS_OF, l, get_node(obj));
-      return;
-    }
-  }
-
-  add_constraint(constraint_kindt::COPY, l, eval_rhs(rhs, loc));
+  assign_node(lhs, eval_rhs(rhs, loc), loc);
 }
 
 void andersent::widen_call(

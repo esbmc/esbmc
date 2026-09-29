@@ -1859,6 +1859,8 @@ regression/esbmc/vla_middle_dim_decl_fail
 regression/esbmc/github_7992
 regression/esbmc/github_8008
 regression/esbmc/github_8008_deref_deref
+regression/esbmc/github_8008_int_slot
+regression/esbmc/github_8008_int_slot_fail
 regression/esbmc/github_8008_member_load
 regression/esbmc/github_8008_safe
 regression/esbmc/gcse_typecast_lvalue_kill
@@ -2006,6 +2008,7 @@ regression/esbmc-cpp/cpp/placement_new_recursive_mem_init
 regression/esbmc-cpp/cpp/placement_new_recursive_mem_init_fail
 regression/esbmc-cpp/cpp/placement_new_recursive_label
 regression/esbmc-cpp/cpp/placement_new_recursive_label_fail
+regression/esbmc-cpp/cpp/github_8008_if_target
 regression/esbmc/byte_view_row_anchor
 regression/esbmc/byte_view_row_anchor_fail
 regression/esbmc/byte_walk_row
