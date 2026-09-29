@@ -409,7 +409,7 @@ void python_class_builder::build(codet &out)
   add_self_attrs(st);
 
   // Partial commit allows nested lookups while building members
-  sym->set_type(st);
+  sym->set_type(migrate_type(st));
 
   // Add methods, class attributes, and default constructor
   get_members(st, out, has_ud_base);
