@@ -1,0 +1,4 @@
+CORE
+main.c
+--gcse --goto-functions-only
+^\s*OTHER FREE\(\(void \*\)addr\);$

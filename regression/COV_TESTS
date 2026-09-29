@@ -1859,6 +1859,7 @@ regression/esbmc/vla_middle_dim_decl_fail
 regression/esbmc/github_7992
 regression/esbmc/github_8006
 regression/esbmc/github_8006_alias
+regression/esbmc/github_8006_intcast
 regression/esbmc/github_8006_safe
 regression/esbmc/gcse_typecast_lvalue_kill
 regression/esbmc/gcse_index_alias_direct
