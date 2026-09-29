@@ -7,6 +7,9 @@ void goto_contractor(
   const namespacet &ns,
   const optionst &options)
 {
+  /* gaol needs the FPU rounding upward; ESBMC otherwise runs rounding to
+   * nearest (see main()). */
+  const host_rounding_mode ibex_rounding(FE_UPWARD);
   goto_contractort gotoContractort(goto_functions, ns, options);
 
   goto_functions.update();

@@ -225,6 +225,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   type = unary_numeric_type(op, unary_sub.type(), type);
   if (op == "Not")
   {
+    // An optional's value is zero when it is None, and `not None` is True.
+    unary_sub = unwrap_optional_if_needed(unary_sub, element);
     exprt is_empty = build_emptiness_check(unary_sub, element);
     if (is_empty.is_not_nil())
       return is_empty;
