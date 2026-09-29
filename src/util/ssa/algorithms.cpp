@@ -51,7 +51,7 @@ bool goto_functions_algorithm::runOnFunction(
 void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
 {
   // Helper definition
-  typedef goto_trace_stept::typet ssa_type;
+  typedef symex_targett::step_typet ssa_type;
   switch (step.type)
   {
   case ssa_type::ASSIGNMENT:

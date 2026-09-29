@@ -98,6 +98,9 @@ One non-trivial SCC survives: **`equation` ↔ `trace`**. Cause, exactly:
 `goto_trace_stept::typet` — the SSA step-kind enum lives in the *trace* header,
 so the equation cannot be compiled without it. See §11 for the follow-up.
 
+**Resolved by §11.1**: with the enum hoisted into `symex_targett`, the
+`equation -> trace` edge is gone, and the group graph is acyclic.
+
 Two further inversions worth naming, neither introduced here:
 
 * **`state/` → `witness/`.** `goto_symex_state.h:22` includes `witnesses.h` for
@@ -383,6 +386,15 @@ PR; each is a separate, small, testable change.
    depend on and which depends on nothing. Hoisting it removes the last group
    cycle. Mechanical but wide: every `goto_trace_stept::ASSERT`-style reference
    changes.
+   **DONE** on branch `refactor/symex-step-type-enum`: the enum is now
+   `symex_targett::step_typet`, and `symex_target_equation.h` no longer includes
+   `trace/goto_trace.h`. It is nested in the class because `goto_program.h`
+   declares a global unscoped enum with `ASSERT`, `ASSUME` and `SKIP`, which a
+   namespace-scope enum would clash with. For the same reason, an unqualified
+   enumerator inside a `goto_trace_stept` member now names the GOTO instruction
+   type. `-Wenum-compare` under `-Werror` caught the one comparison
+   (`goto_trace.cpp:49`), but it does not check `case` labels, so every site is
+   qualified explicitly.
 2. **`witnesses.h` is two headers.** Splitting the violation-witness replay
    types (`waypoint`) from the GraphML/YAML emitters would remove
    `state/` → `witness/` and stop the engine's state header from pulling in
