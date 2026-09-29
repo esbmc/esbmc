@@ -174,6 +174,31 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
   return false;
 }
 
+static void apply_gcse(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const cmdlinet &cmdline)
+{
+  // The available-expressions analysis is sequential: another thread may
+  // write between two reads it treats as equal (#8007).
+  if (spawns_threads(goto_functions))
+  {
+    log_warning("--gcse is ignored: the program may create threads");
+    return;
+  }
+
+  auto andersen = std::make_shared<andersent>();
+  log_status("Computing points-to analysis (Andersen)");
+  (*andersen)(goto_functions);
+  std::shared_ptr<value_setst> points_to = andersen;
+
+  if (cmdline.isset("no-library"))
+    log_warning("Using CSE with --no-library might cause huge slowdowns!");
+
+  goto_cse cse(context, points_to);
+  cse.run(goto_functions);
+}
+
 // This method performs various analyses and transformations
 // on the given GOTO program. They involve all the techniques that we class
 // as "static analyses" - performed on the given GOTO program before it is
@@ -336,23 +361,8 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
-    // The available-expressions analysis is sequential: another thread may
-    // write between two reads it treats as equal (#8007).
-    if (cmdline.isset("gcse") && spawns_threads(goto_functions))
-      log_warning("--gcse is ignored: the program may create threads");
-    else if (cmdline.isset("gcse"))
-    {
-      auto andersen = std::make_shared<andersent>();
-      log_status("Computing points-to analysis (Andersen)");
-      (*andersen)(goto_functions);
-      std::shared_ptr<value_setst> points_to = andersen;
-
-      if (cmdline.isset("no-library"))
-        log_warning("Using CSE with --no-library might cause huge slowdowns!");
-
-      goto_cse cse(context, points_to);
-      cse.run(goto_functions);
-    }
+    if (cmdline.isset("gcse"))
+      apply_gcse(goto_functions, context, cmdline);
 
     // Under --termination, goto_termination does its own havoc, so
     // goto_k_induction must not also run (#6031).
