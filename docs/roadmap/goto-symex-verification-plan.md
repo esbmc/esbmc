@@ -750,6 +750,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R59** | **Medium–High (no verdict, default configuration)** — R44's residual, measured on well-defined C, §15 M9 (R59); **FIXED**, same entry | **A byte-wise walk bounded by another member's address never exits.** `for (char *p = (char *)&s.a[0]; p != (char *)&s.a[1]; ++p)` reads the object representation, which C allows, and has a constant trip count, yet symex unwinds it without end: the guard `(char *)&s.a[0] + k != (char *)&s.a[1]` never folds, because the relation normalisation saw no address under the casts. Walking between two members, over an array of structs, a union or a packed struct fails the same way; `--unwind` or `--smt-symex-guard` decide it at once. | `byte_address_on_root`, `cancel_shared_pointer_base`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/char_walk_{one_member,members,arrays}{,_fail}`, `char_view_through_pointer{,_fail}` | — | **Fixed**: a byte view of a member/index chain over a named struct, union or non-byte array becomes one canonical `(char *)&root` anchor plus a constant byte offset, so both ends cancel, and a bare byte base compares as `base + 0`. |
 | **R64** | **High (a constructor called on no object, and a surplus destructor, default configuration)** — found driving WI-4, §15 M9 (G18, R64, WI-4); **FIXED**, same entry | **A class member initialised from a prvalue of its own class got a second object.** `C impl_ = C::make();` copied a temporary into the member and destroyed it; `C impl_ = C{&x};` called the constructor with no object and copied a nondet temporary in; `M() : impl_{C::make(&x)}` was read as aggregate init, storing the temporary's address. immer's `impl_t impl_ = impl_t::empty();` is the converting-constructor form, and its surplus `~champ` freed the static empty node. | `member_result_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_init_{prvalue_dtor,prvalue_value,braced_prvalue,const_prvalue,functional_cast,elided_copy,converting_ctor}{,_fail}` | — | **Fixed**: the member is the prvalue's result object ([dcl.init]/17.6.1), so the constructor or call builds it directly. |
 | **R65** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found driving WI-4, §15 M9 (R65); **FIXED**, same entry | **A placement new whose address has a side effect was modelled as an allocating new.** The lowering names the address twice, so for any call (`std::addressof(*it)`, immer's `uninitialized_copy`) the frontend warned and fell back: the object was built in fresh memory, the buffer kept its old bytes, and the address expression never ran. `*(int *)buf != 42` after `new (std::addressof(buf)) int(42)` was SUCCESSFUL. | `get_placement_new`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/placement_new_{call_address,address_once,class_call_address,no_initializer,recursive_mem_init,recursive_label}{,_fail}` | — | **Fixed**: the address is bound once, before the initializer, to a local of a statement expression. |
+| **R66** | **High (a crash, default configuration)** — found reviewing R65, §15 M9 (R66); **FIXED**, same entry | **R59's byte-view normalisation never terminated on an array of byte arrays.** The anchor of `unsigned char pool[8][32]` is `(char *)&pool[0]`, itself a byte view of the first row, and rewriting it again gives anchor + 0: `(char *)e == (char *)pool[0]`, a byte walk `for (q = pool[0]; q != pool[1]; ++q)`, and the same one level deeper all died with SIGBUS. | `byte_address_on_root`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/{byte_view_row_anchor,byte_walk_row,byte_view_3d_anchor}{,_fail}` | — | **Fixed**: an operand that already is the anchor is left alone. |
+| **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
@@ -8962,6 +8964,27 @@ local pre-existing failures.
 Not fixed: an array placement new (`new (slot()) int[2]{1, 2}`) is wrong on
 master and here, and the C frontend's `$vector-cmp$` binding pushes its local
 into `current_block` the same way the first version did.
+### M9 (R66) — 2026-09-27, R59's anchor on an array of byte arrays
+
+The review of R65 found ESBMC dying with SIGBUS on a placement new into
+`alignas(16) unsigned char pool[8][32]`. It reduces to plain C,
+`int *e = (int *)&pool[0][0]; assert((char *)e == (char *)pool[0]);`, and
+`--no-simplify` avoids it; sampling the process shows `equality2t::do_simplify`
+recursing through `normalize_addressof_operands` hundreds of frames deep.
+R59's `byte_view_anchor` anchors an array whose element is not a byte at its
+first element, `(char *)&pool[0]`. When that element is itself a byte array,
+the anchor is a byte view of it, so `byte_address_on_root` rewrote the anchor
+to anchor + 0, which simplifies back to the anchor. The byte walk R59 was
+written for, over one row of a 2-D byte array, crashed the same way.
+
+**Fixed** by leaving an operand that already is the anchor alone. The fix
+only declines a rewrite that would reproduce its operand; R59's `char_walk_*`
+and `char_view_through_pointer` pairs, and review probes over byte rows,
+struct and union members, nondet rows and VLAs, keep master's verdict wherever
+master finished. `byte_view_row_anchor{,_fail}`,
+`byte_walk_row{,_fail}` and `byte_view_3d_anchor{,_fail}` crash on master and
+match the native program here. The C, k-induction and `cbmc` suites pass apart
+from a local pre-existing failure.
 ### M9 (R61) — 2026-09-27, the stride of a flattened VLA
 
 The H-C1 census (default slicing against `--no-slice`) left
@@ -9044,6 +9067,38 @@ constructs: `flatten_to_bitvector` has no vector case (a union holding
 `v4i a[2]`), the simplifier drops the lane index pushing a subscript through a
 vector `+` with a non-constant operand (`mk_bvadd` width), and an array of
 structs holding a vector trips `mk_fresh` on Bitwuzla.
+
+### M9 (R68) — 2026-09-28, the C++ H-C1 census, and a pointer difference's width
+
+H-C1 (default slicing against `--no-slice`) had been measured on
+`regression/esbmc` only. Over the C++ suites it found no verdict that flips.
+Thirteen tests are SUCCESSFUL by default and exceed 60 s under `--no-slice`
+(`assoc_contains`, `assoc_emplace`, `container_cbegin_cend2`, four `map_*`,
+`vector_emplace_back`, `github_4758`, `github_4477`, `github_6318_*`,
+`distribution_01`, `future_promise`, `github_4377_filesystem`): a cost of not
+slicing, not a wrong answer. `map_char_key_ir{,_big_endian,_fail}` abort in
+`convert_typecast_to_ints_intmode` under `--ir --no-slice`, left open. And
+`heap_cxx03_fail` aborted `mk_eq` under `--no-slice`.
+
+That one reduces to C: `ptrdiff_t n = (a + 1) - a;` with `n` unused.
+`sub2t::do_simplify` folds `(base + X) - X` to `base` under an `is_bv_type`
+guard, and a pointer difference is bv-typed, so it returned the offset in the
+add's own type, 32 bits, for a 64-bit `ptrdiff_t`. Unsliced, the assignment
+reached the solver with mismatched widths. It is not a slicing artefact:
+`ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborts both solvers at the merge
+under default flags, and `n = end - begin` in a branch is ordinary C.
+
+**Fixed** by casting the folded operand to the difference's type; the fold
+still applies, and both sides count elements. Review found the same defect in
+the two neighbouring rules, `x - (x + y) -> -y` and `x - (x - y) -> y`:
+`a - (a + j)` and `p - (p - j)` aborted both solvers under default flags with
+no branch at all. They get the same cast, taken before the negation, since an
+unsigned offset negated in its own width and then widened reads as
+2^32 - j. Constant, negative, `unsigned`, `unsigned char`, `signed char` and
+`size_t` offsets match the native program.
+`pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` abort on
+master, both halves; `pointer_diff_unused` pins `--no-slice`, the rest default
+flags.
 
 ---
 

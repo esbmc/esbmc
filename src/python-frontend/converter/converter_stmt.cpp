@@ -1139,14 +1139,14 @@ typet python_converter::subscript_annotation_type(
   if (base == "Tuple" || base == "tuple")
     return get_type_from_annotation(var_node["annotation"], var_node);
 
-  // Optional[T] over a reference type is the T* a function returning it has,
-  // NULL for None; the bare "Optional" placeholder cannot hold None. A
-  // primitive T keeps the placeholder: its T* encoding cannot tell a zero
-  // value from None.
+  // Optional[T] takes the type a function returning it has: T* for a
+  // reference T (NULL for None), the Optional<T> struct for a scalar one. The
+  // bare "Optional" placeholder cannot hold None.
   if (base != "Optional")
     return typet();
   typet t = get_type_from_annotation(var_node["annotation"], var_node);
-  return t.is_pointer() && !is_scalar_pointee(t) ? t : typet();
+  return t.is_struct() || (t.is_pointer() && !is_scalar_pointee(t)) ? t
+                                                                    : typet();
 }
 
 std::pair<std::string, typet>
@@ -1241,6 +1241,22 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// A list element that may be a string or a number is read as a tagged
+/// scalar; the variable it is stored in becomes one too, whatever type an
+/// annotation (or the loop lowering's inferred one) gave it (#4797).
+void python_converter::adopt_tagged_element(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    !lhs_symbol || !type_handler_.is_tagged_scalar_type(rhs.type()) ||
+    type_handler_.is_tagged_scalar_type(lhs_symbol->get_type()))
+    return;
+  lhs_symbol->set_type(migrate_type(rhs.type()));
+  lhs.type() = rhs.type();
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1255,6 +1271,8 @@ void python_converter::handle_assignment_type_adjustments(
   // Don't rewrite lhs_symbol's type for a subscript target.
   if (assignment_target_is_subscript(ast_node))
     return;
+
+  rhs = wrap_literal_if_optional(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -6487,6 +6505,8 @@ void python_converter::get_var_assign(
       return;
     }
 
+    adopt_tagged_element(lhs_symbol, lhs, rhs);
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -7081,6 +7101,15 @@ exprt python_converter::apply_bool_dunder_for_not(
 
 exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
 {
+  // An optional is truthy when it holds a truthy value (#8016).
+  if (type_utils::is_optional_struct(cond.type()))
+  {
+    const exprt base = materialize_optional(cond, nlohmann::json());
+    return and_exprt(
+      not_exprt(member_exprt(base, "is_none", bool_type())),
+      typecast_exprt(unwrap_optional_if_needed(base), bool_type()));
+  }
+
   typet value_type = ns.follow(cond.type());
   if (value_type.is_pointer())
     value_type = ns.follow(value_type.subtype());
@@ -8161,14 +8190,7 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
-    // Wrap return value in Optional if the function returns Optional
-    if (current_func_return_type_.is_struct())
-    {
-      const struct_typet &st = to_struct_type(current_func_return_type_);
-      if (st.tag().as_string().starts_with("tag-Optional_"))
-        return_value =
-          wrap_in_optional(return_value, current_func_return_type_);
-    }
+    return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
 
@@ -8177,6 +8199,35 @@ void python_converter::get_return_statements(
     return_code.location() = location;
     target_block.copy_to_operands(return_code);
   }
+}
+
+/// \p value as the current function returns it (#8016): wrapped when the
+/// function returns Optional; when it cannot hold None, an optional's value,
+/// with None reported rather than read as zero.
+exprt python_converter::coerce_optional_return(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  if (type_utils::is_optional_struct(current_func_return_type_))
+    return wrap_in_optional(value, current_func_return_type_);
+  if (!type_utils::is_optional_struct(value.type()))
+    return value;
+  return narrow_optional_return(value, location, target_block);
+}
+
+exprt python_converter::narrow_optional_return(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  const exprt base = materialize_optional(value, nlohmann::json());
+  code_assertt not_none(not_exprt(member_exprt(base, "is_none", bool_type())));
+  not_none.location() = location;
+  not_none.location().comment(
+    "None returned from a function whose return type cannot hold None");
+  target_block.copy_to_operands(not_none);
+  return unwrap_optional_if_needed(base);
 }
 
 exprt python_converter::get_block(

@@ -1,0 +1,7 @@
+properties:
+  # R reads Clear, so the counter is at 0, and Done (CV >= PV = 2) is off, in
+  # every scan where Clear is on. An ignored R lets Done hold while Clear is on.
+  - id: P1
+    kind: invariant
+    expression: "!(Clear && Done)"
+    description: "Clear resets the counter"
