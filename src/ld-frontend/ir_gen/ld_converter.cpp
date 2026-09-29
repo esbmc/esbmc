@@ -6,6 +6,7 @@
 #include <util/message/message.h>
 #include <util/symtab/symbol.h>
 #include <map>
+#include <set>
 #include <stdexcept>
 
 ld_converter::ld_converter(contextt &context, const LdIR &ir)
@@ -746,6 +747,40 @@ void ld_converter::prepend_static_init()
 // Top-level convert()
 // -----------------------------------------------------------------------
 
+// A variable with both a set and a reset coil ends each scan in whichever of
+// them runs later, when both are powered: defined, but easy to misread.
+static void warn_set_and_reset(const LdIR &ir)
+{
+  std::set<std::string> internal;
+  for (const auto &v : ir.variables)
+    if (v.synthesized)
+      internal.insert(v.name);
+  std::map<std::string, CoilKind> last;
+  std::map<std::string, int> changes;
+  for (const auto &rung : ir.rungs)
+    for (const auto &n : rung.nodes)
+    {
+      if (
+        n.kind != LdIRNodeKind::CoilAssign ||
+        (n.coil_kind != CoilKind::Set && n.coil_kind != CoilKind::Reset) ||
+        internal.count(n.variable))
+        continue;
+      auto it = last.find(n.variable);
+      if (it != last.end() && it->second != n.coil_kind)
+        ++changes[n.variable];
+      last[n.variable] = n.coil_kind;
+    }
+  for (const auto &[var, n] : changes)
+    log_warning(
+      "LD: '{}' has both set and reset coils; in a scan where several are "
+      "powered, {}",
+      var,
+      n > 1 ? std::string("the last powered one in rung order wins")
+      : last[var] == CoilKind::Set
+        ? std::string("the set coil runs later and wins")
+        : std::string("the reset coil runs later and wins"));
+}
+
 void ld_converter::convert()
 {
   // REAL function-block arithmetic emits ieee_* operators, which reference
@@ -778,6 +813,8 @@ void ld_converter::convert()
   for (const auto &v : ir_.variables)
     declare_variable(v);
 
+  if (!fault_injection_) // every coil is a plain one then
+    warn_set_and_reset(ir_);
   code_blockt scan_body = build_scan_body(true_exprt());
   emit_scan_function(scan_body);
   emit_main_function();

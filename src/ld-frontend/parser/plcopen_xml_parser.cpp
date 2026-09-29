@@ -725,6 +725,7 @@ static bool parse_graphical_ld(
       v.is_output = driven;
       v.init_value = init;
       v.loc = loc;
+      v.synthesized = true;
       synth_vars.push_back(v);
       return name;
     };
