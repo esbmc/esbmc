@@ -2008,6 +2008,8 @@ regression/esbmc-cpp/cpp/placement_new_recursive_mem_init
 regression/esbmc-cpp/cpp/placement_new_recursive_mem_init_fail
 regression/esbmc-cpp/cpp/placement_new_recursive_label
 regression/esbmc-cpp/cpp/placement_new_recursive_label_fail
+regression/esbmc-cpp/cpp/github_8008_if_deref_member
+regression/esbmc-cpp/cpp/github_8008_if_deref_member_fail
 regression/esbmc-cpp/cpp/github_8008_if_target
 regression/esbmc/byte_view_row_anchor
 regression/esbmc/byte_view_row_anchor_fail
