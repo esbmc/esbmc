@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
 
 namespace fs = std::filesystem;
 
@@ -77,7 +78,21 @@ static std::string annotated_return_type(const nlohmann::json &returns)
   return "None";
 }
 
-static void add_function_def(module &md, const nlohmann::json &node)
+/// Module-level `X = T` aliases, which an importer cannot resolve on its own.
+static std::map<std::string, std::string>
+module_aliases(const nlohmann::json &body)
+{
+  std::map<std::string, std::string> aliases;
+  for (const auto &node : body)
+    if (json_utils::is_name_alias(node))
+      aliases[node["targets"][0]["id"]] = node["value"]["id"];
+  return aliases;
+}
+
+static void add_function_def(
+  module &md,
+  const nlohmann::json &node,
+  const std::map<std::string, std::string> &aliases)
 {
   function f;
   f.name_ = get_string_safe(node, "name");
@@ -85,6 +100,8 @@ static void add_function_def(module &md, const nlohmann::json &node)
     return;
 
   f.return_type_ = annotated_return_type(node["returns"]);
+  if (auto alias = aliases.find(f.return_type_); alias != aliases.end())
+    f.return_type_ = alias->second;
 
   if (json_utils::has_overload_decorator(node))
     md.add_overload(node);
@@ -151,6 +168,7 @@ static bool populate_module(module &md, const fs::path &json_path)
       return false;
     }
 
+    const auto aliases = module_aliases(ast["body"]);
     for (const auto &node : ast["body"])
     {
       std::string node_type =
@@ -167,7 +185,7 @@ static bool populate_module(module &md, const fs::path &json_path)
       }
 
       if (node_type == "FunctionDef")
-        add_function_def(md, node);
+        add_function_def(md, node, aliases);
       else if (node_type == "ClassDef")
         add_class_def(md, node);
     }

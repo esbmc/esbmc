@@ -358,6 +358,16 @@ public:
     const std::vector<unsigned char> &string_literal,
     const typet &t);
 
+  /// A class used as a value (`x = int`, `type(v)`): its name as a char array,
+  /// also held in `value` for the folds that read it back.
+  exprt make_class_object(const std::string &name);
+
+  static bool is_class_object(const exprt &expr)
+  {
+    return expr.is_constant() && expr.type().is_array() &&
+           !expr.get("value").empty();
+  }
+
   exprt get_literal(const nlohmann::json &element);
 
   locationt get_location_from_decl(const nlohmann::json &element) const;
