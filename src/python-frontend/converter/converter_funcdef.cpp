@@ -1485,6 +1485,8 @@ void python_converter::refine_any_param_to_list(
     return;
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
     python_expr::set_symbol_type_if_carried(*param_sym, param_arg.type());
+  if (seed_mixed_call_site_elements(param_id, func_name, param_index))
+    return;
   if (elem_type != typet())
     element_type_registry_.record(param_id, "", elem_type);
 }
@@ -1522,6 +1524,12 @@ void python_converter::seed_list_param_element_type(
 {
   const nlohmann::json &annotation = element["annotation"];
   const std::string kind = annotation.value("_type", "");
+  // Call sites mixing strings and numbers decide over an annotation the
+  // annotator inferred from a first element.
+  if (
+    current_class_name_.empty() &&
+    seed_mixed_call_site_elements(arg_id, id.get_function(), param_index))
+    return;
 
   if (
     kind == "Subscript" && annotation.contains("value") &&
@@ -1546,6 +1554,60 @@ void python_converter::seed_list_param_element_type(
   if (infer_list_elem_type_from_call_sites(
         id.get_function(), param_index, elem_type))
     element_type_registry_.record(arg_id, "", elem_type);
+}
+
+/// When every call site passes parameter \p param_index of \p func_name the
+/// same list literal shape mixing strings and numbers, records its element
+/// types in order for \p param_id, so the list's elements are read as tagged
+/// scalars (#4797). Reports whether it recorded anything.
+bool python_converter::seed_mixed_call_site_elements(
+  const std::string &param_id,
+  const std::string &func_name,
+  size_t param_index)
+{
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  std::optional<std::vector<typet>> shape;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json()).value("id", "") != func_name ||
+      call["args"].size() <= param_index)
+      continue;
+    nlohmann::json literal;
+    if (!list_literal_for_call_arg(
+          call["args"][param_index],
+          site.enclosing_function,
+          *ast_json,
+          literal))
+      return false;
+    std::vector<typet> elems;
+    // get_typet throws on an element it cannot classify (a nested list, a
+    // call); such a literal is not a string/number mix.
+    try
+    {
+      for (const auto &e : literal["elts"])
+        elems.push_back(type_handler_.get_typet(e));
+    }
+    catch (...)
+    {
+      return false;
+    }
+    if (shape && *shape != elems)
+      return false;
+    shape = std::move(elems);
+  }
+
+  const std::string probe = param_id + "$mixed_probe";
+  for (const typet &t : shape.value_or(std::vector<typet>()))
+    element_type_registry_.record(probe, "", t);
+  const bool mixed = element_type_registry_.mixes_str_and_number(probe);
+  if (mixed)
+    for (const typet &t : *shape)
+      element_type_registry_.record(param_id, "", t);
+  return mixed;
 }
 
 bool python_converter::infer_list_elem_type_from_call_sites(
