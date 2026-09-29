@@ -7,7 +7,7 @@
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/set/python_set.h>
@@ -1475,7 +1475,7 @@ exprt function_call_expr::handle_float_fromhex() const
     throw std::runtime_error(
       "float.fromhex() only supports the 0x...p... hexadecimal form");
 
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
   char *end = nullptr;
   const double d = std::strtod(t.c_str(), &end);
   if (end != t.c_str() + t.size() || !std::isfinite(d))
