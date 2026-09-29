@@ -249,27 +249,38 @@ alias_binds_name(const nlohmann::json &alias, const std::string &name)
                              : imported.substr(0, imported.find('.'))) == name;
 }
 
-/// Whether @p node, a statement or part of one, may bind @p name in the scope
-/// the statement runs in. Function and class bodies bind in scopes of their
-/// own and are not searched; a star import may bind any name.
-static bool may_bind_name(const nlohmann::json &node, const std::string &name)
+/// Whether @p node of type @p type names @p name as what it binds: an import
+/// alias, a parameter, or a def or class statement.
+static bool binds_by_name(
+  const nlohmann::json &node,
+  const std::string &type,
+  const std::string &name,
+  bool any_scope)
 {
-  const auto binds = [&](const nlohmann::json &child) {
-    return may_bind_name(child, name);
-  };
-  if (node.is_array())
-    return std::any_of(node.begin(), node.end(), binds);
-  if (!node.is_object())
-    return false;
-
-  const std::string type = node.value("_type", "");
-  const nlohmann::json bound = node.value("name", nlohmann::json());
   if (type == "alias")
     return alias_binds_name(node, name);
-  if (bound.is_string() && bound.get<std::string>() == name)
-    return true;
-  if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef")
-    return false;
+  if (type == "arg")
+    return any_scope && node.value("arg", "") == name;
+  const nlohmann::json bound = node.value("name", nlohmann::json());
+  return bound.is_string() && bound.get<std::string>() == name;
+}
+
+static bool may_bind_name(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_scope);
+
+/// Whether anything @p node of type @p type holds may bind @p name, reading a
+/// node that binds by itself rather than through a child.
+static bool may_bind_within(
+  const nlohmann::json &node,
+  const std::string &type,
+  const std::string &name,
+  bool any_scope)
+{
+  const auto binds = [&](const nlohmann::json &child) {
+    return may_bind_name(child, name, any_scope);
+  };
   if (type == "Name")
     return node.value("id", "") == name &&
            node.value("ctx", nlohmann::json::object()).value("_type", "") !=
@@ -277,8 +288,38 @@ static bool may_bind_name(const nlohmann::json &node, const std::string &name)
   // A bare annotation (`m: int`) records a type and binds nothing.
   if (type == "AnnAssign" && node.value("value", nlohmann::json()).is_null())
     return false;
-
   return std::any_of(node.begin(), node.end(), binds);
+}
+
+/// Whether @p node, a statement or part of one, may bind @p name. Bindings in
+/// nested function and class bodies count only with @p any_scope, which a call
+/// site needs: it sees the scope it stands in as well as the module's.
+static bool may_bind_name(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_scope)
+{
+  if (node.is_array())
+    return std::any_of(
+      node.begin(), node.end(), [&](const nlohmann::json &child) {
+        return may_bind_name(child, name, any_scope);
+      });
+  if (!node.is_object())
+    return false;
+
+  const std::string type = node.value("_type", "");
+  if (binds_by_name(node, type, name, any_scope))
+    return true;
+  if (type == "alias" || type == "arg")
+    return false;
+  if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef")
+    return any_scope &&
+           std::any_of(
+             node.begin(), node.end(), [&](const nlohmann::json &child) {
+               return may_bind_name(child, name, any_scope);
+             });
+
+  return may_bind_within(node, type, name, any_scope);
 }
 
 bool python_converter::class_binds_name(
@@ -286,7 +327,8 @@ bool python_converter::class_binds_name(
   const std::string &name) const
 {
   const nlohmann::json *node = sole_class_binding(class_name);
-  return node && may_bind_name(node->value("body", nlohmann::json()), name);
+  return node &&
+         may_bind_name(node->value("body", nlohmann::json()), name, false);
 }
 
 const nlohmann::json *
@@ -295,7 +337,8 @@ python_converter::sole_class_binding(const std::string &name) const
   const nlohmann::json *found = nullptr;
   for (const auto &stmt : (*ast_json)["body"])
   {
-    if (!may_bind_name(stmt, name))
+    // Any scope: a name the call site's own function binds is not this class.
+    if (!may_bind_name(stmt, name, true))
       continue;
     if (found || stmt.value("_type", "") != "ClassDef")
       return nullptr;
