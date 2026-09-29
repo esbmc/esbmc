@@ -415,7 +415,8 @@ void python_class_builder::build(codet &out)
   get_members(st, out, has_ud_base);
   gen_ctor(has_ud_base, st);
 
-  // Finalize type and clear context
-  sym->set_type(st);
+  // Finalize type and clear context. The seam drops the methods list and the
+  // components' access, which no Python reader needs.
+  sym->set_type(migrate_type(st));
   conv_.current_class_name_.clear();
 }
