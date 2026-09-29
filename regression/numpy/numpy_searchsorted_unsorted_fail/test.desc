@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: ValueError: numpy.searchsorted\(\) requires the input array to be sorted
+^VERIFICATION FAILED$
+numpy.searchsorted\(\) requires the input array to be sorted

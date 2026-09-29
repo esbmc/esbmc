@@ -148,6 +148,10 @@ public:
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
 
+  /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
+  /// handled.
+  typet get_optional_type(const nlohmann::json &slice);
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
@@ -712,6 +716,28 @@ private:
   std::optional<exprt>
   try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
 
+  std::optional<std::vector<std::size_t>>
+  get_numpy_constructor_shape(const nlohmann::json &node) const;
+
+  std::optional<exprt> try_get_numpy_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  void reject_numpy_shape_attr_on_nonobject_call_result(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  bool should_reject_numpy_shape_attr_on_symbol(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  std::optional<exprt> try_get_numpy_bool_mask_rows_shape_attr(
+    const exprt &base_expr,
+    const typet &base_type,
+    const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -1138,6 +1164,10 @@ private:
     size_t param_index);
 
   /// Recovers a bare `list` parameter's element type from its call sites.
+  bool seed_mixed_call_site_elements(
+    const std::string &param_id,
+    const std::string &func_name,
+    size_t param_index);
   bool infer_list_elem_type_from_call_sites(
     const std::string &func_name,
     size_t param_index,
@@ -1613,6 +1643,25 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  bool update_numpy_array_binding_from_name(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
+  bool preserve_conditional_numpy_alias_shape(
+    const std::string &lhs_id,
+    const std::string &rhs_id,
+    bool unconditional_assignment);
+
+  void copy_numpy_alias_shape_state(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  void reject_conditional_numpy_alias_rebind(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node) const;
+
   bool record_numpy_view_copy_from_returned_argument(
     const exprt &lhs,
     const std::string &lhs_id,
@@ -2048,7 +2097,23 @@ private:
   // =========================================================================
 
   /// Wrap values in Optional
+  typet optional_return_type(
+    const nlohmann::json &function_node,
+    const typet &declared);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+  /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
+  exprt wrap_if_optional(const exprt &value, const typet &type)
+  {
+    return type_utils::is_optional_struct(type) ? wrap_in_optional(value, type)
+                                                : value;
+  }
+  /// A (non-None) literal stored into an Optional<T> variable, wrapped (#8016).
+  exprt wrap_literal_if_optional(const exprt &value, const typet &type);
+  typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
+  exprt get_return_value(const nlohmann::json &value);
+  typet subscript_annotation_type(
+    const std::string &base,
+    const nlohmann::json &var_node);
 
   // =========================================================================
   // Enum support helpers
@@ -2061,7 +2126,24 @@ private:
     const std::string &class_name,
     const std::string &member_name);
 
+  void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
+
   /// Handle Optional value access
+  exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt coerce_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt narrow_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt resolve_optional_operands(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element,
+    bool is_none_check);
   exprt unwrap_optional_if_needed(
     const exprt &expr,
     const nlohmann::json &element = nlohmann::json());
@@ -2129,6 +2211,9 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// The target of a ternary that is itself a return value; see
+  /// optional_ternary_type.
+  typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;
@@ -2246,6 +2331,7 @@ private:
   // and the array-consuming numpy calls (transpose, sort/argsort/
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
+  std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

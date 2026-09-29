@@ -367,7 +367,8 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 
 // CounterStep: IEC 61131-3 §2.5.2.3 — edge-triggered on rising CU/CD.
 //   CTU: if (CU && !CU_prev) CV++;  if (R) CV:=0;  CU_prev:=CU; Q:=(CV>=PV)
-//   CTD: if (CD && !CD_prev) CV--;  CD_prev:=CD; Q:=(CV<=0)
+//   CTD: if (LD) CV:=PV; else if (CD && !CD_prev) CV--;  CD_prev:=CD;
+//        Q:=(CV<=0)
 codet ld_converter::translate_counter(const LdIRNode &n)
 {
   code_blockt blk;
@@ -423,7 +424,21 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       binary_relation_exprt(cv, ">", int_min()));
     cd_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
-    blk.copy_to_operands(cd_step);
+
+    if (n.ctr_LD.empty())
+      blk.copy_to_operands(cd_step);
+    else
+    {
+      const exprt pv =
+        n.ctr_PV.empty()
+          ? zero
+          : static_cast<exprt>(typecast_exprt(var_expr(n.ctr_PV), cv.type()));
+      code_ifthenelset load;
+      load.cond() = var_expr(n.ctr_LD);
+      load.then_case() = code_assignt(cv, pv);
+      load.else_case() = cd_step;
+      blk.copy_to_operands(load);
+    }
 
     blk.copy_to_operands(code_assignt(cd_prev, cd));
     blk.copy_to_operands(
@@ -535,7 +550,8 @@ void ld_converter::declare_user_fb_interfaces()
       declare_scoped(prefix + v.name, type_of_kind(v.kind));
     for (const auto &v : ex.local_vars)
       declare_scoped(prefix + v.name, type_of_kind(v.kind));
-    declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
+    for (const auto &v : ex.output_vars)
+      declare_scoped(prefix + v.name, type_of_kind(v.kind));
   }
   // Translate every body up front, so a wire from a block whose body cannot be
   // translated is known to be unmodelled wherever it is read.
@@ -575,7 +591,8 @@ code_blockt ld_converter::translate_fb_body(const UserFBExec &ex)
     declared_kinds[v.name] = v.kind;
   for (const auto &v : ex.local_vars)
     declared_kinds[v.name] = v.kind;
-  declared_kinds[ex.output_var] = ex.output_kind;
+  for (const auto &v : ex.output_vars)
+    declared_kinds[v.name] = v.kind;
 
   st_fb_translator::resolver_t resolve =
     [this, prefix, &declared_kinds](const std::string &nm) -> symbol_exprt {

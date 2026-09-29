@@ -3284,15 +3284,24 @@ std::optional<exprt> python_list::resolve_nested_list_element(
 typet python_list::tagged_elem_type_or(
   const exprt &array,
   bool constant_index,
+  const nlohmann::json &list_node,
   const typet &fallback) const
 {
-  if (constant_index || !array.is_symbol())
+  // A constant index into a literal-backed list already read its own
+  // element's type; into anything else it fell back to one type.
+  const bool literal_backed =
+    list_node.is_object() && list_node.contains("value") &&
+    list_node["value"].is_object() && list_node["value"].contains("elts");
+  if ((constant_index && literal_backed) || !array.is_symbol())
     return fallback;
-  const typet uniform =
-    elem_types().uniform_element_type(array.identifier().as_string());
-  return converter_.get_type_handler().is_tagged_scalar_type(uniform)
-           ? uniform
-           : fallback;
+  // A list mixing strings and numbers has no single static element type
+  // either: read its element as a tagged scalar too (#4797).
+  const std::string id = array.identifier().as_string();
+  const type_handler &th = converter_.get_type_handler();
+  if (elem_types().mixes_str_and_number(id))
+    return th.get_tagged_object_type();
+  const typet uniform = elem_types().uniform_element_type(id);
+  return th.is_tagged_scalar_type(uniform) ? uniform : fallback;
 }
 
 bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
@@ -3728,7 +3737,8 @@ exprt python_list::handle_index_access(
           converter_.ast());
         if (!base_decl.is_null() && base_decl.contains("annotation"))
         {
-          nlohmann::json drilled = base_decl["annotation"];
+          nlohmann::json drilled =
+            unwrap_optional_annotation(base_decl["annotation"]);
           for (size_t k = 0; k < subscript_depth; ++k)
           {
             if (
@@ -3970,7 +3980,8 @@ exprt python_list::handle_index_access(
     // the generic `*(long *)item->value` unwrap and read 8 bytes out of a
     // payload that is 2 for "a". Narrowed to the tagged case: every other
     // element kind keeps whatever the code above resolved.
-    elem_type = tagged_elem_type_or(array, constant_index, elem_type);
+    elem_type =
+      tagged_elem_type_or(array, constant_index, list_node, elem_type);
 
     // A float-typed element read must dispatch on the stored type_id even for a
     // constant index into a statically "pure-float" list: a list[float]
