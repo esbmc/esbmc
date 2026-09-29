@@ -191,7 +191,8 @@ public:
   void assume_assertion(const expr2tc &guard, const ai_baset &ai);
 
   /**
-   * @brief Updates the interval state based on a single goto-program instruction.
+   * @brief Updates the interval state based on a single goto-program
+   * instruction.
    *
    * Handles ASSIGN, ASSUME, DECL, DEAD and FUNCTION_CALL without requiring an
    * ai_baset reference.

@@ -64,6 +64,17 @@ bool is_terminating_call(const irep_idt &identifier)
   return terminators.count(trailing_symbol_name(identifier)) != 0;
 }
 
+// The interval domain never sees a callee's parameter bindings (#8055).
+void havoc_parameters(
+  std::optional<interval_domaint> &domain,
+  const code_type2t &type)
+{
+  if (!domain)
+    return;
+  for (std::size_t i = 0; i < type.arguments.size(); ++i)
+    domain->havoc_rec(symbol2tc(type.arguments[i], type.argument_names[i]));
+}
+
 // A recursive function has a *reachable base case* iff some path from its
 // entry leaves the function — reaching END_FUNCTION or a terminating call
 // (exit/abort/...) — without going through a direct recursive self-call. If no
@@ -665,11 +676,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.va_index = argument_assignments(identifier, function_type, arguments);
   frame.va_cursor = frame.va_index;
 
-  // The interval domain never sees these parameter bindings (#8055).
-  if (interval_domain_state)
-    for (std::size_t i = 0; i < function_type.arguments.size(); ++i)
-      interval_domain_state->havoc_rec(
-        symbol2tc(function_type.arguments[i], function_type.argument_names[i]));
+  havoc_parameters(interval_domain_state, function_type);
 }
 
 // True if a function of type `candidate` may be called through a function
