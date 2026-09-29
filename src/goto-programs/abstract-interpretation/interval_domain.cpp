@@ -1643,7 +1643,11 @@ void interval_domaint::process_instruction(goto_programt::const_targett from)
   case FUNCTION_CALL:
   {
     const expr2tc &ret = to_code_function_call2t(instruction.code).ret;
-    if (!is_nil_expr(ret))
+    if (is_nil_expr(ret))
+      break;
+    if (is_dereference2t(ret))
+      clear_state();
+    else
       havoc_rec(ret);
     break;
   }

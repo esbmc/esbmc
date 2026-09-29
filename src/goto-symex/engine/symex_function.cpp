@@ -1064,6 +1064,12 @@ void goto_symext::pop_frame()
   // retire locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // The interval domain is keyed by L0 name, so a recursive callee's
+    // locals would otherwise overwrite its caller's instances (#8055).
+    if (interval_domain_state)
+      interval_domain_state->havoc_rec(
+        symbol2tc(get_empty_type(), it.base_name));
+
     // Python objects are garbage-collected (issue #4773): keep user class
     // instances alive past their defining frame so references captured into a
     // returned/escaping aggregate stay valid. Skip tearing down their L2 and
