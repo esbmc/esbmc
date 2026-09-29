@@ -2148,6 +2148,35 @@ exprt python_list::guard_numpy_pointer_view_index(
     index, info_it->second.length, info_it->second.stride, slice_node);
 }
 
+exprt python_list::guard_numpy_static_array_index(
+  const exprt &array,
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  if (
+    index.is_constant() || !converter_.safe_to_emit_side_effecting_statement())
+    return index;
+
+  if (is_numpy_param_negative_index_target(array))
+  {
+    const std::vector<std::size_t> &shape =
+      converter_.numpy_param_shapes_.at(array.identifier().as_string());
+    return normalize_and_scale_index(
+      index, static_cast<long long>(shape[0]), /*stride=*/1, slice_node);
+  }
+
+  if (!array.type().is_array())
+    return index;
+
+  const array_typet &array_type = to_array_type(array.type());
+  if (!array_type.size().is_constant())
+    return index;
+
+  const long long length =
+    binary2integer(array_type.size().value().c_str(), false).to_int64();
+  return normalize_and_scale_index(index, length, /*stride=*/1, slice_node);
+}
+
 std::optional<exprt> python_list::try_build_flat_index_assignment_target(
   const exprt &array,
   const nlohmann::json &index_node)
@@ -4172,6 +4201,7 @@ exprt python_list::handle_index_access(
   // Handle static arrays
   exprt guarded_pos =
     guard_numpy_pointer_view_index(array, pos_expr, slice_node);
+  guarded_pos = guard_numpy_static_array_index(array, guarded_pos, slice_node);
   return try_build_row_pointer_view(array, slice_node)
     .value_or(build_index(array, guarded_pos, array.type().subtype()));
 }

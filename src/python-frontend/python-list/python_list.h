@@ -758,6 +758,11 @@ private:
     const exprt &index,
     const nlohmann::json &slice_node);
 
+  exprt guard_numpy_static_array_index(
+    const exprt &array,
+    const exprt &index,
+    const nlohmann::json &slice_node);
+
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
