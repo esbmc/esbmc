@@ -1980,6 +1980,12 @@ regression/esbmc-cpp/cpp/member_init_elided_copy
 regression/esbmc-cpp/cpp/member_init_elided_copy_fail
 regression/esbmc-cpp/cpp/member_init_converting_ctor
 regression/esbmc-cpp/cpp/member_init_converting_ctor_fail
+regression/esbmc/byte_view_row_anchor
+regression/esbmc/byte_view_row_anchor_fail
+regression/esbmc/byte_walk_row
+regression/esbmc/byte_walk_row_fail
+regression/esbmc/byte_view_3d_anchor
+regression/esbmc/byte_view_3d_anchor_fail
 regression/esbmc/pointer_diff_branch
 regression/esbmc/pointer_diff_branch_fail
 regression/esbmc/pointer_diff_unused
