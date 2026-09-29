@@ -1260,6 +1260,11 @@ regression/python/github_6211_shortcircuit
 regression/python/github_3707
 regression/python/github_6258
 regression/esbmc/interval_symex_guard_fail
+regression/esbmc/github_8055
+regression/esbmc/github_8055_extern
+regression/esbmc/github_8055_global
+regression/esbmc/github_8055_param
+regression/esbmc/github_8055_safe
 regression/python/import-error2
 regression/python/string-rfind-more-fail
 regression/python/optional7

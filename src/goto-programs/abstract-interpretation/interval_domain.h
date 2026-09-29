@@ -193,7 +193,8 @@ public:
   /**
    * @brief Updates the interval state based on a single goto-program instruction.
    *
-   * Handles ASSIGN, ASSUME, DECL, and DEAD without requiring an ai_baset reference.
+   * Handles ASSIGN, ASSUME, DECL, DEAD and FUNCTION_CALL without requiring an
+   * ai_baset reference.
    * Intended for online use during symbolic execution (default guard pruning;
    * disable guard with --no-interval-symex-guard; assertion pruning via
    * --interval-symex-assert).
@@ -205,6 +206,17 @@ public:
   /// one, over every variable: a path narrows intervals by ASSUME as well as
   /// by assignment, so joining only the phi-assigned variables is unsound.
   void join_snapshot(const std::shared_ptr<interval_map> &snapshot);
+
+  /**
+   * @brief Recursively explores an Expression until it reaches a symbol, then
+   * removes it from the int_map whatever the symbol's type
+   *
+   * TODO: There are a lot of expressions that are not supported
+   * TODO: A utility function that recursively extracts all the symbols of an
+   * expr would be very useful
+   * @param expr
+   */
+  void havoc_rec(const expr2tc &expr);
 
   /**
    * @brief Uses the abstract state to simplify a given expression using context-
@@ -249,17 +261,6 @@ protected:
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
-
-  /**
-   * @brief Recursively explores an Expression until it reaches a symbol, then
-   * removes it from the int_map whatever the symbol's type
-   *
-   * TODO: There are a lot of expressions that are not supported
-   * TODO: A utility function that recursively extracts all the symbols of an
-   * expr would be very useful
-   * @param expr
-   */
-  void havoc_rec(const expr2tc &expr);
 
   /**
    * @brief Recursively explores intervals of an assume expression

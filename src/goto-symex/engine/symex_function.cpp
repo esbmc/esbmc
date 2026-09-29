@@ -661,9 +661,15 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 
   // assign arguments (goto_function.type is already IREP2)
-  frame.va_index = argument_assignments(
-    identifier, to_code_type(goto_function.type), arguments);
+  const code_type2t &function_type = to_code_type(goto_function.type);
+  frame.va_index = argument_assignments(identifier, function_type, arguments);
   frame.va_cursor = frame.va_index;
+
+  // The interval domain never sees these parameter bindings (#8055).
+  if (interval_domain_state)
+    for (std::size_t i = 0; i < function_type.arguments.size(); ++i)
+      interval_domain_state->havoc_rec(
+        symbol2tc(function_type.arguments[i], function_type.argument_names[i]));
 }
 
 // True if a function of type `candidate` may be called through a function
@@ -1138,6 +1144,10 @@ void goto_symext::symex_return(const expr2tc &code)
   // put into state-queue
   statet::merge_state_listt &merge_state_list =
     cur_state->top().merge_state_map[cur_state->top().end_of_function];
+
+  // The interval domain does not see the write to the caller's lhs (#8055).
+  if (interval_domain_state && !is_nil_expr(cur_state->top().return_value))
+    interval_domain_state->havoc_rec(cur_state->top().return_value);
 
   merge_state_list.emplace_back(*cur_state);
   record_parked_path(
