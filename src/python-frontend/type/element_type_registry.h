@@ -114,6 +114,12 @@ public:
     const std::string &id,
     type_slot slot = type_slot::elements) const;
 
+  /// True when both a string and a number (int, float or bool) are recorded:
+  /// no single static type reads every element.
+  bool mixes_str_and_number(
+    const std::string &id,
+    type_slot slot = type_slot::elements) const;
+
   /// The shared type of every recorded element, or nil when nothing is
   /// recorded or the elements disagree.
   typet uniform_element_type(

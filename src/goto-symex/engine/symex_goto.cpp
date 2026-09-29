@@ -436,13 +436,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   merge_state_list.emplace_back(*cur_state);
   record_parked_path(new_state_pc, std::prev(merge_state_list.end()));
 
-  // Capture the interval domain at the if-branch end so phi_function can JOIN
-  // both branches.  Deep-copy so subsequent else-branch writes don't corrupt
-  // it.
-  if (interval_domain_state)
-    merge_state_list.back().interval_snapshot =
-      std::make_shared<interval_domaint::interval_map>(
-        *interval_domain_state->intervals);
+  snapshot_interval_domain(merge_state_list.back());
 
   // adjust guards
   if (new_guard_true)
@@ -575,6 +569,8 @@ void goto_symext::merge_gotos()
 
       merge_value_sets(merge_state);
 
+      merge_interval_domain(merge_state);
+
       // adjust depth
       cur_state->num_instructions =
         std::min(cur_state->num_instructions, merge_state.num_instructions);
@@ -585,6 +581,29 @@ void goto_symext::merge_gotos()
 
   // clean up to save some memory
   frame.merge_state_map.erase(state_map_it);
+}
+
+void goto_symext::snapshot_interval_domain(statet::merge_statet &merge_state)
+{
+  if (!interval_domain_state)
+    return;
+  // Share the map; clearing `copied` makes the continuing path copy it before
+  // its next write.
+  merge_state.interval_snapshot = interval_domain_state->intervals;
+  interval_domain_state->copied = false;
+}
+
+void goto_symext::merge_interval_domain(const statet::merge_statet &merge_state)
+{
+  if (!interval_domain_state)
+    return;
+
+  if (merge_state.interval_snapshot)
+    interval_domain_state->join_snapshot(
+      std::static_pointer_cast<interval_domaint::interval_map>(
+        merge_state.interval_snapshot));
+  else
+    interval_domain_state->make_top();
 }
 
 void goto_symext::merge_locality(const statet::merge_statet &src)
@@ -745,18 +764,6 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     cur_state->rename_type(new_lhs);
     cur_state->rename_type(rhs);
     cur_state->assignment(new_lhs, rhs);
-
-    // process_instruction never sees synthetic phi assignments; update the
-    // interval domain here using the if-branch snapshot so the JOIN is correct
-    // (both SSA names share the same base-name key in the domain).
-    if (
-      interval_domain_state && merge_state.interval_snapshot &&
-      !cur_state->guard.is_false() && !merge_state.guard.is_false())
-    {
-      auto snap = std::static_pointer_cast<interval_domaint::interval_map>(
-        merge_state.interval_snapshot);
-      interval_domain_state->phi_join_with_snapshot(new_lhs, snap);
-    }
 
     target->assignment(
       gen_true_expr(),

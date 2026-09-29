@@ -2,6 +2,7 @@
 
 #include <util/lang/c_types.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_types.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/type.h>
 
@@ -68,6 +69,16 @@ struct TypeFlags
 class type_utils
 {
 public:
+  /// A parameter's id, preferring `#identifier`: frontends disagree on which
+  /// key holds it and only `#identifier` crosses the IREP2 seam
+  /// (clang_cpp_convert.cpp:2880 sets the plain key alone).
+  static const irep_idt &
+  argument_identifier(const code_typet::argumentt &argument)
+  {
+    return argument.get_identifier().empty() ? argument.identifier()
+                                             : argument.get_identifier();
+  }
+
   static bool is_builtin_type(const std::string &name)
   {
     return (
@@ -205,6 +216,20 @@ public:
   static void remove_member_name(typet &t)
   {
     t.remove_member_name();
+  }
+
+  // A scalar T whose `Optional[T]` is the Optional<T> struct, not a T*.
+  static bool is_optional_scalar(const typet &t)
+  {
+    return t == long_long_int_type() || t == long_long_uint_type() ||
+           t == double_type() || t == bool_type();
+  }
+
+  // The Optional<T> struct type_handler::build_optional_type makes.
+  static bool is_optional_struct(const typet &t)
+  {
+    return t.is_struct() &&
+           to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
   }
 
   static bool is_char_type(const typet &t)

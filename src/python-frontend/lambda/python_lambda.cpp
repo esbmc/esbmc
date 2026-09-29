@@ -54,7 +54,7 @@ void python_lambda::handle_lambda_assignment(
 
   // Create function pointer type
   typet func_ptr_type = gen_pointer_type(lambda_func_symbol->get_type());
-  lhs_symbol->set_type(func_ptr_type);
+  python_expr::set_function_type(*lhs_symbol, func_ptr_type);
   lhs.type() = func_ptr_type;
 
   // Convert lambda symbol to address
@@ -252,10 +252,8 @@ symbolt python_lambda::create_symbol(
   symbolt symbol;
   symbol.id = id;
   symbol.name = name;
-  // A function type, or a pointer to one, keeps its arguments' plain
-  // identifiers only legacy-side (docs/roadmap/scope-python-irep2.md §11).
   if (type.is_code() || (type.is_pointer() && type.subtype().is_code()))
-    symbol.set_type(type);
+    python_expr::set_function_type(symbol, type);
   else
     python_expr::set_symbol_type_if_carried(symbol, type);
   symbol.location = location;
@@ -1097,8 +1095,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
         {
           typet t = added_symbol->get_type();
           to_code_type(t).return_type() = actual_ret;
-          // Legacy type: migrate_type drops the parameters' default values.
-          added_symbol->set_type(t);
+          python_expr::set_function_type(*added_symbol, to_code_type(t));
         }
       }
     }

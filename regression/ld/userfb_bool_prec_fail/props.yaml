@@ -1,0 +1,8 @@
+properties:
+  # Twin of the PREC check in userfb_bool_ops_safe. A OR B AND C groups as
+  # A OR (B AND C), so it differs from (A OR B) AND C when A is on and C is off.
+  # Giving OR the tighter binding would make this hold (#7579).
+  - id: P1
+    kind: invariant
+    expression: "(!g0__PREC_OUT || ((g0__A || g0__B) && g0__C)) && (g0__PREC_OUT || !((g0__A || g0__B) && g0__C))"
+    description: "Deliberately false: A OR B AND C groups as (A OR B) AND C"

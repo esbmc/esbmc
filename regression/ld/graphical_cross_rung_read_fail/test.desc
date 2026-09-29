@@ -1,0 +1,4 @@
+CORE
+fb.ld
+--ld-props props.yaml --unwind 1 --no-unwinding-assertions
+^VERIFICATION FAILED$

@@ -97,6 +97,12 @@ private:
   // out-of-scope keyword arguments.
   const nlohmann::json *find_keyword_arg(const std::string &name) const;
 
+  void reject_invalid_eye_identity_args(const std::string &function) const;
+
+  nlohmann::json eye_column_arg_or_default(
+    const std::string &function,
+    const nlohmann::json &default_arg) const;
+
   // Routes to the below for "diagonal"/"trace"/"fill_diagonal"/"ravel",
   // std::nullopt otherwise. Split out of get() for the same reason as
   // get_arange_expr(): keeping that function's own decision count from
@@ -291,6 +297,17 @@ private:
   // handle_searchsorted_call's final step over an AST-literal `search_space`.
   exprt handle_searchsorted_call_over_literal(
     nlohmann::json search_space,
+    bool right);
+
+  std::optional<exprt> try_searchsorted_sorter_descriptor_fallback(
+    const nlohmann::json *sorter_node,
+    const std::string &array_name,
+    bool right);
+
+  exprt finish_searchsorted_call(
+    std::optional<nlohmann::json> literal_arg,
+    const nlohmann::json *sorter_node,
+    const std::string &array_name,
     bool right);
 
   // np.sum(identity(x))/np.argmin(identity(x)): a reducer's argument reaches

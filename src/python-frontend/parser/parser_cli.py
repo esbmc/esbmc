@@ -212,6 +212,7 @@ def main(*, deps: CliDeps) -> int | None:
             propagate_range_aliases=callbacks_deps.propagate_range_aliases,
             generate_ast_json=callbacks_deps.generate_ast_json,
         ),
+        entry_tree=tree,
     )
 
     for module_name, imported_preprocessor in import_resolver.imported_signature_sources:

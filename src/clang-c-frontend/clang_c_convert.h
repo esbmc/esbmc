@@ -145,6 +145,12 @@ protected:
     const locationt &location_begin,
     exprt &new_expr);
 
+  std::string header_internal_suffix(const clang::NamedDecl &nd);
+  /// Internal-linkage functions and variables sharing a USR, in the order they
+  /// were first named; see header_internal_suffix.
+  std::unordered_map<std::string, std::vector<const clang::Decl *>>
+    internal_copies;
+
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
   virtual bool get_function_body(
