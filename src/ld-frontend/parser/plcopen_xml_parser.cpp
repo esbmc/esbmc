@@ -10,6 +10,7 @@
 #include <limits>
 #include <unordered_map>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <set>
 
@@ -163,6 +164,19 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   return v;
 }
 
+// The variable wired to the first of `ports` a textual block names. CODESYS
+// spells the CTD load pin LOAD where IEC 61131-3 says LD.
+static std::string formal_var(
+  const pugi::xml_node &block,
+  std::initializer_list<const char *> ports)
+{
+  for (const char *port : ports)
+    for (auto var : block.children("variable"))
+      if (std::string(var.attribute("formalParameter").as_string()) == port)
+        return var.child_value();
+  return {};
+}
+
 // -----------------------------------------------------------------------
 // Rung element parsing
 // -----------------------------------------------------------------------
@@ -242,6 +256,7 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
       elem.counter_fb.CU_var = get_var("CU");
       elem.counter_fb.CD_var = get_var("CD");
       elem.counter_fb.R_var = get_var("R");
+      elem.counter_fb.LD_var = formal_var(n, {"LD", "LOAD"});
       elem.counter_fb.PV_var = get_var("PV");
       elem.counter_fb.Q_var = get_var("Q");
       elem.counter_fb.CV_var = get_var("CV");
@@ -293,8 +308,7 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
 // block); each path is a series contact chain (AND) and the paths reaching
 // one sink are alternatives (OR).
 //
-// Rungs are emitted per sink in rightPowerRail order, which is the order in
-// which the vendor tool draws them and therefore the scan execution order.
+// Rungs are emitted per sink in the order Beremiz executes them (step 6).
 // A function block encountered on a path is emitted just before the first
 // sink that consumes it, so a block still observes the values written by the
 // rungs drawn above it.
@@ -313,7 +327,10 @@ struct GNode
   std::string instance_name;          // block instanceName
   std::string expression;             // inVariable literal text (T#20s, 5, ...)
   std::map<std::string, int> in_pins; // formalParameter -> source localId
+  std::map<std::string, std::string> in_pin_source; // formal -> source's pin
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
+  int x = 0, y = 0;       // <position>
+  int document_order = 0; // index among the body's children
 };
 
 static const std::string &label(const GNode &g)
@@ -449,9 +466,80 @@ static FBKind fb_kind_of(const std::string &s)
   return it->second;
 }
 
+// A bare identifier names a variable; TRUE/FALSE and typed literals do not.
+static bool is_identifier(const std::string &text)
+{
+  if (text.empty() || text == "TRUE" || text == "FALSE")
+    return false;
+  if (!isalpha(static_cast<unsigned char>(text[0])) && text[0] != '_')
+    return false;
+  return text.find('#') == std::string::npos;
+}
+
 static bool is_coil_tag(const std::string &t)
 {
   return t == "coil" || t == "SetCoil" || t == "ResetCoil";
+}
+
+// Only a timer or counter step assigns the Q a block's power flow is named
+// after.
+static bool steps_every_scan(const std::string &type_name)
+{
+  try
+  {
+    const FBKind k = fb_kind_of(type_name);
+    return k == FBKind::TON || k == FBKind::TOF || k == FBKind::TP ||
+           k == FBKind::CTU || k == FBKind::CTD;
+  }
+  catch (const LdParseError &)
+  {
+    return false;
+  }
+}
+
+// Resolve a counter's Boolean control pin (R, LD) to the value it carries: the
+// power flow of a contact or block wired to it, or a variable wired to it
+// directly. Empty when the pin is unwired.
+static std::string control_pin(
+  const std::unordered_map<int, GNode> &nodes,
+  const std::set<int> &rail_reaches,
+  const GNode &block,
+  const std::string &instance,
+  std::initializer_list<const char *> pins,
+  const std::function<std::string(int)> &power_flow)
+{
+  for (const char *pin : pins)
+  {
+    auto it = block.in_pins.find(pin);
+    if (it == block.in_pins.end() || !nodes.count(it->second))
+      continue;
+    const int src = it->second;
+    const GNode &s = nodes.at(src);
+    const std::string what = instance + " pin " + pin;
+    const bool is_block = s.tag == "block" || s.tag == "Block";
+    if (s.tag != "contact" && !is_block)
+    {
+      if (is_identifier(s.expression))
+        return s.expression;
+      throw UnsupportedConstructError(what + " driven by " + s.tag, 2);
+    }
+    // Unreachable, it would read false in every scan (see step 4).
+    if (!rail_reaches.count(src))
+      throw UnsupportedConstructError(what + " driven by no power", 2);
+    if (is_block && !steps_every_scan(s.type_name))
+      throw UnsupportedConstructError(what + " driven by " + s.type_name, 2);
+    // A block's power flow is its Q; ENO, CV or ET read as Q would be wrong.
+    const auto source = block.in_pin_source.find(pin);
+    if (
+      is_block &&
+      (source == block.in_pin_source.end() || source->second != "Q"))
+      throw UnsupportedConstructError(
+        what + " driven by " + s.type_name + " output " +
+          (source == block.in_pin_source.end() ? "" : source->second),
+        2);
+    return power_flow(src);
+  }
+  return "";
 }
 
 static bool parse_graphical_ld(
@@ -503,6 +591,8 @@ static bool parse_graphical_ld(
         storage_attr = "reset";
     }
     g.storage = storage_attr;
+    g.x = child.child("position").attribute("x").as_int(0);
+    g.y = child.child("position").attribute("y").as_int(0);
 
     if (t == "block" || t == "Block")
     {
@@ -517,13 +607,18 @@ static bool parse_graphical_ld(
         auto conn = pin.select_node(".//connection").node();
         const int src = conn.attribute("refLocalId").as_int(-1);
         if (!formal.empty() && src >= 0)
+        {
           g.in_pins[formal] = src;
+          g.in_pin_source[formal] =
+            conn.attribute("formalParameter").as_string("");
+        }
       }
     }
 
     if (t == "inVariable")
       g.expression = child.child_value("expression");
 
+    g.document_order = static_cast<int>(nodes.size());
     nodes[lid] = g;
   }
 
@@ -641,31 +736,6 @@ static bool parse_graphical_ld(
     return e;
   };
 
-  // A variable both written by a coil and read by a contact closes a feedback
-  // loop across the network. IEC 61131-3 §4.1.3 requires the loop variable to
-  // be read at its value on entry to the network, so contacts read a snapshot
-  // taken before any rung runs rather than whatever an earlier coil left.
-  // Without this the network's meaning depends on the order the resolver
-  // happens to emit its sinks in — exactly the order-dependence §3.2 rejects.
-  std::set<std::string> feedback_vars;
-  {
-    std::set<std::string> written, sensed;
-    for (auto &[lid, g] : nodes)
-    {
-      (void)lid;
-      if (is_coil_tag(g.tag) && !g.var.empty())
-        written.insert(g.var);
-      if (g.tag == "contact" && !g.var.empty())
-        sensed.insert(g.var);
-    }
-    for (const auto &v : written)
-      if (sensed.count(v))
-        feedback_vars.insert(v);
-  }
-  auto sensed_name = [&](const std::string &var) {
-    return feedback_vars.count(var) ? var + "__prev" : var;
-  };
-
   std::set<std::string> declared_synth;
   auto synth_var =
     [&](const std::string &name, VarKind kind, bool driven, long long init) {
@@ -693,7 +763,7 @@ static bool parse_graphical_ld(
     return inst_name(block_id) + "__" + pin;
   };
 
-  // Resolve a block data pin (PT, PV, R) to a variable name: the declared
+  // Resolve a block data pin (PT, PV) to a variable name: the declared
   // variable it is wired to, or a synthesised constant holding its literal.
   auto resolve_data_pin =
     [&](int block_id, const char *pin, VarKind kind) -> std::string {
@@ -715,10 +785,7 @@ static bool parse_graphical_ld(
     {
       // An <inVariable> may hold a symbol rather than a literal; treat a bare
       // identifier as a variable reference.
-      const bool identifier =
-        isalpha(static_cast<unsigned char>(src.expression[0])) ||
-        src.expression[0] == '_';
-      if (identifier)
+      if (is_identifier(src.expression))
         return src.expression;
       throw UnsupportedConstructError(
         g.instance_name + " pin " + pin + " literal '" + src.expression + "'",
@@ -752,9 +819,9 @@ static bool parse_graphical_ld(
     return make_contact(pf_name(lid), false, ContactEdge::None);
   };
 
-  // Emit the rungs that assign a node's power flow, once per node. The
-  // accumulator is cleared and then set from each live predecessor, so the
-  // whole network costs one clear plus one rung per edge.
+  // Emit the rungs that assign a node's power flow, once per node per sink
+  // (step 7). The accumulator is cleared and then set from each live
+  // predecessor: one clear plus one rung per edge.
   std::set<int> pf_emitted;
   std::set<int> pf_in_progress;
   auto emit_pf = [&](int lid) {
@@ -773,7 +840,7 @@ static bool parse_graphical_ld(
       // own condition.
       if (nodes.at(p).tag != "leftPowerRail")
         r.elements.push_back(pf_contact(p));
-      r.elements.push_back(make_contact(sensed_name(g.var), g.negated, g.edge));
+      r.elements.push_back(make_contact(g.var, g.negated, g.edge));
       r.elements.push_back(make_coil(acc, CoilKind::Set));
       net.rungs.push_back(std::move(r));
     }
@@ -862,6 +929,11 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(drive));
   };
 
+  auto power_flow = [&](int lid) {
+    ensure_pf(lid);
+    return pf_name(lid);
+  };
+
   // Emit a function block: first the rungs driving its enable pin, then the
   // FB step itself.  Blocks feeding this one are emitted first so that their
   // output pins are already assigned when this block reads them.
@@ -918,18 +990,22 @@ static bool parse_graphical_ld(
       e.counter_fb.kind = kind;
       e.counter_fb.instance_name = inst_name(block_id);
       if (kind == FBKind::CTU)
-        e.counter_fb.CU_var = enable_var;
-      else
-        e.counter_fb.CD_var = enable_var;
-      auto reset = g.in_pins.find("R");
-      if (reset != g.in_pins.end() && nodes.count(reset->second))
       {
-        if (!nodes.at(reset->second).var.empty())
-          e.counter_fb.R_var = nodes.at(reset->second).var;
-        else
-          std::cerr << "warning: graphical LD: counter " << inst_name(block_id)
-                    << " has its R pin driven by a contact chain, which is not "
-                    << "modelled; the counter will not reset.\n";
+        e.counter_fb.CU_var = enable_var;
+        e.counter_fb.R_var = control_pin(
+          nodes, rail_reaches, g, inst_name(block_id), {"R"}, power_flow);
+      }
+      else
+      {
+        e.counter_fb.CD_var = enable_var;
+        // IEC 61131-3 names the CTD load pin LD; CODESYS names it LOAD.
+        e.counter_fb.LD_var = control_pin(
+          nodes,
+          rail_reaches,
+          g,
+          inst_name(block_id),
+          {"LD", "LOAD"},
+          power_flow);
       }
       e.counter_fb.PV_var = resolve_data_pin(block_id, "PV", VarKind::INT);
       e.counter_fb.Q_var =
@@ -944,36 +1020,32 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(step));
   };
 
-  // Step 6: snapshot the feedback variables before any rung runs.
-  for (const auto &v : feedback_vars)
-  {
-    RungNode snap = new_rung();
-    snap.elements.push_back(make_contact(v, false, ContactEdge::None));
-    snap.elements.push_back(make_coil(
-      synth_var(v + "__prev", VarKind::BOOL, true, 0), CoilKind::Output));
-    net.rungs.push_back(std::move(snap));
-  }
-
-  // Step 7: emit one sink per coil, in rightPowerRail order — the order the
-  // vendor tool draws the networks, hence the scan execution order.
+  // Step 6: order the coils as Beremiz does (PLCGenerator.SortInstances): by
+  // row, where coils less than 10 apart vertically share a row, then by x. The
+  // rightPowerRail's connection list plays no part in it. That comparison is
+  // not transitive, so it sorts stably from document order, as Beremiz does;
+  // `nodes` is unordered, and iterating it made the order depend on hashing
+  // (#7352).
   std::vector<int> coils;
-  std::set<int> coils_seen;
-  for (auto rpr : ld_body.children("rightPowerRail"))
-    for (auto cpi : rpr.select_nodes(".//connection"))
-    {
-      int cid = cpi.node().attribute("refLocalId").as_int(-1);
-      if (
-        cid >= 0 && nodes.count(cid) && is_coil_tag(nodes.at(cid).tag) &&
-        coils_seen.insert(cid).second)
-        coils.push_back(cid);
-    }
   for (auto &[lid, g] : nodes)
-    if (is_coil_tag(g.tag) && coils_seen.insert(lid).second)
+    if (is_coil_tag(g.tag))
       coils.push_back(lid);
+  std::sort(coils.begin(), coils.end(), [&](int a, int b) {
+    return nodes.at(a).document_order < nodes.at(b).document_order;
+  });
+  std::stable_sort(coils.begin(), coils.end(), [&](int a, int b) {
+    const GNode &ga = nodes.at(a), &gb = nodes.at(b);
+    return std::abs(ga.y - gb.y) < 10 ? ga.x < gb.x : ga.y < gb.y;
+  });
 
+  // Step 7: emit the coils. Evaluation is sequential, as in the ST Beremiz
+  // generates for MATIEC: each coil re-reads its contacts after every earlier
+  // write, including one made by an earlier coil of the same rung (#7352), so
+  // no power flow is reused across coils. A block still runs once per scan.
   for (int coil : coils)
   {
     const GNode &g = nodes.at(coil);
+    pf_emitted.clear();
     CoilKind kind = CoilKind::Output;
     if (g.storage == "set")
       kind = CoilKind::Set;
@@ -983,7 +1055,9 @@ static bool parse_graphical_ld(
   }
 
   // Blocks whose outputs drive nothing still advance their internal state
-  // every scan, so they are emitted even when no coil consumes them.
+  // every scan, so they are emitted even when no coil consumes them, after
+  // every coil and reading the values the coils left, as Beremiz orders them.
+  pf_emitted.clear();
   for (auto &[lid, g] : nodes)
     if (g.tag == "block" || g.tag == "Block")
       emit_block(lid);
@@ -1070,8 +1144,16 @@ static const UserFBDef *fb_output_source(
     std::string(ov.name()) != "outVariable" || wired_variable(ov).empty() ||
     std::string(src.name()) != "block")
     return nullptr;
+  // In/out pins sit in input_vars and may be read after the call.
+  auto has_pin = [&pin](const std::vector<FBVarDecl> &vars) {
+    return std::any_of(vars.begin(), vars.end(), [&](const FBVarDecl &v) {
+      return v.name == pin;
+    });
+  };
   for (const auto &def : ast.user_fb_defs)
-    if (def.type_name == type && def.output_var == pin)
+    if (
+      def.type_name == type &&
+      (has_pin(def.output_vars) || has_pin(def.input_vars)))
       return &def;
   return nullptr;
 }
@@ -1358,22 +1440,27 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         (tag == "derived") ? first.attribute("name").as_string() : tag;
       return var_kind_from_string(type_str);
     };
-    for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
-      def.input_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    for (auto v : pou.select_nodes(".//interface/localVars/variable"))
-      def.local_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
-    {
-      def.output_var = ov.attribute("name").as_string();
-      def.output_kind = fb_var_kind(ov);
-    }
+    auto collect = [&](const std::string &section) {
+      std::vector<FBVarDecl> out;
+      for (auto v :
+           pou.select_nodes((".//interface/" + section + "/variable").c_str()))
+        out.push_back(
+          {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
+      return out;
+    };
+    // An in/out variable is typed like an input, a temporary like a local.
+    def.input_vars = collect("inputVars");
+    const auto in_out = collect("inOutVars");
+    def.input_vars.insert(def.input_vars.end(), in_out.begin(), in_out.end());
+    def.local_vars = collect("localVars");
+    const auto temps = collect("tempVars");
+    def.local_vars.insert(def.local_vars.end(), temps.begin(), temps.end());
+    def.output_vars = collect("outputVars");
     pugi::xml_node st = pou.select_node(".//body/ST").node();
     if (!st)
       continue; // non-ST body (e.g. graphical FB) — not handled here
     collect_text(st, def.st_body);
-    if (def.output_var.empty() || def.st_body.empty())
+    if (def.output_vars.empty() || def.st_body.empty())
       continue;
     ast.user_fb_defs.push_back(std::move(def));
   }

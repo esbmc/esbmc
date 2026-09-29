@@ -42,6 +42,22 @@ void set_symbol_type_if_carried(symbolt &sym, const typet &t)
     sym.set_type(migrate_type(t));
 }
 
+void set_function_type(symbolt &sym, const typet &t)
+{
+  type2tc t2 = migrate_type(t);
+  typet expected = t;
+  typet &code = expected.is_pointer() ? expected.subtype() : expected;
+  for (code_typet::argumentt &arg : to_code_type(code).arguments())
+  {
+    arg.remove("identifier");
+    arg.remove("#location");
+  }
+  if (full_eq(migrate_type_back(t2), expected))
+    sym.set_type(t2);
+  else
+    sym.set_type(t);
+}
+
 exprt build_symbol(const symbolt &sym)
 {
   if (contains_dyn_array(sym.get_type()))

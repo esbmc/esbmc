@@ -155,6 +155,28 @@ bool element_type_registry::has_mixed_numeric(
   return has_int && has_float;
 }
 
+bool element_type_registry::mixes_str_and_number(
+  const std::string &id,
+  type_slot slot) const
+{
+  const entries *e = find(id, slot);
+  if (!e)
+    return false;
+  auto is_str = [](const typet &t) {
+    return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+  };
+  auto is_number = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t.is_bool();
+  };
+  auto any = [&](auto pred) {
+    return std::any_of(e->begin(), e->end(), [&](const entry &elem) {
+      return pred(elem.second);
+    });
+  };
+  return any(is_str) && any(is_number);
+}
+
 typet element_type_registry::uniform_element_type(
   const std::string &id,
   type_slot slot) const

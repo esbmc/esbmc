@@ -23,6 +23,7 @@ CC_DIAGNOSTIC_POP()
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
@@ -622,7 +623,7 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   symbolt guard;
   guard.id = var.id.as_string() + "$init_guard";
   guard.name = var.name.as_string() + "$init_guard";
-  guard.set_type(bool_type());
+  guard.set_type(get_bool_type());
   guard.mode = var.mode;
   guard.module = var.module;
   guard.location = var.location;
@@ -630,7 +631,7 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   guard.static_lifetime = true;
   guard.file_local = true;
   guard.is_thread_local = var.is_thread_local;
-  guard.set_value(false_exprt());
+  guard.set_value(gen_false_expr());
   context.move_symbol_to_context(guard);
 }
 
@@ -5272,6 +5273,38 @@ bool clang_c_convertert::get_mangled_id(
   return true;
 }
 
+/// Several C files are merged into one AST, and every file that includes a
+/// header gets its own copy of an internal-linkage function or variable the
+/// header defines -- the importer does not merge those -- but the USR names
+/// the header, so the copies and their locals shared one symbol. The first
+/// copy keeps its id, so single-file programs are unchanged; each later one
+/// is numbered, and its locals follow it.
+std::string
+clang_c_convertert::header_internal_suffix(const clang::NamedDecl &nd)
+{
+  const clang::DeclContext *fn_ctx = nd.getParentFunctionOrMethod();
+  const auto *owner = fn_ctx ? llvm::dyn_cast<clang::NamedDecl>(
+                                 clang::Decl::castFromDeclContext(fn_ctx))
+                             : &nd;
+  const auto *var = llvm::dyn_cast_or_null<clang::VarDecl>(owner);
+  if (
+    !owner || (!llvm::isa<clang::FunctionDecl>(owner) && !var) ||
+    (var && var->isLocalVarDecl()) || owner->isExternallyVisible())
+    return "";
+
+  clang::SmallString<128> owner_usr;
+  if (clang::index::generateUSRForDecl(owner, owner_usr))
+    return "";
+  std::vector<const clang::Decl *> &copies =
+    internal_copies[owner_usr.str().str()];
+  const clang::Decl *canon = owner->getCanonicalDecl();
+  auto it = std::find(copies.begin(), copies.end(), canon);
+  const std::size_t index = it - copies.begin();
+  if (it == copies.end())
+    copies.push_back(canon);
+  return index == 0 ? "" : "@tu" + std::to_string(index);
+}
+
 void clang_c_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -5497,13 +5530,16 @@ void clang_c_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str();
+    id = DeclUSR.str().str() + header_internal_suffix(nd);
     /* A local variable's USR is its expansion offset, so two declared by one
      * macro expansion shared a symbol. The spelling offset does not separate
      * an inner macro expanded twice inside one outer expansion, but each
-     * expanded token has its own macro location. */
+     * expanded token has its own macro location. A block-scope extern names
+     * the global, so it keeps the global's id. */
     const auto *vd = llvm::dyn_cast<clang::VarDecl>(&nd);
-    if (vd && vd->isLocalVarDecl() && vd->getLocation().isMacroID())
+    if (
+      vd && vd->isLocalVarDecl() && !vd->hasExternalStorage() &&
+      vd->getLocation().isMacroID())
       id += "_m" + std::to_string(vd->getLocation().getRawEncoding());
     return;
   }
