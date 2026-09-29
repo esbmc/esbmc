@@ -238,7 +238,7 @@ struct UserFBInstance
 struct LdAst
 {
   std::string source_file;           // path of the PLCopen XML file
-  std::vector<VarDecl> variables;    // all declared variables
+  std::vector<VarDecl> variables;    // program variables and synthesised pins
   std::vector<NetworkNode> networks; // one per POU (Tier 1: single POU)
   std::vector<UserFBDef> user_fb_defs;
   std::vector<UserFBInstance> user_fb_instances;
