@@ -255,6 +255,10 @@ protected:
     const clang::InitListExpr &init,
     std::vector<exprt> &flat);
 
+  /* The value `init`'s array filler gives each element past its explicit
+   * initialisers, or nil where that value is zero. */
+  bool get_array_filler(const clang::InitListExpr &init, exprt &filler);
+
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
   virtual bool get_decl_ref(const clang::Decl &decl, exprt &new_expr);

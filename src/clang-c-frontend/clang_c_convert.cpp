@@ -2103,6 +2103,24 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
+bool clang_c_convertert::get_array_filler(
+  const clang::InitListExpr &init,
+  exprt &filler)
+{
+  filler.make_nil();
+  const clang::Expr *e = init.getArrayFiller();
+  if (e == nullptr || llvm::isa<clang::ImplicitValueInitExpr>(e))
+    return false;
+
+  // Value-initialising a class whose default constructor is trivial zeroes it
+  // ([dcl.init]/8).
+  if (const auto *ce = llvm::dyn_cast<clang::CXXConstructExpr>(e))
+    if (ce->getConstructor()->isTrivial())
+      return false;
+
+  return get_expr(*e, filler);
+}
+
 // Flatten Clang's InitListExpr for a struct into a linear sequence of exprt
 // that matches ESBMC's flat component layout.
 //
@@ -2972,6 +2990,22 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
+      }
+
+      // The elements past the list are initialised by the filler
+      // ([dcl.init.aggr]/5), which runs a constructor or a default member
+      // initializer where the class has one.
+      if (t.is_array())
+      {
+        exprt filler;
+        if (get_array_filler(init_stmt, filler))
+          return true;
+        if (filler.is_not_nil())
+        {
+          gen_typecast(ns, filler, to_array_type(t).subtype());
+          for (std::size_t i = num; i < inits.operands().size(); ++i)
+            inits.operands()[i] = filler;
+        }
       }
     }
     else if (t.is_union())
