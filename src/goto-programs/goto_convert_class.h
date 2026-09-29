@@ -149,6 +149,13 @@ protected:
     const exprt &elem_count,
     goto_programt &dest);
 
+  bool cpp_new_init_list(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &init,
+    const exprt &elem_count,
+    goto_programt &dest);
+
   //
   // function calls
   //

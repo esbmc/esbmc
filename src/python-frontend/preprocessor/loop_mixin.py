@@ -1703,7 +1703,11 @@ class LoopMixin:
         # rebuilds the concrete tuple struct instead of erasing it to void* and
         # crashing on the unpack (#5444). Other element types (dict, scalars)
         # keep the base-name form so get_typet(base) resolves correctly.
-        if self._is_concrete_tuple_ann(elem_ann):
+        # Optional[T] keeps its T as well: a None-able scalar value is the
+        # Optional<T> struct, which a bare 'Optional' does not name (#8016).
+        is_optional = (isinstance(elem_ann, ast.Subscript) and isinstance(elem_ann.value, ast.Name)
+                       and elem_ann.value.id == "Optional")
+        if self._is_concrete_tuple_ann(elem_ann) or is_optional:
             slice_node = elem_ann
         else:
             actual_base = base_name if base_name and base_name != "Any" else "Any"

@@ -1,7 +1,7 @@
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <util/message/message.h>
 
 #include <nlohmann/json.hpp>
@@ -138,7 +138,7 @@ static bool populate_module(module &md, const fs::path &json_path)
     nlohmann::json ast;
     // Pin FE_TONEAREST while nlohmann's strtod converts float literals (see
     // python_language.cpp): a leftover rounding mode skews them by one ulp.
-    const round_to_nearest_guard rounding_guard;
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     json_file >> ast;
     json_file.close();
 

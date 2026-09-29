@@ -914,7 +914,9 @@ private:
 
   symbolt *find_cached_symbol(const std::string &symbol_id);
   symbolt *find_cached_c_function_symbol(const std::string &symbol_id);
-  exprt try_len_fast_path_from_constant_arg(const nlohmann::json &arg_json);
+  exprt try_len_fast_path_from_constant_arg(
+    const nlohmann::json &arg_json,
+    const exprt &arg_expr);
   exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
 
   /**

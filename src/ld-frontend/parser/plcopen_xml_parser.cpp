@@ -8,6 +8,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <set>
 
@@ -162,6 +163,19 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   return v;
 }
 
+// The variable wired to the first of `ports` a textual block names. CODESYS
+// spells the CTD load pin LOAD where IEC 61131-3 says LD.
+static std::string formal_var(
+  const pugi::xml_node &block,
+  std::initializer_list<const char *> ports)
+{
+  for (const char *port : ports)
+    for (auto var : block.children("variable"))
+      if (std::string(var.attribute("formalParameter").as_string()) == port)
+        return var.child_value();
+  return {};
+}
+
 // -----------------------------------------------------------------------
 // Rung element parsing
 // -----------------------------------------------------------------------
@@ -241,6 +255,7 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
       elem.counter_fb.CU_var = get_var("CU");
       elem.counter_fb.CD_var = get_var("CD");
       elem.counter_fb.R_var = get_var("R");
+      elem.counter_fb.LD_var = formal_var(n, {"LD", "LOAD"});
       elem.counter_fb.PV_var = get_var("PV");
       elem.counter_fb.Q_var = get_var("Q");
       elem.counter_fb.CV_var = get_var("CV");
@@ -312,6 +327,7 @@ struct GNode
   std::string instance_name;          // block instanceName
   std::string expression;             // inVariable literal text (T#20s, 5, ...)
   std::map<std::string, int> in_pins; // formalParameter -> source localId
+  std::map<std::string, std::string> in_pin_source; // formal -> source's pin
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
 };
 
@@ -425,9 +441,80 @@ static FBKind fb_kind_of(const std::string &s)
   return it->second;
 }
 
+// A bare identifier names a variable; TRUE/FALSE and typed literals do not.
+static bool is_identifier(const std::string &text)
+{
+  if (text.empty() || text == "TRUE" || text == "FALSE")
+    return false;
+  if (!isalpha(static_cast<unsigned char>(text[0])) && text[0] != '_')
+    return false;
+  return text.find('#') == std::string::npos;
+}
+
 static bool is_coil_tag(const std::string &t)
 {
   return t == "coil" || t == "SetCoil" || t == "ResetCoil";
+}
+
+// Only a timer or counter step assigns the Q a block's power flow is named
+// after.
+static bool steps_every_scan(const std::string &type_name)
+{
+  try
+  {
+    const FBKind k = fb_kind_of(type_name);
+    return k == FBKind::TON || k == FBKind::TOF || k == FBKind::TP ||
+           k == FBKind::CTU || k == FBKind::CTD;
+  }
+  catch (const LdParseError &)
+  {
+    return false;
+  }
+}
+
+// Resolve a counter's Boolean control pin (R, LD) to the value it carries: the
+// power flow of a contact or block wired to it, or a variable wired to it
+// directly. Empty when the pin is unwired.
+static std::string control_pin(
+  const std::unordered_map<int, GNode> &nodes,
+  const std::set<int> &rail_reaches,
+  const GNode &block,
+  const std::string &instance,
+  std::initializer_list<const char *> pins,
+  const std::function<std::string(int)> &power_flow)
+{
+  for (const char *pin : pins)
+  {
+    auto it = block.in_pins.find(pin);
+    if (it == block.in_pins.end() || !nodes.count(it->second))
+      continue;
+    const int src = it->second;
+    const GNode &s = nodes.at(src);
+    const std::string what = instance + " pin " + pin;
+    const bool is_block = s.tag == "block" || s.tag == "Block";
+    if (s.tag != "contact" && !is_block)
+    {
+      if (is_identifier(s.expression))
+        return s.expression;
+      throw UnsupportedConstructError(what + " driven by " + s.tag, 2);
+    }
+    // Unreachable, it would read false in every scan (see step 4).
+    if (!rail_reaches.count(src))
+      throw UnsupportedConstructError(what + " driven by no power", 2);
+    if (is_block && !steps_every_scan(s.type_name))
+      throw UnsupportedConstructError(what + " driven by " + s.type_name, 2);
+    // A block's power flow is its Q; ENO, CV or ET read as Q would be wrong.
+    const auto source = block.in_pin_source.find(pin);
+    if (
+      is_block &&
+      (source == block.in_pin_source.end() || source->second != "Q"))
+      throw UnsupportedConstructError(
+        what + " driven by " + s.type_name + " output " +
+          (source == block.in_pin_source.end() ? "" : source->second),
+        2);
+    return power_flow(src);
+  }
+  return "";
 }
 
 static bool parse_graphical_ld(
@@ -493,7 +580,11 @@ static bool parse_graphical_ld(
         auto conn = pin.select_node(".//connection").node();
         const int src = conn.attribute("refLocalId").as_int(-1);
         if (!formal.empty() && src >= 0)
+        {
           g.in_pins[formal] = src;
+          g.in_pin_source[formal] =
+            conn.attribute("formalParameter").as_string("");
+        }
       }
     }
 
@@ -669,7 +760,7 @@ static bool parse_graphical_ld(
     return inst_name(block_id) + "__" + pin;
   };
 
-  // Resolve a block data pin (PT, PV, R) to a variable name: the declared
+  // Resolve a block data pin (PT, PV) to a variable name: the declared
   // variable it is wired to, or a synthesised constant holding its literal.
   auto resolve_data_pin =
     [&](int block_id, const char *pin, VarKind kind) -> std::string {
@@ -689,11 +780,7 @@ static bool parse_graphical_ld(
     {
       // An <inVariable> may hold a symbol rather than a literal; treat a bare
       // identifier as a variable reference before falling back to a constant.
-      const bool identifier =
-        !src.expression.empty() &&
-        (isalpha(static_cast<unsigned char>(src.expression[0])) ||
-         src.expression[0] == '_');
-      if (identifier)
+      if (is_identifier(src.expression))
         return src.expression;
       std::cerr << "warning: graphical LD: block pin " << pin
                 << " has unrecognised literal '" << src.expression
@@ -837,6 +924,11 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(drive));
   };
 
+  auto power_flow = [&](int lid) {
+    ensure_pf(lid);
+    return pf_name(lid);
+  };
+
   // Emit a function block: first the rungs driving its enable pin, then the
   // FB step itself.  Blocks feeding this one are emitted first so that their
   // output pins are already assigned when this block reads them.
@@ -893,18 +985,22 @@ static bool parse_graphical_ld(
       e.counter_fb.kind = kind;
       e.counter_fb.instance_name = inst_name(block_id);
       if (kind == FBKind::CTU)
-        e.counter_fb.CU_var = enable_var;
-      else
-        e.counter_fb.CD_var = enable_var;
-      auto reset = g.in_pins.find("R");
-      if (reset != g.in_pins.end() && nodes.count(reset->second))
       {
-        if (!nodes.at(reset->second).var.empty())
-          e.counter_fb.R_var = nodes.at(reset->second).var;
-        else
-          std::cerr << "warning: graphical LD: counter " << inst_name(block_id)
-                    << " has its R pin driven by a contact chain, which is not "
-                    << "modelled; the counter will not reset.\n";
+        e.counter_fb.CU_var = enable_var;
+        e.counter_fb.R_var = control_pin(
+          nodes, rail_reaches, g, inst_name(block_id), {"R"}, power_flow);
+      }
+      else
+      {
+        e.counter_fb.CD_var = enable_var;
+        // IEC 61131-3 names the CTD load pin LD; CODESYS names it LOAD.
+        e.counter_fb.LD_var = control_pin(
+          nodes,
+          rail_reaches,
+          g,
+          inst_name(block_id),
+          {"LD", "LOAD"},
+          power_flow);
       }
       e.counter_fb.PV_var = resolve_data_pin(block_id, "PV", VarKind::INT);
       e.counter_fb.Q_var =
@@ -1252,22 +1348,27 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         (tag == "derived") ? first.attribute("name").as_string() : tag;
       return var_kind_from_string(type_str);
     };
-    for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
-      def.input_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    for (auto v : pou.select_nodes(".//interface/localVars/variable"))
-      def.local_vars.push_back(
-        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
-    if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
-    {
-      def.output_var = ov.attribute("name").as_string();
-      def.output_kind = fb_var_kind(ov);
-    }
+    auto collect = [&](const std::string &section) {
+      std::vector<FBVarDecl> out;
+      for (auto v :
+           pou.select_nodes((".//interface/" + section + "/variable").c_str()))
+        out.push_back(
+          {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
+      return out;
+    };
+    // An in/out variable is typed like an input, a temporary like a local.
+    def.input_vars = collect("inputVars");
+    const auto in_out = collect("inOutVars");
+    def.input_vars.insert(def.input_vars.end(), in_out.begin(), in_out.end());
+    def.local_vars = collect("localVars");
+    const auto temps = collect("tempVars");
+    def.local_vars.insert(def.local_vars.end(), temps.begin(), temps.end());
+    def.output_vars = collect("outputVars");
     pugi::xml_node st = pou.select_node(".//body/ST").node();
     if (!st)
       continue; // non-ST body (e.g. graphical FB) — not handled here
     collect_text(st, def.st_body);
-    if (def.output_var.empty() || def.st_body.empty())
+    if (def.output_vars.empty() || def.st_body.empty())
       continue;
     ast.user_fb_defs.push_back(std::move(def));
   }

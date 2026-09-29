@@ -684,6 +684,16 @@ protected:
     exprt &new_expr,
     bool &elided);
 
+  /* Lower a non-allocating placement new to
+   * comma(<initialize *(T*)place>, (T*)place); a side-effecting place is
+   * first bound to a local, ({ void *p = place; <that comma on p>; }).
+   * Returns true on error. */
+  bool get_placement_new(
+    const clang::CXXNewExpr &ne,
+    const typet &t,
+    const locationt &location,
+    exprt &new_expr);
+
   bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
