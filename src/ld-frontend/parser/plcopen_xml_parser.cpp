@@ -1156,8 +1156,9 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
     const std::string pou_name = pou.attribute("name").as_string();
     const std::string pou_type = pou.attribute("pouType").as_string();
 
-    // A function block's LD body would run once per scan in the program's
-    // scope, not per instance in its own (#7581).
+    // Only a program's LD body is translated: a function block's or a
+    // function's would run once per scan in the program's scope, not per
+    // instance or call in its own (#7581).
     if (
       (tag == "LD" || tag == "ladderDiagram") &&
       (where == "pou" || where == "action") && pou_type == "program")
