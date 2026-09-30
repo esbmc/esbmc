@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-pointer-check --no-bounds-check --ts-check
+^WARNING: main has no loop$
+^TS-CHECK rejected$
+^VERIFICATION UNKNOWN$
