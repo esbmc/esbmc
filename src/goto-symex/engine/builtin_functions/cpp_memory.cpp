@@ -46,6 +46,8 @@ void goto_symext::symex_cpp_new(
   }
 
   new_context.add(symbol);
+  // References rebuilt from the context carry its type, as in symex_mem.
+  newtype = migrate_symbol_type(symbol);
 
   // make symbol expression
   expr2tc rhs_ptr_obj;

@@ -64,27 +64,27 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   if (new_expr->type->get_width() == 0)
     return constant_int2tc(get_uint_type(0), BigInt(0));
 
-  // If it is an array, concat every element into a big bitvector
-  if (is_array_type(new_expr))
+  // If it is an array or a vector, concat every element into a big bitvector
+  if (is_array_type(new_expr) || is_vector_type(new_expr))
   {
     // Assume only fixed-size arrays
-    const array_type2t &arraytype = to_array_type(new_expr->type);
+    const expr2tc &size = array_or_vector_size(new_expr->type);
     assert(
-      !arraytype.size_is_infinite && !is_nil_expr(arraytype.array_size) &&
-      is_constant_int2t(arraytype.array_size) &&
-      "Can't flatten array with unbounded size");
+      !array_or_vector_size_is_infinite(new_expr->type) && !is_nil_expr(size) &&
+      is_constant_int2t(size) && "Can't flatten array with unbounded size");
 
     // Iterate over each element and flatten them
-    const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
+    const constant_int2t &intref = to_constant_int2t(size);
     assert(intref.value > 0);
 
     size_t sz = intref.value.to_uint64();
     type2tc idx = index_type2();
+    const type2tc &subtype = array_or_vector_subtype(new_expr->type);
 
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
-      return flatten_to_bitvector(index2tc(
-        arraytype.subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
+      return flatten_to_bitvector(
+        index2tc(subtype, new_expr, constant_int2tc(idx, sz - i - 1)));
     };
 
     return concat_tree(0, sz, extract);
