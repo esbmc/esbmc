@@ -30,12 +30,9 @@ enum class SosRule
             //       elif rising IN then {ET:=0; Q:=T}
 
   // Counter rules
-  CTU_Step, // [CTU]    rising CU => CV++; Q := (CV >= PV); R => CV:=0
-  CTD_Step, // [CTD]    rising CD => CV--; Q := (CV <= 0); LD => CV:=PV
+  CTU_Step, // [CTU]    rising CU, CV < PV => CV++; Q := (CV >= PV); R => CV:=0
+  CTD_Step, // [CTD]    rising CD, CV > 0 => CV--; Q := (CV <= 0); LD => CV:=PV
 
   // Arithmetic rules
   Arith_Step, // [ARITH]  OUT := IN1 op IN2
-
-  // Network rules
-  Feedback_Snapshot, // [FEEDBACK] prev(var) := var, before any rung runs
 };

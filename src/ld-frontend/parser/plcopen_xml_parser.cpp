@@ -307,8 +307,7 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
 // block); each path is a series contact chain (AND) and the paths reaching
 // one sink are alternatives (OR).
 //
-// Rungs are emitted per sink in rightPowerRail order, which is the order in
-// which the vendor tool draws them and therefore the scan execution order.
+// Rungs are emitted per sink in the order Beremiz executes them (step 6).
 // A function block encountered on a path is emitted just before the first
 // sink that consumes it, so a block still observes the values written by the
 // rungs drawn above it.
@@ -329,6 +328,8 @@ struct GNode
   std::map<std::string, int> in_pins; // formalParameter -> source localId
   std::map<std::string, std::string> in_pin_source; // formal -> source's pin
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
+  int x = 0, y = 0;       // <position>
+  int document_order = 0; // index among the body's children
 };
 
 // Parse an IEC 61131-3 duration literal (T#20s, TIME#1m30s, t#500ms) into
@@ -439,6 +440,43 @@ static FBKind fb_kind_of(const std::string &s)
   if (it == table.end())
     throw LdParseError("Unknown FB type: " + s);
   return it->second;
+}
+
+static std::string trim(const std::string &text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos)
+    return "";
+  return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+}
+
+// What each input pin of a block is wired to: an <inVariable>'s expression, or
+// another block's output pin named as the graphical resolver names it.
+static std::vector<FBInWire> input_wires(const pugi::xml_node &blk)
+{
+  std::vector<FBInWire> wires;
+  for (auto pin : blk.child("inputVariables").children("variable"))
+  {
+    FBInWire w;
+    w.pin = pin.attribute("formalParameter").as_string();
+    auto conn = pin.select_node(".//connection").node();
+    w.connected = static_cast<bool>(conn);
+    auto src = blk.parent().find_child_by_attribute(
+      "localId", conn.attribute("refLocalId").as_string("-"));
+    const std::string src_tag = src.name();
+    const std::string src_pin = conn.attribute("formalParameter").as_string();
+    if (src_tag == "inVariable")
+      w.source = trim(src.child_value("expression"));
+    else if (src_tag == "block" && !src_pin.empty())
+    {
+      std::string src_inst = src.attribute("instanceName").as_string();
+      if (src_inst.empty())
+        src_inst = std::string("blk") + src.attribute("localId").as_string();
+      w.source = src_inst + "__" + src_pin;
+    }
+    wires.push_back(w);
+  }
+  return wires;
 }
 
 // A bare identifier names a variable; TRUE/FALSE and typed literals do not.
@@ -566,6 +604,8 @@ static bool parse_graphical_ld(
         storage_attr = "reset";
     }
     g.storage = storage_attr;
+    g.x = child.child("position").attribute("x").as_int(0);
+    g.y = child.child("position").attribute("y").as_int(0);
 
     if (t == "block" || t == "Block")
     {
@@ -591,6 +631,7 @@ static bool parse_graphical_ld(
     if (t == "inVariable")
       g.expression = child.child_value("expression");
 
+    g.document_order = static_cast<int>(nodes.size());
     nodes[lid] = g;
   }
 
@@ -708,31 +749,6 @@ static bool parse_graphical_ld(
     return e;
   };
 
-  // A variable both written by a coil and read by a contact closes a feedback
-  // loop across the network. IEC 61131-3 §4.1.3 requires the loop variable to
-  // be read at its value on entry to the network, so contacts read a snapshot
-  // taken before any rung runs rather than whatever an earlier coil left.
-  // Without this the network's meaning depends on the order the resolver
-  // happens to emit its sinks in — exactly the order-dependence §3.2 rejects.
-  std::set<std::string> feedback_vars;
-  {
-    std::set<std::string> written, sensed;
-    for (auto &[lid, g] : nodes)
-    {
-      (void)lid;
-      if (is_coil_tag(g.tag) && !g.var.empty())
-        written.insert(g.var);
-      if (g.tag == "contact" && !g.var.empty())
-        sensed.insert(g.var);
-    }
-    for (const auto &v : written)
-      if (sensed.count(v))
-        feedback_vars.insert(v);
-  }
-  auto sensed_name = [&](const std::string &var) {
-    return feedback_vars.count(var) ? var + "__prev" : var;
-  };
-
   std::set<std::string> declared_synth;
   auto synth_var =
     [&](const std::string &name, VarKind kind, bool driven, long long init) {
@@ -746,6 +762,7 @@ static bool parse_graphical_ld(
       v.is_output = driven;
       v.init_value = init;
       v.loc = loc;
+      v.synthesized = true;
       synth_vars.push_back(v);
       return name;
     };
@@ -814,9 +831,9 @@ static bool parse_graphical_ld(
     return make_contact(pf_name(lid), false, ContactEdge::None);
   };
 
-  // Emit the rungs that assign a node's power flow, once per node. The
-  // accumulator is cleared and then set from each live predecessor, so the
-  // whole network costs one clear plus one rung per edge.
+  // Emit the rungs that assign a node's power flow, once per node per sink
+  // (step 7). The accumulator is cleared and then set from each live
+  // predecessor: one clear plus one rung per edge.
   std::set<int> pf_emitted;
   std::set<int> pf_in_progress;
   auto emit_pf = [&](int lid) {
@@ -835,7 +852,7 @@ static bool parse_graphical_ld(
       // own condition.
       if (nodes.at(p).tag != "leftPowerRail")
         r.elements.push_back(pf_contact(p));
-      r.elements.push_back(make_contact(sensed_name(g.var), g.negated, g.edge));
+      r.elements.push_back(make_contact(g.var, g.negated, g.edge));
       r.elements.push_back(make_coil(acc, CoilKind::Set));
       net.rungs.push_back(std::move(r));
     }
@@ -1015,36 +1032,32 @@ static bool parse_graphical_ld(
     net.rungs.push_back(std::move(step));
   };
 
-  // Step 6: snapshot the feedback variables before any rung runs.
-  for (const auto &v : feedback_vars)
-  {
-    RungNode snap = new_rung();
-    snap.elements.push_back(make_contact(v, false, ContactEdge::None));
-    snap.elements.push_back(make_coil(
-      synth_var(v + "__prev", VarKind::BOOL, true, 0), CoilKind::Output));
-    net.rungs.push_back(std::move(snap));
-  }
-
-  // Step 7: emit one sink per coil, in rightPowerRail order — the order the
-  // vendor tool draws the networks, hence the scan execution order.
+  // Step 6: order the coils as Beremiz does (PLCGenerator.SortInstances): by
+  // row, where coils less than 10 apart vertically share a row, then by x. The
+  // rightPowerRail's connection list plays no part in it. That comparison is
+  // not transitive, so it sorts stably from document order, as Beremiz does;
+  // `nodes` is unordered, and iterating it made the order depend on hashing
+  // (#7352).
   std::vector<int> coils;
-  std::set<int> coils_seen;
-  for (auto rpr : ld_body.children("rightPowerRail"))
-    for (auto cpi : rpr.select_nodes(".//connection"))
-    {
-      int cid = cpi.node().attribute("refLocalId").as_int(-1);
-      if (
-        cid >= 0 && nodes.count(cid) && is_coil_tag(nodes.at(cid).tag) &&
-        coils_seen.insert(cid).second)
-        coils.push_back(cid);
-    }
   for (auto &[lid, g] : nodes)
-    if (is_coil_tag(g.tag) && coils_seen.insert(lid).second)
+    if (is_coil_tag(g.tag))
       coils.push_back(lid);
+  std::sort(coils.begin(), coils.end(), [&](int a, int b) {
+    return nodes.at(a).document_order < nodes.at(b).document_order;
+  });
+  std::stable_sort(coils.begin(), coils.end(), [&](int a, int b) {
+    const GNode &ga = nodes.at(a), &gb = nodes.at(b);
+    return std::abs(ga.y - gb.y) < 10 ? ga.x < gb.x : ga.y < gb.y;
+  });
 
+  // Step 7: emit the coils. Evaluation is sequential, as in the ST Beremiz
+  // generates for MATIEC: each coil re-reads its contacts after every earlier
+  // write, including one made by an earlier coil of the same rung (#7352), so
+  // no power flow is reused across coils. A block still runs once per scan.
   for (int coil : coils)
   {
     const GNode &g = nodes.at(coil);
+    pf_emitted.clear();
     CoilKind kind = CoilKind::Output;
     if (g.storage == "set")
       kind = CoilKind::Set;
@@ -1054,7 +1067,9 @@ static bool parse_graphical_ld(
   }
 
   // Blocks whose outputs drive nothing still advance their internal state
-  // every scan, so they are emitted even when no coil consumes them.
+  // every scan, so they are emitted even when no coil consumes them, after
+  // every coil and reading the values the coils left, as Beremiz orders them.
+  pf_emitted.clear();
   for (auto &[lid, g] : nodes)
     if (g.tag == "block" || g.tag == "Block")
       emit_block(lid);
@@ -1387,6 +1402,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         inst.type_name = tn;
         inst.instance_name = blk.attribute("instanceName").as_string();
         inst.block_id = blk.attribute("localId").as_string();
+        inst.in_wires = input_wires(blk);
         inst.loc = {source_file_, 0, 0};
         ast.user_fb_instances.push_back(std::move(inst));
         break;

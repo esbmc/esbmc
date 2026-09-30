@@ -308,6 +308,16 @@ exprt python_converter::make_char_array_expr(
 
   return expr;
 }
+
+exprt python_converter::make_class_object(const std::string &name)
+{
+  std::vector<unsigned char> chars(name.begin(), name.end());
+  chars.push_back('\0');
+  exprt expr = make_char_array_expr(
+    chars, type_handler_.build_array(char_type(), chars.size()));
+  expr.set("value", name);
+  return expr;
+}
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
@@ -1475,12 +1485,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Handle type identifiers (int, str, float, bool, etc.)
       if (type_utils::is_type_identifier(var_name))
       {
-        // Create a string constant containing the type name
-        std::string type_name = var_name;
-        typet str_type =
-          type_handler_.build_array(char_type(), type_name.size() + 1);
-        constant_exprt type_str(type_name, type_name, str_type);
-        expr = type_str;
+        expr = make_class_object(var_name);
         break;
       }
     }
@@ -1835,9 +1840,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             is_class(var_name, *ast_json) ||
             type_utils::is_python_exceptions(var_name))
           {
-            typet str_type =
-              type_handler_.build_array(char_type(), var_name.size() + 1);
-            expr = constant_exprt(var_name, var_name, str_type);
+            expr = make_class_object(var_name);
             expr.location() = get_location_from_decl(element);
             break;
           }

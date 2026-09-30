@@ -11,11 +11,11 @@
 // visible in the verification record (rather than an undiscoverable env var):
 //   default (flag unset) -> "analog-extended": over-approximate unsupported ST
 //                           constructs (function calls, member access) as
-//                           nondeterministic, enabling analog programs (SWaT) to
-//                           be modelled at the cost of soundness (RQ6).
+//                           nondeterministic, enabling analog programs (SWaT)
+//                           to be modelled at the cost of soundness (RQ6).
 //   --ld-sound-mode      -> "sound Boolean/integer": such constructs throw, so
-//                           the FB body falls back to a no-op; no over-
-//                           approximation, zero false positives (RQ2, RQ5).
+//                           the FB body is not translated and its outputs are
+//                           nondeterministic each scan.
 static bool sound_mode()
 {
   return config.options.get_bool_option("ld-sound-mode");

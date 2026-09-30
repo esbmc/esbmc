@@ -176,7 +176,6 @@ established.
   | Form | Names |
   |---|---|
   | `<instance>__<pin>` | a function-block pin — `TOF0__Q`, `TOF0__ET`, `CTU1__CV`. The instance is the block's `instanceName`, or `blk<localId>` when it has none |
-  | `<var>__prev` | the entry-value snapshot of a variable read and written in the same network (SOS §6.3) |
   | `<var>__pf<n>` | the accumulator OR-ing parallel paths into a sink; an implementation detail, not intended for use in properties |
 
   Naming a pin is the only way to state a property about a timer or counter

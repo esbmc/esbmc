@@ -1,0 +1,8 @@
+properties:
+  # Twin of graphical_rail_order_ignored_safe: when a and b are both on, the
+  # reset runs last and mode ends FALSE. Following the rail's order would run
+  # the set last and make this hold.
+  - id: P1
+    kind: invariant
+    expression: "!a || mode"
+    description: "Deliberately false: the set coil does not run last"
