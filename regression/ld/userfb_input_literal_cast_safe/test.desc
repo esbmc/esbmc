@@ -1,0 +1,5 @@
+CORE
+cast.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^.*user FB .c0. input Z is fed by something not modelled.*$
+^VERIFICATION SUCCESSFUL$

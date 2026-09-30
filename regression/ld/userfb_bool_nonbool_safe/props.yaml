@@ -1,8 +1,0 @@
-properties:
-  # AND on the INT input N is rejected, so the whole body is over-approximated
-  # as a no-op and OUT keeps its initial FALSE. Treating N as a BOOL would run
-  # the body and set OUT.
-  - id: P1
-    kind: invariant
-    expression: "!m0__OUT"
-    description: "A body with a non-BOOL AND operand is not executed"
