@@ -40,7 +40,7 @@ execution_statet::execution_statet(
   monitor_tid = 0;
   mon_from_tid = false;
   monitor_from_tid = 0;
-  guard_execution = "execution_statet::\\guard_exec";
+  guard_execution = guard_execution_name;
   interleaving_unviable = false;
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
