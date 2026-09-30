@@ -2054,3 +2054,5 @@ regression/esbmc/vector_union_bytes
 regression/esbmc/vector_union_bytes_fail
 regression/esbmc/vector_struct_array
 regression/esbmc/vector_struct_array_fail
+regression/esbmc/github_8048
+regression/esbmc/github_8048_fail

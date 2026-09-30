@@ -415,8 +415,15 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc end_value = add2tc(ptr_loc_type, start_sym, the_size);
   expr2tc endisequal = equality2tc(end_value, end_sym);
 
-  // Assert that start + size == end
-  assert_expr(endisequal);
+  /* Assert that start + size == end. The size is unguarded: a VLA declared on
+   * a path not taken still gets a layout, so a size no object can have (e.g. a
+   * negative bound, sign-extended) must not make every path infeasible
+   * (#8048). No object exceeds PTRDIFF_MAX bytes. */
+  expr2tc size_fits = lessthanequal2tc(
+    the_size,
+    constant_int2tc(
+      ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width() - 1)));
+  assert_expr(implies2tc(size_fits, endisequal));
 
   // Even better, if we're operating in bitvector mode, it's possible that
   // The solver will try to be clever and arrange the pointer range to cross
