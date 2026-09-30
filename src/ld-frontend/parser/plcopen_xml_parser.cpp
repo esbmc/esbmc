@@ -1155,10 +1155,14 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
     const pugi::xml_node pou =
       where == "pou" ? holder : holder.parent().parent();
     const std::string pou_name = pou.attribute("name").as_string();
+    const std::string pou_type = pou.attribute("pouType").as_string();
 
+    // Only a program's LD body is translated: a function block's or a
+    // function's would run once per scan in the program's scope, not per
+    // instance or call in its own (#7581).
     if (
       (tag == "LD" || tag == "ladderDiagram") &&
-      (where == "pou" || where == "action"))
+      (where == "pou" || where == "action") && pou_type == "program")
       continue;
 
     // st_fb_translator inlines a function block's Structured Text body into
@@ -1166,8 +1170,7 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
     // no output pin or an empty body is dropped, and dropping it silently is
     // the same defect as dropping the body outright.
     const bool translated_fb_body =
-      tag == "ST" &&
-      std::string(pou.attribute("pouType").as_string()) == "functionBlock" &&
+      tag == "ST" && pou_type == "functionBlock" &&
       std::any_of(
         ast.user_fb_defs.begin(),
         ast.user_fb_defs.end(),
@@ -1186,6 +1189,14 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
 // -----------------------------------------------------------------------
 // Top-level parse()
 // -----------------------------------------------------------------------
+
+// Every program body is merged into the one scan loop, so two programs would
+// share their variables and run as one (#7581).
+static void reject_several_programs(const pugi::xml_node &root)
+{
+  if (root.select_nodes("//pou[@pouType='program']").size() > 1)
+    throw UnsupportedConstructError("more than one program POU", 2);
+}
 
 LdAst PlcopenXmlParser::parse(const std::string &path)
 {
@@ -1216,6 +1227,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
 
   if (ast.has_interrupt_tasks)
     throw UnsupportedConstructError("InterruptTask", 2);
+  reject_several_programs(root);
 
   // The cyclic task period sets the tick length of the fixed-tick time model
   // (§3.3): one scan iteration advances time by exactly one interval.
@@ -1231,10 +1243,12 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
-  // Parse variable declarations (global + local)
+  // Program variables. A function block's interface is its own: each
+  // instance gets it from the definition, under the instance's prefix (#7581).
   for (auto xpath_var : root.select_nodes(
-         "//pou/interface//*[self::inputVars or self::outputVars or "
-         "self::inOutVars or self::localVars or self::globalVars]"))
+         "//pou[@pouType='program']/interface/*[self::inputVars or "
+         "self::outputVars or self::inOutVars or self::localVars or "
+         "self::globalVars]"))
   {
     pugi::xml_node vars_node = xpath_var.node();
     std::string vars_tag = vars_node.name();
@@ -1258,7 +1272,8 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // skipped and the program verifies vacuously (no rung assignments,
   // all variables at their zero-initialised default).
   for (auto xpath_node :
-       root.select_nodes("//pou/body/LD | //pou/actions/action/body/LD"))
+       root.select_nodes("//pou[@pouType='program']/body/LD | "
+                         "//pou[@pouType='program']/actions/action/body/LD"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
@@ -1272,9 +1287,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
     ast.networks.push_back(std::move(net));
   }
-  for (auto xpath_node :
-       root.select_nodes("//pou/body/ladderDiagram | "
-                         "//pou/actions/action/body/ladderDiagram"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou[@pouType='program']/body/ladderDiagram | "
+         "//pou[@pouType='program']/actions/action/body/ladderDiagram"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
