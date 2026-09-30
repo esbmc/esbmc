@@ -1,7 +1,7 @@
 #include "python_list_internal.h"
 
 #include <util/lang/c_typecast.h>
-
+#include <iostream>
 using namespace python_expr;
 using namespace python_list_detail;
 
@@ -350,6 +350,18 @@ exprt python_list::build_push_list_call(
   bool enable_float_path)
 {
   const exprt elem = as_object_reference(op, elem_in);
+
+  std::cerr
+    << "[LIST PUSH DEBUG] type="
+    << converter_.get_type_handler().type_to_string(elem.type())
+    << " tagged="
+    << converter_.get_type_handler().is_tagged_scalar_type(elem.type())
+    << " list="
+    << (
+        elem.type() ==
+        converter_.get_type_handler().get_list_type()
+      )
+    << '\n';
 
   if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
   {

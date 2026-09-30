@@ -1,5 +1,5 @@
 import ast
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, cast
 from dataclasses import dataclass, field
 from .lattice import *
 from .cfg_builder import *
@@ -383,7 +383,7 @@ def update_subscript_assignment(container, key_type, value_type, env):
         return
 
     if isinstance(current, Unknown):
-        env[container] = infer_subscript_container(key_type, value_type,)
+       # env[container] = infer_subscript_container(key_type, value_type,)
         return
 
     env[container] = Unknown()
@@ -460,13 +460,16 @@ def collect_function_argument_types(tree, context):
         previous = context.function_params[name]
 
         for i in range(min(len(previous), len(arg_types))):
-            if isinstance(arg_types[i], Unknown):
-                continue
+            current = arg_types[i]
 
             if isinstance(previous[i], Unknown):
-                previous[i] = arg_types[i]
-            else:
-                previous[i] = previous[i].join(arg_types[i])
+                continue
+
+            if isinstance(current, Unknown):
+                previous[i] = Unknown()
+                continue
+
+            previous[i] = previous[i].join(current)
 
 def transfer_expr(
     stmt: ast.Expr,
@@ -797,8 +800,17 @@ def infer_dict_literal_type(expr, env, context):
     )
 
 def infer_binop_type(expr, env, context):
-    left = infer_type_from_expr(expr.left, env, context)
-    right = infer_type_from_expr(expr.right, env, context)
+    left = infer_type_from_expr(
+        expr.left,
+        env,
+        context,
+    )
+
+    right = infer_type_from_expr(
+        expr.right,
+        env,
+        context,
+    )
 
     print(
         "[PYTYPE BINOP]",
@@ -808,48 +820,112 @@ def infer_binop_type(expr, env, context):
         "OP =", type(expr.op).__name__,
     )
 
+    numeric_types = (
+        BoolType,
+        IntType,
+        FloatType,
+        ComplexType,
+    )
+
+    real_numeric_types = (
+        BoolType,
+        IntType,
+        FloatType,
+    )
+
+    # Special cases for +.
     if isinstance(expr.op, ast.Add):
-        result = infer_add_type(left, right)
+        result = infer_add_type(
+            left,
+            right,
+        )
 
         if result is not None:
             return result
 
+    # Tuple repetition is only valid for multiplication.
     if isinstance(expr.op, ast.Mult):
-        if (isinstance(left, TupleType) and isinstance(expr.right, ast.Constant) and isinstance(expr.right.value, int)):
+        if (
+            isinstance(left, TupleType)
+            and isinstance(expr.right, ast.Constant)
+            and isinstance(expr.right.value, int)
+        ):
             count = expr.right.value
 
             if count >= 0:
-                return TupleType(left.elems * count)
+                return TupleType(
+                    left.elems * count
+                )
 
-    if (isinstance(right, TupleType) and isinstance(expr.left, ast.Constant) and isinstance(exp.left.value, int)):
-        count = expr.left.value
+        if (
+            isinstance(right, TupleType)
+            and isinstance(expr.left, ast.Constant)
+            and isinstance(expr.left.value, int)
+        ):
+            count = expr.left.value
 
-        if count >= 0:
-            return TupleType(right.elems * count)
+            if count >= 0:
+                return TupleType(
+                    right.elems * count
+                )
 
-    if isinstance(expr.op, (ast.Div, ast.FloorDiv)):
-        numeric_types = (BoolType, IntType, FloatType)
-
-        if not (
+    # Complex numeric promotion.
+    if isinstance(
+        expr.op,
+        (
+            ast.Add,
+            ast.Sub,
+            ast.Mult,
+            ast.Div,
+            ast.Pow,
+        ),
+    ):
+        if (
             isinstance(left, numeric_types)
             and isinstance(right, numeric_types)
+            and (
+                isinstance(left, ComplexType)
+                or isinstance(right, ComplexType)
+            )
+        ):
+            return ComplexType()
+
+    # Normal real division and floor division.
+    if isinstance(
+        expr.op,
+        (
+            ast.Div,
+            ast.FloorDiv,
+        ),
+    ):
+        if not (
+            isinstance(left, real_numeric_types)
+            and isinstance(right, real_numeric_types)
         ):
             return Unknown()
 
         if isinstance(expr.op, ast.Div):
             return FloatType()
 
-        # Floor division returns float if either operand is float.
-        if isinstance(left, FloatType) or isinstance(right, FloatType):
+        if (
+            isinstance(left, FloatType)
+            or isinstance(right, FloatType)
+        ):
             return FloatType()
 
         return IntType()
 
-
-    if isinstance(left, FloatType) or isinstance(right, FloatType):
+    # Remaining real arithmetic.
+    if (
+        isinstance(left, FloatType)
+        or isinstance(right, FloatType)
+    ):
         return FloatType()
 
-    if isinstance(left, IntType) and isinstance(right, IntType):
+    if (
+        isinstance(left, IntType)
+        and isinstance(right, IntType)
+    ):
         return IntType()
 
     return Unknown()
@@ -882,6 +958,17 @@ def infer_call_type(expr, env, context):
         for arg in expr.args:
             arg_types.append(infer_type_from_expr(arg, env, context))
 
+        if isinstance(obj_type, DictType) and func.attr == "get":
+            if not 1 <= len(arg_types) <= 2 or expr.keywords:
+                return Unknown()
+
+            default_type = NoneType()
+
+            if len(arg_types) == 2:
+                default_type = arg_types[1]
+
+            return obj_type.val_t.join(default_type)     
+        
         if isinstance(obj_type, DictType) and func.attr == "setdefault":
             if not 1 <= len(arg_types) <= 2 or expr.keywords:
                 return Unknown()
