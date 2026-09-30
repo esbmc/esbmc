@@ -2026,3 +2026,7 @@ regression/python/list_pop_result_as_argument
 regression/python/list_pop_result_as_argument_fail
 regression/esbmc/vector_op_nonconstant_lane
 regression/esbmc/vector_op_nonconstant_lane_fail
+regression/esbmc/vector_union_bytes
+regression/esbmc/vector_union_bytes_fail
+regression/esbmc/vector_struct_array
+regression/esbmc/vector_struct_array_fail
