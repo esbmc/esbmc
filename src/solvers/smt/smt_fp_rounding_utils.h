@@ -5,9 +5,9 @@
 
 namespace smt_fp_rounding_utils
 {
-// Shared rounding-mode predicates used by both smt_conv.cpp and smt_fp_conv.cpp.
-// Keeping these in one place avoids semantic drift between interval enclosure
-// paths and IEEE754 post-processing paths.
+// Shared rounding-mode predicates used by both smt_conv.cpp and
+// smt_fp_conv.cpp. Keeping these in one place avoids semantic drift between
+// interval enclosure paths and IEEE754 post-processing paths.
 inline bool is_nearest_rounding_mode(const expr2tc &rounding_mode)
 {
   if (is_nil_expr(rounding_mode))

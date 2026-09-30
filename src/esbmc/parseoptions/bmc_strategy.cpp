@@ -276,7 +276,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   // Track whether any violation was found across all k steps.
   // In multi-property mode the loop continues past a violation to check
-  // remaining properties, so we must remember the failure for the final verdict.
+  // remaining properties, so we must remember the failure for the final
+  // verdict.
   bool any_violation_found = false;
 
   // One property table for the whole run, rather than one per k step with the
@@ -319,8 +320,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
       if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
-      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
-      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
+      // if the property is proven violated in the bs, it's unnecessary to
+      // further run fw and is this will make the trace looks cleaner yet might
+      // lead to an extra round to terminate the verification
       if (
         !is_bcv &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
@@ -414,8 +416,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       }
 
       // Skip IS for k = 1 (degenerates to a base-case check).
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
+      if (
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         log_result(
           "\nForward condition shows all executions terminate "

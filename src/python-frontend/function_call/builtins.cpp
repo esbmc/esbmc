@@ -320,10 +320,8 @@ static bool admits_class_object(const nlohmann::json &type_arg)
 
 exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
 {
-  // A class object is a char-array constant with no operands; a string
-  // literal's chars are operands.
   if (obj_expr.is_constant())
-    return gen_boolean(obj_expr.operands().empty());
+    return gen_boolean(python_converter::is_class_object(obj_expr));
 
   exprt unknown("sideeffect", bool_type());
   unknown.statement("nondet");
@@ -343,8 +341,9 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
 
-  // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
-  // Type objects themselves are not instances of other types (except 'type')
+  // Check if the first argument is a type object (e.g., x = int; isinstance(x,
+  // str)) Type objects themselves are not instances of other types (except
+  // 'type')
   if (obj_arg["_type"] == "Name" && obj_expr.is_symbol())
   {
     const std::string *name =
@@ -625,8 +624,7 @@ exprt function_call_expr::handle_type_call() const
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
 
-  typet str_type = type_handler_.build_array(char_type(), type_name.size() + 1);
-  return constant_exprt(type_name, type_name, str_type);
+  return converter_.make_class_object(type_name);
 }
 
 exprt function_call_expr::handle_divmod() const
@@ -1322,8 +1320,9 @@ exprt function_call_expr::handle_complex() const
               from_double(imag, double_type()));
           }
 
-          // Handle runtime conditionals that select between two string literals:
-          // if cond then "a" else "b" -> if cond then complex(a) else complex(b).
+          // Handle runtime conditionals that select between two string
+          // literals: if cond then "a" else "b" -> if cond then complex(a) else
+          // complex(b).
           const exprt &sym_val = sym->get_value();
           if (sym_val.id() == "if" && sym_val.operands().size() == 3)
           {
@@ -1438,9 +1437,10 @@ exprt function_call_expr::handle_complex() const
     if (is_complex_type(value.type()))
       return value;
 
-    if (std::optional<exprt> dunder_value =
-          try_convert_via_numeric_dunders(value, true);
-        dunder_value.has_value())
+    if (
+      std::optional<exprt> dunder_value =
+        try_convert_via_numeric_dunders(value, true);
+      dunder_value.has_value())
       return *dunder_value;
 
     value = normalize_numeric_expr_for_complex(value);
@@ -1484,9 +1484,10 @@ exprt function_call_expr::handle_complex() const
 
   if (!is_complex_type(real_arg.type()))
   {
-    if (std::optional<exprt> dunder_real =
-          try_convert_via_numeric_dunders(real_arg, true);
-        dunder_real.has_value())
+    if (
+      std::optional<exprt> dunder_real =
+        try_convert_via_numeric_dunders(real_arg, true);
+      dunder_real.has_value())
     {
       if (is_cpp_throw(*dunder_real))
         return *dunder_real;
@@ -1499,9 +1500,10 @@ exprt function_call_expr::handle_complex() const
 
   if (!is_complex_type(imag_arg.type()))
   {
-    if (std::optional<exprt> dunder_imag =
-          try_convert_via_numeric_dunders(imag_arg, true);
-        dunder_imag.has_value())
+    if (
+      std::optional<exprt> dunder_imag =
+        try_convert_via_numeric_dunders(imag_arg, true);
+      dunder_imag.has_value())
     {
       if (is_cpp_throw(*dunder_imag))
         return *dunder_imag;

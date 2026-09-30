@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
+#include <cmath>
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <unordered_map>
 #include <functional>
 #include <initializer_list>
@@ -142,9 +144,8 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
     else if (literal_to_ticks(text, scan_interval_ms_, value))
       v.init_value = value;
     else if (!text.empty())
-      std::cerr << "warning: LD: variable '" << v.name
-                << "' has an unrecognised initial value '" << text
-                << "'; using 0.\n";
+      throw UnsupportedConstructError(
+        "initial value '" + text + "' of " + v.name, 2);
   }
 
   // OpenPLC / CONTROLLINO export all variables as <localVars> with hardware
@@ -332,6 +333,11 @@ struct GNode
   int document_order = 0; // index among the body's children
 };
 
+static const std::string &label(const GNode &g)
+{
+  return g.type_name.empty() ? g.tag : g.type_name;
+}
+
 // Parse an IEC 61131-3 duration literal (T#20s, TIME#1m30s, t#500ms) into
 // milliseconds.  Returns -1 when the text is not a duration literal.
 static long long parse_duration_ms(const std::string &text)
@@ -393,10 +399,16 @@ static long long parse_duration_ms(const std::string &text)
 // Resolve an <inVariable> literal to the value the fixed-tick model expects.
 // A duration is converted to scan ticks using the configured task interval
 // (§3.3: one scan iteration advances time by exactly one tick); anything else
-// is read as a plain integer.  Returns false when the text is neither.
+// is read as an integer, written as one or as an integral decimal.  Returns
+// false when the text is neither.
 static bool
-literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out)
+literal_to_ticks(const std::string &raw, unsigned interval_ms, long long &out)
 {
+  const auto first = raw.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos)
+    return false;
+  const std::string text =
+    raw.substr(first, raw.find_last_not_of(" \t\r\n") - first + 1);
   const long long ms = parse_duration_ms(text);
   if (ms >= 0)
   {
@@ -416,7 +428,19 @@ literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out)
   const long long v = std::strtoll(text.c_str(), &end, 10);
   if (end == text.c_str() || errno == ERANGE)
     return false;
-  out = v;
+  if (*end == '\0')
+  {
+    out = v;
+    return true;
+  }
+  // A prefix is not the value: "1.5" is not 1, and "16#1F" is not 16 (#7389).
+  // An integral decimal such as "0.0" is.
+  const double d = std::strtod(text.c_str(), &end);
+  if (
+    *end != '\0' || d != std::trunc(d) ||
+    std::fabs(d) >= static_cast<double>(std::numeric_limits<long long>::max()))
+    return false;
+  out = static_cast<long long>(d);
   return true;
 }
 
@@ -440,6 +464,43 @@ static FBKind fb_kind_of(const std::string &s)
   if (it == table.end())
     throw LdParseError("Unknown FB type: " + s);
   return it->second;
+}
+
+static std::string trim(const std::string &text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos)
+    return "";
+  return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+}
+
+// What each input pin of a block is wired to: an <inVariable>'s expression, or
+// another block's output pin named as the graphical resolver names it.
+static std::vector<FBInWire> input_wires(const pugi::xml_node &blk)
+{
+  std::vector<FBInWire> wires;
+  for (auto pin : blk.child("inputVariables").children("variable"))
+  {
+    FBInWire w;
+    w.pin = pin.attribute("formalParameter").as_string();
+    auto conn = pin.select_node(".//connection").node();
+    w.connected = static_cast<bool>(conn);
+    auto src = blk.parent().find_child_by_attribute(
+      "localId", conn.attribute("refLocalId").as_string("-"));
+    const std::string src_tag = src.name();
+    const std::string src_pin = conn.attribute("formalParameter").as_string();
+    if (src_tag == "inVariable")
+      w.source = trim(src.child_value("expression"));
+    else if (src_tag == "block" && !src_pin.empty())
+    {
+      std::string src_inst = src.attribute("instanceName").as_string();
+      if (src_inst.empty())
+        src_inst = std::string("blk") + src.attribute("localId").as_string();
+      w.source = src_inst + "__" + src_pin;
+    }
+    wires.push_back(w);
+  }
+  return wires;
 }
 
 // A bare identifier names a variable; TRUE/FALSE and typed literals do not.
@@ -725,6 +786,7 @@ static bool parse_graphical_ld(
       v.is_output = driven;
       v.init_value = init;
       v.loc = loc;
+      v.synthesized = true;
       synth_vars.push_back(v);
       return name;
     };
@@ -751,19 +813,21 @@ static bool parse_graphical_ld(
     const GNode &src = nodes.at(it->second);
     if (!src.var.empty())
       return src.var; // wired to a declared variable
+    // A block output here would be read as the constant 0 (#7389).
+    if (src.expression.empty())
+      throw UnsupportedConstructError(
+        g.instance_name + " pin " + pin + " driven by " + label(src), 2);
 
     long long value = 0;
-    if (
-      !src.expression.empty() &&
-      !literal_to_ticks(src.expression, interval_ms, value))
+    if (!literal_to_ticks(src.expression, interval_ms, value))
     {
       // An <inVariable> may hold a symbol rather than a literal; treat a bare
-      // identifier as a variable reference before falling back to a constant.
+      // identifier as a variable reference.
       if (is_identifier(src.expression))
         return src.expression;
-      std::cerr << "warning: graphical LD: block pin " << pin
-                << " has unrecognised literal '" << src.expression
-                << "'; using 0.\n";
+      throw UnsupportedConstructError(
+        g.instance_name + " pin " + pin + " literal '" + src.expression + "'",
+        2);
     }
     return synth_var(pin_name(block_id, pin), kind, false, value);
   };
@@ -1066,7 +1130,8 @@ NetworkNode PlcopenXmlParser::parse_network(const void *node_ptr)
 // Replace TIA Portal / Rockwell element names with canonical PLCopen names.
 static void rename_vendor_tags(pugi::xml_node node)
 {
-  // Rockwell uses "contactNO" / "contactNC"; normalise to "contact" with negated attr.
+  // Rockwell uses "contactNO" / "contactNC"; normalise to "contact" with
+  // negated attr.
   for (auto child : node.children())
   {
     std::string tag = child.name();
@@ -1092,6 +1157,95 @@ void PlcopenXmlParser::normalise(pugi_doc_wrapper &w)
 }
 
 // -----------------------------------------------------------------------
+// Program variables written by a wire
+// -----------------------------------------------------------------------
+
+// An <outVariable> means "<var> := <source>". The only source translated is
+// the output pin of a user FB instance in the same body; localIds are unique
+// per body only.
+static std::string wired_variable(const pugi::xml_node &ov)
+{
+  const std::string var = ov.child("expression").child_value();
+  return var.empty() ? ov.child("variable").child_value() : var;
+}
+
+static const UserFBDef *fb_output_source(
+  const pugi::xml_node &ov,
+  const pugi::xml_node &src,
+  const LdAst &ast)
+{
+  const std::string pin = ov.select_node(".//connection")
+                            .node()
+                            .attribute("formalParameter")
+                            .as_string();
+  const std::string type = src.attribute("typeName").as_string();
+  if (
+    std::string(ov.name()) != "outVariable" || wired_variable(ov).empty() ||
+    std::string(src.name()) != "block")
+    return nullptr;
+  // In/out pins sit in input_vars and may be read after the call.
+  auto has_pin = [&pin](const std::vector<FBVarDecl> &vars) {
+    return std::any_of(vars.begin(), vars.end(), [&](const FBVarDecl &v) {
+      return v.name == pin;
+    });
+  };
+  for (const auto &def : ast.user_fb_defs)
+    if (
+      def.type_name == type &&
+      (has_pin(def.output_vars) || has_pin(def.input_vars)))
+      return &def;
+  return nullptr;
+}
+
+static std::vector<FBOutWire>
+out_wires_of(const pugi::xml_node &blk, const LdAst &ast)
+{
+  std::vector<FBOutWire> wires;
+  const std::string id = blk.attribute("localId").as_string();
+  for (auto ov : blk.parent().children("outVariable"))
+  {
+    const pugi::xml_node conn = ov.select_node(".//connection").node();
+    if (
+      conn.attribute("refLocalId").as_string() == id &&
+      fb_output_source(ov, blk, ast))
+      wires.push_back(
+        {wired_variable(ov), conn.attribute("formalParameter").as_string()});
+  }
+  return wires;
+}
+
+// Any other source, an operator block, a timer or counter pin, or another
+// variable, would leave <var> unassigned and every property over it vacuous
+// (#7389), so it is refused.
+static void
+reject_unmodelled_wires(const pugi::xml_node &root, const LdAst &ast)
+{
+  for (auto xp : root.select_nodes(
+         "//pou[@pouType='program']//*[self::LD or self::ladderDiagram]"
+         "//*[self::outVariable or self::inOutVariable]"))
+  {
+    const pugi::xml_node ov = xp.node();
+    const pugi::xml_node conn = ov.select_node(".//connection").node();
+    if (!conn)
+      continue;
+    const std::string ref = conn.attribute("refLocalId").as_string();
+    const std::string pin = conn.attribute("formalParameter").as_string();
+    const pugi::xml_node src =
+      ov.parent().find_child_by_attribute("localId", ref.c_str());
+    if (fb_output_source(ov, src, ast))
+      continue;
+    const std::string type = src.attribute("typeName").as_string();
+    const std::string what = !src           ? "localId " + ref
+                             : type.empty() ? std::string(src.name())
+                                            : type;
+    throw UnsupportedConstructError(
+      std::string(ov.name()) + " " + wired_variable(ov) + " driven by " + what +
+        (pin.empty() ? "" : " output " + pin),
+      2);
+  }
+}
+
+// -----------------------------------------------------------------------
 // Untranslated POU bodies
 // -----------------------------------------------------------------------
 
@@ -1105,9 +1259,9 @@ void PlcopenXmlParser::normalise(pugi_doc_wrapper &w)
 static void
 reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
 {
-  for (auto xpath_node :
-       root.select_nodes("//pou/body/* | //pou/actions/action/body/* | "
-                         "//pou/transitions/transition/body/*"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou/body/* | //pou/actions/action/body/* | "
+         "//pou/transitions/transition/body/*"))
   {
     const pugi::xml_node lang = xpath_node.node();
     const std::string tag = lang.name();
@@ -1117,10 +1271,14 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
     const pugi::xml_node pou =
       where == "pou" ? holder : holder.parent().parent();
     const std::string pou_name = pou.attribute("name").as_string();
+    const std::string pou_type = pou.attribute("pouType").as_string();
 
+    // Only a program's LD body is translated: a function block's or a
+    // function's would run once per scan in the program's scope, not per
+    // instance or call in its own (#7581).
     if (
       (tag == "LD" || tag == "ladderDiagram") &&
-      (where == "pou" || where == "action"))
+      (where == "pou" || where == "action") && pou_type == "program")
       continue;
 
     // st_fb_translator inlines a function block's Structured Text body into
@@ -1128,8 +1286,7 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
     // no output pin or an empty body is dropped, and dropping it silently is
     // the same defect as dropping the body outright.
     const bool translated_fb_body =
-      tag == "ST" &&
-      std::string(pou.attribute("pouType").as_string()) == "functionBlock" &&
+      tag == "ST" && pou_type == "functionBlock" &&
       std::any_of(
         ast.user_fb_defs.begin(),
         ast.user_fb_defs.end(),
@@ -1148,6 +1305,14 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
 // -----------------------------------------------------------------------
 // Top-level parse()
 // -----------------------------------------------------------------------
+
+// Every program body is merged into the one scan loop, so two programs would
+// share their variables and run as one (#7581).
+static void reject_several_programs(const pugi::xml_node &root)
+{
+  if (root.select_nodes("//pou[@pouType='program']").size() > 1)
+    throw UnsupportedConstructError("more than one program POU", 2);
+}
 
 LdAst PlcopenXmlParser::parse(const std::string &path)
 {
@@ -1178,6 +1343,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
 
   if (ast.has_interrupt_tasks)
     throw UnsupportedConstructError("InterruptTask", 2);
+  reject_several_programs(root);
 
   // The cyclic task period sets the tick length of the fixed-tick time model
   // (§3.3): one scan iteration advances time by exactly one interval.
@@ -1193,10 +1359,12 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
-  // Parse variable declarations (global + local)
+  // Program variables. A function block's interface is its own: each
+  // instance gets it from the definition, under the instance's prefix (#7581).
   for (auto xpath_var : root.select_nodes(
-         "//pou/interface//*[self::inputVars or self::outputVars or "
-         "self::inOutVars or self::localVars or self::globalVars]"))
+         "//pou[@pouType='program']/interface/*[self::inputVars or "
+         "self::outputVars or self::inOutVars or self::localVars or "
+         "self::globalVars]"))
   {
     pugi::xml_node vars_node = xpath_var.node();
     std::string vars_tag = vars_node.name();
@@ -1219,8 +1387,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // locations must be searched, or the action-nested rungs are silently
   // skipped and the program verifies vacuously (no rung assignments,
   // all variables at their zero-initialised default).
-  for (auto xpath_node :
-       root.select_nodes("//pou/body/LD | //pou/actions/action/body/LD"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou[@pouType='program']/body/LD | "
+         "//pou[@pouType='program']/actions/action/body/LD"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
@@ -1234,9 +1403,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
     ast.networks.push_back(std::move(net));
   }
-  for (auto xpath_node :
-       root.select_nodes("//pou/body/ladderDiagram | "
-                         "//pou/actions/action/body/ladderDiagram"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou[@pouType='program']/body/ladderDiagram | "
+         "//pou[@pouType='program']/actions/action/body/ladderDiagram"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
@@ -1364,38 +1533,18 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         inst.type_name = tn;
         inst.instance_name = blk.attribute("instanceName").as_string();
         inst.block_id = blk.attribute("localId").as_string();
+        inst.in_wires = input_wires(blk);
+        inst.out_wires = out_wires_of(blk, ast);
         inst.loc = {source_file_, 0, 0};
         ast.user_fb_instances.push_back(std::move(inst));
         break;
       }
     }
-
-    // Wire FB output pins to the program variables that consume them: a program
-    // <outVariable> with <connection refLocalId="<block>" formalParameter="<pin>">
-    // means "<prog_var> := <fb_instance>.<pin>".  This propagates a (possibly
-    // forged) FB output into the program so value/actuator-manipulation bombs
-    // become observable, and makes the model faithful instead of vacuous.
-    for (auto xp : root.select_nodes("//pou[@pouType='program']//outVariable"))
-    {
-      pugi::xml_node ov = xp.node();
-      std::string pv = ov.child("expression").child_value();
-      if (pv.empty())
-        pv = ov.child("variable").child_value();
-      pugi::xml_node conn = ov.select_node(".//connection").node();
-      if (!conn || pv.empty())
-        continue;
-      std::string ref = conn.attribute("refLocalId").as_string();
-      std::string pin = conn.attribute("formalParameter").as_string();
-      if (pin.empty())
-        continue;
-      for (auto &inst : ast.user_fb_instances)
-        if (inst.block_id == ref)
-          inst.out_wires.push_back({pv, pin});
-    }
   }
 
   // Last, so the function-block definitions above are already registered.
   reject_untranslated_bodies(root, ast);
+  reject_unmodelled_wires(root, ast);
 
   return ast;
 }

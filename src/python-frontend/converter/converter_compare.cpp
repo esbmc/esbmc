@@ -20,6 +20,21 @@ exprt gen_bool(bool v)
 {
   return migrate_expr_back(v ? gen_true_expr() : gen_false_expr());
 }
+
+// A class object shares a string's char-array model but never equals one
+// (int != "int"), and orders against nothing.
+exprt compare_class_objects(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (op != "Eq" && op != "NotEq")
+    throw std::runtime_error("TypeError: ordered comparison of a class object");
+  const bool same_class = python_converter::is_class_object(lhs) &&
+                          python_converter::is_class_object(rhs) &&
+                          lhs.get("value") == rhs.get("value");
+  return gen_bool(same_class == (op == "Eq"));
+}
 } // namespace
 
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
@@ -114,16 +129,8 @@ exprt python_converter::compare_constants_internal(
       lhs.type().subtype() == char_type() &&
       rhs.type().subtype() == char_type())
     {
-      // Type-identifier constants (e.g. from `x = int`) have no operands and
-      // store the name in get_value(). String literals have individual char
-      // operands and an empty get_value(). These represent different Python
-      // objects (int != "int"), so comparing across formats is always unequal;
-      // an ordered comparison across them is meaningless, so fall through.
-      bool lhs_is_type_id = lhs.operands().empty();
-      bool rhs_is_type_id = rhs.operands().empty();
-      if (lhs_is_type_id != rhs_is_type_id)
-        return (op == "Eq" || op == "NotEq") ? gen_bool(op == "NotEq")
-                                             : nil_exprt();
+      if (is_class_object(lhs) || is_class_object(rhs))
+        return compare_class_objects(op, lhs, rhs);
 
       // Extract string values and compare lexicographically (Python orders
       // strings by code point; for the char-array model this is byte-wise,
@@ -296,7 +303,8 @@ exprt python_converter::handle_string_comparison(
     return gen_bool(op == "Eq");
 
   // Fast-path for comparisons against single-character string literals.
-  // This avoids introducing strcmp() calls that can inflate branch coverage counts.
+  // This avoids introducing strcmp() calls that can inflate branch coverage
+  // counts.
   if (op == "Eq" || op == "NotEq")
   {
     auto extract_single_char = [&](const exprt &expr, char &ch) -> bool {
@@ -566,8 +574,9 @@ exprt python_converter::handle_none_comparison(
   // `has_start` / `has_stop` / `has_step` flags of __ESBMC_PySliceObj.
   // Lower `sl.<field> is None` to `sl.has_<field> == 0` so that user code can
   // distinguish a bare `:` from an explicit `0:0` (github #4543).
-  if (exprt rewrite = try_lower_slice_member_is_none(op, lhs, rhs);
-      !rewrite.is_nil())
+  if (
+    exprt rewrite = try_lower_slice_member_is_none(op, lhs, rhs);
+    !rewrite.is_nil())
     return rewrite;
 
   // If one side is None and the other is a different type (e.g., int, str)
@@ -578,7 +587,8 @@ exprt python_converter::handle_none_comparison(
     const exprt &non_none = lhs_is_none ? rhs : lhs;
 
     // If comparing with a constant integer, string, or other non-None constant
-    // exclude pointer to array (strings), as they could be Optional[str] parameters
+    // exclude pointer to array (strings), as they could be Optional[str]
+    // parameters
     if (
       non_none.is_constant() && (!non_none.type().is_pointer() ||
                                  (non_none.type().is_pointer() &&
@@ -691,9 +701,10 @@ exprt python_converter::handle_string_type_mismatch(
   // Handle equality/inequality comparisons for other type mismatches
   if (op == "Eq" || op == "NotEq")
   {
-    // Python allows this comparison but it always returns False for Eq and True for NotEq
-    // For verification purposes, we model this as returning the expected constant value
-    // This represents Python's behavior: str == int always evaluates to False
+    // Python allows this comparison but it always returns False for Eq and True
+    // for NotEq For verification purposes, we model this as returning the
+    // expected constant value This represents Python's behavior: str == int
+    // always evaluates to False
     return gen_bool(op == "NotEq");
   }
 

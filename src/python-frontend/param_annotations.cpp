@@ -58,9 +58,9 @@ const nlohmann::json &list_elem_annotation(const nlohmann::json &annotation)
 
 /// Python type name of a literal constant, or "" when this pass cannot type it.
 /// A bool member is deliberately left untyped: reading one back out of a stored
-/// tuple is already broken without this pass (`h = [(True, 5)]; h[0][1]` reports
-/// a spurious violation), so binding it would trade a false proof for a false
-/// alarm.
+/// tuple is already broken without this pass (`h = [(True, 5)]; h[0][1]`
+/// reports a spurious violation), so binding it would trade a false proof for a
+/// false alarm.
 std::string constant_type_name(const nlohmann::json &node)
 {
   if (!is_node(node, "Constant") || !node.contains("value"))
@@ -122,7 +122,8 @@ nlohmann::json tuple_annotation_of_list(const nlohmann::json &list_literal)
   return annotation;
 }
 
-/// `list[<elem>]`, keeping the location fields the annotator reads off @p origin.
+/// `list[<elem>]`, keeping the location fields the annotator reads off @p
+/// origin.
 nlohmann::json
 list_annotation_of(const nlohmann::json &elem, const nlohmann::json &origin)
 {
@@ -137,6 +138,40 @@ list_annotation_of(const nlohmann::json &elem, const nlohmann::json &origin)
       annotation[field] = origin[field];
 
   return annotation;
+}
+
+/// True when @p annotation names a module-level alias (`_Elem = int`). A model
+/// spells its element type through one to mark every parameter and return
+/// sharing it as that element, so that they are retyped together with the list.
+bool names_alias(const nlohmann::json &body, const nlohmann::json &annotation)
+{
+  if (!is_node(annotation, "Name"))
+    return false;
+
+  for (const auto &stmt : body)
+    if (
+      json_utils::is_name_alias(stmt) &&
+      stmt["targets"][0]["id"] == annotation["id"])
+      return true;
+  return false;
+}
+
+/// Rewrite @p def's scalar parameters and return annotated @p placeholder to
+/// @p elem.
+void retype_placeholder(
+  nlohmann::json &def,
+  const nlohmann::json &placeholder,
+  const nlohmann::json &elem)
+{
+  const auto same = [&](const nlohmann::json &annotation) {
+    return is_node(annotation, "Name") && annotation["id"] == placeholder["id"];
+  };
+
+  for (auto &arg : def["args"]["args"])
+    if (arg.contains("annotation") && same(arg["annotation"]))
+      arg["annotation"] = elem;
+  if (def.contains("returns") && same(def["returns"]))
+    def["returns"] = elem;
 }
 
 /// A call's callee name: `f(...)` or `m.f(...)`. Empty when neither.
@@ -219,9 +254,9 @@ private:
   /// whose own `heap` parameter is unbound — counting the latter would conflict
   /// the former away and leave `_siftup` mis-typed.
   ///
-  /// The set is keyed by bare name across every module, which over-approximates:
-  /// an unrelated variable named `f` marks a dead `f` live. That direction only
-  /// forgoes a binding; it never produces a wrong one.
+  /// The set is keyed by bare name across every module, which
+  /// over-approximates: an unrelated variable named `f` marks a dead `f` live.
+  /// That direction only forgoes a binding; it never produces a wrong one.
   std::set<std::string> live_names_;
 
   void collect_live_names(const nlohmann::json &node)
@@ -400,10 +435,9 @@ private:
       if (!elem || modules_[module].write == nullptr)
         continue;
 
-      nlohmann::json &annotation =
-        find_function(modules_[module].write->at("body"), func)
-          ->at("args")
-          .at("args")[param]["annotation"];
+      nlohmann::json &body = modules_[module].write->at("body");
+      nlohmann::json &def = *find_function(body, func);
+      nlohmann::json &annotation = def["args"]["args"][param]["annotation"];
 
       // Write once. A binding is only produced in the round where every call
       // site of the parameter is typable, and each site's type then comes from
@@ -413,6 +447,10 @@ private:
       // non-tuple list parameters, which is what bounds the loop below.
       if (is_tuple_annotation(list_elem_annotation(annotation)))
         continue;
+
+      const nlohmann::json &placeholder = list_elem_annotation(annotation);
+      if (names_alias(body, placeholder))
+        retype_placeholder(def, placeholder, *elem);
 
       annotation = list_annotation_of(*elem, annotation);
       changed = true;

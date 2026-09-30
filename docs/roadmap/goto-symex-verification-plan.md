@@ -753,6 +753,10 @@ this document** — each is a prioritised target for the cited harness.
 | **R65** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found driving WI-4, §15 M9 (R65); **FIXED**, same entry | **A placement new whose address has a side effect was modelled as an allocating new.** The lowering names the address twice, so for any call (`std::addressof(*it)`, immer's `uninitialized_copy`) the frontend warned and fell back: the object was built in fresh memory, the buffer kept its old bytes, and the address expression never ran. `*(int *)buf != 42` after `new (std::addressof(buf)) int(42)` was SUCCESSFUL. | `get_placement_new`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/placement_new_{call_address,address_once,class_call_address,no_initializer,recursive_mem_init,recursive_label}{,_fail}` | — | **Fixed**: the address is bound once, before the initializer, to a local of a statement expression. |
 | **R66** | **High (a crash, default configuration)** — found reviewing R65, §15 M9 (R66); **FIXED**, same entry | **R59's byte-view normalisation never terminated on an array of byte arrays.** The anchor of `unsigned char pool[8][32]` is `(char *)&pool[0]`, itself a byte view of the first row, and rewriting it again gives anchor + 0: `(char *)e == (char *)pool[0]`, a byte walk `for (q = pool[0]; q != pool[1]; ++q)`, and the same one level deeper all died with SIGBUS. | `byte_address_on_root`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/{byte_view_row_anchor,byte_walk_row,byte_view_3d_anchor}{,_fail}` | — | **Fixed**: an operand that already is the anchor is left alone. |
 | **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
+| **R69** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R64's residual, §15 M9 (R69); **FIXED**, same entry | **Before C++17 an elided copy was built anyway.** Clang marks the copy in `C c = C::make();`, `C c = C(5);` and `return C(x);` elidable and elides it; ESBMC ran the copy constructor and destroyed a second object. `{ C c = C::make(3); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-c-frontend/clang_c_convert.cpp`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_{local,static,temporary}{,_fail}` | — | **Fixed**: a variable's initializer and a returned value are converted from the elided copy's source, the C++17 form. |
+| **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
+| **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
+| **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
@@ -9195,6 +9199,111 @@ unsigned offset negated in its own width and then widened reads as
 `pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` abort on
 master, both halves; `pointer_diff_unused` pins `--no-slice`, the rest default
 flags.
+
+
+### M9 (R74) — 2026-09-29, the lane the distribution forgot, and an `--ir` wall
+
+R60 recorded that the simplifier drops the lane index when it pushes a
+subscript through a vector `+` with a non-constant operand. It needs no array:
+`v4i b; b[0] = k; ...; v4i c = a + b;` with a constant `a` aborts both solvers
+in `mk_bvadd`. The per-lane writes leave `b` a symbol while `a` is a
+`constant_vector2t`, and `Addtor` hands the pair to
+`distribute_vector_operation`, whose mixed case assumes the other operand is a
+scalar to broadcast. It built `add(a[i], b)` with the whole vector. When `b` is
+itself a constant vector (`{0, 0, 0, 0}` with a lane overwritten afterwards
+still folds to one), the both-constant case runs and the bug stays hidden,
+which is why most vector tests pass.
+
+**Fixed** by indexing a vector operand at the lane being built. `+`, `-`, `*`,
+`&`, `|`, `^`, shifts and division match the native program; a scalar operand
+(`a + k`) still broadcasts. A unit test in `simplify2t.test.cpp` requires every
+lane and its operands to have the element type and fails with the fix
+reverted; `vector_op_nonconstant_lane{,_fail}` abort on master, both halves,
+under Bitwuzla and Z3.
+
+Examined and left open: R68's `map_char_key_ir` under `--ir --no-slice`.
+Unsliced, `cin`'s constructor writes the `std::ios` vtable pointer into its
+`ios_base` subobject byte by byte, and under `--ir` both byte operations lower
+a struct by casting it to an integer, which the integer encoding cannot
+express (`convert_typecast_to_ints_intmode`). Fixing it needs either a struct
+representation for byte operations under `--ir` or the multiple-inheritance
+layout that open PR #5552 reworks.
+
+### M9 (R69) — 2026-09-28, R64's residual: elided copies before C++17
+
+R64 left a local `C c = C::make();` under `--std c++14` destroying a surplus
+copy. Before C++17 clang marks that copy, and the one in `return C(x);`,
+elidable and elides it, and C++17 requires it ([dcl.init]/17.6.1); ESBMC
+converted it, so the copy constructor ran and a second object was destroyed.
+Apple clang defaults to `gnu++14`. On master `{ C c = C::make(3); }
+assert(dtors == 2);` is SUCCESSFUL while the program aborts natively, and its
+passing twin is a false FAILED.
+
+**Fixed** by `elided_copy_source`, identity in C and in C++ R64's
+`peel_elided_copy` under an `ExprWithCleanups`, applied to a variable's
+initializer, a static one's, and a returned value. What remains is the C++17
+form, which was already right. A copy that is not elidable, from a named
+object or a function returning a reference, still runs; `return local;`
+(NRVO) has no materialised temporary and is unchanged. Locals, temporaries,
+globals, static locals and a class with a virtual destructor match the native
+program in C++11, 14 and 17, and the three `cxx14_elided_copy_*` pairs, pinned
+to `--std c++14`, are wrong on master, both halves.
+
+Residuals, all on master before this change: the peel is one level at the
+root, so an elidable copy in a ternary operand, a nested functional cast, an
+init-list element or a catch-by-value parameter is still converted; NRVO
+`return local;` still moves and destroys once more than native; and a
+temporary in a `return` statement's full-expression is never destroyed
+(`int k() { return C(1).v; }` leaves `dtors == 0`, SUCCESSFUL in C++14 and
+C++17, native aborts), which this change now also lets through for
+`return C(C(1).v + 1);` in C++14, as master already did in C++17.
+### M9 (R71) — 2026-09-29, a C++ local's renaming, read from the wrong `#`
+
+R69 left `new S[n]()` and `new C[n]` with a nondet `n` as a false FAILED on
+master. The VCC was right; the SMT formula was not. Under the tuple-node
+flattener (Bitwuzla's default) the assertion read an array valuation nothing
+constrained, and `--tuple-sym-flattener` or Z3's native tuples gave SUCCESSFUL.
+`symex_cpp_new` built the object's expression with its own array type and
+stored a back-migrated copy in the context; references rebuilt from the context
+carried a different type, so the smt layer, which caches by expression, created
+a second array. The two types differed because the round trip misread the size:
+`sym_name_to_symbol` located the renaming suffix with the first `#` and `&` in
+the name, and a C++ local's clang USR has a `#` in its base name
+(`c:t.cpp@73@F@main#@n`). An L1 `n?1!0` came back as L2, and an L2 `n?1!0&0#1`
+came back with `level2_num` 0. C names have no `#`, which is why the C `malloc`
+and VLA shapes verified.
+
+**Fixed** in both places: the suffix is searched for after the `?`, and
+`symex_cpp_new` takes the object's type from the context, as `symex_mem`
+already did. Each patch alone left the reproducers FAILED: the parser fix alone
+changes nothing that references the object, and the context type alone names
+`n#0`, which made the zero-fill store an illegal dynamic offset. A unit test in
+`migrate.test.cpp` pins an L1 and an L2 round trip of a `#`-bearing local and
+fails with the parser reverted; `new_array_runtime_count` is FAILED on master
+under Bitwuzla. `new_array_runtime_count_fail` cannot bite: an unconstrained read
+only adds counterexamples.
+### M9 (R75) — 2026-09-29, the vector cases R60 left behind
+
+R60 listed two aborts that persisted on arrays of vectors. Both are sites
+that know arrays but not vectors, which the SMT layer encodes the same way.
+`flatten_to_bitvector` concatenates an array's elements but aborted on a vector
+member of a union read through its bytes (`union { v4i a[2]; char c[32]; }`).
+In the tuple-node flattener (Bitwuzla's default), `make_free` gives an array
+member its element sort and a vector member none, so `mk_fresh` aborted when an
+`ite` over `struct { v4i v; int k; }` elements needed fresh members: an array
+of such structs written at a symbolic index. Z3's native tuples verified it.
+Past that, `tuple_get_rec` had no vector case, so a violated property aborted
+while building the counterexample.
+
+**Fixed** by taking the array arm for a vector at all three sites, through
+`array_or_vector_size`/`array_or_vector_subtype`. Byte reads of `int` and
+`float` vector lanes, whole-struct copies and conditionals over such elements
+match the native program. `vector_union_bytes{,_fail}` and
+`vector_struct_array{,_fail}` abort on master, both halves; the failing half
+of the second also pins the counterexample path.
+
+Not fixed, and not vector-specific: under `--big-endian`, reading a `float`
+lane of a union back as `int` is FAILED on master for a plain `float[4]` too.
 
 ---
 

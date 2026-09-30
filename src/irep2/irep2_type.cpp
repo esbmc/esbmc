@@ -44,11 +44,12 @@ void irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target)
     (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
   const char *expected_name =
     (expected < type2t::end_type_id) ? type_names[expected] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: to_{}_type() called on type whose type_id is {} (target {})",
-    expected_name,
-    actual_name,
-    target));
+  throw irep2_cast_error(
+    fmt::format(
+      "irep2: to_{}_type() called on type whose type_id is {} (target {})",
+      expected_name,
+      actual_name,
+      target));
 }
 
 // Family accessors (struct_union_member_names, array_or_vector_subtype, ...)
@@ -61,10 +62,11 @@ void irep2_bad_family_cast(unsigned actual, const char *accessor)
 {
   const char *actual_name =
     (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: {}() called on incompatible type (type_id = {})",
-    accessor,
-    actual_name));
+  throw irep2_cast_error(
+    fmt::format(
+      "irep2: {}() called on incompatible type (type_id = {})",
+      accessor,
+      actual_name));
 }
 
 type2t::type2t(type_ids id) : type_id(id), crc_val(0)
@@ -136,7 +138,8 @@ unsigned int array_type2t::get_width() const
   if (array_size->expr_id != expr2t::constant_int_id)
     throw dyn_sized_array_excp(array_size);
 
-  // Otherwise, we can multiply the size of the subtype by the number of elements.
+  // Otherwise, we can multiply the size of the subtype by the number of
+  // elements.
   unsigned int sub_width = subtype->get_width();
 
   const expr2t *elem_size = array_size.get();

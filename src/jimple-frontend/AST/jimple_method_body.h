@@ -108,9 +108,11 @@ public:
   enum class statement
   {
     Assignment, // A = 42
-    Identity, // @this, @parameter0, @parameter1, ...; This will be removed as it can solved directly in the frontend
-    StaticInvoke, // foo() (where foo is a static function)
-    SpecialInvoke, // Special methods of the class: constructors/static-constructor
+    Identity,   // @this, @parameter0, @parameter1, ...; This will be removed as
+                // it can solved directly in the frontend
+    StaticInvoke,  // foo() (where foo is a static function)
+    SpecialInvoke, // Special methods of the class:
+                   // constructors/static-constructor
     VirtualInvoke, // A.foo() (where A is an object)
     Return,        // return; return 42;
     Label,         // 1:, 2:; (GOTO labels)
@@ -153,4 +155,4 @@ private:
     {statement::Location, "Location"}};
 };
 
-#endif //ESBMC_JIMPLE_METHOD_BODY_H
+#endif // ESBMC_JIMPLE_METHOD_BODY_H

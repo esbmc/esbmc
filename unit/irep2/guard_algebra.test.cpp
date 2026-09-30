@@ -7,7 +7,8 @@
 //
 // Oracles per the plan (§H-B4):
 //   -=  conjunct SET DIFFERENCE  (NOT g1 & ~shared): result == AND(g1 \ g2)
-//   |=  logical OR:              as_expr(g1 |= g2) <=> as_expr(g1) | as_expr(g2)
+//   |=  logical OR:              as_expr(g1 |= g2) <=> as_expr(g1) |
+//   as_expr(g2)
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>

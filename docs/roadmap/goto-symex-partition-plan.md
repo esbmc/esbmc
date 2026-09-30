@@ -74,6 +74,7 @@ partition reviewable and what keeps it from decaying.
    would misstate its scope, so it stays at the top. *(Alternative, if the
    reviewer prefers an empty top level: a `support/` directory holding these two
    files. Either is defensible; the plan does not depend on the choice.)*
+   §11.2 added `waypoint.h` here on the same grounds.
 
 ## 4. Measured dependency structure
 
@@ -108,6 +109,7 @@ Two further inversions worth naming, neither introduced here:
   therefore drags in the witness emitter. `witnesses.h` is three headers in one
   — replay input types, GraphML/YAML output, and (until §5) the test
   generators. Splitting it is a follow-up, not part of this move.
+  **Resolved by §11.2.**
 * **`src/util/` → `goto-symex/`, twice.** `util/ssa/algorithms.h` and
   `util/ssa/goto_expr_factory.h` include `symex_target_equation.h`, and
   `util/base/yaml_parser.h:3` includes `<goto-symex/witnesses.h>` — the base
@@ -399,8 +401,18 @@ PR; each is a separate, small, testable change.
 2. **`witnesses.h` is two headers.** Splitting the violation-witness replay
    types (`waypoint`) from the GraphML/YAML emitters would remove
    `state/` → `witness/` and stop the engine's state header from pulling in
-   `boost/property_tree` and `yaml-cpp` into 44 translation units. Step 0
+   `boost/property_tree` and `yaml-cpp` into many translation units. Step 0
    removed the third role (the test generators); this is the remainder.
+   **DONE** on branch `refactor/split-witnesses-header`: `waypoint` and the
+   `c_nonset` sentinel moved to `src/goto-symex/waypoint.h`, which sits at the
+   top level for the same reason as `symex_invariant` (§3 rule 6): it is
+   shared by `state/`, `engine/`, `witness/` and `util/base/yaml_parser`, and
+   depends on nothing in this component. `goto_symex_state.h` and
+   `engine/builtin_functions/witness.cpp` include it in place of
+   `witnesses.h`. Measured with `ninja -t deps`, the TUs that parse
+   `witnesses.h` and `boost/property_tree` fall from 58 to 19, and those that
+   parse `yaml-cpp` fall from 62 to 23. `invariant` stays in `witnesses.h`: only the
+   YAML emitter and `yaml_parser` use it.
 3. **`src/util/` depends upward on `goto-symex/`.** `util/ssa/{algorithms,
    cache, goto_expr_factory}` are not utilities; #6381 named this and deferred
    it because it changes CMake target topology. `util/base/yaml_parser.h`'s
@@ -433,6 +445,10 @@ PR; each is a separate, small, testable change.
    against. Naming this is the point: the header-only graph in §4 does not see
    these edges, so an unqualified "unreachable from `symex_step`" claim
    measured that way is wrong.
+   After §11.2 the witness half holds. The hooks in
+   `engine/builtin_functions/witness.cpp` only read `waypoint` fields, and they
+   still compile once `witnesses.h` is replaced by `waypoint.h`, so they call
+   nothing the emitter declares. The `printf_formattert` half remains.
 6. **The dead citation in `engine/symex_main.cpp`.** It named
    `goto-symex/builtin_functions.cpp`, a file that has not existed since
    `builtin_functions` became a directory. Repointed at

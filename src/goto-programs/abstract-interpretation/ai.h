@@ -22,7 +22,7 @@
  * 1. Running an analysis, via operator() overloads
  * 2. Accessing the results of an analysis, by looking up the state map
  * 3. Outputting the results of the analysis;
-*/
+ */
 class ai_baset
 {
 public:
@@ -101,7 +101,7 @@ protected:
 
   /* The fixedpoint is computed through a Work set algorithm which
    * consists in adding nodes that have changed with the current merge
-  */
+   */
   // the work-queue is sorted by location number
   typedef std::unordered_map<unsigned, goto_programt::const_targett>
     working_sett;

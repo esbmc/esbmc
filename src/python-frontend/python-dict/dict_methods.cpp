@@ -232,7 +232,8 @@ exprt python_dict_handler::handle_dict_get(
 
   if (use_optional)
   {
-    // No default given: return Optional(is_none=true) so `result is None` holds.
+    // No default given: return Optional(is_none=true) so `result is None`
+    // holds.
     constant_exprt none_expr(none_type());
     none_expr.set_value("NULL");
     exprt optional_none =
@@ -312,7 +313,8 @@ exprt python_dict_handler::handle_dict_setdefault(
       result_type = long_int_type();
   }
 
-  // Strings are stored as char arrays; list_at returns a void* to the first character.
+  // Strings are stored as char arrays; list_at returns a void* to the first
+  // character.
   bool is_string_result =
     (result_type.is_pointer() && result_type.subtype() == char_type()) ||
     (result_type.is_array() && result_type.subtype() == char_type());

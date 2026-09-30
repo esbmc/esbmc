@@ -325,8 +325,8 @@ void rw_sett::read_write_rec(
                                               : to_nearbyint2t(expr).from;
     read_write_rec(from, r, w, suffix, guard, original_expr, dereferenced);
   }
-  else if (std::vector<expr2tc> values = ieee_value_operands(expr);
-           !values.empty())
+  else if (
+    std::vector<expr2tc> values = ieee_value_operands(expr); !values.empty())
   {
     for (const expr2tc &v : values)
       read_write_rec(v, r, w, suffix, guard, original_expr, dereferenced);

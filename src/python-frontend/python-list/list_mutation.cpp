@@ -87,8 +87,8 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   symbolt &elem_type_sym = converter_.create_tmp_symbol(
     op, "$list_elem_type$", size_type(), type_name_expr);
 
-  // TODO: Eventually we should build a reverse index of hash => type into the context
-  // this will allow better verification counter-examples.
+  // TODO: Eventually we should build a reverse index of hash => type into the
+  // context this will allow better verification counter-examples.
   constant_exprt hash_value(size_type());
   hash_value.set_value(integer2binary(
     std::hash<std::string>{}(elem_type_name), config.ansi_c.address_width));
@@ -389,10 +389,12 @@ exprt python_list::build_push_list_call(
   push_func_call.arguments().push_back(build_symbol(list)); // list
 
   // For string types (pointer to char), we must pass the pointer value directly
-  // For other types (including other pointers such None/bool*), we must pass the address
+  // For other types (including other pointers such None/bool*), we must pass
+  // the address
   exprt element_arg;
-  if (is_empty_user_class_object_type(
-        elem_info.elem_symbol->get_type(), converter_.name_space()))
+  if (
+    is_empty_user_class_object_type(
+      elem_info.elem_symbol->get_type(), converter_.name_space()))
   {
     // Python list stores object references. For class objects, store a pointer
     // to the object (not a byte copy of the struct payload).
@@ -450,7 +452,8 @@ exprt python_list::build_push_list_call(
 
   // float_type_id: when element is float, its type hash == float_type_id so
   // __ESBMC_copy_value uses *(double*) copy in --ir mode (real sort).
-  // enable_float_path=false skips this for dict values which use void* comparison.
+  // enable_float_path=false skips this for dict values which use void*
+  // comparison.
   exprt float_type_id_arg =
     (enable_float_path && elem_info.elem_symbol->get_type().is_floatbv())
       ? static_cast<exprt>(build_symbol(*elem_info.elem_type_sym))
@@ -880,8 +883,8 @@ exprt python_list::list_repetition(
   };
 
   // Collect source elements for the VLA path: literal `elts`,
-  // or the variable list's type map, falling back to a single `fallback` element
-  // if neither yields anything.
+  // or the variable list's type map, falling back to a single `fallback`
+  // element if neither yields anything.
   auto collect_vla_elems = [&](
                              const nlohmann::json &node,
                              const exprt &list_operand,
@@ -902,8 +905,8 @@ exprt python_list::list_repetition(
   // Count on the lhs (e.g.: 3 * [1] or n * lst). The list operand is the rhs.
   if (lhs.type() != list_type)
   {
-    // For literal `elts`, defer the elts[0] extraction to the constant-count branch
-    // the VLA path re-extracts every element via collect_vla_elems.
+    // For literal `elts`, defer the elts[0] extraction to the constant-count
+    // branch the VLA path re-extracts every element via collect_vla_elems.
     const bool from_elts = right_node.contains("elts");
     if (!from_elts)
     {

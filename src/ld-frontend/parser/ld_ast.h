@@ -183,6 +183,8 @@ struct VarDecl
   VarKind kind = VarKind::BOOL;
   bool is_input = false;
   bool is_output = false;
+  bool synthesized =
+    false; // invented by the graphical resolver (pins, power flow)
   // Initial value for numeric variables. Graphical LD wires FB presets from
   // <inVariable> literals rather than declared variables, so the synthesised
   // preset symbol carries the literal here.
@@ -207,11 +209,11 @@ struct FBVarDecl
 
 struct UserFBDef
 {
-  std::string type_name;               // e.g. "EQ_0"
-  std::vector<FBVarDecl> input_vars;   // formal inputs (IN1, IN2, ...) + types
-  std::vector<FBVarDecl> local_vars;   // FB-local variables (e.g. "i") + types
-  std::vector<FBVarDecl> output_vars;  // every formal output + types
-  std::string st_body;                 // raw Structured Text body
+  std::string type_name;              // e.g. "EQ_0"
+  std::vector<FBVarDecl> input_vars;  // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars;  // FB-local variables (e.g. "i") + types
+  std::vector<FBVarDecl> output_vars; // every formal output + types
+  std::string st_body;                // raw Structured Text body
 };
 
 // Wiring of an FB output pin to a program variable: "prog_var := <inst>__pin".
@@ -221,12 +223,22 @@ struct FBOutWire
   std::string pin;      // FB formal output name (e.g. OUT_MV1)
 };
 
+// Wiring of an FB input pin: "<inst>__pin := source" each scan. The source is
+// a program variable, a literal, or another block's "<inst>__<pin>"; empty when
+// the pin is unwired or fed by something not modelled (the pin stays nondet).
+struct FBInWire
+{
+  std::string pin;
+  std::string source;
+  bool connected = false; // wired, whether or not the source is modelled
+};
+
 struct UserFBInstance
 {
-  std::string type_name;     // references a UserFBDef
-  std::string instance_name; // e.g. "EQ_00"
-  std::string block_id;      // graphical localId of the block
-  std::string in1_var; // program variable feeding IN1 ("" => nondet sample)
+  std::string type_name;            // references a UserFBDef
+  std::string instance_name;        // e.g. "EQ_00"
+  std::string block_id;             // graphical localId of the block
+  std::vector<FBInWire> in_wires;   // input pins and their sources
   std::vector<FBOutWire> out_wires; // pins consumed by program outVariables
   LdLocation loc;
 };
@@ -238,7 +250,7 @@ struct UserFBInstance
 struct LdAst
 {
   std::string source_file;           // path of the PLCopen XML file
-  std::vector<VarDecl> variables;    // all declared variables
+  std::vector<VarDecl> variables;    // program variables and synthesised pins
   std::vector<NetworkNode> networks; // one per POU (Tier 1: single POU)
   std::vector<UserFBDef> user_fb_defs;
   std::vector<UserFBInstance> user_fb_instances;

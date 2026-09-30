@@ -877,12 +877,13 @@ exprt function_call_expr::build_constant_from_arg() const
   {
     // First try to extract complex parts directly from the JSON AST.
     double real_val = 0.0, imag_val = 0.0;
-    if (try_extract_complex_parts_from_json(
-          arg,
-          converter_.ast(),
-          converter_.current_function_name(),
-          real_val,
-          imag_val))
+    if (
+      try_extract_complex_parts_from_json(
+        arg,
+        converter_.ast(),
+        converter_.current_function_name(),
+        real_val,
+        imag_val))
     {
       return converter_.get_string_builder().build_string_literal(
         format_complex_string(real_val, imag_val));
@@ -3618,8 +3619,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (args.size() == 1)
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
 
@@ -3632,9 +3634,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (args.size() == 2)
   {
     auto [lhs_expr, rhs_expr] = require_two_args();
-    if (std::optional<exprt> type_error =
-          validate_real_args(lhs_expr, rhs_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_args(lhs_expr, rhs_expr);
+      type_error.has_value())
 
       return *type_error;
 
@@ -3649,8 +3651,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (converter_.get_math_handler().is_unary_dispatch_function(func_name))
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle(func_name, arg_expr, call_);
@@ -3658,9 +3661,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (converter_.get_math_handler().is_binary_dispatch_function(func_name))
   {
     auto [lhs_expr, rhs_expr] = require_two_args();
-    if (std::optional<exprt> type_error =
-          validate_real_args(lhs_expr, rhs_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_args(lhs_expr, rhs_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle(
@@ -3670,8 +3673,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (func_name == "sin")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle_sin(arg_expr, call_);
@@ -3679,8 +3683,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "cos")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle_cos(arg_expr, call_);
@@ -3688,8 +3693,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "exp")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle_exp(arg_expr, call_);
@@ -3697,8 +3703,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "sqrt")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     // Domain check for sqrt: operand must be >= 0.
@@ -3759,8 +3766,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "log")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     // Domain check for log: operand must be > 0 (V.3: built in IREP2).
@@ -3789,8 +3797,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "acos")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     // Domain check for acos: operand must be in [-1.0, 1.0]
@@ -3832,8 +3841,9 @@ exprt function_call_expr::handle_math_function_dispatch()
     math_guard_utils::math_guard_real_general_functions().count(func_name) != 0)
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return handle_general_function_call();
@@ -3842,8 +3852,9 @@ exprt function_call_expr::handle_math_function_dispatch()
     math_guard_utils::math_guard_int_general_functions().count(func_name) != 0)
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_int_type_error();
@@ -3854,8 +3865,9 @@ exprt function_call_expr::handle_math_function_dispatch()
       func_name) != 0)
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_real_type_error();
@@ -3864,15 +3876,16 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "dist")
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_real_type_error();
     auto [lhs_expr, rhs_expr] = require_two_args();
-    if (std::optional<exprt> type_error =
-          validate_real_args(lhs_expr, rhs_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_args(lhs_expr, rhs_expr);
+      type_error.has_value())
 
       return *type_error;
     // Native handler for tuple arguments; lists use the model
@@ -3902,8 +3915,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "fsum")
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_real_type_error();
@@ -4156,12 +4170,13 @@ function_call_expr::get_dispatch_table()
      [this]() {
        const auto &arg = call_["args"][0];
        double real_val = 0.0, imag_val = 0.0;
-       if (try_extract_complex_parts_from_json(
-             arg,
-             converter_.ast(),
-             converter_.current_function_name(),
-             real_val,
-             imag_val))
+       if (
+         try_extract_complex_parts_from_json(
+           arg,
+           converter_.ast(),
+           converter_.current_function_name(),
+           real_val,
+           imag_val))
        {
          return converter_.get_string_builder().build_string_literal(
            format_complex_string(real_val, imag_val));
@@ -5665,19 +5680,35 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   return call;
 }
 
-/// The base-class declaration of a ClassMethod call the derived class does not
-/// declare itself, or a null pointer when there is none (#7546).
+/// The declaration a ClassMethod call resolves to when the called class's own
+/// symbol does not exist, or a null pointer when there is none. Throws when
+/// the declaration the MRO selects has no converted symbol (#7546).
 const symbolt *function_call_expr::find_inherited_classmethod(
   const std::string &func_symbol_id) const
 {
   if (function_type_ != FunctionType::ClassMethod)
     return nullptr;
 
+  const std::string &method = function_id_.get_function();
+  if (const auto mro = converter_.class_mro(function_id_.get_class()))
+    for (const std::string &cls : *mro)
+    {
+      if (!converter_.class_binds_name(cls, method))
+        continue;
+      if (
+        const symbolt *declared = converter_.symbol_table().find_symbol(
+          symbol_id(converter_.python_file(), cls, method).to_string()))
+        return declared;
+      // No function symbol: the call precedes the definition in the source, or
+      // the binding is not one converted to a function. Binding a declaration
+      // further along the MRO would prove that one's result instead.
+      throw std::runtime_error(
+        "calling " + cls + "." + method +
+        " without a converted definition is not yet supported");
+    }
+
   return converter_.find_function_in_base_classes(
-    function_id_.get_class(),
-    func_symbol_id,
-    function_id_.get_function(),
-    false);
+    function_id_.get_class(), func_symbol_id, method, false);
 }
 
 /// A forward-reference call for `Class.__post_init__(...)`, which a dataclass's

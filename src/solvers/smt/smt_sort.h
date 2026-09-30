@@ -152,9 +152,8 @@ private:
   smt_sortt range_sort;
 
   /** Type of the tuple
-   * For structs, this is the actual type (struct or array of structs) of a tuple
-   * that's been flattened
-   * For everything else, undefined
+   * For structs, this is the actual type (struct or array of structs) of a
+   * tuple that's been flattened For everything else, undefined
    */
   const type2tc tupletype;
 };
