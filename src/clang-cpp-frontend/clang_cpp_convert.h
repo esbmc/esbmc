@@ -136,6 +136,7 @@ protected:
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
+  const clang::Expr &elided_copy_source(const clang::Expr &init) override;
 
   bool get_struct_union_class_fields(
     const clang::RecordDecl &rd,
