@@ -54,10 +54,9 @@ expr2tc goto_symext::value_set_named_object(const expr2tc &ptr)
   if (sym == nullptr || sym->get_type().dynamic())
     return expr2tc();
 
-  // The enforce harness backs a pointer parameter whose contract states no
-  // extent with one element of stack (emit_struct_stack_backing, #6212). That
-  // object stands in for whatever the caller would pass; reading an extent off
-  // it would hand the contract the very guarantee it failed to state.
+  // The enforce harness backs a C++ `this` with one element of stack
+  // (emit_receiver_backing, #6212). That object stands in for whatever the
+  // caller would pass, so it states no extent a contract could rely on.
   if (id2string(sym->id).rfind("__ESBMC_harness_ptr_", 0) == 0)
     return expr2tc();
 

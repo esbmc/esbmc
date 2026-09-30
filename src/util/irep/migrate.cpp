@@ -865,8 +865,11 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
   size_t exm_pos = thestr.rfind("!");
   size_t end_of_name_pos = at_pos;
 
+  // A renaming suffix follows the base name, which for a C++ symbol (a clang
+  // USR) can itself contain '#' and '&', so search for its marks after the '?'.
+  const size_t suffix_pos = at_pos == std::string::npos ? 0 : at_pos;
   size_t and_pos, hash_pos;
-  if (thestr.find("#") == std::string::npos)
+  if (thestr.find('#', suffix_pos) == std::string::npos)
   {
     // We're level 1.
     target_level = symbol_renaming_level::level1;
@@ -877,8 +880,8 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
   {
     // Level 2
     target_level = symbol_renaming_level::level2;
-    and_pos = thestr.find("&");
-    hash_pos = thestr.find("#");
+    and_pos = thestr.find('&', suffix_pos);
+    hash_pos = thestr.find('#', suffix_pos);
 
     if (at_pos == std::string::npos)
     {

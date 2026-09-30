@@ -313,8 +313,7 @@ static bool referenced_objects(
     if (!is_object_descriptor2t(x))
       return false;
 
-    // Andersen names the target of `&s->v` by the expression `*s` rather than
-    // by the object s points to.
+    // A target built around a dereference is not a nameable object.
     const expr2tc &object = to_object_descriptor2t(x).object;
     std::vector<expr2tc> inner;
     collect_dereferences(object, inner);
