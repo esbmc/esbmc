@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-pointer-check --no-bounds-check --error-label ERROR --ts-check
+^TS-CHECK accepted states=1 inputs=0 defs=3 bad=1 prefix_bad=0 extract_s=
+^VERIFICATION UNKNOWN$
