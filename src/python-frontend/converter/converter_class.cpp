@@ -76,8 +76,8 @@ exprt python_converter::make_enum_member_struct_expr(
   // V.3: assemble the enum member struct { value, name } in IREP2 and
   // back-migrate once. Both members are already-built value exprs (the member's
   // integer value symbol and the char* name pointer), so migrating them
-  // round-trips exactly. Re-attach the struct type afterwards: migrate_type does
-  // not carry the frontend struct's component attributes.
+  // round-trips exactly. Re-attach the struct type afterwards: migrate_type
+  // does not carry the frontend struct's component attributes.
   expr2tc value_member, name_member;
   migrate_expr(symbol_expr(int_sym), value_member);
   migrate_expr(name_ptr, name_member);
@@ -151,7 +151,8 @@ void python_converter::register_instance_attribute(
   // Add to regular instance attribute map
   instance_attr_map[symbol_id].insert(attr_name);
 
-  // For 'self' parameters, also track with normalized key for cross-method access
+  // For 'self' parameters, also track with normalized key for cross-method
+  // access
   if (var_name == "self")
   {
     std::string normalized_key = create_normalized_self_key(class_tag);
@@ -356,16 +357,17 @@ typet python_converter::infer_attr_type_from_usage(
     return t;
 
   // Cross-module inference sources. A class and the code that constructs it can
-  // live in different modules: e.g. `Node` is defined in node.py while the calls
-  // `n2 = Node(2, n1)` are in the importing main.py. The struct type is built
-  // while converting the *defining* module, where the call sites are not the
-  // current module_body. Gather every reachable module body — the entry module
-  // (entry_ast_), every imported module (module_ast_pool_), and the current
-  // module — deduplicated by address, so both the class definition and its
-  // constructor call sites are visible regardless of which module is current.
-  // Without this, an imported class's __init__-parameter attributes stay
-  // any_type() and nested reads inside functions abort ("Cannot resolve nested
-  // attribute"), e.g. quixbugs detect_cycle's `node.successor.successor`.
+  // live in different modules: e.g. `Node` is defined in node.py while the
+  // calls `n2 = Node(2, n1)` are in the importing main.py. The struct type is
+  // built while converting the *defining* module, where the call sites are not
+  // the current module_body. Gather every reachable module body — the entry
+  // module (entry_ast_), every imported module (module_ast_pool_), and the
+  // current module — deduplicated by address, so both the class definition and
+  // its constructor call sites are visible regardless of which module is
+  // current. Without this, an imported class's __init__-parameter attributes
+  // stay any_type() and nested reads inside functions abort ("Cannot resolve
+  // nested attribute"), e.g. quixbugs detect_cycle's
+  // `node.successor.successor`.
   std::vector<const nlohmann::json *> module_bodies;
   auto add_body = [&](const nlohmann::json &mod) {
     if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())

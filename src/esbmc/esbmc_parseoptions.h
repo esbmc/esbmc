@@ -77,8 +77,10 @@ protected:
   /// \param goto_functions GOTO functions
   /// \param has_replace Whether to replace calls with contracts
   /// \param has_enforce Whether to enforce contracts
-  /// \param has_enforce_all Whether to enforce contracts for all annotated functions
-  /// \param has_replace_all Whether to replace calls for all annotated functions
+  /// \param has_enforce_all Whether to enforce contracts for all annotated
+  /// functions
+  /// \param has_replace_all Whether to replace calls for all annotated
+  /// functions
   /// \return True on a usage error, e.g. a named function that nothing acted on
   bool process_function_contracts(
     goto_functionst &goto_functions,

@@ -12,7 +12,7 @@ private:
 
 public:
   goto_program_serializationt(irep_serializationt::ireps_containert &ic)
-    : irepconverter(ic){};
+    : irepconverter(ic) {};
 
   void convert(const goto_programt &, std::ostream &);
   void convert(std::istream &, irept &);

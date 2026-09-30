@@ -161,8 +161,9 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  if (const bit_scan_endt end = bit_scan_builtin(symname);
-      end != bit_scan_endt::none)
+  if (
+    const bit_scan_endt end = bit_scan_builtin(symname);
+    end != bit_scan_endt::none)
   {
     assert(
       !func_call.operands.empty() && func_call.operands.size() <= 2 &&

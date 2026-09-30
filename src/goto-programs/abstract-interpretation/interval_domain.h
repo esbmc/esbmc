@@ -55,23 +55,23 @@ public:
 
   // TODO: Add options for ai.h
   // Extensions
-  static bool
-    enable_interval_arithmetic; /// Enable simplification for arithmetic operators
-  static bool
-    enable_interval_bitwise_arithmetic; /// Enable simplification for bitwise operations
-  static bool
-    enable_modular_intervals; /// Make a modular operation after every assignment
-  static bool
-    enable_assertion_simplification; /// Simplify condition and assertions with the intervals
+  static bool enable_interval_arithmetic;         /// Enable simplification for
+                                                  /// arithmetic operators
+  static bool enable_interval_bitwise_arithmetic; /// Enable simplification for
+                                                  /// bitwise operations
+  static bool enable_modular_intervals; /// Make a modular operation after every
+                                        /// assignment
+  static bool enable_assertion_simplification; /// Simplify condition and
+                                               /// assertions with the intervals
   static bool
     enable_contraction_for_abstract_states; /// Use contractor for <= operations
   static bool
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
   static bool enable_real_intervals; /// Enable real (floating-point) intervals
   static bool enable_assume_asserts; /// Asserts are propagates as assumptions
-  static bool
-    enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
-  static bool enable_ibex_contractor; /// Use ibex contractor
+  static bool enable_eval_assumptions; /// Try to evaluate in a guard in a TVT
+                                       /// to accelerate bottoms
+  static bool enable_ibex_contractor;  /// Use ibex contractor
 
   /// When set, the transformer skips any instruction whose
   /// `inductive_step_instruction` flag is true. Used by the post-k-induction
@@ -90,31 +90,32 @@ public:
   // Widening options
   static unsigned
     fixpoint_limit; /// Sets a limit for number of iterations before widening
-  static bool
-    widening_under_approximate_bound; /// Whether to considers overflows for Integers
-  static bool
-    widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
-  static bool widening_narrowing; /// Interpolate bound back after fixpoint
+  static bool widening_under_approximate_bound; /// Whether to considers
+                                                /// overflows for Integers
+  static bool widening_extrapolate; /// Extrapolate bound to infinity based on
+                                    /// previous iteration
+  static bool widening_narrowing;   /// Interpolate bound back after fixpoint
 
-  /// Eval whether a boolean expression is always true, always false, or either (for the current state)
+  /// Eval whether a boolean expression is always true, always false, or either
+  /// (for the current state)
   static tvt
   eval_boolean_expression(const expr2tc &cond, const interval_domaint &id);
 
 protected:
   /**
-  * Sets *this to the mathematical join between the two domains. This can be
-  * thought of as an abstract version of union; *this is increased so that it
-  * contains all of the values that are represented by b as well as its original
-  * intervals. The result is an overapproximation, for example:
-  * "[0,1]".join("[3,4]") --> "[0,4]" includes 2 which isn't in [0,1] or [3,4].
-  *
-  *          Join is used in several places, the most significant being
-  *          merge, which uses it to bring together two different paths
-  *          of analysis.
-  * @param b: The interval domain, b, to join to this domain.
-  * @return True if the join increases the set represented by *this, False if
-  *   there is no change.
-  */
+   * Sets *this to the mathematical join between the two domains. This can be
+   * thought of as an abstract version of union; *this is increased so that it
+   * contains all of the values that are represented by b as well as its
+   * original intervals. The result is an overapproximation, for example:
+   * "[0,1]".join("[3,4]") --> "[0,4]" includes 2 which isn't in [0,1] or [3,4].
+   *
+   *          Join is used in several places, the most significant being
+   *          merge, which uses it to bring together two different paths
+   *          of analysis.
+   * @param b: The interval domain, b, to join to this domain.
+   * @return True if the join increases the set represented by *this, False if
+   *   there is no change.
+   */
   bool join(const interval_domaint &b, const goto_programt::const_targett &to);
 
 public:
@@ -183,7 +184,8 @@ public:
   /**
    * @brief Adds a restriction over all intervals.
    *
-   * Do not mistake this by an ASSUME instruction! This can take any type of expression!
+   * Do not mistake this by an ASSUME instruction! This can take any type of
+   * expression!
    */
   void assume(const expr2tc &);
 
@@ -220,8 +222,8 @@ public:
   void havoc_rec(const expr2tc &expr);
 
   /**
-   * @brief Uses the abstract state to simplify a given expression using context-
-   * specific information.
+   * @brief Uses the abstract state to simplify a given expression using
+   * context- specific information.
    * @param parameters: The expression to simplify.
    * @return A simplified version of the expression.
    *
@@ -229,13 +231,14 @@ public:
    * range checks for arrays and other bounds checks.
    *
    * Rather than work with the various kinds of exprt directly, we use assume,
-   * join and is_bottom.  It is sufficient for the use case and avoids duplicating
-   * functionality that is in assume anyway.
+   * join and is_bottom.  It is sufficient for the use case and avoids
+   * duplicating functionality that is in assume anyway.
    *
    * As some expressions (1<=a && a<=2) can be represented exactly as intervals
    * and some can't (a<1 || a>2), the way these operations are used varies
-   * depending on the structure of the expression to try to give the best results.
-   * For example negating a disjunction makes it easier for assume to handle.
+   * depending on the structure of the expression to try to give the best
+   * results. For example negating a disjunction makes it easier for assume to
+   * handle.
    */
   virtual bool
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
@@ -260,15 +263,18 @@ public:
 
 protected:
   // Abstract state information
-  /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
+  /// Is this state a bottom. I.e., there is a contradiction between an
+  /// assignment and an assume
   bool bottom;
 
   /**
    * @brief Recursively explores intervals of an assume expression
    *
    * This is the entry-point of the function, it does the following:
-   * 1. If the current negation flag is set. Then the operator is inverted (e.g. lower becomes greater_eq)
-   * 2. For if2t and or2t... de morgan is applied and this function is called again for its operands
+   * 1. If the current negation flag is set. Then the operator is inverted (e.g.
+   * lower becomes greater_eq)
+   * 2. For if2t and or2t... de morgan is applied and this function is called
+   * again for its operands
    *
    * @param expr
    * @param negation sets whether the current expr is a negation
@@ -276,7 +282,8 @@ protected:
   void assume_rec(const expr2tc &expr, bool negation = false);
 
   /**
-   * @brief Recursively explores intervals over a comparation expression, inserting them into int_map
+   * @brief Recursively explores intervals over a comparation expression,
+   * inserting them into int_map
    *
    * @param lhs
    * @param id
@@ -308,8 +315,9 @@ protected:
   /**
    * @brief Applies Extrapolation widening algorithm
    *
-   * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
-   * The objective of the extrapolation is to accelerate the convergence at the cost of precision
+   * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after
+   * the computation): The objective of the extrapolation is to accelerate the
+   * convergence at the cost of precision
    *
    * Example:
    * int i = 0;
@@ -329,7 +337,8 @@ protected:
    * it 2 = [0,1] => [0, inf]
    * it 3 = [0,inf] fixpoint
    *
-   * Widening((a0,b0), (a1,b1)) = (a1 < a0 ? -infinity : a0, b1 > b0 ? infinity : b0 )
+   * Widening((a0,b0), (a1,b1)) = (a1 < a0 ? -infinity : a0, b1 > b0 ? infinity
+   * : b0 )
    * @tparam Interval interval template specialization (Integers, Reals)
    * @param lhs
    * @param rhs
@@ -340,20 +349,20 @@ protected:
 
   /**
    * @brief Applies Interpolation narrowing algorithm
-   * 
    *
-   * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after the computation):
-   * The objective of the interpolation is to bring back some of the precision lost from an extrapolation.
+   *
+   * Given two intervals: (a0, b0) (before the computation) and (a1, b1) (after
+   * the computation): The objective of the interpolation is to bring back some
+   * of the precision lost from an extrapolation.
    *
    * Example:
    * int i = 0;
    * while(i < 10)
    *  i++;  <--- what is the interval for i before the increment?
-   * 
+   *
    * Coming back from an extrapolation [0, +inf] (which is a fixpoint)
-   * we can narrow the interval by checking the interval post the loop condition (i < 10)
-   * it 4 = narrowing([0, inf], [0, 9]) => [0,9]
-   * it 5 = [0,9]  
+   * we can narrow the interval by checking the interval post the loop condition
+   * (i < 10) it 4 = narrowing([0, inf], [0, 9]) => [0,9] it 5 = [0,9]
    *
    * Narrowing((a0,b0), (a1,b1)) = (a0 == -inf ? a1 : a0, b0 = +inf ? b1 : b0)
    * @tparam Interval interval template specialization (Integers, Reals)
@@ -389,7 +398,8 @@ protected:
    *
    * @tparam Interval interval template specialization (Integers, Reals)
    * @param sym
-   * @return Interval the returned interval is either [min, max] or (-infinity, infinity)
+   * @return Interval the returned interval is either [min, max] or (-infinity,
+   * infinity)
    */
   template <class Interval>
   Interval generate_modular_interval(const symbol2t sym) const;

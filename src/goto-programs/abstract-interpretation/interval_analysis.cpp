@@ -147,7 +147,8 @@ inline void instrument_symbol_constraints(
 }
 
 /**
- * Instrument loops with all variables that are affected by it (not only the guards)
+ * Instrument loops with all variables that are affected by it (not only the
+ * guards)
  *
  * Before:
  * before-loop

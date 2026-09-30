@@ -810,8 +810,9 @@ bool collect_straight_line(
     {
       std::vector<assignt> summary_assigns;
       goto_programt::const_targett advance_to;
-      if (try_emit_inner_summary_assigns(
-            it, loop_skip, *deref_map, summary_assigns, advance_to))
+      if (
+        try_emit_inner_summary_assigns(
+          it, loop_skip, *deref_map, summary_assigns, advance_to))
       {
         for (assignt &a : summary_assigns)
           out.push_back(std::move(a));
@@ -1219,7 +1220,8 @@ bool recognize_loop(
     std::vector<assignt> span;
     std::vector<assignt> then_arm, else_arm; // if !is_span
     expr2tc if_cond; // raw IF guard (NEGATION of the C-source if-condition):
-      // then-arm runs when !if_cond holds, else-arm when if_cond holds.
+                     // then-arm runs when !if_cond holds, else-arm when if_cond
+                     // holds.
     // Set when the THEN arm is an early-return out of the loop. The
     // path enumerator emits only the else-arm path with conjunct
     // `if_cond` (since the THEN side exits and contributes no
