@@ -115,10 +115,6 @@ bool calls_are_supported(
       return false;
     }
     const irep_idt &name = to_symbol2t(callee).thename;
-    // src/c2goto/library/setjmp.c models these as __ESBMC_unreachable(): the
-    // marker means "not modelled", but with the unreachability intrinsic
-    // enabled it becomes a reachable-error property, so every program using
-    // them reports a violation that is not in the program. Decline instead.
     if (
       name == "c:@F@setjmp" || name == "c:@F@_setjmp" || name == "c:@F@longjmp")
     {
@@ -606,10 +602,6 @@ bool extract_transition_system(
     }
   ts.set_step_local(std::move(step_local));
 
-  // A variable that exists before the loop and that the body writes must be
-  // state. The havoc misses writes through pointers and ESBMC's allocation
-  // bookkeeping; each step would then start from the value before the loop,
-  // which symex may even constant-fold, discarding the properties it feeds.
   std::unordered_set<std::string> before_loop, state;
   for (const auto &d : ts.prefix_defs)
     before_loop.insert(l1_name(to_equality2t(d).side_1));

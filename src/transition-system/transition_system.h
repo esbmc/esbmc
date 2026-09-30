@@ -3,7 +3,6 @@
 #include <irep2/irep2.h>
 #include <util/irep/location.h>
 #include <util/symtab/namespace.h>
-
 #include <iosfwd>
 #include <string>
 #include <unordered_map>
@@ -33,16 +32,6 @@
  *       x = (x + y) & 3;
  *     }                    // back edge
  **/
-/** Collect every `symbol2t` in @p e into @p out, treating @p seen as a shared
- *  visited set so a DAG node reached by many parents is walked once. Unlike
- *  irep2_utils' get_symbols this keeps `__ESBMC_` symbols: the memory-model
- *  bookkeeping they name is a real dependency of the formula.
- */
-void collect_symbols(
-  const expr2tc &e,
-  std::unordered_set<expr2tc, irep2_hash> &out,
-  std::unordered_set<const expr2t *> &seen);
-
 class transition_systemt
 {
 public:
@@ -78,7 +67,7 @@ public:
    */
   std::vector<propertyt> bad;
 
-  /** Guard under which the back edge is reached */
+  /// Guard for the loop condition (usually trivial true for unbounded loops).
   expr2tc back_guard;
 
   /** Facts only the inductive step may assume: the loop entry condition and
@@ -102,12 +91,13 @@ public:
 
   void dump(std::ostream &out, const namespacet &ns) const;
 
-  /** Does `e` mention a step_local symbol, i.e. does it change between steps?
-   */
+  /// Does `e` mention a step_local symbol, i.e. does it change between steps?
   bool has_local(const expr2tc &e) const;
 
 private:
   step_localt step_local;
+
+  /// Memoization for `has_local`.
   mutable std::unordered_map<const expr2t *, bool> has_local_memo;
 };
 
@@ -125,3 +115,13 @@ private:
   const std::string suffix;
   std::unordered_map<const expr2t *, expr2tc> memo;
 };
+
+/** Collect every `symbol2t` in @p e into @p out, treating @p seen as a shared
+ *  visited set so a DAG node reached by many parents is walked once. Unlike
+ *  irep2_utils' get_symbols this keeps `__ESBMC_` symbols: the memory-model
+ *  bookkeeping they name is a real dependency of the formula.
+ */
+void collect_symbols(
+  const expr2tc &e,
+  std::unordered_set<expr2tc, irep2_hash> &out,
+  std::unordered_set<const expr2t *> &seen);
