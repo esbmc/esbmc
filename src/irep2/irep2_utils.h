@@ -397,9 +397,9 @@ distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
     return constant_vector2tc(op1->type, std::move(members));
   }
   /*
-   * If only one of the operator is a vector, then the result
+   * If only one of the operators is a constant vector, then the result
    * would extract each value of the vector and apply the value to
-   * the other operator
+   * the other operator, or to its matching lane when that is a vector
    *
    * Example:
    *
@@ -418,11 +418,18 @@ distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
     expr2tc c = !is_op1_vec ? op1 : op2;
     expr2tc v = is_op1_vec ? op1 : op2;
     std::vector<expr2tc> members = to_constant_vector2t(v).datatype_members;
-    for (auto &datatype_member : members)
+    for (size_t i = 0; i < members.size(); i++)
     {
-      auto &op = datatype_member;
-      auto e1 = is_op1_vec ? op : c;
-      auto e2 = is_op1_vec ? c : op;
+      auto &op = members[i];
+      // A non-constant vector operand contributes its own lane, not itself.
+      expr2tc lane = c;
+      if (is_vector_type(c))
+        lane = index2tc(
+          to_vector_type(c->type).subtype,
+          c,
+          constant_int2tc(get_uint32_type(), BigInt(i)));
+      auto e1 = is_op1_vec ? op : lane;
+      auto e2 = is_op1_vec ? lane : op;
       auto new_op = func(op->type, e1, e2);
       // do_simplify() returns nil when no per-op peephole fires. Don't
       // store nil into the member slot — keep new_op so the lane
@@ -430,7 +437,7 @@ distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
       auto folded = new_op->do_simplify();
       if (!is_nil_expr(folded))
         simplification_check::verify_rewrite(new_op, folded);
-      datatype_member = is_nil_expr(folded) ? new_op : folded;
+      op = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
   }

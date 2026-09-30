@@ -215,6 +215,33 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Vector add of a constant and a symbolic vector adds lane by lane",
+  "[arithmetic][add][vector]")
+{
+  // {1,2,3,4} + v distributes over the constant; each lane must add v's lane,
+  // not the whole vector v, or the SMT layer sees a 32-bit plus a 128-bit add.
+  const type2tc i32 = get_int_type(32);
+  const type2tc vec_type = vector_type2tc(i32, gen_ulong(4));
+  std::vector<expr2tc> members{
+    constant_int2tc(i32, BigInt(1)),
+    constant_int2tc(i32, BigInt(2)),
+    constant_int2tc(i32, BigInt(3)),
+    constant_int2tc(i32, BigInt(4))};
+  const expr2tc vec = constant_vector2tc(vec_type, std::move(members));
+  const expr2tc v = symbol2tc(vec_type, "v");
+
+  const expr2tc result = add2tc(vec_type, vec, v)->simplify();
+
+  REQUIRE(is_constant_vector2t(result));
+  for (const expr2tc &lane : to_constant_vector2t(result).datatype_members)
+  {
+    REQUIRE(lane->type == i32);
+    lane->foreach_operand(
+      [&i32](const expr2tc &e) { REQUIRE(e->type == i32); });
+  }
+}
+
+TEST_CASE(
   "Pointer-add fold: same-width sum widens to index_type2",
   "[arithmetic][add][pointer]")
 {

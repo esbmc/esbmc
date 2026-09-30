@@ -241,3 +241,70 @@ void get_local_identifiers(
     if (identifier != "")
       dest.insert(identifier);
 }
+
+/// Every function whose address `e` takes, restricted to names that are
+/// functions. A thread's start routine is reached no other way.
+static void collect_taken_functions(
+  const expr2tc &e,
+  const goto_functionst &goto_functions,
+  std::vector<irep_idt> &out)
+{
+  if (!e)
+    return;
+
+  if (is_address_of2t(e))
+  {
+    const expr2tc &obj = to_address_of2t(e).ptr_obj;
+    if (
+      is_symbol2t(obj) &&
+      goto_functions.function_map.count(to_symbol2t(obj).thename))
+      out.push_back(to_symbol2t(obj).thename);
+  }
+
+  e->foreach_operand([&goto_functions, &out](const expr2tc &sub) {
+    collect_taken_functions(sub, goto_functions, out);
+  });
+}
+
+/// Whether the program can create a thread. Every route -- pthread_create,
+/// std::thread, a CUDA kernel launch, threading.Thread -- lowers to the
+/// __ESBMC_spawn_thread intrinsic, so reaching it is the creation point.
+/// Reachability and not presence: pthread_lib.c is linked into every program.
+/// An indirect call needs no special case: symex resolves one through the value
+/// set into a list of concrete symbols (get_function_list in
+/// symex_function.cpp), so it can only reach a function whose address is taken
+/// somewhere -- which is exactly what collect_taken_functions seeds the
+/// worklist with.
+bool spawns_threads(const goto_functionst &goto_functions)
+{
+  const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
+
+  std::set<irep_idt> seen;
+  std::vector<irep_idt> work{goto_functions.main_id()};
+  while (!work.empty())
+  {
+    const irep_idt fn = work.back();
+    work.pop_back();
+    if (fn == spawn_intrinsic)
+      return true;
+    if (!seen.insert(fn).second)
+      continue;
+
+    const auto f = goto_functions.function_map.find(fn);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+
+    forall_goto_program_instructions (it, f->second.body)
+    {
+      if (it->is_function_call())
+      {
+        const expr2tc &callee = to_code_function_call2t(it->code).function;
+        if (!is_nil_expr(callee) && is_symbol2t(callee))
+          work.push_back(to_symbol2t(callee).thename);
+      }
+      collect_taken_functions(it->code, goto_functions, work);
+      collect_taken_functions(it->guard, goto_functions, work);
+    }
+  }
+  return false;
+}
