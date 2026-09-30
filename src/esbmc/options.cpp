@@ -260,9 +260,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ld-sound-mode",
      NULL,
      "Translate user function-block ST bodies in sound Boolean/integer mode: "
-     "unsupported constructs (function calls, member access) make the FB body "
-     "fall back to a no-op instead of being over-approximated as "
-     "nondeterministic (no over-approximation, zero false positives)"},
+     "unsupported constructs (function calls, member access) leave the body "
+     "untranslated, so the block's outputs take any value each scan, instead "
+     "of only those constructs being over-approximated"},
     {"ld-scan-watchdog",
      NULL,
      "Instrument WHILE loops in user function-block bodies with a "

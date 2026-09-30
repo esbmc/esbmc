@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- #7580: p0.A is wired to the output of bad0, whose body is malformed
-     (an IF with no END_IF) and is not translated. That output is never
-     written, so p0.A must not read it. -->
+     (an IF with no END_IF) and is not translated, so that output takes any
+     value each scan. -->
 <project xmlns="http://www.plcopen.org/xml/tc6_0200">
   <fileHeader companyName="SAFE-LD" productVersion="1.0" creationDateTime="2026-09-28"/>
   <contentHeader name="UNTRANSLATED"/>

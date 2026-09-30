@@ -1,6 +1,6 @@
 properties:
-  # Twin of userfb_bool_nonbool_safe: the rejected body never sets OUT.
+  # The rejected body does not run, so OUT is not always TRUE.
   - id: P1
     kind: invariant
     expression: "m0__OUT"
-    description: "Deliberately false: the untranslated body leaves OUT off"
+    description: "Deliberately false: the untranslated body does not set OUT"
