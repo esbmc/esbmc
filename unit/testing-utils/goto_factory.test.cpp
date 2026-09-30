@@ -78,16 +78,10 @@ std::vector<std::string> stage_and_list_leftovers(F &&stage)
       p.functions.function_map.end());
   }
 
-  // The frontends extract their headers into the same directory and remove
-  // them at exit, so only what goto_factory staged is of interest here.
-  std::vector<std::string> staged;
+  std::vector<std::string> leftovers;
   for (const fs::directory_entry &e : fs::directory_iterator(sandbox.path()))
-  {
-    const std::string name = e.path().filename().string();
-    if (name.rfind("esbmc-test-", 0) == 0)
-      staged.push_back(name);
-  }
-  return staged;
+    leftovers.push_back(e.path().filename().string());
+  return leftovers;
 }
 } // namespace
 
@@ -95,20 +89,20 @@ TEST_CASE(
   "goto_factory removes the directory it staged a string source in",
   "[testing-utils]")
 {
-  std::vector<std::string> staged = stage_and_list_leftovers([] {
+  std::vector<std::string> leftovers = stage_and_list_leftovers([] {
     std::string code = "int main() { return 0; }";
     return goto_factory::get_goto_functions(code);
   });
-  CHECK(staged == std::vector<std::string>{});
+  CHECK(leftovers == std::vector<std::string>{});
 }
 
 TEST_CASE(
   "goto_factory removes the directory it staged a stream source in",
   "[testing-utils]")
 {
-  std::vector<std::string> staged = stage_and_list_leftovers([] {
+  std::vector<std::string> leftovers = stage_and_list_leftovers([] {
     std::istringstream code("int main() { return 0; }");
     return goto_factory::get_goto_functions(code);
   });
-  CHECK(staged == std::vector<std::string>{});
+  CHECK(leftovers == std::vector<std::string>{});
 }
