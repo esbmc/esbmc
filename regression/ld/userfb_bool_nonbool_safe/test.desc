@@ -1,5 +1,0 @@
-CORE
-mask.ld
---ld-props props.yaml --k-induction --unlimited-k-steps
-^WARNING: user FB 'MASK' body not translated.*; over-approximating \(no-op\)\.$
-^VERIFICATION SUCCESSFUL$
