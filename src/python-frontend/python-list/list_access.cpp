@@ -7,6 +7,46 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+static exprt normalize_positive_slice_bound_expr(
+  const exprt &bound,
+  const exprt &logical_len)
+{
+  const typet signed_t = signed_size_type();
+  const type2tc signed_t2 = migrate_type(signed_t);
+  const exprt bound_signed = build_typecast(bound, signed_t);
+  const exprt len_signed = build_typecast(logical_len, signed_t);
+
+  expr2tc bound2, len2;
+  migrate_expr(bound_signed, bound2);
+  migrate_expr(len_signed, len2);
+  expr2tc zero = gen_zero(signed_t2);
+  expr2tc shifted = add2tc(signed_t2, len2, bound2);
+  expr2tc normalized =
+    if2tc(signed_t2, lessthan2tc(bound2, zero), shifted, bound2);
+  expr2tc lower_clamped =
+    if2tc(signed_t2, lessthan2tc(normalized, zero), zero, normalized);
+  expr2tc upper_clamped =
+    if2tc(signed_t2, greaterthan2tc(lower_clamped, len2), len2, lower_clamped);
+  return build_typecast(migrate_expr_back(upper_clamped), size_type());
+}
+
+static exprt
+build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
+{
+  const typet signed_t = signed_size_type();
+  const type2tc signed_t2 = migrate_type(signed_t);
+  const exprt lower_signed = build_typecast(lower, signed_t);
+  const exprt upper_signed = build_typecast(upper, signed_t);
+
+  expr2tc lower2, upper2;
+  migrate_expr(lower_signed, lower2);
+  migrate_expr(upper_signed, upper2);
+  expr2tc zero = gen_zero(signed_t2);
+  expr2tc diff = sub2tc(signed_t2, upper2, lower2);
+  expr2tc span = if2tc(signed_t2, lessthan2tc(upper2, lower2), zero, diff);
+  return build_typecast(migrate_expr_back(span), size_type());
+}
+
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
@@ -2638,13 +2678,17 @@ exprt python_list::handle_range_slice(
 
       const auto &bound = slice_node[bound_name];
 
+      exprt e = converter_.get_expr(bound);
+      e = remove_function_calls_recursive(e, slice_node);
+      if (!negative_step)
+        return normalize_positive_slice_bound_expr(e, logical_len);
+
       // Check if negative index
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
         return normalize_negative_slice_bound(
           bound["operand"], logical_len, negative_step);
 
-      exprt e = converter_.get_expr(bound);
-      return to_size_expr(remove_function_calls_recursive(e, slice_node));
+      return to_size_expr(e);
     };
 
     // Process bounds: defaults depend on step direction
@@ -2664,24 +2708,6 @@ exprt python_list::handle_range_slice(
     if (!negative_step)
       upper_expr = process_bound("upper", logical_len);
 
-    // Clamp bounds to [0, logical_len] to match Python semantics.
-    if (!negative_step)
-    {
-      // bound = (bound >= logical_len) ? logical_len : bound
-      // (V.3: built in IREP2.)
-      const type2tc size_t2 = migrate_type(size_type());
-      expr2tc len2;
-      migrate_expr(logical_len, len2);
-      auto clamp_to_len = [&](exprt &bound) {
-        expr2tc b2;
-        migrate_expr(bound, b2);
-        bound = migrate_expr_back(
-          if2tc(size_t2, greaterthanequal2tc(b2, len2), len2, b2));
-      };
-      clamp_to_len(lower_expr);
-      clamp_to_len(upper_expr);
-    }
-
     // Calculate slice length
     exprt slice_len;
     if (negative_step)
@@ -2700,16 +2726,15 @@ exprt python_list::handle_range_slice(
     }
     else if (step_val != 1)
     {
-      // For step > 1: length = ceil((upper - lower) / step)
-      exprt range =
-        size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
+      // For step > 1: length = ceil(max(upper - lower, 0) / step)
+      exprt range = build_nonnegative_slice_span(lower_expr, upper_expr);
       exprt step_const = from_integer(step_val, size_type());
       exprt step_minus_one = from_integer(step_val - 1, size_type());
       slice_len = size_div(size_add(range, step_minus_one), step_const);
     }
     else
     {
-      slice_len = size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
+      slice_len = build_nonnegative_slice_span(lower_expr, upper_expr);
     }
 
     // Char-array slices (strings) keep a trailing null terminator so the
