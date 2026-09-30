@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: absence
+    expression: "Open"
+    description: "Unprovable: under --ld-sound-mode the body is not translated, so Open can be set"

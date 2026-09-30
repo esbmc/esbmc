@@ -46,10 +46,10 @@ void tuple_node_smt_ast::make_free(smt_solver_baset *ctx)
         ctx->convert_sort(ctx->get_flattened_array_subtype(it));
       elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
     }
-    else if (is_array_type(it))
+    else if (is_array_type(it) || is_vector_type(it))
     {
       elements[i] = ctx->mk_fresh(
-        newsort, fieldname, ctx->convert_sort(to_array_type(it).subtype));
+        newsort, fieldname, ctx->convert_sort(array_or_vector_subtype(it)));
     }
     else
     {
