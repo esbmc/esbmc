@@ -1,5 +1,5 @@
 #include <goto-symex/engine/goto_symex.h>
-#include <goto-symex/witness/witnesses.h>
+#include <goto-symex/waypoint.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
