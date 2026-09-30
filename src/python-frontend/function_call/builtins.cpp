@@ -320,10 +320,8 @@ static bool admits_class_object(const nlohmann::json &type_arg)
 
 exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
 {
-  // A class object is a char-array constant with no operands; a string
-  // literal's chars are operands.
   if (obj_expr.is_constant())
-    return gen_boolean(obj_expr.operands().empty());
+    return gen_boolean(python_converter::is_class_object(obj_expr));
 
   exprt unknown("sideeffect", bool_type());
   unknown.statement("nondet");
@@ -625,8 +623,7 @@ exprt function_call_expr::handle_type_call() const
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
 
-  typet str_type = type_handler_.build_array(char_type(), type_name.size() + 1);
-  return constant_exprt(type_name, type_name, str_type);
+  return converter_.make_class_object(type_name);
 }
 
 exprt function_call_expr::handle_divmod() const

@@ -1857,6 +1857,8 @@ regression/esbmc/vla_long_size_truncation_fail
 regression/esbmc/vla_middle_dim_decl
 regression/esbmc/vla_middle_dim_decl_fail
 regression/esbmc/github_7992
+regression/esbmc/github_8007
+regression/esbmc/github_8007_safe
 regression/esbmc/github_8006
 regression/esbmc/github_8006_alias
 regression/esbmc/github_8006_intcast
@@ -2029,3 +2031,5 @@ regression/python/list_mixed_str_number_isinstance
 regression/python/list_mixed_str_number_isinstance_fail
 regression/python/list_pop_result_as_argument
 regression/python/list_pop_result_as_argument_fail
+regression/esbmc/vector_op_nonconstant_lane
+regression/esbmc/vector_op_nonconstant_lane_fail
