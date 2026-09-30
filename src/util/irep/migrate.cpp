@@ -221,6 +221,14 @@ static bool migrates_to_empty(const typet &type)
          type.id() == "destructor" || type.id() == "constructor";
 }
 
+static std::vector<irep_idt> struct_bases(const typet &type)
+{
+  std::vector<irep_idt> bases;
+  for (const irept &b : type.find("bases").get_sub())
+    bases.push_back(b.id());
+  return bases;
+}
+
 static irep_idt ctor_dtor_marker(const typet &ret)
 {
   return ret.id() == "constructor" || ret.id() == "destructor" ? ret.id()
@@ -384,7 +392,9 @@ static type2tc migrate_type0(const typet &type)
       packed,
       base_names,
       explicit_alignment(type),
-      python_aggregate_kind(type));
+      python_aggregate_kind(type),
+      type.find("bases").is_not_nil(),
+      struct_bases(type));
   }
 
   if (type.id() == typet::t_union)
@@ -3212,6 +3222,15 @@ void migrate_type_back_cache_clear()
   back_cache.clear();
 }
 
+static void migrate_struct_bases_back(const struct_type2t &ref, typet &type)
+{
+  if (!ref.has_bases)
+    return;
+  irept::subt &bases = type.add("bases").get_sub();
+  for (const irep_idt &b : ref.bases)
+    bases.emplace_back(b);
+}
+
 static void
 migrate_ctor_dtor_marker_back(const code_type2t &ref, code_typet &code)
 {
@@ -3310,6 +3329,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
     if (!ref2.python_aggregate.empty())
       set_python_aggregate_kind(thetype, ref2.python_aggregate);
+    migrate_struct_bases_back(ref2, thetype);
     return thetype;
   }
   case type2t::union_id:

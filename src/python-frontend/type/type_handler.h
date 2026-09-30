@@ -270,7 +270,11 @@ public:
    */
   size_t get_type_width(const typet &type) const;
 
-  typet build_optional_type(const typet &base_type);
+  typet get_generic_typet(
+    const std::string &ast_type,
+    size_t bracket_pos,
+    size_t type_size) const;
+  typet build_optional_type(const typet &base_type) const;
 
   /*
    * Returns true if `class_name` is the same as, or derives (directly or

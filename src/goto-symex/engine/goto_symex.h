@@ -430,6 +430,14 @@ protected:
 
   void merge_locality(const statet::merge_statet &merge_state);
 
+  /** Record the online interval domain in a path being parked, so
+   *  merge_interval_domain can join it back in (#8047). */
+  void snapshot_interval_domain(statet::merge_statet &merge_state);
+
+  /** Join a parked path's interval domain into the shared one; a path parked
+   *  without a snapshot sends the domain to top. */
+  void merge_interval_domain(const statet::merge_statet &merge_state);
+
   /**
    *  Join a previous jump's merge snapshot into the active thread state.
    *  This combines together two thread states by using if-then-elses to decide

@@ -1,0 +1,5 @@
+CORE
+rail.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^.*LD: 'mode' has both set and reset coils; in a scan where several are powered, the set coil runs later and wins$
+^VERIFICATION SUCCESSFUL$

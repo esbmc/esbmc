@@ -4,9 +4,8 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/type/type_handler.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
@@ -97,7 +96,7 @@ std::string py_str_from_double(double d)
   // std::to_string uses %f, which honours the host rounding mode; an earlier
   // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
   // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
   std::string str_val = std::to_string(d);
 
   // Remove unnecessary trailing zeros and dot (to match Python str): "5.500000"
@@ -1066,7 +1065,7 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
           : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
       const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
       {
-        const round_to_nearest_guard guard;
+        const host_rounding_mode guard(FE_TONEAREST);
         const int n = std::snprintf(nullptr, 0, f, p, ad);
         if (n < 0)
           return std::nullopt;

@@ -1485,6 +1485,8 @@ void python_converter::refine_any_param_to_list(
     return;
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
     python_expr::set_symbol_type_if_carried(*param_sym, param_arg.type());
+  if (seed_mixed_call_site_elements(param_id, func_name, param_index))
+    return;
   if (elem_type != typet())
     element_type_registry_.record(param_id, "", elem_type);
 }
@@ -1522,6 +1524,12 @@ void python_converter::seed_list_param_element_type(
 {
   const nlohmann::json &annotation = element["annotation"];
   const std::string kind = annotation.value("_type", "");
+  // Call sites mixing strings and numbers decide over an annotation the
+  // annotator inferred from a first element.
+  if (
+    current_class_name_.empty() &&
+    seed_mixed_call_site_elements(arg_id, id.get_function(), param_index))
+    return;
 
   if (
     kind == "Subscript" && annotation.contains("value") &&
@@ -1546,6 +1554,60 @@ void python_converter::seed_list_param_element_type(
   if (infer_list_elem_type_from_call_sites(
         id.get_function(), param_index, elem_type))
     element_type_registry_.record(arg_id, "", elem_type);
+}
+
+/// When every call site passes parameter \p param_index of \p func_name the
+/// same list literal shape mixing strings and numbers, records its element
+/// types in order for \p param_id, so the list's elements are read as tagged
+/// scalars (#4797). Reports whether it recorded anything.
+bool python_converter::seed_mixed_call_site_elements(
+  const std::string &param_id,
+  const std::string &func_name,
+  size_t param_index)
+{
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  std::optional<std::vector<typet>> shape;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json()).value("id", "") != func_name ||
+      call["args"].size() <= param_index)
+      continue;
+    nlohmann::json literal;
+    if (!list_literal_for_call_arg(
+          call["args"][param_index],
+          site.enclosing_function,
+          *ast_json,
+          literal))
+      return false;
+    std::vector<typet> elems;
+    // get_typet throws on an element it cannot classify (a nested list, a
+    // call); such a literal is not a string/number mix.
+    try
+    {
+      for (const auto &e : literal["elts"])
+        elems.push_back(type_handler_.get_typet(e));
+    }
+    catch (...)
+    {
+      return false;
+    }
+    if (shape && *shape != elems)
+      return false;
+    shape = std::move(elems);
+  }
+
+  const std::string probe = param_id + "$mixed_probe";
+  for (const typet &t : shape.value_or(std::vector<typet>()))
+    element_type_registry_.record(probe, "", t);
+  const bool mixed = element_type_registry_.mixes_str_and_number(probe);
+  if (mixed)
+    for (const typet &t : *shape)
+      element_type_registry_.record(param_id, "", t);
+  return mixed;
 }
 
 bool python_converter::infer_list_elem_type_from_call_sites(
@@ -3080,6 +3142,88 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   return returns;
 }
 
+/// Whether a return in \p stmts (nested blocks included) satisfies \p pred.
+static bool any_return(
+  const nlohmann::json &stmts,
+  const std::function<bool(const nlohmann::json &)> &pred)
+{
+  for (const auto &s : stmts)
+  {
+    if (s["_type"] == "Return" && pred(s["value"]))
+      return true;
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (s.contains(key) && s[key].is_array() && any_return(s[key], pred))
+        return true;
+    if (s.contains("handlers") && s["handlers"].is_array())
+      for (const auto &h : s["handlers"])
+        if (any_return(h["body"], pred))
+          return true;
+  }
+  return false;
+}
+
+/// Whether a return annotation spells a union with None (`T | None`,
+/// `Union[T, None]`).
+static bool annotation_admits_none(const nlohmann::json &returns)
+{
+  if (!returns.is_object())
+    return false;
+  if (returns.value("_type", "") == "BinOp")
+    return type_utils::extract_binop_union_types(returns).has_none;
+  if (
+    returns.value("_type", "") != "Subscript" ||
+    returns["value"].value("id", "") != "Union")
+    return false;
+  const nlohmann::json &slice = returns["slice"];
+  for (const auto &elt : slice.value("elts", nlohmann::json::array()))
+    if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+      return true;
+  return false;
+}
+
+/// Whether a return in \p body yields None: a bare `return`, `return None`, or
+/// a conditional expression with a None arm.
+static bool returns_none(const nlohmann::json &body)
+{
+  // Bignum literals (#4642) carry `_bigint` with a null value; they are ints.
+  auto is_none = [](const nlohmann::json &v) {
+    return v.is_null() || (v.value("_type", "") == "Constant" &&
+                           v["value"].is_null() && !v.contains("_bigint"));
+  };
+  return any_return(body, [&](const nlohmann::json &v) {
+    return is_none(v) || (v.value("_type", "") == "IfExp" &&
+                          (is_none(v["body"]) || is_none(v["orelse"])));
+  });
+}
+
+/// The Optional<T> type a function returns when it can return None but its
+/// declared return type cannot hold it, or an empty type (#8016). Python does
+/// not enforce annotations, so `-> int` with a `return None` path is Optional
+/// too.
+typet python_converter::optional_return_type(
+  const nlohmann::json &function_node,
+  const typet &declared)
+{
+  // An inferred return (flagged by the annotator) and `-> None` (an empty
+  // declared type) count as unannotated.
+  const nlohmann::json &returns =
+    function_node.value("returns", nlohmann::json());
+  const bool unannotated = !returns.is_object() ||
+                           returns.value("_inferred_annotation", false) ||
+                           declared.is_empty();
+  if (!returns_none(function_node["body"]) && !annotation_admits_none(returns))
+    return typet();
+  if (!unannotated)
+    return type_handler_.build_optional_type(declared);
+
+  // Unannotated: the value returns decide T.
+  const TypeFlags flags = infer_types_from_returns(function_node["body"]);
+  if (!flags.has_int && !flags.has_float && !flags.has_bool)
+    return typet();
+  return type_handler_.build_optional_type(
+    type_utils::select_widest_type(flags, long_long_int_type()));
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -3303,68 +3447,16 @@ void python_converter::get_function_definition(
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-  // Pre-scan: detect mixed value+None returns and upgrade return type to
-  // Optional so None checks work correctly at runtime.
-  // This applies even when the function has an explicit return annotation:
-  // Python does not enforce annotations, so `-> int` with `return None` in
-  // the body must be modelled as Optional[int].
-  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
-    std::function<bool(const nlohmann::json &)> scan =
-      [&](const nlohmann::json &stmts) -> bool {
-      for (const auto &s : stmts)
-      {
-        if (s["_type"] == "Return")
-        {
-          if (s["value"].is_null())
-            return true;
-          // Bignum literals (issue #4642) carry `_bigint` with a null value;
-          // they are int returns, not None.
-          if (
-            s["value"]["_type"] == "Constant" &&
-            s["value"]["value"].is_null() && !s["value"].contains("_bigint"))
-            return true;
-        }
-        if (s.contains("body") && s["body"].is_array() && scan(s["body"]))
-          return true;
-        if (s.contains("orelse") && s["orelse"].is_array() && scan(s["orelse"]))
-          return true;
-      }
-      return false;
-    };
-    return scan(body);
-  };
-
   bool already_optional =
     annotation_is_optional || is_user_class_pointer(type.return_type()) ||
     type_handler_.is_tagged_scalar_type(type.return_type()) ||
-    (type.return_type().is_struct() && to_struct_type(type.return_type())
-                                         .tag()
-                                         .as_string()
-                                         .starts_with("tag-Optional_"));
-  if (!already_optional && body_has_none_return(function_node["body"]))
+    type_utils::is_optional_struct(type.return_type());
+  if (!already_optional)
   {
-    if (type.return_type().is_empty())
+    const typet optional_type =
+      optional_return_type(function_node, type.return_type());
+    if (!optional_type.id().empty())
     {
-      // Unannotated function: need full type inference to pick value_type
-      TypeFlags return_flags = infer_types_from_returns(function_node["body"]);
-      bool has_value_return =
-        return_flags.has_int || return_flags.has_float || return_flags.has_bool;
-      if (has_value_return)
-      {
-        typet value_type =
-          type_utils::select_widest_type(return_flags, long_long_int_type());
-        typet optional_type = type_handler_.build_optional_type(value_type);
-        type.return_type() = optional_type;
-        current_element_type = optional_type;
-        python_expr::set_function_type(*added_symbol, type);
-      }
-    }
-    else
-    {
-      // Explicitly-annotated function (e.g., -> int) with return None paths:
-      // upgrade the annotated type to Optional[annotated_type].
-      typet optional_type =
-        type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
       python_expr::set_function_type(*added_symbol, type);

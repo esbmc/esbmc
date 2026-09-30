@@ -1,8 +1,8 @@
 /// \file frame_enforcer.cpp
-/// \brief Implementation of the Operational Frame Rule for verification.
+/// \brief Implementation of the observational frame rule.
 ///
-/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged == Snapshot)"
-/// mechanism. See frame_enforcer.h for detailed documentation.
+/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged ==
+/// Snapshot)" mechanism. See frame_enforcer.h for detailed documentation.
 
 #include "frame_enforcer.h"
 #include <util/irep/migrate.h>

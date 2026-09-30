@@ -14,52 +14,54 @@
 #include <functional>
 #include <set>
 
+/// \p expr as an addressable value: a call producing an optional is stored in a
+/// temporary first.
+exprt python_converter::materialize_optional(
+  const exprt &expr,
+  const nlohmann::json &element)
+{
+  // A member can only be taken of an addressable value. When the optional is
+  // produced by a call used directly in a comparison -- e.g. f(...) == 2 --
+  // the operand is the call itself (a code_function_callt statement, or a
+  // side-effect call expression), and member_exprt(<call>, "value") is
+  // malformed: it aborts during goto migration (member2t requires a
+  // struct/union/complex source). Materialise the call result into a
+  // temporary first, mirroring the already-working assigned path
+  // (r = f(...); r.value == 2). See #4807.
+  exprt base = expr;
+  if (base.is_code() && base.is_function_call())
+    base = to_value_expr(base, name_space());
+
+  if (base.id() == "sideeffect")
+  {
+    symbolt &tmp =
+      create_tmp_symbol(element, "$optional_tmp$", base.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = base.location();
+    add_instruction(decl);
+
+    code_assignt assign(symbol_expr(tmp), base);
+    assign.location() = base.location();
+    add_instruction(assign);
+    base = symbol_expr(tmp);
+  }
+  return base;
+}
+
 exprt python_converter::unwrap_optional_if_needed(
   const exprt &expr,
   const nlohmann::json &element)
 {
-  if (!expr.type().is_struct())
+  if (!type_utils::is_optional_struct(expr.type()))
     return expr;
 
-  const struct_typet &struct_type = to_struct_type(expr.type());
-  std::string tag = struct_type.tag().as_string();
-
-  if (tag.starts_with("tag-Optional_"))
-  {
-    // A member can only be taken of an addressable value. When the optional is
-    // produced by a call used directly in a comparison -- e.g. f(...) == 2 --
-    // the operand is the call itself (a code_function_callt statement, or a
-    // side-effect call expression), and member_exprt(<call>, "value") is
-    // malformed: it aborts during goto migration (member2t requires a
-    // struct/union/complex source). Materialise the call result into a
-    // temporary first, mirroring the already-working assigned path
-    // (r = f(...); r.value == 2). See #4807.
-    exprt base = expr;
-    if (base.is_code() && base.is_function_call())
-      base = to_value_expr(base, name_space());
-
-    if (base.id() == "sideeffect")
-    {
-      symbolt &tmp =
-        create_tmp_symbol(element, "$optional_tmp$", base.type(), exprt());
-      code_declt decl(symbol_expr(tmp));
-      decl.location() = base.location();
-      add_instruction(decl);
-
-      code_assignt assign(symbol_expr(tmp), base);
-      assign.location() = base.location();
-      add_instruction(assign);
-      base = symbol_expr(tmp);
-    }
-
-    // Extract the value field. V.3: IREP2 member access (round-trip).
-    expr2tc b2;
-    migrate_expr(base, b2);
-    return migrate_expr_back(
-      member2tc(migrate_type(struct_type.components()[1].type()), b2, "value"));
-  }
-
-  return expr;
+  // Extract the value field. V.3: IREP2 member access (round-trip).
+  expr2tc b2;
+  migrate_expr(materialize_optional(expr, element), b2);
+  return migrate_expr_back(member2tc(
+    migrate_type(to_struct_type(expr.type()).get_component("value").type()),
+    b2,
+    "value"));
 }
 
 exprt python_converter::wrap_in_optional(
@@ -68,6 +70,11 @@ exprt python_converter::wrap_in_optional(
 {
   assert(optional_type.is_struct());
   const struct_typet &struct_type = to_struct_type(optional_type);
+  // A `x if c else None` ternary is already an optional.
+  if (
+    value.type().is_struct() &&
+    to_struct_type(value.type()).tag() == struct_type.tag())
+    return value;
   const bool is_none = value.type() == none_type();
 
   // V.3: build the optional value { is_none, value } in IREP2, back-migrating
@@ -76,18 +83,33 @@ exprt python_converter::wrap_in_optional(
   // the migrated operands round-trips exactly through migrate. Re-attach the
   // full struct type: the seam drops the components' `access`
   // (build_optional_type), which is part of the type's identity.
-  expr2tc value_member;
-  migrate_expr(
-    is_none ? gen_zero(struct_type.components()[1].type()) : value,
-    value_member);
-
-  std::vector<expr2tc> members{
-    is_none ? gen_true_expr() : gen_false_expr(), std::move(value_member)};
+  std::vector<expr2tc> members;
+  for (const auto &component : struct_type.components())
+  {
+    expr2tc member;
+    if (component.get_name() == "is_none")
+      member = is_none ? gen_true_expr() : gen_false_expr();
+    else if (component.get_name() == "value" && !is_none)
+      migrate_expr(value, member);
+    else
+      migrate_expr(gen_zero(component.type()), member);
+    members.push_back(std::move(member));
+  }
 
   exprt optional_value =
     migrate_expr_back(constant_struct2tc(migrate_type(struct_type), members));
   optional_value.type() = struct_type;
   return optional_value;
+}
+
+exprt python_converter::wrap_literal_if_optional(
+  const exprt &value,
+  const typet &type)
+{
+  // None keeps the retyping handle_assignment_type_adjustments gives it.
+  return value.is_constant() && value.type() != none_type()
+           ? wrap_if_optional(value, type)
+           : value;
 }
 
 // Extract non-None type from union
@@ -368,7 +390,10 @@ typet python_converter::get_optional_type(const nlohmann::json &slice)
     const typet base_type = json_utils::is_class(inner_type, *ast_json)
                               ? typet(symbol_typet("tag-" + inner_type))
                               : type_handler_.get_typet(inner_type);
-    // Always use pointer type for Optional to properly represent None
+    // A number or bool has no NULL to spare for None: it gets the Optional<T>
+    // struct `T | None` does, not a T* holding the value (#8016).
+    if (type_utils::is_optional_scalar(base_type))
+      return type_handler_.build_optional_type(base_type);
     return gen_pointer_type(base_type);
   }
 
@@ -763,11 +788,7 @@ typet python_converter::get_type_from_annotation(
       typet base_type = type_handler_.get_typet(base_type_name);
 
       // Single type + None: use Optional wrapper for primitives only
-      if (
-        contains_none &&
-        (base_type == long_long_int_type() ||
-         base_type == long_long_uint_type() || base_type == double_type() ||
-         base_type == bool_type()))
+      if (contains_none && type_utils::is_optional_scalar(base_type))
       {
         return type_handler_.build_optional_type(base_type);
       }

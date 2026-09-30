@@ -218,6 +218,20 @@ public:
     t.remove_member_name();
   }
 
+  // A scalar T whose `Optional[T]` is the Optional<T> struct, not a T*.
+  static bool is_optional_scalar(const typet &t)
+  {
+    return t == long_long_int_type() || t == long_long_uint_type() ||
+           t == double_type() || t == bool_type();
+  }
+
+  // The Optional<T> struct type_handler::build_optional_type makes.
+  static bool is_optional_struct(const typet &t)
+  {
+    return t.is_struct() &&
+           to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
+  }
+
   static bool is_char_type(const typet &t)
   {
     return (t.is_signedbv() || t.is_unsignedbv()) && get_cpp_type(t) == "char";

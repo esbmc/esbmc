@@ -1,0 +1,8 @@
+properties:
+  # Twin of graphical_row_tolerance_safe. Within one row the reset, further right,
+  # runs last and wins; ordering strictly by y would let the set win and make
+  # this hold.
+  - id: P1
+    kind: invariant
+    expression: "!(a && b) || q"
+    description: "Deliberately false: the set path wins when both are energised"

@@ -31,15 +31,13 @@ A **variable store** σ ∈ Σ is a total map from variable names to values,
 respecting the declared type of each variable (§2). We write σ[v ↦ x] for the
 store that agrees with σ everywhere except at v, where it takes the value x.
 
-Two derived stores are carried alongside σ:
+One derived store is carried alongside σ:
 
 - **π ∈ Π** — the *edge store*, mapping each operand sensed by a
   transition-sensing contact to its value at the previous scan boundary.
-- **φ ∈ Φ** — the *feedback store*, mapping each network-feedback variable
-  (§6.3) to its value on entry to the current network.
 
-A full configuration is the triple ⟨σ, π, φ⟩. Where π and φ are not mentioned
-in a rule they are threaded through unchanged.
+A full configuration is the pair ⟨σ, π⟩. Where π is not mentioned in a rule it
+is threaded through unchanged.
 
 ### 1.2 Boolean projection
 
@@ -57,8 +55,8 @@ Three judgement forms are used.
 
 | Form | Reads |
 |---|---|
-| ⟨e, σ, π, φ⟩ ⇓ b | element e evaluated in the given state yields power flow b ∈ B |
-| ⟨e, σ, π, φ⟩ → σ' | element e transforms the store to σ' |
+| ⟨e, σ, π⟩ ⇓ b | element e evaluated in the given state yields power flow b ∈ B |
+| ⟨e, σ, π⟩ → σ' | element e transforms the store to σ' |
 | ⟨P, σ, π⟩ ⟹ ⟨σ', π'⟩ | one full scan cycle of program P |
 
 Power flow is threaded left to right along a rung: an element's *input* power
@@ -94,8 +92,7 @@ One scan cycle is:
 
 ```
                     σ₁ = read_inputs(σ)
-                    φ  = snapshot(σ₁)                         [FEEDBACK]
-      ⟨R₁, σ₁, π, φ⟩ → σ₂    …    ⟨R_n, σ_n, π, φ⟩ → σ_{n+1}
+      ⟨R₁, σ₁, π⟩ → σ₂    …    ⟨R_n, σ_n, π⟩ → σ_{n+1}
                     π' = latch(σ_{n+1})
       ───────────────────────────────────────────────────────  [SCAN]
                     ⟨P, σ, π⟩ ⟹ ⟨σ_{n+1}, π'⟩
@@ -107,8 +104,6 @@ where
   reassigned an arbitrary value of its type. Inputs are *free*: the semantics
   admits every input sequence, which is what makes a proof over this relation
   a proof over all environments.
-- `snapshot(σ)` binds each feedback variable to its value here, before any
-  rung runs (§6.3).
 - `latch(σ)` binds each edge-sensed operand v to ⌊σ(v)⌋, at the end of the
   scan and after every rung, so that all contacts sensing v within one scan
   compare against the same previous-scan sample regardless of rung order.
@@ -127,9 +122,9 @@ A rung is a sequence of elements e₁ … e_m evaluated left to right, starting
 from the left power rail, which always supplies power:
 
 ```
-   p₀ = tt      ⟨e_i, σ_i, π, φ⟩ ⇓ p_i    ⟨e_i, σ_i, π, φ⟩ → σ_{i+1}
+   p₀ = tt      ⟨e_i, σ_i, π⟩ ⇓ p_i    ⟨e_i, σ_i, π⟩ → σ_{i+1}
    ─────────────────────────────────────────────────────────────────  [RUNG]
-                     ⟨e₁ … e_m, σ₁, π, φ⟩ → σ_{m+1}
+                     ⟨e₁ … e_m, σ₁, π⟩ → σ_{m+1}
 ```
 
 Contacts contribute to p and leave σ unchanged; coils and FB steps consume p
@@ -139,17 +134,17 @@ and update σ.
 
 ## 4. Contacts and coils
 
-Let `val(v, φ) = ⌊φ(v)⌋` if v is a feedback variable and `⌊σ(v)⌋` otherwise
-(§6.3), and let `p` be the input power flow.
+Let `val(v) = ⌊σ(v)⌋`, the value of v in the current store (§6.3), and let `p`
+be the input power flow.
 
 ### 4.1 Static contacts
 
 ```
-      val(v, φ) = tt                        val(v, φ) = ff
+      val(v) = tt                        val(v) = ff
   ───────────────────────  [NO-TRUE]   ───────────────────────  [NO-FALSE]
    ⟨--[ ]-- v, …⟩ ⇓ p              ⟨--[ ]-- v, …⟩ ⇓ ff
 
-      val(v, φ) = ff                        val(v, φ) = tt
+      val(v) = ff                        val(v) = tt
   ───────────────────────  [NC-TRUE]   ───────────────────────  [NC-FALSE]
    ⟨--[/]-- v, …⟩ ⇓ p              ⟨--[/]-- v, …⟩ ⇓ ff
 ```
@@ -161,14 +156,16 @@ contact's own polarity is applied to the result, so `--[/P]--` conducts on
 every scan on which `--[P]--` does not.
 
 ```
-   val(v, φ) = tt      π(v) = ff              val(v, φ) = ff     π(v) = tt
+   val(v) = tt      π(v) = ff              val(v) = ff     π(v) = tt
   ─────────────────────────────  [P-EDGE]   ─────────────────────────────  [N-EDGE]
      ⟨--[P]-- v, …⟩ ⇓ p                        ⟨--[N]-- v, …⟩ ⇓ p
 ```
 
 and ⇓ ff otherwise. Because π is updated only by `latch` at the end of the
 scan, an edge contact conducts for exactly one scan per transition, and two
-contacts sensing the same operand always agree.
+contacts sensing the same operand agree unless a coil writes the operand
+between them. Beremiz instead gives each edge contact its own `R_TRIG`/`F_TRIG`
+instance; the two coincide for operands no coil writes, such as inputs.
 
 ### 4.3 Coils
 
@@ -185,8 +182,8 @@ contacts sensing the same operand always agree.
    ⟨--(R)-- v, σ⟩ → σ[v ↦ ff]            ⟨--(R)-- v, σ⟩ → σ
 ```
 
-A coil writes σ directly, never φ: within a network, later contacts on a
-feedback variable still read the entry snapshot (§6.3).
+A coil writes σ directly, so a later contact on the same variable, in the same
+rung or a later one, reads the value just written (§6.3).
 
 ---
 
@@ -268,20 +265,22 @@ is retriggerable only after its pulse has completed.
 ### 5.5 CTU / CTD — counters
 
 ```
-   σ(CU) = tt, π(CU) = ff, σ(CV) < INTmax        σ(R) = tt
+   σ(CU) = tt, π(CU) = ff, σ(CV) < σ(PV)         σ(R) = tt
   ─────────────────────────────────────  [CTU]  ───────────────────  [CTU-RESET]
    σ' = σ[CV ↦ σ(CV)+1]                          σ' = σ[CV ↦ 0]
 
                     σ'' = σ'[Q ↦ (σ'(CV) ≥ σ(PV))]
 
-   σ(CD) = tt, π(CD) = ff, σ(CV) > INTmin
+   σ(CD) = tt, π(CD) = ff, σ(CV) > 0
   ─────────────────────────────────────  [CTD]  σ'' = σ'[Q ↦ (σ'(CV) ≤ 0)]
    σ' = σ[CV ↦ σ(CV)−1]
 ```
 
 Counters are edge-triggered on their count pin, using a per-instance entry in
 the edge store. The reset arm applies after the count arm, so a scan in which
-both fire leaves CV at 0.
+both fire leaves CV at 0. CTU stops at the preset and CTD at 0, as the bodies
+of MATIEC's `CTU` and `CTD` (`lib/counter.txt`) do. An unwired PV reads 0, the
+INT default, so a CTU without one never counts.
 
 ### 5.6 Arithmetic blocks
 
@@ -307,51 +306,53 @@ directly.
 
 A graphical PLCopen body is a connection graph, not a sequence. Let G be that
 graph, with an edge x → y whenever y lists x as a `refLocalId` on a
-power-flow pin. Define, for a sink s (a coil, or a function block's enable
-pin), the set
-
-> paths(s) = { simple paths from a leftPowerRail to s in G }
-
-Each path is a series chain, so it contributes the conjunction of its
-contacts; paths to the same sink are alternatives, so the sink's power flow is
-their disjunction:
+power-flow pin. The power flow out of a node n is
 
 ```
-                   pf(s) = ⋁ over q ∈ paths(s) of ⋀ over c ∈ q of ⟨c⟩ ⇓
+            pf(n) = (⋁ over predecessors p of n in G of pf(p)) ∧ ⟨n⟩ ⇓
   ────────────────────────────────────────────────────────────────────  [NET]
-                       sink s receives power flow pf(s)
+                  a sink s receives the power flow of its predecessors
 ```
+
+which is the disjunction over rail-to-sink paths of the conjunction of their
+contacts, computed per node rather than per path. Sequential evaluation (§6.3)
+recomputes it for each sink, so a body with C sinks costs O(C·(V+E)).
 
 Only power-flow pins (`IN`, `CU`, `CD`) induce edges; data pins (`PT`, `PV`)
 carry values, and a literal wired to one is read as a constant via ticks(·).
 
 A path running through a function block is cut at the block: the segment
 before it is what drives the block's enable, and the segment after it resumes
-from the block's output pin. Sinks are ordered by the order in which the
-right power rail lists them — the order the vendor tool draws them — and a
-block is stepped immediately before the first sink that consumes it.
+from the block's output pin. A block is stepped once per scan, immediately
+before the first sink that consumes it; a block no sink consumes is stepped
+after every sink.
 
-**Complexity.** |paths(s)| is exponential in the number of parallel branches
-reaching s. This is tractable for the programs evaluated here; a path-count
-guard is future work.
+Sinks run in the order the right power rail lists them, the order the vendor
+tool draws them. Coils the rail does not list follow in Beremiz's order
+(`PLCGenerator.SortInstances`): coils less than 10 apart vertically share a row
+and are ordered by x, other rows by y, sorted stably from document order.
 
-### 6.3 Feedback variables
+### 6.3 Sequential evaluation
 
-A variable both written by a coil and sensed by a contact of the same network
-closes a feedback loop, and [NET] alone does not determine its meaning — the
-answer would depend on the order the resolver happened to emit sinks in. IEC
-61131-3 §4.1.3 fixes this by requiring the loop variable to be read at its
-value on entry to the network. That is the role of φ:
+Each sink is a statement evaluated in turn: its power flow is recomputed from
+the current σ when the sink runs, so it reads every write made by an earlier
+sink, in the same rung or in an earlier one. The exception is a function block:
+it steps once, and a later sink downstream of it reads the output of that step. This is the ST that Beremiz
+generates for MATIEC and OpenPLC. For the toggle of
+`regression/ld/stairs_light_safe/stairs_light.ld` it emits
 
 ```
-      F = { v : v written by a coil of N and sensed by a contact of N }
-  ─────────────────────────────────────────────────────────────────────  [FEEDBACK]
-                  φ = { v ↦ σ(v) : v ∈ F }, before any rung of N
+IF NOT(lights_buttons_state) AND (R_TRIG1.Q OR R_TRIG2.Q) THEN
+  lights_buttons_state := TRUE;
+END_IF;
+IF lights_buttons_state AND (R_TRIG3.Q OR R_TRIG4.Q) THEN
+  lights_buttons_state := FALSE;
+END_IF;
 ```
 
-Contacts on v ∈ F read φ(v); coils on v write σ(v). A latch therefore takes
-effect on the scan *after* the one that set it, which is the standard
-behaviour of a feedback coil in a single network.
+so a button press sets the variable and the reset clears it in the same scan.
+The semantics reproduces that behaviour rather than reading a variable at its
+value on entry to the network.
 
 ---
 
@@ -359,15 +360,14 @@ behaviour of a feedback coil in a single network.
 
 The translation `ld_converter` performs is a rule-by-rule refinement of the
 above. With R ⊆ Σ × S the relation of §3.7 — (σ, s) ∈ R iff σ(v) = s(`ld::v`)
-for every LD variable v, extended to π and φ through the shadow symbols
-`ld::__edge_prev_v` and `ld::v__prev` — each rule maps to:
+for every LD variable v, extended to π through the shadow symbols
+`ld::__edge_prev_v`, each rule maps to:
 
 | Rule | GOTO IR |
 |---|---|
 | [SCAN] | `code_whilet(true, scan_body)` in `ld::scan_loop` |
 | read_inputs | `code_assignt(v, side_effect_expr_nondett)` per input, at scan top |
 | latch | `code_assignt(prev_v, ⌊v⌋)` per sensed operand, at scan bottom |
-| [FEEDBACK] | a rung `--[ ]-- v --( )-- v__prev` emitted before all others |
 | [NO-*] / [NC-*] | `and_exprt(pf, v)` / `and_exprt(pf, not_exprt(v))` |
 | [P-EDGE] / [N-EDGE] | `and_exprt(v, not_exprt(prev_v))` / `and_exprt(not_exprt(v), prev_v)` |
 | [COIL] | `code_assignt(v, pf)` |
@@ -410,10 +410,8 @@ time or documented as an approximation.
   A reset pin driven by a contact chain in a graphical body is diagnosed and
   left unconnected rather than silently approximated.
 - **Integer width.** CV and ET are machine integers of the configured width.
-  Both saturate rather than wrap: CV at INTmax/INTmin, ET at PT. Saturating at
-  the type bound rather than at PV over-approximates CV above the preset, which
-  can raise a false alarm but cannot hide a violation; see the open item in §10
-  on which bound IEC intends.
+  Neither can wrap: CV stays between 0 and PV (§5.5) and ET saturates at PT.
+  See the open item in §10 on which counter bound IEC intends.
 - **Non-timer, non-counter blocks on a rung path.** A path through an
   arithmetic or unknown block is diagnosed and dropped rather than modelled,
   so a program using one verifies over strictly less behaviour. User-defined
@@ -433,8 +431,7 @@ and before the next `read_inputs`. Properties may name:
 
 - any declared program variable;
 - `<instance>__<pin>` for a function-block pin synthesised by the graphical
-  resolver (§6.2), e.g. `TOF0__Q`;
-- `<var>__prev` for the entry snapshot of a feedback variable (§6.3).
+  resolver (§6.2), e.g. `TOF0__Q`.
 
 ---
 
@@ -449,11 +446,12 @@ to raise in it:
 2. §5.5 orders the counter's reset arm after its count arm. IEC 61131-3
    defines CTU with reset dominant; confirm the intended order when both fire
    in one scan.
-3. §6.3 applies the entry-snapshot rule to all feedback variables of a
-   network. IEC 61131-3 §4.1.3 states it for feedback paths specifically;
-   confirm the two coincide for LD bodies, or narrow the rule.
-4. §5.5 saturates CV at the integer type's bound. Secondary sources render the
-   normative CTU body with both `CV < PVmax` (the type bound, as here) and
-   `CV < PV` (the preset); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The
-   two agree on Q for every reachable state and differ only in CV's value above
-   the preset, so this changes no verdict that does not read CV directly.
+3. §6.3 follows the sequential evaluation of Beremiz/MATIEC. IEC 61131-3
+   §4.1.3 (Ed. 3 §8.1.5) states an entry-value rule for feedback paths within a
+   network; confirm whether it applies to LD coils and contacts on the same
+   variable, and record where the reference toolchain departs from it.
+4. §5.5 stops CTU at the preset and CTD at 0, as MATIEC does. Secondary
+   sources render the normative bodies with `CV < PVmax` and `CV > PVmin`
+   (the type bounds); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The two
+   agree on Q in every reachable state and differ only in CV beyond the preset
+   or below 0, so the choice changes only verdicts that read CV.

@@ -1,0 +1,4 @@
+CORE
+../stairs_light_safe/stairs_light.ld
+--ld-props props.yaml --unwind 6 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

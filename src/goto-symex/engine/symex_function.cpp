@@ -935,6 +935,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     merge_state_list.emplace_back(*cur_state);
     statet::merge_statet &new_state = merge_state_list.back();
+    snapshot_interval_domain(new_state);
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
@@ -973,6 +974,7 @@ bool goto_symext::run_next_function_ptr_target(bool first)
       cur_state->top()
         .merge_state_map[cur_state->top().function_ptr_combine_target];
     merge_state_list.emplace_back(*cur_state);
+    snapshot_interval_domain(merge_state_list.back());
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -1140,6 +1142,7 @@ void goto_symext::symex_return(const expr2tc &code)
   merge_state_list.emplace_back(*cur_state);
   record_parked_path(
     cur_state->top().end_of_function, std::prev(merge_state_list.end()));
+  snapshot_interval_domain(merge_state_list.back());
 
   // check whether the stack limit and return
   // value optimization have been activated.

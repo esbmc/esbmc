@@ -7,7 +7,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
@@ -249,7 +249,7 @@ std::string py_percent_format(
       // printf rounds %f/%e/%g per the host FP rounding mode, which the
       // pipeline can leave non-default; pin FE_TONEAREST across both snprintf
       // passes so the fold matches CPython's round-half-to-even.
-      const round_to_nearest_guard guard;
+      const host_rounding_mode guard(FE_TONEAREST);
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
@@ -1036,12 +1036,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return type_identity_result;
 
   // Handle None comparisons (don't unwrap optionals for identity checks)
-  bool is_none_check = handle_none_check_setup(op, lhs, rhs);
-  if (!is_none_check)
-  {
-    lhs = unwrap_optional_if_needed(lhs, element);
-    rhs = unwrap_optional_if_needed(rhs, element);
-  }
+  // Optionals are unwrapped here, except for an identity check against None.
+  if (exprt optional_result = resolve_optional_operands(
+        op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
+      optional_result.is_not_nil())
+    return optional_result;
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
   {
@@ -1700,6 +1699,48 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return handle_chained_comparisons_logic(element, bin_expr);
 
   return bin_expr;
+}
+
+/// Replace Optional<T> operands by their values (#8016). `==`/`!=` also compare
+/// the None flags, so None equals only None. Returns the finished comparison,
+/// or nil once \p lhs and \p rhs hold plain values.
+exprt python_converter::resolve_optional_operands(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element,
+  bool is_none_check)
+{
+  if (is_none_check)
+    return nil_exprt();
+  auto none_flag = [&](exprt &operand) -> exprt {
+    if (!type_utils::is_optional_struct(operand.type()))
+      return false_exprt();
+    operand = materialize_optional(operand, element);
+    exprt flag = member_exprt(operand, "is_none", bool_type());
+    operand = unwrap_optional_if_needed(operand, element);
+    return flag;
+  };
+  const bool any_optional = type_utils::is_optional_struct(lhs.type()) ||
+                            type_utils::is_optional_struct(rhs.type());
+  const exprt lhs_none = none_flag(lhs);
+  const exprt rhs_none = none_flag(rhs);
+  if (!any_optional || (op != "Eq" && op != "NotEq"))
+    return nil_exprt();
+
+  auto is_scalar = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t.is_bool();
+  };
+  if (!is_scalar(lhs.type()) || !is_scalar(rhs.type()))
+    return nil_exprt();
+  const exprt values_equal =
+    equality_exprt(lhs, typecast_exprt(rhs, lhs.type()));
+  const exprt equal = or_exprt(
+    and_exprt(lhs_none, rhs_none),
+    and_exprt(
+      and_exprt(not_exprt(lhs_none), not_exprt(rhs_none)), values_equal));
+  return op == "Eq" ? equal : exprt(not_exprt(equal));
 }
 
 bool python_converter::handle_none_check_setup(

@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-symex-assert
+^ +FAILED .*line 17 +g above -7$
+^VERIFICATION FAILED$

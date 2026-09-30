@@ -641,6 +641,42 @@ void goto_convertt::cpp_new_zero_fill(
   convert(loop, dest);
 }
 
+/* `new T[n]{a, b}` for a scalar T: the listed elements are initialised in
+ * order and the rest are value-initialised ([dcl.init.aggr]/5), so zero every
+ * element and then store the list. The initializer, the list decayed to
+ * `&list[0]`, carries no constructor, which is all the element loop below
+ * looks for, so the list was dropped. False for any other initializer. */
+bool goto_convertt::cpp_new_init_list(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &decayed,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  const typet &subtype = ns.follow(rhs.type().subtype());
+  if (
+    !decayed.is_address_of() || !decayed.op0().is_index() ||
+    subtype.is_struct() || subtype.is_union() || subtype.is_array())
+    return false;
+  const exprt &init = decayed.op0().op0();
+  if (!init.type().is_array() || (!init.is_constant() && init.id() != "array"))
+    return false;
+
+  cpp_new_zero_fill(lhs, rhs, elem_count, dest);
+  for (std::size_t i = 0; i < init.operands().size(); ++i)
+  {
+    plus_exprt element_addr(lhs, from_integer(i, size_type()));
+    element_addr.type() = lhs.type();
+    exprt element("dereference", subtype);
+    element.copy_to_operands(element_addr);
+
+    code_assignt store(element, init.operands()[i]);
+    store.location() = rhs.find_location();
+    convert(store, dest);
+  }
+  return true;
+}
+
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
@@ -722,6 +758,9 @@ void goto_convertt::cpp_new_initializer(
       //
       //   for (size_type i = 0; i < n; ++i)
       //     <element constructor, with `this` = lhs + i>
+      if (cpp_new_init_list(lhs, rhs, initializer.op0(), elem_count, dest))
+        return;
+
       exprt *ctor = find_cpp_new_constructor(initializer);
       if (ctor == nullptr)
         return;

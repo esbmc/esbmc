@@ -1,0 +1,10 @@
+properties:
+  # m is written by the first rung and read by the second. The rungs run in
+  # order, so the second reads the value the first just wrote
+  # and q follows m within the same scan (#7352). Reading m's value from the
+  # start of the scan instead would let the scan in which a rises set m and
+  # leave q off.
+  - id: P1
+    kind: invariant
+    expression: "(!m || q) && (m || !q)"
+    description: "The coil reading m matches m in every scan"

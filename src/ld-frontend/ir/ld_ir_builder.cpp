@@ -72,6 +72,7 @@ LdIRNode LdIRBuilder::lower_element(const RungElement &elem)
     node.ctr_CU = elem.counter_fb.CU_var;
     node.ctr_CD = elem.counter_fb.CD_var;
     node.ctr_R = elem.counter_fb.R_var;
+    node.ctr_LD = elem.counter_fb.LD_var;
     node.ctr_CV = elem.counter_fb.CV_var;
     node.ctr_PV = elem.counter_fb.PV_var;
     node.ctr_Q = elem.counter_fb.Q_var;
@@ -125,9 +126,8 @@ LdIR LdIRBuilder::build(const LdAst &ast)
       ex.instance_name = inst.instance_name;
       ex.input_vars = def.input_vars;
       ex.local_vars = def.local_vars;
-      ex.output_var = def.output_var;
-      ex.output_kind = def.output_kind;
-      ex.in1_var = inst.in1_var;
+      ex.output_vars = def.output_vars;
+      ex.in_wires = inst.in_wires;
       ex.out_wires = inst.out_wires;
       ex.st_body = def.st_body;
       ir.user_fbs.push_back(ex);

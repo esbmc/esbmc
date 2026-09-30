@@ -2,7 +2,7 @@
 #include <python-frontend/exception/exception_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -378,7 +378,7 @@ std::string apply_format_spec(
     // A typeless float spec ("{:8}", "{:.2}") uses CPython's general format,
     // which is not faithfully snprintf-expressible (e.g. 1.0 -> "1.0", not
     // "1"); it is left to the nondet fallback via the final throw below.
-    const round_to_nearest_guard rounding_guard;
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     const int pr = prec >= 0 ? prec : 6;
     const char t = type;
     int n = 0;
@@ -415,7 +415,7 @@ std::string apply_format_spec(
   {
     // {:%} multiplies by 100, formats like 'f' (default precision 6), and
     // appends a literal '%'.
-    const round_to_nearest_guard rounding_guard;
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     const int pr = prec >= 0 ? prec : 6;
     const double pct = dval * 100.0;
     int n = std::snprintf(nullptr, 0, "%.*f", pr, pct);

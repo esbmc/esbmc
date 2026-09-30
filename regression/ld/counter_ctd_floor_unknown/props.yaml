@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!Full"
+    description: "CV of a CTD never drops below 0"

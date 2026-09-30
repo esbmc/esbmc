@@ -1,0 +1,7 @@
+properties:
+  # Twin of userfb_input_anon_block_safe: two X pulses reach the preset, so the
+  # counter's Q, and Y through p0, can be on.
+  - id: P1
+    kind: invariant
+    expression: "!Y"
+    description: "Deliberately false: Y follows the counter once it fires"

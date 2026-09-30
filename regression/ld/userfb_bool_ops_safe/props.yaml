@@ -1,0 +1,42 @@
+properties:
+  # Each output must equal its ST expression over the instance's inputs. On
+  # master the parenthesised OR threw, so the whole body was dropped, and
+  # outputs after the first were typed int32 (#7579). PREC_OUT, NOTAND_OUT and
+  # EQAND_OUT pin IEC 61131-3 precedence: AND over OR, NOT over AND, and
+  # comparison over AND.
+  - id: AND
+    kind: invariant
+    expression: "(!g0__AND_OUT || (g0__A && g0__B)) && (g0__AND_OUT || !(g0__A && g0__B))"
+    description: "AND"
+  - id: AMP
+    kind: invariant
+    expression: "(!g0__AMP_OUT || (g0__A && g0__B)) && (g0__AMP_OUT || !(g0__A && g0__B))"
+    description: "& is AND"
+  - id: OR
+    kind: invariant
+    expression: "(!g0__OR_OUT || g0__A || g0__B) && (g0__OR_OUT || !(g0__A || g0__B))"
+    description: "OR"
+  - id: XOR
+    kind: invariant
+    expression: "(!g0__XOR_OUT || ((g0__A && !g0__B) || (!g0__A && g0__B))) && (g0__XOR_OUT || !((g0__A && !g0__B) || (!g0__A && g0__B)))"
+    description: "XOR"
+  - id: NOT
+    kind: invariant
+    expression: "(!g0__NOT_OUT || !g0__A) && (g0__NOT_OUT || g0__A)"
+    description: "NOT"
+  - id: PREC
+    kind: invariant
+    expression: "(!g0__PREC_OUT || g0__A || (g0__B && g0__C)) && (g0__PREC_OUT || !(g0__A || (g0__B && g0__C)))"
+    description: "AND binds tighter than OR"
+  - id: PAREN
+    kind: invariant
+    expression: "(!g0__PAREN_OUT || ((g0__A || g0__B) && g0__C)) && (g0__PAREN_OUT || !((g0__A || g0__B) && g0__C))"
+    description: "Parentheses group a Boolean expression"
+  - id: NOTAND
+    kind: invariant
+    expression: "(!g0__NOTAND_OUT || (!g0__A && g0__B)) && (g0__NOTAND_OUT || !(!g0__A && g0__B))"
+    description: "NOT binds tighter than AND"
+  - id: EQAND
+    kind: invariant
+    expression: "(!g0__EQAND_OUT || (((g0__A && g0__B) || (!g0__A && !g0__B)) && g0__C)) && (g0__EQAND_OUT || !(((g0__A && g0__B) || (!g0__A && !g0__B)) && g0__C))"
+    description: "Comparison binds tighter than AND"

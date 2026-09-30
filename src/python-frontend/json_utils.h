@@ -81,6 +81,14 @@ ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b)
   return a == b;
 }
 
+/// True for `X = Y` between two bare names, such as `_Elem = int`.
+inline bool is_name_alias(const nlohmann::json &stmt)
+{
+  return stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
+         stmt["targets"][0].value("_type", "") == "Name" &&
+         stmt["value"].value("_type", "") == "Name";
+}
+
 /// Convert a dotted Python module name to a filesystem path segment.
 /// Example: "pkg.mod4" -> "pkg/mod4", "l.ks.foo" -> "l/ks/foo"
 inline std::string dotted_to_path(const std::string &module_name)

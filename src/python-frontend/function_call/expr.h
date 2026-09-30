@@ -880,6 +880,7 @@ private:
     const typet &param_type,
     const locationt &location) const;
 
+  typet dict_param_value_type(const symbolt *func, size_t idx) const;
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,

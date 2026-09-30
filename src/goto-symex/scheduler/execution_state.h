@@ -666,6 +666,9 @@ public:
   value_sett global_value_set;
   /** Current active states thread ID. */
   unsigned int active_thread;
+  /** Name of the top-level execution guard symbol. */
+  static constexpr const char *guard_execution_name =
+    "execution_statet::\\guard_exec";
   /** Name prefix for execution guard. */
   irep_idt guard_execution;
   /** Number of nondeterministic symbols in this state. */

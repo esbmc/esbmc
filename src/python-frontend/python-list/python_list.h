@@ -583,6 +583,7 @@ public:
   typet tagged_elem_type_or(
     const exprt &array,
     bool constant_index,
+    const nlohmann::json &list_node,
     const typet &fallback) const;
 
   struct shallow_push_call

@@ -1,8 +1,8 @@
 /// \file frame_enforcer.h
-/// \brief Operational Frame Rule enforcement for verification.
+/// \brief Observational frame-rule enforcement for verification.
 ///
-/// This module implements the "Snapshot → Havoc → Assume/Assert(Unchanged == Snapshot)"
-/// pattern used in two contexts:
+/// This module implements the "Snapshot → Havoc → Assume/Assert(Unchanged ==
+/// Snapshot)" pattern used in two contexts:
 ///
 /// 1. Loop invariants (ASSUME mode): Bridges the inductive gap in k-induction
 ///    by assuming unassigned variables retain pre-havoc values.

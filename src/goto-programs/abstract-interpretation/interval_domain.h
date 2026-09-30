@@ -131,6 +131,8 @@ public:
   void clear_state()
   {
     intervals = get_empty();
+    // get_empty() is shared: the next write must copy it first.
+    copied = false;
   }
 
   // no states
@@ -199,13 +201,10 @@ public:
    */
   void process_instruction(goto_programt::const_targett from);
 
-  /** JOIN the if-branch snapshot value with the current (else-branch) domain
-   *  value for lhs.  Both SSA variables for a base name share the same key, so
-   *  by the time phi_function runs only the else-branch value remains; the
-   *  snapshot preserves the if-branch value for the correct HULL computation. */
-  void phi_join_with_snapshot(
-    const expr2tc &lhs,
-    const std::shared_ptr<interval_map> &if_snapshot);
+  /// Join the domain recorded when another symex path was parked into this
+  /// one, over every variable: a path narrows intervals by ASSUME as well as
+  /// by assignment, so joining only the phi-assigned variables is unsound.
+  void join_snapshot(const std::shared_ptr<interval_map> &snapshot);
 
   /**
    * @brief Uses the abstract state to simplify a given expression using context-

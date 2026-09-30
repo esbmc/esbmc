@@ -107,8 +107,8 @@ public:
     unsigned int thread_id;
     renaming::level1t::current_namest level1_names;
     variable_name_sett local_variables;
-    std::shared_ptr<void> interval_snapshot; // interval_domaint::interval_map;
-                                             // set in symex_goto.cpp
+    // interval_domaint::interval_map; see snapshot_interval_domain
+    std::shared_ptr<void> interval_snapshot;
 
     explicit merge_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),

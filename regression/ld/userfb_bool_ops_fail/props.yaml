@@ -1,0 +1,8 @@
+properties:
+  # Twin of userfb_bool_ops_safe. With AND translated, AND_OUT differs from A
+  # whenever A is on and B is off. A parser that kept only the first operand of
+  # AND would make AND_OUT equal A and this hold (#7579).
+  - id: P1
+    kind: invariant
+    expression: "(!g0__AND_OUT || g0__A) && (g0__AND_OUT || !g0__A)"
+    description: "Deliberately false: AND_OUT is just A"

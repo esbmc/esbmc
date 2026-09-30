@@ -7,8 +7,11 @@
 ## Description
 
 Real-world building automation program for staircase lighting.
-Two push buttons toggle the light. A PIR motion sensor activates
-the light automatically for 20 seconds via a TOF timer.
+Two push buttons are meant to toggle the light. A PIR motion sensor
+activates the light automatically for 20 seconds via a TOF timer. The toggle
+rung sets and then resets its latch in the same scan, so on OpenPLC, and under
+the sequential semantics ESBMC models, the buttons never leave the light on
+(`graphical_in_rung_sequential_safe`).
 
 Graphical PLCopen (tc6_0201): the logic is a connection graph, and it
 exercises every part of the graphical resolver — rising-edge contacts, a
@@ -21,7 +24,6 @@ declared 20 ms task period turns the timer's `T#20s` preset into 1000 ticks.
 | ID | Kind | Description |
 |---|---|---|
 | P1 | invariant | Timer output energises the light |
-| P2 | invariant | Latched button toggle energises the light |
 | P3 | invariant | Light is only ever on when the timer or the toggle drives it |
 
 ## Expected Result
@@ -40,5 +42,4 @@ the rung path. `regression/ld/stairs_light_hold_fail` keeps the old property
 as a negative test so a resolver that drops the timer again is caught.
 
 Properties may name function-block pins using the `<instance>__<pin>`
-symbols the resolver synthesises for graphical blocks — `TOF0__Q` here — and
-`<var>__prev` for the entry-value snapshot of a feedback variable.
+symbols the resolver synthesises for graphical blocks, `TOF0__Q` here.

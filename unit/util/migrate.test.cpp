@@ -1670,3 +1670,36 @@ TEST_CASE("a struct keeps its Python aggregate kind", "[migrate]")
     REQUIRE(migrate_type(marked)->crc() == migrate_type(tuple)->crc());
   }
 }
+
+// A class's `bases` list is no part of its type's identity, but exception
+// dispatch and base_type.cpp read the class hierarchy from it.
+TEST_CASE("a struct keeps its bases", "[migrate]")
+{
+  struct_typet cls;
+  cls.components().emplace_back("x", "x", signedbv_typet(64));
+  cls.tag("tag-D");
+
+  SECTION("the bases round-trip")
+  {
+    cls.add("bases").get_sub().emplace_back("tag-B");
+    REQUIRE(full_eq(migrate_type_back(migrate_type(cls)), cls));
+  }
+
+  SECTION("an empty list stays distinct from none")
+  {
+    cls.add("bases");
+    REQUIRE(migrate_type_back(migrate_type(cls)).find("bases").is_not_nil());
+  }
+
+  SECTION("no bases gains no key")
+  {
+    REQUIRE(migrate_type_back(migrate_type(cls)).find("bases").is_nil());
+  }
+
+  SECTION("the bases are no part of the type's identity")
+  {
+    struct_typet derived = cls;
+    derived.add("bases").get_sub().emplace_back("tag-B");
+    REQUIRE(migrate_type(derived) == migrate_type(cls));
+  }
+}

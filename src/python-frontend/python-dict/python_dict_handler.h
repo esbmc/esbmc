@@ -364,6 +364,11 @@ public:
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
+  /// The value type a dict literal not bound to an annotated name takes, such
+  /// as one passed straight to an annotated parameter (#8016).
+  typet literal_value_type_hint;
+  typet literal_value_type(const exprt &target);
+
   /**
    * @brief Stored tuple struct type of a literal dict's values, recorded at
    * construction; empty unless every value has the same tuple type.

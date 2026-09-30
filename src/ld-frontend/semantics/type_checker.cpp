@@ -108,6 +108,7 @@ void TypeChecker::check_counter_fb(const CounterFBNode &fb)
   check_bool(fb.CU_var, "CU");
   check_bool(fb.CD_var, "CD");
   check_bool(fb.R_var, "R");
+  check_bool(fb.LD_var, "LD");
   check_bool(fb.Q_var, "Q");
   check_int(fb.PV_var, "PV");
   check_int(fb.CV_var, "CV");

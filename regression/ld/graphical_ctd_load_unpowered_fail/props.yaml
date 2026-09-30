@@ -1,0 +1,9 @@
+properties:
+  # The CTD's LD pin is wired to a contact on Load and PV is 2, so a load puts
+  # CV back at 2 and takes Q low in the same scan (IEC 61131-3 CTD: LD before
+  # the count). A converter that never reads LD lets CV fall past 0 and holds
+  # Empty on while Load is on (#7353).
+  - id: P1
+    kind: invariant
+    expression: "!(Empty && Load)"
+    description: "Load is dominant: Empty and Load never hold together"

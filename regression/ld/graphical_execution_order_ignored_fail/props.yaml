@@ -1,0 +1,8 @@
+properties:
+  # Twin of graphical_execution_order_ignored_safe. Coils run by position, so the
+  # set drawn below wins; ordering by executionOrderId would let the reset win
+  # and make this hold.
+  - id: P1
+    kind: invariant
+    expression: "!b || !q"
+    description: "Deliberately false: the reset path wins when both are energised"
