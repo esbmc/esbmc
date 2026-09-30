@@ -177,9 +177,9 @@ bool python_languaget::parse(const std::string &path)
   }
   catch (const nlohmann::json::exception &e)
   {
-    // parser/__main__.py exited 0 but left a truncated or empty AST file. Report
-    // it instead of aborting via an uncaught nlohmann parse_error
-    // (issue #2012).
+    // parser/__main__.py exited 0 but left a truncated or empty AST file.
+    // Report it instead of aborting via an uncaught nlohmann parse_error (issue
+    // #2012).
     log_error(
       "<python-parser> failed to parse generated AST {}: {}\n",
       script_path.str(),
@@ -245,10 +245,10 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   const host_rounding_mode rounding_guard(FE_TONEAREST);
 
   // Load c models. The C++ handled-stack exception OM (push/pop_handled,
-  // rethrow_current) is deliberately NOT pulled in for Python: it drags the full
-  // C++ std::terminate closure, and Python does not use std::current_exception.
-  // The lowering's inline re-raise fallback (remove_exceptions) covers Python's
-  // bare `raise` without that OM.
+  // rethrow_current) is deliberately NOT pulled in for Python: it drags the
+  // full C++ std::terminate closure, and Python does not use
+  // std::current_exception. The lowering's inline re-raise fallback
+  // (remove_exceptions) covers Python's bare `raise` without that OM.
   add_cprover_library(context, this);
 
   if (
@@ -273,7 +273,8 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // *replaces* clang_cpp_adjust on the Python path (the B.5 "sole adjuster"
   // milestone, gated behind a default-off flag). It stays default-off: a
   // whole-corpus legacy-vs-hop-off census (2026-07-29) found the missing
-  // assignment/operand conversion documented in docs/roadmap/scope-v1k-adjuster.md
+  // assignment/operand conversion documented in
+  // docs/roadmap/scope-v1k-adjuster.md
   // ("the assignment-conversion trap") reaches the solver as an ill-typed term
   // and crashes it, so the flip waits on the coupled arithmetic-reconciliation
   // effort that section sizes.
@@ -295,25 +296,26 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
 
   // V.4 B.2: optionally run the IREP2-native Python adjuster. Default off.
   //
-  // It runs *after* clang_cpp_adjust for now: reading get_value2() migrates each
-  // legacy value to IREP2, which requires its types to already be resolved —
-  // before clang_cpp_adjust they are still by-name symbol_types and migrating a
-  // constant aggregate trips constant_struct2t's (un-relaxed) assert. Post-adjust
-  // the types are resolved, so the walk is safe; it currently resolves nothing
-  // (clang_cpp_adjust already did) and only writes a symbol back when it changes
-  // the value, so the flag is behaviour-inert.
+  // It runs *after* clang_cpp_adjust for now: reading get_value2() migrates
+  // each legacy value to IREP2, which requires its types to already be resolved
+  // — before clang_cpp_adjust they are still by-name symbol_types and migrating
+  // a constant aggregate trips constant_struct2t's (un-relaxed) assert.
+  // Post-adjust the types are resolved, so the walk is safe; it currently
+  // resolves nothing (clang_cpp_adjust already did) and only writes a symbol
+  // back when it changes the value, so the flag is behaviour-inert.
   //
-  // B.3 experiment (2026-06-25, negative result, do not retry as-is): moving the
-  // pass *before* clang_cpp_adjust to exercise resolution was prototyped. It
-  // additionally needs member2t/index2t to tolerate a transient pointer source
-  // (the Python frontend stores instances/containers behind a pointer) plus a
-  // pointer auto-deref in resolve_source. With those, migration no longer aborts,
-  // but the whole 20-test fixture then produced *no verdict* under the flag
-  // (symex crash/hang): running the IREP2 adjuster before clang_cpp_adjust while
-  // clang_cpp_adjust still runs afterwards double-resolves the same nodes — the
-  // "two-places-resolve hazard" the V.1k spike flagged. Conclusion: the
-  // before-placement is only viable once it *replaces* clang_cpp_adjust for
-  // Python (B.5), which is a dedicated effort, not a reorder of this call.
+  // B.3 experiment (2026-06-25, negative result, do not retry as-is): moving
+  // the pass *before* clang_cpp_adjust to exercise resolution was prototyped.
+  // It additionally needs member2t/index2t to tolerate a transient pointer
+  // source (the Python frontend stores instances/containers behind a pointer)
+  // plus a pointer auto-deref in resolve_source. With those, migration no
+  // longer aborts, but the whole 20-test fixture then produced *no verdict*
+  // under the flag (symex crash/hang): running the IREP2 adjuster before
+  // clang_cpp_adjust while clang_cpp_adjust still runs afterwards
+  // double-resolves the same nodes — the "two-places-resolve hazard" the V.1k
+  // spike flagged. Conclusion: the before-placement is only viable once it
+  // *replaces* clang_cpp_adjust for Python (B.5), which is a dedicated effort,
+  // not a reorder of this call.
   if (config.options.get_bool_option("python-irep2-adjust"))
   {
     python_adjust py_adjuster(context);

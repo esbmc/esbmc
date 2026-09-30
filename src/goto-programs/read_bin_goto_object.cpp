@@ -98,7 +98,8 @@ bool read_bin_goto_object(
       // Symbol is not in the function set
       if (function_set.find(id2string(fname)) == function_set.end())
       {
-        // Keep this symbol in case we end up needing it as a dependency later on
+        // Keep this symbol in case we end up needing it as a dependency later
+        // on
         ignored.add(symbol);
         continue; // skip to next symbol
       }
@@ -143,8 +144,8 @@ bool read_bin_goto_object(
   contextt &context,
   goto_functionst &goto_functions)
 {
-  contextt
-    empt_ignored; // empty context to put ignored symbols in; will not be used since empty function filter
+  contextt empt_ignored; // empty context to put ignored symbols in; will not be
+                         // used since empty function filter
   std::unordered_set<std::string>
     empt_function_set; // empty function filter; no function whitelist
   return read_bin_goto_object(

@@ -1777,8 +1777,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     // We only want expressions of typecast(address_of(symbol)) or
     // address_of(symbol).
     {
-      if (const typecast2t *tc = try_to_typecast2t(symbol);
-          tc && is_address_of2t(tc->from))
+      if (
+        const typecast2t *tc = try_to_typecast2t(symbol);
+        tc && is_address_of2t(tc->from))
         symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))

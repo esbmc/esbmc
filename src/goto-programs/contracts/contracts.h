@@ -1,38 +1,45 @@
 /*
  * This function is used to check function contracts.
- * 
+ *
  * Verification Strategy: Abstraction and Hierarchical Verification
- * 
- * Function contracts enable a manual abstraction approach to assist over-approximation
- * verification logic. By splitting verification into system-level and function-level,
- * we should be able to reduce verification complexity. 
- * 
+ *
+ * Function contracts enable a manual abstraction approach to assist
+ * over-approximation verification logic. By splitting verification into
+ * system-level and function-level, we should be able to reduce verification
+ * complexity.
+ *
  * 1. Function-level verification (enforce_contracts):
  *    - Verify each function independently against its contract
- *    - Use contract as specification: assume requires -> execute function -> assert ensures
- *    - This provides over-approximation: if function satisfies contract, it's correct
+ *    - Use contract as specification: assume requires -> execute function ->
+ * assert ensures
+ *    - This provides over-approximation: if function satisfies contract, it's
+ * correct
  *    - Complexity: O(n) where n is function size, not system size
- * 
+ *
  * 2. System-level verification (replace_calls):
  *    - Replace function calls with contract semantics
- *    - Use contract as abstraction: assert requires -> havoc assigns -> assume ensures
+ *    - Use contract as abstraction: assert requires -> havoc assigns -> assume
+ * ensures
  *    - This avoids exploring function body, reducing state space
  *    - Complexity: O(m) where m is call sites, not function implementations
- * 
+ *
  * Benefits:
  * - Modularity: Verify functions separately from system
  * - Scalability: System verification doesn't need to explore function internals
  * - Reusability: Once function is verified, contract can be used in any context
- * - Over-approximation: Contract provides safe abstraction (may have false positives)
- * 
+ * - Over-approximation: Contract provides safe abstraction (may have false
+ * positives)
+ *
  * This approach transforms a complex system verification problem into:
  * - Multiple simpler function verification problems
  * - One system verification problem using abstracted functions
- * 
+ *
  * It takes phases:
  * 1. Extract contract clauses (requires, ensures, assigns) from contract symbol
- * 2. For contract checking: rename original function, generate wrapper with assume requires -> call -> assert ensures
- * 3. For contract replacement: replace calls with assert requires -> havoc assigns -> assume ensures
+ * 2. For contract checking: rename original function, generate wrapper with
+ * assume requires -> call -> assert ensures
+ * 3. For contract replacement: replace calls with assert requires -> havoc
+ * assigns -> assume ensures
  */
 
 #ifndef ESBMC_CONTRACTS_H
@@ -48,12 +55,15 @@
 #include <string>
 
 /// \brief Basic contract handling class
-/// Provides contract checking and replacement functionality at goto function level
+/// Provides contract checking and replacement functionality at goto function
+/// level
 ///
-/// Function contracts are specifications that describe the behavior of functions.
-/// They consist of:
-/// - Preconditions (requires): conditions that must hold when the function is called
-/// - Postconditions (ensures): conditions that must hold when the function returns
+/// Function contracts are specifications that describe the behavior of
+/// functions. They consist of:
+/// - Preconditions (requires): conditions that must hold when the function is
+/// called
+/// - Postconditions (ensures): conditions that must hold when the function
+/// returns
 /// - Assigns clauses: memory locations that the function may modify
 ///
 /// Contracts enable modular verification by allowing functions to be verified
@@ -66,9 +76,9 @@ public:
   /// \brief Structure to store is_fresh mapping information
   struct is_fresh_mapping_t
   {
-    irep_idt
-      temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
-    expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+    irep_idt temp_var_name; ///< Temporary variable name (e.g.,
+                            ///< return_value$___ESBMC_is_fresh$1)
+    expr2tc ptr_expr;       ///< Pointer expression (dereferenced from &ptr)
     expr2tc size_expr; ///< Extent the contract asked for, in bytes; may be nil
   };
 
@@ -78,13 +88,16 @@ public:
     const namespacet &ns);
 
   /// \brief Enforce function contracts
-  /// Renames function F to __ESBMC_contracts_original_F and generates a new wrapper function F
-  /// Wrapper function: assume requires -> call original function -> assert ensures
+  /// Renames function F to __ESBMC_contracts_original_F and generates a new
+  /// wrapper function F Wrapper function: assume requires -> call original
+  /// function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
-  /// \param entry_function The --function entry point name (empty if using main).
+  /// \param entry_function The --function entry point name (empty if using
+  /// main).
   ///        When non-empty AND matches the function being enforced, the wrapper
   ///        allocates fresh backing storage for all pointer parameters so that
-  ///        the harness-generated nil args become valid dereferenceable objects.
+  ///        the harness-generated nil args become valid dereferenceable
+  ///        objects.
   /// \return The subset of \p to_enforce that was actually enforced. A name
   ///         absent from the result named nothing this pass could act on.
   std::set<std::string> enforce_contracts(
@@ -111,7 +124,8 @@ public:
   /// \return True if function has any contract clauses
   bool has_contracts(const goto_programt &function_body) const;
 
-  /// \brief Check if function is marked with __attribute__((annotate("__ESBMC_contract")))
+  /// \brief Check if function is marked with
+  /// __attribute__((annotate("__ESBMC_contract")))
   /// \param func_sym Function symbol to check
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
@@ -146,9 +160,10 @@ public:
     expr2tc snapshot_sym; ///< Snapshot symbol holding pre-call field value
   };
 
-  /// \brief Snapshot for pointer-parameter dereference assigns compliance (Phase 2C).
-  /// When a pointer param p is NOT declared in the assigns clause at all, its
-  /// pointed-to value (*p or p->field for structs) must remain unchanged.
+  /// \brief Snapshot for pointer-parameter dereference assigns compliance
+  /// (Phase 2C). When a pointer param p is NOT declared in the assigns clause
+  /// at all, its pointed-to value (*p or p->field for structs) must remain
+  /// unchanged.
   struct ptr_deref_snapshot_t
   {
     expr2tc ptr_sym;      ///< Pointer parameter symbol
@@ -316,12 +331,14 @@ private:
 
   /// \brief Extract requires clauses from function body
   /// \param function_body Function goto program
-  /// \return Requires expression (conjunction of all requires), or true_exprt() if none
+  /// \return Requires expression (conjunction of all requires), or true_exprt()
+  /// if none
   expr2tc extract_requires_from_body(const goto_programt &function_body);
 
   /// \brief Extract ensures clauses from function body
   /// \param function_body Function goto program
-  /// \return Ensures expression (conjunction of all ensures), or true_exprt() if none
+  /// \return Ensures expression (conjunction of all ensures), or true_exprt()
+  /// if none
   expr2tc extract_ensures_from_body(const goto_programt &function_body);
 
   /// \brief Extract assigns clause from function body
@@ -335,7 +352,8 @@ private:
   /// \return Assigns expression, or nil_exprt() if not present
   expr2tc extract_assigns_clause(const symbolt &contract_symbol);
 
-  /// \brief Replace __ESBMC_return_value symbols in expression with actual return value
+  /// \brief Replace __ESBMC_return_value symbols in expression with actual
+  /// return value
   /// \param expr Expression to replace symbols in
   /// \param ret_val Actual return value expression
   /// \return Expression with __ESBMC_return_value replaced
@@ -346,10 +364,12 @@ private:
   /// \brief Extract struct/union member accesses to temporary variables
   /// For struct return values, accessing members directly (ret_val.x) can cause
   /// symbolic execution issues when ret_val's value is a 'with' expression.
-  /// This function extracts member accesses to temporary variables to avoid dereference failures.
+  /// This function extracts member accesses to temporary variables to avoid
+  /// dereference failures.
   /// \param expr Expression containing member accesses
   /// \param ret_val Return value symbol (must be struct/union type)
-  /// \param wrapper GOTO program to add temporary variable declarations and assignments
+  /// \param wrapper GOTO program to add temporary variable declarations and
+  /// assignments
   /// \param location Source location for generated instructions
   /// \return Expression with member accesses replaced by temporary variables
   expr2tc extract_struct_members_to_temps(
@@ -460,10 +480,10 @@ private:
   std::vector<old_snapshot_t>
   collect_old_snapshots_from_body(const goto_programt &function_body) const;
 
-  /// \brief Snapshot fields of pointed-to structs that are NOT in the assigns clause.
-  /// For each pointer symbol in classified.ptr_field_targets, enumerates the
-  /// pointed-to struct's fields, and for each field NOT in the assigned set
-  /// emits DECL+ASSIGN instructions capturing the pre-call value.
+  /// \brief Snapshot fields of pointed-to structs that are NOT in the assigns
+  /// clause. For each pointer symbol in classified.ptr_field_targets,
+  /// enumerates the pointed-to struct's fields, and for each field NOT in the
+  /// assigned set emits DECL+ASSIGN instructions capturing the pre-call value.
   /// \param classified Classified assigns targets (provides ptr_field_targets)
   /// \param original_func Original function symbol (provides parameter types)
   /// \param wrapper GOTO program to append snapshot instructions to
@@ -487,16 +507,21 @@ private:
     goto_programt &wrapper,
     const locationt &location);
 
-  // ========== Phase 2C: pointer-parameter dereference assigns compliance ==========
+  // ========== Phase 2C: pointer-parameter dereference assigns compliance
+  // ==========
 
-  /// \brief Snapshot pointer params whose dereferenced value is NOT in the assigns clause.
-  /// For each pointer parameter p not covered by the assigns clause:
+  /// \brief Snapshot pointer params whose dereferenced value is NOT in the
+  /// assigns clause. For each pointer parameter p not covered by the assigns
+  /// clause:
   ///   - scalar pointee: snapshot *p
   ///   - struct pointee: snapshot each field of *p
   /// Called before the function call in the checking wrapper.
-  /// \param classified Classified assigns targets (provides pointer_targets, ptr_field_targets)
-  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
-  /// \param original_func Original function symbol (provides parameter types/names)
+  /// \param classified Classified assigns targets (provides pointer_targets,
+  /// ptr_field_targets)
+  /// \param assigns_targets Full assigns target list (must be non-empty to
+  /// enable check)
+  /// \param original_func Original function symbol (provides parameter
+  /// types/names)
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
@@ -534,8 +559,9 @@ private:
     const std::string &func_name,
     std::vector<ptr_deref_snapshot_t> &result);
 
-  /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
-  /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
+  /// \brief Emit ASSERT instructions for pointer-parameter dereference
+  /// compliance. For each snapshot: asserts *p == snapshot (scalar) or p->field
+  /// == snapshot (struct).
   /// \param snapshots Snapshots produced by materialize_ptr_deref_snapshots
   /// \param wrapper GOTO program to append assertions to
   /// \param location Source location
@@ -697,7 +723,8 @@ private:
 
   /// \brief Check if a symbol represents a return value variable
   /// \param sym Symbol to check
-  /// \return True if symbol is a return value variable (matches patterns like "return_value", "__ESBMC_return_value", etc.)
+  /// \return True if symbol is a return value variable (matches patterns like
+  /// "return_value", "__ESBMC_return_value", etc.)
   bool is_return_value_symbol(const symbol2t &sym) const;
 
   /// \brief Remove incorrect typecasts on return value symbols
@@ -707,23 +734,27 @@ private:
   expr2tc
   remove_incorrect_casts(const expr2tc &expr, const expr2tc &ret_val) const;
 
-  /// \brief Fix type mismatches in comparison expressions involving return values
+  /// \brief Fix type mismatches in comparison expressions involving return
+  /// values
   /// \param expr Expression to fix (typically an ensures guard)
   /// \param ret_val Return value symbol with correct type
   /// \return Expression with corrected type casts
   expr2tc
   fix_comparison_types(const expr2tc &expr, const expr2tc &ret_val) const;
 
-  /// \brief Normalize floating-point addition in contract expressions to use IEEE semantics
-  /// This ensures contracts use IEEE_ADD (matching implementation) instead of regular +
+  /// \brief Normalize floating-point addition in contract expressions to use
+  /// IEEE semantics This ensures contracts use IEEE_ADD (matching
+  /// implementation) instead of regular +
   /// \param expr Expression to normalize (typically an ensures guard)
   /// \return Expression with floating-point add2t replaced by ieee_add2t
   expr2tc normalize_fp_add_in_ensures(const expr2tc &expr) const;
 
   /// \brief Normalize ensures guard expression for return value handling
-  /// This is a unified helper that applies all return_value-related transformations:
+  /// This is a unified helper that applies all return_value-related
+  /// transformations:
   /// 1. Replaces __ESBMC_return_value with actual ret_val symbol
-  /// 2. Fixes type mismatches in comparisons (removes incorrect casts, adds correct casts)
+  /// 2. Fixes type mismatches in comparisons (removes incorrect casts, adds
+  /// correct casts)
   /// 3. Normalizes floating-point operations to use IEEE semantics
   /// \param ensures_clause Original ensures clause expression
   /// \param ret_val Return value symbol (may be nil if function returns void)

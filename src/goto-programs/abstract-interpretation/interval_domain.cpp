@@ -712,8 +712,9 @@ interval_domaint::make_expression_value<interval_domaint::real_intervalt>(
     (upper ? *interval.upper : *interval.lower).convert_to<double>();
   v.value.from_double(d);
 
-  // 'from_double' changes the original spec. This makes solvers complain that we are comparing
-  // 'orange' floats to 'apple' floats. To fix this, we need to convert the spec back.
+  // 'from_double' changes the original spec. This makes solvers complain that
+  // we are comparing 'orange' floats to 'apple' floats. To fix this, we need to
+  // convert the spec back.
   const ieee_float_spect original_spec(
     to_floatbv_type(type).fraction, to_floatbv_type(type).exponent);
   v.value.change_spec(original_spec);
@@ -1005,9 +1006,10 @@ void interval_domaint::transform(
     break;
   }
 
-  /* The abstract interpreter can only affect the state 'after' the execution of the statement
-   * however, function calls need to change the parameter 'before' its execution. We can
-   * deal with this by just checking if the target instruction is a function call!
+  /* The abstract interpreter can only affect the state 'after' the execution of
+   * the statement however, function calls need to change the parameter 'before'
+   * its execution. We can deal with this by just checking if the target
+   * instruction is a function call!
    */
   if (to->is_function_call())
   {
@@ -1142,7 +1144,7 @@ bool interval_domaint::join(
          * This happens due to the Abstract Interpreter
          * being unable to merge the information that is
          * coming before the loop (see #1738)
-        */
+         */
         log_error(
           "Narrowing is currently disabled. See GitHub issue #1738 for more "
           "details");
@@ -1283,7 +1285,8 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   }
   else if (is_symbol2t(expr) || is_code_decl2t(expr))
   {
-    // Reset the interval domain if it is being reassigned (-infinity, +infinity).
+    // Reset the interval domain if it is being reassigned (-infinity,
+    // +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
     if (intervals->count(identifier))
@@ -1533,7 +1536,8 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     assume_rec(to_typecast2t(cond).from, negation);
   }
-  //added in case "cond = false" which happens when the ibex contractor results in empty set.
+  // added in case "cond = false" which happens when the ibex contractor results
+  // in empty set.
   else if (is_constant_bool2t(cond))
   {
     if ((negation && is_true(cond)) || (!negation && is_false(cond)))

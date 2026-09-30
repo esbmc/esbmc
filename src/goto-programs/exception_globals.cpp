@@ -11,9 +11,10 @@ namespace
 /// Register one zero-initialised static global.
 /// The exception state is per-thread: a propagating exception, its type and its
 /// object belong to the thread that raised it, so the globals are thread-local.
-/// symex routes thread-local globals to a per-thread instance (renaming.cpp), so
-/// one thread cannot observe, catch, or clear another thread's in-flight
-/// exception — which is what makes the lowered dispatch sound under concurrency.
+/// symex routes thread-local globals to a per-thread instance (renaming.cpp),
+/// so one thread cannot observe, catch, or clear another thread's in-flight
+/// exception — which is what makes the lowered dispatch sound under
+/// concurrency.
 ///
 /// If @p id already exists it is a bare extern declaration (the OM
 /// std::uncaught_exceptions() reads __ESBMC_exc_uncaught_count, so linking that

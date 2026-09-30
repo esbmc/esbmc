@@ -81,9 +81,8 @@ private:
     {"void", BASE_TYPES::_VOID},
     /* Basic Java classes that can work as primitive types */
     {"java.lang.Integer", BASE_TYPES::INT},
-    {"java.util.Random",
-     BASE_TYPES::
-       INT}, // We dont really care about the initialization of this mode
+    {"java.util.Random", BASE_TYPES::INT}, // We dont really care about the
+                                           // initialization of this mode
     {"java.lang.String", BASE_TYPES::INT}, // TODO: handle this properly
     /* TODO: these are hacks and should be moved into an intrinsics class */
     {"Main", BASE_TYPES::INT},                     // TODO: handle this properly
@@ -93,4 +92,4 @@ private:
     {"__other", BASE_TYPES::OTHER}};
 };
 
-#endif //ESBMC_JIMPLE_TYPE_H
+#endif // ESBMC_JIMPLE_TYPE_H

@@ -91,7 +91,7 @@ bool solidity_convertert::convert_bool_literal(
 // TODO: Character literal
 /**
  * @brief Converts the string literal to a string_constt
- * 
+ *
  * @param the_value the value of the literal
  * @param dest return reference
  * @return true Only if the function fails
@@ -107,7 +107,8 @@ bool solidity_convertert::convert_string_literal(
       * size: constant
           * type: unsignedbv
               * width: 64
-          * value: 0000000000000000000000000000000000000000000000000000000000000101
+          * value:
+  0000000000000000000000000000000000000000000000000000000000000101
           * #cformat: 5
       * subtype: signedbv
           * width: 8
@@ -127,7 +128,7 @@ bool solidity_convertert::convert_string_literal(
 /**
  * convert hex-string to uint constant
  * @n: the bit width, default 256 (unsignedbv_typet(256))
-*/
+ */
 bool solidity_convertert::convert_hex_literal(
   std::string the_value,
   exprt &dest,
@@ -155,5 +156,7 @@ bool solidity_convertert::convert_hex_literal(
 }
 
 // TODO: Float literal.
-//    - Note: Currently Solidity does NOT support floating point data types or fp arithmetic.
-//      Everything is done in fixed-point arithmetic as of Solidity compiler v0.8.6.
+//    - Note: Currently Solidity does NOT support floating point data types or
+//    fp arithmetic.
+//      Everything is done in fixed-point arithmetic as of Solidity compiler
+//      v0.8.6.

@@ -610,8 +610,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   }
   else if (is_bv_type(to_type))
   {
-    // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values are
-    // real-encoded; fall back to value-based typecast.
+    // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values
+    // are real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
       return convert_ast(typecast2tc(to_type, from));
 

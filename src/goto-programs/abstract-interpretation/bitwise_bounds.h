@@ -6,7 +6,8 @@
 
 /**
  * Adaptation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
- * for unsigned integers of any width, by scanning from the least significant bit.
+ * for unsigned integers of any width, by scanning from the least significant
+ * bit.
  * @author Edoardo Manino.
  * @brief Maximum value of x | y given x in [a,b] and y in [c,d]
  * @param a Min value of variable x
@@ -26,8 +27,9 @@ UINT_X unsigned_max_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
     // e.g. cand_bits = 0b01101010 yields least_bit = 0b00000010
     UINT_X least_bit = cand_bits & (-cand_bits);
 
-    // reduce b and d by removing least_bit and activating all the less significant ones
-    // e.g. b = 0b00101100 and least_bit = 0b00001000 yields alternate_b = 0b00100111
+    // reduce b and d by removing least_bit and activating all the less
+    // significant ones e.g. b = 0b00101100 and least_bit = 0b00001000 yields
+    // alternate_b = 0b00100111
     UINT_X alternate_b = (b - least_bit) | (least_bit - 1);
     UINT_X alternate_d = (d - least_bit) | (least_bit - 1);
 
@@ -43,13 +45,15 @@ UINT_X unsigned_max_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
     cand_bits &= (cand_bits - 1);
   }
 
-  // the maximum value is the disjunction of both upper bounds and the extra bits
+  // the maximum value is the disjunction of both upper bounds and the extra
+  // bits
   return b | d | extra_bits;
 }
 
 /**
  * Adaptation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
- * for unsigned integers of any width, by scanning from the least significant bit.
+ * for unsigned integers of any width, by scanning from the least significant
+ * bit.
  * @author Edoardo Manino.
  * @brief Minimum value of x | y given x in [a,b] and y in [c,d]
  * @param a Min value of variable x
@@ -70,8 +74,9 @@ UINT_X unsigned_min_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
     // e.g. cand_bits = 0b01101010 yields least_bit = 0b00000010
     UINT_X least_bit = cand_bits & (-cand_bits);
 
-    // increase a by adding least_bit and de-activating all the less significant ones
-    // e.g. a = 0b00101100 and least_bit = 0b00010000 yields alternate_a = 0b00110000
+    // increase a by adding least_bit and de-activating all the less significant
+    // ones e.g. a = 0b00101100 and least_bit = 0b00010000 yields alternate_a =
+    // 0b00110000
     UINT_X alternate_a = (a | least_bit) & (-least_bit);
 
     // stop if the alternate value is outside of the valid interval
@@ -108,7 +113,8 @@ UINT_X unsigned_min_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Maximum value of x & y given x in [a,b] and y in [c,d]
  * @param a Min value of variable x
@@ -122,7 +128,8 @@ UINT_X unsigned_max_and(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Minimum value of x & y given x in [a,b] and y in [c,d]
  * @param a Min value of variable x
@@ -136,7 +143,8 @@ UINT_X unsigned_min_and(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Maximum value of x ^ y given x in [a,b] and y in [c,d]
  * @param a Min value of variable x
@@ -151,7 +159,8 @@ UINT_X unsigned_max_xor(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Minimum value of x ^ y given x in [a,b] and y in [c,d]
  * @param a Min value of variable x
@@ -165,7 +174,8 @@ UINT_X unsigned_min_xor(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Maximum value of ~x given x in [a,b]
  * @param a Min value of variable x
@@ -177,7 +187,8 @@ UINT_X unsigned_max_not(UINT_X a, UINT_X)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Minimum value of ~x given x in [a,b]
  * @param a Min value of variable x
@@ -247,7 +258,8 @@ UINT_X unsigned_min_right_shift(UINT_X a, UINT_X, UINT_X, UINT_X d)
 /**
  * Upper bound on unsigned to unsigned interval truncation
  * @author Edoardo Manino.
- * @brief Maximum value of unsigned truncate(x, n) given n bits and unsigned x in [a,b]
+ * @brief Maximum value of unsigned truncate(x, n) given n bits and unsigned x
+ * in [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -265,7 +277,8 @@ UINT_X unsigned_2_unsigned_max_truncate(UINT_X a, UINT_X b, UINT_X n)
 /**
  * Lower bound on unsigned to unsigned interval truncation
  * @author Edoardo Manino.
- * @brief Minimum value of unsigned truncate(x, n) given n bits and unsigned x in [a,b]
+ * @brief Minimum value of unsigned truncate(x, n) given n bits and unsigned x
+ * in [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -283,7 +296,8 @@ UINT_X unsigned_2_unsigned_min_truncate(UINT_X a, UINT_X b, UINT_X n)
 /**
  * Upper bound on signed to unsigned interval truncation
  * @author Edoardo Manino.
- * @brief Maximum value of unsigned truncate(x, n) given n bits and signed x in [a,b]
+ * @brief Maximum value of unsigned truncate(x, n) given n bits and signed x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -302,7 +316,8 @@ UINT_X signed_2_unsigned_max_truncate(INT_X a, INT_X b, UINT_X n)
 /**
  * Lower bound on signed to unsigned interval truncation
  * @author Edoardo Manino.
- * @brief Minimum value of unsigned truncate(x, n) given n bits and signed x in [a,b]
+ * @brief Minimum value of unsigned truncate(x, n) given n bits and signed x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -321,7 +336,8 @@ UINT_X signed_2_unsigned_min_truncate(INT_X a, INT_X b, UINT_X n)
 /**
  * Upper bound on the unsigned extension of an n bit signed interval
  * @author Edoardo Manino.
- * @brief Maximum value of unsigned extend(x, n) given n bits and signed x in [a,b]
+ * @brief Maximum value of unsigned extend(x, n) given n bits and signed x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the input
@@ -345,7 +361,8 @@ UINT_X signed_2_unsigned_max_extend(INT_X a, INT_X b, UINT_X n)
 /**
  * Lower bound on the unsigned extension of an n bit signed interval
  * @author Edoardo Manino.
- * @brief Minimum value of unsigned extend(x, n) given n bits and signed x in [a,b]
+ * @brief Minimum value of unsigned extend(x, n) given n bits and signed x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the input
@@ -367,9 +384,11 @@ UINT_X signed_2_unsigned_min_extend(INT_X a, INT_X b, UINT_X n)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
- * @brief Maximum value of x | y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Maximum value of x | y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -437,9 +456,11 @@ INT_X signed_max_or(INT_X a, INT_X b, INT_X c, INT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
- * @brief Minimum value of x | y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x | y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -507,9 +528,11 @@ INT_X signed_min_or(INT_X a, INT_X b, INT_X c, INT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
- * @brief Maximum value of x & y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Maximum value of x & y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -521,9 +544,11 @@ INT_X signed_max_and(INT_X a, INT_X b, INT_X c, INT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
- * @brief Minimum value of x & y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x & y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -535,10 +560,12 @@ INT_X signed_min_and(INT_X a, INT_X b, INT_X c, INT_X d)
 }
 
 /**
- * Original upper bound on signed interval XOR, inspired by the case-based algorithm
- * for signed interval OR in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Original upper bound on signed interval XOR, inspired by the case-based
+ * algorithm for signed interval OR in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
- * @brief Maximum value of x ^ y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Maximum value of x ^ y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -608,10 +635,12 @@ INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
 }
 
 /**
- * Original lower bound on signed interval XOR, inspired by the case-based algorithm
- * for signed interval OR in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Original lower bound on signed interval XOR, inspired by the case-based
+ * algorithm for signed interval OR in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
- * @brief Minimum value of x ^ y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x ^ y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -681,7 +710,8 @@ INT_X signed_min_xor(INT_X a, INT_X b, INT_X c, INT_X d)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Maximum value of ~x given x in [a,b], potentially negative
  * @param a Min value of variable x
@@ -693,7 +723,8 @@ INT_X signed_max_not(INT_X a, INT_X)
 }
 
 /**
- * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight", 2003
+ * Implementation of the algorithm in Henry S. Warren Jr., "Hacker's Delight",
+ * 2003
  * @author Edoardo Manino.
  * @brief Minimum value of ~x given x in [a,b], potentially negative
  * @param a Min value of variable x
@@ -707,7 +738,8 @@ INT_X signed_min_not(INT_X, INT_X b)
 /**
  * Upper bound on interval left shift
  * @author Edoardo Manino.
- * @brief Maximum value of x << y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Maximum value of x << y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -724,7 +756,8 @@ INT_X signed_max_left_shift(INT_X, INT_X b, UINT_X c, UINT_X d)
 /**
  * Lower bound on interval left shift
  * @author Edoardo Manino.
- * @brief Minimum value of x << y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x << y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -741,7 +774,8 @@ INT_X signed_min_left_shift(INT_X a, INT_X, UINT_X c, UINT_X d)
 /**
  * Upper bound on interval right shift
  * @author Edoardo Manino.
- * @brief Maximum value of x >> y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Maximum value of x >> y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -758,7 +792,8 @@ INT_X signed_max_right_shift(INT_X, INT_X b, UINT_X c, UINT_X d)
 /**
  * Lower bound on interval right shift
  * @author Edoardo Manino.
- * @brief Minimum value of x >> y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x >> y given x in [a,b] and y in [c,d], potentially
+ * negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y
@@ -791,8 +826,8 @@ INT_X unsigned_2_signed(UINT_X x, UINT_X n)
   if ((x & sign_bit) == 0)
     return (INT_X)x & mask;
 
-  // if the input is negative, convert it to positive with relation -x = (~x) + 1,
-  // truncate it, cast it to signed integer and return the negative result
+  // if the input is negative, convert it to positive with relation -x = (~x) +
+  // 1, truncate it, cast it to signed integer and return the negative result
   INT_X positive_x = (~x & mask) + 1;
   return -positive_x;
 }
@@ -800,7 +835,8 @@ INT_X unsigned_2_signed(UINT_X x, UINT_X n)
 /**
  * Upper bound on unsigned to signed interval truncation
  * @author Edoardo Manino.
- * @brief Maximum value of signed truncate(x, n) given n bits and unsigned x in [a,b]
+ * @brief Maximum value of signed truncate(x, n) given n bits and unsigned x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -820,7 +856,8 @@ INT_X unsigned_2_signed_max_truncate(UINT_X a, UINT_X b, UINT_X n)
   UINT_X least_bit = cand_bits & (-cand_bits);
 
   // reduce b by removing least_bit and activating all the less significant ones
-  // e.g. b = 0b00101100 and least_bit = 0b00001000 yields alternate_b = 0b00100111
+  // e.g. b = 0b00101100 and least_bit = 0b00001000 yields alternate_b =
+  // 0b00100111
   UINT_X alternate_b = (b - least_bit) | (least_bit - 1);
 
   // reduce b further by setting the sign bit to zero
@@ -846,7 +883,8 @@ INT_X unsigned_2_signed_max_truncate(UINT_X a, UINT_X b, UINT_X n)
 /**
  * Lower bound on unsigned to signed interval truncation
  * @author Edoardo Manino.
- * @brief Minimum value of signed truncate(x, n) given n bits and unsigned x in [a,b]
+ * @brief Minimum value of signed truncate(x, n) given n bits and unsigned x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -866,7 +904,8 @@ INT_X unsigned_2_signed_min_truncate(UINT_X a, UINT_X b, UINT_X n)
   UINT_X least_bit = cand_bits & (-cand_bits);
 
   // increase a by adding least_bit and removing all the less significant ones
-  // e.g. a = 0b00110100 and least_bit = 0b00001000 yields alternate_a = 0b00111000
+  // e.g. a = 0b00110100 and least_bit = 0b00001000 yields alternate_a =
+  // 0b00111000
   UINT_X alternate_a = (a | least_bit) & (-least_bit);
 
   // increase a further by setting the sign bit to one
@@ -892,7 +931,8 @@ INT_X unsigned_2_signed_min_truncate(UINT_X a, UINT_X b, UINT_X n)
 /**
  * Upper bound on signed to signed interval truncation
  * @author Edoardo Manino.
- * @brief Maximum value of signed truncate(x, n) given n bits and signed x in [a,b]
+ * @brief Maximum value of signed truncate(x, n) given n bits and signed x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -914,7 +954,8 @@ INT_X signed_2_signed_max_truncate(INT_X a, INT_X b, UINT_X n)
 /**
  * Lower bound on signed to signed interval truncation
  * @author Edoardo Manino.
- * @brief Minimum value of signed truncate(x, n) given n bits and signed x in [a,b]
+ * @brief Minimum value of signed truncate(x, n) given n bits and signed x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the result
@@ -936,7 +977,8 @@ INT_X signed_2_signed_min_truncate(INT_X a, INT_X b, UINT_X n)
 /**
  * Upper bound on the signed extension of an n bit unsigned interval
  * @author Edoardo Manino.
- * @brief Maximum value of signed extend(x, n) given n bits and unsigned x in [a,b]
+ * @brief Maximum value of signed extend(x, n) given n bits and unsigned x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the input
@@ -963,7 +1005,8 @@ INT_X unsigned_2_signed_max_extend(UINT_X a, UINT_X b, UINT_X n)
 /**
  * Lower bound on the signed extension of an n bit unsigned interval
  * @author Edoardo Manino.
- * @brief Minimum value of signed extend(x, n) given n bits and unsigned x in [a,b]
+ * @brief Minimum value of signed extend(x, n) given n bits and unsigned x in
+ * [a,b]
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param n Number of bits of the input

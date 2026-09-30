@@ -127,9 +127,9 @@ smt_astt tuple_node_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   const_cast<tuple_node_smt_ast *>(to_tuple_node_ast(other))->make_free(ctx);
 
-  // We have two tuple_node_smt_asts and need to create a boolean ast representing
-  // their equality: iterate over all their members, compute an equality for
-  // each of them, and then combine that into a final ast.
+  // We have two tuple_node_smt_asts and need to create a boolean ast
+  // representing their equality: iterate over all their members, compute an
+  // equality for each of them, and then combine that into a final ast.
   tuple_node_smt_astt ta = this;
   tuple_node_smt_astt tb = to_tuple_node_ast(other);
 

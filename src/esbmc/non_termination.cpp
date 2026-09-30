@@ -663,15 +663,16 @@ tvt try_prove_non_termination_by_recurrent_set(
         continue;
       std::unordered_set<irep_idt, irep_id_hash> callee_writes;
       collect_writes(callee_it->second, callee_writes);
-      if (check_period_1_fixpoint(
-            input_arg,
-            callee_formal_name,
-            valid_inputs,
-            branch_conds,
-            initial_state,
-            callee_writes,
-            options,
-            ns))
+      if (
+        check_period_1_fixpoint(
+          input_arg,
+          callee_formal_name,
+          valid_inputs,
+          branch_conds,
+          initial_state,
+          callee_writes,
+          options,
+          ns))
         return tvt(tvt::TV_FALSE);
     }
   }

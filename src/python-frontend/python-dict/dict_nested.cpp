@@ -25,12 +25,14 @@ exprt python_dict_handler::safe_cast_to_dict_pointer(
   const typet &target_ptr_type,
   const locationt &location)
 {
-  // Step 1: Cast void* to pointer_type* and dereference to get pointer_type value
+  // Step 1: Cast void* to pointer_type* and dereference to get pointer_type
+  // value
   exprt as_ptr_type_ptr =
     build_typecast(obj_value, pointer_typet(pointer_type()));
   exprt ptr_as_ptr_type = build_dereference(as_ptr_type_ptr, pointer_type());
 
-  // Step 2: Store pointer_type value in temporary to ensure proper evaluation order
+  // Step 2: Store pointer_type value in temporary to ensure proper evaluation
+  // order
   symbolt &ptr_type_var = converter_.create_tmp_symbol(
     node, "$dict_ptr_as_int$", pointer_type(), exprt());
   code_declt ptr_type_decl(build_symbol(ptr_type_var));
@@ -94,7 +96,8 @@ void python_dict_handler::store_nested_dict_value(
     integer2binary(type_hash_value, config.ansi_c.address_width));
 
   // Call __ESBMC_list_push_dict_ptr(list, ptr_var, type_hash)
-  // ptr_var (dict*) is stored directly in item->value — no byte extraction needed
+  // ptr_var (dict*) is stored directly in item->value — no byte extraction
+  // needed
   code_function_callt push_call;
   push_call.function() = build_symbol(*push_func);
   push_call.arguments().push_back(build_symbol(values_list));
@@ -119,8 +122,9 @@ exprt python_dict_handler::retrieve_nested_dict_value(
       "retrieve_nested_dict_value: expected_type is nil");
   }
 
-  // obj_value = item->value = the dict* stored directly by __ESBMC_list_push_dict_ptr
-  // Cast void* to dict* directly (no byte extraction needed)
+  // obj_value = item->value = the dict* stored directly by
+  // __ESBMC_list_push_dict_ptr Cast void* to dict* directly (no byte extraction
+  // needed)
   pointer_typet dict_ptr_type(expected_type);
   exprt dict_ptr = build_typecast(obj_value, dict_ptr_type);
 
