@@ -1,0 +1,7 @@
+properties:
+  # A load through LOAD clears Empty. A CTD that ignores LOAD starts at 0 and
+  # only counts down, so Empty would hold in every scan and this would pass.
+  - id: P1
+    kind: invariant
+    expression: "Empty"
+    description: "Deliberately false: a load through LOAD clears Empty"

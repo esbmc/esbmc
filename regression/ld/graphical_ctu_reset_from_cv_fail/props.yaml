@@ -1,0 +1,8 @@
+properties:
+  # CTU1 (PV = 1, no reset) latches Q after the first Stop pulse, and its Q
+  # resets CTU0, so Done is off whenever CTU1__Q is on. Ignoring a block-driven
+  # R lets CTU0 reach its preset regardless.
+  - id: P1
+    kind: invariant
+    expression: "!(CTU1__Q && Done)"
+    description: "A counter output on R holds the other counter at 0"

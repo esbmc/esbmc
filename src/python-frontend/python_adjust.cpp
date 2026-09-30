@@ -1248,7 +1248,9 @@ void python_adjust::adjust_type(type2tc &type)
           st.packed,
           st.member_base_names,
           st.alignment,
-          st.python_aggregate);
+          st.python_aggregate,
+          st.has_bases,
+          st.bases);
       }
       else
       {

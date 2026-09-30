@@ -362,6 +362,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
   if (cmdline.isset("houdini-loop-invariants"))
     return do_houdini_strategy(options, goto_functions);
 
+  if (cmdline.isset("ts-check"))
+    return do_ts_strategy(options, goto_functions);
+
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||

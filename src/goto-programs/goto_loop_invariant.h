@@ -39,7 +39,7 @@ bool is_inert_scan_instruction(goto_programt::const_targett t);
 class frame_enforcert;
 
 /// \brief Entry point: process loop invariants for all functions.
-/// When use_frame_rule is true, enables the Operational Frame Rule
+/// When use_frame_rule is true, enables the observational frame rule
 /// (Snapshot → Havoc → Assume) for enhanced inductive verification.
 void goto_loop_invariant(
   goto_functionst &goto_functions,

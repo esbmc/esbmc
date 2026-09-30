@@ -1,4 +1,5 @@
 #include <python-frontend/type/type_handler.h>
+#include <clang-c-frontend/padding.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
@@ -471,6 +472,23 @@ static void throw_if_unmodelled_builtin_result(const std::string &ast_type)
 /// References:
 /// - Python 3 type system: https://docs.python.org/3/library/stdtypes.html
 /// - ESBMC irep type system: src/util/type.h
+/// The type a generic spelling `Base[...]` names: its base type, except that
+/// "Optional[T]" spelled as one name (a preprocessor-generated or inferred
+/// annotation) resolves like the Optional[T] subscript does (#8016).
+typet type_handler::get_generic_typet(
+  const std::string &ast_type,
+  size_t bracket_pos,
+  size_t type_size) const
+{
+  const std::string base_type = ast_type.substr(0, bracket_pos);
+  const std::string inner =
+    ast_type.substr(bracket_pos + 1, ast_type.size() - bracket_pos - 2);
+  if (base_type == "Optional" && inner.find('[') == std::string::npos)
+    if (const typet t = get_typet(inner); type_utils::is_optional_scalar(t))
+      return build_optional_type(t);
+  return get_typet(base_type, type_size);
+}
+
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
@@ -487,8 +505,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   size_t bracket_pos = ast_type.find('[');
   if (bracket_pos != std::string::npos)
   {
-    std::string base_type = ast_type.substr(0, bracket_pos);
-    return get_typet(base_type, type_size);
+    return get_generic_typet(ast_type, bracket_pos, type_size);
   }
 
   // type: represents Python type objects (int, str, float, bool, etc.)
@@ -1532,7 +1549,7 @@ size_t type_handler::get_type_width(const typet &type) const
   return 32;
 }
 
-typet type_handler::build_optional_type(const typet &base_type)
+typet type_handler::build_optional_type(const typet &base_type) const
 {
   // Create a struct with two fields:
   // 1. is_none: bool - indicates if value is None
@@ -1552,7 +1569,11 @@ typet type_handler::build_optional_type(const typet &base_type)
   value_field.set_access("public");
   optional_type.components().push_back(value_field);
 
-  return optional_type;
+  // Padded here, once: clang_cpp_adjust pads a variable's copy of this inline
+  // struct but not a parameter's, and base_type_eq then rejects the call.
+  typet padded = optional_type;
+  add_padding(padded, converter_.ns);
+  return padded;
 }
 
 bool type_handler::class_derives_from(

@@ -1035,18 +1035,18 @@ expr2tc sub2t::do_simplify() const
 
   if (is_bv_type(type))
   {
-    // Recognize (base + X) - X = base pattern. bv-only: for pointer types,
-    // returning add.side_2 (an integer offset) when add.side_1 == side_2
-    // would yield a value with the wrong type — sub2t of two pointers has
-    // ptrdiff type, but the offset's type is whatever the original add used.
+    // Recognize (base + X) - X = base pattern. A pointer difference is
+    // bv-typed too, but `(a + k) - a` leaves the offset k in the add's own
+    // type, not ptrdiff's, so cast it to the result type (both count
+    // elements).
     if (is_add2t(side_1))
     {
       const add2t &add = to_add2t(side_1);
 
       if (add.side_2 == side_2)
-        return add.side_1;
+        return typecast_check_return(type, add.side_1);
       if (add.side_1 == side_2)
-        return add.side_2;
+        return typecast_check_return(type, add.side_2);
     }
 
     // -1 - x -> ~x
@@ -1059,24 +1059,25 @@ expr2tc sub2t::do_simplify() const
     if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
       return sub2tc(type, to_bitnot2t(side_2).value, to_bitnot2t(side_1).value);
 
-    // x - (x - y) -> y
+    // x - (x - y) -> y, cast like the (base + X) - X arm above
     if (is_sub2t(side_2))
     {
       const sub2t &sub = to_sub2t(side_2);
 
       if (sub.side_1 == side_1)
-        return sub.side_2;
+        return typecast_check_return(type, sub.side_2);
     }
 
-    // x - (x + y) -> -y and x - (y + x) -> -y
+    // x - (x + y) -> -y and x - (y + x) -> -y; cast before negating, or an
+    // unsigned offset is negated in its own width and then zero-extended
     if (is_add2t(side_2))
     {
       const add2t &add = to_add2t(side_2);
 
       if (add.side_1 == side_1)
-        return neg2tc(type, add.side_2);
+        return neg2tc(type, typecast_check_return(type, add.side_2));
       if (add.side_2 == side_1)
-        return neg2tc(type, add.side_1);
+        return neg2tc(type, typecast_check_return(type, add.side_1));
     }
 
     if (expr2tc folded = fold_common_addend(side_1, side_2, type);
@@ -4066,10 +4067,12 @@ static expr2tc byte_address_on_root(const expr2tc &e)
   if (!root)
     return expr2tc();
   const expr2tc anchor = byte_view_anchor(*root, e->type);
-  if (is_nil_expr(anchor))
+  // The anchor of an array of byte arrays is its first row's address, a byte
+  // view of that row: rewriting it again to anchor + 0 never terminates.
+  if (is_nil_expr(anchor) || e == anchor)
     return expr2tc();
   if (root == &obj)
-    return is_typecast2t(e) && e != anchor ? anchor : expr2tc();
+    return is_typecast2t(e) ? anchor : expr2tc();
 
   expr2tc offset = compute_pointer_offset(obj);
   if (expr2tc folded = offset->simplify(); !is_nil_expr(folded))

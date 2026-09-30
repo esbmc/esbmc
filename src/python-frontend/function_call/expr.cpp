@@ -7,7 +7,7 @@
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/set/python_set.h>
@@ -1475,7 +1475,7 @@ exprt function_call_expr::handle_float_fromhex() const
     throw std::runtime_error(
       "float.fromhex() only supports the 0x...p... hexadecimal form");
 
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
   char *end = nullptr;
   const double d = std::strtod(t.c_str(), &end);
   if (end != t.c_str() + t.size() || !std::isfinite(d))
@@ -5665,19 +5665,35 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   return call;
 }
 
-/// The base-class declaration of a ClassMethod call the derived class does not
-/// declare itself, or a null pointer when there is none (#7546).
+/// The declaration a ClassMethod call resolves to when the called class's own
+/// symbol does not exist, or a null pointer when there is none. Throws when
+/// the declaration the MRO selects has no converted symbol (#7546).
 const symbolt *function_call_expr::find_inherited_classmethod(
   const std::string &func_symbol_id) const
 {
   if (function_type_ != FunctionType::ClassMethod)
     return nullptr;
 
+  const std::string &method = function_id_.get_function();
+  if (const auto mro = converter_.class_mro(function_id_.get_class()))
+    for (const std::string &cls : *mro)
+    {
+      if (!converter_.class_binds_name(cls, method))
+        continue;
+      if (
+        const symbolt *declared = converter_.symbol_table().find_symbol(
+          symbol_id(converter_.python_file(), cls, method).to_string()))
+        return declared;
+      // No function symbol: the call precedes the definition in the source, or
+      // the binding is not one converted to a function. Binding a declaration
+      // further along the MRO would prove that one's result instead.
+      throw std::runtime_error(
+        "calling " + cls + "." + method +
+        " without a converted definition is not yet supported");
+    }
+
   return converter_.find_function_in_base_classes(
-    function_id_.get_class(),
-    func_symbol_id,
-    function_id_.get_function(),
-    false);
+    function_id_.get_class(), func_symbol_id, method, false);
 }
 
 /// A forward-reference call for `Class.__post_init__(...)`, which a dataclass's
@@ -6497,6 +6513,24 @@ exprt function_call_expr::fold_from_bytes_byteorder(
   return *byteorder == "big" ? exprt(true_exprt()) : exprt(false_exprt());
 }
 
+/// The value type of \p func's `dict[K, V]` parameter \p idx, or an empty
+/// type (#8016).
+typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
+  const
+{
+  const nlohmann::json fn = json_utils::try_find_function(
+    converter_.ast()["body"], func->name.as_string());
+  if (fn.empty() || idx >= fn["args"]["args"].size())
+    return typet();
+  const nlohmann::json &ann =
+    fn["args"]["args"][idx].value("annotation", nlohmann::json());
+  if (
+    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
+    !ann["slice"].contains("elts") || ann["slice"]["elts"].size() != 2)
+    return typet();
+  return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -6514,11 +6548,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // (GitHub #4552).
     exprt *saved_lhs = converter_.current_lhs;
     converter_.current_lhs = nullptr;
+    size_t param_idx = arg_index + param_offset;
+    // A dict literal argument stores its values as the parameter's dict does.
+    typet &value_hint = converter_.get_dict_handler()->literal_value_type_hint;
+    value_hint = dict_param_value_type(func_symbol, param_idx);
     exprt arg = converter_.get_expr(arg_node);
+    value_hint = typet();
     converter_.current_lhs = saved_lhs;
 
     // Check if the corresponding parameter is Optional / tagged.
-    size_t param_idx = arg_index + param_offset;
 
     if (param_idx < params.size())
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
@@ -6586,18 +6624,16 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         arg = build_address_of(build_symbol(temp_symbol));
       }
 
-      // Check if parameter is an Optional type
-      if (param_type.is_struct())
-      {
-        const struct_typet &struct_type = to_struct_type(param_type);
-        std::string tag = struct_type.tag().as_string();
-
-        if (tag.starts_with("tag-Optional_"))
-        {
-          // Wrap the argument in Optional struct
-          arg = converter_.wrap_in_optional(arg, param_type);
-        }
-      }
+      // An Optional parameter takes the argument wrapped; any other takes an
+      // optional argument's value, since the caller narrowed it first.
+      if (
+        param_type.is_struct() && to_struct_type(param_type)
+                                    .tag()
+                                    .as_string()
+                                    .starts_with("tag-Optional_"))
+        arg = converter_.wrap_in_optional(arg, param_type);
+      else
+        arg = converter_.unwrap_optional_if_needed(arg, call_);
 
       // Handle struct argument passed to a union-typed parameter (e.g. str |
       // T). Union parameters are stored as pointer(char[0]). When the actual

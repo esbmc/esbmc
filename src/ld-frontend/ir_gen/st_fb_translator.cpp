@@ -11,11 +11,11 @@
 // visible in the verification record (rather than an undiscoverable env var):
 //   default (flag unset) -> "analog-extended": over-approximate unsupported ST
 //                           constructs (function calls, member access) as
-//                           nondeterministic, enabling analog programs (SWaT) to
-//                           be modelled at the cost of soundness (RQ6).
+//                           nondeterministic, enabling analog programs (SWaT)
+//                           to be modelled at the cost of soundness (RQ6).
 //   --ld-sound-mode      -> "sound Boolean/integer": such constructs throw, so
-//                           the FB body falls back to a no-op; no over-
-//                           approximation, zero false positives (RQ2, RQ5).
+//                           the FB body is not translated and its outputs are
+//                           nondeterministic each scan.
 static bool sound_mode()
 {
   return config.options.get_bool_option("ld-sound-mode");
@@ -189,7 +189,7 @@ exprt st_fb_translator::parse_primary()
   // parenthesised
   if (accept_sym("("))
   {
-    exprt e = parse_expr();
+    exprt e = parse_condition();
     expect_sym(")");
     return e;
   }
@@ -286,9 +286,26 @@ exprt st_fb_translator::parse_expr()
   return lhs;
 }
 
+// Boolean operators on ANY_BIT operands other than BOOL are bitwise in
+// IEC 61131-3; only the BOOL case is modelled.
+static const exprt &boolean_operand(const exprt &e, const char *op)
+{
+  if (!e.type().is_bool())
+    throw std::runtime_error(
+      std::string("st_fb_translator: ") + op + " on a non-BOOL operand");
+  return e;
+}
+
+exprt st_fb_translator::parse_unary()
+{
+  if (accept_kw("not"))
+    return not_exprt(boolean_operand(parse_unary(), "NOT"));
+  return parse_primary();
+}
+
 exprt st_fb_translator::parse_term()
 {
-  exprt lhs = parse_primary();
+  exprt lhs = parse_unary();
   for (;;)
   {
     irep_idt op;
@@ -298,7 +315,7 @@ exprt st_fb_translator::parse_term()
       op = exprt::div;
     else
       break;
-    lhs = make_binary_arith(op, lhs, parse_primary());
+    lhs = make_binary_arith(op, lhs, parse_unary());
   }
   return lhs;
 }
@@ -315,8 +332,42 @@ static void promote_numeric(exprt &a, exprt &b)
     a = typecast_exprt(a, double_type());
 }
 
-// value possibly followed by a relational operator (=, <>, <, <=, >, >=)
 exprt st_fb_translator::parse_condition()
+{
+  exprt lhs = parse_xor();
+  while (accept_kw("or"))
+  {
+    exprt rhs = parse_xor();
+    lhs = or_exprt(boolean_operand(lhs, "OR"), boolean_operand(rhs, "OR"));
+  }
+  return lhs;
+}
+
+exprt st_fb_translator::parse_xor()
+{
+  exprt lhs = parse_and();
+  while (accept_kw("xor"))
+  {
+    exprt rhs = parse_and();
+    lhs = not_exprt(
+      equality_exprt(boolean_operand(lhs, "XOR"), boolean_operand(rhs, "XOR")));
+  }
+  return lhs;
+}
+
+exprt st_fb_translator::parse_and()
+{
+  exprt lhs = parse_comparison();
+  while (accept_kw("and") || accept_sym("&"))
+  {
+    exprt rhs = parse_comparison();
+    lhs = and_exprt(boolean_operand(lhs, "AND"), boolean_operand(rhs, "AND"));
+  }
+  return lhs;
+}
+
+// value possibly followed by a relational operator (=, <>, <, <=, >, >=)
+exprt st_fb_translator::parse_comparison()
 {
   exprt lhs = parse_expr();
   irep_idt relop;
@@ -495,7 +546,7 @@ codet st_fb_translator::parse_stmt()
   }
   symbol_exprt lhs = resolve_(name);
   exprt rhs = parse_condition();
-  accept_sym(";");
+  expect_sym(";");
   if (rhs.type() != lhs.type())
     rhs = typecast_exprt(rhs, lhs.type());
   return code_assignt(lhs, rhs);

@@ -1,0 +1,5 @@
+CORE
+mask.ld
+--ld-props props.yaml --incremental-bmc
+^WARNING: user FB 'MASK' body not translated.*; its outputs are nondeterministic\.$
+^VERIFICATION FAILED$
