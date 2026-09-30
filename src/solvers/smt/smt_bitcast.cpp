@@ -66,6 +66,36 @@ expr2tc union_member_bits(const expr2tc &bits, unsigned width)
   return extract2tc(get_uint_type(width), bits, total - 1, total - width);
 }
 
+expr2tc union_bits_with_member(
+  const expr2tc &rest,
+  const expr2tc &member,
+  unsigned bits)
+{
+  const unsigned width = member->type->get_width();
+  if (!width || width >= bits)
+    return member;
+  const type2tc rest_type = get_uint_type(bits - width);
+  if (lowest_address_high())
+    return concat2tc(
+      get_uint_type(bits),
+      member,
+      extract2tc(rest_type, rest, bits - width - 1, 0));
+  return concat2tc(
+    get_uint_type(bits), extract2tc(rest_type, rest, bits - 1, width), member);
+}
+
+expr2tc union_bits_of_member(const expr2tc &member, unsigned bits)
+{
+  if (!lowest_address_high())
+    return member;
+  return union_bits_with_member(gen_zero(get_uint_type(bits)), member, bits);
+}
+
+static size_t flattened_index(size_t i, size_t n)
+{
+  return lowest_address_high() ? i : n - i - 1;
+}
+
 static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 {
   // Easy cases, no need to concat anything
@@ -103,9 +133,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     auto extract = [&](size_t i) {
       /* The sub-expression should be flattened as well */
       return flatten_to_bitvector(index2tc(
-        subtype,
-        new_expr,
-        constant_int2tc(idx, lowest_address_high() ? i : sz - i - 1)));
+        subtype, new_expr, constant_int2tc(idx, flattened_index(i, sz))));
     };
 
     return concat_tree(0, sz, extract);
@@ -128,8 +156,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
         nonempty.push_back(i);
 
     auto extract = [&](size_t i) {
-      size_t idx =
-        nonempty[lowest_address_high() ? i : nonempty.size() - i - 1];
+      size_t idx = nonempty[flattened_index(i, nonempty.size())];
       return flatten_to_bitvector(member2tc(
         structtype.members[idx], new_expr, structtype.member_names[idx]));
     };

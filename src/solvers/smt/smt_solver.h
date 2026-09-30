@@ -112,6 +112,17 @@ unsigned flattened_position(unsigned offset, unsigned width, unsigned total);
 /** The @p width bits of a union member within the union's bits @p bits: those
  *  at the union's lowest address. */
 expr2tc union_member_bits(const expr2tc &bits, unsigned width);
+
+/** The @p bits wide bits of a union whose lowest-addressed bits hold
+ *  @p member and whose other bits are those of @p rest. */
+expr2tc union_bits_with_member(
+  const expr2tc &rest,
+  const expr2tc &member,
+  unsigned bits);
+
+/** A union member's bits @p member widened to the union's @p bits, as the
+ *  bits at the union's lowest address; zero-extension is left to the caller. */
+expr2tc union_bits_of_member(const expr2tc &member, unsigned bits);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
