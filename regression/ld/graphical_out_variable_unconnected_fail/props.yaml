@@ -1,0 +1,6 @@
+properties:
+  # The dangling outVariable must not stop the rung a -> q being modelled.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Deliberately false: a drives q"

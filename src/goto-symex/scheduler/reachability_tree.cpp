@@ -23,8 +23,8 @@ reachability_treet::reachability_treet(
   // Put a few useful symbols in the symbol table.
   symbolt sym;
   sym.set_type(bool_typet());
-  sym.id = "execution_statet::\\guard_exec";
-  sym.name = "execution_statet::\\guard_exec";
+  sym.id = execution_statet::guard_execution_name;
+  sym.name = execution_statet::guard_execution_name;
   context.move(sym);
 
   CS_bound = atoi(options.get_option("context-bound").c_str());
