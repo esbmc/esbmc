@@ -183,13 +183,13 @@ public:
   ///
   /// \p justified says whether the harness backing is real enough to read
   /// through: an __ESBMC_is_fresh size, or the one-element stack backing of
-  /// the #6483 carve-out. It is false for a nondet heap extent, which nothing
+  /// a C++ `this`. It is false for a nondet heap extent, which nothing
   /// may dereference. An absent map entry is a third state: the harness never
   /// allocated, so the pointer is the real caller's.
   ///
   /// \p from_is_fresh is narrower: true only when \p bytes came from the
-  /// contract's own __ESBMC_is_fresh(ptr, bytes) clause. The #6483 carve-out
-  /// entry is \p justified (real stack storage genuinely backs one element)
+  /// contract's own __ESBMC_is_fresh(ptr, bytes) clause. The `this` entry
+  /// is \p justified (real stack storage genuinely backs one element)
   /// but NOT \p from_is_fresh (the contract never stated that extent) --
   /// consumers that need the extent to match what the contract actually
   /// claims, not just "some real memory happens to be there", must check
@@ -799,8 +799,8 @@ private:
   /// only dereferenceable as far as the contract itself justifies via
   /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
   /// contract does not state and mask out-of-bounds accesses in the body
-  /// (GitHub issue #6212). Struct and union params are the exception: they keep
-  /// a one-element stack backing, see emit_struct_stack_backing.
+  /// (GitHub issue #6212). A C++ `this` is the exception, see
+  /// emit_receiver_backing.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
@@ -811,7 +811,7 @@ private:
   /// \param allocated_ptrs Output: snapshots of the heap allocations made
   ///        here, taken at allocation time by retain_allocation_for_free
   ///        rather than the lvalues themselves, which aliasing may reassign.
-  ///        Stack-backed struct params are not appended. Callers use this to
+  ///        A stack-backed `this` is not appended. Callers use this to
   ///        emit matching free() calls at wrapper exit so --memory-leak-check
   ///        does not blame the user's function for wrapper-internal
   ///        allocations (CWE-401).
@@ -896,17 +896,8 @@ private:
     const locationt &location,
     const std::vector<std::pair<expr2tc, std::string>> &params);
 
-  /// \brief Back a struct/union pointer param with one stack-allocated element.
-  ///
-  /// This is the normative statement of the #6483 carve-out; other sites point
-  /// here rather than restating it. One element is still an extent the contract
-  /// does not state (#6212), but the alternative is worse: a heap-backed struct
-  /// silently discharges __ESBMC_old-based ensures clauses (#6483), turning
-  /// every such contract into a false negative. Stack backing also gives symex
-  /// proper SSA phi-nodes for conditional field writes, which the heap path
-  /// loses. Route struct params through emit_pointer_param_malloc instead once
-  /// #6483 is fixed.
-  void emit_struct_stack_backing(
+  /// \brief Back a C++ `this` with one stack-allocated object of its class.
+  void emit_receiver_backing(
     goto_programt &wrapper,
     const expr2tc &p,
     const std::string &param_name,
