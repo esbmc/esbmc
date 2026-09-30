@@ -6351,7 +6351,23 @@ size_t function_call_expr::bind_call_receiver(
       const std::string recv_type =
         obj_symbol ? type_handler_.get_var_type(obj_symbol->name.as_string())
                    : std::string();
+      // Tagged receiver takes priority: recv_type is a static guess that
+      // can be stale (e.g. it names the first branch's type after a join).
       if (
+        obj_symbol && call_["args"].empty() &&
+        type_handler_.is_tagged_scalar_type(obj_symbol->get_type()) &&
+        func_type.arguments().size() > 1)
+      {
+        // isinstance() already narrowed the type_id; unbox instead of
+        // passing the tagged struct.
+        const typet &param_type = func_type.arguments()[1].type();
+        exprt value_ptr = build_typecast(
+          build_member(
+            build_symbol(*obj_symbol), "value", pointer_typet(empty_typet())),
+          pointer_typet(param_type));
+        call.arguments().push_back(build_dereference(value_ptr, param_type));
+      }
+      else if (
         obj_symbol && call_["args"].empty() &&
         (recv_type == "int" || recv_type == "float"))
       {
@@ -6995,11 +7011,16 @@ exprt function_call_expr::finalize_call(
 
     if (obj_symbol)
     {
-      std::string var_type =
-        type_handler_.get_var_type(obj_symbol->name.as_string());
-
-      if (var_type == "int" || var_type == "float")
+      if (type_handler_.is_tagged_scalar_type(obj_symbol->get_type()))
         will_add_object = true;
+      else
+      {
+        std::string var_type =
+          type_handler_.get_var_type(obj_symbol->name.as_string());
+
+        if (var_type == "int" || var_type == "float")
+          will_add_object = true;
+      }
     }
 
     if (call_["func"]["value"]["_type"] == "BinOp")

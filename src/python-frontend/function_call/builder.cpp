@@ -17,8 +17,24 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <set>
+#include <unordered_map>
 
 using namespace python_expr;
+
+// Which OM class a tagged scalar's no-arg instance method belongs to.
+// Extend this map, not the call site, when a new int/float OM method is
+// added.
+static const std::unordered_map<std::string, std::string> &
+tagged_scalar_method_class()
+{
+  static const std::unordered_map<std::string, std::string> class_by_method = {
+    {"bit_length", "int"},
+    {"bit_count", "int"},
+    {"conjugate", "int"},
+    {"is_integer", "float"},
+  };
+  return class_by_method;
+}
 
 // True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
 // Mirrors converter_expr.cpp's helper of the same name: used here to tell
@@ -1073,21 +1089,31 @@ symbol_id function_call_builder::build_function_id() const
           "variable so the attribute chain can be typed.");
       }
 
-      // Extract class name from the type, following symbol references
-      typet var_type = var_symbol->get_type().is_pointer()
-                         ? var_symbol->get_type().subtype()
-                         : var_symbol->get_type();
-
-      // Follow symbol type references using the converter's namespace
-      var_type = converter_.ns.follow(var_type);
-
-      if (var_type.is_struct())
+      // A tagged receiver's struct tag isn't a real class; isinstance()
+      // already narrowed its runtime type_id, so dispatch by method name.
+      if (th.is_tagged_scalar_type(var_symbol->get_type()))
       {
-        const struct_typet &struct_type = to_struct_type(var_type);
-        class_name = struct_type.tag().as_string();
+        auto it = tagged_scalar_method_class().find(func_name);
+        class_name = it != tagged_scalar_method_class().end() ? it->second : "";
       }
       else
-        class_name = th.type_to_string(var_type);
+      {
+        // Extract class name from the type, following symbol references
+        typet var_type = var_symbol->get_type().is_pointer()
+                           ? var_symbol->get_type().subtype()
+                           : var_symbol->get_type();
+
+        // Follow symbol type references using the converter's namespace
+        var_type = converter_.ns.follow(var_type);
+
+        if (var_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(var_type);
+          class_name = struct_type.tag().as_string();
+        }
+        else
+          class_name = th.type_to_string(var_type);
+      }
     }
   }
 
