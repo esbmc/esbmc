@@ -3,6 +3,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
 #include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -418,11 +419,12 @@ smt_astt smt_solver_baset::init_pointer_obj(
   /* Assert that start + size == end. The size is unguarded: a VLA declared on
    * a path not taken still gets a layout, so a size no object can have (e.g. a
    * negative bound, sign-extended) must not make every path infeasible
-   * (#8048). No object exceeds PTRDIFF_MAX bytes. */
-  expr2tc size_fits = lessthanequal2tc(
-    the_size,
-    constant_int2tc(
-      ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width() - 1)));
+   * (#8048). The bound is the largest size symex lets an object have. */
+  const BigInt max_size = options.get_bool_option("no-vla-size-check")
+                            ? max_layable_size()
+                            : max_object_size();
+  expr2tc size_fits =
+    lessthanequal2tc(the_size, constant_int2tc(ptr_loc_type, max_size));
   assert_expr(implies2tc(size_fits, endisequal));
 
   // Even better, if we're operating in bitvector mode, it's possible that

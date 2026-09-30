@@ -45,6 +45,8 @@ typet pointer_type();
 type2tc pointer_type2();
 
 type2tc ptraddr_type2();
+BigInt max_object_size();
+BigInt max_layable_size();
 
 type2tc bitsize_type2();
 

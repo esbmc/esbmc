@@ -2056,3 +2056,5 @@ regression/esbmc/vector_struct_array
 regression/esbmc/vector_struct_array_fail
 regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
+regression/esbmc/github_8048_huge_vla
+regression/esbmc/github_8048_huge_vla_fail
