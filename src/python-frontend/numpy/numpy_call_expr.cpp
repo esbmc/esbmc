@@ -25,6 +25,7 @@
 #include <complex>
 #include <functional>
 #include <limits>
+#include <numeric>
 #include <ostream>
 
 const char *kConstant = "Constant";
@@ -3187,33 +3188,113 @@ std::optional<exprt> numpy_call_expr::try_get_pointer_view_call_result()
   return std::nullopt;
 }
 
+static typet get_nested_array_element_type(typet type)
+{
+  while (type.is_array())
+    type = type.subtype();
+  return type;
+}
+
+static typet build_nested_array_type(
+  const type_handler &type_handler,
+  const typet &element_type,
+  const std::vector<int> &shape,
+  std::size_t depth = 0)
+{
+  if (depth == shape.size())
+    return element_type;
+  typet subtype =
+    build_nested_array_type(type_handler, element_type, shape, depth + 1);
+  return type_handler.build_array(subtype, shape[depth]);
+}
+
+static exprt index_nested_array_expr(
+  const exprt &source_expr,
+  const std::vector<exprt> &indices)
+{
+  exprt current = source_expr;
+  for (const exprt &index : indices)
+    current = np_index(current, index, current.type().subtype());
+  return current;
+}
+
+static exprt build_numpy_axis_permuted_expr_rec(
+  const type_handler &type_handler,
+  const exprt &source_expr,
+  const std::vector<int> &source_shape,
+  const std::vector<std::size_t> &axes,
+  const typet &result_type,
+  std::vector<exprt> &output_indices,
+  std::size_t depth)
+{
+  if (depth == axes.size())
+  {
+    std::vector<exprt> source_indices(axes.size());
+    for (std::size_t i = 0; i < axes.size(); ++i)
+      source_indices[axes[i]] = output_indices[i];
+    return index_nested_array_expr(source_expr, source_indices);
+  }
+
+  exprt result = gen_zero(result_type);
+  result.operands().clear();
+  for (int i = 0; i < source_shape[axes[depth]]; ++i)
+  {
+    output_indices.push_back(from_integer(i, size_type()));
+    result.operands().push_back(build_numpy_axis_permuted_expr_rec(
+      type_handler,
+      source_expr,
+      source_shape,
+      axes,
+      result_type.subtype(),
+      output_indices,
+      depth + 1));
+    output_indices.pop_back();
+  }
+  return result;
+}
+
+static std::vector<std::size_t> reversed_numpy_axes(std::size_t rank)
+{
+  std::vector<std::size_t> axes(rank);
+  std::iota(axes.begin(), axes.end(), 0);
+  std::reverse(axes.begin(), axes.end());
+  return axes;
+}
+
+static exprt build_numpy_axis_permuted_expr(
+  const type_handler &type_handler,
+  const exprt &source_expr,
+  const std::vector<int> &source_shape,
+  const std::vector<std::size_t> &axes)
+{
+  std::vector<int> result_shape;
+  result_shape.reserve(axes.size());
+  for (std::size_t axis : axes)
+    result_shape.push_back(source_shape[axis]);
+
+  typet result_type = build_nested_array_type(
+    type_handler,
+    get_nested_array_element_type(source_expr.type()),
+    result_shape);
+
+  std::vector<exprt> output_indices;
+  return build_numpy_axis_permuted_expr_rec(
+    type_handler,
+    source_expr,
+    source_shape,
+    axes,
+    result_type,
+    output_indices,
+    0);
+}
+
 static exprt build_numpy_axis_swapped_2d_expr(
   const type_handler &type_handler,
   const exprt &source_expr,
   const std::vector<int> &source_shape)
 {
-  const typet source_row_type = source_expr.type().subtype();
-  const typet base_type = source_row_type.subtype();
-  typet row_type = type_handler.build_array(base_type, source_shape[0]);
-  typet result_type = type_handler.build_array(row_type, source_shape[1]);
-
-  exprt result = gen_zero(result_type);
-  result.operands().clear();
-  for (int c = 0; c < source_shape[1]; ++c)
-  {
-    exprt row = gen_zero(row_type);
-    row.operands().clear();
-    for (int r = 0; r < source_shape[0]; ++r)
-    {
-      exprt source_row =
-        np_index(source_expr, from_integer(r, size_type()), source_row_type);
-      row.operands().push_back(
-        np_index(source_row, from_integer(c, size_type()), base_type));
-    }
-    result.operands().push_back(row);
-  }
-
-  return result;
+  return build_numpy_axis_permuted_expr(
+    type_handler, source_expr, source_shape, {1, 0});
 }
 
 exprt numpy_call_expr::handle_axis_permutation_view_call(
@@ -3232,12 +3313,8 @@ exprt numpy_call_expr::handle_axis_permutation_view_call(
       "() currently supports only fixed-shape arrays");
 
   const std::size_t rank = source_shape.size();
-  if (rank == 0 || rank > 2)
-    throw std::runtime_error(
-      "TypeError: numpy." + function + " currently supports up to 2D arrays");
-
-  std::array<long long, 2> axes{};
-  for (std::size_t i = 0; i < axes.size(); ++i)
+  std::array<long long, 2> axis_values{};
+  for (std::size_t i = 0; i < axis_values.size(); ++i)
   {
     numeric_value axis_value;
     if (
@@ -3246,16 +3323,17 @@ exprt numpy_call_expr::handle_axis_permutation_view_call(
       throw std::runtime_error(
         "TypeError: numpy." + function + "() axis must be a concrete integer");
 
-    axes[i] = axis_value.int_value;
-    if (axes[i] < 0)
-      axes[i] += static_cast<long long>(rank);
-    if (axes[i] < 0 || axes[i] >= static_cast<long long>(rank))
+    long long axis = axis_value.int_value;
+    if (axis < 0)
+      axis += static_cast<long long>(rank);
+    if (axis < 0 || axis >= static_cast<long long>(rank))
       throw std::runtime_error(
         "AxisError: axis " + std::to_string(axis_value.int_value) +
         " is out of bounds for array of dimension " + std::to_string(rank));
+    axis_values[i] = axis;
   }
 
-  if (axes[0] == axes[1])
+  if (axis_values[0] == axis_values[1])
   {
     if (converter_.current_lhs)
     {
@@ -3265,8 +3343,25 @@ exprt numpy_call_expr::handle_axis_permutation_view_call(
     return source_expr;
   }
 
-  exprt transposed =
-    build_numpy_axis_swapped_2d_expr(type_handler_, source_expr, source_shape);
+  std::vector<std::size_t> axes(rank);
+  std::iota(axes.begin(), axes.end(), 0);
+  if (function == "swapaxes")
+  {
+    std::swap(
+      axes[static_cast<std::size_t>(axis_values[0])],
+      axes[static_cast<std::size_t>(axis_values[1])]);
+  }
+  else
+  {
+    std::size_t source_axis = static_cast<std::size_t>(axis_values[0]);
+    std::size_t destination = static_cast<std::size_t>(axis_values[1]);
+    std::size_t moved_axis = axes[source_axis];
+    axes.erase(axes.begin() + source_axis);
+    axes.insert(axes.begin() + destination, moved_axis);
+  }
+
+  exprt transposed = build_numpy_axis_permuted_expr(
+    type_handler_, source_expr, source_shape, axes);
   if (converter_.current_lhs)
   {
     converter_.current_lhs->type() = transposed.type();
@@ -4331,6 +4426,38 @@ T get_constant_value(const nlohmann::json &node)
   }
 }
 
+exprt numpy_call_expr::return_retyped_or_temp(exprt value)
+{
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = value.type();
+    converter_.update_symbol(*converter_.current_lhs);
+    return value;
+  }
+
+  symbolt &tmp = converter_.create_tmp_symbol(
+    call_, "$compound-literal$", value.type(), value);
+  exprt tmp_expr = symbol_expr(tmp);
+  code_declt decl(tmp_expr);
+  decl.operands().push_back(value);
+  converter_.add_instruction(decl);
+  return tmp_expr;
+}
+
+exprt numpy_call_expr::build_default_axis_transpose_expr(
+  const exprt &source_expr,
+  const std::string &error_message)
+{
+  std::vector<int> shape =
+    type_handler_.get_array_type_shape(source_expr.type());
+  if (shape.empty())
+    throw std::runtime_error(error_message);
+
+  exprt transposed = build_numpy_axis_permuted_expr(
+    type_handler_, source_expr, shape, reversed_numpy_axes(shape.size()));
+  return return_retyped_or_temp(transposed);
+}
+
 std::optional<exprt> numpy_call_expr::try_transpose_decayed_2d_param(
   const nlohmann::json &arg,
   typet t)
@@ -4433,8 +4560,9 @@ std::optional<exprt> numpy_call_expr::try_transpose_name_arg(
     std::vector<int> shape = type_handler_.get_array_type_shape(t);
     if (shape.size() != 2)
     {
-      throw std::runtime_error(
-        "TypeError: numpy.transpose currently supports up to 2D arrays");
+      return build_default_axis_transpose_expr(
+        arg_expr,
+        "TypeError: numpy.transpose currently supports fixed-shape arrays");
     }
 
     typet base_type = t.subtype().subtype();
@@ -5549,8 +5677,10 @@ exprt numpy_call_expr::create_expr_from_call()
             }
             return *folded;
           }
-          throw std::runtime_error(
-            "TypeError: numpy.transpose currently supports up to 2D arrays");
+
+          return build_default_axis_transpose_expr(
+            converter_.get_expr(*materialized),
+            "TypeError: numpy.transpose currently supports fixed-shape arrays");
         }
       }
 
@@ -5636,8 +5766,10 @@ exprt numpy_call_expr::create_expr_from_call()
           std::vector<int> shape = type_handler_.get_array_type_shape(t);
           if (shape.size() != 2)
           {
-            throw std::runtime_error(
-              "TypeError: numpy.transpose currently supports up to 2D arrays");
+            return build_default_axis_transpose_expr(
+              converter_.get_expr(list_arg),
+              "TypeError: numpy.transpose currently supports fixed-shape "
+              "arrays");
           }
 
           typet base_type = t.subtype().subtype();

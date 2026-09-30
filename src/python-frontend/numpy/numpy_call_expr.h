@@ -132,6 +132,12 @@ private:
   // non-2-D, or not a tracked array at all), leaving the caller's own
   // fully-nested-array handling (e.g. a local array) unchanged. Split out of
   // create_expr_from_call to keep that function's own decision count down.
+  exprt return_retyped_or_temp(exprt value);
+
+  exprt build_default_axis_transpose_expr(
+    const exprt &source_expr,
+    const std::string &error_message);
+
   std::optional<exprt>
   try_transpose_decayed_2d_param(const nlohmann::json &arg, typet t);
 
