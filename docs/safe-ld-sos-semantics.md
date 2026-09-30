@@ -265,20 +265,22 @@ is retriggerable only after its pulse has completed.
 ### 5.5 CTU / CTD — counters
 
 ```
-   σ(CU) = tt, π(CU) = ff, σ(CV) < INTmax        σ(R) = tt
+   σ(CU) = tt, π(CU) = ff, σ(CV) < σ(PV)         σ(R) = tt
   ─────────────────────────────────────  [CTU]  ───────────────────  [CTU-RESET]
    σ' = σ[CV ↦ σ(CV)+1]                          σ' = σ[CV ↦ 0]
 
                     σ'' = σ'[Q ↦ (σ'(CV) ≥ σ(PV))]
 
-   σ(CD) = tt, π(CD) = ff, σ(CV) > INTmin
+   σ(CD) = tt, π(CD) = ff, σ(CV) > 0
   ─────────────────────────────────────  [CTD]  σ'' = σ'[Q ↦ (σ'(CV) ≤ 0)]
    σ' = σ[CV ↦ σ(CV)−1]
 ```
 
 Counters are edge-triggered on their count pin, using a per-instance entry in
 the edge store. The reset arm applies after the count arm, so a scan in which
-both fire leaves CV at 0.
+both fire leaves CV at 0. CTU stops at the preset and CTD at 0, as the bodies
+of MATIEC's `CTU` and `CTD` (`lib/counter.txt`) do. An unwired PV reads 0, the
+INT default, so a CTU without one never counts.
 
 ### 5.6 Arithmetic blocks
 
@@ -408,10 +410,8 @@ time or documented as an approximation.
   A reset pin driven by a contact chain in a graphical body is diagnosed and
   left unconnected rather than silently approximated.
 - **Integer width.** CV and ET are machine integers of the configured width.
-  Both saturate rather than wrap: CV at INTmax/INTmin, ET at PT. Saturating at
-  the type bound rather than at PV over-approximates CV above the preset, which
-  can raise a false alarm but cannot hide a violation; see the open item in §10
-  on which bound IEC intends.
+  Neither can wrap: CV stays between 0 and PV (§5.5) and ET saturates at PT.
+  See the open item in §10 on which counter bound IEC intends.
 - **Non-timer, non-counter blocks on a rung path.** A path through an
   arithmetic or unknown block is diagnosed and dropped rather than modelled,
   so a program using one verifies over strictly less behaviour. User-defined
@@ -450,8 +450,8 @@ to raise in it:
    §4.1.3 (Ed. 3 §8.1.5) states an entry-value rule for feedback paths within a
    network; confirm whether it applies to LD coils and contacts on the same
    variable, and record where the reference toolchain departs from it.
-4. §5.5 saturates CV at the integer type's bound. Secondary sources render the
-   normative CTU body with both `CV < PVmax` (the type bound, as here) and
-   `CV < PV` (the preset); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The
-   two agree on Q for every reachable state and differ only in CV's value above
-   the preset, so this changes no verdict that does not read CV directly.
+4. §5.5 stops CTU at the preset and CTD at 0, as MATIEC does. Secondary
+   sources render the normative bodies with `CV < PVmax` and `CV > PVmin`
+   (the type bounds); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The two
+   agree on Q in every reachable state and differ only in CV beyond the preset
+   or below 0, so the choice changes only verdicts that read CV.

@@ -836,10 +836,11 @@ is the only gate on the front-end.
 - **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
   variable assignments (sufficient for the current property checks).
 - **Timer/counter integer width — now saturating.** CTU/CTD saturate CV at the
-  configured integer type's bound and TON bounds ET by PT, so neither wraps.
+  configured integer type's bound and TON bounds ET by PT, so neither wraps. Since then CTU stops at PV and CTD at 0, as MATIEC's bodies do.
   Before this, `CV + 1` on a counter at INTmax was reachable undefined behaviour
   (`--overflow-check` reports `arithmetic overflow on add`) and the wrap dropped
-  Q back to false, losing violations; `counter_saturate_at_max` pins it, and
+  Q back to false, losing violations; `counter_above_preset_no_overflow` (then
+  `counter_saturate_at_max`) pins it, and
   `counter_counts_fail` pins that the bound does not stop the counter counting.
   Whether IEC saturates CV at the type bound or at PV is recorded as open item 4
   for the M1 review in `docs/safe-ld-sos-semantics.md` §10 — the two agree on Q
