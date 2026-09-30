@@ -2029,6 +2029,12 @@ regression/esbmc/pointer_diff_sub_sub
 regression/esbmc/pointer_diff_sub_sub_fail
 regression/esbmc/pointer_diff_unsigned
 regression/esbmc/pointer_diff_unsigned_fail
+regression/esbmc-cpp/cpp/cxx14_elided_copy_local
+regression/esbmc-cpp/cpp/cxx14_elided_copy_local_fail
+regression/esbmc-cpp/cpp/cxx14_elided_copy_static
+regression/esbmc-cpp/cpp/cxx14_elided_copy_static_fail
+regression/esbmc-cpp/cpp/cxx14_elided_copy_temporary
+regression/esbmc-cpp/cpp/cxx14_elided_copy_temporary_fail
 regression/python/list_mixed_str_number_isinstance
 regression/python/list_mixed_str_number_isinstance_fail
 regression/python/list_pop_result_as_argument
