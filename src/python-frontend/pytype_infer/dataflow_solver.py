@@ -1,5 +1,5 @@
 import ast
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, cast
 from dataclasses import dataclass, field
 from .lattice import *
 from .cfg_builder import *
@@ -383,7 +383,7 @@ def update_subscript_assignment(container, key_type, value_type, env):
         return
 
     if isinstance(current, Unknown):
-        env[container] = infer_subscript_container(key_type, value_type,)
+       # env[container] = infer_subscript_container(key_type, value_type,)
         return
 
     env[container] = Unknown()
@@ -460,13 +460,16 @@ def collect_function_argument_types(tree, context):
         previous = context.function_params[name]
 
         for i in range(min(len(previous), len(arg_types))):
-            if isinstance(arg_types[i], Unknown):
-                continue
+            current = arg_types[i]
 
             if isinstance(previous[i], Unknown):
-                previous[i] = arg_types[i]
-            else:
-                previous[i] = previous[i].join(arg_types[i])
+                continue
+
+            if isinstance(current, Unknown):
+                previous[i] = Unknown()
+                continue
+
+            previous[i] = previous[i].join(current)
 
 def transfer_expr(
     stmt: ast.Expr,
@@ -821,7 +824,7 @@ def infer_binop_type(expr, env, context):
             if count >= 0:
                 return TupleType(left.elems * count)
 
-    if (isinstance(right, TupleType) and isinstance(expr.left, ast.Constant) and isinstance(exp.left.value, int)):
+    if (isinstance(right, TupleType) and isinstance(expr.left, ast.Constant) and isinstance(expr.left.value, int)):
         count = expr.left.value
 
         if count >= 0:

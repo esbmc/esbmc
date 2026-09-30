@@ -1,5 +1,5 @@
 import ast
-from typing import Dict, Any
+from typing import Any, cast
 from .dataflow_solver import analyze_function, infer_type_from_expr, collect_known_classes, InferenceContext, collect_function_argument_types
 from .lattice import *
 
@@ -25,19 +25,35 @@ def derive_param_and_return_types(
 
     param_types = {}
 
-    for arg in func_node.args.args:
-        param_types[arg.arg] = merged.get(arg.arg, Unknown())
+    known_param_types = context.function_params.get(func_node.name, [],)
+
+    for i, arg in enumerate(func_node.args.args):
+        if i < len(known_param_types):
+            param_types[arg.arg] = merged.get(arg.arg, Unknown())
+        else:
+            param_types[arg.arg] = Unknown()
 
     return param_types, ret_type
 
-def annotate_parameters(funct_node: ast.FunctionDef, param_types):
+def annotate_parameters(funct_node: ast.FunctionDef, param_types, skip_names=None):
+
+    if skip_names is None:
+        skip_names = set()
+
+    
     for arg in funct_node.args.args:
         if arg.annotation is not None:
+            continue
+
+        if arg.arg in skip_names:
             continue
 
         t = param_types.get(arg.arg, Unknown())
 
         if isinstance(t, Unknown):
+            continue
+
+        if not can_make_annotation(t):
             continue
 
         if isinstance(t, UnionType):
@@ -46,8 +62,11 @@ def annotate_parameters(funct_node: ast.FunctionDef, param_types):
 
             for member in t.members:
                 if not isinstance(member, supported_types):
-                    supported_types = False
+                    support_union = False
                     break
+
+            if not support_union:
+                continue    
 
         annotation = type_to_ast_annotation(t)    
 
@@ -60,6 +79,9 @@ def annotate_parameters(funct_node: ast.FunctionDef, param_types):
 def annotate_return(func_node: ast.FunctionDef, ret_type):
 
     if ret_type is None:
+        return
+
+    if not can_make_annotation(ret_type):
         return
 
     if isinstance(ret_type, Bottom):
@@ -188,6 +210,36 @@ def collect_reassigned_names(func_node):
 
     return reassigned
 
+def collect_rebound_parameters(func_node):
+    parameter_names = {
+        arg.arg
+        for arg in func_node.args.args
+    }
+
+    rebound = set()
+
+    class ReboundCollector(ast.NodeVisitor):
+        def visit_Name(self, node):
+            if (isinstance(node.ctx, ast.Store) and node.id in parameter_names):
+                rebound.add(node.id)
+
+        def visit_FunctionDef(self, node):
+            pass
+
+        def visit_AsyncFunctionDef(self, node):
+            pass
+        def visit_ClassDef(self, node):
+            pass
+        def visit_Lambda(self, node):
+            pass        
+
+    collector = ReboundCollector()
+
+    for stmt in func_node.body:
+        collector.visit(stmt)
+
+    return rebound        
+
 def annotate_function_with_env_and_signatures(
     func_node,
     out_envs,
@@ -201,7 +253,9 @@ def annotate_function_with_env_and_signatures(
         context,
     )
 
-    annotate_parameters(func_node, param_types)
+    rebound_parameters = collect_rebound_parameters(func_node)
+
+    annotate_parameters(func_node, param_types, rebound_parameters)
     annotate_return(func_node, ret_type)
 
     merged = merge_out_envs(out_envs)
@@ -248,11 +302,12 @@ def annotate_function_with_env_and_signatures(
     for name in reassigned:
         merged.pop(name, None)
 
+    for name in rebound_parameters:
+        merged.pop(name, None)
+
     new_body = []
     already_annotated = set()
 
-    # IMPORTANT:
-    # this must happen AFTER the filtering above.
     func_node.body = process_statements(
         func_node.body,
         merged,
@@ -297,14 +352,6 @@ def annotate_function_with_env_and_signatures(
 
     return func_node         
 
-# def is_typed_assignment(stmt, merged):
-#     return (
-#         isinstance(stmt, ast.Assign)
-#         and len(stmt.targets) == 1
-#         and isinstance(stmt.targets[0], ast.Name)
-#         and stmt.targets[0].id in merged
-#         and not isinstance(merged[stmt.targets[0].id], Unknown)
-#     )
 def is_typed_assignment(stmt, merged, already_annotated):
     if not isinstance(stmt, ast.Assign):
         return False
@@ -327,12 +374,12 @@ def is_typed_assignment(stmt, merged, already_annotated):
 
     inferred_type = merged[name]
 
-    if isinstance(inferred_type, Unknown):
+    if not can_make_annotation(inferred_type):
         return False   
 
-    if isinstance(stmt.value, ast.List):
-        if len(stmt.value.elts) > 0:
-            return False
+   # if isinstance(stmt.value, ast.List):
+       # if len(stmt.value.elts) == 0:
+    #    return False
 
     if isinstance(inferred_type, CallableType):
         for param_type in inferred_type.param_types:
@@ -343,6 +390,54 @@ def is_typed_assignment(stmt, merged, already_annotated):
                 return False
 
     return True
+
+
+
+def return_type_uncertain_case(func_node, out_envs, return_types, ret_type,):
+    if not isinstance(ret_type, NoneType):
+        return ret_type, return_types
+
+    returned_names = set()
+    
+    for stmt in ast.walk(func_node):
+        if not isinstance(stmt, ast.Return):
+            continue
+
+        if not isinstance(stmt.value, ast.Name):
+            continue
+
+        returned_names.add(stmt.value.id)
+
+    uncertain = False    
+        
+    for name in returned_names:
+        for env in out_envs:
+            typ = env.get(name)    
+
+            if isinstance(typ, Unknown):
+                uncertain = True
+                break
+
+        if uncertain:
+            break    
+
+    if not uncertain:
+        return ret_type, return_types
+
+    print(
+        "[PYTYPE] suppressing unsafe None return for",
+        func_node.name,
+    )        
+
+    safe_return_types = {}
+
+    for key, typ in return_types.items():
+        if isinstance(typ, NoneType):
+            safe_return_types[key] = Unknown()
+        else:
+            safe_return_types[key] = typ
+
+    return Unknown(), safe_return_types                   
 
 def process_statements(statements, merged, already_annotated):
     new_body = []
@@ -563,7 +658,48 @@ def type_to_ast_annotation(t: Type) ->ast.expr | None:
         )
 
     return None
-    
+
+def can_make_annotation(t):
+    if isinstance(t, (Unknown, AnyType, Bottom)):
+        return False
+
+    if isinstance(t, (BoolType, IntType, FloatType, StrType, ComplexType, NoneType, InstanceType),):
+        return True
+
+    if isinstance(t, UnionType):
+        supported_types = (BoolType, IntType, FloatType)
+
+        for member in t.members:
+            if not isinstance(member, supported_types):
+               return False
+
+        return True
+
+    if isinstance(t, ListType):
+        return can_make_annotation(t.elem)
+
+    if isinstance(t, SetType):
+        return can_make_annotation(t.elem)
+
+    if isinstance(t, TupleType):
+        for member in t.elems:
+            if not can_make_annotation(member):
+                return False
+
+        return True
+
+    if isinstance(t, DictType):
+        return (can_make_annotation(t.key_t) and can_make_annotation(t.val_t))
+
+    if isinstance(t, CallableType):
+        for param in t.param_types:
+            if not can_make_annotation(param):
+                return False
+
+        return can_make_annotation(t.ret)
+
+    return False        
+
 
     
 def annotate_module_with_outenvs(module_node: ast.Module, out_envs_by_func, return_types_by_func, context: InferenceContext, ):
@@ -591,6 +727,104 @@ def annotate_module_with_outenvs(module_node: ast.Module, out_envs_by_func, retu
 
     return module_node
 
+def analyze_module_body(module_node:ast.Module, context: InferenceContext, ):
+    module_statements = []
+
+    for stmt in module_node.body:
+        if isinstance(
+            stmt,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.ClassDef,
+                ast.Import,
+                ast.ImportFrom,
+            ),
+        ):
+            continue
+
+        module_statements.append(stmt)
+
+    if not module_statements:
+        return None
+
+    wrapper = cast(
+        ast.FunctionDef,
+        ast.parse(
+            "def __pytype_module__():\n"
+            "    pass\n"
+        ).body[0],
+    )
+
+    wrapper.body = module_statements
+
+    if not isinstance(wrapper, ast.FunctionDef):
+        raise RuntimeError(
+            "Internal pytype error: "
+            "module wrapper is not a FunctionDef"
+        )
+
+    #wrapper = wrapper_node
+
+    #wrapper.body = list(module_statements)
+
+    #ast.fix_missing_locations(wrapper)
+
+
+    return analyze_function(wrapper, context)
+
+def annotate_module_assignments(
+    module_node: ast.Module,
+    out_envs,
+):
+    merged = merge_out_envs(out_envs)
+
+    already_annotated = set()
+
+    new_body = []
+
+    for stmt in module_node.body:
+        if isinstance(
+            stmt,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.ClassDef,
+                ast.Import,
+                ast.ImportFrom,
+            ),
+        ):
+            new_body.append(stmt)
+            continue
+
+        if is_typed_assignment(
+            stmt,
+            merged,
+            already_annotated,
+        ):
+            name = stmt.targets[0].id
+            inferred_type = merged[name]
+
+            print(
+                "[ANNOTATE MODULE] converting "
+                f"{name} -> "
+                f"{inferred_type.to_ann_name()}"
+            )
+
+            new_body.append(
+                convert_assign_to_annassign(
+                    stmt,
+                    inferred_type,
+                )
+            )
+
+            already_annotated.add(name)
+            continue
+
+        new_body.append(stmt)
+
+    module_node.body = new_body
+
 def annotate_ast(ast_node, opts=None):
     known_classes = collect_known_classes(ast_node)
     context = InferenceContext(known_classes=known_classes)
@@ -616,8 +850,27 @@ def annotate_ast(ast_node, opts=None):
 
             _, ret_type = derive_param_and_return_types(node, out_envs, return_types, context)
 
-            if not isinstance(ret_type, (Bottom, Unknown)):
-                context.function_returns[node.name] = ret_type
+            ret_type, return_types = return_type_uncertain_case(node, out_envs, return_types, ret_type,)
+            
+            if isinstance(ret_type, (Bottom, Unknown)):
+                context.function_returns.pop(
+                    node.name,
+                    None,
+                )
+            else:
+                context.function_returns[node.name] = ret_type    
+        
+            
+            print(
+                        "[PYTYPE] suppressing uncertain return type:",
+                        node.name,
+                        ret_type,
+                    )
+
+            ret_type = Unknown()
+
+            #if not isinstance(ret_type, (Bottom, Unknown)):
+              #  context.function_returns[node.name] = ret_type
 
             print("[FUNCTION RETURN]", node.name, "=>", ret_type)    
 
@@ -628,7 +881,22 @@ def annotate_ast(ast_node, opts=None):
 
            # param_types, ret_type = derive_param_and_return_types(node, out_envs, return_types, context,)
     annotate_module_with_outenvs(ast_node, out_envs_by_func, return_types_by_func, context, )
+    module_result = analyze_module_body(ast_node, context)
+    if module_result is not None:
+        (module_cfg, module_in_envs, module_out_envs, module_return_types) = module_result
+
+        print("[PYTYPE] Converged: <module>")
+        print(module_cfg)
+        print(module_out_envs)
+
+        # Write inferred module-level types back into the AST.
+        annotate_module_assignments(
+            ast_node,
+            module_out_envs,
+        )
+     
     ast.fix_missing_locations(ast_node)
+
     print("[PYTYPE] FINAL SOURCE")
     print(ast.unparse(ast_node))
 
