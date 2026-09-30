@@ -121,7 +121,7 @@ public:
   static std::shared_ptr<value_setst> vsa;
 };
 
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *
