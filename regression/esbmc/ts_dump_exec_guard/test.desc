@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-pointer-check --no-bounds-check --error-label ERROR --ts-check --ts-dump
+^Transition system: 1 state variables, 0 inputs, 3 step definitions,
+^  \[.*\] error label: goto_symex::guard[?!&#0-9]*$

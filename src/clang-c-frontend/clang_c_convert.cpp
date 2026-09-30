@@ -549,7 +549,7 @@ bool clang_c_convertert::get_static_var_init(
    * pass through the declaration, so a dynamic one is lowered there by
    * goto_convert (see has_dynamic_local_init) and converted in the
    * function's scope. */
-  const clang::Stmt *stmt = vd.getInit();
+  const clang::Stmt *stmt = &elided_copy_source(*vd.getInit());
   code_blockt *orig = current_block;
   if (!dynamic_local_init)
     current_block = nullptr;
@@ -633,6 +633,12 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   guard.is_thread_local = var.is_thread_local;
   guard.set_value(gen_false_expr());
   context.move_symbol_to_context(guard);
+}
+
+const clang::Expr &
+clang_c_convertert::elided_copy_source(const clang::Expr &init)
+{
+  return init;
 }
 
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
@@ -733,7 +739,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if (vd.hasInit() && !vd.isExceptionVariable())
   {
     exprt val;
-    if (get_expr(*vd.getInit(), val))
+    if (get_expr(elided_copy_source(*vd.getInit()), val))
       return true;
 
     gen_typecast(ns, val, t);
@@ -3739,7 +3745,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       const clang::Expr &retval = *ret.getRetValue();
 
       exprt val;
-      if (get_expr(retval, val))
+      if (get_expr(elided_copy_source(retval), val))
         return true;
 
       gen_typecast(ns, val, return_type);

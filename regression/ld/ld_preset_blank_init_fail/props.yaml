@@ -1,0 +1,6 @@
+properties:
+  # A blank initial value is not a preset of 0; it must be refused (#7389).
+  - id: P1
+    kind: invariant
+    expression: "!q || a"
+    description: "The coil follows its contact within the scan"
