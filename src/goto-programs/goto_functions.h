@@ -125,4 +125,6 @@ public:
 
 void get_local_identifiers(const goto_functiont &, std::set<irep_idt> &dest);
 
+bool spawns_threads(const goto_functionst &goto_functions);
+
 #endif
