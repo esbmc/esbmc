@@ -699,11 +699,13 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
 #endif
-    a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
-        src_expr)));
+    const unsigned bits = type_byte_size_bits(expr->type).to_uint64();
+    const unsigned mem_bits = type_byte_size_bits(src_expr->type).to_uint64();
+    expr2tc val = bitcast2tc(get_uint_type(mem_bits), src_expr);
+    if (lowest_address_high() && mem_bits && mem_bits < bits)
+      val = concat2tc(
+        get_uint_type(bits), val, gen_zero(get_uint_type(bits - mem_bits)));
+    a = convert_ast(typecast2tc(get_uint_type(bits), val));
     break;
   }
   case expr2t::constant_vector_id:
@@ -1055,7 +1057,16 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         expr2tc upd = bitcast2tc(
           get_uint_type(mem_bits),
           typecast2tc(tu.members[c], with.update_value));
-        if (mem_bits < bits)
+        if (mem_bits < bits && lowest_address_high())
+          upd = concat2tc(
+            get_uint_type(bits),
+            upd,
+            extract2tc(
+              get_uint_type(bits - mem_bits),
+              with.source_value,
+              bits - mem_bits - 1,
+              0));
+        else if (mem_bits < bits)
           upd = concat2tc(
             get_uint_type(bits),
             extract2tc(
@@ -2410,9 +2421,7 @@ smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
     }
 
     return convert_ast(bitcast2tc(
-      type,
-      typecast2tc(
-        get_uint_type(type_byte_size_bits(type).to_uint64()), to_bv)));
+      type, union_member_bits(to_bv, type_byte_size_bits(type).to_uint64())));
   }
 
   assert(
@@ -3665,9 +3674,8 @@ expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
     {
       expr2tc cast = bitcast2tc(
         member_type,
-        typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
+        union_member_bits(
+          uint_rep, type_byte_size_bits(member_type).to_uint64()));
       simplify(cast);
       members.push_back(cast);
     }

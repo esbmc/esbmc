@@ -99,6 +99,19 @@ class smt_solver_baset;
 /** The bit a byte update with a symbolic offset writes at, in bit-vector mode:
  *  the offset scaled to bits, in the width of the updated value. */
 expr2tc byte_update_bit_offset(const byte_update2t &data);
+
+/** Whether an object's lowest address sits in the most significant bits of its
+ *  bit-vector encoding: true on a big-endian target, so the bit-vector reads
+ *  as the object's bytes in memory order, as byte_extract assumes. */
+bool lowest_address_high();
+
+/** Lowest bit of the @p width bits at bit offset @p offset of a @p total bit
+ *  object's bit-vector encoding. */
+unsigned flattened_position(unsigned offset, unsigned width, unsigned total);
+
+/** The @p width bits of a union member within the union's bits @p bits: those
+ *  at the union's lowest address. */
+expr2tc union_member_bits(const expr2tc &bits, unsigned width);
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>

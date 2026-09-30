@@ -756,6 +756,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R69** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R64's residual, §15 M9 (R69); **FIXED**, same entry | **Before C++17 an elided copy was built anyway.** Clang marks the copy in `C c = C::make();`, `C c = C(5);` and `return C(x);` elidable and elides it; ESBMC ran the copy constructor and destroyed a second object. `{ C c = C::make(3); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-c-frontend/clang_c_convert.cpp`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_{local,static,temporary}{,_fail}` | — | **Fixed**: a variable's initializer and a returned value are converted from the elided copy's source, the C++17 form. |
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
+| **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
@@ -9303,7 +9304,55 @@ match the native program. `vector_union_bytes{,_fail}` and
 of the second also pins the counterexample path.
 
 Not fixed, and not vector-specific: under `--big-endian`, reading a `float`
-lane of a union back as `int` is FAILED on master for a plain `float[4]` too.
+lane of a union back as `int` is FAILED on master for a plain `float[4]` too. Fixed as R76.
+
+---
+
+### M9 (R76) — 2026-09-30, big-endian aggregates laid out little-endian
+
+R75's note is wider than floats and than a false FAILED. On a big-endian target
+the SMT layer disagreed with itself about where an object's lowest address
+sits. `flatten_to_bitvector` put element and member 0 in the low bits;
+`byte_extract` and `byte_update` with `big_endian` read address 0 from the most
+significant bits. Every path that went from one to the other misplaced bytes:
+
+- `union { short a[4]; short b[4]; } u = {0}; u.a[1] = 5;` stores `5` at
+  `u.b[2]`. `assert(u.b[1] != 5)` is **SUCCESSFUL** on master.
+- A member shorter than its union was read from the low bits:
+  `u.i = 0x01020304; u.s` gave `0x0304`.
+- `((unsigned char *)&p)[k]` for a symbolic `k` over `struct { unsigned short
+  x, y; }` returned each member's low byte first; a constant `k` did not.
+
+#4108 had compensated at one site: `dereferencet` mirrored the byte offset of
+a struct byte access, which holds only when every member is a byte. #4112's
+`convert_member` rebuilds a union's array member from big-endian byte reads,
+correct once the union's bits are laid out big-endian, and is kept.
+
+**Fixed** by giving the big-endian layout one rule, lowest address in the most
+significant bits, at every site that builds or takes apart an object's bits:
+the flattener, the struct and array rebuilds, the pointer-tracking walk
+`flattened_in_struct`, union construction and member writes, and scalar union
+members in `convert_member` and in the counterexample (`get_by_ast`, which
+still decoded the low bits and printed `.s=772` beside a violated `s == 258`).
+#4108's mirror is removed. Little-endian encodes as before.
+
+`github_571_{1,2,3}` expected the old layout. Their sources choose the
+declaration order by `__BYTE_ORDER__`, which `--big-endian` does not change,
+so under `--big-endian` they compiled the little-endian bit-field order and
+passed only because the layout was little-endian too. They now declare #571's
+big-endian layout and check #571's big-endian values; master fails all three.
+`big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`,
+`big_endian_union_trace_fail` and `github_571_1_fail` change verdict against
+master, under Bitwuzla and Z3; reverting the trace decoder or the
+union-initialiser placement alone fails the trace test or
+`big_endian_union_short_member`. 476 `--big-endian`, union, vector and endian
+tests keep their verdicts otherwise. `regression/cheri-128` is all
+`--big-endian` and needs a CHERI build; it was not run. The capability union's
+address, read from its low bits, is now `cursor` rather than `pesbt`.
+
+Not fixed: clang still predefines the host's `__BYTE_ORDER__` under
+`--big-endian`, so a program that selects its layout by that macro verifies the
+little-endian variant.
 
 ---
 
