@@ -139,6 +139,40 @@ list_annotation_of(const nlohmann::json &elem, const nlohmann::json &origin)
   return annotation;
 }
 
+/// True when @p annotation names a module-level alias (`_Elem = int`). A model
+/// spells its element type through one to mark every parameter and return
+/// sharing it as that element, so that they are retyped together with the list.
+bool names_alias(const nlohmann::json &body, const nlohmann::json &annotation)
+{
+  if (!is_node(annotation, "Name"))
+    return false;
+
+  for (const auto &stmt : body)
+    if (
+      json_utils::is_name_alias(stmt) &&
+      stmt["targets"][0]["id"] == annotation["id"])
+      return true;
+  return false;
+}
+
+/// Rewrite @p def's scalar parameters and return annotated @p placeholder to
+/// @p elem.
+void retype_placeholder(
+  nlohmann::json &def,
+  const nlohmann::json &placeholder,
+  const nlohmann::json &elem)
+{
+  const auto same = [&](const nlohmann::json &annotation) {
+    return is_node(annotation, "Name") && annotation["id"] == placeholder["id"];
+  };
+
+  for (auto &arg : def["args"]["args"])
+    if (arg.contains("annotation") && same(arg["annotation"]))
+      arg["annotation"] = elem;
+  if (def.contains("returns") && same(def["returns"]))
+    def["returns"] = elem;
+}
+
 /// A call's callee name: `f(...)` or `m.f(...)`. Empty when neither.
 std::string callee_name(const nlohmann::json &func)
 {
@@ -400,10 +434,9 @@ private:
       if (!elem || modules_[module].write == nullptr)
         continue;
 
-      nlohmann::json &annotation =
-        find_function(modules_[module].write->at("body"), func)
-          ->at("args")
-          .at("args")[param]["annotation"];
+      nlohmann::json &body = modules_[module].write->at("body");
+      nlohmann::json &def = *find_function(body, func);
+      nlohmann::json &annotation = def["args"]["args"][param]["annotation"];
 
       // Write once. A binding is only produced in the round where every call
       // site of the parameter is typable, and each site's type then comes from
@@ -413,6 +446,10 @@ private:
       // non-tuple list parameters, which is what bounds the loop below.
       if (is_tuple_annotation(list_elem_annotation(annotation)))
         continue;
+
+      const nlohmann::json &placeholder = list_elem_annotation(annotation);
+      if (names_alias(body, placeholder))
+        retype_placeholder(def, placeholder, *elem);
 
       annotation = list_annotation_of(*elem, annotation);
       changed = true;

@@ -322,6 +322,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   if (is_dict_type(result_type))
     throw std::runtime_error("setdefault(): dict value type is not supported");
 
+  default_value = converter_.wrap_if_optional(default_value, result_type);
+
   // List values are stored by pointer so that
   // `a.setdefault(k, []).append(x)` mutates the stored list.
   const bool is_list_result = (result_type == list_type);

@@ -149,6 +149,13 @@ protected:
     const exprt &elem_count,
     goto_programt &dest);
 
+  bool cpp_new_init_list(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &init,
+    const exprt &elem_count,
+    goto_programt &dest);
+
   //
   // function calls
   //
@@ -194,6 +201,11 @@ protected:
     exprt &initializer,
     const codet &new_code,
     const symbolt &s,
+    goto_programt &dest);
+  void convert_dynamic_static_init(
+    const codet &decl,
+    const symbolt &s,
+    const symbolt &guard,
     goto_programt &dest);
   void schedule_array_element_destructors(const exprt &base, const typet &type);
 

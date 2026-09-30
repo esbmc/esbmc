@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --incremental-bmc --multi-property
+^VERIFICATION FAILED$
+^  FAILED +\[follow\.null-pointer-dereference\.\d+\] +line +28 +dereference failure: NULL pointer$

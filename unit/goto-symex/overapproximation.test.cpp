@@ -9,17 +9,14 @@
  produced equation and pin the direction, so a change that quietly reverses it
  fails here rather than in a verdict months later.
 
- All three are pinned below. The third -- the value-set filter after a pointer
- havoc (`symex_assign.cpp:554-576`) -- was recorded as out of reach because it
- needs `pc->inductive_step_instruction`, which only the k-induction goto
- transform sets. `goto_k_induction` is a free function, so
- `symex_run::inductive_step_equation` runs it over a `goto_factory` program and
- the branch is reached at this tier after all.
+ The first two are pinned below. The third -- a value-set filter after a
+ pointer havoc in the inductive step -- was removed in #7964: it restored p's
+ loop-entry points-to set, so the step checked only loop-entry pointer states.
+ What is pinned in its place is that the havoc stays unconstrained.
 
- The direction that matters differs by claim. For the first two it is *never
- adding behaviour*: dropping a constraint is safe, dropping a call target or
- letting a discarded body run is not. The third is a *narrowing*, so the
- question is what it removes -- only the sink, and never the entire set.
+ The direction that matters is *never adding behaviour*: dropping a
+ constraint is safe, dropping a call target or letting a discarded body run
+ is not.
 
  \*******************************************************************/
 
@@ -120,66 +117,18 @@ size_t mentions_invalid_object(const symex_target_equationt &eq)
   return n;
 }
 
-/// Safety properties whose comment contains `what`. Named rather than counted
-/// in bulk: a value set emptied by a filter takes its dereference checks with
-/// it, and every assignment survives, so a total would not say which.
-size_t
-asserts_commented(const symex_target_equationt &eq, const std::string &what)
-{
-  size_t n = 0;
-  for (const auto &step : eq.SSA_steps)
-    if (
-      step.is_assert() &&
-      id2string(step.comment).find(what) != std::string::npos)
-      n++;
-  return n;
-}
-
-// `p`'s pre-havoc set holds one concrete candidate and one `unknown`: `ext`
-// is external, so its result contributes the sink. The loop writes `p`, which
-// is what makes the k-induction transform havoc it with
-// `inductive_step_instruction = true` -- the flag the filter is guarded on.
-const char *mixed_sink_and_candidate = R"(
+// `p` enters the loop pointing only at `a`, and the loop writes it, so the
+// k-induction transform havocs it with `inductive_step_instruction = true`.
+const char *loop_entry_singleton = R"(
 int a, b;
-int *ext(void);
-int nondet_int(void);
 int main(void)
 {
-  int *p;
+  int *p = &a;
   int i;
-  if (nondet_int())
-    p = &a;
-  else
-    p = ext();
   for (i = 0; i < 4; i++)
   {
     *p = i;
-    p = (p == &a) ? &b : p;
-  }
-  return 0;
-}
-)";
-
-// Every entry in `p`'s pre-havoc set is a sink, so filtering would empty it.
-// The counterpart of `all_incompatible_targets` below: the same asymmetry, in
-// the same direction.
-//
-// The dereference is a read. A write through a set that resolves to nothing is
-// reported unmodelled (dereference.cpp, the WRITE/FREE check after the target
-// loop), and in the inductive step that claim is assumed as well as asserted,
-// so the first iteration cuts the path and the counts below stop measuring the
-// filter at all.
-const char *all_sink = R"(
-int *ext(void);
-int total;
-int main(void)
-{
-  int *p = ext();
-  int i;
-  for (i = 0; i < 4; i++)
-  {
-    total += *p;
-    p = ext();
+    p = (p == &a) ? &b : &a;
   }
   return 0;
 }
@@ -323,42 +272,14 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "the post-havoc value-set filter drops the sink, not the candidate",
+  "an inductive-step pointer havoc is not pinned to its loop-entry targets",
   "[symex][overapproximation]")
 {
-  symex_run::inductive_step_equation run(mixed_sink_and_candidate);
+  symex_run::inductive_step_equation run(loop_entry_singleton);
   const symex_target_equationt &eq = run.get();
 
-  // The claim's mechanism, stated as a predicate: an `unknown` left in the
-  // restored set flips `known_exhaustive` to false in
-  // `dereferencet::dereference`, so the deref-time ITE chain starts from a
-  // fresh `invalid_object` free variable that the solver can route through.
-  // Keeping the sink entries (`if (false && ...)` on the drop) puts one in the
-  // equation, so this is the filter's own work and not the value set's.
-  REQUIRE(mentions_invalid_object(eq) == 0);
-
-  // Anti-vacuity in the direction that matters. This one is a *narrowing* --
-  // unlike R9's other two claims it removes candidates rather than constraints
-  // -- so "never adding behaviour" is not the property to check. What has to
-  // hold is that only the sink went: the concrete candidate the pre-havoc set
-  // carried must still be reachable through `p`.
-  REQUIRE(assignments_to(eq, "c:@a") > 1);
-}
-
-TEST_CASE(
-  "a filter that would empty the value set leaves it alone",
-  "[symex][overapproximation]")
-{
-  symex_run::inductive_step_equation run(all_sink);
-  const symex_target_equationt &eq = run.get();
-
-  // Every entry is a sink, so `filtered` comes out empty and the
-  // `!filtered.empty()` guard is the only thing between `p` and an empty target
-  // set. The loop dereferences `p` once per unwound iteration, so all four must
-  // carry their checks. Deleting the guard costs exactly one of each kind --
-  // a dereference nobody verifies, which is the missed-bug direction, and the
-  // same asymmetry the function-pointer filter above is checked for.
-  REQUIRE(asserts_commented(eq, "dereference failure: invalid pointer") == 4);
-  REQUIRE(
-    asserts_commented(eq, "dereference failure: Incorrect alignment") == 4);
+  // Restoring p's loop-entry set {a} would resolve `*p` to `a` alone, so the
+  // step could never see p == &b (#7964). Unconstrained, the dereference
+  // falls back to the `invalid_object` sink.
+  REQUIRE(mentions_invalid_object(eq) > 0);
 }

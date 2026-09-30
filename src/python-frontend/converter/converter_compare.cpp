@@ -20,6 +20,21 @@ exprt gen_bool(bool v)
 {
   return migrate_expr_back(v ? gen_true_expr() : gen_false_expr());
 }
+
+// A class object shares a string's char-array model but never equals one
+// (int != "int"), and orders against nothing.
+exprt compare_class_objects(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (op != "Eq" && op != "NotEq")
+    throw std::runtime_error("TypeError: ordered comparison of a class object");
+  const bool same_class = python_converter::is_class_object(lhs) &&
+                          python_converter::is_class_object(rhs) &&
+                          lhs.get("value") == rhs.get("value");
+  return gen_bool(same_class == (op == "Eq"));
+}
 } // namespace
 
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
@@ -114,16 +129,8 @@ exprt python_converter::compare_constants_internal(
       lhs.type().subtype() == char_type() &&
       rhs.type().subtype() == char_type())
     {
-      // Type-identifier constants (e.g. from `x = int`) have no operands and
-      // store the name in get_value(). String literals have individual char
-      // operands and an empty get_value(). These represent different Python
-      // objects (int != "int"), so comparing across formats is always unequal;
-      // an ordered comparison across them is meaningless, so fall through.
-      bool lhs_is_type_id = lhs.operands().empty();
-      bool rhs_is_type_id = rhs.operands().empty();
-      if (lhs_is_type_id != rhs_is_type_id)
-        return (op == "Eq" || op == "NotEq") ? gen_bool(op == "NotEq")
-                                             : nil_exprt();
+      if (is_class_object(lhs) || is_class_object(rhs))
+        return compare_class_objects(op, lhs, rhs);
 
       // Extract string values and compare lexicographically (Python orders
       // strings by code point; for the char-array model this is byte-wise,
@@ -742,18 +749,11 @@ exprt python_converter::handle_type_identity_check(
       // Check if it's a variable holding a type object (e.g., x = int)
       if (expr.is_symbol())
       {
-        const symbol_exprt &sym = to_symbol_expr(expr);
-        const symbolt *symbol = ns.lookup(sym.get_identifier());
-        if (symbol && symbol->get_value().is_constant())
+        const std::string *val = class_object_name(expr.identifier());
+        if (val && type_utils::is_type_identifier(*val))
         {
-          std::string val =
-            to_constant_expr(symbol->get_value()).get_value().as_string();
-
-          if (type_utils::is_type_identifier(val))
-          {
-            out_name = val;
-            return true;
-          }
+          out_name = *val;
+          return true;
         }
       }
     }

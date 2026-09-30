@@ -998,25 +998,6 @@ class CoreVisitorsMixin:
         return result
 
     @staticmethod
-    def _normalize_int_from_bytes_endianness(node):
-        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
-            return
-        # Positional byteorder: int.from_bytes(b, "big" | "little").
-        if len(node.args) > 1:
-            is_big = isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"
-            node.args[1] = ast.Constant(value=is_big)
-        # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
-        # model names it "big_endian". Rename the keyword to the model's
-        # parameter and fold its string value to the bool the model expects.
-        for kw in node.keywords:
-            if kw.arg == "byteorder":
-                is_big = isinstance(kw.value, ast.Constant) and kw.value.value == "big"
-                kw.arg = "big_endian"
-                kw.value = ast.Constant(value=is_big)
-        ast.fix_missing_locations(node)
-
-    @staticmethod
     def _normalize_math_gcd_lcm_variadic(node):
         # math.gcd / math.lcm accept any number of integer arguments in CPython,
         # but the operational model (models/math.py) is binary. Normalise to
@@ -1781,7 +1762,6 @@ class CoreVisitorsMixin:
             return rewritten_ratio
 
         self._normalize_builtin_keyword_args(node)
-        self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
         self._apply_call_signature_defaults(node)

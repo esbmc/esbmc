@@ -1,8 +1,10 @@
 #include <util/base/compiler_defs.h>
+#include <cctype>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Attr.h>
+#include <clang/AST/Mangle.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
@@ -21,6 +23,7 @@ CC_DIAGNOSTIC_POP()
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
@@ -306,6 +309,24 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+/* The decl a RecordType carries need not be the defining one; resolve to the
+ * definition so a caller does not register a record that stays incomplete
+ * (#7643). Hand-rolled: getDefinitionOrSelf() is LLVM >= 21. */
+static const clang::RecordDecl &defining_decl(const clang::RecordDecl &rd)
+{
+  if (!rd.isCompleteDefinition())
+    if (const clang::RecordDecl *def = rd.getDefinition())
+      return *def;
+  return rd;
+}
+
+/* A record symbol carrying the placeholder put in the context before its
+ * fields are converted, under either spelling. */
+static bool holds_incomplete_record(const typet &t)
+{
+  return t.incomplete() || t.id() == "incomplete_struct";
+}
+
 bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 {
   if (rd.isInterface())
@@ -378,9 +399,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * which is why the id is tested as well as the flag (de9158daeb); it
    * terminates because every non-re-entrant arrival inserts its symbol
    * first. */
-  if (
-    !sym->get_type().incomplete() &&
-    sym->get_type().id() != "incomplete_struct")
+  if (!holds_incomplete_record(sym->get_type()))
     return false;
 
   clang::RecordDecl *rd_def = rd.getDefinition();
@@ -405,7 +424,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * incomplete-type symbol with the now-complete type definition, in place.
    * The order of definitions in the context matters — this type must be
    * defined after any of the types it is composed of — so move it to the
-   * back of the insertion order afterwards.
+   * back of the insertion order afterwards. Since #7643 a record reached
+   * through a pointer field is converted eagerly, so a record composed of it
+   * can precede it; goto2c re-sorts compound types (goto2c_preprocess.cpp).
    *
    * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
    * through field types into other records, and any of those recursions may
@@ -415,6 +436,13 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
+
+  /* That recursion can also re-enter this very record and complete it (#2323).
+   * Completing it again would run the method pass a second time and add the
+   * vtable variable symbol twice, which aborts conversion (#7643). */
+  if (!holds_incomplete_record(sym->get_type()))
+    return false;
+
   sym->set_type(t);
   sym = context.reorder_symbol_to_back(id);
 
@@ -462,6 +490,149 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 {
   // We don't add methods or static members to the struct in C
   return false;
+}
+
+/// A C++ function-local static whose initializer is not a constant runs it
+/// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
+/// hoisted into static_lifetime_init. Arrays keep the hoisted form, and the
+/// IREP2 adjuster, which drops the declaration's marker, keeps it too.
+bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
+{
+  return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
+         vd.hasInit() && !vd.getType()->isArrayType() &&
+         !vd.getInit()->isConstantInitializer(
+           *ASTContext, vd.getType()->isReferenceType()) &&
+         !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
+}
+
+/// The static-storage arm of get_var: converts @p vd's initializer and adds
+/// @p symbol to the context.
+bool clang_c_convertert::get_static_var_init(
+  const clang::VarDecl &vd,
+  symbolt &symbol,
+  const typet &t,
+  const locationt &location_begin,
+  exprt &new_expr)
+{
+  const bool dynamic_local_init = has_dynamic_local_init(vd);
+  symbolt *added_symbol = nullptr;
+  /* Static symbols can't refer to themselves in the initializer (which the
+   * 'else' case handles) as it would not be constant then.
+   *
+   * We need to get the initializer first, since it can contain compound
+   * literals (with their own initialization) that this variable here is
+   * initialized to:
+   *
+   * int x = (int){5};
+   *
+   * This creates a new symbol for the compound literal, and x's initializer
+   * should point to that (already initialized) symbol. As
+   * static_lifetime_init() expects the symbols to be initialized in the order
+   * they are put into the context, by getting the RHS first, we avoid first
+   * initializing 'x' and then the compound literal symbol, which would be
+   * wrong.
+   */
+
+  /* Since this is in static storage context, pretend that any surrounding
+   * block does not exist in order to force declarations by the RHS to appear
+   * in file scope as well. Technically, this is not fully correct, as the
+   * initialization of x in
+   *
+   * void f() {
+   *   static int x = 42;
+   * }
+   *
+   * should only occur the first time f() is run, but for C this makes no
+   * difference as x cannot be accessed outside of f() anyway and the
+   * initializer can't have side-effects (it's a constant expression). */
+  /* C++ lets that initializer have side effects and runs it on the first
+   * pass through the declaration, so a dynamic one is lowered there by
+   * goto_convert (see has_dynamic_local_init) and converted in the
+   * function's scope. */
+  const clang::Stmt *stmt = vd.getInit();
+  code_blockt *orig = current_block;
+  if (!dynamic_local_init)
+    current_block = nullptr;
+
+  exprt val;
+  bool r = get_expr(*stmt, val);
+  current_block = orig;
+  if (r)
+    return true;
+
+  bool aggregate_without_init =
+    is_aggregate_type(vd.getType()) &&
+    stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
+
+  // An array of a class type with a non-trivial constructor is an aggregate,
+  // but its CXXConstructExpr is not a no-op: every element must be
+  // constructed.  Keep the constructor call so static_lifetime_init (via
+  // clang_cpp_maint::adjust_init) can expand it into per-element calls;
+  // otherwise the element constructors are silently dropped and any side
+  // effect (e.g. a global counter bumped by the ctor) never happens.  See
+  // regression esbmc-cpp/gcc-template-tests/ctor2.
+  if (aggregate_without_init)
+  {
+    const auto &construct_expr =
+      static_cast<const clang::CXXConstructExpr &>(*stmt);
+    const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
+    if (ctor && !ctor->isTrivial())
+      aggregate_without_init = false;
+  }
+
+  if (vd.isStaticDataMember() && vd.isOutOfLine())
+  {
+    // Reorder to respect definition order for static_lifetime_init().
+    // C++ class static members are inserted when the class body is processed
+    // (in declaration order), but their out-of-class definitions appear later
+    // in textual order, and the later definition supplies the complete type
+    // (e.g. an array's real size). Erase the incomplete declaration-order
+    // symbol so move_symbol_to_context below re-adds the complete one at the
+    // end — both replacing its contents and fixing the init order.
+    symbolt *s = context.find_symbol(symbol.id);
+    if (
+      s &&
+      vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
+      // In AST, nodes are also generated for the template instantiation,
+      // already initialized — skip those.
+      context.erase_symbol(s->id);
+  }
+
+  aggregate_without_init &= !dynamic_local_init;
+  added_symbol = context.move_symbol_to_context(symbol);
+  gen_typecast(ns, val, t);
+  if (!aggregate_without_init && !dynamic_local_init)
+    added_symbol->set_value(val);
+
+  code_declt decl(symbol_expr(*added_symbol));
+  decl.location() = location_begin;
+  if (!aggregate_without_init)
+    decl.operands().push_back(val);
+  if (dynamic_local_init)
+    add_init_guard(*added_symbol);
+
+  new_expr = decl;
+  return false;
+}
+
+/// The flag goto_convert tests to run @p var's initializer only once; its
+/// presence in the symbol table is what marks the initializer as dynamic, so
+/// it survives the declaration's round trip through IREP2.
+void clang_c_convertert::add_init_guard(const symbolt &var)
+{
+  symbolt guard;
+  guard.id = var.id.as_string() + "$init_guard";
+  guard.name = var.name.as_string() + "$init_guard";
+  guard.set_type(get_bool_type());
+  guard.mode = var.mode;
+  guard.module = var.module;
+  guard.location = var.location;
+  guard.lvalue = true;
+  guard.static_lifetime = true;
+  guard.file_local = true;
+  guard.is_thread_local = var.is_thread_local;
+  guard.set_value(gen_false_expr());
+  context.move_symbol_to_context(guard);
 }
 
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
@@ -533,7 +704,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
   if (
     symbol.static_lifetime && !symbol.is_extern &&
-    (!vd.hasInit() || is_aggregate_type(vd.getType())))
+    (!vd.hasInit() || is_aggregate_type(vd.getType()) ||
+     has_dynamic_local_init(vd)))
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
@@ -547,122 +719,30 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
   }
 
-  symbolt *added_symbol = nullptr;
   if (symbol.static_lifetime && vd.hasInit())
+    return get_static_var_init(vd, symbol, t, location_begin, new_expr);
+
+  // We have to add the symbol before converting the initial assignment
+  // because we might have something like 'int x = x + 1;' which is
+  // completely wrong but allowed by the language
+  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+
+  code_declt decl(symbol_expr(*added_symbol));
+  decl.location() = location_begin;
+
+  if (vd.hasInit() && !vd.isExceptionVariable())
   {
-    /* Static symbols can't refer to themselves in the initializer (which the
-     * 'else' case handles) as it would not be constant then.
-     *
-     * We need to get the initializer first, since it can contain compound
-     * literals (with their own initialization) that this variable here is
-     * initialized to:
-     *
-     * int x = (int){5};
-     *
-     * This creates a new symbol for the compound literal, and x's initializer
-     * should point to that (already initialized) symbol. As
-     * static_lifetime_init() expects the symbols to be initialized in the order
-     * they are put into the context, by getting the RHS first, we avoid first
-     * initializing 'x' and then the compound literal symbol, which would be
-     * wrong.
-     */
-
-    /* Since this is in static storage context, pretend that any surrounding
-     * block does not exist in order to force declarations by the RHS to appear
-     * in file scope as well. Technically, this is not fully correct, as the
-     * initialization of x in
-     *
-     * void f() {
-     *   static int x = 42;
-     * }
-     *
-     * should only occur the first time f() is run, but for C this makes no
-     * difference as x cannot be accessed outside of f() anyway and the
-     * initializer can't have side-effects (it's a constant expression). */
-    code_blockt *orig = current_block;
-    current_block = nullptr;
-    const clang::Stmt *stmt = vd.getInit();
-
     exprt val;
-    bool r = get_expr(*stmt, val);
-    current_block = orig;
-    if (r)
+    if (get_expr(*vd.getInit(), val))
       return true;
 
-    bool aggregate_without_init =
-      is_aggregate_type(vd.getType()) &&
-      stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
-
-    // An array of a class type with a non-trivial constructor is an aggregate,
-    // but its CXXConstructExpr is not a no-op: every element must be
-    // constructed.  Keep the constructor call so static_lifetime_init (via
-    // clang_cpp_maint::adjust_init) can expand it into per-element calls;
-    // otherwise the element constructors are silently dropped and any side
-    // effect (e.g. a global counter bumped by the ctor) never happens.  See
-    // regression esbmc-cpp/gcc-template-tests/ctor2.
-    if (aggregate_without_init)
-    {
-      const auto &construct_expr =
-        static_cast<const clang::CXXConstructExpr &>(*stmt);
-      const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
-      if (ctor && !ctor->isTrivial())
-        aggregate_without_init = false;
-    }
-
-    if (vd.isStaticDataMember() && vd.isOutOfLine())
-    {
-      // Reorder to respect definition order for static_lifetime_init().
-      // C++ class static members are inserted when the class body is processed
-      // (in declaration order), but their out-of-class definitions appear later
-      // in textual order, and the later definition supplies the complete type
-      // (e.g. an array's real size). Erase the incomplete declaration-order
-      // symbol so move_symbol_to_context below re-adds the complete one at the
-      // end — both replacing its contents and fixing the init order.
-      symbolt *s = context.find_symbol(symbol.id);
-      if (
-        s &&
-        vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
-        // In AST, nodes are also generated for the template instantiation,
-        // already initialized — skip those.
-        context.erase_symbol(s->id);
-    }
-
-    added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
-    if (!aggregate_without_init)
-      added_symbol->set_value(val);
 
-    code_declt decl(symbol_expr(*added_symbol));
-    decl.location() = location_begin;
-    if (!aggregate_without_init)
-      decl.operands().push_back(val);
-
-    new_expr = decl;
+    added_symbol->set_value(val);
+    decl.operands().push_back(val);
   }
-  else
-  {
-    // We have to add the symbol before converting the initial assignment
-    // because we might have something like 'int x = x + 1;' which is
-    // completely wrong but allowed by the language
-    added_symbol = context.move_symbol_to_context(symbol);
 
-    code_declt decl(symbol_expr(*added_symbol));
-    decl.location() = location_begin;
-
-    if (vd.hasInit() && !vd.isExceptionVariable())
-    {
-      exprt val;
-      if (get_expr(*vd.getInit(), val))
-        return true;
-
-      gen_typecast(ns, val, t);
-
-      added_symbol->set_value(val);
-      decl.operands().push_back(val);
-    }
-
-    new_expr = decl;
-  }
+  new_expr = decl;
   return false;
 }
 
@@ -1236,8 +1316,10 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Record:
   {
-    const clang::RecordDecl &rd =
-      *(static_cast<const clang::RecordType &>(the_type)).getDecl();
+    /* From the definition: this arm converts a record only while no symbol
+     * exists for it yet, so one registered incomplete here stays that way. */
+    const clang::RecordDecl &rd = defining_decl(
+      *(static_cast<const clang::RecordType &>(the_type)).getDecl());
 
     std::string id, name;
     get_decl_name(rd, name, id);
@@ -3915,6 +3997,33 @@ bool clang_c_convertert::get_enum_value(
   return false;
 }
 
+#if CLANG_VERSION_MAJOR >= 12
+/// A C++20 class-type template argument names a template parameter object: a
+/// static const object holding the argument's value ([temp.param]/8). Clang
+/// has no declaration for it to convert, so add its symbol on first use.
+bool clang_c_convertert::add_template_param_object(
+  const clang::TemplateParamObjectDecl &tpo,
+  const std::string &name,
+  const std::string &id)
+{
+  typet type;
+  if (get_type(tpo.getType(), type))
+    return true;
+  const clang::QualType qt = tpo.getType();
+  exprt value;
+  if (get_APValue_expr(tpo.getValue(), value, &qt))
+    return true;
+
+  symbolt symbol;
+  get_default_symbol(symbol, "", type, name, id, locationt());
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+  symbol.set_value(value);
+  context.move_symbol_to_context(symbol);
+  return false;
+}
+#endif
+
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
   // Special case for Enums, we return the constant instead of a reference
@@ -3950,6 +4059,12 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
       if (get_type(nd->getType(), type))
         return true;
     }
+
+#if CLANG_VERSION_MAJOR >= 12
+    if (const auto *tpo = llvm::dyn_cast<clang::TemplateParamObjectDecl>(nd))
+      if (!context.find_symbol(id) && add_template_param_object(*tpo, name, id))
+        return true;
+#endif
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
@@ -5033,6 +5148,163 @@ getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c)
   return clang::TypeName::getFullyQualifiedName(t, c, Policy);
 }
 
+// Function-local declarations reachable from template arguments. Their
+// printed names omit the enclosing function, so a specialisation over one
+// prints like a specialisation over any other of the same name.
+static void collect_local_decls(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  std::vector<const clang::NamedDecl *> &out);
+
+static void collect_local_decls(
+  clang::QualType t,
+  std::vector<const clang::NamedDecl *> &out)
+{
+  t = t.getCanonicalType();
+  for (;;)
+  {
+    if (const auto *ref = t->getAs<clang::ReferenceType>())
+      t = ref->getPointeeType();
+    else if (const auto *ptr = t->getAs<clang::PointerType>())
+      t = ptr->getPointeeType();
+    else if (const clang::ArrayType *arr = t->getAsArrayTypeUnsafe())
+      t = arr->getElementType();
+    else if (const auto *mp = t->getAs<clang::MemberPointerType>())
+    {
+      const clang::CXXRecordDecl *cls = mp->getMostRecentCXXRecordDecl();
+      if (cls && cls->getParentFunctionOrMethod())
+        out.push_back(cls);
+      t = mp->getPointeeType();
+    }
+    else
+      break;
+  }
+  if (const auto *fn = t->getAs<clang::FunctionProtoType>())
+  {
+    collect_local_decls(fn->getReturnType(), out);
+    for (clang::QualType param : fn->getParamTypes())
+      collect_local_decls(param, out);
+    return;
+  }
+  const clang::TagDecl *td = t->getAsTagDecl();
+  if (!td)
+    return;
+  if (td->getParentFunctionOrMethod())
+    out.push_back(td);
+  if (
+    const auto *cs = llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(td))
+    collect_local_decls(cs->getTemplateArgs().asArray(), out);
+}
+
+static void collect_local_decls(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  std::vector<const clang::NamedDecl *> &out)
+{
+  for (const clang::TemplateArgument &arg : args)
+    switch (arg.getKind())
+    {
+    case clang::TemplateArgument::Pack:
+      collect_local_decls(arg.getPackAsArray(), out);
+      break;
+    case clang::TemplateArgument::Type:
+      collect_local_decls(arg.getAsType(), out);
+      break;
+    case clang::TemplateArgument::Declaration:
+      if (arg.getAsDecl()->getParentFunctionOrMethod())
+        out.push_back(arg.getAsDecl());
+      break;
+    default:
+      break;
+    }
+}
+
+// Keeps a record name identifier-shaped: goto2c prints it as a C tag, and
+// reformat_class_name splits it on ':'.
+static std::string identifier_suffix(const std::string &text)
+{
+  std::string out;
+  for (char c : text)
+    out += std::isalnum(static_cast<unsigned char>(c)) ? c : '_';
+  return out;
+}
+
+/// The USR generator gives up on some C++20 declarations: a specialisation
+/// over a class-type template argument, its members and parameters, and the
+/// template parameter object that argument names. Their mangled names still
+/// identify them; a parameter is named after its function.
+bool clang_c_convertert::get_mangled_id(
+  const clang::NamedDecl &nd,
+  std::string &id)
+{
+  if (const auto *pd = llvm::dyn_cast<clang::ParmVarDecl>(&nd))
+  {
+    const auto *fn =
+      llvm::dyn_cast_or_null<clang::FunctionDecl>(pd->getDeclContext());
+    std::string fn_id;
+    if (!fn || !get_mangled_id(*fn, fn_id))
+      return false;
+    id = fn_id + "@" + pd->getNameAsString() +
+         "::" + std::to_string(pd->getFunctionScopeIndex());
+    return true;
+  }
+
+  clang::GlobalDecl gd;
+  if (const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&nd))
+    gd = clang::GlobalDecl(ctor, clang::Ctor_Complete);
+  else if (const auto *dtor = llvm::dyn_cast<clang::CXXDestructorDecl>(&nd))
+    gd = clang::GlobalDecl(dtor, clang::Dtor_Complete);
+  else if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(&nd))
+    gd = clang::GlobalDecl(fd);
+#if CLANG_VERSION_MAJOR >= 12
+  else if (llvm::isa<clang::TemplateParamObjectDecl>(nd))
+    gd = clang::GlobalDecl(&nd);
+#endif
+  else
+    return false;
+
+  std::unique_ptr<clang::MangleContext> mangler(
+    ASTContext->createMangleContext());
+  if (!mangler->shouldMangleDeclName(&nd))
+    return false;
+  std::string mangled;
+  llvm::raw_string_ostream os(mangled);
+  mangler->mangleName(gd, os);
+  os.flush();
+  id = "c:@" + mangled;
+  return true;
+}
+
+/// Several C files are merged into one AST, and every file that includes a
+/// header gets its own copy of an internal-linkage function or variable the
+/// header defines -- the importer does not merge those -- but the USR names
+/// the header, so the copies and their locals shared one symbol. The first
+/// copy keeps its id, so single-file programs are unchanged; each later one
+/// is numbered, and its locals follow it.
+std::string
+clang_c_convertert::header_internal_suffix(const clang::NamedDecl &nd)
+{
+  const clang::DeclContext *fn_ctx = nd.getParentFunctionOrMethod();
+  const auto *owner = fn_ctx ? llvm::dyn_cast<clang::NamedDecl>(
+                                 clang::Decl::castFromDeclContext(fn_ctx))
+                             : &nd;
+  const auto *var = llvm::dyn_cast_or_null<clang::VarDecl>(owner);
+  if (
+    !owner || (!llvm::isa<clang::FunctionDecl>(owner) && !var) ||
+    (var && var->isLocalVarDecl()) || owner->isExternallyVisible())
+    return "";
+
+  clang::SmallString<128> owner_usr;
+  if (clang::index::generateUSRForDecl(owner, owner_usr))
+    return "";
+  std::vector<const clang::Decl *> &copies =
+    internal_copies[owner_usr.str().str()];
+  const clang::Decl *canon = owner->getCanonicalDecl();
+  auto it = std::find(copies.begin(), copies.end(), canon);
+  const std::size_t index = it - copies.begin();
+  if (it == copies.end())
+    copies.push_back(canon);
+  return index == 0 ? "" : "@tu" + std::to_string(index);
+}
+
 void clang_c_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -5183,6 +5455,43 @@ void clang_c_convertert::get_decl_name(
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
 #endif
 
+    /* A local class's qualified name omits the function it is declared in,
+     * so same-named local classes in two functions, two blocks, or two
+     * instantiations of one function template shared a single record. The
+     * definition's location keeps a forward declaration on the same id, and
+     * the raw encoding of a macro location, unique per expanded token,
+     * separates blocks from one macro expansion, nested ones included. */
+    const auto *fn = llvm::dyn_cast_or_null<clang::FunctionDecl>(
+      rd.getParentFunctionOrMethod());
+    if (fn && !rd.getCanonicalDecl()->getNameAsString().empty())
+    {
+      const clang::RecordDecl *def = rd.getDefinition();
+      const clang::TagDecl &at = def ? *def : *rd.getCanonicalDecl();
+      std::string fn_name, fn_id;
+      get_decl_name(*fn, fn_name, fn_id);
+      locationt location_begin;
+      get_location_from_decl(at, location_begin);
+      std::string suffix = fn_id + "_" + location_begin.line().as_string() +
+                           "_" + location_begin.column().as_string();
+      if (at.getLocation().isMacroID())
+        suffix += "_m" + std::to_string(at.getLocation().getRawEncoding());
+      name += "_at_" + identifier_suffix(suffix);
+    }
+
+    // A specialisation, or a member of one, over a local declaration.
+    std::vector<const clang::NamedDecl *> locals;
+    for (const clang::DeclContext *dc = &rd; dc; dc = dc->getParent())
+      if (
+        const auto *cs =
+          llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(dc))
+        collect_local_decls(cs->getTemplateArgs().asArray(), locals);
+    for (const clang::NamedDecl *local : locals)
+    {
+      std::string local_name, local_id;
+      get_decl_name(*local, local_name, local_id);
+      name += "_of_" + identifier_suffix(local_id);
+    }
+
     id = "tag-" + name;
     return;
   }
@@ -5221,9 +5530,22 @@ void clang_c_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str();
+    id = DeclUSR.str().str() + header_internal_suffix(nd);
+    /* A local variable's USR is its expansion offset, so two declared by one
+     * macro expansion shared a symbol. The spelling offset does not separate
+     * an inner macro expanded twice inside one outer expansion, but each
+     * expanded token has its own macro location. A block-scope extern names
+     * the global, so it keeps the global's id. */
+    const auto *vd = llvm::dyn_cast<clang::VarDecl>(&nd);
+    if (
+      vd && vd->isLocalVarDecl() && !vd->hasExternalStorage() &&
+      vd->getLocation().isMacroID())
+      id += "_m" + std::to_string(vd->getLocation().getRawEncoding());
     return;
   }
+
+  if (get_mangled_id(nd, id))
+    return;
 
   // Otherwise, abort
   std::ostringstream oss;

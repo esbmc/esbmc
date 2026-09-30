@@ -191,6 +191,39 @@ static void report_non_termination_cwe(
     sarif_goto_trace(options, ns, trace);
 }
 
+/// Give this run one property table for all its k steps, where it should have
+/// one: the strategy then owns the verdict store, each phase records into it,
+/// and the table is printed once where the run concludes (W3b of
+/// docs/roadmap/multi-property-strategy-plan.md). A coverage run reports
+/// reachability rather than properties and resets per pass by design;
+/// --termination asks about the loops, not the assertions; and a run that only
+/// emits a formula decides nothing to put in a table; so none of them join in.
+static void adopt_one_property_table(optionst &options, bool is_coverage)
+{
+  if (
+    !options.get_bool_option("multi-property") || is_coverage ||
+    options.get_bool_option("termination") ||
+    options.get_bool_option("dead-code-check") ||
+    options.get_bool_option("show-vcc") ||
+    options.get_bool_option("program-only") ||
+    options.get_bool_option("smt-formula-only"))
+    return;
+
+  options.set_option("k-step-property-table", true);
+  goto_functionst::property_verdicts.clear();
+}
+
+/// Records a base case's violation. The run ends there unless
+/// --multi-property keeps it looking for the claims violated at a larger k.
+static bool ends_at_violation(optionst &options, bool &any_violation_found)
+{
+  any_violation_found = true;
+  // Suppresses report_result's VERIFICATION SUCCESSFUL at the later k steps
+  // that find no new violation.
+  options.set_option("kind-violation-found", true);
+  return !options.get_bool_option("multi-property");
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -246,6 +279,14 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // remaining properties, so we must remember the failure for the final verdict.
   bool any_violation_found = false;
 
+  // One property table for the whole run, rather than one per k step with the
+  // ids renumbered per equation (D2 of
+  // docs/roadmap/multi-property-strategy-plan.md). The calls to
+  // report_k_step_property_table below print it where the k steps run out,
+  // i.e. where no phase concluded the run and so none of them reported; they
+  // are no-ops when this run keeps a table per phase.
+  adopt_one_property_table(options, is_coverage);
+
   // Helper: emit the final verdict and return the correct exit code once a
   // proof or refutation has been found.  In multi-property mode the loop may
   // have continued past an earlier violation, so we must return 1 even when
@@ -273,19 +314,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      bool is_bcv =
+      const bool is_bcv =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv)
-      {
-        any_violation_found = true;
-        // Suppress spurious VERIFICATION SUCCESSFUL from report_result at
-        // subsequent k steps where no new violations are found.
-        options.set_option("kind-violation-found", true);
-      }
-
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
+      if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
       // if the property is proven violated in the bs, it's unnecessary to further run fw and is
@@ -432,17 +463,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      bool is_bcv =
+      const bool is_bcv =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv)
-      {
-        any_violation_found = true;
-        options.set_option("kind-violation-found", true);
-      }
-
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
+      if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
       if (
@@ -464,7 +487,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     {
       const bool violated =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (violated && !is_coverage)
+      if (
+        violated && !is_coverage &&
+        ends_at_violation(options, any_violation_found))
         return 1;
       // A coverage run has no verdict to falsify, so nothing would ever stop
       // the escalation: without this it re-solves every goal at each bound and
@@ -494,6 +519,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       ctest_gen);
     return 0;
   }
+
+  report_k_step_property_table(options, goto_functions, namespacet(context));
 
   // A violation recorded at some earlier k settles the program: reporting
   // UNKNOWN here would contradict the counterexamples already printed, and

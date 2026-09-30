@@ -81,6 +81,14 @@ ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b)
   return a == b;
 }
 
+/// True for `X = Y` between two bare names, such as `_Elem = int`.
+inline bool is_name_alias(const nlohmann::json &stmt)
+{
+  return stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
+         stmt["targets"][0].value("_type", "") == "Name" &&
+         stmt["value"].value("_type", "") == "Name";
+}
+
 /// Convert a dotted Python module name to a filesystem path segment.
 /// Example: "pkg.mod4" -> "pkg/mod4", "l.ks.foo" -> "l/ks/foo"
 inline std::string dotted_to_path(const std::string &module_name)
@@ -136,6 +144,19 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+/// Counts every ClassDef under @p node, at any depth.
+template <typename JsonType>
+std::size_t count_class_defs(const JsonType &node)
+{
+  std::size_t count = 0;
+  if (node.is_object() && node.value("_type", "") == "ClassDef")
+    ++count;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      count += count_class_defs(child);
+  return count;
+}
+
 /// Counts the ClassDef nodes named @p class_name that sit inside a function
 /// body under @p body. Module-scope definitions are not counted: find_class
 /// already reports those.
@@ -161,6 +182,42 @@ unsigned count_function_scope_classes(
       count += count_function_scope_classes(node["body"], class_name, true);
   }
   return count;
+}
+
+/// Source lines of every ClassDef named @p class_name under @p node that the
+/// converter registers: at any scope except directly inside a class body.
+template <typename JsonType>
+void collect_class_definition_lines(
+  const JsonType &node,
+  const std::string &class_name,
+  std::vector<int> &lines)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_class_definition_lines(child, class_name, lines);
+    return;
+  }
+
+  if (!node.is_object())
+    return;
+
+  const bool is_class_def = node.value("_type", "") == "ClassDef";
+  if (is_class_def && node.value("name", "") == class_name)
+    lines.push_back(node.value("lineno", 0));
+
+  for (const auto &child : node.items())
+  {
+    // A class nested directly in a class body is never registered.
+    if (is_class_def && child.key() == "body")
+    {
+      for (const auto &stmt : child.value())
+        if (stmt.value("_type", "") != "ClassDef")
+          collect_class_definition_lines(stmt, class_name, lines);
+      continue;
+    }
+    collect_class_definition_lines(child.value(), class_name, lines);
+  }
 }
 
 template <typename JsonType>
@@ -471,8 +528,27 @@ inline std::vector<std::string> split_function_path(const std::string &function)
   return path;
 }
 
+// The annotation pass names a method "Cls@C@m". For such a @p name, return the
+// body of class Cls in @p body (null if absent) and strip @p name to "m";
+// otherwise return @p body unchanged.
+template <typename JsonType>
+const JsonType *class_method_scope(const JsonType &body, std::string &name)
+{
+  const size_t sep = name.find("@C@");
+  if (sep == std::string::npos)
+    return &body;
+  const std::string class_name = name.substr(0, sep);
+  name.erase(0, sep + 3);
+  const JsonType *scope = nullptr;
+  for (const auto &elem : body)
+    if (elem["_type"] == "ClassDef" && elem["name"] == class_name)
+      scope = &elem["body"];
+  return scope;
+}
+
 // Find a function in AST by hierarchical path
-// Example: ["foo", "bar"] finds nested function bar() inside foo()
+// Example: ["foo", "bar"] finds nested function bar() inside foo(), and
+// ["Cls@C@m"] finds method m() of class Cls
 template <typename JsonType>
 JsonType
 find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
@@ -486,9 +562,12 @@ find_function_by_path(const JsonType &ast, const std::vector<std::string> &path)
     if (depth >= path.size())
       return JsonType();
 
-    const std::string &target_name = path[depth];
+    std::string target_name = path[depth];
+    const JsonType *scope = class_method_scope(parent_body, target_name);
+    if (scope == nullptr)
+      return JsonType();
 
-    for (const auto &elem : parent_body)
+    for (const auto &elem : *scope)
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == target_name)
       {

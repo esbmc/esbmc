@@ -91,7 +91,16 @@ public:
   exprt build_fstring_conversion(
     const nlohmann::json &value,
     int conversion,
+    const exprt &operand,
     const locationt &location);
+
+  /// repr() of a runtime value, or nil when its type has no model: a number
+  /// or bool renders as str() does, a str through __python_str_repr. For an
+  /// ASCII value this is also ascii().
+  exprt build_repr(const exprt &value, const locationt &location);
+
+  /// The rendered text of one f-string replacement field.
+  exprt format_fstring_part(const nlohmann::json &value);
 
   exprt build_nondet_string_fallback(const locationt &location);
 
@@ -905,7 +914,9 @@ private:
 
   symbolt *find_cached_symbol(const std::string &symbol_id);
   symbolt *find_cached_c_function_symbol(const std::string &symbol_id);
-  exprt try_len_fast_path_from_constant_arg(const nlohmann::json &arg_json);
+  exprt try_len_fast_path_from_constant_arg(
+    const nlohmann::json &arg_json,
+    const exprt &arg_expr);
   exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
 
   /**

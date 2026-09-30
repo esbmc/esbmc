@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: Decimal\(\) with non-constant arguments is not supported$
+^ERROR: .*main\.py:5:8: Decimal\(\) with non-constant arguments is not supported$

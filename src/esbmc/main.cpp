@@ -1,3 +1,4 @@
+#include <cfenv>
 #include <cstdint>
 #include <esbmc/esbmc_parseoptions.h>
 #include <esbmc/globals.h>
@@ -115,6 +116,17 @@ static void *run_main(void *arg)
 
 int main(int argc, const char **argv)
 {
+  /* Builds with goto-contractor link ibex, whose static initialisers call
+   * gaol_init(), and that leaves the FPU rounding toward +inf for the rest of
+   * the process. Solvers assume round-to-nearest: CaDiCaL fills its
+   * local-search score table with a loop that ends only once base^k underflows
+   * to exactly zero, which rounding upward never does, so the table grows until
+   * the allocator gives out and the run reports "Out of memory" on a formula of
+   * a few thousand gates. Restore the default before any thread starts (a
+   * thread inherits its creator's mode); goto-contractor takes its own
+   * FE_UPWARD guard around the ibex calls. */
+  std::fesetround(FE_TONEAREST);
+
 #ifdef __GLIBC__
   if (!wants_parallel_solving(argc, argv))
     mallopt(M_ARENA_MAX, 1);

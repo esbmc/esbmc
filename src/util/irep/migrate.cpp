@@ -4,6 +4,8 @@
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/lang/python_types.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
@@ -107,6 +109,24 @@ static struct_union_typet::componentst migrate_components_back(
   return comps;
 }
 
+static code_typet::argumentst migrate_arguments_back(const code_type2t &ref2)
+{
+  code_typet::argumentst args;
+  for (std::size_t i = 0; i < ref2.arguments.size(); i++)
+  {
+    args.emplace_back(migrate_type_back(ref2.arguments[i]));
+    args.back().set_identifier(ref2.argument_names[i]);
+    // Unreflected, so it may be absent on a type built by a frontend rather
+    // than by migrate_type (§44).
+    if (i < ref2.argument_base_names.size())
+      args.back().cmt_base_name(ref2.argument_base_names[i]);
+    if (i < ref2.argument_defaults.size() && ref2.argument_defaults[i])
+      args.back().default_value() =
+        migrate_expr_back(ref2.argument_defaults[i]);
+  }
+  return args;
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -199,6 +219,52 @@ static bool migrates_to_empty(const typet &type)
   return type.id().as_string().empty() || type.id() == "nil" ||
          type.id() == "ellipsis" || type.id() == typet::t_ptrmem ||
          type.id() == "destructor" || type.id() == "constructor";
+}
+
+static std::vector<irep_idt> struct_bases(const typet &type)
+{
+  std::vector<irep_idt> bases;
+  for (const irept &b : type.find("bases").get_sub())
+    bases.push_back(b.id());
+  return bases;
+}
+
+static irep_idt ctor_dtor_marker(const typet &ret)
+{
+  return ret.id() == "constructor" || ret.id() == "destructor" ? ret.id()
+                                                               : irep_idt();
+}
+
+// A dynamic specification is resolved by finalize_exception_specification;
+// until then it lists its declared types under "exception_spec_decl".
+static void migrate_exception_spec(
+  const typet &type,
+  irep_idt &kind,
+  std::vector<irep_idt> &types,
+  std::vector<type2tc> &decl)
+{
+  const irept &k = type.find(exception_specificationt::kind_attribute());
+  if (k.is_nil())
+    return;
+  kind = k.id();
+  for (const irept &t :
+       type.find(exception_specificationt::types_attribute()).get_sub())
+    types.push_back(t.id());
+  for (const irept &t : type.find("exception_spec_decl").get_sub())
+    decl.push_back(migrate_type(static_cast<const typet &>(t)));
+}
+
+static std::vector<expr2tc>
+migrate_arg_defaults(const code_typet::argumentst &old_args)
+{
+  std::vector<expr2tc> defaults;
+  for (std::size_t i = 0; i < old_args.size(); i++)
+    if (old_args[i].has_default_value())
+    {
+      defaults.resize(old_args.size());
+      migrate_expr(old_args[i].default_value(), defaults[i]);
+    }
+  return defaults;
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -325,7 +391,10 @@ static type2tc migrate_type0(const typet &type)
       name,
       packed,
       base_names,
-      explicit_alignment(type));
+      explicit_alignment(type),
+      python_aggregate_kind(type),
+      type.find("bases").is_not_nil(),
+      struct_bases(type));
   }
 
   if (type.id() == typet::t_union)
@@ -407,7 +476,24 @@ static type2tc migrate_type0(const typet &type)
       ret_type = migrate_type(static_cast<const typet &>(type.return_type()));
     }
 
-    return code_type2tc(args, ret_type, arg_names, ellipsis, arg_base_names);
+    irep_idt exc_kind;
+    std::vector<irep_idt> exc_types;
+    std::vector<type2tc> exc_decl;
+    migrate_exception_spec(type, exc_kind, exc_types, exc_decl);
+
+    const typet &ret = ref.return_type();
+    return code_type2tc(
+      args,
+      ret_type,
+      arg_names,
+      ellipsis,
+      arg_base_names,
+      migrate_arg_defaults(old_args),
+      exc_kind,
+      exc_types,
+      ctor_dtor_marker(ret),
+      ret.get_bool("#implicit_union_copy_move_constructor"),
+      exc_decl);
   }
 
   if (type.id() == "cpp-name")
@@ -3136,6 +3222,47 @@ void migrate_type_back_cache_clear()
   back_cache.clear();
 }
 
+static void migrate_struct_bases_back(const struct_type2t &ref, typet &type)
+{
+  if (!ref.has_bases)
+    return;
+  irept::subt &bases = type.add("bases").get_sub();
+  for (const irep_idt &b : ref.bases)
+    bases.emplace_back(b);
+}
+
+static void
+migrate_ctor_dtor_marker_back(const code_type2t &ref, code_typet &code)
+{
+  if (ref.return_marker.empty())
+    return;
+  code.return_type() = typet(ref.return_marker);
+  if (ref.implicit_union_copy_move)
+    code.return_type().set("#implicit_union_copy_move_constructor", true);
+}
+
+static void
+migrate_exception_spec_back(const code_type2t &ref, code_typet &code)
+{
+  if (ref.exception_kind.empty())
+    return;
+  code.set(exception_specificationt::kind_attribute(), ref.exception_kind);
+  if (ref.exception_kind != "dynamic")
+    return;
+  // An unresolved throw() comes back resolved, which means the same.
+  if (!ref.exception_decl.empty())
+  {
+    irept &decl = code.add("exception_spec_decl");
+    for (const type2tc &t : ref.exception_decl)
+      decl.get_sub().push_back(migrate_type_back(t));
+    return;
+  }
+  irept types;
+  for (const irep_idt &id : ref.exception_types)
+    types.get_sub().emplace_back(id);
+  code.set(exception_specificationt::types_attribute(), types);
+}
+
 static typet migrate_type_back_uncached(const type2tc &ref);
 
 typet migrate_type_back(const type2tc &ref)
@@ -3200,6 +3327,9 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       thetype.set("packed", true);
     if (ref2.alignment != 0)
       thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
+    if (!ref2.python_aggregate.empty())
+      set_python_aggregate_kind(thetype, ref2.python_aggregate);
+    migrate_struct_bases_back(ref2, thetype);
     return thetype;
   }
   case type2t::union_id:
@@ -3220,21 +3350,11 @@ static typet migrate_type_back_uncached(const type2tc &ref)
 
     assert(ref2.arguments.size() == ref2.argument_names.size());
 
-    code_typet::argumentst args;
-    unsigned int i = 0;
-    for (auto const &it : ref2.arguments)
-    {
-      args.emplace_back(migrate_type_back(it));
-      args.back().set_identifier(ref2.argument_names[i]);
-      // Unreflected, so it may be absent on a type built by a frontend rather
-      // than by migrate_type (§44).
-      if (i < ref2.argument_base_names.size())
-        args.back().cmt_base_name(ref2.argument_base_names[i]);
-      i++;
-    }
-
-    code.arguments() = args;
+    code.arguments() = migrate_arguments_back(ref2);
     code.return_type() = ret_type;
+
+    migrate_exception_spec_back(ref2, code);
+    migrate_ctor_dtor_marker_back(ref2, code);
 
     if (ref2.ellipsis)
       code.make_ellipsis();

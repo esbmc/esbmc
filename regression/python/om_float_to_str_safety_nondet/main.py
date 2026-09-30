@@ -7,7 +7,8 @@ def nondet_float() -> float: ...
 v = nondet_float()
 __ESBMC_assume(v == 0.0)
 s0 = str(v)
-assert s0 == "0.0"
+# -0.0 == 0.0 too, and str(-0.0) is "-0.0".
+assert s0 == "0.0" or s0 == "-0.0"
 
 v2 = nondet_float()
 __ESBMC_assume(v2 == 1.0)

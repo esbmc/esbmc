@@ -148,6 +148,10 @@ public:
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
 
+  /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
+  /// handled.
+  typet get_optional_type(const nlohmann::json &slice);
+
   string_builder &get_string_builder();
 
   python_dict_handler *get_dict_handler()
@@ -270,6 +274,53 @@ public:
       current_block->copy_to_operands(expr);
   }
 
+  // Converts `ast_node` (an Assign statement) into GOTO and appends it to
+  // current_block, the same way any real source-level assignment is
+  // converted -- for a caller (numpy argument hoisting) that only has
+  // add_instruction's implicit current_block, not a codet& of its own to
+  // pass to get_var_assign directly. False when there is no current block to
+  // emit into (e.g. converting outside statement context).
+  bool emit_statement_into_current_block(const nlohmann::json &ast_node)
+  {
+    if (!current_block || !safe_to_emit_side_effecting_statement())
+      return false;
+    // get_var_assign always leaves current_lhs pointing at its own target
+    // (or null) when it returns, clobbering whatever an enclosing
+    // assignment's own RHS conversion had it pointing at -- e.g. a call
+    // argument hoisted into a temp mid-conversion (hoist_call_argument_
+    // into_temp) would otherwise silently erase the outer assignment's
+    // ability to retype its own target from the freshly computed RHS
+    // (retype_current_lhs_and_return and friends), leaving a stale
+    // static-annotator guess in place. Save and restore around the nested
+    // statement so it only ever affects its own target.
+    exprt *outer_lhs = current_lhs;
+    bool outer_is_converting_rhs = is_converting_rhs;
+    bool outer_is_converting_lhs = is_converting_lhs;
+    const nlohmann::json *outer_store_target = lhs_store_target_;
+    typet outer_element_type = current_element_type;
+    get_var_assign(ast_node, *current_block);
+    current_lhs = outer_lhs;
+    is_converting_rhs = outer_is_converting_rhs;
+    is_converting_lhs = outer_is_converting_lhs;
+    lhs_store_target_ = outer_store_target;
+    current_element_type = outer_element_type;
+    return true;
+  }
+
+  // True where a side-effecting statement (e.g. a hoisted temporary
+  // assignment) is safe to plant into current_block without being evaluated
+  // an extra time or leaking into a specification -- the same guard
+  // needs_zero_division_guard applies before hoisting a side-effecting
+  // divisor: not a lambda body at its definition (operands still unbound),
+  // not the discarded type-probe pass of an assignment RHS (which runs the
+  // real conversion again right after), and not inside a contract clause
+  // (which must not plant a statement into the enclosing block at all).
+  bool safe_to_emit_side_effecting_statement() const
+  {
+    return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+           !in_contract_clause_;
+  }
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
@@ -307,6 +358,16 @@ public:
     const std::vector<unsigned char> &string_literal,
     const typet &t);
 
+  /// A class used as a value (`x = int`, `type(v)`): its name as a char array,
+  /// also held in `value` for the folds that read it back.
+  exprt make_class_object(const std::string &name);
+
+  static bool is_class_object(const exprt &expr)
+  {
+    return expr.is_constant() && expr.type().is_array() &&
+           !expr.get("value").empty();
+  }
+
   exprt get_literal(const nlohmann::json &element);
 
   locationt get_location_from_decl(const nlohmann::json &element) const;
@@ -337,6 +398,15 @@ public:
   bool in_contract_clause() const
   {
     return in_contract_clause_;
+  }
+
+  /// The class a variable was last assigned as a value (`x = int`), or null.
+  /// Kept here rather than read back from the symbol's value, which the IREP2
+  /// seam cannot carry in this shape (docs/roadmap/scope-python-irep2.md §14).
+  const std::string *class_object_name(const irep_idt &id) const
+  {
+    auto it = class_object_names_.find(id);
+    return it == class_object_names_.end() ? nullptr : &it->second;
   }
 
 private:
@@ -608,6 +678,12 @@ private:
   /// __len__, or raising TypeError as CPython does when it defines none.
   /// Returns nil when @p element is not such a call.
   exprt get_len_on_class_instance(const nlohmann::json &element);
+  static bool is_pure_read(const nlohmann::json &node);
+  exprt
+  get_len_on_list_element(const nlohmann::json &arg, const locationt &location);
+  static exprt list_element_type_id(const exprt &value);
+  std::size_t count_user_classes();
+  exprt checked_len_result(const exprt &len_call, const locationt &location);
 
   // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
   // slice views). Split out of get_function_call() to keep that already
@@ -649,6 +725,28 @@ private:
   // its own decision count by one per source.
   std::optional<exprt>
   try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
+
+  std::optional<std::vector<std::size_t>>
+  get_numpy_constructor_shape(const nlohmann::json &node) const;
+
+  std::optional<exprt> try_get_numpy_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  void reject_numpy_shape_attr_on_nonobject_call_result(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  bool should_reject_numpy_shape_attr_on_symbol(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  std::optional<exprt> try_get_numpy_bool_mask_rows_shape_attr(
+    const exprt &base_expr,
+    const typet &base_type,
+    const std::string &attr_name);
 
   exprt get_block(
     const nlohmann::json &ast_block,
@@ -807,6 +905,54 @@ private:
     const std::string &param_name,
     size_t param_index) const;
 
+  /// A bare `bytes` annotation carries no length, so its parameter type
+  /// defaults to a zero-size array (register_function_argument). Recovers a
+  /// concrete length by following each call site's argument for `func_name`
+  /// at `param_index` back to a `nondet_bytes(N)` literal, directly, through
+  /// one local-variable assignment, or forwarded through an intermediate
+  /// function's own bytes parameter; disagreeing call sites leave the
+  /// parameter untyped (returns false), same policy as
+  /// try_infer_numpy_param_type.
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size) const;
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size,
+    std::set<std::string> &visiting) const;
+
+  /// `arg` is a bare `Name` that did not resolve locally: if it names one
+  /// of `enclosing_function`'s own parameters, resolves that parameter's
+  /// bytes size recursively instead.
+  std::optional<long long> resolve_forwarded_bytes_param_size(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body,
+    const std::string &enclosing_function,
+    std::set<std::string> &visiting) const;
+
+  /// A single call site's argument (at `param_index`) resolved to a bytes
+  /// length: locally within the call's enclosing scope, or forwarded
+  /// through that scope's own bytes parameter
+  /// (resolve_forwarded_bytes_param_size).
+  std::optional<long long> resolve_bytes_call_site_arg_size(
+    const std::string &enclosing_function,
+    const nlohmann::json &call,
+    size_t param_index,
+    const nlohmann::json &module_body,
+    std::set<std::string> &visiting) const;
+
+  /// Wraps infer_bytes_param_size_from_call_sites for
+  /// register_function_argument: nullopt for `self`/`cls`, a non-bytes or
+  /// already-sized parameter, or one with no single inferable size; otherwise
+  /// the resolved `bytes` type.
+  std::optional<typet> try_infer_bytes_param_size(
+    const std::string &arg_name,
+    const typet &arg_type,
+    const symbol_id &id,
+    size_t param_index) const;
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
@@ -951,6 +1097,27 @@ private:
     const std::string &method_name,
     bool is_ctor) const;
 
+  using mro_memo =
+    std::map<std::string, std::optional<std::vector<std::string>>>;
+
+  /// The C3 method resolution order of class @p class_name in the file being
+  /// converted. Only classes that file binds once, by their class statement,
+  /// take part, each base named plainly; anything else (an import, a
+  /// rebinding, a qualified base) yields nothing.
+  std::optional<std::vector<std::string>>
+  class_mro(const std::string &class_name) const;
+  std::optional<std::vector<std::string>>
+  class_mro(const std::string &class_name, mro_memo &memo) const;
+  static std::optional<std::vector<std::string>>
+  c3_merge(std::vector<std::vector<std::string>> seqs);
+  /// The class statement that alone binds @p name in the file being
+  /// converted, or null.
+  const nlohmann::json *sole_class_binding(const std::string &name) const;
+  /// Whether the body of class @p class_name may bind @p name, hiding any
+  /// base's @p name.
+  bool class_binds_name(const std::string &class_name, const std::string &name)
+    const;
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
@@ -1028,6 +1195,10 @@ private:
     size_t param_index);
 
   /// Recovers a bare `list` parameter's element type from its call sites.
+  bool seed_mixed_call_site_elements(
+    const std::string &param_id,
+    const std::string &func_name,
+    size_t param_index);
   bool infer_list_elem_type_from_call_sites(
     const std::string &func_name,
     size_t param_index,
@@ -1047,7 +1218,7 @@ private:
 
   /// Whether a module-scope assignment must probe its RHS type before fixing
   /// the target's type.
-  bool module_scope_rhs_needs_type_probe(const nlohmann::json &value);
+  bool module_scope_rhs_needs_type_probe(const nlohmann::json &ast_node);
 
   /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
   /// declares it in `target_block` when it is a local, and records the
@@ -1064,6 +1235,8 @@ private:
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
     codet &target_block);
+
+  void set_assigned_value(symbolt &symbol, const exprt &rhs);
 
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
@@ -1325,6 +1498,9 @@ private:
   bool is_tracked_numpy_view_name_node(const nlohmann::json &node);
 
   bool is_basic_numpy_view_subscript_escape(const nlohmann::json &node);
+  /// Converts @p node into a discarded block, so only its value is kept and
+  /// nothing it would emit reaches the program.
+  exprt probe_expr(const nlohmann::json &node);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
@@ -1497,6 +1673,25 @@ private:
 
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  bool update_numpy_array_binding_from_name(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
+  bool preserve_conditional_numpy_alias_shape(
+    const std::string &lhs_id,
+    const std::string &rhs_id,
+    bool unconditional_assignment);
+
+  void copy_numpy_alias_shape_state(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  void reject_conditional_numpy_alias_rebind(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node) const;
 
   bool record_numpy_view_copy_from_returned_argument(
     const exprt &lhs,
@@ -1767,6 +1962,13 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  exprt
+  build_emptiness_check(const exprt &value, const nlohmann::json &element);
+
+  /// A call statement nested in an expression is invisible to goto-convert's
+  /// side-effect removal, so it would reach the solver unevaluated.
+  static void convert_function_call_to_side_effect(exprt &expr);
+
   /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
@@ -1821,6 +2023,11 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  /// Builds a `bytes` concatenation (`lhs + rhs`) as a fresh array literal of
+  /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
+  /// nil_exprt if either side's length is not a compile-time constant.
+  exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
 
   /**
    * @brief Handles list-related binary operations.
@@ -1921,7 +2128,23 @@ private:
   // =========================================================================
 
   /// Wrap values in Optional
+  typet optional_return_type(
+    const nlohmann::json &function_node,
+    const typet &declared);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+  /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
+  exprt wrap_if_optional(const exprt &value, const typet &type)
+  {
+    return type_utils::is_optional_struct(type) ? wrap_in_optional(value, type)
+                                                : value;
+  }
+  /// A (non-None) literal stored into an Optional<T> variable, wrapped (#8016).
+  exprt wrap_literal_if_optional(const exprt &value, const typet &type);
+  typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
+  exprt get_return_value(const nlohmann::json &value);
+  typet subscript_annotation_type(
+    const std::string &base,
+    const nlohmann::json &var_node);
 
   // =========================================================================
   // Enum support helpers
@@ -1934,7 +2157,24 @@ private:
     const std::string &class_name,
     const std::string &member_name);
 
+  void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
+
   /// Handle Optional value access
+  exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt coerce_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt narrow_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt resolve_optional_operands(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element,
+    bool is_none_check);
   exprt unwrap_optional_if_needed(
     const exprt &expr,
     const nlohmann::json &element = nlohmann::json());
@@ -2002,6 +2242,9 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// The target of a ternary that is itself a return value; see
+  /// optional_ternary_type.
+  typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;
@@ -2065,6 +2308,7 @@ private:
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
+  std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
   // A pointer-backed numpy view's logical shape (ADR-NP-003 etapa 2 scalar
@@ -2118,6 +2362,7 @@ private:
   // and the array-consuming numpy calls (transpose, sort/argsort/
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
+  std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

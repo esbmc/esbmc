@@ -1,0 +1,7 @@
+properties:
+  # bad0 is not translated, so its OUT, and through the wire A and Y, take any
+  # value each scan.
+  - id: P1
+    kind: invariant
+    expression: "!Y"
+    description: "Unprovable: A is bound to an output the untranslated body does not write"

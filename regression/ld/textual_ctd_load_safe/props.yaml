@@ -1,0 +1,7 @@
+properties:
+  # Textual counterpart of graphical_ctd_load_safe: LD reloads CV from PV (2)
+  # before the count, so Empty is off in every scan in which Load is on (#7353).
+  - id: P1
+    kind: invariant
+    expression: "!(Empty && Load)"
+    description: "Load is dominant: Empty and Load never hold together"

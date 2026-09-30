@@ -1,0 +1,9 @@
+properties:
+  # p1 runs before p0, so p1.A reads p0.Q from the previous scan: FALSE in the
+  # first scan, and Z with it. A wire to a block not yet declared used to fall
+  # back to a nondeterministic value, which can turn Z on at once (#7580).
+  - id: P1
+    kind: reachability
+    expression: "Z"
+    description: "Z cannot be on in the first scan"
+    justification: "p0 has not run yet when p1 reads its output in the first scan"

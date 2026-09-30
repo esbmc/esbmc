@@ -2,6 +2,7 @@
 
 #include <util/lang/c_types.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_types.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/type.h>
 
@@ -68,6 +69,16 @@ struct TypeFlags
 class type_utils
 {
 public:
+  /// A parameter's id, preferring `#identifier`: frontends disagree on which
+  /// key holds it and only `#identifier` crosses the IREP2 seam
+  /// (clang_cpp_convert.cpp:2880 sets the plain key alone).
+  static const irep_idt &
+  argument_identifier(const code_typet::argumentt &argument)
+  {
+    return argument.get_identifier().empty() ? argument.identifier()
+                                             : argument.get_identifier();
+  }
+
   static bool is_builtin_type(const std::string &name)
   {
     return (
@@ -207,9 +218,32 @@ public:
     t.remove_member_name();
   }
 
+  // A scalar T whose `Optional[T]` is the Optional<T> struct, not a T*.
+  static bool is_optional_scalar(const typet &t)
+  {
+    return t == long_long_int_type() || t == long_long_uint_type() ||
+           t == double_type() || t == bool_type();
+  }
+
+  // The Optional<T> struct type_handler::build_optional_type makes.
+  static bool is_optional_struct(const typet &t)
+  {
+    return t.is_struct() &&
+           to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
+  }
+
   static bool is_char_type(const typet &t)
   {
     return (t.is_signedbv() || t.is_unsignedbv()) && get_cpp_type(t) == "char";
+  }
+
+  // Distinguishes a `bytes` value from a numpy-style numeric array, so `+`
+  // routes to concatenation only for the former. Both share the same legacy
+  // `array of long_long_int_type` representation here
+  // (type_handler::get_typet's "bytes" branch).
+  static bool is_bytes_array(const typet &t)
+  {
+    return t.is_array() && get_cpp_type(t) == "bytes";
   }
 
   static bool is_float_vs_char(const exprt &a, const exprt &b)
@@ -416,8 +450,10 @@ private:
 
   static const std::map<std::string, std::string> &consensus_func_to_type()
   {
+    // hash() -> bytes (Bytes32), matching models/consensus.py's real
+    // signature -- not the real Python builtin's int.
     static const std::map<std::string, std::string> func_to_type = {
-      {"hash", "uint256"}};
+      {"hash", "bytes"}};
     return func_to_type;
   }
 };

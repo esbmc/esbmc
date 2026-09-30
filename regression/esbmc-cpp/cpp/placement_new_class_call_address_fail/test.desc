@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^VERIFICATION FAILED$
+^\s+assertion reinterpret_cast<C \*>\(buf\)->v != 5$

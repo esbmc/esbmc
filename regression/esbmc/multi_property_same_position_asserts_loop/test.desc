@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 4 --multi-property
+^\s+PASSED\s+\[main\.array-bounds-violated\.\d+\]\s+line\s+13\s+array bounds violated: array `a' upper bound \[\([^)]*\)i < 4\]$
+^\s+FAILED\s+\[main\.array-bounds-violated\.\d+\]\s+line\s+13\s+array bounds violated: array `a' upper bound \[\([^)]*\)j < 4\]$
+^\*\* 1 of 2 properties failed, 1 passed$

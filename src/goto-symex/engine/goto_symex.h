@@ -338,6 +338,13 @@ protected:
    */
   void symex_assert();
 
+public:
+  /// The message of the claim an ASSERT instruction raises for itself, as
+  /// opposed to a check symex raises while evaluating its guard.
+  static std::string
+  assertion_message(const namespacet &ns, const goto_programt::instructiont &i);
+
+protected:
   /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
@@ -422,6 +429,14 @@ protected:
   void merge_value_sets(const statet::merge_statet &merge_state);
 
   void merge_locality(const statet::merge_statet &merge_state);
+
+  /** Record the online interval domain in a path being parked, so
+   *  merge_interval_domain can join it back in (#8047). */
+  void snapshot_interval_domain(statet::merge_statet &merge_state);
+
+  /** Join a parked path's interval domain into the shared one; a path parked
+   *  without a snapshot sends the domain to top. */
+  void merge_interval_domain(const statet::merge_statet &merge_state);
 
   /**
    *  Join a previous jump's merge snapshot into the active thread state.
