@@ -16,6 +16,53 @@
 #include <util/irep/std_types.h>
 #include <algorithm>
 
+/* The array whose elements hold @p object's bytes, or nil. The SMT layer
+ * cannot byte-address an array; one of single bytes the simplifier turns into
+ * element reads, any other has to be indexed down to the element. */
+static const array_type2t *multibyte_array(const expr2tc &object)
+{
+  if (!is_array_type(object))
+    return nullptr;
+  const array_type2t &arr = to_array_type(object->type);
+  return type_byte_size_bits(arr.subtype) == 8 ? nullptr : &arr;
+}
+
+/** Byte @p offset of @p object. */
+static expr2tc
+object_byte(const expr2tc &object, uint64_t offset, bool big_endian)
+{
+  const array_type2t *arr = multibyte_array(object);
+  if (!arr)
+    return byte_extract2tc(
+      get_uint8_type(), object, gen_ulong(offset), big_endian);
+  const uint64_t size = type_byte_size(arr->subtype).to_uint64();
+  return object_byte(
+    index2tc(arr->subtype, object, gen_ulong(offset / size)),
+    offset % size,
+    big_endian);
+}
+
+/** @p object with byte @p offset replaced by @p byte. */
+static expr2tc update_object_byte(
+  const expr2tc &object,
+  uint64_t offset,
+  const expr2tc &byte,
+  bool big_endian)
+{
+  const array_type2t *arr = multibyte_array(object);
+  if (!arr)
+    return byte_update2tc(
+      object->type, object, gen_ulong(offset), byte, big_endian);
+  const uint64_t size = type_byte_size(arr->subtype).to_uint64();
+  const expr2tc index = gen_ulong(offset / size);
+  return with2tc(
+    object->type,
+    object,
+    index,
+    update_object_byte(
+      index2tc(arr->subtype, object, index), offset % size, byte, big_endian));
+}
+
 // Computes the equivalent object value when considering a memset operation on
 // it
 static inline expr2tc gen_byte_expression_byte_update(
@@ -752,14 +799,11 @@ bool goto_symext::memcpy_symbolic_length(
   expr2tc res = dst_obj;
   for (uint64_t i = 0; i < nbytes; ++i)
   {
-    expr2tc src_byte =
-      byte_extract2tc(byte_t, src_obj, gen_ulong(src_off + i), be);
-    expr2tc dst_byte =
-      byte_extract2tc(byte_t, dst_obj, gen_ulong(dst_off + i), be);
+    expr2tc src_byte = object_byte(src_obj, src_off + i, be);
+    expr2tc dst_byte = object_byte(dst_obj, dst_off + i, be);
     expr2tc within = lessthan2tc(constant_int2tc(n_t, BigInt(i)), n_arg);
     expr2tc new_byte = if2tc(byte_t, within, src_byte, dst_byte);
-    res =
-      byte_update2tc(dst_obj->type, res, gen_ulong(dst_off + i), new_byte, be);
+    res = update_object_byte(res, dst_off + i, new_byte, be);
   }
 
   symex_assign(code_assign2tc(dst_obj, res), false, cur_state->guard);
@@ -1203,7 +1247,6 @@ void goto_symext::intrinsic_memcmp(
   //         ite(active[1] && ..., ..., 0))
   // where active[i] is (i < n) for symbolic n, or always-true for constant n.
   // No loop is emitted, so nothing unwinds.
-  const type2tc byte_t = get_uint_type(8);
   const type2tc int_t = signedbv_type2tc(config.ansi_c.int_width);
   const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
   const type2tc n_t = n_arg->type;
@@ -1211,10 +1254,8 @@ void goto_symext::intrinsic_memcmp(
   expr2tc res = gen_zero(int_t);
   for (long i = (long)nbytes - 1; i >= 0; --i)
   {
-    expr2tc b1 =
-      byte_extract2tc(byte_t, obj1, gen_ulong(off1 + (uint64_t)i), be);
-    expr2tc b2 =
-      byte_extract2tc(byte_t, obj2, gen_ulong(off2 + (uint64_t)i), be);
+    expr2tc b1 = object_byte(obj1, off1 + (uint64_t)i, be);
+    expr2tc b2 = object_byte(obj2, off2 + (uint64_t)i, be);
     expr2tc diff =
       sub2tc(int_t, typecast2tc(int_t, b1), typecast2tc(int_t, b2));
     expr2tc differs = notequal2tc(b1, b2);
@@ -1392,11 +1433,8 @@ void goto_symext::intrinsic_memchr(
     expr2tc result = null_result;
     for (unsigned long k = number_of_bytes; k-- > 0;)
     {
-      expr2tc byte = byte_extract2tc(
-        get_uint_type(8),
-        item_object,
-        gen_ulong(number_of_offset + k),
-        is_big_endian);
+      expr2tc byte =
+        object_byte(item_object, number_of_offset + k, is_big_endian);
       expr2tc match = equality2tc(byte, ch_byte);
       expr2tc hit = add2tc(ret_type, buf_arg, gen_ulong(k));
       result = if2tc(ret_type, match, hit, result);

@@ -2059,3 +2059,4 @@ regression/esbmc/big_endian_union_short_member
 regression/esbmc/big_endian_struct_byte_access
 regression/esbmc/big_endian_union_trace_fail
 regression/esbmc/github_571_1
+regression/esbmc/mem_intrinsics_multibyte_array
