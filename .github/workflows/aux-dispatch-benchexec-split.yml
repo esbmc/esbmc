@@ -1,0 +1,234 @@
+name: Dispatch Benchexec Split Full Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: 'Timeout for each benchmark (in seconds)'
+        required: true
+        default: '30'
+      options:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: ''
+      output:
+        description: 'File output name (to keep the logs)'
+        required: false
+        default: ''
+      svbenchmarks:
+        description: 'Git branch, tag, or commit of SV-Benchmarks to use'
+        required: true
+        default: 'main'
+      validate:
+        description: "Run witness validation after benchexec"
+        required: true
+        type: boolean
+      validator:
+        type: choice
+        description: "Witness validator to use (only used when validate is enabled)"
+        options:
+        - CPAChecker
+        - ESBMC
+      witness:
+        type: choice
+        description: "Witness run mode (only used when validate is enabled)"
+        options:
+        - Full
+        - Correctness
+        - Violation
+
+# Permissions needed to dispatch runs and download artifacts
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-and-merge:
+    runs-on: ubuntu-slim
+    timeout-minutes: 12000
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          path: esbmc-src
+
+      - name: Compute task list
+        id: compute_tasks
+        run: |
+          python3 ./esbmc-src/scripts/competitions/svcomp/split_full_run.py --list > tasks.txt
+          echo "tasks=$(cat tasks.txt | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+          echo "Count: $(wc -l < tasks.txt) tasks"
+
+      - name: Dispatch 49 runs
+        id: dispatch_runs
+        run: |
+          # Record orchestrator run ID for attribution
+          ORCHESTRATOR_RUN_ID=${{ github.run_id }}
+          
+          # Clear previous run IDs file
+          > run_ids.txt
+          
+          # Dispatch one run per task
+          while IFS= read -r task; do
+            echo "Dispatching task: $task"
+            gh workflow run dispatch-benchexec.yml \
+              -f mode=Task \
+              -f task="$task" \
+              -f timeout="${{ inputs.timeout }}" \
+              -f options="${{ inputs.options }}" \
+              -f svbenchmarks="${{ inputs.svbenchmarks }}" \
+              -f validate="${{ inputs.validate }}" \
+              -f validator="${{ inputs.validator }}" \
+              -f witness="${{ inputs.witness }}" \
+              -f output="split-$ORCHESTRATOR_RUN_ID"
+            
+            # Immediately after dispatch, record the run ID
+            # Use createdAt filter to avoid picking up older runs
+            sleep 2  # Give API time to register the run
+            run_id=$(gh run list \
+              --workflow dispatch-benchexec.yml \
+              --json databaseId,createdAt \
+              --jq '.[] | select(.createdAt > "2025-01-01") | select(.databaseId | tostring) | .databaseId' \
+              --jq 'first')
+            
+            if [ -n "$run_id" ]; then
+              echo "$run_id" >> run_ids.txt
+              echo "Recorded run ID: $run_id for task: $task"
+            fi
+          done < tasks.txt
+          
+          echo "Dispatched $(wc -l < run_ids.txt) runs"
+
+      - name: Poll all runs
+        id: poll_runs
+        run: |
+          FAILED_RUNS=""
+          for run_id in $(cat run_ids.txt); do
+            echo "Polling run: $run_id"
+            # Poll with timeout; exit code 1 means failure
+            if ! gh run watch "$run_id" --exit-status; then
+              # Run failed or timed out, continue polling others
+              echo "Run $run_id did not complete successfully"
+              FAILED_RUNS="$FAILED_RUNS $run_id"
+            fi
+          done
+          
+          # Record failure status
+          if [ -n "$FAILED_RUNS" ]; then
+            echo "failed=1" >> $GITHUB_OUTPUT
+            echo "failed_runs=$FAILED_RUNS" >> $GITHUB_OUTPUT
+          else
+            echo "failed=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        if: ${{ steps.poll_runs.outputs.failed != '1' }}
+        id: download_artifacts
+        run: |
+          mkdir -p shards
+          
+          for run_id in $(cat run_ids.txt); do
+            echo "Downloading artifacts for run: $run_id"
+            
+            # Download esbmc-result
+            mkdir -p shards/$run_id
+            gh run download "$run_id" \
+              --name esbmc-result \
+              --dir shards/$run_id \
+              --pattern output.zip || true
+            
+            # Download witness-result if validation was enabled
+            if [ "${{ inputs.validate }}" == "true" ]; then
+              gh run download "$run_id" \
+                --name witness-result \
+                --dir shards/$run_id \
+                --pattern witness-output.zip || true
+            fi
+          done
+          
+          echo "Downloaded artifacts for $(ls -d shards/*/ 2>/dev/null | wc -l) runs"
+
+      - name: Merge results
+        if: ${{ steps.poll_runs.outputs.failed != '1' }}
+        id: merge_results
+        run: |
+          # Create merged output directory
+          mkdir -p merged/esbmc-output
+          mkdir -p merged/witness-output
+          
+          # Extract all shard output.zip files and collect indirs
+          for run_id in $(cat run_ids.txt); do
+            if [ -f shards/$run_id/output.zip ]; then
+              unzip -o shards/$run_id/output.zip -d merged/esbmc-output
+            fi
+            if [ "${{ inputs.validate }}" == "true" ] && [ -f shards/$run_id/witness-output.zip ]; then
+              unzip -o shards/$run_id/witness-output.zip -d merged/witness-output
+            fi
+          done
+          
+          # Run merge script
+          python3 ./esbmc-src/scripts/competitions/svcomp/split_full_run.py \
+            --merge merged/esbmc-output merged/esbmc-output
+        
+          # Create final output.zip
+          cd merged/esbmc-output
+          zip -r $HOME/esbmc-result.zip output
+          cd $HOME
+          mv $HOME/esbmc-result.zip esbmc-result.zip
+          
+          # Same for witness if enabled
+          if [ "${{ inputs.validate }}" == "true" ]; then
+            cd merged/witness-output
+            zip -r $HOME/witness-result.zip output
+            cd $HOME
+            mv $HOME/witness-result.zip witness-result.zip
+          fi
+          
+          echo "Merged results complete"
+
+      - name: Show summary (ESBMC)
+        if: ${{ steps.poll_runs.outputs.failed != '1' }}
+        run: |
+          tail -v merged/esbmc-output/*results*.txt || echo "No summary files found"
+
+      - name: Show the marginal band (ESBMC)
+        if: ${{ steps.poll_runs.outputs.failed != '1' }}
+        continue-on-error: true
+        run: |
+          python3 ./esbmc-src/scripts/competitions/svcomp/marginal_timeouts.py \
+            merged/esbmc-output/*results*.xml.bz2 || echo "Marginal timeouts check skipped"
+
+      - name: Show validation summary
+        if: ${{ inputs.validate == true && steps.poll_runs.outputs.failed != '1' }}
+        run: |
+          tail -v merged/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==' || echo "No validation summary found"
+
+      - name: Upload merged artifact (ESBMC)
+        if: ${{ steps.poll_runs.outputs.failed != '1' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: esbmc-result
+          path: esbmc-result.zip
+
+      - name: Upload merged artifact (Witness)
+        if: ${{ inputs.validate == true && steps.poll_runs.outputs.failed != '1' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: witness-result
+          path: witness-result.zip
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Clean up large intermediate files
+          rm -rf merged shards output.zip 2>/dev/null || true
+          echo "Cleanup complete"
+
+      - name: Fail on shard failures
+        if: ${{ steps.poll_runs.outputs.failed == '1' }}
+        run: |
+          echo "One or more shard runs failed:"
+          echo "${{ steps.poll_runs.outputs.failed_runs }}"
+          exit 1

@@ -503,6 +503,15 @@ unrelated branch settles it.
 `VERIFICATION FAILED` followed by `Unknown` is `esbmc-wrapper.py` failing to
 classify the output, not ESBMC failing to find the bug.
 
+**Split full runs.** Full runs can be split into 49 task-level runs via
+`.github/workflows/aux-dispatch-benchexec-split.yml`. Each shard runs and
+validates independently; the orchestrator downloads all `esbmc-result` and
+`witness-result` artifacts, merges them back into a single `esbmc-result` and
+`witness-result` artifact (same structure as a single full run), and uploads
+them. The merged artifact is byte-shape-compatible with what a full run produces,
+so `compare-runs.sh` and artifact-download commands work unchanged.
+Per-shard artifacts remain on the individual runs for log inspection.
+
 **Changing what ESBMC prints is an interface change.** `parse_result()` in
 `scripts/competitions/svcomp/esbmc-wrapper.py` classifies each task by matching
 substrings of ESBMC's output, so a PR that adds, renames, or reformats a verdict
