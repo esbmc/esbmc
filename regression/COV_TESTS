@@ -2079,3 +2079,5 @@ regression/esbmc/vector_union_bytes
 regression/esbmc/vector_union_bytes_fail
 regression/esbmc/vector_struct_array
 regression/esbmc/vector_struct_array_fail
+regression/esbmc/calloc_force_malloc_success
+regression/esbmc/calloc_force_malloc_success_sv_comp_fail
