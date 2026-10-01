@@ -74,8 +74,8 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   return memcmp(a, b, size) == 0;
 }
 
-// Default maximum nesting depth to prevent state explosion during symbolic execution.
-// This can be overridden via --python-list-compare-depth option.
+// Default maximum nesting depth to prevent state explosion during symbolic
+// execution. This can be overridden via --python-list-compare-depth option.
 #define __ESBMC_LIST_DEFAULT_DEPTH 4
 
 // Maximum physical stack size for list comparison (prevents buffer overflow).
@@ -277,7 +277,8 @@ bool __ESBMC_list_push_object(
   assert(o != NULL);
   // For float elements, read from the global float_buf array via a local temp.
   // This avoids the expired-pointer issue of loop-scoped $list_elem symbols,
-  // and the local temp ensures the pointer is "fresh" (not stored void*) in --ir.
+  // and the local temp ensures the pointer is "fresh" (not stored void*) in
+  // --ir.
   if (o->size == 8 && float_type_id != 0 && o->type_id == float_type_id)
   {
     double temp = __ESBMC_float_buf[o->float_idx];
@@ -309,11 +310,11 @@ bool __ESBMC_list_push_object(
 // two lists sharing a scalar buffer would alias. Scalars therefore keep the
 // independent byte-copy via __ESBMC_list_push_object.
 // Size-aware core: elem_size is the statically-known scalar element byte size
-// (0 if unknown). When known, the scalar copy goes straight to __ESBMC_list_push
-// with the constant size, so __ESBMC_copy_value takes its branch-free fast path
-// instead of the symbolic o->size memcpy loop. elem_size == 0 reproduces the
-// original behaviour exactly (copy o->size bytes), so a missing size is never
-// wrong.
+// (0 if unknown). When known, the scalar copy goes straight to
+// __ESBMC_list_push with the constant size, so __ESBMC_copy_value takes its
+// branch-free fast path instead of the symbolic o->size memcpy loop. elem_size
+// == 0 reproduces the original behaviour exactly (copy o->size bytes), so a
+// missing size is never wrong.
 static bool __ESBMC_list_push_shallow_sz(
   PyListObject *l,
   PyObject *o,
@@ -515,7 +516,8 @@ bool __ESBMC_list_eq(
       if ((size_t)top >= depth_limit)
       {
         // List depth unwinding assertion: similar to loop unwinding assertions.
-        // If this fires, increase depth with --python-list-compare-depth option.
+        // If this fires, increase depth with --python-list-compare-depth
+        // option.
         __ESBMC_assert(
           0,
           "list comparison depth limit exceeded "

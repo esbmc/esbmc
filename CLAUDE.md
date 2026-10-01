@@ -184,7 +184,7 @@ Before implementing any feature or bug fix, always work on a dedicated branch:
 
 ## Code Style
 
-- **C++**: Clang-format (Clang 11), Allman braces, 80-col limit, 2-space indent,
+- **C++**: clang-format 23, Allman braces, 80-col limit, 2-space indent,
   no tabs. Config in `.clang-format`.
 - **Python**: YAPF, PEP 8 based, 100-col limit. Config in `.style.yapf`.
 - Prefer modern C++ idioms (C++11+). Use const-correctness throughout. Prefer

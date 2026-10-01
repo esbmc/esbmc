@@ -154,7 +154,6 @@ public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-
   std::string variable;
   std::string value;
 };
@@ -198,4 +197,4 @@ class jimple_throw : public jimple_statement
   std::shared_ptr<jimple_expr> expr;
 };
 
-#endif //ESBMC_JIMPLE_STATEMENT_H
+#endif // ESBMC_JIMPLE_STATEMENT_H

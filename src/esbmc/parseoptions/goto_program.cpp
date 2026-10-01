@@ -450,25 +450,27 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   file_operations::tmp_file tf =
     file_operations::create_tmp_file("esbmc-cprover-%%%%-%%%%-%%%%.c");
   // Taking the addresses of the bodied libc functions marks them referenced, so
-  // add_cprover_library links their operational-model bodies into the additions;
-  // link_cbmc_libc_bodies then bridges the CBMC binary's plain-named bodyless
-  // declarations to them. Unlike sqrt/fabs (operators rewritten in cbmc_adapter)
-  // these have no ESBMC expression form and must run the C library body -- that
-  // includes the string.h query functions (strlen/strcmp/strncmp), whose bodies
-  // are byte loops. Referencing memcpy/memmove/memset/memcmp additionally
-  // force-links string.c, whose bodies pull in
+  // add_cprover_library links their operational-model bodies into the
+  // additions; link_cbmc_libc_bodies then bridges the CBMC binary's plain-named
+  // bodyless declarations to them. Unlike sqrt/fabs (operators rewritten in
+  // cbmc_adapter) these have no ESBMC expression form and must run the C
+  // library body -- that includes the string.h query functions
+  // (strlen/strcmp/strncmp), whose bodies are byte loops. Referencing
+  // memcpy/memmove/memset/memcmp additionally force-links string.c, whose
+  // bodies pull in
   // __memcpy_impl/__memmove_impl/__memset_impl/__memcmp_impl -- the byte-loop
   // fallbacks intrinsic_memcpy/memmove/memset/memcmp bump to when a size or
   // pointer is symbolic (and, for memmove, when the regions overlap). The
-  // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight to
-  // the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl
-  // bodies present for the bump path, so the boilerplate must link them here.
-  // The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the same
-  // bodyless-external shape; their ctype.c bodies are straight-line (no unwind).
-  // The <stdlib.h> string-to-integer parsers atoi/atol/strtol likewise bridge
-  // to stdlib.c bodies -- these are byte loops, so they need `--unwind` like the
-  // string.h family. CBMC 6.8.0 models atoi/atol/strtol but not atoll/strtoll,
-  // which stay bodyless (their nondet return already matches CBMC's verdict).
+  // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight
+  // to the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the
+  // *_impl bodies present for the bump path, so the boilerplate must link them
+  // here. The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the
+  // same bodyless-external shape; their ctype.c bodies are straight-line (no
+  // unwind). The <stdlib.h> string-to-integer parsers atoi/atol/strtol likewise
+  // bridge to stdlib.c bodies -- these are byte loops, so they need `--unwind`
+  // like the string.h family. CBMC 6.8.0 models atoi/atol/strtol but not
+  // atoll/strtoll, which stay bodyless (their nondet return already matches
+  // CBMC's verdict).
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"

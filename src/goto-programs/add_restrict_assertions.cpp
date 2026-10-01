@@ -22,9 +22,9 @@ struct restrict_paramt
 
 // Byte size of one pointed-to element. Incomplete/opaque (symbolic), function,
 // and dynamically/infinitely sized subtypes have no concrete size computable
-// here — sizing them would abort or throw — so fall back to one byte. That keeps
-// the overlap test a sound under-approximation (it may miss some overlaps, never
-// invent one).
+// here — sizing them would abort or throw — so fall back to one byte. That
+// keeps the overlap test a sound under-approximation (it may miss some
+// overlaps, never invent one).
 static BigInt element_size(const type2tc &pointer_type, const namespacet &ns)
 {
   const type2tc &subtype = to_pointer_type(pointer_type).subtype;
@@ -70,9 +70,9 @@ collect_restrict_params(const symbolt &func_symbol, const namespacet &ns)
   return params;
 }
 
-// Build the disjointness assertion for a pair of restrict pointers. The pointers
-// alias illegally when both designate an object (are non-null), point into the
-// same object, and their element footprints overlap:
+// Build the disjointness assertion for a pair of restrict pointers. The
+// pointers alias illegally when both designate an object (are non-null), point
+// into the same object, and their element footprints overlap:
 //   !(a != NULL && b != NULL && same_object(a,b) &&
 //     [oa, oa+sa) overlaps [ob, ob+sb))
 // The non-null guard avoids a false alarm on unused/null parameters, which
