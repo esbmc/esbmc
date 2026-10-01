@@ -21,8 +21,8 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Partial | Concrete array/view/descriptor returns from supported constructors, bare parameters, parameter subscript/subarrays, and supported descriptor calls over parameters are implemented. Remaining gap: `array_return_call_arg_edge` is still pinned as `KNOWNBUG`; mutating a captured list/array inside a function without a `global` declaration is a pre-existing symbol-resolution gap, not specific to array returns. Genuinely symbolic parameter shapes are rejected when unsupported metadata/view consumers need concrete shape information; `len()` on such parameters remains supported through its independent path. |
-| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases fixed-shape 1-D/2-D views through frontend view metadata. Implemented consumers include literal 1-D slices (unit stride, step != 1, and reversed), 2-D row/column views, `diagonal`, `trace`, `fill_diagonal`, `ravel`/`.flat`, 2-D transpose (`np.transpose`, `.T`, `.transpose()`, `swapaxes`, `moveaxis`), contiguous `reshape` rank 1/2, `squeeze`, `expand_dims`, read-only `broadcast_to`, basic single-operand `nditer`, explicit descriptor materialization (`np.copy`, `view.copy`, `np.array(view)`, including empty descriptors), descriptor `tolist()` rank 1/2, and flattened descriptor reducers (`sum`, `mean`, `min`, `max`, `view.any()`, `view.all()`). Literal-index writes are mirrored across sibling 1-D/2-D descriptor views; non-constant view writes are rejected explicitly. Remaining gaps are 3-D+ view aliasing, symbolic shapes/axes/bounds, non-literal descriptor mutation, non-contiguous reshape beyond the explicit recut, advanced `nditer`, descriptor escape through unknown calls/containers/returns, and making `ndarray_descriptor` itself the consulted runtime structure rather than auxiliary frontend maps. |
-| Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
+| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases fixed-shape 1-D/2-D views through frontend view metadata, and the current branch extends selected fixed-shape rank 3/4 recuts. Implemented consumers include literal 1-D slices (unit stride, step != 1, and reversed), 2-D row/column views, rank-3 subarray row views with aliasing, chained rank-3 subarray writes, rank-3 descriptor `tolist()`, `diagonal`, `trace`, `fill_diagonal`, `ravel`/`.flat`, 2-D transpose (`np.transpose`, `.T`, `.transpose()`), fixed-shape rank-3 `transpose`/`swapaxes`/`moveaxis` materialization, contiguous `reshape` rank 1/2/3, `squeeze`, `expand_dims`, read-only `broadcast_to`, basic single-operand `nditer`, explicit descriptor materialization (`np.copy`, `view.copy`, `np.array(view)`, including empty descriptors), descriptor `tolist()` rank 1/2/3, and flattened descriptor reducers (`sum`, `mean`, `min`, `max`, `view.any()`, `view.all()`). Literal-index writes are mirrored across sibling 1-D/2-D descriptor views; rank-3 subarray writes alias through pointer views where supported. Remaining gaps are full 3-D+ descriptor aliasing for every view producer, symbolic shapes/axes, non-literal descriptor mutation, non-contiguous reshape beyond the explicit recut, advanced `nditer`, descriptor escape through unknown calls/containers/returns, and making `ndarray_descriptor` itself the consulted runtime structure rather than auxiliary frontend maps. |
+| Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Partial | Literal/fixed-shape cases such as bounded 2-D column slices, one-/two-slice-axis mixed tuple indexing, and selected 3-D mixed tuple slice shapes are supported. Symbolic positive and negative 1-D slice bounds are normalized for non-empty slices. Remaining gaps: symbolic empty slices still require a separate logical length from the physical VLA allocation, symbolic/non-literal strides are rejected, three or more slice axes remain outside the current recut, and broader stride combinations are incomplete. |
 
 ---
 
@@ -37,7 +37,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
 | Structured arrays | Record dtypes. |
-| Views / strides | Higher-rank (3-D+) view aliasing, symbolic/non-literal-stride slices, symbolic shape/axis handling, non-literal descriptor mutation, advanced descriptor escape handling, and replacing frontend-only maps with a fully consulted `ndarray_descriptor` runtime model. |
+| Views / strides | Full higher-rank descriptor aliasing beyond the selected rank-3 subarray paths, symbolic empty slice logical lengths, symbolic/non-literal-stride slices, symbolic shape/axis handling, non-literal descriptor mutation, advanced descriptor escape handling, and replacing frontend-only maps with a fully consulted `ndarray_descriptor` runtime model. |
 | Iteration | Advanced `nditer` flags/options, multi-operand iteration, `external_loop`, `multi_index`, buffering, non-C order, casting/op_dtypes/op_axes, and broader mutable item forms. |
 
 ---
@@ -53,10 +53,11 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    conceptually simple.
 4. **Descriptor views still rely on frontend maps instead of one runtime
    descriptor abstraction.** The implemented 1-D/2-D literal-index paths
-   propagate writes across tracked sibling views, and unsupported non-literal
-   writes reject explicitly; 3-D+, symbolic shape/axis/bound cases, broad
-   escape handling, and advanced iterator/method semantics remain
-   intentionally incomplete.
+   propagate writes across tracked sibling views, and selected rank-3 subarray
+   paths alias through pointer views; unsupported non-literal writes reject
+   explicitly. Full 3-D+ descriptor aliasing, symbolic shapes/axes, symbolic
+   empty-slice logical lengths, broad escape handling, and advanced
+   iterator/method semantics remain intentionally incomplete.
 ---
 
 ## Community testing readiness
@@ -90,11 +91,12 @@ behavior. **A build can be cut for community testing from here.**
 Nothing below blocks community testing (see above); this is post-release
 backlog, in priority order:
 
-1. **3-D+ and symbolic view descriptors (ADR-NP-003 etapa 3)** — extend the
-   fixed-shape rank 1/2 descriptor model to higher ranks, symbolic
-   shapes/axes/bounds, and broader stride combinations.
-2. **Symbolic and broader multi-axis slicing** — support cases beyond the
-   literal/fixed-shape recuts.
+1. **Finish descriptor-backed 3-D+ views (ADR-NP-003 etapa 3)** — replace the
+   selected rank-3/4 recuts with one runtime-consulted descriptor path for all
+   supported producers and consumers.
+2. **Symbolic and broader multi-axis slicing** — add symbolic empty-slice
+   logical lengths, symbolic/non-literal strides, and broader 3-D+ multi-axis
+   slicing beyond the currently supported literal recuts.
 3. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
 4. **Random and iteration depth** — probability/replacement `choice`, extra
@@ -110,9 +112,10 @@ Each roadmap item above groups several sub-efforts; sizing them 1 PR per
 item undercounts the real work. Items below with multiple named consumers or
 distinct designs are sized accordingly instead of assumed to be one PR each.
 
-1. **3-D+ / symbolic view descriptors** (~2 PRs) — extend the rank 1/2
-   fixed-shape descriptor model to higher ranks, symbolic axes/bounds/shapes,
-   and broader non-literal stride combinations.
+1. **Complete 3-D+ / symbolic view descriptors** (~2 PRs) — finish the
+   descriptor-backed runtime path for all view producers/consumers, symbolic
+   axes/shapes, symbolic empty-slice lengths, and non-literal stride
+   combinations.
 2. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.
@@ -121,7 +124,7 @@ distinct designs are sized accordingly instead of assumed to be one PR each.
 4. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
    separate from fuller `eig`/`svd`/`norm`.
 
-**Total to close every item in this file: ~7 PRs.**
+**Total to close every item in this file: ~6 PRs.**
 
 ---
 
