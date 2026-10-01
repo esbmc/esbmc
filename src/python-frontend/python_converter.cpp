@@ -149,7 +149,8 @@ static void add_global_static_variable(
 void python_converter::load_c_intrisics(code_blockt &)
 {
   // Add symbols required by the C models
-  // __ESBMC_rounding_mode is pulled in indirectly via fesetround in cprover_library.cpp
+  // __ESBMC_rounding_mode is pulled in indirectly via fesetround in
+  // cprover_library.cpp
 
   auto type1 = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
@@ -236,8 +237,8 @@ void python_converter::create_builtin_symbols()
 
 // Module name for an Import/ImportFrom AST node. For a relative import with no
 // module name (`from . import X` / `from .. import X`), ImportFrom.module is
-// null; return "" so the import is treated as unresolved rather than crashing on
-// a null-to-std::string conversion (nlohmann type_error, #6281). A relative
+// null; return "" so the import is treated as unresolved rather than crashing
+// on a null-to-std::string conversion (nlohmann type_error, #6281). A relative
 // import that names a module (`from ..pkg import X`) carries the plain name and
 // is handled as before.
 static std::string import_module_name(const nlohmann::json &node)
@@ -981,7 +982,8 @@ void python_converter::convert()
   }
 
   /*
-   * Create three-function architecture for coverage support (similar to Solidity Frontend):
+   * Create three-function architecture for coverage support (similar to
+   * Solidity Frontend):
    *
    * 1. python_init
    *    - Contains models, intrinsics, and imports initialization

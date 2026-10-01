@@ -1,0 +1,7 @@
+properties:
+  # T0.Q sets x once a has been held for PT, and x drives q. Dropping the wire
+  # leaves x at FALSE, so this would hold; the wire must be refused instead.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Deliberately false: the timer sets x, which drives q"

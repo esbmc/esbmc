@@ -32,7 +32,8 @@ TEST_CASE(
 
   optionst options;
   options.set_option("interval-analysis-arithmetic", false);
-  // symex_assign sets this to true before calling set_options when feature is active
+  // symex_assign sets this to true before calling set_options when feature is
+  // active
   options.set_option("interval-symex-guard", true);
   // Supply defaults for all other options referenced by set_options
   options.set_option("interval-analysis-bitwise", false);

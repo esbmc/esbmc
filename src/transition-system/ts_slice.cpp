@@ -18,8 +18,7 @@ void slice_transition_system(transition_systemt &ts)
   std::unordered_set<expr2tc, irep2_hash> needed;
   std::unordered_set<const expr2t *> visited;
   std::vector<expr2tc> work;
-  auto need = [&](const expr2tc &e)
-  {
+  auto need = [&](const expr2tc &e) {
     std::unordered_set<expr2tc, irep2_hash> syms;
     collect_symbols(e, syms, visited);
     for (const auto &s : syms)
@@ -52,14 +51,14 @@ void slice_transition_system(transition_systemt &ts)
     }
   }
 
-  auto keep_defs = [&](std::vector<expr2tc> &defs)
-  {
+  auto keep_defs = [&](std::vector<expr2tc> &defs) {
     defs.erase(
       std::remove_if(
         defs.begin(),
         defs.end(),
-        [&](const expr2tc &e)
-        { return !needed.count(to_equality2t(e).side_1); }),
+        [&](const expr2tc &e) {
+          return !needed.count(to_equality2t(e).side_1);
+        }),
       defs.end());
   };
   keep_defs(ts.prefix_defs);
@@ -75,7 +74,8 @@ void slice_transition_system(transition_systemt &ts)
     std::remove_if(
       ts.inputs.begin(),
       ts.inputs.end(),
-      [&](const std::pair<expr2tc, std::string> &in)
-      { return !needed.count(in.first); }),
+      [&](const std::pair<expr2tc, std::string> &in) {
+        return !needed.count(in.first);
+      }),
     ts.inputs.end());
 }

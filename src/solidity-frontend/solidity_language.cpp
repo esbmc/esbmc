@@ -393,8 +393,8 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
       s->set_value(std::move(val));
   }
 
-  if (c_link(
-        context, new_context, module)) // also populates language_uit::context
+  if (c_link(context, new_context, module)) // also populates
+                                            // language_uit::context
     return true;
 
   // Same census the C++ frontend takes, over one shared definition: it names

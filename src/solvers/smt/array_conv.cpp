@@ -28,9 +28,9 @@ array_convt::array_convt(smt_solver_baset *_ctx)
 void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
   // Implement array assignments by simply making the destination AST track the
-  // same array. No new variables need to be introduced, saving lots of searching
-  // hopefully. This works because we're working with an SSA program where the
-  // source array will never be modified.
+  // same array. No new variables need to be introduced, saving lots of
+  // searching hopefully. This works because we're working with an SSA program
+  // where the source array will never be modified.
 
   // Get a mutable reference to the destination
   array_ast *destination = const_cast<array_ast *>(array_downcast(sym));

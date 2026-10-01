@@ -113,7 +113,7 @@ public:
         total_claims(claims),
         remaining_claims(remain),
         simplified_claims(simplified),
-        bounded_loop_truncations(truncations){};
+        bounded_loop_truncations(truncations) {};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;

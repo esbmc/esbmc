@@ -70,7 +70,8 @@ static bool is_param_used_as_string(
 
   std::string body_type = body_node["_type"].get<std::string>();
 
-  // Check if param is in string concatenation: param + "string" or "string" + param
+  // Check if param is in string concatenation: param + "string" or "string" +
+  // param
   if (
     body_type == "BinOp" && body_node.contains("op") &&
     body_node["op"].contains("_type") && body_node["op"]["_type"] == "Add")
@@ -1017,7 +1018,8 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);
 
-  // Determine the scope for parameters: use first lambda's scope for all nested lambdas
+  // Determine the scope for parameters: use first lambda's scope for all nested
+  // lambdas
   std::string param_scope;
   if (in_lambda)
   {

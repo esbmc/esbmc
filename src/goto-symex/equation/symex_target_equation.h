@@ -5,7 +5,6 @@
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_program.h>
-#include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/symex_target.h>
 #include <list>
 #include <map>
@@ -108,35 +107,35 @@ public:
   {
   public:
     sourcet source;
-    goto_trace_stept::typet type;
+    symex_targett::step_typet type;
 
     bool is_assert() const
     {
-      return type == goto_trace_stept::ASSERT;
+      return type == symex_targett::ASSERT;
     }
     bool is_assume() const
     {
-      return type == goto_trace_stept::ASSUME;
+      return type == symex_targett::ASSUME;
     }
     bool is_assignment() const
     {
-      return type == goto_trace_stept::ASSIGNMENT;
+      return type == symex_targett::ASSIGNMENT;
     }
     bool is_output() const
     {
-      return type == goto_trace_stept::OUTPUT;
+      return type == symex_targett::OUTPUT;
     }
     bool is_renumber() const
     {
-      return type == goto_trace_stept::RENUMBER;
+      return type == symex_targett::RENUMBER;
     }
     bool is_skip() const
     {
-      return type == goto_trace_stept::SKIP;
+      return type == symex_targett::SKIP;
     }
     bool is_branching() const
     {
-      return type == goto_trace_stept::BREANCHING;
+      return type == symex_targett::BREANCHING;
     }
 
     expr2tc guard;

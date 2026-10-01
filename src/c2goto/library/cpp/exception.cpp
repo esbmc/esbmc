@@ -306,12 +306,12 @@ __ESBMC_HIDE:;
   terminate();
 }
 
-// Both forms are defined unconditionally: the OM library is compiled at a single
-// fixed standard (no --std flag), so a __cplusplus guard could omit a body that a
-// user program built at a different standard still references — the same
-// on-demand-linking gap that the set_unexpected/unexpected models hit. Providing
-// the entry points always is harmless: conformant code at the wrong standard
-// cannot name the form the standard removed, so it stays dead.
+// Both forms are defined unconditionally: the OM library is compiled at a
+// single fixed standard (no --std flag), so a __cplusplus guard could omit a
+// body that a user program built at a different standard still references — the
+// same on-demand-linking gap that the set_unexpected/unexpected models hit.
+// Providing the entry points always is harmless: conformant code at the wrong
+// standard cannot name the form the standard removed, so it stays dead.
 bool uncaught_exception() noexcept
 {
 __ESBMC_HIDE:;

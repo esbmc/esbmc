@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 3
+^VERIFICATION FAILED$
+^\s+assertion b->f\(\) == 5$

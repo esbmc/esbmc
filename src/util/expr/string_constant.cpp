@@ -48,8 +48,8 @@ static_assert(sizeof(mbstate_t) >= sizeof(uint32_t));
 #  define IS_SURR_HI(c) (((c) & ~SURR_VAL_MASK) == SURR_HI_MASK)
 #  define IS_SURR_LO(c) (((c) & ~SURR_VAL_MASK) == SURR_LO_MASK)
 #  define SURR_COMBINE(hi, lo)                                                 \
-    (((char32_t)(((hi)&SURR_VAL_MASK) << SURR_VAL_BITS) + UNI_PLANE_SZ) |      \
-     (char32_t)((lo)&SURR_VAL_MASK))
+    (((char32_t)(((hi) & SURR_VAL_MASK) << SURR_VAL_BITS) + UNI_PLANE_SZ) |    \
+     (char32_t)((lo) & SURR_VAL_MASK))
 
 /* Define the missing functions, statically, so once they choose to implement
  * them in their libc, we'll be notified and have to see about the version... */
@@ -139,16 +139,19 @@ struct convert_mb
   {
     assert(v.length() % w == 0);
     if (wide && sizeof(wchar_t) * 8 != config.ansi_c.wchar_t_width)
-      throw string_constantt::mb_conversion_error(fmt::format(
-        "error interpreting {} string literal: host and target wchar_t widths "
-        "differ: {} != {}",
-        desc(),
-        sizeof(wchar_t) * 8,
-        config.ansi_c.wchar_t_width));
+      throw string_constantt::mb_conversion_error(
+        fmt::format(
+          "error interpreting {} string literal: host and target wchar_t "
+          "widths "
+          "differ: {} != {}",
+          desc(),
+          sizeof(wchar_t) * 8,
+          config.ansi_c.wchar_t_width));
     if (config.ansi_c.endianess == configt::ansi_ct::NO_ENDIANESS)
-      throw string_constantt::mb_conversion_error(fmt::format(
-        "impossible to interpret {} string literal without endianness",
-        desc()));
+      throw string_constantt::mb_conversion_error(
+        fmt::format(
+          "impossible to interpret {} string literal without endianness",
+          desc()));
 
     memset(&ps, 0, sizeof(ps));
 
@@ -166,11 +169,12 @@ struct convert_mb
         uint32_t c = decode(i);
         size_t r = encode(buf, c);
         if (r == (size_t)-1)
-          throw string_constantt::mb_conversion_error(fmt::format(
-            "error interpreting {} string literal at {}: {}",
-            desc(),
-            i,
-            strerror(errno)));
+          throw string_constantt::mb_conversion_error(
+            fmt::format(
+              "error interpreting {} string literal at {}: {}",
+              desc(),
+              i,
+              strerror(errno)));
         result.insert(result.end(), buf, buf + r);
       }
     }
@@ -181,10 +185,11 @@ struct convert_mb
     }
 
     if (!mbsinit(&ps))
-      throw string_constantt::mb_conversion_error(fmt::format(
-        "error interpreting {} string literal: terminates with "
-        "incomplete sequence",
-        desc()));
+      throw string_constantt::mb_conversion_error(
+        fmt::format(
+          "error interpreting {} string literal: terminates with "
+          "incomplete sequence",
+          desc()));
   }
 
   std::string desc() const
@@ -238,16 +243,18 @@ static std::string convert_utf8(const std::string &v)
             : *p < 0xf8 ? 4 // 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
                         : 0;
     if (!n || e - p < n)
-      throw string_constantt::mb_conversion_error(fmt::format(
-        "error interpreting UTF-8 string literal: invalid sequence at {}",
-        p1 - p0));
+      throw string_constantt::mb_conversion_error(
+        fmt::format(
+          "error interpreting UTF-8 string literal: invalid sequence at {}",
+          p1 - p0));
     uint32_t c = *p++ & (0xff >> n);
     for (int i = 1; i < n; i++, p++)
     {
       if (*p < 0x80 || *p >= 0xc0)
-        throw string_constantt::mb_conversion_error(fmt::format(
-          "error interpreting UTF-8 string literal: invalid sequence at {}",
-          p1 - p0));
+        throw string_constantt::mb_conversion_error(
+          fmt::format(
+            "error interpreting UTF-8 string literal: invalid sequence at {}",
+            p1 - p0));
       c = (c << 6) | (*p & ~0xc0U);
     }
     char buf[4];

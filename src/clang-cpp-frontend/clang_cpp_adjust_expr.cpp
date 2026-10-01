@@ -43,11 +43,13 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   }
   code_blockt &ctor_body = to_code_block(to_code(value));
   /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
-   * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
-   * > by the compiler if odr-used or needed for constant evaluation(since C++11).
-   * > **For union types, the implicitly-defined copy constructor copies the object representation (as by std::memmove).**
-   * We don't call std::memmove here, we should be able to just assign the union.
-   * (The wording is similar for https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
+   * > If the implicitly-declared copy constructor is not deleted, it is defined
+   * (that is, a function body is generated and compiled) > by the compiler if
+   * odr-used or needed for constant evaluation(since C++11). > **For union
+   * types, the implicitly-defined copy constructor copies the object
+   * representation (as by std::memmove).** We don't call std::memmove here, we
+   * should be able to just assign the union. (The wording is similar for
+   * https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
    */
 
   code_assignt copy_ctor_assign;

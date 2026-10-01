@@ -726,8 +726,9 @@ std::optional<exprt> dispatch_split_method(
     {
       bool safe_boundary = true;
       std::string left_const;
-      if (string_handler::extract_constant_string(
-            binop["left"], converter, left_const))
+      if (
+        string_handler::extract_constant_string(
+          binop["left"], converter, left_const))
         safe_boundary = left_const.find(parsed.separator) == std::string::npos;
 
       if (safe_boundary)
@@ -1079,8 +1080,8 @@ static bool is_ascii_compatible_encoding_json(const nlohmann::json &node)
 
 // True for a strict ASCII encoding literal ("ascii"/"us-ascii"), which — unlike
 // utf-8 — cannot encode a non-ASCII character (CPython raises
-// UnicodeEncodeError). Callers that fold an encode round-trip must require ASCII
-// content when this holds.
+// UnicodeEncodeError). Callers that fold an encode round-trip must require
+// ASCII content when this holds.
 static bool is_strict_ascii_encoding_json(const nlohmann::json &node)
 {
   if (!(node.contains("_type") && node["_type"] == "Constant" &&
@@ -1196,8 +1197,9 @@ std::optional<exprt> dispatch_decode_join_method(
     std::vector<uint8_t> bytes;
     if (decode_utf8 && extract_constant_bytes(converter, receiver_json, bytes))
     {
-      if (std::all_of(
-            bytes.begin(), bytes.end(), [](uint8_t b) { return b < 0x80; }))
+      if (std::all_of(bytes.begin(), bytes.end(), [](uint8_t b) {
+            return b < 0x80;
+          }))
         return converter.get_string_builder().build_string_literal(
           std::string(bytes.begin(), bytes.end()));
     }

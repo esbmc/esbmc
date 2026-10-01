@@ -17,7 +17,7 @@
 #  define HOME_ENV_NAME "USERPROFILE"
 #  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
 #  include <windows.h>
-#  elifdef __APPLE__
+#elifdef __APPLE__
 #  define HOME_ENV_NAME "HOME"
 #  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
 #  include <sys/ttycom.h> // TIOCGWINSZ, struct winsize
@@ -212,7 +212,8 @@ std::optional<std::string> cmdlinet::get_config_file_location() const
   const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
   if (envloc)
   {
-    // Disabled Case: Check if empty string, in which case we don't return anything.
+    // Disabled Case: Check if empty string, in which case we don't return
+    // anything.
     const std::string envloc_str = std::string(envloc);
     if (envloc_str.empty())
       return std::nullopt;

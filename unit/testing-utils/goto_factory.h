@@ -17,7 +17,7 @@ public:
 /**
  * @brief This class parses C inputs
  * and generates goto-functions
- * 
+ *
  */
 class goto_factory
 {

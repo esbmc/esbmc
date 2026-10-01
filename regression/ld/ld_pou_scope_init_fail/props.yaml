@@ -1,0 +1,7 @@
+properties:
+  # The program's mode starts TRUE, so q is on in the first scan. Taking the
+  # FB's declaration of mode instead would start it FALSE and hide that.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Deliberately false: the program's mode starts TRUE"

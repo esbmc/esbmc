@@ -257,7 +257,8 @@ bool clang_c_maint::clang_main()
 
       for (int ai = 0; ai < max_args; ++ai)
       {
-        // Nondet length for this string (uninitialized static ⟹ nondet in symex).
+        // Nondet length for this string (uninitialized static ⟹ nondet in
+        // symex).
         std::string lname = "__ESBMC_argv_len_" + std::to_string(ai);
         symbolt len_sym;
         len_sym.name = irep_idt(lname);

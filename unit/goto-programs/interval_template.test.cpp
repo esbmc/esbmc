@@ -481,7 +481,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
     REQUIRE(over_meet.is_equal(A));
     REQUIRE(over_join.is_equal(B));
-    //REQUIRE(intersection.is_equal(A));
+    // REQUIRE(intersection.is_equal(A));
   }
 
   SECTION("Approx Union gets smallest gap")
@@ -553,7 +553,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     wrapped_interval check(t1_unsigned);
     check.lower = 10;
     check.upper = 100;
-    //REQUIRE(check.is_included(intersection));
+    // REQUIRE(check.is_included(intersection));
   }
 
   SECTION("Join/Meet when A do not overlap and B overlaps and no intersection")
@@ -573,7 +573,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
 
     // Intersection should be bottom
     auto intersection = wrapped_interval::intersection(A, B);
-    //REQUIRE(intersection.is_bottom());
+    // REQUIRE(intersection.is_bottom());
   }
 
   SECTION("Addition Unsigned")

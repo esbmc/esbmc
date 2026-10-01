@@ -35,7 +35,8 @@ public:
   LdAst parse(const std::string &path);
 
 private:
-  // Schema normalisation: absorb vendor-specific deviations before building AST.
+  // Schema normalisation: absorb vendor-specific deviations before building
+  // AST.
   void normalise(struct pugi_doc_wrapper &doc);
 
   VarKind var_kind_from_string(const std::string &type_str);

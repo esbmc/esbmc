@@ -15,6 +15,18 @@ class symex_targett
 public:
   virtual ~symex_targett() = default;
 
+  // The kind of an SSA step, and of the counterexample step built from it.
+  enum step_typet
+  {
+    ASSIGNMENT,
+    ASSUME,
+    ASSERT,
+    OUTPUT,
+    SKIP,
+    RENUMBER,
+    BREANCHING
+  };
+
   struct sourcet
   {
     unsigned thread_nr;

@@ -6,6 +6,7 @@ typedef struct { void *sub; int x; } Outer;
 
 void write_sub_a(Outer *o, int v)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(o, sizeof(*o)));
   __ESBMC_requires(o != (void *)0 && o->sub != (void *)0);
   __ESBMC_assigns(((Inner *)o->sub)->a);
   __ESBMC_ensures(1);

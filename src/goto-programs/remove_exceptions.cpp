@@ -134,8 +134,8 @@ public:
     // is unsound to even link on a frontend without the C++ exception OM, e.g.
     // Python). So enable the helpers only when the handled stack is actually
     // needed — the program references __ESBMC_current_exception_raw or contains
-    // a bare `throw;` — and their bodies are linked; otherwise the lowering uses
-    // its inline re-raise fallback, and a plain throw/catch program (no
+    // a bare `throw;` — and their bodies are linked; otherwise the lowering
+    // uses its inline re-raise fallback, and a plain throw/catch program (no
     // current_exception, no re-raise) pays no handled-stack overhead.
     if (
       program_calls(goto_functions, "c:@F@__ESBMC_current_exception_raw") ||
@@ -159,8 +159,8 @@ public:
     may_throw = compute_may_throw(call_graph, address_taken);
     entry_reachable_ = compute_entry_reachable(call_graph, address_taken);
 
-    // Single scan: teach the registry any exception hierarchy that lives only in
-    // THROW exception_lists (the Python frontend's classes have no `tag-`
+    // Single scan: teach the registry any exception hierarchy that lives only
+    // in THROW exception_lists (the Python frontend's classes have no `tag-`
     // symbol). Concurrency is sound here: the exception-state globals are
     // thread-local (see create_exception_state_symbols), so each thread raises,
     // catches and clears its own in-flight exception independently.
@@ -231,12 +231,12 @@ public:
     // entry but is *also* invoked through an indirect call elsewhere keeps
     // is_entry on that path too, so an exception the indirect caller would
     // catch is over-reported as a terminate. That needs call-site-sensitive
-    // enforcement at the pthread trampoline, which is blocked until thread-local
-    // state propagates across its indirect call.
-    // Only decline when an exception can actually escape a thread. A concurrent
-    // program that declares a noexcept spec but never throws or catches puts no
-    // exception in flight, so the thread-entry uncaught-escape check is moot and
-    // the program stays lowerable (lower_ip no-ops its exception-free bodies).
+    // enforcement at the pthread trampoline, which is blocked until
+    // thread-local state propagates across its indirect call. Only decline when
+    // an exception can actually escape a thread. A concurrent program that
+    // declares a noexcept spec but never throws or catches puts no exception in
+    // flight, so the thread-entry uncaught-escape check is moot and the program
+    // stays lowerable (lower_ip no-ops its exception-free bodies).
     if (program_throws_or_catches(goto_functions))
     {
       if (thread_entry_unresolved)
@@ -260,8 +260,9 @@ public:
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
     // then calls main / python_user_main), so an escaping exception always
-    // reaches it. Without it (e.g. --function isolated verification) an uncaught
-    // exception could be silently accepted, so report it as unsupported.
+    // reaches it. Without it (e.g. --function isolated verification) an
+    // uncaught exception could be silently accepted, so report it as
+    // unsupported.
     bool has_entry = false;
     for (const auto &fn : goto_functions.function_map)
       if (fn.first == "__ESBMC_main")
@@ -307,10 +308,10 @@ public:
 
   /// True if a function belongs to a linked operational model / library rather
   /// than user code. The C++ exception OM (library/cpp/exception.cpp) itself
-  /// uses throw/catch (std::terminate's try/catch, the rethrow helpers); linking
-  /// it pulls those constructs into every program's context, but they are not
-  /// *user* exception flow, so they must not count when deciding whether a
-  /// concurrent program can escape an exception out of a thread.
+  /// uses throw/catch (std::terminate's try/catch, the rethrow helpers);
+  /// linking it pulls those constructs into every program's context, but they
+  /// are not *user* exception flow, so they must not count when deciding
+  /// whether a concurrent program can escape an exception out of a thread.
   bool is_library_function(const irep_idt &name) const
   {
     const symbolt *s = ns.lookup(name);
@@ -354,7 +355,8 @@ public:
   }
 
   /// True if any function contains a bare `throw;` (a THROW with no operand),
-  /// which re-raises the exception being handled and so needs the handled stack.
+  /// which re-raises the exception being handled and so needs the handled
+  /// stack.
   static bool program_has_bare_throw(const goto_functionst &gf)
   {
     for (const auto &fn : gf.function_map)
@@ -368,8 +370,9 @@ public:
   }
 
   /// True if any function calls std::uncaught_exception or uncaught_exceptions
-  /// (matched by name to stay robust to overload mangling) — the only readers of
-  /// the uncaught count, so the count is maintained only when one is present.
+  /// (matched by name to stay robust to overload mangling) — the only readers
+  /// of the uncaught count, so the count is maintained only when one is
+  /// present.
   static bool program_reads_uncaught(const goto_functionst &gf)
   {
     for (const auto &fn : gf.function_map)
@@ -728,15 +731,15 @@ private:
   }
 
   /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
-  /// failing dynamic_cast<T&> lowers to — so the rest of the pass never sees the
-  /// call. The frontend guards it with the cast-failed condition
+  /// failing dynamic_cast<T&> lowers to — so the rest of the pass never sees
+  /// the call. The frontend guards it with the cast-failed condition
   /// (`if (!vptr_matches) __ESBMC_throw_bad_cast();`), so the replacement
   /// inherits that guard. When std::bad_cast is resolvable it becomes the
   /// equivalent THROW (lowered like any other throw, so a surrounding handler
-  /// can catch it). When it is not (no <typeinfo>), there is no exception object
-  /// to throw, so it becomes an ASSERT(false): a failing reference cast with no
-  /// RTTI model is std::terminate, hence a verification error at that point — a
-  /// cast that always succeeds leaves the assertion unreachable.
+  /// can catch it). When it is not (no <typeinfo>), there is no exception
+  /// object to throw, so it becomes an ASSERT(false): a failing reference cast
+  /// with no RTTI model is std::terminate, hence a verification error at that
+  /// point — a cast that always succeeds leaves the assertion unreachable.
   void lower_bad_cast_calls(goto_functionst &goto_functions)
   {
     expr2tc bad_cast_throw = build_bad_cast_throw();
@@ -942,9 +945,10 @@ private:
     int depth = 0;
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
-      // Exception specifications (noexcept / throw(T...) / throw()) are function
-      // metadata enforced at the epilogue (see lower_ip), so they never force
-      // fallback here; this scan only rejects unsupported catch/throw shapes.
+      // Exception specifications (noexcept / throw(T...) / throw()) are
+      // function metadata enforced at the epilogue (see lower_ip), so they
+      // never force fallback here; this scan only rejects unsupported
+      // catch/throw shapes.
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
@@ -996,18 +1000,19 @@ private:
       // (run before this check) rewrites every such call to a THROW or an
       // ASSERT(false), so a failing dynamic_cast<T&> is always lowered.
     }
-    // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
-    // (its body cannot complete normally). Such unclosed pushes are accepted:
-    // lower_ip's rebalance_removed_pops re-inserts the synthetic pop before
-    // lowering. depth < 0 (an unmatched pop) is already rejected above.
+    // depth > 0 means some try's empty-CATCH pop was pruned by
+    // remove_unreachable (its body cannot complete normally). Such unclosed
+    // pushes are accepted: lower_ip's rebalance_removed_pops re-inserts the
+    // synthetic pop before lowering. depth < 0 (an unmatched pop) is already
+    // rejected above.
     return depth >= 0;
   }
 
   /// `remove_unreachable` runs before this pass and prunes the empty CATCH pop
   /// and skip-GOTO of a try whose body cannot complete normally — the common
-  /// Python idiom `try: <raises>; assert False; except E: ...`, where the model-
-  /// or user-raised throw makes the fall-through dead. That leaves the CATCH
-  /// push unbalanced, which the region recovery cannot pair. Re-insert a
+  /// Python idiom `try: <raises>; assert False; except E: ...`, where the
+  /// model- or user-raised throw makes the fall-through dead. That leaves the
+  /// CATCH push unbalanced, which the region recovery cannot pair. Re-insert a
   /// synthetic pop + skip-GOTO immediately before each unclosed push's first
   /// handler, restoring the balanced shape collect()/build_dispatch expect. The
   /// skip-GOTO sits on the (now infeasible, hence pruned) normal-completion
@@ -1365,12 +1370,12 @@ private:
     landing->location = h.target->location;
     landing->function = h.target->function;
 
-    // The handler body begins after the catch marker, plus the parameter binding
-    // for a typed catch. The decrement of the uncaught count goes there, so it
-    // happens once the exception has entered its handler ([except.uncaught]) and
-    // after the catch-parameter is bound (§5.5).
-    // Anchor the handler prologue (uncaught decrement, handled-stack push) so
-    // it precedes the handler body. A typed catch reassigns this to its binding
+    // The handler body begins after the catch marker, plus the parameter
+    // binding for a typed catch. The decrement of the uncaught count goes
+    // there, so it happens once the exception has entered its handler
+    // ([except.uncaught]) and after the catch-parameter is bound (§5.5). Anchor
+    // the handler prologue (uncaught decrement, handled-stack push) so it
+    // precedes the handler body. A typed catch reassigns this to its binding
     // instruction below; a catch-all has no binding, and its `h.target` is the
     // body's first instruction, so anchoring on `landing` keeps the push ahead
     // of a bare `throw;` (otherwise it landed after the rethrow, leaving the
@@ -1449,8 +1454,8 @@ private:
 
   /// `__ESBMC_exc_typeid ∈ { id(T) : T <: some allowed type }` — the in-flight
   /// exception is permitted by a dynamic exception specification. Nil when the
-  /// specification allows nothing (a no-throw spec), so callers fall back to the
-  /// plain `!thrown` boundary check.
+  /// specification allows nothing (a no-throw spec), so callers fall back to
+  /// the plain `!thrown` boundary check.
   expr2tc spec_guard(const std::vector<irep_idt> &spec_types)
   {
     expr2tc disj;
@@ -1492,11 +1497,11 @@ private:
   /// (noexcept/throw-spec violation, uncaught exception at the program entry,
   /// bare throw with no active exception) are verification errors in ESBMC's
   /// model, so they are asserted directly — NOT routed through the OM
-  /// std::terminate() — and reported as FAILED. Routing through the OM would let
-  /// a custom std::set_terminate handler that ends the path (e.g. abort(),
+  /// std::terminate() — and reported as FAILED. Routing through the OM would
+  /// let a custom std::set_terminate handler that ends the path (e.g. abort(),
   /// modeled as assume(0)) silently swallow the violation, a false negative. A
-  /// user-written std::terminate() call is an ordinary function call into the OM
-  /// and is unaffected. @p skip_cond is the condition under which execution
+  /// user-written std::terminate() call is an ordinary function call into the
+  /// OM and is unaffected. @p skip_cond is the condition under which execution
   /// continues past the point without terminating (nil = always terminate); the
   /// assertion is assert(skip_cond), or assert(false) when skip_cond is nil. @p
   /// reason selects the diagnostic comment, unless @p comment_override is
@@ -1517,17 +1522,18 @@ private:
       n->function = fn;
     };
 
-    // A lowering-synthesized terminate point (a noexcept/throw-spec violation or
-    // an uncaught exception at the program entry) is a verification error in
+    // A lowering-synthesized terminate point (a noexcept/throw-spec violation
+    // or an uncaught exception at the program entry) is a verification error in
     // ESBMC's model regardless of any installed std::set_terminate handler
     // ([except.terminate]: reaching std::terminate is abnormal termination, and
-    // a handler that returns is itself undefined). Assert the violation directly
-    // so it is reported as FAILED — routing it through the OM std::terminate()
-    // would let a custom handler that ends the path (e.g. abort(), modeled as
-    // assume(0)) silently swallow the violation, a false negative. A *user*
-    // `std::terminate()` call is an ordinary function call into the OM and is
-    // unaffected by this path; only the dynamic-spec/noexcept/uncaught checks
-    // synthesized here use emit_terminate.
+    // a handler that returns is itself undefined). Assert the violation
+    // directly so it is reported as FAILED — routing it through the OM
+    // std::terminate() would let a custom handler that ends the path (e.g.
+    // abort(), modeled as assume(0)) silently swallow the violation, a false
+    // negative. A *user* `std::terminate()` call is an ordinary function call
+    // into the OM and is unaffected by this path; only the
+    // dynamic-spec/noexcept/uncaught checks synthesized here use
+    // emit_terminate.
     auto first = body.insert(before);
     first->make_assertion(
       is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
@@ -1561,13 +1567,14 @@ private:
 
   /// The uncaught-exception check at a program-entry epilogue, partitioned by
   /// the escaping exception's dynamic type. Each throwable type T gets its own
-  /// property `assert(!(thrown && typeid == id(T)))` with a comment naming T, so
-  /// a distinct verdict ("uncaught exception: IndexError") surfaces per family.
-  /// A final residual property covers any in-flight typeid outside that set,
-  /// keeping the partition complete: the conjunction of all skip-conditions is
-  /// exactly `thrown == false`, identical to the single generic assert it
-  /// replaces. The properties are inserted before @p before in program order;
-  /// returns the head (first property), so a caller can target it with a goto.
+  /// property `assert(!(thrown && typeid == id(T)))` with a comment naming T,
+  /// so a distinct verdict ("uncaught exception: IndexError") surfaces per
+  /// family. A final residual property covers any in-flight typeid outside that
+  /// set, keeping the partition complete: the conjunction of all
+  /// skip-conditions is exactly `thrown == false`, identical to the single
+  /// generic assert it replaces. The properties are inserted before @p before
+  /// in program order; returns the head (first property), so a caller can
+  /// target it with a goto.
   goto_programt::targett emit_uncaught_checks(
     goto_programt &body,
     goto_programt::targett before,
@@ -1580,7 +1587,8 @@ private:
     };
 
     // Residual guard: typeid matches one of the known throwable types. A state
-    // with no known type in flight fails only the residual "uncaught exception".
+    // with no known type in flight fails only the residual "uncaught
+    // exception".
     expr2tc known_disj;
     goto_programt::targett head = before;
     bool have_head = false;
@@ -1651,10 +1659,10 @@ private:
 
   /// Enforce a dynamic exception specification throw(allowed...) (including the
   /// empty throw()) at the epilogue. When an exception the spec does not permit
-  /// is propagating out, run the std::unexpected handler and re-check: a handler
-  /// that rethrows a permitted type lets it propagate; anything else (handler
-  /// returns, rethrows a disallowed type, or no handler installed) is a
-  /// violation. Mirrors the imperative goto_symext path: one handler call, no
+  /// is propagating out, run the std::unexpected handler and re-check: a
+  /// handler that rethrows a permitted type lets it propagate; anything else
+  /// (handler returns, rethrows a disallowed type, or no handler installed) is
+  /// a violation. Mirrors the imperative goto_symext path: one handler call, no
   /// std::bad_exception substitution.
   void build_dynamic_spec_check(
     goto_programt &body,
@@ -1711,8 +1719,9 @@ private:
       clear->make_assignment();
       clear->code = code_assign2tc(thrown, gen_false_expr());
 
-      // Make the original exception the "currently handled" one for the duration
-      // of the handler, so a bare `throw;` in it re-raises the original
+      // Make the original exception the "currently handled" one for the
+      // duration of the handler, so a bare `throw;` in it re-raises the
+      // original
       // ([except.throw]/8, [except.unexpected]) via __ESBMC_rethrow_current
       // rather than terminating on an empty handled stack.
       expr2tc push = make_c_helper_call(exception_globals::push_handled_id);
@@ -1749,9 +1758,9 @@ private:
       // Handler threw a disallowed type: substitute std::bad_exception
       // ([except.unexpected]/2). The substitute propagates when the spec lists
       // bad_exception, and otherwise stays disallowed and falls through to the
-      // terminate assert — which reports the violation directly (FAILED) instead
-      // of routing through std::terminate(), whose custom handler could end the
-      // path and swallow it.
+      // terminate assert — which reports the violation directly (FAILED)
+      // instead of routing through std::terminate(), whose custom handler could
+      // end the path and swallow it.
       expr2tc bad_exc_obj = build_bad_exception_object();
       if (!is_nil_expr(bad_exc_obj))
       {
@@ -1922,11 +1931,12 @@ void remove_exceptions(
   contextt &context,
   const namespacet &ns)
 {
-  // A program with no throw/catch needs no exception machinery. Skip entirely so
-  // the pass is a true no-op for exception-free programs — otherwise it would
-  // add the exception-state globals to __ESBMC_main, perturbing analyses that
-  // inspect program state on programs that have nothing to do with exceptions
-  // (e.g. termination's recurrent-set search, function-contract frames).
+  // A program with no throw/catch needs no exception machinery. Skip entirely
+  // so the pass is a true no-op for exception-free programs — otherwise it
+  // would add the exception-state globals to __ESBMC_main, perturbing analyses
+  // that inspect program state on programs that have nothing to do with
+  // exceptions (e.g. termination's recurrent-set search, function-contract
+  // frames).
   if (!exception_loweringt::program_uses_exceptions(goto_functions))
     return;
   create_exception_state_symbols(context);

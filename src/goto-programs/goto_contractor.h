@@ -4,7 +4,7 @@
 #include <iostream>
 #include <util/ssa/goto_expr_factory.h>
 #include <goto-programs/goto_functions.h>
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 #include <util/message/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_no_op.h>
@@ -76,7 +76,7 @@ public:
   }
   ~Contractor()
   {
-    //clean up
+    // clean up
     for (auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
       delete (*it);
     for (auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
@@ -111,7 +111,7 @@ public:
   }
 
 private:
-  //Cleanup
+  // Cleanup
   std::vector<ibex::Function *> vector_f;
   std::vector<ibex::NumConstraint *> vector_nc;
   std::vector<ibex::Ctc *> vector_ctc;
@@ -172,7 +172,7 @@ private:
         auto *side1 = new ibex::CtcFwdBwd(*ctr);
         auto *side2 = new ibex::CtcFwdBwd(*ctr2);
         auto ctc_union = new ibex::CtcUnion(*side1, *side2);
-        //for clean up
+        // for clean up
         vector_nc.push_back(ctr);
         vector_nc.push_back(ctr2);
         vector_ctc.push_back(side1);
@@ -376,8 +376,8 @@ public:
 
   void update_intervals(ibex::IntervalVector vector)
   {
-    //check if interval box is empty set or if the interval is degenerated
-    // in the case of a single interval
+    // check if interval box is empty set or if the interval is degenerated
+    //  in the case of a single interval
     if (vector.is_empty())
     {
       is_empty_vector = true;
@@ -429,7 +429,7 @@ private:
   CspMap *map;
   ibex::Variable *vars = nullptr;
 
-  //Cleanup
+  // Cleanup
   std::vector<ibex::Function *> vector_f;
   std::vector<ibex::NumConstraint *> vector_nc;
   std::vector<ibex::Ctc *> vector_ctc;
@@ -438,19 +438,20 @@ private:
   static bool is_unsupported_operator_in_constraint(const expr2tc &);
   ibex::Ctc *create_contractor_from_expr2t(const expr2tc &);
   /**
-   * @function create_constraint_from_expr2t is called from create_contractor_from_expr2t
-   * and it will parse an expression with comparison operators and create
-   * constraints to be used by create_contractor_from_expr2t.
+   * @function create_constraint_from_expr2t is called from
+   * create_contractor_from_expr2t and it will parse an expression with
+   * comparison operators and create constraints to be used by
+   * create_contractor_from_expr2t.
    * @return Constraint
    */
   ibex::NumConstraint *create_constraint_from_expr2t(const expr2tc &);
   /**
-   * @function create_function_from_expr2t is called by create_constraint_from_expr2t
-   * and it will parse expressions with arithmetic operators and create
-   * functions to be used by create_constraint_from_expr2t.
+   * @function create_function_from_expr2t is called by
+   * create_constraint_from_expr2t and it will parse expressions with arithmetic
+   * operators and create functions to be used by create_constraint_from_expr2t.
    * @return Function
    */
-  //not
+  // not
   ibex::Ctc *create_contractor_from_expr2t_not(const expr2tc &);
   ibex::NumConstraint *create_constraint_from_expr2t_not(const expr2tc &);
 
@@ -473,7 +474,7 @@ public:
   }
   ~expr_to_ibex_parser()
   {
-    //clean up
+    // clean up
     for (auto it = vector_ctc.rbegin(); it != vector_ctc.rend(); ++it)
       delete (*it);
     for (auto it = vector_nc.rbegin(); it != vector_nc.rend(); ++it)
@@ -496,7 +497,8 @@ public:
    * First is parsing the properties.
    * Second, parsing the intervals.
    * Third, applying the contractor.
-   * Fourth, inserting assumes in the program to reflect the contracted intervals.
+   * Fourth, inserting assumes in the program to reflect the contracted
+   * intervals.
    * @param _goto_functions
    */
   goto_contractort(
@@ -548,7 +550,7 @@ protected:
 
 private:
   ibex::IntervalVector domains;
-  ///vars variable references to be used in Ibex formulas
+  /// vars variable references to be used in Ibex formulas
   ibex::Variable *vars;
   /// map is where the variable references and intervals are stored.
   CspMap map;
@@ -688,7 +690,7 @@ public:
 
 private:
   ibex::IntervalVector domains;
-  ///vars variable references to be used in Ibex formulas
+  /// vars variable references to be used in Ibex formulas
   ibex::Variable *vars;
   /// map is where the variable references and intervals are stored.
   CspMap map;
@@ -732,4 +734,4 @@ private:
     return oss;
   }
 };
-#endif //ESBMC_GOTO_CONTRACTOR_H
+#endif // ESBMC_GOTO_CONTRACTOR_H

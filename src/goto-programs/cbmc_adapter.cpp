@@ -298,9 +298,10 @@ void fix_expression(irept &irep)
     // clz/ctz irep2 node. Reproduce that formula here in terms of ids
     // migrate_expr already lowers (bitor, lshr, bitand, bitnot, "-", popcount),
     // so no new node is needed. Scoped to the CBMC --binary path, so it never
-    // perturbs native handling (which never emits count_{leading,trailing}_zeros
-    // as an expression). clz(0)/ctz(0) is UB; CBMC emits its own #bounds_check
-    // guard for the zero argument, which is matched independently.
+    // perturbs native handling (which never emits
+    // count_{leading,trailing}_zeros as an expression). clz(0)/ctz(0) is UB;
+    // CBMC emits its own #bounds_check guard for the zero argument, which is
+    // matched independently.
     const bool leading = irep.id() == "count_leading_zeros";
     const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
     const irept optype = operand.find("type"); // operand's bitvector type
@@ -347,16 +348,18 @@ void fix_expression(irept &irep)
   if (irep.id() == "rol" || irep.id() == "ror")
   {
     // CBMC lowers __builtin_rotateleft{8,16,32,64}/__builtin_rotateright... to
-    // rol/ror expression ids, which migrate_expr has no handler for (aborts with
-    // "migrate expr failed"); ESBMC has no rotate irep2 node either. As with
-    // clz/ctz above, reproduce the rotate from ids migrate_expr already lowers
-    // (shl, lshr, bitor, bitand, "-"), so no new node is needed:
-    //   rol(x, n) = (x << d) | (x >> (W - d)),  ror(x, n) = (x >> d) | (x << (W - d))
+    // rol/ror expression ids, which migrate_expr has no handler for (aborts
+    // with "migrate expr failed"); ESBMC has no rotate irep2 node either. As
+    // with clz/ctz above, reproduce the rotate from ids migrate_expr already
+    // lowers (shl, lshr, bitor, bitand, "-"), so no new node is needed:
+    //   rol(x, n) = (x << d) | (x >> (W - d)),  ror(x, n) = (x >> d) | (x << (W
+    //   - d))
     // where d = n mod W. CBMC takes the distance mod the width (rol(x, W) == x,
-    // rol(x, W + k) == rol(x, k)); W is always a power of two, so `& (W - 1)` is
-    // the modulus. The complement (W - d) is also masked with (W - 1) so that
-    // d == 0 yields a 0 shift rather than a full-width shift: rol(x, 0) then
-    // reduces to (x << 0) | (x >> 0) == x. Scoped to the CBMC --binary path.
+    // rol(x, W + k) == rol(x, k)); W is always a power of two, so `& (W - 1)`
+    // is the modulus. The complement (W - d) is also masked with (W - 1) so
+    // that d == 0 yields a 0 shift rather than a full-width shift: rol(x, 0)
+    // then reduces to (x << 0) | (x >> 0) == x. Scoped to the CBMC --binary
+    // path.
     const bool left = irep.id() == "rol";
     const irept x = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
     const irept n = irep.get_sub().size() > 1 ? irep.get_sub()[1] : irept();
@@ -386,14 +389,16 @@ void fix_expression(irept &irep)
     // CBMC lowers __builtin_ffs/ffsl/ffsll to a find_first_set irep, which
     // migrate_expr has no handler for (it aborts with "migrate expr failed").
     // find_first_set(x) is the 1-based index of the least-significant set bit,
-    // or 0 when x is zero -- exactly __builtin_ffs. ESBMC's native path does not
-    // model ffs at all, so, as with clz/ctz above, reproduce it here in terms of
-    // ids migrate_expr already lowers rather than adding an irep2 node:
+    // or 0 when x is zero -- exactly __builtin_ffs. ESBMC's native path does
+    // not model ffs at all, so, as with clz/ctz above, reproduce it here in
+    // terms of ids migrate_expr already lowers rather than adding an irep2
+    // node:
     //   ffs(x) = (x == 0) ? 0 : popcount(~x & (x - 1)) + 1
     // The popcount term is exactly ctz(x) (see the count_trailing_zeros rewrite
-    // above); the x == 0 guard is load-bearing because ~0 & (0 - 1) is all-ones,
-    // whose popcount is the width, not 0. Scoped to the CBMC --binary path, so it
-    // never perturbs native handling (which never emits find_first_set).
+    // above); the x == 0 guard is load-bearing because ~0 & (0 - 1) is
+    // all-ones, whose popcount is the width, not 0. Scoped to the CBMC --binary
+    // path, so it never perturbs native handling (which never emits
+    // find_first_set).
     const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
     const irept optype = operand.find("type"); // operand's bitvector type
     const irept restype = irep.find("type");   // int result type (signedbv/32)
@@ -423,12 +428,13 @@ void fix_expression(irept &irep)
 
   if (irep.id() == "bitreverse")
   {
-    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep (reverse
-    // the bit order: bit i <-> bit W-1-i), which migrate_expr has no handler for
-    // (aborts with "migrate expr failed"); ESBMC has no bitreverse irep2 node.
-    // As with clz/ctz above, reproduce it from ids migrate_expr already lowers
-    // (bitand, shl, lshr, bitor) via the standard SWAR reversal: swap adjacent
-    // bits, then 2-bit groups, then 4-bit, ... doubling the group size each step
+    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep
+    // (reverse the bit order: bit i <-> bit W-1-i), which migrate_expr has no
+    // handler for (aborts with "migrate expr failed"); ESBMC has no bitreverse
+    // irep2 node. As with clz/ctz above, reproduce it from ids migrate_expr
+    // already lowers (bitand, shl, lshr, bitor) via the standard SWAR reversal:
+    // swap adjacent bits, then 2-bit groups, then 4-bit, ... doubling the group
+    // size each step
     //   acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)
     // where mask_k selects the low k bits of every 2k-bit block. Scoped to the
     // CBMC --binary path, so it never perturbs native handling.
@@ -502,11 +508,11 @@ void fix_expression(irept &irep)
     irep.get_sub().size() == 2 && irep.get_sub()[0].id() == "tuple")
   {
     // CBMC binds a quantifier's variable(s) inside a "tuple" node in the first
-    // operand; ESBMC's forall2t/exists2t (and the solver, smt_solver.cpp) expect
-    // side_1 to be the bound symbol itself. Unwrap a single-symbol tuple to the
-    // bare symbol. A tuple with more than one bound variable is left untouched
-    // (forall2t binds exactly one symbol) so it aborts cleanly rather than
-    // silently dropping the extra binders -- a soundness hazard.
+    // operand; ESBMC's forall2t/exists2t (and the solver, smt_solver.cpp)
+    // expect side_1 to be the bound symbol itself. Unwrap a single-symbol tuple
+    // to the bare symbol. A tuple with more than one bound variable is left
+    // untouched (forall2t binds exactly one symbol) so it aborts cleanly rather
+    // than silently dropping the extra binders -- a soundness hazard.
     const irept &tuple = irep.get_sub()[0];
     if (tuple.get_sub().size() == 1)
     {
@@ -807,10 +813,11 @@ void fix_expression(irept &irep)
   else if (irep.id() == "ieee_float_notequal")
     // CBMC's IEEE-754 float inequality (NaN != NaN is true) has no migrate_expr
     // handler, so it aborts with "migrate expr failed". ESBMC's own C frontend
-    // lowers a float != to a plain "notequal" whose floatbv SMT encoding already
-    // implements IEEE semantics (NaN-aware), so rewrite to that -- the exact
-    // counterpart of the "ieee_float_equal" -> "=" rewrite above. "notequal" is
-    // in the operand-wrap set below, so its operands reach migrate_expr.
+    // lowers a float != to a plain "notequal" whose floatbv SMT encoding
+    // already implements IEEE semantics (NaN-aware), so rewrite to that -- the
+    // exact counterpart of the "ieee_float_equal" -> "=" rewrite above.
+    // "notequal" is in the operand-wrap set below, so its operands reach
+    // migrate_expr.
     irep.id("notequal");
   else if (
     (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
@@ -854,13 +861,14 @@ void fix_expression(irept &irep)
       const std::string val = irep.find("value").id_string();
       const std::size_t width = bv_width(irep.find("type"));
       // CBMC stores the value as hex; ESBMC wants a binary string of the type's
-      // own bit width. A value already exactly `width` chars long is an existing
-      // binary string (e.g. one this pass produced earlier) and is left as-is;
-      // anything else is hex and gets converted (see hex_to_bin). Keying on the
-      // type width, not a hardcoded 32, is what makes 128-bit float128 / long
-      // double work: its value is 32 hex chars, which a `!= 32` guard mistook
-      // for an already-binary 32-bit value and left as raw hex, so migrate
-      // misdecoded it (1.5L read as ~0 -- a false verdict, not a crash).
+      // own bit width. A value already exactly `width` chars long is an
+      // existing binary string (e.g. one this pass produced earlier) and is
+      // left as-is; anything else is hex and gets converted (see hex_to_bin).
+      // Keying on the type width, not a hardcoded 32, is what makes 128-bit
+      // float128 / long double work: its value is 32 hex chars, which a `!= 32`
+      // guard mistook for an already-binary 32-bit value and left as raw hex,
+      // so migrate misdecoded it (1.5L read as ~0 -- a false verdict, not a
+      // crash).
       if (val.size() != width)
         irep.add("value") = mk(hex_to_bin(val, width));
     }
@@ -873,9 +881,9 @@ void fix_expression(irept &irep)
     "notequal",
     "and",
     "or",
-    // Boolean implication (a ==> b); migrate_expr lowers "=>" to implies2t via a
-    // wrapped operand pair. Common in quantifier bodies (__CPROVER_forall guards)
-    // but valid in any boolean context.
+    // Boolean implication (a ==> b); migrate_expr lowers "=>" to implies2t via
+    // a wrapped operand pair. Common in quantifier bodies (__CPROVER_forall
+    // guards) but valid in any boolean context.
     "=>",
     "mod",
     "not",
@@ -941,16 +949,17 @@ void fix_expression(irept &irep)
     "ieee_sqrt",
     "ieee_fma",
     "abs",
-    // Unary bit-builtins: migrate_expr already handles popcount/bswap via op0(),
-    // but without wrapping CBMC's raw operands into "operands" here, op0() reads
-    // an empty list (same failure shape as isnan/pointer_offset). __builtin_bswap
-    // / __builtin_popcount lower to these ids in CBMC's goto.
+    // Unary bit-builtins: migrate_expr already handles popcount/bswap via
+    // op0(), but without wrapping CBMC's raw operands into "operands" here,
+    // op0() reads an empty list (same failure shape as isnan/pointer_offset).
+    // __builtin_bswap / __builtin_popcount lower to these ids in CBMC's goto.
     "popcount",
     "bswap",
     // Quantifier predicates: __CPROVER_forall/__CPROVER_exists lower to these
-    // ids, which migrate_expr handles via op0()/op1() (bound symbol, predicate).
-    // Without wrapping CBMC's raw operands into "operands" here, op0() reads an
-    // empty operand list and segfaults (same failure shape as isnan/popcount).
+    // ids, which migrate_expr handles via op0()/op1() (bound symbol,
+    // predicate). Without wrapping CBMC's raw operands into "operands" here,
+    // op0() reads an empty operand list and segfaults (same failure shape as
+    // isnan/popcount).
     "forall",
     "exists"};
 
@@ -997,10 +1006,10 @@ bool is_anon_tag(const std::string &ident)
 // unresolved -- exactly as fix_type already does for a not-yet-seen *named* tag
 // -- so the re-check pass in adapt_cbmc_to_esbmc, which runs with the full
 // cache, resolves it. Resolving from CBMC's own serialised type symbol (rather
-// than parsing the tag-name grammar) guarantees the definition is byte-identical
-// to the one the reader builds for the same member in an instruction, which
-// with2t::assert_type_compat_for_with compares by value. A tag that is still
-// unresolved after the re-check pass trips that pass's own
+// than parsing the tag-name grammar) guarantees the definition is
+// byte-identical to the one the reader builds for the same member in an
+// instruction, which with2t::assert_type_compat_for_with compares by value. A
+// tag that is still unresolved after the re-check pass trips that pass's own
 // "should have been resolved" guard.
 void expand_anon_struct(const irept &)
 {
@@ -1062,9 +1071,9 @@ void fix_type(
     // incomplete_c_enum to a signed int (C99 6.7.2.2.3) but has no case for the
     // tag, so any enum-typed object aborts with "ERROR: c_enum_tag". An enum is
     // consistently int-typed and migrate discards the underlying width anyway,
-    // so rather than resolve the tag through the cache (which only holds struct/
-    // union definitions) rewrite it to a bare c_enum and let migrate yield the
-    // same int type.
+    // so rather than resolve the tag through the cache (which only holds
+    // struct/ union definitions) rewrite it to a bare c_enum and let migrate
+    // yield the same int type.
     self = mk("c_enum");
     return;
   }
@@ -1414,16 +1423,17 @@ irept build_fma_rhs(const irept &lhs, const irept::subt &args)
 }
 
 // __builtin_nan("")/__builtin_nanf("") construct a quiet NaN. CBMC's own
-// <builtin-library-__builtin_nan> body returns floatbv_div(0, 0, rounding_mode),
-// i.e. 0.0/0.0, so mirror that exactly: ieee_div of two +0.0 constants of the
-// result's float type. The NaN-payload string argument is ignored -- it does not
-// affect NaN-ness, and ESBMC's own C frontend likewise folds __builtin_nan to a
-// constant NaN without dereferencing it. ieee_div is in fix_expression's
-// operand-wrap set and defaults its rounding mode like the rest of the ieee_*
-// family. Restricted to double/float: CBMC 6.5.0 does not model __builtin_nanl
-// as a NaN (its result compares equal to itself, so x != x is FALSE), so nanl is
-// deliberately left as a bodyless external -- whose nondet return already yields
-// the same FAILED verdict CBMC gives -- to preserve verdict parity.
+// <builtin-library-__builtin_nan> body returns floatbv_div(0, 0,
+// rounding_mode), i.e. 0.0/0.0, so mirror that exactly: ieee_div of two +0.0
+// constants of the result's float type. The NaN-payload string argument is
+// ignored -- it does not affect NaN-ness, and ESBMC's own C frontend likewise
+// folds __builtin_nan to a constant NaN without dereferencing it. ieee_div is
+// in fix_expression's operand-wrap set and defaults its rounding mode like the
+// rest of the ieee_* family. Restricted to double/float: CBMC 6.5.0 does not
+// model __builtin_nanl as a NaN (its result compares equal to itself, so x != x
+// is FALSE), so nanl is deliberately left as a bodyless external -- whose
+// nondet return already yields the same FAILED verdict CBMC gives -- to
+// preserve verdict parity.
 irept build_nan_rhs(const irept &lhs)
 {
   const irept ftype = lhs.find("type");
@@ -1438,14 +1448,15 @@ irept build_nan_rhs(const irept &lhs)
 }
 
 // __builtin_huge_val{,f,l} / __builtin_inf{,f,l} construct positive infinity.
-// CBMC's <builtin-library-*> bodies return it, but the bodies do not survive the
-// reader/adapter (their flattened floatbv nodes have no migrate handler), so
-// these reach symex as bodyless externals returning nondet -- and a valid
+// CBMC's <builtin-library-*> bodies return it, but the bodies do not survive
+// the reader/adapter (their flattened floatbv nodes have no migrate handler),
+// so these reach symex as bodyless externals returning nondet -- and a valid
 // `double x = __builtin_huge_val(); assert(x > 1e30)` reports a false FAILED.
 // Emit +Inf directly as a floatbv constant: sign 0, exponent all ones, mantissa
-// 0. The value is written as the full-width binary bit pattern (fix_expression's
-// constant branch leaves an already-width-length string unchanged), which works
-// for every width including 128-bit long double -- unlike a 64-bit literal.
+// 0. The value is written as the full-width binary bit pattern
+// (fix_expression's constant branch leaves an already-width-length string
+// unchanged), which works for every width including 128-bit long double --
+// unlike a 64-bit literal.
 // (__builtin_inf -- double, no suffix -- is folded to a constant by CBMC and
 // never reaches here; it is matched for uniformity and is harmless.)
 irept build_inf_rhs(const irept &lhs)
@@ -1624,20 +1635,20 @@ bool fix_builtin_call(irept &code)
 
   const std::string callee = sub[1].find("identifier").id_string();
 
-  // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that performs
-  // the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET OTHER-instructions, which
-  // ESBMC's symex has no handler for and silently skips -- so the copy never
-  // happens and a post-copy read of the destination reports a false FAILED.
-  // memcmp is a bodyless external returning nondet, so a valid comparison also
-  // reports a false FAILED. Rather than teach symex those array ops, retarget
-  // the call to ESBMC's own well-tested memory intrinsic: symex dispatches any
-  // c:@F@__ESBMC* call to run_intrinsic purely by callee name (symex_main.cpp),
-  // so only the function symbol's identifier needs to change -- the 3-argument
-  // signature (dst/src/n, s/c/n, s1/s2/n) already matches
-  // intrinsic_memcpy/memset/memmove/memcmp, and the lhs may be nil (the return
-  // value is often discarded). The instruction stays a FUNCTION_CALL, so return
-  // false: the caller then keeps CBMC's original FUNCTION_CALL instruction type
-  // rather than forcing it to ASSIGN.
+  // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that
+  // performs the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET
+  // OTHER-instructions, which ESBMC's symex has no handler for and silently
+  // skips -- so the copy never happens and a post-copy read of the destination
+  // reports a false FAILED. memcmp is a bodyless external returning nondet, so
+  // a valid comparison also reports a false FAILED. Rather than teach symex
+  // those array ops, retarget the call to ESBMC's own well-tested memory
+  // intrinsic: symex dispatches any c:@F@__ESBMC* call to run_intrinsic purely
+  // by callee name (symex_main.cpp), so only the function symbol's identifier
+  // needs to change -- the 3-argument signature (dst/src/n, s/c/n, s1/s2/n)
+  // already matches intrinsic_memcpy/memset/memmove/memcmp, and the lhs may be
+  // nil (the return value is often discarded). The instruction stays a
+  // FUNCTION_CALL, so return false: the caller then keeps CBMC's original
+  // FUNCTION_CALL instruction type rather than forcing it to ASSIGN.
   static const std::unordered_map<std::string, const char *> mem_intrinsics = {
     {"memcpy", "c:@F@__ESBMC_memcpy"},
     {"memset", "c:@F@__ESBMC_memset"},
@@ -1653,8 +1664,9 @@ bool fix_builtin_call(irept &code)
   // CBMC's third argument is the memory map it threads through to state
   // separation between two is_fresh'd pointers; the bridge does not model that
   // yet, so it is dropped.
-  if (const char *bridge = is_fresh_bridge(callee);
-      bridge && sub[2].get_sub().size() == 3)
+  if (
+    const char *bridge = is_fresh_bridge(callee);
+    bridge && sub[2].get_sub().size() == 3)
   {
     code.get_sub()[1].set("identifier", bridge);
     code.get_sub()[2].get_sub().resize(2);
@@ -2220,9 +2232,9 @@ irept function_to_esbmc_irep(const cbmc_functiont &func)
 
 unsigned map_cbmc_instruction_type(unsigned cbmc_type)
 {
-  // CBMC's goto_program_instruction_typet (CBMC src/goto-programs/goto_program.h),
-  // named here so the CBMC->ESBMC mapping is explicit and auditable. The
-  // numbering matches CBMC's enum exactly.
+  // CBMC's goto_program_instruction_typet (CBMC
+  // src/goto-programs/goto_program.h), named here so the CBMC->ESBMC mapping is
+  // explicit and auditable. The numbering matches CBMC's enum exactly.
   enum cbmc_instruction_typet
   {
     CBMC_NO_INSTRUCTION_TYPE = 0,
@@ -2308,11 +2320,11 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
       // symbol's *name*, which is scope-qualified: `tag-S` at file scope but
       // `main::1::tag-S` for a struct declared inside a function body. Keying
       // the cache by `"tag-" + base_name` only matched the former, so any
-      // function-local struct went unresolved and aborted ("struct_tag/union_tag
-      // should have been resolved"). Key by the symbol name, which equals the
-      // reference identifier at every scope (identical to the old key at file
-      // scope, where name == "tag-" + base_name).
-      // Seed the expansion stack with the definition's own identity so
+      // function-local struct went unresolved and aborted
+      // ("struct_tag/union_tag should have been resolved"). Key by the symbol
+      // name, which equals the reference identifier at every scope (identical
+      // to the old key at file scope, where name == "tag-" + base_name). Seed
+      // the expansion stack with the definition's own identity so
       // self-references stay "symbol" back-references (see
       // fix_type_symbol_definition).
       fix_type_symbol_definition(sym.stype, type_cache, sym.name);

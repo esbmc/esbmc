@@ -364,13 +364,13 @@ const std::string &tmp_path::path() const noexcept
   return _path;
 }
 
-tmp_path &tmp_path::keep(bool yes) &noexcept
+tmp_path &tmp_path::keep(bool yes) & noexcept
 {
   _keep = yes;
   return *this;
 }
 
-tmp_path &&tmp_path::keep(bool yes) &&noexcept
+tmp_path &&tmp_path::keep(bool yes) && noexcept
 {
   _keep = yes;
   return std::move(*this);

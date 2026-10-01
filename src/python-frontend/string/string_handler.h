@@ -187,7 +187,8 @@ public:
    * @param lhs Left operand
    * @param rhs Right operand
    * @param element JSON element with location info
-   * @return Comparison expression or nil_exprt to continue with standard comparison
+   * @return Comparison expression or nil_exprt to continue with standard
+   * comparison
    */
   exprt handle_string_comparison(
     const std::string &op,
@@ -416,7 +417,8 @@ public:
    * @brief Handle Python's str.islower() method
    * @param string_obj Expression representing the string or character to check
    * @param location Source location for error reporting
-   * @return Boolean expression: true if all cased chars are lowercase, false otherwise
+   * @return Boolean expression: true if all cased chars are lowercase, false
+   * otherwise
    */
   exprt
   handle_string_islower(const exprt &string_obj, const locationt &location);

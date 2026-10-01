@@ -100,9 +100,10 @@ void pattern_checker::check_require_call(const nlohmann::json &expr)
     if (expr["expression"]["name"].get<std::string>() == "require")
     {
       const nlohmann::json &call_args = expr["arguments"];
-      // Search for tx.origin in BinaryOperation (==) as used in require(tx.origin == <VarDeclReference>)
-      // There should be just one argument, the BinaryOperation expression.
-      // Checking 1 argument as in require(<leftExpr> == <rightExpr>)
+      // Search for tx.origin in BinaryOperation (==) as used in
+      // require(tx.origin == <VarDeclReference>) There should be just one
+      // argument, the BinaryOperation expression. Checking 1 argument as in
+      // require(<leftExpr> == <rightExpr>)
       if (call_args.size() == 1)
       {
         check_require_argument(call_args);
@@ -113,7 +114,8 @@ void pattern_checker::check_require_call(const nlohmann::json &expr)
 
 void pattern_checker::check_require_argument(const nlohmann::json &call_args)
 {
-  // This function is used to check the authorization argument of require() function
+  // This function is used to check the authorization argument of require()
+  // function
   const nlohmann::json &arg_expr = call_args[0];
 
   // look for BinaryOperation "=="
@@ -122,8 +124,9 @@ void pattern_checker::check_require_argument(const nlohmann::json &call_args)
     if (arg_expr["operator"].get<std::string>() == "==")
     {
       const nlohmann::json &left_expr = arg_expr["leftExpression"];
-      // Search for "tx", "." and "origin". First, confirm the nodeType is MemberAccess
-      // If the nodeType was NOT MemberAccess, accessing "memberName" would throw an exception !
+      // Search for "tx", "." and "origin". First, confirm the nodeType is
+      // MemberAccess If the nodeType was NOT MemberAccess, accessing
+      // "memberName" would throw an exception !
       if (
         left_expr["nodeType"].get<std::string>() ==
         "MemberAccess") // tx.origin is of the type MemberAccess expression
@@ -131,7 +134,7 @@ void pattern_checker::check_require_argument(const nlohmann::json &call_args)
         check_tx_origin(left_expr);
       }
     } // end of "=="
-  }   // end of "BinaryOperation"
+  } // end of "BinaryOperation"
 }
 
 void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)

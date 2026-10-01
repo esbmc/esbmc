@@ -515,9 +515,11 @@ static bool try_parse_func_def(
 
 // Try to parse a declaration at `toks[idx]`.  Best-effort heuristic covering:
 //   type-keyword(s) [*]* name [= ...] [, name2 ...] ;
-//   typedef-identifier name [= ...] ;            (IDENT IDENT followed by = ; [ or ,)
-//   __label__ name, name, ... ;                  (consumed silently with a warning)
-//   nested-function definition: ret-type name ( ... ) { ... }   (consumed, no vars)
+//   typedef-identifier name [= ...] ;            (IDENT IDENT followed by = ; [
+//   or ,)
+//   __label__ name, name, ... ;                  (consumed silently with a
+//   warning) nested-function definition: ret-type name ( ... ) { ... }
+//   (consumed, no vars)
 //
 // Returns a token index immediately past the consumed declaration.  If no
 // declaration is recognized at `idx`, returns `idx` unchanged so callers can
@@ -1753,7 +1755,8 @@ find_nested_functions(const std::string &src, const std::vector<token> &toks)
   return result;
 }
 
-// A single contiguous replacement in a string: replace [start, end) with `text`.
+// A single contiguous replacement in a string: replace [start, end) with
+// `text`.
 struct rewrite_op
 {
   size_t start;

@@ -88,8 +88,8 @@ static std::string utf8_encode(unsigned int int_value)
 // std::to_string's %f (six fractional digits) with trailing zeros stripped, and
 // a ".0" restored for whole numbers (str(1.0) == "1.0"). Shared by
 // handle_float_to_str (str()/repr()) and handle_format's empty-spec float path
-// so format(x) folds identically to str(x); it therefore inherits the same known
-// gap (values needing more than six fractional digits, e.g. str(1/3), or
+// so format(x) folds identically to str(x); it therefore inherits the same
+// known gap (values needing more than six fractional digits, e.g. str(1/3), or
 // scientific notation, e.g. str(1e16)) — pre-existing in str(), not new here.
 std::string py_str_from_double(double d)
 {
@@ -430,11 +430,12 @@ exprt function_call_expr::handle_int_to_bytes() const
                                    call_["func"]["value"]["_type"] == "Name" &&
                                    call_["func"]["value"]["id"] == "int";
 
-  // CPython signature: int.to_bytes(length=1, byteorder='big', *, signed=False).
-  // length and byteorder may be passed positionally or by keyword, and both
-  // default (since 3.11). Resolve each from its positional slot, then its
-  // keyword, then the default. The type-method form passes the integer value as
-  // the leading positional argument, shifting the length/byteorder slots by one.
+  // CPython signature: int.to_bytes(length=1, byteorder='big', *,
+  // signed=False). length and byteorder may be passed positionally or by
+  // keyword, and both default (since 3.11). Resolve each from its positional
+  // slot, then its keyword, then the default. The type-method form passes the
+  // integer value as the leading positional argument, shifting the
+  // length/byteorder slots by one.
   const std::size_t value_offset = is_type_method_call ? 1 : 0;
   exprt value = is_type_method_call
                   ? converter_.get_expr(args[0])
@@ -484,8 +485,9 @@ exprt function_call_expr::handle_int_to_bytes() const
     else if (
       byteorder_arg->contains("value") && (*byteorder_arg)["value"].is_string())
       big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
-    else if (string_handler::extract_constant_string(
-               *byteorder_arg, converter_, folded_byteorder))
+    else if (
+      string_handler::extract_constant_string(
+        *byteorder_arg, converter_, folded_byteorder))
       big_endian = folded_byteorder == "big";
     else
       throw std::runtime_error(
@@ -508,17 +510,18 @@ exprt function_call_expr::handle_int_to_bytes() const
   }
 
   // Fill the output array one byte at a time. For big-endian we start from the
-  // most significant byte; for little-endian we start from the least significant one.
+  // most significant byte; for little-endian we start from the least
+  // significant one.
   for (std::size_t i = 0; i < length; ++i)
   {
     const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
 
-    // Shift the selected byte down to the low 8 bits and mask everything else out.
-    // `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
-    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness), and
-    // migrate_expr has no `shr` arm — so a surviving `shr` aborts with "migrate
-    // expr failed". `value` is unsignedbv by construction above, which is the
-    // branch adjust_expr_shifts would take anyway.
+    // Shift the selected byte down to the low 8 bits and mask everything else
+    // out. `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
+    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness),
+    // and migrate_expr has no `shr` arm — so a surviving `shr` aborts with
+    // "migrate expr failed". `value` is unsignedbv by construction above, which
+    // is the branch adjust_expr_shifts would take anyway.
     const exprt shift_amount = from_integer(byte_index * 8, value.type());
     exprt shifted("lshr", value.type());
     shifted.copy_to_operands(value, shift_amount);
@@ -932,7 +935,8 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
     ++i;
     // CPython's '0' flag sets a '0' fill unless a fill char was explicit, and
     // derives '=' alignment only when no alignment was given — the two effects
-    // are independent (e.g. ">05d" keeps '>' but takes the '0' fill -> "00005").
+    // are independent (e.g. ">05d" keeps '>' but takes the '0' fill ->
+    // "00005").
     if (!fill_specified)
       fill = '0';
     if (align == 0)
@@ -1120,10 +1124,11 @@ exprt function_call_expr::handle_format() const
     spec = args[1]["value"].get<std::string>();
   }
 
-  // Only a genuine literal value is folded — a Constant or a unary +/- over one.
-  // extract_constant_integer would also resolve a Name to its bound constant,
-  // but that value can be stale after a reassignment (`x = 255; x = 10`), which
-  // would mis-fold; a variable argument is left unsupported instead.
+  // Only a genuine literal value is folded — a Constant or a unary +/- over
+  // one. extract_constant_integer would also resolve a Name to its bound
+  // constant, but that value can be stale after a reassignment (`x = 255; x =
+  // 10`), which would mis-fold; a variable argument is left unsupported
+  // instead.
   const std::string value_node_type = args[0].value("_type", std::string());
   const bool is_literal_value =
     value_node_type == "Constant" || value_node_type == "UnaryOp";

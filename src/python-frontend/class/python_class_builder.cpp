@@ -157,7 +157,8 @@ void python_class_builder::get_members(
     {
       // class-level annotated attribute
       // Check if annotation is a simple Name node with an "id" field
-      // Complex types like Dict[str, Any] are Subscript nodes without direct "id"
+      // Complex types like Dict[str, Any] are Subscript nodes without direct
+      // "id"
       if (
         n.contains("annotation") && n["annotation"].contains("id") &&
         n["annotation"]["id"].is_string())

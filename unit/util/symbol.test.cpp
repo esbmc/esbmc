@@ -34,7 +34,7 @@ SCENARIO(
 
     THEN("Symbol should be well formed")
     {
-      //REQUIRE(symbol.is_well_formed());
+      // REQUIRE(symbol.is_well_formed());
     }
   }
 }

@@ -55,8 +55,9 @@ public:
     smt_astt sym_ast,
     const floatbv_type2t &fbv_type);
 
-  /** Look up the tracked interval for t; fall back to the point interval {t, t}.
-   *  Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp. */
+  /** Look up the tracked interval for t; fall back to the point interval {t,
+   * t}. Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp.
+   */
   ra_interval_t get_interval(smt_astt t) const;
 
   /** Store an interval for t in the map.
@@ -227,10 +228,12 @@ private:
   /** Returns the max-normal threshold for the given float precision. */
   smt_astt get_max_normal_real(const floatbv_type2t &fbv_type) const;
 
-  /** True iff x > max_normal (positive infinity in the real-arithmetic encoding). */
+  /** True iff x > max_normal (positive infinity in the real-arithmetic
+   * encoding). */
   smt_astt is_pos_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
 
-  /** True iff x < −max_normal (negative infinity in the real-arithmetic encoding). */
+  /** True iff x < −max_normal (negative infinity in the real-arithmetic
+   * encoding). */
   smt_astt is_neg_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
 
   /** True iff |x| > max_normal (either sign of infinity). */

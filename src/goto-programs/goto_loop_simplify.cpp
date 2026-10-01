@@ -711,8 +711,9 @@ bool simplify_function_once(goto_functiont &fn, const optionst &options)
     // type. A non-terminating loop cannot match the recognition
     // template, so the rewrite never converts a non-terminating
     // shape into a terminating one.
-    if (try_step_recognition(
-          body, loop_head, loop_exit, body_first, exit_guard, is_dowhile))
+    if (
+      try_step_recognition(
+        body, loop_head, loop_exit, body_first, exit_guard, is_dowhile))
     {
       changed = true;
       continue;

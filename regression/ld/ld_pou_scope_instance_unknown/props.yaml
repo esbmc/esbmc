@@ -1,0 +1,12 @@
+properties:
+  # p0's input mode carries feed through to seen; the program's mode is never
+  # set. Declaring PASS's input globally would sample the program's mode every
+  # scan and turn q on in scan 1.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Holds: p0's input does not reach the program's mode"
+  - id: P2
+    kind: invariant
+    expression: "!feed || seen"
+    description: "Holds: p0__mode is feed, and OUT copies it to seen"

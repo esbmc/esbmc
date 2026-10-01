@@ -25,8 +25,9 @@
  * needed here.
  *
  * When --loop-frame-rule is enabled, the havoc step is enhanced with:
- *   Snapshot -> Havoc -> FrameRule(Assume unchanged == snapshot) -> Assume invariants
- * This preserves the relationship between modified and unmodified variables.
+ *   Snapshot -> Havoc -> FrameRule(Assume unchanged == snapshot) -> Assume
+ * invariants This preserves the relationship between modified and unmodified
+ * variables.
  */
 
 #include <goto-programs/goto_loop_invariant.h>
@@ -417,9 +418,10 @@ static bool is_trivial_rhs(const expr2tc &expr)
   return false;
 }
 
-/// Heuristic: compiler-generated temporaries (e.g. for short-circuit evaluation)
-/// typically have '$' in their name; user variables do not. Used to avoid
-/// moving user variable DECLs/ASSIGNs while still collecting compiler temps.
+/// Heuristic: compiler-generated temporaries (e.g. for short-circuit
+/// evaluation) typically have '$' in their name; user variables do not. Used to
+/// avoid moving user variable DECLs/ASSIGNs while still collecting compiler
+/// temps.
 static bool is_likely_compiler_temp(const irep_idt &id)
 {
   return id2string(id).find('$') != std::string::npos;
@@ -794,7 +796,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
   // =========================================================
   // Frame Rule Step 3: Enforce Frame Conditions (if enabled)
-  // ASSUME: for vars NOT in assigns set, assume var == snapshot (k-induction hypothesis)
+  // ASSUME: for vars NOT in assigns set, assume var == snapshot (k-induction
+  // hypothesis)
   // =========================================================
   if (use_frame_rule && active_frame_enforcer && !loop_assigns.empty())
   {
@@ -836,10 +839,10 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     return false;
   };
 
-  // Flatten top-level conjunctions so a pure conjunct can be split out even when
-  // the frontend folded it together with a side-effecting one into `a && b`.
-  // The conjunct guards are themselves pure: any embedded call has already been
-  // hoisted into the side_effects block (see file header).
+  // Flatten top-level conjunctions so a pure conjunct can be split out even
+  // when the frontend folded it together with a side-effecting one into `a &&
+  // b`. The conjunct guards are themselves pure: any embedded call has already
+  // been hoisted into the side_effects block (see file header).
   std::function<void(const expr2tc &)> partition;
   std::vector<expr2tc> pure, impure;
   partition = [&](const expr2tc &e) {

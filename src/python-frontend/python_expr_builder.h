@@ -83,7 +83,8 @@ exprt build_not(const exprt &op);
 // `a < b` over same-width operands (lessthan2t asserts width consistency).
 exprt build_less_than(const exprt &a, const exprt &b);
 
-// `a <= b` over same-width operands (lessthanequal2t asserts width consistency).
+// `a <= b` over same-width operands (lessthanequal2t asserts width
+// consistency).
 exprt build_less_equal(const exprt &a, const exprt &b);
 
 // `a > b` over same-width operands (greaterthan2t asserts width consistency).

@@ -1406,8 +1406,9 @@ ieee_floatt z3_convt::get_fpbv(smt_astt a)
   else
   {
     Z3_ast v;
-    if (Z3_model_eval(
-          z3_ctx, solver.get_model(), Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
+    if (
+      Z3_model_eval(
+        z3_ctx, solver.get_model(), Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
       number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
   }
 

@@ -106,7 +106,8 @@ TEST_CASE("type2t ordering is a strict total order (H-B1)", "[core][irep2]")
     get_int_type(8),
     get_int_type(32),
     // Structurally equal to element [4] but a fresh allocation (get_uint_type
-    // returns a shared singleton), so the distinct-pointer cmp path is exercised.
+    // returns a shared singleton), so the distinct-pointer cmp path is
+    // exercised.
     unsignedbv_type2tc(32),
     array_type2tc(get_uint_type(8), sz2, false),
     array_type2tc(get_uint_type(8), sz5, false), // unequal array size

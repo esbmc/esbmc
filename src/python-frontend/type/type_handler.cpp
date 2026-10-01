@@ -140,9 +140,8 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   /* The statement is a constructor call if the function call on the
    * rhs corresponds to the name of a class. */
 
-  // First, check if the class is defined in the AST (handles forward references)
-  // example: class Foo: -> "Bar":
-  // Bar is a class here defined later
+  // First, check if the class is defined in the AST (handles forward
+  // references) example: class Foo: -> "Bar": Bar is a class here defined later
   if (json_utils::is_class(func_name, converter_.ast()))
     return true;
 
@@ -162,7 +161,8 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   return is_ctor_call;
 }
 
-/// This utility maps internal ESBMC types to their corresponding Python type strings
+/// This utility maps internal ESBMC types to their corresponding Python type
+/// strings
 std::string type_handler::type_to_string(const typet &t) const
 {
   if (t == double_type())
@@ -386,7 +386,8 @@ bool type_handler::are_types_compatible(const typet &t1, const typet &t2) const
 }
 
 /// Get a normalized/canonical type for list element type inference
-/// This ensures all strings use the same representative type regardless of length
+/// This ensures all strings use the same representative type regardless of
+/// length
 typet type_handler::get_canonical_string_type(const typet &t) const
 {
   // For string types (char arrays), return a canonical string type
@@ -395,7 +396,8 @@ typet type_handler::get_canonical_string_type(const typet &t) const
     const array_typet &arr_type = to_array_type(t);
     if (arr_type.subtype() == char_type())
     {
-      // Return a canonical string type (size 0 array indicates variable length string)
+      // Return a canonical string type (size 0 array indicates variable length
+      // string)
       return build_array(char_type(), 0);
     }
   }
@@ -552,7 +554,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
   // as per Python documentation. This ensures proper precision, range, and
-  // compatibility with Python's numeric type promotion (int -> float -> complex).
+  // compatibility with Python's numeric type promotion (int -> float ->
+  // complex).
   if (ast_type == "float")
     return lower_to_seam(double_type2());
 
@@ -908,7 +911,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     // Handle Python AST UnaryOp node (e.g., -1, +1, ~1, not x)
     if (elem["_type"] == "UnaryOp" && elem.contains("operand"))
     {
-      // For unary operations, the result type is typically the same as the operand type
+      // For unary operations, the result type is typically the same as the
+      // operand type
       return get_typet(elem["operand"]);
     }
 
@@ -931,7 +935,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     }
 
     // Handle Python AST Tuple node
-    // Converts tuple expressions such as (1, 2) or ("hello", 42, 3.14) to struct types
+    // Converts tuple expressions such as (1, 2) or ("hello", 42, 3.14) to
+    // struct types
     if (elem["_type"] == "Tuple" && elem.contains("elts"))
     {
       struct_typet tuple_type;
@@ -1065,7 +1070,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
-    // Handle case where annotation is directly a Subscript (e.g., List['Action'])
+    // Handle case where annotation is directly a Subscript (e.g.,
+    // List['Action'])
     if (list_value["annotation"]["_type"] == "Subscript")
     {
       const nlohmann::json &slice = list_value["annotation"]["slice"];
@@ -1290,10 +1296,11 @@ typet type_handler::get_slice_type() const
   return symbol_typet(slice_type_symbol->id);
 }
 
-/// This method inspects the JSON representation of a Python operand node and attempts to
-/// infer its type based on its AST node type (`_type`). It currently supports variable
-/// names, constants (literals), and list subscripts. This type information is used for
-/// symbolic execution or translation within ESBMC.
+/// This method inspects the JSON representation of a Python operand node and
+/// attempts to infer its type based on its AST node type (`_type`). It
+/// currently supports variable names, constants (literals), and list
+/// subscripts. This type information is used for symbolic execution or
+/// translation within ESBMC.
 std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 {
   // Handle variable reference (e.g., `x`)
@@ -1394,14 +1401,16 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     }
   }
 
-  // Handle call expressions: constructor calls like A() and method calls like B().g()
+  // Handle call expressions: constructor calls like A() and method calls like
+  // B().g()
   else if (operand["_type"] == "Call" && operand.contains("func"))
   {
     const auto &func = operand["func"];
     // Direct constructor call: A() — return the class name as the type
     if (func["_type"] == "Name" && func.contains("id"))
       return func["id"].get<std::string>();
-    // Method call: obj.method() — infer the return type from the class definition
+    // Method call: obj.method() — infer the return type from the class
+    // definition
     if (
       func["_type"] == "Attribute" && func.contains("attr") &&
       func.contains("value"))
@@ -1447,7 +1456,8 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     }
   }
 
-  // If no known type can be determined, issue a warning and return std::string()
+  // If no known type can be determined, issue a warning and return
+  // std::string()
   log_warning(
     "type_handler::get_operand_type: unable to determine operand type for AST "
     "node: {}",

@@ -731,7 +731,8 @@ BigInt string_handler::get_string_size(const exprt &expr)
         const auto &arr_type = to_array_type(symbol->get_type());
         return binary2integer(arr_type.size().value().as_string(), false);
       }
-      // For non-array symbols, we need a reasonable default since we can't compute actual size
+      // For non-array symbols, we need a reasonable default since we can't
+      // compute actual size
       return BigInt(20); // Conservative default
     }
 
@@ -1118,7 +1119,8 @@ exprt string_handler::apply_format_specification(
   // The 'c' type renders an integer as the character with that code point.
   // Fold only 1-127 (printable-through-DEL ASCII) for a constant integer:
   // code point 0 embeds a NUL (unreliable in the null-terminated string model)
-  // and > 127 is multi-byte UTF-8, so those fall through to the nondet handling.
+  // and > 127 is multi-byte UTF-8, so those fall through to the nondet
+  // handling.
   if (
     format == "c" && (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
   {
@@ -2109,7 +2111,8 @@ static bool fold_constant_string(
 
   // Name reference: resolve its declaration and fold the bound value.
   // Reassigned names are not foldable:
-  // get_var_value returns the first binding, so defer to the runtime string model.
+  // get_var_value returns the first binding, so defer to the runtime string
+  // model.
   if (type == "Name" && node.contains("id"))
   {
     const std::string id = node["id"].get<std::string>();
@@ -2445,8 +2448,9 @@ exprt string_handler::try_handle_len_string_fast_path(
     len_cache_scope_id_ = current_scope_id;
   }
 
-  if (exprt fast = try_len_fast_path_from_constant_arg(arg_json, arg_expr);
-      !fast.is_nil())
+  if (
+    exprt fast = try_len_fast_path_from_constant_arg(arg_json, arg_expr);
+    !fast.is_nil())
     return fast;
 
   if (exprt fast = try_len_fast_path_from_name_arg(arg_json); !fast.is_nil())
@@ -2904,11 +2908,11 @@ exprt string_handler::handle_string_attribute_call(
   // are otherwise routed through the str strncmp/strlen machinery, which is
   // wrong for the int-array bytes representation (a NUL byte truncates the
   // length). Fold over *literal* operands only: the receiver must be a
-  // bytes([...]) constructor, and the argument either a bytes([...]) subsequence
-  // or a single integer byte. The match is purely syntactic (AST only), so no
-  // symbolic, branch-merged, or partially-evaluated value can reach the fold;
-  // a str receiver, a variable/expression receiver, and any other form fall
-  // through to the existing dispatch, sound and unchanged.
+  // bytes([...]) constructor, and the argument either a bytes([...])
+  // subsequence or a single integer byte. The match is purely syntactic (AST
+  // only), so no symbolic, branch-merged, or partially-evaluated value can
+  // reach the fold; a str receiver, a variable/expression receiver, and any
+  // other form fall through to the existing dispatch, sound and unchanged.
   if ((method_name == "find" || method_name == "rfind") && args.size() == 1)
   {
     auto extract_bytes_literal =
@@ -2998,12 +3002,13 @@ exprt string_handler::handle_string_attribute_call(
 
   // bytes.index(sub) / bytes.rindex(sub): like find/rfind but raise ValueError
   // when sub is absent (CPython). Both are otherwise routed through the str
-  // strncmp/strlen machinery, wrong for the int-array bytes representation. Fold
-  // over *literal* operands: the receiver must be a bytes([...]) constructor and
-  // the argument either a bytes([...]) subsequence or a single integer byte. The
-  // match is purely syntactic (AST only), so no symbolic, branch-merged, or
-  // partially-evaluated value can reach the fold; a str receiver, a variable
-  // receiver, and any other form fall through to the existing dispatch.
+  // strncmp/strlen machinery, wrong for the int-array bytes representation.
+  // Fold over *literal* operands: the receiver must be a bytes([...])
+  // constructor and the argument either a bytes([...]) subsequence or a single
+  // integer byte. The match is purely syntactic (AST only), so no symbolic,
+  // branch-merged, or partially-evaluated value can reach the fold; a str
+  // receiver, a variable receiver, and any other form fall through to the
+  // existing dispatch.
   if ((method_name == "index" || method_name == "rindex") && args.size() == 1)
   {
     auto extract_bytes_literal =
@@ -3373,7 +3378,8 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list argument (the iterable to join)
   const nlohmann::json &list_arg = call_json["args"][0];
 
-  // Resolve the list JSON node from either a Name reference or a direct List literal
+  // Resolve the list JSON node from either a Name reference or a direct List
+  // literal
   const nlohmann::json *list_node = nullptr;
   nlohmann::json var_decl;
 
@@ -3458,8 +3464,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       (*call_to_resolve)["func"].contains("value"))
     {
       std::string input;
-      if (extract_constant_string(
-            (*call_to_resolve)["func"]["value"], converter_, input))
+      if (
+        extract_constant_string(
+          (*call_to_resolve)["func"]["value"], converter_, input))
       {
         std::string sep;
         if (

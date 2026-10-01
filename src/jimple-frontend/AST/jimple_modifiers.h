@@ -98,4 +98,4 @@ private:
     {modifier::Annotation, "Annotation"}};
 };
 
-#endif //ESBMC_JIMPLE_MODIFIERS_H
+#endif // ESBMC_JIMPLE_MODIFIERS_H

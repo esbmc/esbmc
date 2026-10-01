@@ -13,6 +13,8 @@ typedef struct
 
 void callee(P *a, P *b)
 {
+  __ESBMC_requires(a == 0 || __ESBMC_is_fresh(a, sizeof(*a)));
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(*b)));
   __ESBMC_requires(a != 0);
   __ESBMC_requires(b != 0);
   __ESBMC_assigns(a->coeffs);

@@ -74,6 +74,7 @@ partition reviewable and what keeps it from decaying.
    would misstate its scope, so it stays at the top. *(Alternative, if the
    reviewer prefers an empty top level: a `support/` directory holding these two
    files. Either is defensible; the plan does not depend on the choice.)*
+   §11.2 added `waypoint.h` here on the same grounds.
 
 ## 4. Measured dependency structure
 
@@ -98,6 +99,9 @@ One non-trivial SCC survives: **`equation` ↔ `trace`**. Cause, exactly:
 `goto_trace_stept::typet` — the SSA step-kind enum lives in the *trace* header,
 so the equation cannot be compiled without it. See §11 for the follow-up.
 
+**Resolved by §11.1**: with the enum hoisted into `symex_targett`, the
+`equation -> trace` edge is gone, and the group graph is acyclic.
+
 Two further inversions worth naming, neither introduced here:
 
 * **`state/` → `witness/`.** `goto_symex_state.h:22` includes `witnesses.h` for
@@ -105,12 +109,14 @@ Two further inversions worth naming, neither introduced here:
   therefore drags in the witness emitter. `witnesses.h` is three headers in one
   — replay input types, GraphML/YAML output, and (until §5) the test
   generators. Splitting it is a follow-up, not part of this move.
+  **Resolved by §11.2.**
 * **`src/util/` → `goto-symex/`, twice.** `util/ssa/algorithms.h` and
   `util/ssa/goto_expr_factory.h` include `symex_target_equation.h`, and
   `util/base/yaml_parser.h:3` includes `<goto-symex/witnesses.h>` — the base
   layer depending upward on this component. #6381 named the `ssa/` half and
   left it; the `yaml_parser.h` half is the reason `yaml_parser.cpp` sits in the
   affected-TU set of any change to `witnesses.h`. Still out of scope.
+  §11.3 slice 1 removed `algorithms.h` from this list.
 
 ## 5. Step 0 — prerequisite include repair — **DONE**
 
@@ -383,16 +389,47 @@ PR; each is a separate, small, testable change.
    depend on and which depends on nothing. Hoisting it removes the last group
    cycle. Mechanical but wide: every `goto_trace_stept::ASSERT`-style reference
    changes.
+   **DONE** on branch `refactor/symex-step-type-enum`: the enum is now
+   `symex_targett::step_typet`, and `symex_target_equation.h` no longer includes
+   `trace/goto_trace.h`. It is nested in the class because `goto_program.h`
+   declares a global unscoped enum with `ASSERT`, `ASSUME` and `SKIP`, which a
+   namespace-scope enum would clash with. For the same reason, an unqualified
+   enumerator inside a `goto_trace_stept` member now names the GOTO instruction
+   type. `-Wenum-compare` under `-Werror` caught the one comparison
+   (`goto_trace.cpp:49`), but it does not check `case` labels, so every site is
+   qualified explicitly.
 2. **`witnesses.h` is two headers.** Splitting the violation-witness replay
    types (`waypoint`) from the GraphML/YAML emitters would remove
    `state/` → `witness/` and stop the engine's state header from pulling in
-   `boost/property_tree` and `yaml-cpp` into 44 translation units. Step 0
+   `boost/property_tree` and `yaml-cpp` into many translation units. Step 0
    removed the third role (the test generators); this is the remainder.
+   **DONE** on branch `refactor/split-witnesses-header`: `waypoint` and the
+   `c_nonset` sentinel moved to `src/goto-symex/waypoint.h`, which sits at the
+   top level for the same reason as `symex_invariant` (§3 rule 6): it is
+   shared by `state/`, `engine/`, `witness/` and `util/base/yaml_parser`, and
+   depends on nothing in this component. `goto_symex_state.h` and
+   `engine/builtin_functions/witness.cpp` include it in place of
+   `witnesses.h`. Measured with `ninja -t deps`, the TUs that parse
+   `witnesses.h` and `boost/property_tree` fall from 58 to 19, and those that
+   parse `yaml-cpp` fall from 62 to 23. `invariant` stays in `witnesses.h`: only the
+   YAML emitter and `yaml_parser` use it.
 3. **`src/util/` depends upward on `goto-symex/`.** `util/ssa/{algorithms,
    cache, goto_expr_factory}` are not utilities; #6381 named this and deferred
    it because it changes CMake target topology. `util/base/yaml_parser.h`'s
    include of `witnesses.h` is the same inversion in a second place. The
    natural sequel to this PR, not part of it.
+   **Slice 1 DONE** on branch `refactor/split-ssa-algorithms`:
+   `util/ssa/algorithms.h` held two unrelated base classes. `algorithm<T>`,
+   which has no dependencies, is now `util/base/algorithm.h`.
+   `goto_functions_algorithm` moved to `goto-programs/` (library
+   `gotoprograms`), and `ssa_step_algorithm` moved to `goto-symex/equation/`
+   (library `symex`). The `algorithms` CMake library, and with it the
+   `ESBMC::algorithms` alias, is gone. `slice.h` had reached
+   `property_verdict.h` only through the old header, so it now includes it
+   directly. `cache` now links `symex` explicitly; before, it reached
+   `run_on_step` through `algorithms`. That makes the remaining inversion
+   visible in CMake. Remaining: `util/ssa/{cache, fingerprint, proof_cache,
+   goto_expr_factory}` and `yaml_parser`.
 4. **`goto_symex.h` is 66 KB in one file.** Splitting the `goto_symext`
    declaration is a real improvement and is emphatically *not* a move — it
    changes what each translation unit sees. Separate PR, separate risk.
@@ -408,6 +445,10 @@ PR; each is a separate, small, testable change.
    against. Naming this is the point: the header-only graph in §4 does not see
    these edges, so an unqualified "unreachable from `symex_step`" claim
    measured that way is wrong.
+   After §11.2 the witness half holds. The hooks in
+   `engine/builtin_functions/witness.cpp` only read `waypoint` fields, and they
+   still compile once `witnesses.h` is replaced by `waypoint.h`, so they call
+   nothing the emitter declares. The `printf_formattert` half remains.
 6. **The dead citation in `engine/symex_main.cpp`.** It named
    `goto-symex/builtin_functions.cpp`, a file that has not existed since
    `builtin_functions` became a directory. Repointed at

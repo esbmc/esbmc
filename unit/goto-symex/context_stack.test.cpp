@@ -52,12 +52,14 @@ class engine
 public:
   explicit engine(std::string src)
     : source(std::move(src)),
-      prog(goto_factory::get_goto_functions(
-        source,
-        goto_factory::Architecture::BIT_64)),
+      prog(
+        goto_factory::get_goto_functions(
+          source,
+          goto_factory::Architecture::BIT_64)),
       ns(prog.context),
-      opts(goto_factory::get_default_options(
-        goto_factory::get_default_cmdline("test.c")))
+      opts(
+        goto_factory::get_default_options(
+          goto_factory::get_default_cmdline("test.c")))
   {
     // Read by execution_statet's constructor, so it has to be set before the
     // reachability tree builds the initial state.

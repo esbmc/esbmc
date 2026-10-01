@@ -93,7 +93,8 @@ inline std::string map_operator(const std::string &op, const typet &type)
       return float_it->second;
   }
 
-  // Look up the operator in the general operator map (for non-floating-point types).
+  // Look up the operator in the general operator map (for non-floating-point
+  // types).
   const auto &m = operator_map();
   auto it = m.find(lower_op);
   if (it != m.end())

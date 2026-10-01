@@ -211,8 +211,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
       // access through that path when it is not a direct member (#1866, #3894).
       const type2tc member_type = to_pointer_type(ref.type).subtype;
       expr2tc nested;
-      if (build_nested_member_access(
-            source, ref.member, member_type, ns, nested))
+      if (
+        build_nested_member_access(source, ref.member, member_type, ns, nested))
         expr = nested;
       else
         expr = member2tc(member_type, source, ref.member);

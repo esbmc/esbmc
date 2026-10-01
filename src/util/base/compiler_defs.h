@@ -18,7 +18,7 @@
 #else
 #  define CC_DIAGNOSTIC_PUSH() _Pragma("GCC diagnostic push")
 #  define CC_DIAGNOSTIC_POP() _Pragma("GCC diagnostic pop")
-#  define DO_PRAGMA(x) _Pragma(#  x)
+#  define DO_PRAGMA(x) _Pragma(#x)
 
 #  define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()                                   \
     DO_PRAGMA(GCC diagnostic ignored "-Wstrict-aliasing")                      \

@@ -66,8 +66,8 @@ private:
   exprt parse_xor();
   exprt parse_and();
   exprt parse_comparison();
-  exprt parse_expr(); // additive  (+ -), left-assoc
-  exprt parse_term(); // multiplicative (* /), binds tighter than + -
+  exprt parse_expr();  // additive  (+ -), left-assoc
+  exprt parse_term();  // multiplicative (* /), binds tighter than + -
   exprt parse_unary(); // NOT
   exprt parse_primary();
 };

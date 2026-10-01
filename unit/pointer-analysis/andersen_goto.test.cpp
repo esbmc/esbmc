@@ -411,3 +411,31 @@ TEST_CASE(
   // p's pointee must be assumed clobbered by the unknown callee.
   REQUIRE(targets_of(andersen, functions, "", "a").count("*") == 1);
 }
+
+TEST_CASE(
+  "andersen widens the target of an assignment with no source",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int a;
+    int main(void)
+    {
+      int *p = &a;
+      int *q = p;
+      return 0;
+    }
+  )";
+
+  // q = p gives p a node, so dropping the assignment would leave it empty
+  // rather than unknown.
+  goto_functionst functions = compile(src);
+  for (auto &f : functions.function_map)
+    for (auto &i : f.second.body.instructions)
+      if (i.is_assign() && is_address_of2t(to_code_assign2t(i.code).source))
+        i.code = code_assign2tc(to_code_assign2t(i.code).target, expr2tc());
+
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(targets_of(andersen, functions, "main", "p").count("*") == 1);
+}

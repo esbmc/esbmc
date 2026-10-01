@@ -323,12 +323,14 @@ irep_idt symbolt::get_function_name() const
   // Find the position of the last '@'
   size_t posLastAt = symbol_id.rfind('@');
 
-  // Check if there is an '@' after the function name (e.g.: c:string.c@1290@F@strcmp@c1)
+  // Check if there is an '@' after the function name (e.g.:
+  // c:string.c@1290@F@strcmp@c1)
   if (posLastAt != std::string::npos && posLastAt > posF)
     return symbol_id.substr(
       posF,
       posLastAt - posF); // Extract the content between "F@" and the last '@'
 
   return symbol_id.substr(
-    posF); // If there is no '@' after the function name (e.g: c:string.c@1290@F@strcmp), return from "F@"
+    posF); // If there is no '@' after the function name (e.g:
+           // c:string.c@1290@F@strcmp), return from "F@"
 }

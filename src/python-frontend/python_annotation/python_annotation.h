@@ -182,8 +182,9 @@ private:
     const Json &function_element,
     size_t param_index,
     size_t param_count);
-  // Return type of a FunctionDef @p member: its declared `-> T` (or `-> T[...]`)
-  // annotation, else the type inferred from its return statements, else "Any".
+  // Return type of a FunctionDef @p member: its declared `-> T` (or `->
+  // T[...]`) annotation, else the type inferred from its return statements,
+  // else "Any".
   std::string
   method_return_type(const Json &member, const std::string &class_name);
   // Type inferred from the return statements of @p member, a method of

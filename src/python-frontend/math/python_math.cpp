@@ -211,8 +211,9 @@ bool python_math::is_math_dispatch_target_cached(
 
   function_call_cache &cache = converter.get_function_call_cache();
   const std::string key = make_math_dispatch_cache_key(caller, func_name);
-  if (std::optional<bool> cached = cache.get_math_dispatch_classification(key);
-      cached.has_value())
+  if (
+    std::optional<bool> cached = cache.get_math_dispatch_classification(key);
+    cached.has_value())
   {
     return cached.value();
   }
@@ -382,8 +383,9 @@ exprt python_math::compute_expr(const exprt &expr) const
   // Fold to a constant only when the expression is genuinely a compile-time
   // integer; otherwise return it unchanged so callers keep a symbolic encoding
   // rather than a fabricated 0 read from a non-constant operand (issue #5915).
-  if (std::optional<BigInt> value = try_fold_int_constant(expr);
-      value.has_value())
+  if (
+    std::optional<BigInt> value = try_fold_int_constant(expr);
+    value.has_value())
     return from_integer(*value, expr.type());
   return expr;
 }
@@ -439,8 +441,9 @@ exprt python_math::promote_to_double_if_needed(exprt operand) const
 
   // Fast path: fold numeric constants directly to double literal to avoid
   // generating extra typecast IR in hot math call paths.
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
   {
     return from_double(*val, double_type());
   }
@@ -488,8 +491,9 @@ const symbolt &python_math::get_c_math_symbol_cached(
   const char *display_name)
 {
   const std::string_view symbol_key{symbol_id};
-  if (auto it = c_math_symbol_cache_.find(symbol_key);
-      it != c_math_symbol_cache_.end() && it->second != nullptr)
+  if (
+    auto it = c_math_symbol_cache_.find(symbol_key);
+    it != c_math_symbol_cache_.end() && it->second != nullptr)
   {
     return *it->second;
   }
@@ -651,7 +655,8 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
       return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
   }
 
-  // Build symbolic multiplication tree using exponentiation by squaring for efficiency
+  // Build symbolic multiplication tree using exponentiation by squaring for
+  // efficiency
   return build_power_expression(lhs, exponent);
 }
 
@@ -660,9 +665,10 @@ exprt python_math::handle_modulo(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-      rhs_const = try_resolve_constant_double(rhs);
-      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
   {
     const double q = std::floor(*lhs_const / *rhs_const);
     const double r = *lhs_const - (q * *rhs_const);
@@ -703,9 +709,10 @@ exprt python_math::handle_floor_division(
     lhs.type().is_floatbv() || rhs.type().is_floatbv() ||
     bin_expr.type().is_floatbv())
   {
-    if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-        rhs_const = try_resolve_constant_double(rhs);
-        lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+    if (
+      std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+      rhs_const = try_resolve_constant_double(rhs);
+      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
       return from_double(std::floor(*lhs_const / *rhs_const), double_type());
 
     exprt div_expr("ieee_div", double_type());
@@ -768,7 +775,8 @@ exprt python_math::handle_floor_division(
   exprt if_expr =
     python_expr::build_if(cond, gen_one(div_type), gen_zero(div_type));
 
-  // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
+  // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0)
+  // else 0)
   return python_expr::build_sub(bin_expr, if_expr, div_type);
 }
 
@@ -868,7 +876,8 @@ void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
     }
     else
     {
-      // For non-constant operands (like function parameters), create explicit typecast expression
+      // For non-constant operands (like function parameters), create explicit
+      // typecast expression
       e = math_typecast(e, float_type);
     }
   };
@@ -932,8 +941,9 @@ void python_math::promote_int_to_float(exprt &op, const typet &target_type)
 
 exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
   {
     // Constant-fold when we have a concrete value that is either:
     //  - non-negative finite, or
@@ -955,9 +965,10 @@ exprt python_math::handle_divmod(
   if (dividend.type().is_floatbv() || divisor.type().is_floatbv())
   {
     result_type = double_type();
-    if (std::optional<double> lhs_const = try_resolve_constant_double(dividend),
-        rhs_const = try_resolve_constant_double(divisor);
-        lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+    if (
+      std::optional<double> lhs_const = try_resolve_constant_double(dividend),
+      rhs_const = try_resolve_constant_double(divisor);
+      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
     {
       const double q = std::floor(*lhs_const / *rhs_const);
       const double r = *lhs_const - (q * *rhs_const);
@@ -1070,8 +1081,9 @@ exprt python_math::handle_divmod(
 
 exprt python_math::handle_sin(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::sin(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1080,8 +1092,9 @@ exprt python_math::handle_sin(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::cos(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1090,8 +1103,9 @@ exprt python_math::handle_cos(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_exp(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::exp(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1100,8 +1114,9 @@ exprt python_math::handle_exp(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val > 0.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val > 0.0)
     return from_double(std::log(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1110,8 +1125,9 @@ exprt python_math::handle_log(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val >= -1.0 && *val <= 1.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val >= -1.0 && *val <= 1.0)
     return from_double(std::acos(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1120,8 +1136,9 @@ exprt python_math::handle_acos(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_atan(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::atan(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1133,9 +1150,10 @@ exprt python_math::handle_atan2(
   exprt x_operand,
   const nlohmann::json &element)
 {
-  if (std::optional<double> y_const = try_resolve_constant_double(y_operand),
-      x_const = try_resolve_constant_double(x_operand);
-      y_const.has_value() && x_const.has_value())
+  if (
+    std::optional<double> y_const = try_resolve_constant_double(y_operand),
+    x_const = try_resolve_constant_double(x_operand);
+    y_const.has_value() && x_const.has_value())
   {
     return from_double(std::atan2(*y_const, *x_const), double_type());
   }
@@ -1155,8 +1173,9 @@ exprt python_math::handle_atan2(
 
 exprt python_math::handle_log2(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val > 0.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val > 0.0)
   {
     // Avoid platform/libm rounding noise for exact powers of two.
     int exponent = 0;
@@ -1176,9 +1195,10 @@ exprt python_math::handle_pow(
   exprt exp,
   const nlohmann::json &element)
 {
-  if (std::optional<double> base_const = try_resolve_constant_double(base),
-      exp_const = try_resolve_constant_double(exp);
-      base_const.has_value() && exp_const.has_value())
+  if (
+    std::optional<double> base_const = try_resolve_constant_double(base),
+    exp_const = try_resolve_constant_double(exp);
+    base_const.has_value() && exp_const.has_value())
   {
     return from_double(std::pow(*base_const, *exp_const), double_type());
   }
@@ -1196,8 +1216,9 @@ exprt python_math::handle_pow(
 
 exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::fabs(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1206,8 +1227,9 @@ exprt python_math::handle_fabs(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && std::isfinite(*val))
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && std::isfinite(*val))
   {
     const double truncated = std::trunc(*val);
     const double ll_min =
@@ -1230,9 +1252,10 @@ exprt python_math::handle_fmod(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-      rhs_const = try_resolve_constant_double(rhs);
-      lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value() && *rhs_const != 0.0)
   {
     return from_double(std::fmod(*lhs_const, *rhs_const), double_type());
   }
@@ -1253,9 +1276,10 @@ exprt python_math::handle_copysign(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-      rhs_const = try_resolve_constant_double(rhs);
-      lhs_const.has_value() && rhs_const.has_value())
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value())
   {
     return from_double(std::copysign(*lhs_const, *rhs_const), double_type());
   }
@@ -1275,8 +1299,9 @@ exprt python_math::handle_copysign(
 
 exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::tan(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1285,8 +1310,9 @@ exprt python_math::handle_tan(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val >= -1.0 && *val <= 1.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val >= -1.0 && *val <= 1.0)
     return from_double(std::asin(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1295,8 +1321,9 @@ exprt python_math::handle_asin(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::sinh(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1305,8 +1332,9 @@ exprt python_math::handle_sinh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::cosh(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1315,8 +1343,9 @@ exprt python_math::handle_cosh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::tanh(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1325,8 +1354,9 @@ exprt python_math::handle_tanh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val > 0.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val > 0.0)
     return from_double(std::log10(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1335,8 +1365,9 @@ exprt python_math::handle_log10(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_expm1(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::expm1(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1345,8 +1376,9 @@ exprt python_math::handle_expm1(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_log1p(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val > -1.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val > -1.0)
     return from_double(std::log1p(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1355,8 +1387,9 @@ exprt python_math::handle_log1p(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_exp2(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::exp2(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1365,8 +1398,9 @@ exprt python_math::handle_exp2(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_asinh(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value())
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value())
     return from_double(std::asinh(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1375,8 +1409,9 @@ exprt python_math::handle_asinh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_acosh(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && *val >= 1.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && *val >= 1.0)
     return from_double(std::acosh(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1385,8 +1420,9 @@ exprt python_math::handle_acosh(exprt operand, const nlohmann::json &element)
 
 exprt python_math::handle_atanh(exprt operand, const nlohmann::json &element)
 {
-  if (std::optional<double> val = try_resolve_constant_double(operand);
-      val.has_value() && std::fabs(*val) < 1.0)
+  if (
+    std::optional<double> val = try_resolve_constant_double(operand);
+    val.has_value() && std::fabs(*val) < 1.0)
     return from_double(std::atanh(*val), double_type());
 
   return build_unary_c_math_call(
@@ -1398,9 +1434,10 @@ exprt python_math::handle_hypot(
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (std::optional<double> lhs_const = try_resolve_constant_double(lhs),
-      rhs_const = try_resolve_constant_double(rhs);
-      lhs_const.has_value() && rhs_const.has_value())
+  if (
+    std::optional<double> lhs_const = try_resolve_constant_double(lhs),
+    rhs_const = try_resolve_constant_double(rhs);
+    lhs_const.has_value() && rhs_const.has_value())
   {
     return from_double(std::hypot(*lhs_const, *rhs_const), double_type());
   }

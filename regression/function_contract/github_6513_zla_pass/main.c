@@ -10,6 +10,7 @@ int g;
 
 void f(buf_t *b)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(b, sizeof(*b)));
   __ESBMC_requires(b != 0);
   __ESBMC_assigns(g);
   __ESBMC_ensures(g == 1);

@@ -1412,8 +1412,9 @@ void report_coverage(
     }
 
     log_success("\n[Coverage]\n");
-    // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
-    // "Total/Unreached Asserts" count static claims; the "Instances" lines
+    // The total assertion instances include the assert inside the source file,
+    // the unwinding asserts, the claims inserted during the goto-check and so
+    // on. "Total/Unreached Asserts" count static claims; the "Instances" lines
     // count their goto-unwound copies.
     log_result("Total Asserts: {}", total);
     log_result("Unreached Asserts: {}", unreached_claims.size());
@@ -1423,7 +1424,8 @@ void report_coverage(
     {
       // this could be
       // 1. the loop is too large that we cannot goto-unwind it
-      // 2. the loop is somewhat non-deterministic that we cannot run goto-unwind
+      // 2. the loop is somewhat non-deterministic that we cannot run
+      // goto-unwind
       log_result("Total Assertion Instances: unknown / non-deterministic");
       note_cov_incomplete(
         "the total number of assertion instances could not be determined "
@@ -1815,8 +1817,9 @@ void report_coverage_completeness()
     log_fail("  reason: {}", reason);
 }
 
-// Output coverage information whenever an instrumented assertion is found violated.
-// It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
+// Output coverage information whenever an instrumented assertion is found
+// violated. It is helpful when the program is too large and ESBMC cannot
+// finish, we can still get some info about the coverage
 void bmct::report_coverage_verbose(
   const claim_slicer &claim,
   const std::string &claim_sig,
@@ -1829,7 +1832,8 @@ void bmct::report_coverage_verbose(
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
   // for condition coverage verbose output
-  // total_cond: the combination of assertion's guard and location, which is used to identify each assertion in multi-property checking.
+  // total_cond: the combination of assertion's guard and location, which is
+  // used to identify each assertion in multi-property checking.
 
   auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
 
@@ -2064,16 +2068,16 @@ smt_resultt bmct::start_bmc()
   // report_coverage inside multi_property_check: that runs per thread
   // interleaving, and reporting there called a branch dead on the strength of
   // the first interleaving alone. goto_functionst::reached_claims is a static
-  // that is never cleared between interleavings, so by this point it holds every
-  // probe reached by any of them. Emitting before report_result keeps the
-  // [Dead code] section above the verdict, and routing the dead-store advisories
-  // through the same call keeps both sets in one SARIF document (issue #4495).
-  // Only a run that actually solved the probes can say anything about dead
-  // code. --show-vcc returns P_SMTLIB from run_thread before
+  // that is never cleared between interleavings, so by this point it holds
+  // every probe reached by any of them. Emitting before report_result keeps the
+  // [Dead code] section above the verdict, and routing the dead-store
+  // advisories through the same call keeps both sets in one SARIF document
+  // (issue #4495). Only a run that actually solved the probes can say anything
+  // about dead code. --show-vcc returns P_SMTLIB from run_thread before
   // multi_property_check ever runs, and a solver failure gives P_ERROR; either
   // way reached_claims is empty while all_claims is full, so every branch would
-  // be reported dead. report_result already declines to claim success over those
-  // two results — stay silent here for the same reason.
+  // be reported dead. report_result already declines to claim success over
+  // those two results — stay silent here for the same reason.
   if (
     options.get_bool_option("dead-code-check") && res != P_SMTLIB &&
     res != P_ERROR)
@@ -2222,8 +2226,8 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       // looking unreached, and report it as CWE-561. There is no
       // early-exit-on-bug to preserve for this mode — the verdict is forced
       // SUCCESSFUL regardless (issue #4495). A solver error or an SMT-formula
-      // emission still stops immediately: those are not "live probe" results and
-      // must propagate. It also leaves violation_seen clear, so the barren
+      // emission still stops immediately: those are not "live probe" results
+      // and must propagate. It also leaves violation_seen clear, so the barren
       // budget below never cuts the search short: --dead-code-check turns
       // --multi-property on implicitly, and it wants every interleaving.
       const bool keep_exploring_for_dead_code =
@@ -2670,7 +2674,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         else
         {
           masked.push_back(it);
-          it->type = goto_trace_stept::SKIP;
+          it->type = symex_targett::SKIP;
         }
       }
 
@@ -2683,7 +2687,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
     }
 
     for (auto &it : masked)
-      it->type = goto_trace_stept::ASSERT;
+      it->type = symex_targett::ASSERT;
 
     return std::make_tuple(solver_result, num_asserts, std::move(smt_conv));
   };
@@ -2955,10 +2959,11 @@ smt_resultt bmct::multi_property_check(
   // rather than live exploration state, which --schedule has already
   // invalidated by now (issue #6423).
   if (options.get_bool_option("coverage-measurement") && truncated_loops > 0)
-    note_cov_incomplete(fmt::format(
-      "the unwinding bound cut off {} loop iteration(s) with unwinding "
-      "assertions disabled, so goals past the bound were never explored",
-      truncated_loops));
+    note_cov_incomplete(
+      fmt::format(
+        "the unwinding bound cut off {} loop iteration(s) with unwinding "
+        "assertions disabled, so goals past the bound were never explored",
+        truncated_loops));
 
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
@@ -2990,8 +2995,10 @@ smt_resultt bmct::multi_property_check(
   // advisories, so none of the coverage reporting rules below apply to it.
   const bool is_cov_run = options.get_bool_option("coverage-measurement");
 
-  // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
-  // By enabling this, we will output the coverage information when handling each instrumentation assertion.
+  // is_vb: enable verbose output coverage info if the option "--verbosity
+  // coverage:N" is set, where N should larger than 0 By enabling this, we will
+  // output the coverage information when handling each instrumentation
+  // assertion.
   bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
 
   // For incr/kind in multi-property
@@ -3035,10 +3042,11 @@ smt_resultt bmct::multi_property_check(
    *
    * This job also affects the environment by using:
    * - &ce_counter: for generating the Counter Example file name
-   * - &final_result: if the current instance is SAT, then we known that the current k contains a bug
+   * - &final_result: if the current instance is SAT, then we known that the
+   * current k contains a bug
    *
-   * Finally, this function is affected by the "multi-fail-fast" option, which makes this instance stop
-   * if final_result is set to SAT
+   * Finally, this function is affected by the "multi-fail-fast" option, which
+   * makes this instance stop if final_result is set to SAT
    */
   auto job_function = [this,
                        &eq,
@@ -3157,12 +3165,13 @@ smt_resultt bmct::multi_property_check(
 
     std::string cone_key;
     bool cached_proof = false;
-    if (proof_cache_hit(
-          proof_cache.get(),
-          proof_cache_verify,
-          local_eq.SSA_steps,
-          cone_key,
-          cached_proof))
+    if (
+      proof_cache_hit(
+        proof_cache.get(),
+        proof_cache_verify,
+        local_eq.SSA_steps,
+        cone_key,
+        cached_proof))
     {
       record_discharge(
         withhold_proofs,
@@ -3594,23 +3603,24 @@ smt_resultt bmct::multi_property_check(
   if (options.get_bool_option("parallel-solving"))
   {
     /* NOTE: I would love to use std::for_each here, but it is not giving
-       * the result I would expect. My guess is either compiler version
-       * or some magic flag that we are not using.
-       *
-       * Nevertheless, we can achieve the same results by just creating
-       * threads.
-       */
+     * the result I would expect. My guess is either compiler version
+     * or some magic flag that we are not using.
+     *
+     * Nevertheless, we can achieve the same results by just creating
+     * threads.
+     */
 
     // TODO: Running everything in parallel might be a bad idea.
     //       Should we also add a thread pool?
     std::vector<std::thread> parallel_jobs;
     for (const auto &i : jobs)
-      parallel_jobs.push_back(std::thread(
-        [&](const size_t &n) {
-          run_job_guarded(
-            job_function, n, result_mutex, final_result, report_incomplete);
-        },
-        i));
+      parallel_jobs.push_back(
+        std::thread(
+          [&](const size_t &n) {
+            run_job_guarded(
+              job_function, n, result_mutex, final_result, report_incomplete);
+          },
+          i));
 
     // Main driver
     for (auto &t : parallel_jobs)

@@ -42,12 +42,14 @@ class equation
 public:
   explicit equation(const std::string &src, const char *unwind = "4")
     : source(src),
-      prog(goto_factory::get_goto_functions(
-        source,
-        goto_factory::Architecture::BIT_64)),
+      prog(
+        goto_factory::get_goto_functions(
+          source,
+          goto_factory::Architecture::BIT_64)),
       ns(prog.context),
-      opts(goto_factory::get_default_options(
-        goto_factory::get_default_cmdline("test.c"))),
+      opts(
+        goto_factory::get_default_options(
+          goto_factory::get_default_cmdline("test.c"))),
       rt(
         prog.functions,
         ns,
@@ -98,12 +100,14 @@ public:
     const std::string &src,
     const char *unwind = "4")
     : source(src),
-      prog(goto_factory::get_goto_functions(
-        source,
-        goto_factory::Architecture::BIT_64)),
+      prog(
+        goto_factory::get_goto_functions(
+          source,
+          goto_factory::Architecture::BIT_64)),
       ns(prog.context),
-      opts(goto_factory::get_default_options(
-        goto_factory::get_default_cmdline("test.c"))),
+      opts(
+        goto_factory::get_default_options(
+          goto_factory::get_default_cmdline("test.c"))),
       rt(
         prog.functions,
         ns,

@@ -405,13 +405,9 @@ void python_typechecking::inject_parameter_type_assertions(
     std::vector<typet> allowed_types = get_annotation_types(sid);
 
     code_assertt type_assert;
-    if (build_type_assertion(
-          param_expr,
-          type_it->second,
-          allowed_types,
-          arg_name,
-          loc,
-          type_assert))
+    if (
+      build_type_assertion(
+        param_expr, type_it->second, allowed_types, arg_name, loc, type_assert))
       assertions.push_back(type_assert);
   };
 

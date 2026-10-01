@@ -12,7 +12,7 @@
  * @brief This class is used to store intervals
  * in the form of lower <= upper. It also has support
  * for infinite. For this the variables `_set` are used.
- * 
+ *
  * @tparam T template type for the numeric value (e.g. int, float, bigint)
  */
 template <class T>
@@ -106,9 +106,9 @@ public:
   }
 
   /**
- * @brief Checks whether there are values that satisfy the
- * the interval.
- */
+   * @brief Checks whether there are values that satisfy the
+   * the interval.
+   */
   virtual bool empty() const
   {
     return lower && upper && *lower > *upper;
@@ -162,7 +162,8 @@ public:
   // Sound version (considering over approximations)
   void make_sound_le(interval_templatet<T> &v)
   {
-    // [lower, upper] <= [v.lower,v.upper] <==> [lower, min(upper,v.upper)] <= [max(lower, v.lower), v.upper]
+    // [lower, upper] <= [v.lower,v.upper] <==> [lower, min(upper,v.upper)] <=
+    // [max(lower, v.lower), v.upper]
 
     if (upper || v.upper)
       upper = upper && v.upper ? std::min(*upper, *v.upper)
@@ -253,32 +254,33 @@ public:
       upper.reset();
   }
 
-  /* INTERVAL ARITHMETICS 
+  /* INTERVAL ARITHMETICS
    *
    * Following Chapter 32 of Principles of Abstract Interpretation.
-   * 
+   *
    * ADD/SUB
-   * [x0, x1] + empty <==>  empty + [x0, x1] <==> [x0, x1] - empty <==>  empty + [x0, x1] <==> empty
-   * [x0, x1] + [y0, y1] <==> [x0+y0, x1+y1]
-   * [x0, x1] - [y0, y1] <==> [x0-y1, x1-y0]
+   * [x0, x1] + empty <==>  empty + [x0, x1] <==> [x0, x1] - empty <==>  empty +
+   * [x0, x1] <==> empty [x0, x1] + [y0, y1] <==> [x0+y0, x1+y1] [x0, x1] - [y0,
+   * y1] <==> [x0-y1, x1-y0]
    * -[x0, x1] <==> [-x1, -x0]
    * -infinity + infinity <==> -infinity
    * -infinity + c <==> -infinity
    * infinity + infinity = infinity
-   * 
+   *
    * MULT
    * [x0, x1] * empty <==> empty * [x0, x1] <==> empty
-   * [x0, x1] * [y0, y1] <==> [min(x0*y0, x0*y1, x1*y0, x1*y1), max(x0*y0, x0*y1, x1*y0, x1*y1)]
-   * 
+   * [x0, x1] * [y0, y1] <==> [min(x0*y0, x0*y1, x1*y0, x1*y1), max(x0*y0,
+   * x0*y1, x1*y0, x1*y1)]
+   *
    * DIV
    * [1, 1] / [x0, x1] <==> {
    *  (x1 < 0) || (0 < x0) => [1/x1, 1/x0]
    *  otherwise (e.g. 1/0) => [-infinity, infinity]
    *  }
    * [x0, x1] / [y0, y1] <==> [x0, x1] * [[1,1] / [y0, y1]]
-   * 
-   * 
-  */
+   *
+   *
+   */
   friend interval_templatet<T>
   operator+(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
@@ -346,7 +348,8 @@ public:
   friend interval_templatet<T>
   operator*(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
-    // [a_0, a_1] * [b_0, b_1] = [min(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1), max(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1)]
+    // [a_0, a_1] * [b_0, b_1] = [min(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1),
+    // max(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1)]
     interval_templatet<T> result;
     if (rhs.empty() || lhs.empty())
       return rhs.empty() ? rhs : lhs;
@@ -375,11 +378,12 @@ public:
   friend interval_templatet<T>
   operator/(const interval_templatet<T> &lhs, const interval_templatet<T> &rhs)
   {
-    /* Note, some works suggests doing a multiplication as [a0, a_1] * ([1,1] / [b_0, b_1])
-     * However, our implementation is not a symbolic computation; thus the arithmetic is not
-     * associative. For example, [-6, 10] / 2 which is [-3, 5] cannot be computed through
-     * the [-6, 10] * [1/2, 1/2] because 1/2 will result in 0.
-    */
+    /* Note, some works suggests doing a multiplication as [a0, a_1] * ([1,1] /
+     * [b_0, b_1]) However, our implementation is not a symbolic computation;
+     * thus the arithmetic is not associative. For example, [-6, 10] / 2 which
+     * is [-3, 5] cannot be computed through the [-6, 10] * [1/2, 1/2] because
+     * 1/2 will result in 0.
+     */
     if (rhs.empty() || lhs.empty())
       return rhs.empty() ? rhs : lhs;
 
@@ -660,7 +664,8 @@ public:
     return less_than(rhs, lhs);
   }
 
-  /// This is just to check if a value has changed. This is not the same as an interval comparation!
+  /// This is just to check if a value has changed. This is not the same as an
+  /// interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {
     if (empty())
@@ -680,22 +685,23 @@ public:
   }
 
   /**
-     * @brief Computer the contraction of "a" and "b" under a <= b
-     * 
-     * @param a 
-     * @param b 
-     */
+   * @brief Computer the contraction of "a" and "b" under a <= b
+   *
+   * @param a
+   * @param b
+   */
   static void
   contract_interval_le(interval_templatet<T> &a, interval_templatet<T> &b)
   {
     /**
-       * 1. Forward Evaluation y = (a - b) ===> [y] = ([a] - [b]) intersect [-infinity, 0]
-       * 2. Backwards Step, for each variable:
-       *   a. [a] = [a] intersect [b] + [y]
-       *   b. [b] = [b] intersect [a] - [y]
-       * 3. Find a fixpoint. 
-       * 
-       */
+     * 1. Forward Evaluation y = (a - b) ===> [y] = ([a] - [b]) intersect
+     * [-infinity, 0]
+     * 2. Backwards Step, for each variable:
+     *   a. [a] = [a] intersect [b] + [y]
+     *   b. [b] = [b] intersect [a] - [y]
+     * 3. Find a fixpoint.
+     *
+     */
     interval_templatet<T> intersection_operand;
     intersection_operand.make_lower_interval();
     bool changed;

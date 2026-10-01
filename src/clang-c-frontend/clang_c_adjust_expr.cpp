@@ -275,10 +275,6 @@ void clang_c_adjust::adjust_ptr_mem(exprt &expr)
   }
 }
 
-
-
-
-
 static bool has_side_effect(const exprt &expr)
 {
   if (expr.id() == "sideeffect")
@@ -1181,9 +1177,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    if (exprt poly = declare_gcc_polymorphic_builtin(
-          to_symbol_expr(f_op), expr.arguments(), expr.location(), context);
-        poly.is_not_nil())
+    if (
+      exprt poly = declare_gcc_polymorphic_builtin(
+        to_symbol_expr(f_op), expr.arguments(), expr.location(), context);
+      poly.is_not_nil())
     {
       f_op = std::move(poly);
     }

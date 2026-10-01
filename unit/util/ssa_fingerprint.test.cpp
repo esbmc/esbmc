@@ -28,7 +28,7 @@ void add_step(
 {
   steps.emplace_back();
   auto &s = steps.back();
-  s.type = goto_trace_stept::ASSIGNMENT;
+  s.type = symex_targett::ASSIGNMENT;
   s.guard = gen_true_expr();
   s.cond = equality2tc(lhs, constant_int2tc(get_int32_type(), BigInt(literal)));
 }
@@ -46,7 +46,7 @@ expr2tc plain(const std::string &name, unsigned version)
 
 void add_bare_step(
   symex_target_equationt::SSA_stepst &steps,
-  goto_trace_stept::typet type)
+  symex_targett::step_typet type)
 {
   steps.emplace_back();
   steps.back().type = type;
@@ -65,7 +65,7 @@ void add_typed_step(
 
   steps.emplace_back();
   auto &s = steps.back();
-  s.type = goto_trace_stept::ASSIGNMENT;
+  s.type = symex_targett::ASSIGNMENT;
   s.guard = gen_true_expr();
   s.cond = equality2tc(
     symbol2tc(
@@ -76,7 +76,7 @@ void add_typed_step(
 
 void add_typed_step(
   symex_target_equationt::SSA_stepst &steps,
-  goto_trace_stept::typet type,
+  symex_targett::step_typet type,
   const expr2tc &cond)
 {
   steps.emplace_back();
@@ -110,7 +110,7 @@ void add_member_claim(
 
   add_typed_step(
     steps,
-    goto_trace_stept::ASSERT,
+    symex_targett::ASSERT,
     greaterthan2tc(
       member2tc(get_int32_type(), s, irep_idt(member)),
       constant_int2tc(get_int32_type(), BigInt(0))));
@@ -122,7 +122,7 @@ void add_renumber_step(
 {
   steps.emplace_back();
   auto &s = steps.back();
-  s.type = goto_trace_stept::RENUMBER;
+  s.type = symex_targett::RENUMBER;
   s.guard = gen_true_expr();
   s.lhs = local("p", 100, 0);
   s.rhs = constant_int2tc(get_int32_type(), BigInt(object_size));
@@ -134,7 +134,7 @@ void add_output_step(
 {
   steps.emplace_back();
   auto &s = steps.back();
-  s.type = goto_trace_stept::OUTPUT;
+  s.type = symex_targett::OUTPUT;
   s.guard = gen_true_expr();
   auto &od = s.output_payload();
   od.format_string = "%d";
@@ -152,10 +152,10 @@ TEST_CASE(
     local("x", 100, 0), constant_int2tc(get_int32_type(), BigInt(5)));
 
   symex_target_equationt::SSA_stepst assumed_first, asserted_first;
-  add_typed_step(assumed_first, goto_trace_stept::ASSUME, assumption);
-  add_typed_step(assumed_first, goto_trace_stept::ASSERT, claim);
-  add_typed_step(asserted_first, goto_trace_stept::ASSERT, claim);
-  add_typed_step(asserted_first, goto_trace_stept::ASSUME, assumption);
+  add_typed_step(assumed_first, symex_targett::ASSUME, assumption);
+  add_typed_step(assumed_first, symex_targett::ASSERT, claim);
+  add_typed_step(asserted_first, symex_targett::ASSERT, claim);
+  add_typed_step(asserted_first, symex_targett::ASSUME, assumption);
 
   // convert_internal_step encodes a claim as implies(assumpt_expr, cond),
   // where assumpt_expr holds only the assumes seen *before* it. The same steps
@@ -226,8 +226,8 @@ TEST_CASE("a name with no source position is not merged", "[fingerprint]")
 TEST_CASE("a step with no guard or condition still counts", "[fingerprint]")
 {
   symex_target_equationt::SSA_stepst output, skip, empty;
-  add_bare_step(output, goto_trace_stept::OUTPUT);
-  add_bare_step(skip, goto_trace_stept::SKIP);
+  add_bare_step(output, symex_targett::OUTPUT);
+  add_bare_step(skip, symex_targett::SKIP);
 
   REQUIRE(ssa_cone_size(output) == 1);
   // The step type is all such a step contributes, and it must contribute it.

@@ -717,7 +717,8 @@ exprt tuple_handler::handle_tuple_membership(
 
   // Python's `x in (a, b, c)` is element-wise equality: x == a or x == b or ...
   // Strings are compared by content (strcmp), not by pointer/array identity, so
-  // each string element needs handle_string_comparison rather than equality_exprt.
+  // each string element needs handle_string_comparison rather than
+  // equality_exprt.
   const bool lhs_is_string = lhs.type().is_array() || lhs.type().is_pointer();
 
   // An inline tuple literal `(a, b, c)` is a struct_exprt whose operands are

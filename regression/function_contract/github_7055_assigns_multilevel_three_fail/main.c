@@ -6,6 +6,7 @@ typedef struct { L2 *l2; int top; } L1;
 
 void f(L1 *p, int v)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(*p)));
   __ESBMC_requires(
     p != (void *)0 && p->l2 != (void *)0 && p->l2->l3 != (void *)0);
   __ESBMC_assigns(p->l2->l3->deep);

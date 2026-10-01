@@ -410,9 +410,9 @@ TEST_CASE(
   "python_adjust B.4 adjust() flags an unresolved member source post-adjust",
   "[python-adjust]")
 {
-  // A code body reads `obj.x` where obj's tag follows to a scalar (tag-Scalar ->
-  // int): resolve_source must NOT retype the source to a non-aggregate, so the
-  // transient symbol_type2t source survives adjust. The post-adjust
+  // A code body reads `obj.x` where obj's tag follows to a scalar (tag-Scalar
+  // -> int): resolve_source must NOT retype the source to a non-aggregate, so
+  // the transient symbol_type2t source survives adjust. The post-adjust
   // strong-invariant check catches the survivor and adjust() returns true
   // (error) — the negative of the resolved-struct case above, which returns
   // false. This is the B.5-era mis-resolution the safety net exists to catch.

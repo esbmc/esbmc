@@ -136,8 +136,8 @@ void clang_c_languaget::build_compiler_args(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
     compiler_args.emplace_back("-cheri-bounds=subobject-safe");
 
-    if (config.ansi_c.target
-          .is_riscv()) /* unused as of yet: arch is mips64el */
+    if (config.ansi_c.target.is_riscv()) /* unused as of yet: arch is mips64el
+                                          */
     {
       compiler_args.emplace_back("-march=rv64imafdcxcheri");
       compiler_args.emplace_back(

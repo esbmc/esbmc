@@ -238,7 +238,7 @@ symex_target_equationt::SSA_stept make_assume(
   const symex_target_equationt::SSA_stept &origin)
 {
   symex_target_equationt::SSA_stept step;
-  step.type = goto_trace_stept::ASSUME;
+  step.type = symex_targett::ASSUME;
   step.guard = gen_true_expr();
   step.cond = cond;
   step.source = origin.source;

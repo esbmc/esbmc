@@ -1,5 +1,6 @@
 /// \file solidity_convert_modifier.cpp
-/// \brief Function and modifier definition conversion for the Solidity frontend.
+/// \brief Function and modifier definition conversion for the Solidity
+/// frontend.
 ///
 /// Converts Solidity function definitions, modifier definitions, and fallback/
 /// receive functions from the solc JSON AST into ESBMC's symbol table and code
@@ -93,8 +94,8 @@ bool solidity_convertert::get_function_definition(
   }
 
   // 5. Check fd.isVariadic(), fd.isInlined()
-  //  Skipped since Solidity does not support variadic (optional args) or inline function.
-  //  Actually "inline" doesn not make sense in Solidity
+  //  Skipped since Solidity does not support variadic (optional args) or inline
+  //  function. Actually "inline" doesn not make sense in Solidity
 
   // 6. Populate "locationt location_begin"
   locationt location_begin;
@@ -126,7 +127,8 @@ bool solidity_convertert::get_function_definition(
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
 
-  // 9. Populate "symbol.static_lifetime", "symbol.is_extern" and "symbol.file_local"
+  // 9. Populate "symbol.static_lifetime", "symbol.is_extern" and
+  // "symbol.file_local"
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
 
@@ -138,7 +140,8 @@ bool solidity_convertert::get_function_definition(
   // 10. Add symbol into the context
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   // 11. Convert parameters, if no parameter, assume ellipis
-  //  - Convert params before body as they may get referred by the statement in the body
+  //  - Convert params before body as they may get referred by the statement in
+  //  the body
 
   // 11.1 add this pointer as the first param
   bool is_event_err_lib =
@@ -229,8 +232,8 @@ bool solidity_convertert::get_function_definition(
     {
       // func() modf_1 modf_2
       // => func() => func_modf1() => func_modf2()
-      if (get_func_modifier(
-            ast_node, c_name, name, id, add_reentry, body_exprt))
+      if (
+        get_func_modifier(ast_node, c_name, name, id, add_reentry, body_exprt))
         return true;
     }
     else
@@ -468,7 +471,7 @@ bool solidity_convertert::add_reentry_check(
   // we should only add this to the contract's functions
   // rather than interface and library's functions,
   // or contract's errors, events and ctor
-  //TODO: detect is_library_function
+  // TODO: detect is_library_function
 
   // add a global mutex checker _ESBMC_check_reentrancy() in the front
   side_effect_expr_function_callt call;
@@ -526,7 +529,8 @@ bool solidity_convertert::get_func_modifier(
   for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
   {
     int modifier_id = (*it)["modifierName"]["referencedDeclaration"];
-    // we cannot use reference here, as the src_ast_json got inserted/deleted later
+    // we cannot use reference here, as the src_ast_json got inserted/deleted
+    // later
     const nlohmann::json mod_def = find_decl_ref(modifier_id);
     assert(!mod_def.is_null());
     assert(!mod_def.empty());
@@ -558,8 +562,9 @@ bool solidity_convertert::get_func_modifier(
     if (has_return)
     {
       // return func_modifier();
-      if (get_type_description(
-            ast_node["returnParameters"], aux_type.return_type()))
+      if (
+        get_type_description(
+          ast_node["returnParameters"], aux_type.return_type()))
         return true;
     }
     else
@@ -694,8 +699,9 @@ bool solidity_convertert::get_func_modifier(
         return true;
       func_modifier.arguments().push_back(this_ptr);
 
-      if (insert_modifier_json(
-            ast_node, c_name, next_aux_func_name, modifier_func))
+      if (
+        insert_modifier_json(
+          ast_node, c_name, next_aux_func_name, modifier_func))
         return true;
       assert(modifier_func != nullptr);
       auto old_decl = current_functionDecl;

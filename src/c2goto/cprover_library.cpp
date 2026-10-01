@@ -185,7 +185,8 @@ const static std::vector<std::string> python_c_extern_deps = {
   // Python threading.Thread lowering helpers (pthread_lib.c). Bodies call
   // __ESBMC_atomic_begin/end (lowered via __ESBMC_yield). The *_main_hook pair
   // is pulled in by python_converter.cpp's __ESBMC_main wrapping so the main
-  // thread is counted; __ESBMC_pylock_block_and_check backs the --deadlock-check
+  // thread is counted; __ESBMC_pylock_block_and_check backs the
+  // --deadlock-check
   // Lock model (models/threading_deadlock.py).
   "__pyt_init_tid",
   "__pyt_join",
@@ -381,20 +382,22 @@ static void generate_symbol_deps(
     }
     else
     {
-      /* Even if symbol & identifier found, further traversal might be needed for type identifier
-       * Continue traversing to find symbol dependencies
-       * The subcall will add the symbol identifier before traversing named and unnamed ireps so does not need to be done explicitly here
+      /* Even if symbol & identifier found, further traversal might be needed
+       * for type identifier Continue traversing to find symbol dependencies The
+       * subcall will add the symbol identifier before traversing named and
+       * unnamed ireps so does not need to be done explicitly here
        */
       generate_symbol_deps(name, *irep_it, deps);
     }
   }
 
-  /* The case where symbol identifier is reached but there are more nested type symbols
-   * has only been seen so far when these higher-level symbols are unnamed ireps.
-   *        (in particular inside an "operands" named_irep the layer above that)
-   * Therefore named_irep iterator should be able to terminate on named_irep symbols
-   * If there are future symbol resolution issues, consider changing this to also keep traversing
-   *        For debugging, you can look at the nested structure via irept::pretty()
+  /* The case where symbol identifier is reached but there are more nested type
+   * symbols has only been seen so far when these higher-level symbols are
+   * unnamed ireps. (in particular inside an "operands" named_irep the layer
+   * above that) Therefore named_irep iterator should be able to terminate on
+   * named_irep symbols If there are future symbol resolution issues, consider
+   * changing this to also keep traversing For debugging, you can look at the
+   * nested structure via irept::pretty()
    */
   forall_named_irep (irep_it, irep.get_named_sub())
   {
@@ -747,7 +750,8 @@ void add_cprover_library(contextt &context, const languaget *language)
   {
     if (language)
     {
-      // C library sources must be parsed with C frontend, not the current language
+      // C library sources must be parsed with C frontend, not the current
+      // language
       std::unique_ptr<languaget> c_lang(new_language(language_idt::C));
       return add_bundled_library_sources(context, *c_lang);
     }
@@ -777,14 +781,16 @@ void add_cprover_library(contextt &context, const languaget *language)
    */
   contextt ignored_ctx;
   fine_timet read_start = current_time();
-  if (goto_reader.read_goto_binary_array(
-        lib_start, lib_size, new_ctx, ignored_ctx))
+  if (
+    goto_reader.read_goto_binary_array(
+      lib_start, lib_size, new_ctx, ignored_ctx))
     abort();
 
   read_python_blob(is_python, new_ctx, ignored_ctx);
   fine_timet read_stop = current_time();
 
-  // Traverse symbols and get dependencies from both their nested types and values
+  // Traverse symbols and get dependencies from both their nested types and
+  // values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.get_value(), symbol_deps);
     generate_symbol_deps(s.id, s.get_type(), symbol_deps);
@@ -809,15 +815,17 @@ void add_cprover_library(contextt &context, const languaget *language)
     irep_idt("pthread_join"), irep_idt("pthread_join_noswitch"));
   symbol_deps.insert(joincheck);
 
-  /* Iterate through the new_ctx symbols, figure out which ones to go into store_ctx
-   *    For Python/Solidity this is everything: new_ctx already has a filtering layer
-   *    For other frontends, only add symbols that exist already in context but value empty
-   * store_ctx is what actually gets merged into the existing, final context
+  /* Iterate through the new_ctx symbols, figure out which ones to go into
+   * store_ctx For Python/Solidity this is everything: new_ctx already has a
+   * filtering layer For other frontends, only add symbols that exist already in
+   * context but value empty store_ctx is what actually gets merged into the
+   * existing, final context
    */
 
   // Determine whether this language uses a whitelist-based loading strategy.
-  // Python: uses whitelist with clib64 → symbols split between new_ctx/ignored_ctx.
-  // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
+  // Python: uses whitelist with clib64 → symbols split between
+  // new_ctx/ignored_ctx. Solidity: uses dedicated sol64 binary → ALL symbols in
+  // new_ctx, no whitelist.
   bool uses_whitelist = is_python;
 
   const bool bundled_wholesale = is_solidity || uses_whitelist;
@@ -839,8 +847,9 @@ void add_cprover_library(contextt &context, const languaget *language)
     ingest_symbol(s.id, symbol_deps, to_include);
   });
 
-  /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
-   * These will be symbols that didn't make it into store_ctx
+  /* Now iterate through the dependencies that we know we want to add (due to
+   * ingest_symbol filter) These will be symbols that didn't make it into
+   * store_ctx
    *
    * For Python (whitelist):
    *    - symbols not in whitelist go to ignored_ctx, dependencies found there
@@ -904,12 +913,14 @@ void add_cprover_library(contextt &context, const languaget *language)
      select_stop - deps_stop - deps_extra,
      link_stop - select_stop});
 
-  // We basically need a place where we know that ESBMC produces the "main" executable that will be run.
-  // This is the best place that I've found and mimics how a real compiler would work:
-  // First compile all source files to objects files, then link them together and then link with the libc
-  // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
-  // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
-  // those and initialize the extern variables to nondet.
+  // We basically need a place where we know that ESBMC produces the "main"
+  // executable that will be run. This is the best place that I've found and
+  // mimics how a real compiler would work: First compile all source files to
+  // objects files, then link them together and then link with the libc library.
+  // Only when linking to the libc library, we know that all unresolved extern
+  // symbols (those whose value is nil) will stay unresolved. A normal linker
+  // would reject such files, but we provide some compatibility with those and
+  // initialize the extern variables to nondet.
   context.Foreach_operand([&context](symbolt &s) {
     if (s.is_extern && !s.get_type().is_code())
     {

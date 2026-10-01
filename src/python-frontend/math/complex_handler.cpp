@@ -281,7 +281,8 @@ exprt complex_handler::promote_int_arith_to_double(
     // __ESBMC_rounding_mode symbol (migrate.cpp), and migrate_expr_back writes
     // it as a `rounding_mode` attribute rather than a third operand — so a
     // nested node re-migrates through the same arm rather than splice_expr,
-    // and the tree this recursion builds stays byte-identical to the legacy one.
+    // and the tree this recursion builds stays byte-identical to the legacy
+    // one.
     const type2tc dt2 = migrate_type(cached_double_type());
     const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
     expr2tc l2, r2;

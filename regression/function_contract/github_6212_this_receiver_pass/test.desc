@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--function bump --enforce-contract bump
+^VERIFICATION SUCCESSFUL$

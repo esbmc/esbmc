@@ -55,7 +55,8 @@ __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
-  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_base_get on capability with invalid bounds");
+  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_base_get on
+  // capability with invalid bounds");
   return comp.cr_base;
 }
 
@@ -65,7 +66,8 @@ __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
-  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
+  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_type_get on
+  // capability with invalid bounds");
   __SIZE_TYPE__ hwperms = cc128_get_perms(&comp);
   __SIZE_TYPE__ swperms = cc128_get_uperms(&comp);
   return hwperms | swperms << CC128_UPERMS_SHFT;
@@ -86,7 +88,8 @@ __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
-  // __ESBMC_assert(comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
+  // __ESBMC_assert(comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability
+  // with invalid bounds");
   return cc128_get_otype(&comp);
 }
 
@@ -99,7 +102,8 @@ __ESBMC_HIDE:;
   return cc128_is_cap_sealed(&comp);
 }
 
-/* modelled after UCAM-CL-TR-951 semantics of CHERI-MIPS instruction CSetBounds */
+/* modelled after UCAM-CL-TR-951 semantics of CHERI-MIPS instruction CSetBounds
+ */
 void *__capability
 __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 {
@@ -117,7 +121,8 @@ __ESBMC_HIDE:;
   __PTRADDR_TYPE__ top = cheri_gettop(cap);
 #    endif
   __ESBMC_assert(cheri_gettag(cap), "tag-violation c2exception");
-  // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/, "seal-violation c2exception");
+  // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/,
+  // "seal-violation c2exception");
   __ESBMC_assert(base <= cursor, "length-violation c2exception");
   bool exact = cc128_setbounds(&comp, sz);
   (void)exact; /* ignore */
@@ -248,8 +253,8 @@ __attribute__((annotate("__ESBMC_inf_size"))) _Bool __ESBMC_alloc[1];
 
 __attribute__((annotate("__ESBMC_inf_size"))) _Bool __ESBMC_is_dynamic[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-__SIZE_TYPE__ __ESBMC_alloc_size[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 /* CBMC memory primitives, mapped onto ESBMC's memory model (esbmc/esbmc#2457).
  * Declared in esbmc_intrinsics.h; the semantics reproduced here are CBMC's

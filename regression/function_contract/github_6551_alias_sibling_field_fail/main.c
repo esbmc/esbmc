@@ -7,6 +7,8 @@ typedef struct { int coeffs[4]; int other; } P;
 
 void f(P *r, P *b)
 {
+  __ESBMC_requires(r == 0 || __ESBMC_is_fresh(r, sizeof(*r)));
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(*b)));
   __ESBMC_requires(r != 0);
   __ESBMC_requires(b != 0);
   __ESBMC_assigns(r->coeffs);

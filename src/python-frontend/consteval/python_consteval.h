@@ -92,11 +92,11 @@ private:
   int call_depth_ = 0;
   static constexpr int MAX_CALL_DEPTH = 30;
 
-  // When false (the default, used by the call-site pre-scan in converter_funcall
-  // that folds f(literal) in expression position), functions containing control
-  // flow (If/For/While) are NOT folded, so their branches stay in the GOTO
-  // program for coverage/branch analysis. The whole-assertion folder
-  // (try_eval_global_expr) sets this true: an assert over fully-constant
+  // When false (the default, used by the call-site pre-scan in
+  // converter_funcall that folds f(literal) in expression position), functions
+  // containing control flow (If/For/While) are NOT folded, so their branches
+  // stay in the GOTO program for coverage/branch analysis. The whole-assertion
+  // folder (try_eval_global_expr) sets this true: an assert over fully-constant
   // operands has a deterministic single path, so folding it loses no coverage.
   bool allow_control_flow_ = false;
 

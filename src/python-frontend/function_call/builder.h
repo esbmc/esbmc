@@ -21,7 +21,8 @@ public:
   symbol_id build_function_id() const;
 
   /*
-   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being invoked.
+   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being
+   * invoked.
    */
   bool is_assume_call(const symbol_id &function_id) const;
 

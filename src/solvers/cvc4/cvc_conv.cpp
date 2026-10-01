@@ -1019,8 +1019,9 @@ smt_astt cvc_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   smt_str += integer2binary(sig, thereal.spec.f);
 
   return new_ast(
-    em.mkConst(CVC4::FloatingPoint(
-      s->get_exponent_width(), s->get_significand_width(), smt_str)),
+    em.mkConst(
+      CVC4::FloatingPoint(
+        s->get_exponent_width(), s->get_significand_width(), smt_str)),
     s);
 }
 
@@ -1028,8 +1029,10 @@ smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   smt_astt the_nan = new_ast(
-    em.mkConst(CVC4::FloatingPoint::makeNaN(CVC4::FloatingPointSize(
-      s->get_exponent_width(), s->get_significand_width()))),
+    em.mkConst(
+      CVC4::FloatingPoint::makeNaN(
+        CVC4::FloatingPointSize(
+          s->get_exponent_width(), s->get_significand_width()))),
     s);
 
   if (sgn)
@@ -1042,10 +1045,11 @@ smt_astt cvc_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
   return new_ast(
-    em.mkConst(CVC4::FloatingPoint::makeInf(
-      CVC4::FloatingPointSize(
-        s->get_exponent_width(), s->get_significand_width()),
-      sgn)),
+    em.mkConst(
+      CVC4::FloatingPoint::makeInf(
+        CVC4::FloatingPointSize(
+          s->get_exponent_width(), s->get_significand_width()),
+        sgn)),
     s);
 }
 

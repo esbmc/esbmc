@@ -89,8 +89,8 @@
 /** Class providing interface to value set tracking code.
  *  This class allows dereference code to get more data out of the environment
  *  in which it is dereferencing, fetching the set of values that a pointer
- *  points at, and also encoding any assertions that occur regarding the validity
- *  of the dereference.
+ *  points at, and also encoding any assertions that occur regarding the
+ * validity of the dereference.
  */
 class dereference_callbackt
 {
@@ -148,8 +148,8 @@ public:
     expr2tc guard;
   };
 
-  virtual void dump_internal_state(const std::list<struct internal_item> &data
-                                   [[maybe_unused]])
+  virtual void dump_internal_state(
+    const std::list<struct internal_item> &data [[maybe_unused]])
   {
   }
 
@@ -578,6 +578,14 @@ private:
     const guard2tc &guard,
     modet mode);
   void construct_struct_ref_from_dyn_offs_rec(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guard2tc &guard,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_ref_from_dyn_offs_members(
     const expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,

@@ -246,6 +246,7 @@ protected:
 
   /// A node whose points-to set is the value of \p rhs, introducing a
   /// \ref fresh_node when the expression is not already a nameable object.
+  /// It may be another object's own node, so callers only ever read it.
   node_id eval_rhs(const expr2tc &rhs, unsigned location_number);
 
   /// Lowers `lhs := rhs` to whichever of the four constraints fits.
@@ -254,10 +255,14 @@ protected:
     const expr2tc &rhs,
     unsigned location_number);
 
+  /// Adds what \p src points to into every object \p lhs may designate:
+  /// both arms of a conditional, and through the pointer of a dereference.
+  void assign_node(const expr2tc &lhs, node_id src, unsigned loc);
+
   /// Records that the object \p lhs designates may hold any address, storing
   /// through the pointer when \p lhs is a dereference.  The escape hatch for
   /// an assignment whose source this frontend cannot model.
-  void assign_top(const expr2tc &lhs);
+  void assign_top(const expr2tc &lhs, unsigned loc);
 
   /// Lowers an OTHER instruction: the ones that only read are dropped, the
   /// rest may write through any pointer operand.

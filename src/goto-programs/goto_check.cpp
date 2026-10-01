@@ -505,7 +505,8 @@ void goto_checkt::input_overflow_check(
   const std::string fmt = to_constant_string2t(base_expr).value.as_string();
 
   // obtain the length limits in the format string
-  // TODO: A specific class for the scanf/fscanf format string(e.g scanf_formattert)
+  // TODO: A specific class for the scanf/fscanf format string(e.g
+  // scanf_formattert)
   long unsigned int pos = 0;
   std::vector<std::string> limits;
 
@@ -1272,8 +1273,8 @@ void goto_checkt::check_rec(
   case expr2t::exists_id:
     // A quantifier binds a fresh logical variable ranging over its whole type;
     // its body is a pure predicate, not executed code. Runtime safety checks
-    // (bounds, overflow, div-by-zero) over the bound variable are meaningless --
-    // e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless
+    // -- e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
     // out-of-bounds access, since i is universally quantified, not a concrete
     // index. CBMC likewise emits no such checks inside a quantifier body. Skip
     // the whole node so the array theory (not goto_check) models the body.

@@ -63,8 +63,8 @@ bool assign_params_as_non_det::runOnFunction(
     return false; // Empty function
 
   /*
-    Foreach parameter, create an assignment to nondet value and insert in the front
-    E.g. func(int x, bool y) {...}
+    Foreach parameter, create an assignment to nondet value and insert in the
+    front E.g. func(int x, bool y) {...}
     =>
     func(int x, bool y)  { x = nondet_int(); y = nondet_bool(); ...}
   */

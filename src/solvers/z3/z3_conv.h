@@ -22,8 +22,8 @@ public:
   void dump() const override;
 };
 
-/* Be sure to not make smt_solver_baset a *virtual* base class: our dtor ~z3_convt()
- * erases all smt_asts early. */
+/* Be sure to not make smt_solver_baset a *virtual* base class: our dtor
+ * ~z3_convt() erases all smt_asts early. */
 class z3_convt : public smt_solver_baset,
                  public tuple_iface,
                  public array_iface,

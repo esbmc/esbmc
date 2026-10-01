@@ -171,7 +171,7 @@ extern inline code_declt &to_code_decl(codet &code)
 }
 
 /*! \brief A removal of a local variable
-*/
+ */
 class code_deadt : public codet
 {
 public:
@@ -334,7 +334,7 @@ extern inline code_ifthenelset &to_code_ifthenelse(codet &code)
 }
 
 /*! \brief A `switch' instruction
-*/
+ */
 class code_switcht : public codet
 {
 public:
@@ -377,7 +377,7 @@ static inline code_switcht &to_code_switch(codet &code)
 }
 
 /*! \brief A `while' instruction
-*/
+ */
 class code_whilet : public codet
 {
 public:
@@ -420,7 +420,7 @@ static inline code_whilet &to_code_while(codet &code)
 }
 
 /*! \brief A `do while' instruction
-*/
+ */
 class code_dowhilet : public codet
 {
 public:
@@ -463,7 +463,7 @@ static inline code_dowhilet &to_code_dowhile(codet &code)
 }
 
 /*! \brief A `for' instruction
-*/
+ */
 class code_fort : public codet
 {
 public:
@@ -527,7 +527,7 @@ static inline code_fort &to_code_for(codet &code)
 }
 
 /*! \brief A `goto' instruction
-*/
+ */
 class code_gotot : public codet
 {
 public:
@@ -705,7 +705,7 @@ extern inline code_labelt &to_code_label(codet &code)
 }
 
 /*! \brief A switch-case
-*/
+ */
 class code_switch_caset : public codet
 {
 public:

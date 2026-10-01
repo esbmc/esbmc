@@ -12,7 +12,7 @@ class type_handler;
 
 /**
  * @brief Handler for Python tuple operations
- * 
+ *
  * This class manages tuple creation, subscripting, unpacking, and type handling
  * for Python tuples in the ESBMC converter.
  */

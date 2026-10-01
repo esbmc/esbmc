@@ -40,7 +40,7 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
   switch (decl.getKind())
   {
   // TODO: dtor might be virtual too
-  //case clang::Decl::CXXDestructor:
+  // case clang::Decl::CXXDestructor:
   case clang::Decl::CXXMethod:
   {
     const clang::CXXMethodDecl &cxxmd =
@@ -146,7 +146,8 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   pointer_typet member_type(vtable_type);
   member_exprt deref_member(base_deref, vtable_ptr_name, member_type);
 
-  // we've got the deref type and member. Now we are ready to make the deref new_expr
+  // we've got the deref type and member. Now we are ready to make the deref
+  // new_expr
   new_expr = dereference_exprt(deref_member, member_type);
 }
 

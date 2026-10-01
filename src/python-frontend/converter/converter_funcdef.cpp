@@ -501,8 +501,9 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
   TypeFlags flags;
 
-  std::function<void(const nlohmann::json &)> scan = [&](const nlohmann::json
-                                                           &body) {
+  std::function<void(const nlohmann::json &)> scan = [&](
+                                                       const nlohmann::json
+                                                         &body) {
     for (const auto &stmt : body)
     {
       if (stmt["_type"] == "Return" && stmt["value"].is_null())
@@ -1551,8 +1552,9 @@ void python_converter::seed_list_param_element_type(
     return;
 
   typet elem_type;
-  if (infer_list_elem_type_from_call_sites(
-        id.get_function(), param_index, elem_type))
+  if (
+    infer_list_elem_type_from_call_sites(
+      id.get_function(), param_index, elem_type))
     element_type_registry_.record(arg_id, "", elem_type);
 }
 
@@ -1894,8 +1896,8 @@ void python_converter::reject_if_symbolic_shape_param(
     (arg_type != any_type() && arg_type != type_handler_.get_list_type()))
     return;
 
-  if (numpy_param_call_site_has_symbolic_shape(
-        func_name, param_index, arg_name))
+  if (
+    numpy_param_call_site_has_symbolic_shape(func_name, param_index, arg_name))
     throw std::runtime_error(
       "TypeError: numpy array parameter shape must be concrete for "
       ".shape/.ndim/.size/transpose()/sort()/argsort()");
@@ -1999,8 +2001,9 @@ bool python_converter::try_infer_numpy_param_type(
       if (enclosing_params[i].value("arg", "") == arg_name)
       {
         typet forwarded_type;
-        if (try_infer_numpy_param_type(
-              site.enclosing_function, i, forwarded_type, visiting))
+        if (
+          try_infer_numpy_param_type(
+            site.enclosing_function, i, forwarded_type, visiting))
           record(forwarded_type);
         break;
       }
@@ -2106,8 +2109,9 @@ std::optional<long long> python_converter::resolve_forwarded_bytes_param_size(
       continue;
 
     long long forwarded_size = 0;
-    if (infer_bytes_param_size_from_call_sites(
-          enclosing_function, i, forwarded_size, visiting))
+    if (
+      infer_bytes_param_size_from_call_sites(
+        enclosing_function, i, forwarded_size, visiting))
       return forwarded_size;
     return std::nullopt;
   }
@@ -2449,11 +2453,12 @@ size_t python_converter::register_function_argument(
   {
     typet inferred_array_type;
     std::set<std::string> visiting;
-    if (try_infer_numpy_param_type(
-          id.get_function(),
-          type.arguments().size(),
-          inferred_array_type,
-          visiting))
+    if (
+      try_infer_numpy_param_type(
+        id.get_function(),
+        type.arguments().size(),
+        inferred_array_type,
+        visiting))
     {
       arg_type = inferred_array_type;
       numpy_array_param = true;

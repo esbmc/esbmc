@@ -110,7 +110,8 @@ TEST_CASE(
   "read_word flags a >32-bit varint instead of aborting",
   "[cbmc-reader]")
 {
-  // 0x80 0x80 0x80 0x80 0x10 decodes to 0x10 << 28 == 2^32, one past UINT32_MAX.
+  // 0x80 0x80 0x80 0x80 0x10 decodes to 0x10 << 28 == 2^32, one past
+  // UINT32_MAX.
   std::istringstream in(
     std::string("\x80\x80\x80\x80\x10", 5), std::ios::binary);
   cbmc_irep_readert reader(in);
@@ -229,9 +230,10 @@ TEST_CASE(
   "[cbmc-reader]")
 {
   // CBMC and ESBMC share the goto_program_instruction_typet numbering for every
-  // kind that survives into a finished straight-line/control-flow binary, so the
-  // adapter maps them by identity. Pin each one against the ESBMC enumerator so a
-  // future renumbering on either side is caught here rather than in symex.
+  // kind that survives into a finished straight-line/control-flow binary, so
+  // the adapter maps them by identity. Pin each one against the ESBMC
+  // enumerator so a future renumbering on either side is caught here rather
+  // than in symex.
   REQUIRE(map_cbmc_instruction_type(0) == NO_INSTRUCTION_TYPE);
   REQUIRE(map_cbmc_instruction_type(1) == GOTO);
   REQUIRE(map_cbmc_instruction_type(2) == ASSUME);
@@ -281,8 +283,9 @@ TEST_CASE(
     goto_functions.function_map.end());
 
   // Every instruction in the loaded body carries an ESBMC instruction type that
-  // came through map_cbmc_instruction_type, and a well-formed function ends with
-  // END_FUNCTION. A raw, unmapped CBMC value would surface as an unknown kind.
+  // came through map_cbmc_instruction_type, and a well-formed function ends
+  // with END_FUNCTION. A raw, unmapped CBMC value would surface as an unknown
+  // kind.
   const goto_programt &body = it->second.body;
   REQUIRE_FALSE(body.instructions.empty());
   for (const auto &ins : body.instructions)

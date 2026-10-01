@@ -21,6 +21,7 @@ typedef struct {
 // Mimics Fibonacci.c::fib_reaction_timer pattern with two pointer parameters
 void compute(State *self, int *out)
 {
+    __ESBMC_requires(__ESBMC_is_fresh(self, sizeof(*self)));
     __ESBMC_requires(self != NULL);
     __ESBMC_requires(out != NULL);
     __ESBMC_requires(__ESBMC_is_fresh(out, sizeof(int)));

@@ -3,7 +3,7 @@
 #include <vector>
 
 #include <goto-programs/dead_store_advisory.h>
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 #include <util/symtab/context.h>
 
 /// Intra-procedural dead-store detector (CWE-563). Runs a backward

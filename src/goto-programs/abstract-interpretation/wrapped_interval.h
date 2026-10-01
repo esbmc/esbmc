@@ -965,7 +965,8 @@ public:
       - get_interval_bounds([255, 10]) --> <-1, 10>
 
       Note: This is not to represent a range interval, wrapped can have holes!
-      From the example: [10, 128] contains both <-128, 127> but it does not contain 9 or -127!
+      From the example: [10, 128] contains both <-128, 127> but it does not
+     contain 9 or -127!
   */
   std::pair<BigInt, BigInt> get_interval_bounds() const
   {

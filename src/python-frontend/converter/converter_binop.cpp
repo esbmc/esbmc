@@ -434,7 +434,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   };
 
   // Mark that we're processing operands in an expression context
-  // This ensures boolean-returning function calls are converted to side-effect expressions
+  // This ensures boolean-returning function calls are converted to side-effect
+  // expressions
   bool old_is_converting_rhs = is_converting_rhs;
   is_converting_rhs = true;
 
@@ -757,9 +758,9 @@ exprt python_converter::handle_chained_comparisons_logic(
       // (get_binary_operator_expr, "cast void* to integer"). Restricted to
       // integers: a float bound is reconciled differently there (the float is
       // bitcast to the pointer type), so folding it in here would make the two
-      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A float-bounded
-      // chained comparison over an unannotated param stays a pre-existing
-      // crash, unchanged by this patch.
+      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A
+      // float-bounded chained comparison over an unannotated param stays a
+      // pre-existing crash, unchanged by this patch.
       auto is_integer = [](const typet &t) {
         return t.is_signedbv() || t.is_unsignedbv();
       };
@@ -903,7 +904,8 @@ exprt python_converter::handle_membership_operator(
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
-  // Handle string membership testing: "substr" in "string" or "substr" not in "string"
+  // Handle string membership testing: "substr" in "string" or "substr" not in
+  // "string"
   if (
     lhs.type().is_pointer() || rhs.type().is_pointer() ||
     lhs.type().is_array() || rhs.type().is_array() || lhs_type == "str" ||
@@ -1037,9 +1039,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle None comparisons (don't unwrap optionals for identity checks)
   // Optionals are unwrapped here, except for an identity check against None.
-  if (exprt optional_result = resolve_optional_operands(
-        op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
-      optional_result.is_not_nil())
+  if (
+    exprt optional_result = resolve_optional_operands(
+      op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
+    optional_result.is_not_nil())
     return optional_result;
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
@@ -1342,12 +1345,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // value flowing from it, including a function's return — is modelled as a
   // pointer-width unsigned integer handle (value 0 for None; see
   // type_handler `NoneType`/`Optional`). A freshly constructed instance such as
-  // `Node(0)` is stored by value (tag-Node). Comparing the two fed a struct sort
-  // and a pointer-width scalar to the solver's mk_eq, whose operand-width assert
-  // is elided under NDEBUG -> SIGSEGV in release builds (github #4796). The
-  // tag-matched pointer case above does not fire because the handle carries no
-  // class tag. Reinterpret the struct as its address cast to the handle type so
-  // both sides compare as object references.
+  // `Node(0)` is stored by value (tag-Node). Comparing the two fed a struct
+  // sort and a pointer-width scalar to the solver's mk_eq, whose operand-width
+  // assert is elided under NDEBUG -> SIGSEGV in release builds (github #4796).
+  // The tag-matched pointer case above does not fire because the handle carries
+  // no class tag. Reinterpret the struct as its address cast to the handle type
+  // so both sides compare as object references.
   if (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot")
   {
     // A None-able object handle: a pointer-width unsigned integer (how
@@ -1516,7 +1519,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   };
 
   // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
-  // operand combined with an integer operand, cast the void* to the integer type.
+  // operand combined with an integer operand, cast the void* to the integer
+  // type.
   if (
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
@@ -1550,9 +1554,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     // An operand with no concrete type is an unmodelled value (e.g. the result
     // of calling a generator function, whose type stays "empty"). Coercing it —
-    // in particular wrapping it in a typecast — yields a null-typed operand that
-    // crashes expression simplification. Leave such a comparison untouched so it
-    // lowers like any other (the assertion is simply not satisfied).
+    // in particular wrapping it in a typecast — yields a null-typed operand
+    // that crashes expression simplification. Leave such a comparison untouched
+    // so it lowers like any other (the assertion is simply not satisfied).
     auto has_concrete_type = [](const exprt &e) {
       return !e.type().is_nil() && !e.type().is_empty();
     };
@@ -2172,8 +2176,8 @@ exprt python_converter::handle_tuple_operations(
   }
 
   // Lexicographic ordering for tuples, lowered to element-wise comparisons
-  // (the SMT backend has no struct ordering -- a raw `>` on a tuple struct trips
-  // an is_signedbv assertion):
+  // (the SMT backend has no struct ordering -- a raw `>` on a tuple struct
+  // trips an is_signedbv assertion):
   //   (a0,a1,..) < (b0,b1,..)
   //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
   // Components may be integer/bool/float scalars (mixed int/float promote to
@@ -2496,12 +2500,13 @@ exprt python_converter::handle_relational_type_mismatches(
   // Single character comparisons (including equality/inequality)
   if (type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq")
   {
-    // Special handling. Reject cases where both operands are character arrays (like chr(65) == "A")
-    // Todo: we should change the all expression to a correct format in future.
+    // Special handling. Reject cases where both operands are character arrays
+    // (like chr(65) == "A") Todo: we should change the all expression to a
+    // correct format in future.
     bool both_arrays = lhs.type().is_array() && rhs.type().is_array();
 
-    // If both operands are strings (including char pointers), skip single-char comparison
-    // and let the string comparison path handle it (strcmp).
+    // If both operands are strings (including char pointers), skip single-char
+    // comparison and let the string comparison path handle it (strcmp).
     bool both_strings = type_utils::is_string_type(lhs.type()) &&
                         type_utils::is_string_type(rhs.type());
 

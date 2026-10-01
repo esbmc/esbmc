@@ -75,4 +75,4 @@ private:
     {file_type::Class, "Class"},
     {file_type::Interface, "Interface"}};
 };
-#endif //ESBMC_JIMPLE_FILE_H
+#endif // ESBMC_JIMPLE_FILE_H

@@ -108,7 +108,8 @@ bool json_arg_contains_or_is_complex_impl(
     }
   }
 
-  // Generic recursive walk so kwargs merges / BinOp / nested expressions are covered.
+  // Generic recursive walk so kwargs merges / BinOp / nested expressions are
+  // covered.
   for (const auto &[key, value] : arg_json.items())
   {
     if (key == "ctx" || key == "_type")
@@ -116,8 +117,9 @@ bool json_arg_contains_or_is_complex_impl(
 
     if (value.is_object())
     {
-      if (json_arg_contains_or_is_complex_impl(
-            value, converter, type_handler, current_function, depth + 1))
+      if (
+        json_arg_contains_or_is_complex_impl(
+          value, converter, type_handler, current_function, depth + 1))
       {
         return true;
       }
@@ -228,8 +230,9 @@ bool call_has_complex_in_args_or_keywords(
   {
     for (const auto &arg : call["args"])
     {
-      if (json_arg_contains_or_is_complex(
-            arg, converter, type_handler, current_function))
+      if (
+        json_arg_contains_or_is_complex(
+          arg, converter, type_handler, current_function))
       {
         return true;
       }

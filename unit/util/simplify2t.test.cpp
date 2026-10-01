@@ -1,5 +1,6 @@
 /*
- * SPDX-FileCopyrightText: 2025 Lucas Cordeiro, Jeremy Morse, Bernd Fischer, Mikhail Ramalho
+ * SPDX-FileCopyrightText: 2025 Lucas Cordeiro, Jeremy Morse, Bernd Fischer,
+ * Mikhail Ramalho
  *
  * SPDX-License-Identifier: Apache-2.0
  */

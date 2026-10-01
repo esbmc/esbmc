@@ -4,6 +4,8 @@
  * the p->field target shape. */
 typedef struct { int x; } S;
 void f(S *r, S *b) {
+  __ESBMC_requires(r == 0 || __ESBMC_is_fresh(r, sizeof(*r)));
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(*b)));
   __ESBMC_requires(r != 0);
   __ESBMC_requires(b != 0);
   __ESBMC_assigns(*r);

@@ -318,8 +318,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // The interval domain is a single shared instance (not forked per branch).
   // Assuming the fall-through constraint would contaminate the taken path when
   // it is explored later, causing unsound pruning.  The domain is still updated
-  // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
-  // tracking loop counters.
+  // by process_instruction, which is sufficient for tracking loop counters.
 
   symex_witness_branching(
     old_guard,

@@ -58,9 +58,9 @@ const nlohmann::json &list_elem_annotation(const nlohmann::json &annotation)
 
 /// Python type name of a literal constant, or "" when this pass cannot type it.
 /// A bool member is deliberately left untyped: reading one back out of a stored
-/// tuple is already broken without this pass (`h = [(True, 5)]; h[0][1]` reports
-/// a spurious violation), so binding it would trade a false proof for a false
-/// alarm.
+/// tuple is already broken without this pass (`h = [(True, 5)]; h[0][1]`
+/// reports a spurious violation), so binding it would trade a false proof for a
+/// false alarm.
 std::string constant_type_name(const nlohmann::json &node)
 {
   if (!is_node(node, "Constant") || !node.contains("value"))
@@ -122,7 +122,8 @@ nlohmann::json tuple_annotation_of_list(const nlohmann::json &list_literal)
   return annotation;
 }
 
-/// `list[<elem>]`, keeping the location fields the annotator reads off @p origin.
+/// `list[<elem>]`, keeping the location fields the annotator reads off @p
+/// origin.
 nlohmann::json
 list_annotation_of(const nlohmann::json &elem, const nlohmann::json &origin)
 {
@@ -253,9 +254,9 @@ private:
   /// whose own `heap` parameter is unbound — counting the latter would conflict
   /// the former away and leave `_siftup` mis-typed.
   ///
-  /// The set is keyed by bare name across every module, which over-approximates:
-  /// an unrelated variable named `f` marks a dead `f` live. That direction only
-  /// forgoes a binding; it never produces a wrong one.
+  /// The set is keyed by bare name across every module, which
+  /// over-approximates: an unrelated variable named `f` marks a dead `f` live.
+  /// That direction only forgoes a binding; it never produces a wrong one.
   std::set<std::string> live_names_;
 
   void collect_live_names(const nlohmann::json &node)

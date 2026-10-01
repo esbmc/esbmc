@@ -1159,8 +1159,9 @@ python_converter::try_dispatch_fancy_index_via_list_variable(
   // find_var_decl returns the first textual assignment in scope,
   // not necessarily the one reaching this use site; reject any
   // reassignment rather than risk resolving a stale index list.
-  if (json_utils::has_multiple_assignments_in_scope(
-        idx_name, current_func_name_, *ast_json))
+  if (
+    json_utils::has_multiple_assignments_in_scope(
+      idx_name, current_func_name_, *ast_json))
     reject(
       "requires an index variable that is assigned exactly once "
       "(no reassignment) so its literal value can be resolved "
@@ -1491,8 +1492,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (element["_type"] == "Attribute")
     {
-      // Resolve `<base>.<attr>` after unwrapping Optional[T] / pointer-to-struct
-      // / complex types. Returns nil if the attribute cannot be resolved.
+      // Resolve `<base>.<attr>` after unwrapping Optional[T] /
+      // pointer-to-struct / complex types. Returns nil if the attribute cannot
+      // be resolved.
       auto resolve_member_on_base = [this](
                                       exprt base_expr,
                                       const nlohmann::json &base_node,
@@ -1710,16 +1712,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        throw std::runtime_error(fmt::format(
-          "Cannot resolve attribute '{}' on {} result",
-          attr_name,
-          element["value"]["_type"].get<std::string>()));
+        throw std::runtime_error(
+          fmt::format(
+            "Cannot resolve attribute '{}' on {} result",
+            attr_name,
+            element["value"]["_type"].get<std::string>()));
       }
       else
       {
-        throw std::runtime_error(fmt::format(
-          "Unsupported Attribute value type: {}",
-          element["value"]["_type"].get<std::string>()));
+        throw std::runtime_error(
+          fmt::format(
+            "Unsupported Attribute value type: {}",
+            element["value"]["_type"].get<std::string>()));
       }
 
       // Handle module attribute access (e.g., math.inf) — unless the module
@@ -1756,10 +1760,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *symbol = find_symbol(module_sid.to_string());
         if (!symbol)
         {
-          throw std::runtime_error(fmt::format(
-            "Module member '{}' not found in module '{}'",
-            attr_name,
-            var_name));
+          throw std::runtime_error(
+            fmt::format(
+              "Module member '{}' not found in module '{}'",
+              attr_name,
+              var_name));
         }
 
         expr = symbol_expr(*symbol);
@@ -1790,7 +1795,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = nullptr;
     if (!(symbol = find_symbol(sid_str)))
     {
-      // Fallback for global variables accessed inside functions or class methods
+      // Fallback for global variables accessed inside functions or class
+      // methods
       if (!is_class_attr && element["_type"] == "Name")
       {
         sid.set_function(""); // remove function scope
@@ -2089,12 +2095,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (symbol_type.is_array() && symbol_type.subtype() == char_type())
       {
         // For union types, we need to infer which concrete type to use.
-        // Strategy: Look for isinstance checks in the current scope to determine
-        // the expected type, or search for classes that have this attribute.
+        // Strategy: Look for isinstance checks in the current scope to
+        // determine the expected type, or search for classes that have this
+        // attribute.
 
         symbolt *target_class_symbol = nullptr;
 
-        // Search all class types in the symbol table to find one that has this attribute
+        // Search all class types in the symbol table to find one that has this
+        // attribute
         symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
           if (target_class_symbol)
             return; // Already found
@@ -2279,8 +2287,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           var_name,
           class_type.tag().as_string());
       }
-      // For RHS (reading): use instance member if explicitly set OR if symbol is a parameter
-      // This allows parameter objects like 'f: Foo' to access instance attributes
+      // For RHS (reading): use instance member if explicitly set OR if symbol
+      // is a parameter This allows parameter objects like 'f: Foo' to access
+      // instance attributes
       else if (
         !is_converting_lhs && class_type.has_component(attr_name) &&
         (instance_has_attr || symbol->is_parameter ||
@@ -2333,10 +2342,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
           }
-          else if (is_property_method(
-                     (*ast_json)["body"],
-                     extract_class_name_from_tag(obj_type_name),
-                     attr_name))
+          else if (
+            is_property_method(
+              (*ast_json)["body"],
+              extract_class_name_from_tag(obj_type_name),
+              attr_name))
           {
             // Reading a @property: invoke its getter. Rewrite `obj.attr` to a
             // call `obj.attr()` and convert that, reusing the method-call

@@ -1,11 +1,11 @@
 /*
  * socket_lib.c — Operational models for POSIX socket and I/O multiplexing APIs.
  *
- * These models abstract the behavior of network system calls for use with ESBMC.
- * Instead of following the real OS kernel implementation (which would make the
- * state space intractable), each function returns a non-deterministic result
- * consistent with the POSIX specification, along with appropriate precondition
- * checks.
+ * These models abstract the behavior of network system calls for use with
+ * ESBMC. Instead of following the real OS kernel implementation (which would
+ * make the state space intractable), each function returns a non-deterministic
+ * result consistent with the POSIX specification, along with appropriate
+ * precondition checks.
  *
  * Key design decisions:
  *   - socket()/bind()/listen()/accept()/connect() return non-deterministic
@@ -472,8 +472,8 @@ __ESBMC_HIDE:;
   __ESBMC_assume((unsigned long)result <= nfds);
 
   /* Fill revents with non-deterministic values constrained to
-     * the requested events plus error flags (POLLERR/POLLHUP/POLLNVAL
-     * can be reported regardless of what the caller requested) */
+   * the requested events plus error flags (POLLERR/POLLHUP/POLLNVAL
+   * can be reported regardless of what the caller requested) */
   for (unsigned long i = 0; i < nfds; i++)
   {
     fds[i].revents = __VERIFIER_nondet_short() &

@@ -322,8 +322,8 @@ public:
     // Acquire ordering on the load so a non-zero cached value also
     // synchronises with the writer that produced it (crc()'s release
     // store), and we observe whatever node state went into computing it.
-    if (size_t cached = foo->crc_val.load(std::memory_order_acquire);
-        cached != 0)
+    if (
+      size_t cached = foo->crc_val.load(std::memory_order_acquire); cached != 0)
       return cached;
     return foo->crc();
   }
@@ -528,8 +528,9 @@ public:
       // Race-free attempt to claim the slot. If we lose the CAS to a
       // concurrent writer we fall through to the mismatch assert
       // below, which is the contract violation.
-      if (writer_thread.compare_exchange_strong(
-            prev, me, std::memory_order_release, std::memory_order_acquire))
+      if (
+        writer_thread.compare_exchange_strong(
+          prev, me, std::memory_order_release, std::memory_order_acquire))
         return;
     }
     assert(

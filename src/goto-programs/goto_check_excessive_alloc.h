@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 #include <util/arith/mp_arith.h>
 #include <irep2/irep2.h>
 

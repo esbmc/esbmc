@@ -64,6 +64,17 @@ bool is_terminating_call(const irep_idt &identifier)
   return terminators.count(trailing_symbol_name(identifier)) != 0;
 }
 
+// The interval domain never sees a callee's parameter bindings (#8055).
+void havoc_parameters(
+  std::optional<interval_domaint> &domain,
+  const code_type2t &type)
+{
+  if (!domain)
+    return;
+  for (std::size_t i = 0; i < type.arguments.size(); ++i)
+    domain->havoc_rec(symbol2tc(type.arguments[i], type.argument_names[i]));
+}
+
 // A recursive function has a *reachable base case* iff some path from its
 // entry leaves the function — reaching END_FUNCTION or a terminating call
 // (exit/abort/...) — without going through a direct recursive self-call. If no
@@ -661,9 +672,11 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 
   // assign arguments (goto_function.type is already IREP2)
-  frame.va_index = argument_assignments(
-    identifier, to_code_type(goto_function.type), arguments);
+  const code_type2t &function_type = to_code_type(goto_function.type);
+  frame.va_index = argument_assignments(identifier, function_type, arguments);
   frame.va_cursor = frame.va_index;
+
+  havoc_parameters(interval_domain_state, function_type);
 }
 
 // True if a function of type `candidate` may be called through a function
@@ -1058,6 +1071,12 @@ void goto_symext::pop_frame()
   // retire locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // The interval domain is keyed by L0 name, so a recursive callee's
+    // locals would otherwise overwrite its caller's instances (#8055).
+    if (interval_domain_state)
+      interval_domain_state->havoc_rec(
+        symbol2tc(get_empty_type(), it.base_name));
+
     // Python objects are garbage-collected (issue #4773): keep user class
     // instances alive past their defining frame so references captured into a
     // returned/escaping aggregate stay valid. Skip tearing down their L2 and
@@ -1138,6 +1157,10 @@ void goto_symext::symex_return(const expr2tc &code)
   // put into state-queue
   statet::merge_state_listt &merge_state_list =
     cur_state->top().merge_state_map[cur_state->top().end_of_function];
+
+  // The interval domain does not see the write to the caller's lhs (#8055).
+  if (interval_domain_state && !is_nil_expr(cur_state->top().return_value))
+    interval_domain_state->havoc_rec(cur_state->top().return_value);
 
   merge_state_list.emplace_back(*cur_state);
   record_parked_path(

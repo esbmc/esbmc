@@ -76,7 +76,8 @@ protected:
    *    src/cpp/library
    * 4. our C standard library and system headers, corresponds to:
    *    src/c2goto/headers
-   * 5. the system's C++ standard library, e.g., /usr/include/c++/v1 for libc++ or
+   * 5. the system's C++ standard library, e.g., /usr/include/c++/v1 for libc++
+   * or
    *    /usr/lib/gcc/x86_64-pc-linux-gnu/13/include/g++-v13/{.,x86_64-pc-linux-gnu,backward}
    *    for the default libstdc++
    * 6. the Clang resource directory's /include, e.g.

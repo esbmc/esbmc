@@ -78,12 +78,12 @@ struct UserFBExec
 {
   std::string type_name;
   std::string instance_name;
-  std::vector<FBVarDecl> input_vars; // formal inputs (IN1, IN2, ...) + types
-  std::vector<FBVarDecl> local_vars; // FB locals (e.g. "i") + types
+  std::vector<FBVarDecl> input_vars;  // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars;  // FB locals (e.g. "i") + types
   std::vector<FBVarDecl> output_vars; // every formal output + types
   std::vector<FBInWire> in_wires;     // input pin sources ("" => nondet)
-  std::vector<FBOutWire> out_wires; // FB pin -> program variable assignments
-  std::string st_body;              // raw Structured Text
+  std::vector<FBOutWire> out_wires;   // FB pin -> program variable assignments
+  std::string st_body;                // raw Structured Text
 };
 
 // Top-level IR: variable declarations + the ordered list of rungs.

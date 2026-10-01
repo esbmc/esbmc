@@ -4,7 +4,8 @@
 #include <string.h>
 #include "python_types.h"
 
-// Python character isalpha - handles ASCII letters only in a single-byte context.
+// Python character isalpha - handles ASCII letters only in a single-byte
+// context.
 _Bool __python_char_isalpha(int c)
 {
 __ESBMC_HIDE:;
@@ -26,7 +27,8 @@ __ESBMC_HIDE:;
   return max_len;
 }
 
-// Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
+// Python string isalpha - handles ASCII and common two-byte UTF-8 Latin
+// letters.
 _Bool __python_str_isalpha(const char *s)
 {
 __ESBMC_HIDE:;

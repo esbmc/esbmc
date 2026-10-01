@@ -30,8 +30,8 @@ typedef enum cublasoperation
 typedef enum cublasoperation cublasOperation_t;
 
 /*
-This function initializes the CUBLAS library and creates a handle to an opaque structure 
-holding the CUBLAS library context. 
+This function initializes the CUBLAS library and creates a handle to an opaque
+structure holding the CUBLAS library context.
 */
 cublasStatus_t cublasCreate(cublasHandle_t *handle)
 {
@@ -39,21 +39,21 @@ cublasStatus_t cublasCreate(cublasHandle_t *handle)
 }
 
 /*
-This function releases hardware resources used by the CUBLAS library.  
+This function releases hardware resources used by the CUBLAS library.
 */
 cublasStatus_t cublasDestroy(cublasHandle_t handle)
 {
   return CUBLAS_STATUS_SUCCESS;
 }
 
-/*	This function copies a tile of rows x cols elements from a matrix A in host 
-memory space to a matrix B in GPU memory space. It is assumed that each element 
-requires storage of elemSize bytes and that both matrices are stored in column-major
- format, with the leading dimension of the source matrix A and destination matrix B 
-given in lda and ldb, respectively. The leading dimension indicates the number of rows 
-of the allocated matrix, even if only a submatrix of it is being used. In general,
- B is a device pointer that points to an object, or part of an object, that was 
-allocated in GPU memory space via cublasAlloc().
+/*	This function copies a tile of rows x cols elements from a matrix A in host
+memory space to a matrix B in GPU memory space. It is assumed that each element
+requires storage of elemSize bytes and that both matrices are stored in
+column-major format, with the leading dimension of the source matrix A and
+destination matrix B given in lda and ldb, respectively. The leading dimension
+indicates the number of rows of the allocated matrix, even if only a submatrix
+of it is being used. In general, B is a device pointer that points to an object,
+or part of an object, that was allocated in GPU memory space via cublasAlloc().
 */
 cublasStatus_t cublasSetMatrix(
   int rows,
@@ -64,21 +64,21 @@ cublasStatus_t cublasSetMatrix(
   void *B,
   int ldb)
 {
-  //Due to the Fortran column major the ldb must be the rows of matrix A
+  // Due to the Fortran column major the ldb must be the rows of matrix A
   __ESBMC_assert(ldb == rows, "Full matrix is not bein copied");
 
   return CUBLAS_STATUS_SUCCESS;
 }
 
 /*
-This function copies a tile of rows x cols elements from a matrix A in GPU memory space
- to a matrix B in host memory space. It is assumed that each element requires storage 
-of elemSize bytes and that both matrices are stored in column-major format, with the 
-leading dimension of the source matrix A and destination matrix B given in lda and ldb,
- respectively. The leading dimension indicates the number of rows of the allocated
- matrix, even if only a submatrix of it is being used. In general, A is a device 
-pointer that points to an object, or part of an object, that was allocated in GPU 
-memory space via cublasAlloc(). 
+This function copies a tile of rows x cols elements from a matrix A in GPU
+memory space to a matrix B in host memory space. It is assumed that each element
+requires storage of elemSize bytes and that both matrices are stored in
+column-major format, with the leading dimension of the source matrix A and
+destination matrix B given in lda and ldb, respectively. The leading dimension
+indicates the number of rows of the allocated matrix, even if only a submatrix
+of it is being used. In general, A is a device pointer that points to an object,
+or part of an object, that was allocated in GPU memory space via cublasAlloc().
 */
 cublasStatus_t cublasGetMatrix(
   int rows,

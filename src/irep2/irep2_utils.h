@@ -352,17 +352,17 @@ expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false);
 expr2tc gen_one(const type2tc &type);
 
 /**
-   * @brief Distribute the functor `func` over op1 and op2
-   * at least one of those must be a vector
-   * 
-   * Here, if one of the operands is `nil` then func must
-   * support an operation between the vector subtype and nil
-   *
-   * @param func the functor operation e.g add, sub, mul
-   * @param op1 the first operand
-   * @param op2 the second operand
-   * @return expr2tc with the resulting vector
-   */
+ * @brief Distribute the functor `func` over op1 and op2
+ * at least one of those must be a vector
+ *
+ * Here, if one of the operands is `nil` then func must
+ * support an operation between the vector subtype and nil
+ *
+ * @param func the functor operation e.g add, sub, mul
+ * @param op1 the first operand
+ * @param op2 the second operand
+ * @return expr2tc with the resulting vector
+ */
 template <typename Func>
 inline expr2tc
 distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)

@@ -755,13 +755,11 @@ are skipped rather than reported, so a contract that wants frame checking for a
 pointer must state its extent with `__ESBMC_is_fresh`. The warning names the
 parameters this applies to.
 
-**Struct pointer parameters assume one element.** A `struct S *` parameter is
-backed by a single stack-allocated `S`, so `s->field` is accepted even when the
-contract states no extent for `s`. This is the same unstated assumption that
-nondet extents remove for other pointer types, just narrowed to one element.
-Moving struct parameters onto the same nondet-extent allocation is blocked on
-[#6483](https://github.com/esbmc/esbmc/issues/6483): a heap-backed struct
-parameter silently discharges `__ESBMC_old`-based `ensures` clauses.
+**A C++ `this` addresses exactly one object.** Calling a member function
+requires `this` to point at an object of its class, so the harness backs it with
+one object rather than a nondet extent. Struct pointer parameters get no such
+exception: like any other pointer, `s->field` needs
+`__ESBMC_requires(__ESBMC_is_fresh(s, sizeof(*s)))`.
 
 **Pointer parameters may alias, and not every aliasing is explored.** A
 contract that needs two pointer parameters to be separate has to say so, with

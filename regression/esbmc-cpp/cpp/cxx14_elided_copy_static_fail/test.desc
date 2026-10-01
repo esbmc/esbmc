@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++14
+^VERIFICATION FAILED$
+^\s+assertion f\(\) == 7 && copies != 0$

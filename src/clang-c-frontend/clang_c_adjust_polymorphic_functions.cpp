@@ -750,13 +750,13 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     instantiate_overflow_builtin(identifier, code_type, new_loc, block);
   else if (is_carry_builtin(identifier))
     instantiate_carry_builtin(identifier, code_type, new_loc, block);
-  else if (has_prefix(
-             identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
+  else if (
+    has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
   {
     // TODO
   }
-  else if (has_prefix(
-             identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
+  else if (
+    has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
   {
     // TODO
   }

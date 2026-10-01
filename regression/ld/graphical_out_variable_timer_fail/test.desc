@@ -1,0 +1,5 @@
+CORE
+ton.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(outVariable x driven by TON output Q, tier=2\)$
+^ERROR: PARSING ERROR$

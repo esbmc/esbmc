@@ -17,8 +17,24 @@ AlwaysBreakBeforeMultilineStrings: 'true'
 AlwaysBreakTemplateDeclarations: 'true'
 BinPackArguments: 'false'
 BinPackParameters: 'false'
+# Allman, except that lambda bodies open on the signature's line: the Allman
+# preset of newer clang-format also wraps those.
+BraceWrapping:
+  AfterCaseLabel: 'true'
+  AfterClass: 'true'
+  AfterControlStatement: Always
+  AfterEnum: 'true'
+  AfterExternBlock: 'true'
+  AfterFunction: 'true'
+  AfterNamespace: 'true'
+  AfterObjCDeclaration: 'true'
+  AfterStruct: 'true'
+  AfterUnion: 'true'
+  BeforeCatch: 'true'
+  BeforeElse: 'true'
+  BeforeLambdaBody: 'false'
 BreakBeforeBinaryOperators: None
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Custom
 BreakBeforeTernaryOperators: 'true'
 BreakConstructorInitializersBeforeComma: 'false'
 ColumnLimit: '80'

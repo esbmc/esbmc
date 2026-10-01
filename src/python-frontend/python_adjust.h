@@ -89,8 +89,8 @@ protected:
   /// `symbol_type2t`, follow it to the resolved struct/union/array and retype
   /// the node in place (returns true); otherwise leave it (returns false). The
   /// source is a plain `symbol2t` (the instance) or a `dereference2t` of a
-  /// `pointer→tag-Cls` instance pointer — both arrive as a symbol_type2t source,
-  /// since a member/index cannot be constructed over a raw pointer.
+  /// `pointer→tag-Cls` instance pointer — both arrive as a symbol_type2t
+  /// source, since a member/index cannot be constructed over a raw pointer.
   bool resolve_source(expr2tc &source);
 
   /// If `fn` is a symbol whose table type is pointer-to-code — the

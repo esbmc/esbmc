@@ -1,4 +1,5 @@
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 #include <catch2/catch.hpp>
 
 #include <util/arith/arith_tools.h>
@@ -20,7 +21,8 @@ TEST_CASE("for a division expression...", "[unit][util][std_expr]")
     REQUIRE(div.op0() == dividend);
     REQUIRE(div.op1() == divisor);
   }
-  /* This will not work on current implementation (and we probably shouldn't waste time on this)
+  /* This will not work on current implementation (and we probably shouldn't
+  waste time on this)
    * after irep is switched to irep2 we have to fix this
   SECTION("its type is that of its operands")
   {
