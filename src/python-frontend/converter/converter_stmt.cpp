@@ -318,9 +318,10 @@ numpy_shape_from_type(const namespacet &ns, typet source_type)
     const exprt &size = array_type.size();
     if (!size.is_constant())
       return {};
-    shape.push_back(static_cast<std::size_t>(
-      binary2integer(to_constant_expr(size).value().c_str(), false)
-        .to_uint64()));
+    shape.push_back(
+      static_cast<std::size_t>(
+        binary2integer(to_constant_expr(size).value().c_str(), false)
+          .to_uint64()));
     source_type = ns.follow(array_type.subtype());
   }
   return shape;
@@ -1342,8 +1343,9 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
         ann["value"]["_type"] == "Attribute" && ann["value"].contains("attr"))
         var_type_str = ann["value"]["attr"];
 
-      if (typet t = subscript_annotation_type(var_type_str, var_node);
-          !t.id().empty())
+      if (
+        typet t = subscript_annotation_type(var_type_str, var_node);
+        !t.id().empty())
         return {var_type_str, t};
     }
     else if (
@@ -2652,8 +2654,9 @@ python_converter::build_numpy_descriptor_materialized_elements(
   if (shape->empty() || shape->size() > 2)
     throw std::runtime_error(unsupported_rank_error);
 
-  if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
-      pointer_it != numpy_pointer_view_info_.end())
+  if (
+    auto pointer_it = numpy_pointer_view_info_.find(root_id);
+    pointer_it != numpy_pointer_view_info_.end())
   {
     const symbolt *symbol = symbol_table_.find_symbol(root_id);
     if (symbol == nullptr)
@@ -2761,20 +2764,24 @@ python_converter::get_numpy_nditer_logical_shape(
   // dimension to the C-ABI row-pointer decay (register_function_argument),
   // so the full shape must come from here rather than the fallback below,
   // which would otherwise read the decayed (1-D) type instead.
-  if (auto param_it = numpy_param_shapes_.find(root_id);
-      param_it != numpy_param_shapes_.end())
+  if (
+    auto param_it = numpy_param_shapes_.find(root_id);
+    param_it != numpy_param_shapes_.end())
     return param_it->second;
 
-  if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
-      pointer_it != numpy_pointer_view_info_.end())
+  if (
+    auto pointer_it = numpy_pointer_view_info_.find(root_id);
+    pointer_it != numpy_pointer_view_info_.end())
     return std::vector<std::size_t>{pointer_it->second.length};
 
-  if (auto reshape_it = numpy_reshape_view_info_.find(root_id);
-      reshape_it != numpy_reshape_view_info_.end())
+  if (
+    auto reshape_it = numpy_reshape_view_info_.find(root_id);
+    reshape_it != numpy_reshape_view_info_.end())
     return reshape_it->second.view_shape;
 
-  if (auto transpose_it = numpy_transpose_view_info_.find(root_id);
-      transpose_it != numpy_transpose_view_info_.end())
+  if (
+    auto transpose_it = numpy_transpose_view_info_.find(root_id);
+    transpose_it != numpy_transpose_view_info_.end())
   {
     const symbolt *source = symbol_table_.find_symbol(
       resolve_numpy_array_storage_alias_id(transpose_it->second.source_id));
@@ -2847,12 +2854,14 @@ bool python_converter::is_numpy_readonly_view_arg(
   if (root_id.empty())
     return false;
 
-  if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
-      pointer_it != numpy_pointer_view_info_.end())
+  if (
+    auto pointer_it = numpy_pointer_view_info_.find(root_id);
+    pointer_it != numpy_pointer_view_info_.end())
     return pointer_it->second.readonly;
 
-  if (auto reshape_it = numpy_reshape_view_info_.find(root_id);
-      reshape_it != numpy_reshape_view_info_.end())
+  if (
+    auto reshape_it = numpy_reshape_view_info_.find(root_id);
+    reshape_it != numpy_reshape_view_info_.end())
     return reshape_it->second.readonly;
 
   return false;
@@ -3989,8 +3998,9 @@ void python_converter::copy_numpy_alias_shape_state(
   else
     numpy_ambiguous_shape_symbols_.erase(lhs_id);
 
-  if (auto rhs_shape = numpy_param_shapes_.find(rhs_id);
-      rhs_shape != numpy_param_shapes_.end())
+  if (
+    auto rhs_shape = numpy_param_shapes_.find(rhs_id);
+    rhs_shape != numpy_param_shapes_.end())
     numpy_param_shapes_[lhs_id] = rhs_shape->second;
   else
     numpy_param_shapes_.erase(lhs_id);
@@ -4036,8 +4046,9 @@ bool python_converter::update_numpy_array_binding_from_name(
     clear_numpy_array_storage_aliases_for(lhs_id);
     clear_numpy_view_copy(lhs);
     numpy_array_symbols_.insert(lhs_id);
-    if (preserve_conditional_numpy_alias_shape(
-          lhs_id, rhs_id, unconditional_assignment))
+    if (
+      preserve_conditional_numpy_alias_shape(
+        lhs_id, rhs_id, unconditional_assignment))
       return true;
     copy_numpy_alias_shape_state(lhs_id, rhs_id);
     return true;
@@ -4063,8 +4074,9 @@ bool python_converter::update_numpy_array_binding_from_name(
   clear_numpy_view_copy(lhs);
   numpy_array_symbols_.insert(lhs_id);
   bind_numpy_array_storage_alias(lhs_id, rhs_id);
-  if (preserve_conditional_numpy_alias_shape(
-        lhs_id, rhs_id, unconditional_assignment))
+  if (
+    preserve_conditional_numpy_alias_shape(
+      lhs_id, rhs_id, unconditional_assignment))
     return true;
   copy_numpy_alias_shape_state(lhs_id, rhs_id);
   return true;
@@ -4080,8 +4092,9 @@ void python_converter::update_numpy_array_binding(
   const std::string lhs_id = lhs.identifier().as_string();
   const bool unconditional_assignment =
     block_nesting_ == function_body_depth_ + 1;
-  if (update_numpy_array_binding_from_name(
-        lhs, lhs_id, rhs_node, unconditional_assignment))
+  if (
+    update_numpy_array_binding_from_name(
+      lhs, lhs_id, rhs_node, unconditional_assignment))
     return;
 
   clear_numpy_transpose_views_of(lhs_id);
@@ -4994,8 +5007,8 @@ void python_converter::handle_function_call_rhs(
                         .return_type()
                         .is_empty())
     {
-      if (auto ret = get_return_from_func(func_symbol->id.c_str());
-          !ret.is_nil())
+      if (
+        auto ret = get_return_from_func(func_symbol->id.c_str()); !ret.is_nil())
       {
         copy_instance_attributes(
           ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
@@ -5055,8 +5068,9 @@ void python_converter::handle_function_call_rhs(
   // Special handling for list return type
   if (rhs.type() == type_handler_.get_list_type())
   {
-    if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
-        !ret.is_nil())
+    if (
+      auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+      !ret.is_nil())
     {
       element_type_registry_.assign_from(
         ret.op0().identifier().as_string(), lhs.identifier().as_string());
@@ -6146,8 +6160,9 @@ void python_converter::get_var_assign(
   }
 
   // Handle dict subscript assignment: dict[key] = value
-  if (dict_handler_->handle_subscript_assignment_check(
-        *this, ast_node, target, target_block))
+  if (
+    dict_handler_->handle_subscript_assignment_check(
+      *this, ast_node, target, target_block))
     return;
 
   if (target.contains("_type") && target["_type"] == "Subscript")
@@ -6542,8 +6557,9 @@ void python_converter::get_var_assign(
   // unannotated assignment branches above -- the annotator may inject an
   // annotation onto what the user wrote as a plain `a = ...`, routing it
   // through either one.
-  if (should_detach_numpy_pointer_views_for_assignment(
-        target, ast_node, lhs_symbol))
+  if (
+    should_detach_numpy_pointer_views_for_assignment(
+      target, ast_node, lhs_symbol))
     detach_numpy_pointer_views_of(
       lhs_symbol->id.as_string(), location_begin, target_block);
 

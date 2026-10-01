@@ -1993,10 +1993,11 @@ void goto_symext::add_memory_leak_checks()
       pts = pts ? or2tc(pts, g) : g;
     }
 
-    if (log_debug(
-          "memcleanup",
-          "memcleanup: time: {}s, globals point to:",
-          time2string(current_time() - start_time)))
+    if (
+      log_debug(
+        "memcleanup",
+        "memcleanup: time: {}s, globals point to:",
+        time2string(current_time() - start_time)))
       for (const auto &[e, g] : globals_point_to)
         log_debug(
           "memcleanup",

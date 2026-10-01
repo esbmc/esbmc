@@ -169,7 +169,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     {
       res = ctx->get_by_ast(it, tuple->elements[i]);
     }
-    else if (is_array_type(it))
+    else if (is_array_type(it) || is_vector_type(it))
     {
       // this will eventually jump to get_array()
       res = ctx->get_by_ast(it, tuple->elements[i]);

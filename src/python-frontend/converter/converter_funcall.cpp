@@ -504,8 +504,9 @@ exprt python_converter::checked_len_result(
   code_ifthenelset guard;
   guard.cond() = binary_relation_exprt(result, "<", gen_zero(result.type()));
   codet raise("expression");
-  raise.copy_to_operands(get_exception_handler().gen_exception_raise(
-    "ValueError", "__len__() should return >= 0"));
+  raise.copy_to_operands(
+    get_exception_handler().gen_exception_raise(
+      "ValueError", "__len__() should return >= 0"));
   guard.then_case() = raise;
   guard.location() = location;
   current_block->copy_to_operands(guard);
@@ -1334,16 +1335,18 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           arg_node["operand"]["_type"] == "Constant" &&
           arg_node["operand"]["value"].is_number_integer())
         {
-          const_args.push_back(PyConstValue::make_int(
-            -arg_node["operand"]["value"].get<long long>()));
+          const_args.push_back(
+            PyConstValue::make_int(
+              -arg_node["operand"]["value"].get<long long>()));
         }
         else if (
           arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
           arg_node["operand"]["_type"] == "Constant" &&
           arg_node["operand"]["value"].is_number_float())
         {
-          const_args.push_back(PyConstValue::make_float(
-            -arg_node["operand"]["value"].get<double>()));
+          const_args.push_back(
+            PyConstValue::make_float(
+              -arg_node["operand"]["value"].get<double>()));
         }
         else
         {
@@ -1372,8 +1375,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  if (exprt len_expr = get_len_on_class_instance(element);
-      len_expr.is_not_nil())
+  if (
+    exprt len_expr = get_len_on_class_instance(element); len_expr.is_not_nil())
     return len_expr;
 
   if (std::optional<exprt> view_len = try_get_numpy_pointer_view_len(element))

@@ -68,9 +68,10 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
     const boost::program_options::option_description &d = *options[i];
 
     if (d.long_name().empty())
-      boost::throw_exception(boost::program_options::error(
-        "abbreviated option names are not permitted in options "
-        "configuration files"));
+      boost::throw_exception(
+        boost::program_options::error(
+          "abbreviated option names are not permitted in options "
+          "configuration files"));
 
     allowed_options.insert(d.long_name());
     if (d.semantic()->max_tokens() == 0)
@@ -92,8 +93,9 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
             log_status("[CONFIG] loaded {} = \"{}\"", key, val);
           else
             log_status("[CONFIG] loaded {} = {}", key, val);
-          result.options.push_back(boost::program_options::option(
-            key, std::vector<std::string>(1, val)));
+          result.options.push_back(
+            boost::program_options::option(
+              key, std::vector<std::string>(1, val)));
         };
 
       switch (value_node->type())
@@ -145,8 +147,9 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         // Also they are added as blank strings!
         if (value)
         {
-          result.options.push_back(boost::program_options::option(
-            key_name, std::vector<std::string>(1, "")));
+          result.options.push_back(
+            boost::program_options::option(
+              key_name, std::vector<std::string>(1, "")));
         }
         break;
       }

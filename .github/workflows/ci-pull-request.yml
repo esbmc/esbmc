@@ -71,12 +71,13 @@ jobs:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0
-    - name: Install Dependencies
-      run: sudo apt-get update && sudo apt-get install libtinfo-dev
-    - name: Download Clang 11
-      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
-    - name: Extract Clang 11
-      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+    # The PyPI wheel ships a static clang-format and git-clang-format in ~2 MB;
+    # LLVM's release tarballs carry the whole toolchain (over 1 GB). Keep the
+    # version in sync with scripts/install-format-hook.sh.
+    - name: Install clang-format 23
+      run: |
+        pipx install clang-format==23.1.1
+        pipx environment --value PIPX_BIN_DIR >> "$GITHUB_PATH"
     - name: Check formatting of changed lines
       id: fmt
       shell: bash
@@ -96,9 +97,9 @@ jobs:
 
         # Format only the lines that differ from the base branch (not whole
         # files) and emit a diff instead of editing. A non-empty diff means
-        # the PR touched lines that are not clang-format-11-clean.
-        diff=$(python3 ./clang/bin/git-clang-format \
-          --binary ./clang/bin/clang-format \
+        # the PR touched lines that are not clang-format-23-clean.
+        clang-format --version
+        diff=$(git-clang-format \
           --style file \
           --extensions h,c,cpp,hpp,hh \
           --diff \
@@ -112,7 +113,7 @@ jobs:
           exit 0
         fi
 
-        echo "::error::Changed lines are not clang-format-11 clean."
+        echo "::error::Changed lines are not clang-format-23 clean."
         echo "$diff"
         {
           echo "diff<<DIFF_EOF"
@@ -138,9 +139,9 @@ jobs:
             marker,
             '### Code style check failed',
             '',
-            'Some lines changed in this PR are not formatted with **clang-format 11**.',
+            'Some lines changed in this PR are not formatted with **clang-format 23**.',
             '',
-            '**Fix the lines already committed** — reformat the changed lines with the same clang-format 11 CI uses, then commit and push:',
+            '**Fix the lines already committed** — reformat the changed lines with the same clang-format 23 CI uses, then commit and push:',
             '',
             '```sh',
             './scripts/install-format-hook.sh --fix origin/' + base,
@@ -194,9 +195,6 @@ jobs:
                 { owner, repo, comment_id: c.id });
             }
           }
-    - name: Delete downloaded Clang 11
-      if: always()
-      run: rm -rf clang*
 
   # Check CMake files with cmakelint
   cmake-lint:

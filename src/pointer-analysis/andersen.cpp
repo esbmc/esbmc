@@ -325,11 +325,18 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
   if (is_address_of2t(r))
   {
     const expr2tc obj = base_object(to_address_of2t(r).ptr_obj);
+    // &*q and &q->f point into whatever q points to.
+    if (is_dereference2t(obj))
+      return pointer_of(obj, loc);
     const node_id t = fresh_node();
-    if (is_dereference2t(obj)) // &*q and &q->f are just q
-      add_constraint(constraint_kindt::COPY, t, pointer_of(obj, loc));
-    else
-      add_constraint(constraint_kindt::ADDRESS_OF, t, get_node(obj));
+    add_constraint(constraint_kindt::ADDRESS_OF, t, get_node(obj));
+    return t;
+  }
+
+  if (is_dereference2t(base_object(r)))
+  {
+    const node_id t = fresh_node();
+    add_constraint(constraint_kindt::LOAD, t, pointer_of(base_object(r), loc));
     return t;
   }
 
@@ -407,16 +414,9 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
 
   // A nameable l-value read as a value: its own node already holds its targets.
   if (
-    is_symbol2t(r) || is_member2t(r) || is_index2t(r) ||
-    is_dynamic_object2t(r) || is_dereference2t(r))
-  {
-    const expr2tc obj = base_object(r);
-    if (!is_dereference2t(obj))
-      return get_node(obj);
-    const node_id t = fresh_node();
-    add_constraint(constraint_kindt::LOAD, t, pointer_of(obj, loc));
-    return t;
-  }
+    const expr2tc base = base_object(r);
+    is_symbol2t(base) || is_dynamic_object2t(base))
+    return get_node(base);
 
   // An integer carries the addresses it is computed from: `(long)p + 44`
   // still points into p's object. A constant operand is an offset and carries
@@ -462,15 +462,26 @@ andersent::node_id andersent::pointer_of(const expr2tc &deref, unsigned loc)
   return eval_rhs(to_dereference2t(deref).value, loc);
 }
 
-void andersent::assign_top(const expr2tc &lhs, unsigned loc)
+void andersent::assign_node(const expr2tc &lhs, node_id src, unsigned loc)
 {
+  // Field- and index-insensitivity means the destination of `s.f = q` and
+  // `p->f = q` is decided entirely by the base object.
   const expr2tc target = base_object(lhs);
 
-  if (is_dereference2t(target))
-    add_constraint(
-      constraint_kindt::STORE, pointer_of(target, loc), top_source());
+  if (is_if2t(target))
+  {
+    assign_node(to_if2t(target).true_value, src, loc);
+    assign_node(to_if2t(target).false_value, src, loc);
+  }
+  else if (is_dereference2t(target))
+    add_constraint(constraint_kindt::STORE, pointer_of(target, loc), src);
   else
-    points_to_top(get_node(target));
+    add_constraint(constraint_kindt::COPY, get_node(target), src);
+}
+
+void andersent::assign_top(const expr2tc &lhs, unsigned loc)
+{
+  assign_node(lhs, top_source(), loc);
 }
 
 void andersent::handle_assign(
@@ -502,38 +513,7 @@ void andersent::handle_assign(
   if (!may_carry_pointer(lhs->type) && is_constant_int2t(r))
     return;
 
-  // Field- and index-insensitivity means the destination of `s.f = q` and
-  // `p->f = q` is decided entirely by the base object.
-  const expr2tc target = base_object(lhs);
-
-  if (is_dereference2t(target))
-  {
-    add_constraint(
-      constraint_kindt::STORE, pointer_of(target, loc), eval_rhs(rhs, loc));
-    return;
-  }
-
-  const node_id l = get_node(target);
-
-  // The two dominant shapes get a constraint directly rather than through a
-  // temporary, which keeps the node count close to the variable count.
-  if (is_address_of2t(r))
-  {
-    const expr2tc obj = base_object(to_address_of2t(r).ptr_obj);
-    if (!is_dereference2t(obj))
-    {
-      add_constraint(constraint_kindt::ADDRESS_OF, l, get_node(obj));
-      return;
-    }
-  }
-
-  if (is_dereference2t(r))
-  {
-    add_constraint(constraint_kindt::LOAD, l, pointer_of(r, loc));
-    return;
-  }
-
-  add_constraint(constraint_kindt::COPY, l, eval_rhs(rhs, loc));
+  assign_node(lhs, eval_rhs(rhs, loc), loc);
 }
 
 void andersent::widen_call(

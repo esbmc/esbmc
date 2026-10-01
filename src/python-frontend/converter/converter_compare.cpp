@@ -303,7 +303,8 @@ exprt python_converter::handle_string_comparison(
     return gen_bool(op == "Eq");
 
   // Fast-path for comparisons against single-character string literals.
-  // This avoids introducing strcmp() calls that can inflate branch coverage counts.
+  // This avoids introducing strcmp() calls that can inflate branch coverage
+  // counts.
   if (op == "Eq" || op == "NotEq")
   {
     auto extract_single_char = [&](const exprt &expr, char &ch) -> bool {
@@ -573,8 +574,9 @@ exprt python_converter::handle_none_comparison(
   // `has_start` / `has_stop` / `has_step` flags of __ESBMC_PySliceObj.
   // Lower `sl.<field> is None` to `sl.has_<field> == 0` so that user code can
   // distinguish a bare `:` from an explicit `0:0` (github #4543).
-  if (exprt rewrite = try_lower_slice_member_is_none(op, lhs, rhs);
-      !rewrite.is_nil())
+  if (
+    exprt rewrite = try_lower_slice_member_is_none(op, lhs, rhs);
+    !rewrite.is_nil())
     return rewrite;
 
   // If one side is None and the other is a different type (e.g., int, str)
@@ -585,7 +587,8 @@ exprt python_converter::handle_none_comparison(
     const exprt &non_none = lhs_is_none ? rhs : lhs;
 
     // If comparing with a constant integer, string, or other non-None constant
-    // exclude pointer to array (strings), as they could be Optional[str] parameters
+    // exclude pointer to array (strings), as they could be Optional[str]
+    // parameters
     if (
       non_none.is_constant() && (!non_none.type().is_pointer() ||
                                  (non_none.type().is_pointer() &&
@@ -698,9 +701,10 @@ exprt python_converter::handle_string_type_mismatch(
   // Handle equality/inequality comparisons for other type mismatches
   if (op == "Eq" || op == "NotEq")
   {
-    // Python allows this comparison but it always returns False for Eq and True for NotEq
-    // For verification purposes, we model this as returning the expected constant value
-    // This represents Python's behavior: str == int always evaluates to False
+    // Python allows this comparison but it always returns False for Eq and True
+    // for NotEq For verification purposes, we model this as returning the
+    // expected constant value This represents Python's behavior: str == int
+    // always evaluates to False
     return gen_bool(op == "NotEq");
   }
 

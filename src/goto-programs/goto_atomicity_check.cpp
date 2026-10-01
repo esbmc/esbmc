@@ -236,7 +236,8 @@ void goto_atomicity_checkt::instrument_assign(
 
   if (need_atomic)
   {
-    // Advance past the newly inserted instructions to reach the original ASSIGN.
+    // Advance past the newly inserted instructions to reach the original
+    // ASSIGN.
     goto_programt::targett orig = it;
     std::advance(orig, n);
 

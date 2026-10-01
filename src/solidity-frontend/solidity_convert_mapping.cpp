@@ -30,9 +30,9 @@ void solidity_convertert::get_mapping_inf_arr_name(
 }
 
 /**
-	@target: target index access child json
-	return true if it's a mapping_set, including assign, assign+, tuple assign...
-	otherwise return false, representing mapping_get
+  @target: target index access child json
+  return true if it's a mapping_set, including assign, assign+, tuple assign...
+  otherwise return false, representing mapping_get
 */
 bool solidity_convertert::is_mapping_set_lvalue(const nlohmann::json &target)
 {
@@ -49,14 +49,16 @@ bool solidity_convertert::get_mapping_key_value_type(
   SolidityGrammar::SolType &val_sol_type)
 {
   assert(map_node.contains("typeName"));
-  if (get_type_description(
-        map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
+  if (
+    get_type_description(
+      map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
   {
     log_error("cannot get mapping key type");
     return true;
   }
-  if (get_type_description(
-        map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
+  if (
+    get_type_description(
+      map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
   {
     log_error("cannot get mapping value type");
     return true;
@@ -613,7 +615,8 @@ void solidity_convertert::get_mapping_struct_function(
 }
 
 // invoking a function in the library
-// note that the function symbol might not be inside the symbol table at the moment
+// note that the function symbol might not be inside the symbol table at the
+// moment
 void solidity_convertert::get_library_function_call_no_args(
   const std::string &func_name,
   const std::string &func_id,

@@ -1230,8 +1230,9 @@ static bool apply_numpy_binary_to_scalars(
         rhs_numeric.int_value >= 0)
       {
         BigInt exact_power;
-        if (try_exact_integer_power(
-              lhs_numeric.int_value, rhs_numeric.int_value, exact_power))
+        if (
+          try_exact_integer_power(
+            lhs_numeric.int_value, rhs_numeric.int_value, exact_power))
         {
           const BigInt min_val = BigInt(std::numeric_limits<int64_t>::min());
           const BigInt max_val = BigInt(std::numeric_limits<int64_t>::max());
@@ -3284,8 +3285,9 @@ exprt numpy_call_expr::handle_broadcast_to_call()
   if (arr_arg.contains("_type") && arr_arg["_type"] == "Name")
   {
     const std::string name = arr_arg["id"].get<std::string>();
-    if (json_utils::has_multiple_assignments_in_scope(
-          name, converter_.current_function_name(), converter_.ast()))
+    if (
+      json_utils::has_multiple_assignments_in_scope(
+        name, converter_.current_function_name(), converter_.ast()))
       throw std::runtime_error(
         "TypeError: numpy.broadcast_to() currently supports only "
         "single-assignment array inputs");
@@ -6099,16 +6101,17 @@ exprt numpy_call_expr::create_expr_from_call()
         {
           nlohmann::json folded;
           std::vector<std::size_t> indices;
-          if (build_broadcast_literal_result(
-                function,
-                lhs,
-                lhs_shape,
-                rhs,
-                rhs_shape,
-                result_shape,
-                indices,
-                0,
-                folded))
+          if (
+            build_broadcast_literal_result(
+              function,
+              lhs,
+              lhs_shape,
+              rhs,
+              rhs_shape,
+              result_shape,
+              indices,
+              0,
+              folded))
           {
             exprt result_expr = converter_.get_expr(folded);
             if (converter_.current_lhs)
@@ -6820,8 +6823,9 @@ exprt numpy_call_expr::handle_argsort_call()
   if (const nlohmann::json *stable_kw = find_keyword_arg("stable"))
     validate_numpy_stable_bool_keyword_value(*stable_kw, "argsort");
 
-  if (numpy_reducer_has_unsupported_keywords_besides(
-        call_, {"axis", "kind", "stable"}))
+  if (
+    numpy_reducer_has_unsupported_keywords_besides(
+      call_, {"axis", "kind", "stable"}))
     throw std::runtime_error(
       "TypeError: numpy.argsort() does not support kind or order "
       "arguments yet");
@@ -7501,8 +7505,9 @@ std::optional<exprt> numpy_call_expr::try_searchsorted_probe_placeholder()
     converter_.safe_to_emit_side_effecting_statement())
     return std::nullopt;
 
-  exprt placeholder = converter_.get_expr(nlohmann::json{
-    {"_type", "Constant"}, {"value", int64_t{0}}, {"kind", nullptr}});
+  exprt placeholder = converter_.get_expr(
+    nlohmann::json{
+      {"_type", "Constant"}, {"value", int64_t{0}}, {"kind", nullptr}});
   if (resolve_searchsorted_value_vector(call_["args"][1], converter_))
     return build_1d_numpy_array_value({placeholder}, type_handler_);
   return placeholder;
@@ -8375,10 +8380,11 @@ exprt numpy_call_expr::get()
         // own scalar/list extraction then raises an explicit diagnostic on
         // it, exactly as it already does for any other unresolvable
         // operand.
-        if (json_utils::has_multiple_assignments_in_scope(
-              var["id"].get<std::string>(),
-              converter_.current_function_name(),
-              converter_.ast()))
+        if (
+          json_utils::has_multiple_assignments_in_scope(
+            var["id"].get<std::string>(),
+            converter_.current_function_name(),
+            converter_.ast()))
           return;
         // See create_expr_from_call()'s own resolve_var for why var is not
         // overwritten until decl is confirmed to have a real declaration
@@ -9652,16 +9658,17 @@ exprt numpy_call_expr::get()
         {
           nlohmann::json folded;
           std::vector<std::size_t> indices;
-          if (build_broadcast_literal_result(
-                function,
-                lhs,
-                lhs_shape,
-                rhs,
-                rhs_shape,
-                result_shape,
-                indices,
-                0,
-                folded))
+          if (
+            build_broadcast_literal_result(
+              function,
+              lhs,
+              lhs_shape,
+              rhs,
+              rhs_shape,
+              result_shape,
+              indices,
+              0,
+              folded))
           {
             exprt result_expr = converter_.get_expr(folded);
             if (converter_.current_lhs)
@@ -9835,8 +9842,9 @@ exprt numpy_call_expr::get()
             function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
           {
             BigInt exact_power;
-            if (try_exact_integer_power(
-                  lhs.int_value, rhs.int_value, exact_power))
+            if (
+              try_exact_integer_power(
+                lhs.int_value, rhs.int_value, exact_power))
             {
               const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
               const BigInt min_val =
