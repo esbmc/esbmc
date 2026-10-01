@@ -5,4 +5,4 @@ row = a[0]
 alias = row
 alias[0] = 99
 
-assert a[0][0] == 1
+assert a[0][0] == 99
