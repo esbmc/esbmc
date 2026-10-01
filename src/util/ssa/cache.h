@@ -2,7 +2,7 @@
 
 #include <unordered_set>
 
-#include <util/ssa/algorithms.h>
+#include <goto-symex/equation/ssa_step_algorithm.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache_defs.h>
 

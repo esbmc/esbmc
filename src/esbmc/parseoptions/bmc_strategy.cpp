@@ -177,7 +177,7 @@ static void report_non_termination_cwe(
   goto_trace_stept step;
   step.step_nr = 1;
   step.thread_nr = 0;
-  step.type = goto_trace_stept::ASSERT;
+  step.type = symex_targett::ASSERT;
   step.guard = false; // a violated assert
   step.pc = marker;
   step.comment = comment;
