@@ -2942,6 +2942,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     t = get_complete_type(t, ns);
 
+    // `char a[4] = {"ab"}` initialises the whole array from the literal
+    // (C11 6.7.9p14), which clang has already typed as `char[4]`.
+    if (init_stmt.isStringLiteralInit())
+    {
+      if (get_expr(*init_stmt.getInit(0), new_expr))
+        return true;
+      break;
+    }
+
     // Structs/unions/arrays put the initializer on operands
     if (t.is_struct() || t.is_array() || t.is_vector())
     {
