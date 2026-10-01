@@ -63,6 +63,22 @@ void clang_c_languaget::build_include_args(
   }
 }
 
+/* clang predefines the target's byte order, which --big-endian or
+ * --little-endian may have replaced. */
+static void add_byte_order_macros(std::vector<std::string> &compiler_args)
+{
+  if (!config.ansi_c.endianess_overrides_target())
+    return;
+  const bool big = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  compiler_args.emplace_back("-U__BYTE_ORDER__");
+  compiler_args.emplace_back(
+    big ? "-D__BYTE_ORDER__=__ORDER_BIG_ENDIAN__"
+        : "-D__BYTE_ORDER__=__ORDER_LITTLE_ENDIAN__");
+  compiler_args.emplace_back(big ? "-U__LITTLE_ENDIAN__" : "-U__BIG_ENDIAN__");
+  compiler_args.emplace_back(
+    big ? "-D__BIG_ENDIAN__=1" : "-D__LITTLE_ENDIAN__=1");
+}
+
 void clang_c_languaget::build_compiler_args(
   std::vector<std::string> &compiler_args)
 {
@@ -127,19 +143,7 @@ void clang_c_languaget::build_compiler_args(
   compiler_args.emplace_back("-target");
   compiler_args.emplace_back(config.ansi_c.target.to_string());
 
-  // clang predefines the target's byte order, which the option replaced.
-  if (config.ansi_c.endianess_overrides_target())
-  {
-    const bool big = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
-    compiler_args.emplace_back("-U__BYTE_ORDER__");
-    compiler_args.emplace_back(
-      big ? "-D__BYTE_ORDER__=__ORDER_BIG_ENDIAN__"
-          : "-D__BYTE_ORDER__=__ORDER_LITTLE_ENDIAN__");
-    compiler_args.emplace_back(
-      big ? "-U__LITTLE_ENDIAN__" : "-U__BIG_ENDIAN__");
-    compiler_args.emplace_back(
-      big ? "-D__BIG_ENDIAN__=1" : "-D__LITTLE_ENDIAN__=1");
-  }
+  add_byte_order_macros(compiler_args);
 
   std::string sysroot;
 
