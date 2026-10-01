@@ -17,14 +17,15 @@
 #include <algorithm>
 
 /* The array whose elements hold @p object's bytes, or nil. The SMT layer
- * cannot byte-address an array; one of single bytes the simplifier turns into
- * element reads, any other has to be indexed down to the element. */
+ * cannot byte-address an array; one of byte-wide integers the simplifier turns
+ * into element reads, any other has to be indexed down to the element. */
 static const array_type2t *multibyte_array(const expr2tc &object)
 {
   if (!is_array_type(object))
     return nullptr;
   const array_type2t &arr = to_array_type(object->type);
-  return type_byte_size_bits(arr.subtype) == 8 ? nullptr : &arr;
+  return is_bv_type(arr.subtype) && arr.subtype->get_width() == 8 ? nullptr
+                                                                  : &arr;
 }
 
 /** Byte @p offset of @p object. */
