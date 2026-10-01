@@ -447,6 +447,10 @@ public:
   Interval get_interval_from_const(const expr2tc &sym) const;
 
   template <class Interval>
+  Interval
+  get_interval_from_typecast(const typecast2t &cast, Interval result) const;
+
+  template <class Interval>
   Interval get_top_interval_from_expr(const expr2tc &sym) const;
 
   template <class Interval>
