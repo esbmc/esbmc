@@ -472,6 +472,7 @@ void goto_convertt::do_cpp_new(
   // two objects alias, which a fresh built-in allocation hides (github #6494).
   const exprt &alloc_function =
     static_cast<const exprt &>(rhs.find("alloc_function"));
+  const exprt &placement = static_cast<const exprt &>(rhs.find("placement"));
 
   // The element count drives both the allocation size and the construction
   // loop, and `new T[f()]` evaluates f() exactly once, so evaluate it here --
@@ -508,8 +509,10 @@ void goto_convertt::do_cpp_new(
   // object well enough. Storage from a replaced operator new is not fresh --
   // the program decides its contents ([expr.new]/17 default-initialises a
   // scalar to nothing at all) -- so zero-filling it would overwrite what the
-  // replacement just returned.
-  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+  // replacement just returned, and the same holds for placement storage.
+  if (
+    (alloc_function.is_nil() && placement.is_nil()) ||
+    rhs.initializer().is_not_nil())
     cpp_new_initializer(lhs, rhs, elem_count, tmp_initializer);
 
   if (alloc_size.is_nil())
@@ -521,7 +524,9 @@ void goto_convertt::do_cpp_new(
     simplify_via_irep2(alloc_size);
   }
 
-  if (alloc_function.is_not_nil())
+  if (placement.is_not_nil())
+    cpp_new_at(lhs, placement, rhs.find_location(), dest);
+  else if (alloc_function.is_not_nil())
   {
     // operator new takes a byte count. alloc_size is already scaled by the
     // element size for the array form; the scalar form allocates one T.
@@ -567,6 +572,21 @@ void goto_convertt::do_cpp_new(
 
   // run initializer
   dest.destructive_append(tmp_initializer);
+}
+
+void goto_convertt::cpp_new_at(
+  const exprt &lhs,
+  const exprt &placement,
+  const locationt &location,
+  goto_programt &dest)
+{
+  exprt place = placement;
+  remove_sideeffects(place, dest);
+  place.make_typecast(lhs.type());
+
+  goto_programt::targett t = dest.add_instruction(ASSIGN);
+  migrate_expr(code_assignt(lhs, place), t->code);
+  t->location = location;
 }
 
 // Locate the element constructor inside a cpp_new[] initializer, by shape.

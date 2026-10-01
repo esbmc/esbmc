@@ -1141,6 +1141,16 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr.add("alloc_function") = alloc_function;
     }
 
+    // An array placement new constructs its elements at the given address:
+    // ::operator new[](size_t, void *) adds no array overhead (CWG2382).
+    if (op_new && op_new->isReservedGlobalPlacementOperator())
+    {
+      exprt place;
+      if (get_expr(*ne.getPlacementArg(0), place))
+        return true;
+      new_expr.add("placement") = place;
+    }
+
     // [expr.new]/24: `new T[n]()` and `new T[n]{}` value-initialise every
     // element, which zero-initialises whatever the element constructor -- if
     // there is one at all -- does not write itself. Plain `new T[n]`
