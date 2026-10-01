@@ -112,9 +112,8 @@ void jimple_method::from_json(const json &j)
 
   // Method Name
   j.at("name").get_to(this->name);
-  name +=
-    "_" +
-    get_hash_name(); // to handle polymorphism, the method will have an uuid based on its type and arguments
+  name += "_" + get_hash_name(); // to handle polymorphism, the method will have
+                                 // an uuid based on its type and arguments
   try
   {
     j.at("throws").get_to(this->throws);
@@ -135,7 +134,7 @@ std::string jimple_method::to_string() const
   oss << "Class Method"
       << "\n\tName: " << this->name << "\n\t" << this->type.to_string()
       << "\n\t" << this->modifiers.to_string() << "\n\tParameters: "
-      << "[]" //TODO: this->parameters
+      << "[]" // TODO: this->parameters
       << "\n\tThrows: " << this->throws
       << "\n\tBody : " << this->body->to_string();
 

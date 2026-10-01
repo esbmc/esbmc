@@ -871,8 +871,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(std::make_pair(
-    prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(
+    std::make_pair(
+      prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }

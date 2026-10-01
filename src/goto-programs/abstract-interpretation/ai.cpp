@@ -259,19 +259,19 @@ bool ai_baset::do_function_call_rec(
 
     return do_function_call(l_call, l_return, goto_functions, it, ns);
   }
-  /* As we do not have a points-to analysis, we can't know where a function pointer
-     will point-to. For now we will assume that it always points to a valid place.
-     However we will assume that the function will result the state (as we don't know)
-     what it does. */
+  /* As we do not have a points-to analysis, we can't know where a function
+     pointer will point-to. For now we will assume that it always points to a
+     valid place. However we will assume that the function will result the state
+     (as we don't know) what it does. */
 
   // TODO: We really should have a points-to for the AI.
   get_state(l_return);
   std::unique_ptr<statet> tmp_state(make_temporary_state(get_state(l_call)));
 
-  /* NOTE: Ideally we could let the domains deal with this with a more grained level.
-     For example, a function pointer that has no parameters can only affect global state.
-     However, I do not think its a good idea to optimize for a hacky behavior. Let's first
-     fix the AI. */
+  /* NOTE: Ideally we could let the domains deal with this with a more grained
+     level. For example, a function pointer that has no parameters can only
+     affect global state. However, I do not think its a good idea to optimize
+     for a hacky behavior. Let's first fix the AI. */
   tmp_state->make_entry();
   return merge(*tmp_state, l_call, l_return);
 }

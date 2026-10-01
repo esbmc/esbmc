@@ -217,8 +217,8 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     }
     else if (it->get_is_padding() && it_type.get_bool("#extint"))
     {
-      // The alignment offset of ExtInt padding (that is not part of a bit field)
-      // is accounted for by the main ExtInt field, so not done here
+      // The alignment offset of ExtInt padding (that is not part of a bit
+      // field) is accounted for by the main ExtInt field, so not done here
       assert(bit_field_bits == 0);
       continue;
     }

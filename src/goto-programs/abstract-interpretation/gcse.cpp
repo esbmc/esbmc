@@ -45,8 +45,9 @@ void cse_domaint::transform(
     // Expressions that contain the target will need to be recomputed
     havoc_expr(code.target, to);
     // Target may be an expression as well
-    // TODO: skip recursive definitions only. For example, x = x + 1 should be skipped as 'x' isn't available.
-    //make_expression_available(code.target);
+    // TODO: skip recursive definitions only. For example, x = x + 1 should be
+    // skipped as 'x' isn't available.
+    // make_expression_available(code.target);
   }
   break;
 
@@ -83,7 +84,8 @@ void cse_domaint::transform(
     const code_function_call2t &func =
       to_code_function_call2t(instruction.code);
 
-    // each operand should be available now (unless someone is doing a sideeffect)
+    // each operand should be available now (unless someone is doing a
+    // sideeffect)
 #if 0
     // Skip functions for now, the abstract interpreter is not context-aware
     // so it can't deal with function parameters properly.
@@ -427,7 +429,8 @@ bool goto_cse::runOnProgram(goto_functionst &F)
   log_status("{}", "[CSE] Computing Available Expressions for program");
   available_expressions(F, ns);
   log_status("{}", "[CSE] Finished computing AE for program");
-  // Let's release the reference. TODO: create the "VSA aware" abstract interpreter
+  // Let's release the reference. TODO: create the "VSA aware" abstract
+  // interpreter
   cse_domaint::vsa = nullptr;
   return false;
 }
@@ -547,7 +550,8 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
   if (!F.second.body_available)
     return false;
 
-  // 1. Let's count expressions, the idea is to go through all program statements
+  // 1. Let's count expressions, the idea is to go through all program
+  // statements
   //    and check if any sub-expr is already available
   std::unordered_set<expr2tc, irep2_hash> expressions_set;
   for (auto it = (F.second.body).instructions.begin();

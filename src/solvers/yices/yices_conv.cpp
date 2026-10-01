@@ -1079,11 +1079,12 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   unsigned int i = 0;
   for (auto const &it : members)
   {
-    outmem.push_back(smt_solver_baset::get_by_ast(
-      it,
-      new_ast(
-        yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
-        convert_sort(it))));
+    outmem.push_back(
+      smt_solver_baset::get_by_ast(
+        it,
+        new_ast(
+          yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
+          convert_sort(it))));
     i++;
   }
 

@@ -119,8 +119,8 @@ TEST_CASE("guard -= over a shared cached prefix (H-A9)", "[core][irep2][guard]")
   }
 }
 
-// operator-= with no shared prefix falls through common_pointer_prefix_size == 0
-// into the order-independent hash-set path.
+// operator-= with no shared prefix falls through common_pointer_prefix_size ==
+// 0 into the order-independent hash-set path.
 TEST_CASE("guard -= with no common prefix (H-A9)", "[core][irep2][guard]")
 {
   config.ansi_c.word_size = 32;

@@ -15,7 +15,8 @@ class namespacet;
 ///
 /// Scope (whole-program, all-or-nothing — anything outside it is reported as
 /// unsupported, since this is the only exception path):
-///   - C++ class and primitive throws; reference, value (with single-inheritance
+///   - C++ class and primitive throws; reference, value (with
+///   single-inheritance
 ///     slicing), pointer and void* catches, and catch-all;
 ///   - nested try regions with innermost-out propagation;
 ///   - inter-procedural propagation through direct and indirect calls, and
