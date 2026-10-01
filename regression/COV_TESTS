@@ -2086,3 +2086,5 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc-cpp/cpp/array_placement_new
+regression/esbmc-cpp/cpp/array_placement_new_fail
