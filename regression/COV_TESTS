@@ -2085,3 +2085,12 @@ regression/python/github_8090_list_long
 regression/python/github_8090_list_long_fail
 regression/esbmc/memcmp_symbolic_len
 regression/esbmc/memcmp_symbolic_len_fail
+regression/esbmc/big_endian_union_array_lane
+regression/esbmc/big_endian_union_short_member
+regression/esbmc/big_endian_struct_byte_access
+regression/esbmc/big_endian_union_trace_fail
+regression/esbmc/github_571_1
+regression/esbmc/github_8048
+regression/esbmc/github_8048_fail
+regression/esbmc/github_8048_huge_vla
+regression/esbmc/github_8048_huge_vla_fail
