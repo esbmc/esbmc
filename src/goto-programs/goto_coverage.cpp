@@ -156,13 +156,15 @@ void goto_coveraget::assertion_coverage()
 }
 
 /*
-Branch coverage applies to any control structure that can alter the flow of execution, including:
+Branch coverage applies to any control structure that can alter the flow of
+execution, including:
 - if-else
 - switch-case
 - Loops (for, while, do-while)
 - try-catch-finally (not in c)
 - Early exits (return, break, continue)
-The goal of branch coverage is to ensure that all possible execution paths in the program are tested.
+The goal of branch coverage is to ensure that all possible execution paths in
+the program are tested.
 
 The CBMC extends it to the entry of the function. So we will do the same.
 
@@ -243,7 +245,8 @@ void goto_coveraget::branch_function_coverage()
     }
 
   // fix for branch coverage with kind/incr
-  // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
+  // It seems in kind/incr, the goto_functions used during the BMC is simplified
+  // and incomplete
   total_func_branch = get_total_instrument();
   all_claims = get_total_cond_assert();
 
@@ -953,7 +956,8 @@ void goto_coveraget::condition_coverage()
 {
   // we need to skip the conditions within the built-in library
   // while keeping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
+  // this filter, however, is unsound.. E.g. if the src filename is the same as
+  // the builtin library name
   total_cond = {{}};
 
   std::unordered_set<std::string> location_pool = {};
@@ -1012,7 +1016,8 @@ void goto_coveraget::condition_coverage()
           {
             expr2tc guard = handle_single_guard(it->guard, true);
             gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
-            // after adding the instrumentation, we neutralize the original assert
+            // after adding the instrumentation, we neutralize the original
+            // assert
             if (cov_assume_asserts)
               replace_assert_to_assume(it);
             else
@@ -1232,18 +1237,20 @@ expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard) const
   rule:
   1. No-op: Do nothing. This means it's a symbol or constant
   2. Binary OP: for boolean expreession, e.g. a>b, a==b, do nothing
-  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add if it's already a binary boolean expression in 2.
-    e.g. if(x==1 && a++) => if(x==1 && a++ !=0)
-  4. Others: for any other expresison, including unary, binary and teranry, traverse its op with handle_single_guard recursivly. convert it to not equal in the top level only.
-    e.g. if((bool)a+b+c) => if((bool)(a+b+c)!=0)
-    typecast <--- add not equal here
+  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add
+  if it's already a binary boolean expression in 2. e.g. if(x==1 && a++) =>
+  if(x==1 && a++ !=0)
+  4. Others: for any other expresison, including unary, binary and teranry,
+  traverse its op with handle_single_guard recursivly. convert it to not equal
+  in the top level only. e.g. if((bool)a+b+c) => if((bool)(a+b+c)!=0) typecast
+  <--- add not equal here
     - +
       - a
       - +
         - b
         - c
-  e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) => if((a?b:c:d)!=0)
-  if(a==b) => if(a==b); if(a&&b) => if(a != 0 && b!=0 )
+  e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) =>
+  if((a?b:c:d)!=0) if(a==b) => if(a==b); if(a&&b) => if(a != 0 && b!=0 )
 */
 /// Recursively maps each operand of @p expr through handle_single_guard
 /// (with the supplied @p sub_top_level), in place. Foreach_operand detaches
@@ -1416,7 +1423,8 @@ bool goto_coveraget::is_target_func(
 }
 
 // negate the condition inside the assertion
-// The idea is that, if the claim is verified safe, and its negated claim is also verified safe, then we say this claim is unreachable
+// The idea is that, if the claim is verified safe, and its negated claim is
+// also verified safe, then we say this claim is unreachable
 void goto_coveraget::negating_asserts(const std::string &tgt_fname)
 {
   std::string old = target_function;

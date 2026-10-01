@@ -309,27 +309,30 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
   // The thrown operand may still carry side effects — most importantly a
   // `temporary_object` that constructs the thrown value — when convert_throw is
   // reached through the code-statement path (a codet("cpp-throw"), as produced
-  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
-  // in remove_sideeffects, which lowers operands before dispatching here. Lower
-  // them now so the thrown value is a plain symbol, matching the legacy flag-off
-  // GOTO; otherwise the constructor never runs and the handler reads an
-  // unconstructed object. A no-op when the operand is already side-effect-free.
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt
+  // path in remove_sideeffects, which lowers operands before dispatching here.
+  // Lower them now so the thrown value is a plain symbol, matching the legacy
+  // flag-off GOTO; otherwise the constructor never runs and the handler reads
+  // an unconstructed object. A no-op when the operand is already
+  // side-effect-free.
   exprt expr = expr_in;
   Forall_operands (it, expr)
     remove_sideeffects(*it, dest);
 
   // C++ stack unwinding: before the throw, run the destructors of the automatic
   // objects constructed since the nearest enclosing try block, in reverse
-  // construction order ([except.ctor]). throw_stack_size is the destructor-stack
-  // level at that try's entry — or 0 when the throw is not in any try, so an
-  // exception propagating out of the function destroys all of its locals.
+  // construction order ([except.ctor]). throw_stack_size is the
+  // destructor-stack level at that try's entry — or 0 when the throw is not in
+  // any try, so an exception propagating out of the function destroys all of
+  // its locals.
   //
   // The thrown object itself must NOT be unwound: its lifetime is owned by the
-  // exception machinery and it has to survive the throw. It is the most-recently
-  // constructed full-expression temporary, so its destructor entries sit on top
-  // of the stack (above the enclosing try's locals). Detach them, run the
-  // (non-destructive) unwind of the try-block locals, then restore them so the
-  // normal fall-through cleanup after the throw is unchanged.
+  // exception machinery and it has to survive the throw. It is the
+  // most-recently constructed full-expression temporary, so its destructor
+  // entries sit on top of the stack (above the enclosing try's locals). Detach
+  // them, run the (non-destructive) unwind of the try-block locals, then
+  // restore them so the normal fall-through cleanup after the throw is
+  // unchanged.
   destructor_stackt &stack = targets.destructor_stack;
   const irep_idt thrown_id =
     expr.operands().empty() || expr.op0().id() != "symbol"
@@ -461,10 +464,10 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
 void goto_convertt::convert_controlled(const codet &code, goto_programt &dest)
 {
   // A braced block gets its own destructor scope via convert_block; a bare
-  // controlled substatement (e.g. `if (c) throw std::bad_alloc();`) does not, so
-  // full-expression temporaries created in it would leak their destructors onto
-  // the enclosing block's stack and run on sibling paths where the object was
-  // never constructed -> spurious use-after-free (#5950). Wrap a non-block
+  // controlled substatement (e.g. `if (c) throw std::bad_alloc();`) does not,
+  // so full-expression temporaries created in it would leak their destructors
+  // onto the enclosing block's stack and run on sibling paths where the object
+  // was never constructed -> spurious use-after-free (#5950). Wrap a non-block
   // substatement so it is scoped identically to a braced one.
   if (code.get_statement() == "block")
   {
@@ -492,8 +495,8 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
   // source location from a side_effect_exprt: sideeffect2t carries no location
   // field, unlike the enclosing code_expression statement (whose location does
-  // survive). remove_function_call copies expr.location() into the lowered call,
-  // so for the function_call side effect that backs the void builtins
+  // survive). remove_function_call copies expr.location() into the lowered
+  // call, so for the function_call side effect that backs the void builtins
   // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
   // loop-invariant / requires / ensures contracts) this yields a location-less
   // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
@@ -649,10 +652,11 @@ void goto_convertt::generate_dynamic_size_vla(
 
   array_typet arr_type = to_array_type(var.type());
   // Use arr_type.size() directly -- rewrite_vla_decl_size has already run and
-  // materialised any side-effecting size expression into an __ESBMC_tmp_ symbol,
-  // so arr_type.size() is a plain symbol (no side effects).  We keep a copy
-  // of the pre-cast expression so the zero-size check operates on the original
-  // (possibly signed) type and correctly catches both zero and negative dimensions.
+  // materialised any side-effecting size expression into an __ESBMC_tmp_
+  // symbol, so arr_type.size() is a plain symbol (no side effects).  We keep a
+  // copy of the pre-cast expression so the zero-size check operates on the
+  // original (possibly signed) type and correctly catches both zero and
+  // negative dimensions.
   exprt dim_expr = arr_type.size();
   exprt size = typecast_exprt(dim_expr, size_type());
 
@@ -1062,9 +1066,9 @@ void goto_convertt::convert_assign_atomic(
   }
   subst.replace(working_rhs);
 
-  // Phase 2: emit the store, wrapped in ATOMIC_BEGIN/END only when lhs is _Atomic.
-  // A context switch is allowed between Phase 1 and Phase 2 (between the
-  // ATOMIC_END above and the ATOMIC_BEGIN below), which is exactly the C11
+  // Phase 2: emit the store, wrapped in ATOMIC_BEGIN/END only when lhs is
+  // _Atomic. A context switch is allowed between Phase 1 and Phase 2 (between
+  // the ATOMIC_END above and the ATOMIC_BEGIN below), which is exactly the C11
   // requirement that atomic load and atomic store are separate operations.
   bool lhs_atomic = is_atomic_symbol(lhs, ns);
   if (lhs_atomic)
@@ -1842,8 +1846,8 @@ void goto_convertt::convert_return(
       log_warning(
         "The return of the function {} is missing",
         id2string(code.location().function()));
-      // This might be because the remove_sideeffect removed the undefined function
-      // We replaced it with nondet
+      // This might be because the remove_sideeffect removed the undefined
+      // function We replaced it with nondet
       exprt ret = exprt("sideeffect", code.op0().type());
       ret.statement("nondet");
       new_code.return_value() = ret;

@@ -32,6 +32,7 @@ add_library(symex
   equation/slice.cpp
   equation/symex_symmetry.cpp
   equation/features.cpp
+  equation/ssa_step_algorithm.cpp
 
   trace/goto_trace.cpp
   trace/build_goto_trace.cpp

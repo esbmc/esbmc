@@ -201,7 +201,8 @@ bool is_sol_library_function(const int ref_id)
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
-  // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+  // Solidity AST node has duplicate descrptions:
+  // ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
   //! Order matters
 
   if (type_name.contains("typeString"))
@@ -235,10 +236,12 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
 
-      // The Arrays in Solidity can be classified into the following two types based on size –
+      // The Arrays in Solidity can be classified into the following two types
+      // based on size –
       //   Fixed Size Array
       //   Dynamic Array
-      // Furthermore, the solidity array can also be categorized based on where they are stored as –
+      // Furthermore, the solidity array can also be categorized based on where
+      // they are stored as –
       //   Storage Array
       //   Memory Array
 
@@ -300,7 +303,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if (typeIdentifier.find("ArrayToPtr") != std::string::npos)
     {
-      // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
+      // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g.
+      // a[0]
       return PointerArrayToPtr;
     }
     // for Special Variables and Functions
@@ -904,9 +908,9 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     else if (type_name == SolidityGrammar::TypeNameT::TypeConversionName)
       return TypeMemberCall;
     else
-      //TODO Assume it's a builtin member
-      // due to that the BuiltinTypeName cannot cover all the builtin member
-      // e.g. string.concat ==> TypeConversionName
+      // TODO Assume it's a builtin member
+      //  due to that the BuiltinTypeName cannot cover all the builtin member
+      //  e.g. string.concat ==> TypeConversionName
       return BuiltinMemberCall;
   }
   else if (expr["nodeType"] == "ImplicitCastExprClass")

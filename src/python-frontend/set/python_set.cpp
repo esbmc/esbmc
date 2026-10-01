@@ -211,8 +211,9 @@ exprt python_set::get_from_iterable(
     converter_.add_instruction(len_call);
 
     // Ensure bounded strlen doesn't exceed the configured limit.
-    // If it does, the model would silently truncate, so assert to make it explicit.
-    // (len_sym and the bound literal are both size_type — same width.)
+    // If it does, the model would silently truncate, so assert to make it
+    // explicit. (len_sym and the bound literal are both size_type — same
+    // width.)
     exprt bound_check = build_less_equal(
       build_symbol(len_sym),
       from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));

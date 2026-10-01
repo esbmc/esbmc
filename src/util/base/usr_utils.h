@@ -26,7 +26,8 @@ std::string user_name_to_usr(std::string_view user_name);
  * Inverse of user_name_to_usr. Strips c:@ prefix and converts scope markers
  * (N@, S@, F@) to user-friendly format.
  *
- * @param usr_name Clang USR format (e.g., c:@F@func# or c:@N@ns@S@Class@F@method#)
+ * @param usr_name Clang USR format (e.g., c:@F@func# or
+ * c:@N@ns@S@Class@F@method#)
  * @return User-friendly name (e.g., func or N@ns@S@Class@method)
  */
 std::string usr_to_user_name(std::string_view usr_name);

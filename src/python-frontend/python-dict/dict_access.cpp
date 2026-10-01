@@ -15,7 +15,8 @@ exprt python_dict_handler::handle_dict_subscript(
   locationt location = converter_.get_location_from_decl(slice_node);
   typet list_type = type_handler_.get_list_type();
 
-  // If expected_type is not provided, try to infer it from the dict's annotation
+  // If expected_type is not provided, try to infer it from the dict's
+  // annotation
   typet resolved_type = expected_type;
   if (resolved_type.is_nil() || resolved_type.is_empty())
     resolved_type = resolve_expected_type_for_dict_subscript(dict_expr);
@@ -48,7 +49,8 @@ exprt python_dict_handler::handle_dict_subscript(
   list_elem_info key_info =
     list_handler.get_list_element_info(slice_node, key_expr);
 
-  // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if absent
+  // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
+  // absent
   code_function_callt find_call;
   find_call.function() = build_symbol(*find_func);
   find_call.lhs() = build_symbol(index_var);
@@ -70,7 +72,8 @@ exprt python_dict_handler::handle_dict_subscript(
   converter_.add_instruction(find_call);
 
   // If index == SIZE_MAX the key was not found: throw KeyError so that
-  // try/except KeyError handlers can catch it (instead of failing the property).
+  // try/except KeyError handlers can catch it (instead of failing the
+  // property).
   {
     // V.3: build the not-found check (index == SIZE_MAX) in IREP2.
     const BigInt size_max_val = power(2, bv_width(size_type())) - 1;

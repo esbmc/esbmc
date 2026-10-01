@@ -44,7 +44,8 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
         abort();
       }
 
-      // TODO: there are some special C functions that should be handled: exit, longjmp, etc.
+      // TODO: there are some special C functions that should be handled: exit,
+      // longjmp, etc.
     }
 
     // Second pass - identify all the basic blocks

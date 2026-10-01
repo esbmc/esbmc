@@ -269,21 +269,22 @@ void clang_cpp_convertert::get_decl_name(
   case clang::Decl::ParmVar:
   {
     const clang::ParmVarDecl &pd = static_cast<const clang::ParmVarDecl &>(nd);
-    // If the parameter is unnamed, it will be handled by `name_param_and_continue`, but not here.
+    // If the parameter is unnamed, it will be handled by
+    // `name_param_and_continue`, but not here.
     if (!name.empty())
     {
       /* Add the parameter index to the name and id to avoid name clashes.
-     * Consider the following example:
-     * ```
-     * template <typename... f> int e(f... g) {return 0;};
-     * int d = e(1, 2.0);
-     * ```
-     * The two parameters in the function e will have the same name and id
-     * because clang does not differentiate between them. This will cause
-     * the second parameter to overwrite the first in the symbol table which
-     * causes all kinds of problems. To avoid this, we append the parameter
-     * index to the name and id.
-    */
+       * Consider the following example:
+       * ```
+       * template <typename... f> int e(f... g) {return 0;};
+       * int d = e(1, 2.0);
+       * ```
+       * The two parameters in the function e will have the same name and id
+       * because clang does not differentiate between them. This will cause
+       * the second parameter to overwrite the first in the symbol table which
+       * causes all kinds of problems. To avoid this, we append the parameter
+       * index to the name and id.
+       */
       name += "::" + std::to_string(pd.getFunctionScopeIndex());
       id_suffix = "::" + std::to_string(pd.getFunctionScopeIndex());
       break;
@@ -318,8 +319,9 @@ void clang_cpp_convertert::get_decl_name(
      * instantiation share an id and the last body converted wins (#7499); the
      * closure's own id is already unique (#6976). Constructors take the case
      * above and need none -- their USR spells the class "(lambda at f:l:c)". */
-    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd);
-        md && md->getParent()->isLambda())
+    if (
+      const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd);
+      md && md->getParent()->isLambda())
     {
       std::string closure_name, closure_id;
       get_decl_name(*md->getParent(), closure_name, closure_id);
@@ -470,7 +472,8 @@ bool clang_cpp_convertert::get_method(
   const clang::CXXMethodDecl &md,
   exprt &new_expr)
 {
-  // Only convert instantiated functions/methods not depending on a template parameter
+  // Only convert instantiated functions/methods not depending on a template
+  // parameter
   if (md.isDependentContext())
     return false;
 
@@ -731,6 +734,30 @@ static bool zero_initialises(const clang::Expr &init)
   return false;
 }
 
+/// Attach a new-expression's initializer, and for an array its braced list's
+/// filler: a run-time element count can reach past the list.
+bool clang_cpp_convertert::get_new_initializer(
+  const clang::CXXNewExpr &ne,
+  exprt &new_expr)
+{
+  exprt init;
+  if (get_expr(*ne.getInitializer(), init))
+    return true;
+  convert_expression_to_code(init);
+  new_expr.initializer(init);
+
+  const auto *list = llvm::dyn_cast<clang::InitListExpr>(ne.getInitializer());
+  if (!ne.isArray() || list == nullptr)
+    return false;
+
+  exprt filler;
+  if (get_array_filler(*list, filler))
+    return true;
+  if (filler.is_not_nil())
+    new_expr.add("array_filler") = filler;
+  return false;
+}
+
 /// The id a catch handler matches a throw on. The catch type rides on the
 /// handler block's own type and is read off it exactly once -- here.
 /// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
@@ -973,8 +1000,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     auto args = operator_call.arguments();
     auto begin = args.begin();
     const auto *direct = operator_call.getDirectCallee();
-    if (const auto *md = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
-        md && md->isStatic())
+    if (
+      const auto *md = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
+      md && md->isStatic())
     {
       assert(begin != args.end());
       ++begin;
@@ -1123,16 +1151,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       zero_initialises(*ne.getInitializer()))
       new_expr.set("zero_initialized", true);
 
-    if (ne.hasInitializer())
-    {
-      exprt init;
-      if (get_expr(*ne.getInitializer(), init))
-        return true;
-
-      convert_expression_to_code(init);
-
-      new_expr.initializer(init);
-    }
+    if (ne.hasInitializer() && get_new_initializer(ne, new_expr))
+      return true;
 
     break;
   }
@@ -1231,7 +1251,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::CXXPseudoDestructorExpr &cxxpd =
       static_cast<const clang::CXXPseudoDestructorExpr &>(stmt);
-    // A pseudo-destructor expression has no run-time semantics beyond evaluating the base expression.
+    // A pseudo-destructor expression has no run-time semantics beyond
+    // evaluating the base expression.
     exprt base;
     if (get_expr(*cxxpd.getBase(), base))
       return true;
@@ -1286,8 +1307,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     // In a lambda `CXXThisExpr` refers to the captured `this` pointer,
-    // while the `this_map` refers to the `this` pointer of the lambda closure type.
-    // This causes a mismatch, so ignore the type check in this case.
+    // while the `this_map` refers to the `this` pointer of the lambda closure
+    // type. This causes a mismatch, so ignore the type check in this case.
     assert(this_type == it->second.second || is_lambda());
 
     if (is_lambda())
@@ -1601,7 +1622,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt sym("struct", lambda_class_type);
-    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully the same size and order
+    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully
+    // the same size and order
     auto capture = lambda_expr.capture_begin();
     for (const auto &it : lambda_expr.capture_inits())
     {
@@ -2546,7 +2568,8 @@ bool clang_cpp_convertert::get_function_body(
           build_member_from_component(fd, member);
         size_flexible_array_member(*member_decl, member.type());
 
-        // set #member_init flag again, as it has been cleared between the first call...
+        // set #member_init flag again, as it has been cleared between the first
+        // call...
         member.set("#member_init", 1);
 
         exprt rhs;
@@ -2724,8 +2747,9 @@ bool clang_cpp_convertert::get_function_body(
   // and base-subobject destructor calls.
   else if (fd.getKind() == clang::Decl::CXXDestructor)
   {
-    if (build_destructor_chain(
-          static_cast<const clang::CXXDestructorDecl &>(fd), body))
+    if (
+      build_destructor_chain(
+        static_cast<const clang::CXXDestructorDecl &>(fd), body))
       return true;
   }
 
@@ -3067,9 +3091,10 @@ bool clang_cpp_convertert::get_decl_ref(
     // Replace decl in the lambda operator with FieldDecl
     // x = 1 convert into this->_x = 1;
     if (auto it = cap_map.find(address); it != cap_map.end())
-      if (auto it1 =
-            it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
-          it1 != it->second.first.end())
+      if (
+        auto it1 =
+          it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
+        it1 != it->second.first.end())
       {
         typet t;
         if (get_type(it1->first->getType(), t))
@@ -3088,9 +3113,9 @@ bool clang_cpp_convertert::get_decl_ref(
   /**
    * References are modeled as pointers in ESBMC.
    * Normally, when getting a reference, we should therefore dereference it.
-   * However, when a reference type variable is initialized in a (member initializer) constructor call,
-   * we should not dereference it, because the reference/pointer is _not_ yet initialized.
-   * See test case "RefMemberInit".
+   * However, when a reference type variable is initialized in a (member
+   * initializer) constructor call, we should not dereference it, because the
+   * reference/pointer is _not_ yet initialized. See test case "RefMemberInit".
    */
   bool should_dereference = !new_expr.get_bool("#member_init");
 
@@ -3151,7 +3176,8 @@ bool clang_cpp_convertert::get_decl_ref(
     if (get_function_params(fd, fd_type.arguments()))
       return true;
 
-    // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
+    // annotate return type - will be used to adjust the initiliazer or
+    // decl-derived stmt
     const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
     assert(md);
     annotate_ctor_dtor_rtn_type(*md, fd_type.return_type());
@@ -3505,7 +3531,8 @@ bool clang_cpp_convertert::get_base_map(
   base_map &map)
 {
   /*
-   * This function gets all the base classes from which we need to get the components/methods
+   * This function gets all the base classes from which we need to get the
+   * components/methods
    */
   for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
   {
@@ -3748,9 +3775,10 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
  * if_exprt instead materialises a temporary per branch plus a result temporary
  * and copies between them with a plain assignment, so no copy/move constructor
  * runs and every one of those temporaries is destroyed, including the branch
- * that was not taken. Emit a single temporary_object whose initializer branches,
- * so replace_new_object points both constructors at the same object -- the same
- * elision the MaterializeTemporaryExpr arm above performs one level down.
+ * that was not taken. Emit a single temporary_object whose initializer
+ * branches, so replace_new_object points both constructors at the same object
+ * -- the same elision the MaterializeTemporaryExpr arm above performs one level
+ * down.
  *
  * Only the shape where both branches are constructor temporaries is rewritten;
  * anything else (an lvalue operand, a non-constructor temporary) keeps the

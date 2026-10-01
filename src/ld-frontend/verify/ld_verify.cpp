@@ -327,7 +327,8 @@ LdVerifyResult LdVerifyRunner::run(const LdVerifyOptions &opts)
   }
   else
   {
-    // No recognisable verdict: esbmc crashed, was killed, or rejected the input.
+    // No recognisable verdict: esbmc crashed, was killed, or rejected the
+    // input.
     r.verdict = LdVerifyResult::Verdict::Error;
     r.description = no_verdict_description(output);
     r.raw_output = output;

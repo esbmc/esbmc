@@ -12,7 +12,8 @@ class type_handler;
 class symbolt;
 
 /**
- * @brief Dedicated handler for complex number operations in the Python frontend.
+ * @brief Dedicated handler for complex number operations in the Python
+ * frontend.
  *
  * Centralises complex arithmetic (mul, div, pow, log, exp), unary operations,
  * attribute access (.real, .imag, .conjugate()), abs(), and numeric

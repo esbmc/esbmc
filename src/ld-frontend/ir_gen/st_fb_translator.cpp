@@ -445,19 +445,20 @@ codet st_fb_translator::parse_stmt()
     code_whilet loop;
     loop.cond() = cond;
 
-    // Without the scan-watchdog, the WHILE stays a plain loop: a non-terminating
-    // Ladder Logic Bomb is then caught by ESBMC's unwinding assertion (--unwind),
-    // and no extra assertion is added to the verified model.
+    // Without the scan-watchdog, the WHILE stays a plain loop: a
+    // non-terminating Ladder Logic Bomb is then caught by ESBMC's unwinding
+    // assertion (--unwind), and no extra assertion is added to the verified
+    // model.
     if (!watchdog_enabled())
     {
       loop.body() = body;
       return loop;
     }
 
-    // Scan-watchdog instrumentation (opt-in via --ld-scan-watchdog).  A real PLC
-    // trips a watchdog timer if a scan overruns; a non-terminating rung loop is
-    // exactly such an overrun.  We prepend a per-loop iteration counter and
-    // assert it stays within the scan budget, turning a (trigger-gated)
+    // Scan-watchdog instrumentation (opt-in via --ld-scan-watchdog).  A real
+    // PLC trips a watchdog timer if a scan overruns; a non-terminating rung
+    // loop is exactly such an overrun.  We prepend a per-loop iteration counter
+    // and assert it stays within the scan budget, turning a (trigger-gated)
     // non-terminating Ladder Logic Bomb into a reachable safety violation that
     // incremental BMC detects, while bounded legitimate loops within budget
     // remain SAFE.  This injects an assertion, so it deliberately changes the
@@ -484,7 +485,8 @@ codet st_fb_translator::parse_stmt()
     return out;
   }
 
-  // VAR / VAR_INPUT / ... END_VAR declaration block embedded in the body -> skip
+  // VAR / VAR_INPUT / ... END_VAR declaration block embedded in the body ->
+  // skip
   if (kw == "var" || kw.rfind("var_", 0) == 0)
   {
     require_tolerant("embedded VAR block");

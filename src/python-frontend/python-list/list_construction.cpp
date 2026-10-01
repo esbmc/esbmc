@@ -162,8 +162,9 @@ exprt python_list::get()
 
   // Convert every element once, recording whether the literal mixes integer and
   // floating-point values. Python promotes such a list to a homogeneous float
-  // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would leave
-  // their float_buf slot unset and read back as a stale float (issue #5156).
+  // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would
+  // leave their float_buf slot unset and read back as a stale float (issue
+  // #5156).
   std::vector<exprt> elems;
   elems.reserve(list_value_["elts"].size());
   bool has_int = false, has_float = false;

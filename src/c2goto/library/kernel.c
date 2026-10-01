@@ -12,8 +12,8 @@
 
 typedef unsigned int gfp_t;
 
-char user_memory[USER_MEMORY_SPACE];     //mock user memory
-char kernel_memory[KERNEL_MEMORY_SPACE]; //mock kernel memory
+char user_memory[USER_MEMORY_SPACE];     // mock user memory
+char kernel_memory[KERNEL_MEMORY_SPACE]; // mock kernel memory
 
 static void check_gfp_flags(gfp_t flags)
 {
@@ -48,12 +48,13 @@ void *kmalloc(int size, int flags)
 __ESBMC_HIDE:;
   // Check size greater than  zero and less than max
   assert(size > 0 && size <= MAX_ALLOC_SIZE);
-  //check flags greater than zero
+  // check flags greater than zero
   assert(flags > 0);
 
-  //check if flags have corresponding valid values
+  // check if flags have corresponding valid values
   check_gfp_flags(flags);
-  // If the size is larger than the KMALLOC_MAX_CACHE_SIZE, then handle in kmalloc_large
+  // If the size is larger than the KMALLOC_MAX_CACHE_SIZE, then handle in
+  // kmalloc_large
   if (size > KMALLOC_MAX_CACHE_SIZE)
   {
     // Call to kmalloc_large or equivalent function can be here.
@@ -85,8 +86,8 @@ __ESBMC_HIDE:;
 unsigned long copy_to_user(void *to, void *from, unsigned long size)
 {
 __ESBMC_HIDE:;
-  //checking on the passed parameters of kernel function
-  //the source in kernel space and destination in user space must be valid
+  // checking on the passed parameters of kernel function
+  // the source in kernel space and destination in user space must be valid
   assert(to != NULL);
   assert(from != NULL);
   assert(size <= PAGE_SIZE);
@@ -94,8 +95,8 @@ __ESBMC_HIDE:;
   assert((char *)to >= user_memory);
   assert((char *)from >= kernel_memory);
 
-  //copy memory from kernel space to user space
-  //simulate the copy operation by memcpy
+  // copy memory from kernel space to user space
+  // simulate the copy operation by memcpy
   memcpy(to, from, size);
 
   return 0;
@@ -104,16 +105,16 @@ __ESBMC_HIDE:;
 unsigned long copy_from_user(void *to, void *from, unsigned long size)
 {
 __ESBMC_HIDE:;
-  //the source in user space and destination in kernel space must be valid
-  //avoid dereferencing null pointer
+  // the source in user space and destination in kernel space must be valid
+  // avoid dereferencing null pointer
   assert(to != NULL);
   assert(from != NULL);
   assert(size <= PAGE_SIZE);
 
   assert((char *)to >= kernel_memory);
   assert((char *)from >= user_memory);
-  //copy memory from user space to kernel space
-  //simulate the copy operation by memcpy
+  // copy memory from user space to kernel space
+  // simulate the copy operation by memcpy
   memcpy(to, from, size);
 
   return 0;
@@ -122,9 +123,9 @@ __ESBMC_HIDE:;
 void spin_lock_init(spinlock_t *lock)
 {
 __ESBMC_HIDE:;
-  //check if the lock is valid
+  // check if the lock is valid
   assert(lock != NULL);
-  //initialize the lock
+  // initialize the lock
   lock->locked = false;
 }
 

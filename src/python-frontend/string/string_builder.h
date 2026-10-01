@@ -13,8 +13,9 @@ class type_handler;
 class contextt;
 class string_handler;
 
-/// Helper class for building and manipulating string expressions in Python frontend
-/// Handles null-termination, character extraction, and string concatenation
+/// Helper class for building and manipulating string expressions in Python
+/// frontend Handles null-termination, character extraction, and string
+/// concatenation
 class string_builder
 {
 public:
@@ -32,7 +33,8 @@ public:
     const exprt &expr,
     const nlohmann::json &json_node = nlohmann::json());
 
-  /// Create a null-terminated string array from a vector of character expressions
+  /// Create a null-terminated string array from a vector of character
+  /// expressions
   exprt build_null_terminated_string(const std::vector<exprt> &chars);
 
   /// Create a null-terminated string from a std::string
@@ -54,7 +56,8 @@ public:
 
   exprt handle_string_repetition(exprt &lhs, exprt &rhs);
 
-  /// Create a raw byte array without null termination (for Python bytes literals)
+  /// Create a raw byte array without null termination (for Python bytes
+  /// literals)
   exprt build_raw_byte_array(const std::vector<uint8_t> &bytes);
 
   exprt concatenate_strings_via_c_function(
