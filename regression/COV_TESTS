@@ -2077,3 +2077,7 @@ regression/esbmc/vector_union_bytes
 regression/esbmc/vector_union_bytes_fail
 regression/esbmc/vector_struct_array
 regression/esbmc/vector_struct_array_fail
+regression/python/github_8090_list_eq
+regression/python/github_8090_list_eq_fail
+regression/python/github_8090_list_eq_nested
+regression/python/github_8090_list_eq_nested_fail
