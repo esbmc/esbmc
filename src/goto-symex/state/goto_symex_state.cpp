@@ -343,6 +343,32 @@ static bool aggregate_literal_may_propagate(
   return noconst;
 }
 
+/* Whether every update in an array's `with` chain may be carried. An infinite
+ * array has no literal value, so its chain must be a bounded run of
+ * constant-index writes over its initial symbol (#8090). */
+static bool array_with_chain_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &expr)
+{
+  const bool infinite = to_array_type(expr->type).size_is_infinite;
+  unsigned symbolic_updates = 0;
+  unsigned writes = 0;
+  expr2tc current = expr;
+
+  while (is_with2t(current))
+  {
+    const with2t &w = to_with2t(current);
+    if (
+      !update_may_propagate(state, w.update_value, symbolic_updates) ||
+      (infinite && (!is_constant_int2t(w.update_field) ||
+                    ++writes > inf_array_write_bound)))
+      return false;
+    current = w.source_value;
+  }
+
+  return !infinite || is_symbol2t(current);
+}
+
 /// Whether an incremental strategy is driving the unwind. Both re-bound it
 /// themselves rather than reading a folded guard, so carrying a `with` costs
 /// without paying (#7597, and constant_propagation's own opt-out).
@@ -482,33 +508,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     }
 
     // Handle WITH chains for arrays where all updates are constants
-    if (is_array_type(expr->type))
-    {
-      // Check if this is a chain of WITHs with all constant updates
-      bool all_constant_updates = true;
-      unsigned symbolic_updates = 0;
-      expr2tc current = expr;
-      const bool infinite = to_array_type(expr->type).size_is_infinite;
-      unsigned writes = 0;
-
-      while (is_with2t(current))
-      {
-        const with2t &w = to_with2t(current);
-        if (
-          !update_may_propagate(*this, w.update_value, symbolic_updates) ||
-          (infinite && (!is_constant_int2t(w.update_field) ||
-                        ++writes > inf_array_write_bound)))
-        {
-          all_constant_updates = false;
-          break;
-        }
-        current = w.source_value;
-      }
-
-      // If all updates in the chain were constants, propagate
-      if (all_constant_updates && (!infinite || is_symbol2t(current)))
-        return true;
-    }
+    if (
+      is_array_type(expr->type) && array_with_chain_may_propagate(*this, expr))
+      return true;
 
     // Handle WITH chains for unions where all updates are constants
     if (is_union_type(expr->type))
