@@ -2,6 +2,7 @@
 #include <boost/filesystem.hpp>
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <vector>
@@ -399,6 +400,37 @@ tmp_file &tmp_file::operator=(tmp_file o)
 FILE *tmp_file::file() noexcept
 {
   return _file;
+}
+
+#ifdef _WIN32
+static const char *const tmp_dir_var = "TMP";
+#else
+static const char *const tmp_dir_var = "TMPDIR";
+#endif
+
+static void set_tmp_dir_var(const char *value)
+{
+#ifdef _WIN32
+  _putenv_s(tmp_dir_var, value ? value : "");
+#else
+  if (value)
+    setenv(tmp_dir_var, value, 1);
+  else
+    unsetenv(tmp_dir_var);
+#endif
+}
+
+/* Copy the old value: setenv() may free the storage getenv() pointed at. */
+tmp_dir_override::tmp_dir_override(const std::string &dir)
+  : _was_set(getenv(tmp_dir_var) != nullptr),
+    _old(_was_set ? getenv(tmp_dir_var) : "")
+{
+  set_tmp_dir_var(dir.c_str());
+}
+
+tmp_dir_override::~tmp_dir_override()
+{
+  set_tmp_dir_var(_was_set ? _old.c_str() : nullptr);
 }
 
 /* unique_path() only invents a name; it does not stake a claim on it. Opening

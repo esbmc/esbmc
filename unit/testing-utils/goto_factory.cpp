@@ -85,9 +85,6 @@ program goto_factory::get_goto_functions(
   goto_factory::Architecture arch,
   const std::string &test_name)
 {
-  /* Not create_tmp_dir(): it registers the path for signal cleanup and never
-   * unregisters, and this runs hundreds of times per binary. ~tmp_path()
-   * removes the directory; the program holds no reference to the source. */
   file_operations::tmp_path dir(
     file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
   std::string filename = dir.path() + "/" + test_name;
