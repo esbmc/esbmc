@@ -6,6 +6,9 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
 #include <util/irep/std_expr.h>
+#include <util/base/prefix.h>
+#include <string_view>
+#include <unordered_set>
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif
@@ -992,6 +995,9 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
+    havoc_written_arguments(to_code_function_call2t(instruction.code));
+    break;
+
   case END_FUNCTION:
   case ATOMIC_BEGIN:
   case ATOMIC_END:
@@ -1270,6 +1276,62 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else
     // Unmodelled assignment: the old range must not survive the write.
     havoc_rec(c.target);
+}
+
+/* Body-less callees symex gives a write through a pointer argument: the input
+ * functions and its intrinsics and builtins. An intrinsic missing from
+ * read_only is assumed to write, which costs precision, never soundness. */
+static bool writes_through_arguments(const expr2tc &function)
+{
+  // A call through a pointer is ai_baset's: it resets the whole state.
+  if (!is_symbol2t(function))
+    return false;
+  static const std::unordered_set<std::string_view> read_only = {
+    "c:@F@__ESBMC_memcmp",
+    "c:@F@__ESBMC_memchr",
+    "c:@F@__ESBMC_r_ok",
+    "c:@F@__ESBMC_is_fresh",
+    "c:@F@__ESBMC_get_object_size",
+    "c:@F@__ESBMC_builtin_object_size"};
+  const std::string &id = to_symbol2t(function).thename.as_string();
+  if (read_only.count(id))
+    return false;
+  return has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin") ||
+         id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf";
+}
+
+/// The object @p address points into, or nil when that is not statically known.
+static expr2tc pointed_object(expr2tc address)
+{
+  while (is_typecast2t(address))
+    address = to_typecast2t(address).from;
+  if (!is_address_of2t(address))
+    return expr2tc();
+  expr2tc object = to_address_of2t(address).ptr_obj;
+  while (is_index2t(object) || is_member2t(object))
+    object = is_index2t(object) ? to_index2t(object).source_value
+                                : to_member2t(object).source_value;
+  return object;
+}
+
+void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
+{
+  if (!writes_through_arguments(call.function))
+    return;
+  for (const expr2tc &arg : call.operands)
+  {
+    if (is_nil_expr(arg) || !is_pointer_type(arg))
+      continue;
+    const expr2tc object = pointed_object(arg);
+    if (object && is_constant_expr(object))
+      continue;
+    if (!object || !is_symbol2t(object))
+    {
+      clear_state();
+      return;
+    }
+    havoc_rec(object);
+  }
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
