@@ -2077,3 +2077,5 @@ regression/esbmc/vector_union_bytes
 regression/esbmc/vector_union_bytes_fail
 regression/esbmc/vector_struct_array
 regression/esbmc/vector_struct_array_fail
+regression/esbmc-cpp/cpp/github_8090_unnamed_override
+regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
