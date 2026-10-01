@@ -28,6 +28,15 @@ int before_locals()
 }
 C slot() { return C(C(4).v + 1); }
 
+struct P
+{
+  int *p;
+  P(int x) : p(new int(x)) {}
+  ~P() { delete p; }
+};
+
+int conditional(bool c) { return c ? *P(6).p : 0; }
+
 int main()
 {
   assert(member() == 1);
@@ -43,4 +52,5 @@ int main()
     assert(dtors == 104);
   }
   assert(dtors == 105);
+  assert(conditional(false) == 0);
 }

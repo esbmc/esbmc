@@ -304,22 +304,38 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
+/// Whether a side effect sits under `?:`, `&&` or `||`, so the temporaries it
+/// creates exist on one path only.
+static bool
+has_conditional_sideeffect(const exprt &expr, bool conditional = false)
+{
+  if (conditional && expr.id() == "sideeffect")
+    return true;
+  conditional |= expr.id() == "if" || expr.is_and() || expr.is_or();
+  forall_operands (it, expr)
+    if (has_conditional_sideeffect(*it, conditional))
+      return true;
+  return false;
+}
+
 /// Drop the entries above `from` that clean up the object `value` names: a
 /// materialized return temporary (`return A(n);`) is the return slot and
-/// outlives the return (github #6075/#6076).
+/// outlives the return (github #6075/#6076). With `drop_all`, drop every
+/// entry: the unwind would run a branch's destructors on both paths.
 static void drop_return_slot_entries(
   const exprt &value,
+  bool drop_all,
   std::vector<codet> &stack,
   std::size_t from)
 {
-  if (value.id() != "symbol")
-    return;
   stack.erase(
     std::remove_if(
       stack.begin() + from,
       stack.end(),
-      [&value](const codet &entry) {
-        return destructor_entry_symbol(entry) == value.identifier();
+      [&value, drop_all](const codet &entry) {
+        return drop_all ||
+               (value.id() == "symbol" &&
+                destructor_entry_symbol(entry) == value.identifier());
       }),
     stack.end());
 }
@@ -1812,11 +1828,16 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
+    const bool conditional =
+      has_conditional_sideeffect(new_code.return_value());
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
     drop_return_slot_entries(
-      new_code.return_value(), targets.destructor_stack, value_stack_size);
+      new_code.return_value(),
+      conditional,
+      targets.destructor_stack,
+      value_stack_size);
   }
 
   // C++ [stmt.return]: the return value is computed before the local
