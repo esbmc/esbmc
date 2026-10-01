@@ -366,11 +366,12 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
     symbol.is_type = true;
 
-    // We have to add the struct/union/class to the context before converting its
-    // fields because there might be recursive struct/union/class (pointers) and
-    // the code at get_type, case clang::Type::Record, needs to find the correct
-    // type (itself). Note that the type is incomplete at this stage, it doesn't
-    // contain the fields, which are added to the symbol later on this method.
+    // We have to add the struct/union/class to the context before converting
+    // its fields because there might be recursive struct/union/class (pointers)
+    // and the code at get_type, case clang::Type::Record, needs to find the
+    // correct type (itself). Note that the type is incomplete at this stage, it
+    // doesn't contain the fields, which are added to the symbol later on this
+    // method.
 
     sym = context.move_symbol_to_context(symbol);
   }
@@ -759,15 +760,16 @@ bool clang_c_convertert::get_function(
   // If the function is not defined but this is not the definition, skip it
   if (fd.isDefined() && !fd.isThisDeclarationADefinition())
   {
-    // Continue for virtual method as we need its type to make virtual function table
+    // Continue for virtual method as we need its type to make virtual function
+    // table
     if (!is_fd_virtual_or_overriding(fd))
       return false;
   }
 
-  // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of template functions are
-  // only deduced when they are instantiated (i.e. used).
-  // We skip all functions with undeduced return types as they should always be unused anyway
-  // and the rest of esbmc can't handle undeduced types.
+  // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of
+  // template functions are only deduced when they are instantiated (i.e. used).
+  // We skip all functions with undeduced return types as they should always be
+  // unused anyway and the rest of esbmc can't handle undeduced types.
   if (fd.getReturnType()->isUndeducedType())
     return false;
 
@@ -1374,8 +1376,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 #if CLANG_VERSION_MAJOR >= 22
   case clang::Type::PredefinedSugar:
   {
-    if (get_type(
-          *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
+    if (
+      get_type(
+        *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
       return true;
     break;
   }
@@ -2086,9 +2089,9 @@ bool clang_c_convertert::get_bitfield_type(
   }
 
   /* TODO: remove this recursive call. `width` is not used. However, there
-       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
-       * and that also negatively affect Boolector run times, see #764. These
-       * should be investigated before removing it. */
+   * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
+   * and that also negatively affect Boolector run times, see #764. These
+   * should be investigated before removing it. */
   exprt width;
   if (get_expr(*fd.getBitWidth(), width))
     return true;
@@ -2277,12 +2280,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
 
     // pull in the type that is used to qualify the decl. This is needed so that
-    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static member function
-    // works correctly when `C<0>::f` is the only use of `C<0>`.
-    // When parsing the template `C` we do not parse the specializations, so there
-    // is no other code that could parse the type of `C<0>`.
-    // (Yes, clang allows us to get all specializations of a template, but that leads to other problems.
-    // See #1782 or #2284)
+    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static
+    // member function works correctly when `C<0>::f` is the only use of `C<0>`.
+    // When parsing the template `C` we do not parse the specializations, so
+    // there is no other code that could parse the type of `C<0>`. (Yes, clang
+    // allows us to get all specializations of a template, but that leads to
+    // other problems. See #1782 or #2284)
 
     if (const auto nns = decl.getQualifier())
     {
@@ -2957,6 +2960,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     t = get_complete_type(t, ns);
 
+    // `char a[4] = {"ab"}` initialises the whole array from the literal
+    // (C11 6.7.9p14), which clang has already typed as `char[4]`.
+    if (init_stmt.isStringLiteralInit())
+    {
+      if (get_expr(*init_stmt.getInit(0), new_expr))
+        return true;
+      break;
+    }
+
     // Structs/unions/arrays put the initializer on operands
     if (t.is_struct() || t.is_array() || t.is_vector())
     {
@@ -3056,12 +3068,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       /* We have a list initializer with no elements.
        * So per https://en.cppreference.com/w/cpp/language/list_initialization
        * we perform value-initialization.
-       * > Otherwise, if the braced-init-list has no elements, T is value-initialized.
-       * And per https://en.cppreference.com/w/cpp/language/value_initialization
-       * > The effects of value-initialization are:
-       * > ...
-       * > - Otherwise, the object is zero-initialized.
-       * So we just zero-initialize the object.
+       * > Otherwise, if the braced-init-list has no elements, T is
+       * value-initialized. And per
+       * https://en.cppreference.com/w/cpp/language/value_initialization > The
+       * effects of value-initialization are: > ... > - Otherwise, the object is
+       * zero-initialized. So we just zero-initialize the object.
        */
       /* The rule is the type's, not the scalar types' alone, but gen_zero
        * answers nil for a type it cannot build a value of (an incomplete
@@ -3989,10 +4000,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // __builtin_bit_cast / std::bit_cast must reinterpret the value's
     // byte-level representation, NOT perform an arithmetic conversion.  Using
-    // gen_typecast here would, e.g., turn `bit_cast<float>(uint32_t{0xFFFFFFFF})`
-    // into the float value 4.29e9 rather than the IEEE-NaN whose bits match
-    // the input.  Use the irep1 "bitcast" node, which migrates to bitcast2tc
-    // and is handled by symex as a byte-level reinterpret.  See #4191.
+    // gen_typecast here would, e.g., turn
+    // `bit_cast<float>(uint32_t{0xFFFFFFFF})` into the float value 4.29e9
+    // rather than the IEEE-NaN whose bits match the input.  Use the irep1
+    // "bitcast" node, which migrates to bitcast2tc and is handled by symex as a
+    // byte-level reinterpret.  See #4191.
     make_bitcast(new_expr, t);
     break;
   }
@@ -4085,8 +4097,9 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
     typet type;
 
-    // Special handling for __ESBMC_return_value: use function return type if available
-    // This allows __ESBMC_return_value to have a semi-dynamic type matching the function
+    // Special handling for __ESBMC_return_value: use function return type if
+    // available This allows __ESBMC_return_value to have a semi-dynamic type
+    // matching the function
     if (name == "__ESBMC_return_value" && current_functionDecl)
     {
       // Use the current function's return type instead of the declared type
@@ -5390,8 +5403,8 @@ void clang_c_convertert::get_decl_name(
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
     std::string kind_name = rd.getKindName().str();
 
-    // Checking if it is not a typedef, but the tag name is empty. If so we give it a new
-    // unique name based on its location
+    // Checking if it is not a typedef, but the tag name is empty. If so we give
+    // it a new unique name based on its location
     if (
       rd.getCanonicalDecl()->getNameAsString().empty() &&
       !rd.getCanonicalDecl()->getTypedefNameForAnonDecl())
@@ -5812,8 +5825,9 @@ bool clang_c_convertert::process_record_layout_attributes(
     }
 
     case clang::attr::Aligned:
-      if (process_aligned_attribute(
-            static_cast<const clang::AlignedAttr &>(*attr), t))
+      if (
+        process_aligned_attribute(
+          static_cast<const clang::AlignedAttr &>(*attr), t))
         return true;
       break;
 
@@ -5831,8 +5845,9 @@ bool clang_c_convertert::process_aligned_attribute(
 {
   unsigned alignment_bits = aattr.getAlignment(*ASTContext);
 
-  // Clang should report alignment in bits; require a non-zero multiple of `char_width`
-  // to safely convert to bytes. If this is not the case, emit a diagnostic.
+  // Clang should report alignment in bits; require a non-zero multiple of
+  // `char_width` to safely convert to bytes. If this is not the case, emit a
+  // diagnostic.
   if (alignment_bits == 0 || alignment_bits % config.ansi_c.char_width != 0)
   {
     log_error(

@@ -754,6 +754,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R66** | **High (a crash, default configuration)** — found reviewing R65, §15 M9 (R66); **FIXED**, same entry | **R59's byte-view normalisation never terminated on an array of byte arrays.** The anchor of `unsigned char pool[8][32]` is `(char *)&pool[0]`, itself a byte view of the first row, and rewriting it again gives anchor + 0: `(char *)e == (char *)pool[0]`, a byte walk `for (q = pool[0]; q != pool[1]; ++q)`, and the same one level deeper all died with SIGBUS. | `byte_address_on_root`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/{byte_view_row_anchor,byte_walk_row,byte_view_3d_anchor}{,_fail}` | — | **Fixed**: an operand that already is the anchor is left alone. |
 | **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
 | **R69** | **High (false SUCCESSFUL, default configuration)** — found probing R67's residual, §15 M9 (R69); **FIXED**, same entry | **A class-element list ran its first constructor on every element, and an array list's filler was zeroed.** For `new C[2]{C(1), C(2)}`, goto-convert took the first constructor it found in the list and ran it in a loop, so `p[1].v == 1` was SUCCESSFUL. The frontend ignored every `InitListExpr` array filler, so `S s[2]{S{1, 2}}` with `int a = 5;` in `S` left `s[1].a` zero (`s[1].a == 0` SUCCESSFUL), and `C c[3]{C(1)}` did not call `C()` on the tail. Nested lists (`new int[2][2]{{1, 2}, {3, 4}}`) and aggregate lists were dropped as in R67. | `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `get_array_filler`, `src/clang-c-frontend/clang_c_convert.cpp`; `cpp_new` migration, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_new_init_list_{class,virtual,aggregate,nested,filler,filler_runtime}{,_fail}`, `array_init_list_filler{,_fail}`, `github_6588_multidim` | — | **Fixed**: each element runs its own initializer in place, and the filler fills the rest; a string-literal row and a nondet count with struct elements are still wrong. |
+| **R70** | **High (false SUCCESSFUL, default configuration, C and C++)** — found probing R69's string-literal residual, §15 M9 (R70); **FIXED** for declarations, same entry | **A braced string literal initialised one element with the literal's address.** `char a[4] = {"ab"}` went through the list conversion as a one-element list: the literal decayed to `&"ab"[0]`, was cast to `char` into `a[0]`, and the rest was zeroed, so `a[1] == 0` was SUCCESSFUL. | InitListExpr arm of `get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/string_literal_brace_init{,_fail}`, `regression/esbmc-cpp/cpp/string_literal_brace_init{,_fail}` | — | **Fixed**: a string-literal list initialises the whole array from the literal (C11 6.7.9p14); `new char[4]{"ab"}` is still dropped by `cpp_new_init_list`. |
+| **R72** | **High (a crash, default configuration)** — found probing R69's residual, §15 M9 (R72); **FIXED**, same entry | **A struct store at a dynamic offset was taken as a store to the element's base subobject.** `new D[2]()` for a class `D : B` with a vtable zero-fills each element through `*(p + i)`. `construct_struct_ref_from_dyn_offs_rec` matched the element, then recursed into its members, and `dereference_type_compare` accepts the `B` base (its `is_subclass_of` call is inverted on purpose), so both candidates were guarded by `offs == 0` and the base won. Symex then aborted in `symex_assign_typecast` assigning a `D` through `(struct D)element.@base`. | `construct_struct_ref_from_dyn_offs_rec`, `src/pointer-analysis/dereference.cpp`; `regression/esbmc-cpp/cpp/new_value_init_polymorphic{,_fail}` | — | **Fixed**: an exact match is the whole object, so its members are not searched. |
 | **R69** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R64's residual, §15 M9 (R69); **FIXED**, same entry | **Before C++17 an elided copy was built anyway.** Clang marks the copy in `C c = C::make();`, `C c = C(5);` and `return C(x);` elidable and elides it; ESBMC ran the copy constructor and destroyed a second object. `{ C c = C::make(3); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-c-frontend/clang_c_convert.cpp`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_{local,static,temporary}{,_fail}` | — | **Fixed**: a variable's initializer and a returned value are converted from the elided copy's source, the C++17 form. |
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
@@ -9278,6 +9280,50 @@ size_typet::size_bits"), `new D[2]{}` for a class with a vtable aborts in
 `symex_assign_typecast`, a throw from the second listed constructor does not
 destroy the first, and a declaration's filler is unrolled per element, so
 `C a[5000]{}` builds 5000 constructor calls.
+### M9 (R70) — 2026-09-29, a braced string literal
+
+R69 left `new char[4]{"ab"}` open, as a frontend conversion of the literal to a
+pointer cast to `char`. The same conversion runs for any braced literal, in C
+too: `char a[4] = {"ab"}` stored the literal's address, truncated, in `a[0]`
+and zeroed the rest, so `a[1] == 0` was SUCCESSFUL and `a[1] == 'b'` FAILED.
+Clang marks the form with `InitListExpr::isStringLiteralInit` and has already
+typed the literal as the whole array (`char[4]`), but the list conversion
+treated it as a one-element list and cast the element to `char`. Nested rows
+(`char b[2][3] = {{"ab"}, "cd"}`) and struct members were already right,
+because there the literal meets an array element type.
+
+**Fixed** by converting such a list as its literal. `char a[] = {"ab"}`,
+`char a[2] = {"ab"}` (no terminator), `unsigned char`, a static array and the
+C++ `char a[4]{"ab"}` match the native program.
+`string_literal_brace_init{,_fail}` in `regression/esbmc` and
+`regression/esbmc-cpp/cpp` are wrong on master, both halves.
+
+Not fixed: `new char[4]{"ab"}` now reaches `cpp_new_init_list` as a string
+constant, which it does not expand, so the elements stay nondet (a false
+FAILED, as on master). The lowering is being rewritten by R69, so the fix
+follows it.
+### M9 (R72) — 2026-09-29, the base subobject that won the tie
+
+R69's review found `new D[2]{}` and `new D[2]()` aborting in
+`symex_assign_typecast` for a class with a vtable. The abort needs only the
+value-initialising zero fill, which stores a whole `D` through `*(p + i)` at a
+symbolic `i`; plain `new D[2]` and copy assignment through `p[i]` verify.
+Dereferencing that lvalue walks the array at a dynamic offset, and
+`construct_struct_ref_from_dyn_offs_rec` records the element as a match at
+offset zero, then keeps searching the element's members. `dereference_type_compare`
+also accepts the `@base` member, of type `B`, as a `D`: the type2tc
+`is_subclass_of` it calls is inverted by design (`base_type.cpp` warns not to
+change it without auditing its callers). Both candidates carried the guard
+`offs == 0`, the later one wrapped the earlier in the result's `if` chain, and
+symex received `(struct D)element.@base` as the lvalue, which its prefix
+assertion rejects.
+
+**Fixed** in the walk rather than in `is_subclass_of`: when the struct itself
+matches without a cast, it is the whole object, and no member of it can be the
+same object again, so the members are not searched. A cast match (a derived
+element read as its base) still searches them. Reads through the base pointer,
+a copy of an element, and member reads after `new D[2]()` match the native
+program; `new_value_init_polymorphic{,_fail}` abort on master, both halves.
 
 ### M9 (R69) — 2026-09-28, R64's residual: elided copies before C++17
 

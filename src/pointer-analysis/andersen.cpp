@@ -368,8 +368,9 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     return fresh_node();
 
   // A nameable l-value read as a value: its own node already holds its targets.
-  if (const expr2tc base = base_object(r);
-      is_symbol2t(base) || is_dynamic_object2t(base))
+  if (
+    const expr2tc base = base_object(r);
+    is_symbol2t(base) || is_dynamic_object2t(base))
     return get_node(base);
 
   // Anything else is a value this frontend does not model.  Leaving the set

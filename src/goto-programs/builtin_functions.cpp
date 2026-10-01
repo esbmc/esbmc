@@ -299,8 +299,8 @@ void goto_convertt::do_atomic_begin(
   }
 
   // We should allow a context switch to happen before synchronization points.
-  // In particular, here we force a context switch to happen before an atomic block
-  // via the intrinsic function __ESBMC_yield();
+  // In particular, here we force a context switch to happen before an atomic
+  // block via the intrinsic function __ESBMC_yield();
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
@@ -414,7 +414,8 @@ void goto_convertt::do_realloc(
 {
   assert(arguments.size() == 2 && "realloc requires two arguments");
 
-  // Create a null pointer expression (workaround for missing null_pointer_exprt)
+  // Create a null pointer expression (workaround for missing
+  // null_pointer_exprt)
   exprt null_ptr = gen_zero(arguments[0].type());
 
   // Compare if the pointer is NULL
@@ -440,7 +441,8 @@ void goto_convertt::do_realloc(
   realloc_expr.cmt_size(arguments[1]);
   realloc_expr.location() = function.location();
 
-  // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)
+  // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr,
+  // size)
   if_exprt conditional_expr(is_null, malloc_expr, realloc_expr);
   simplify_via_irep2(conditional_expr);
 
@@ -1242,7 +1244,8 @@ void goto_convertt::do_function_call_symbol(
     }
     else
     {
-      // For contract functions, generate ASSUME instructions with special markers
+      // For contract functions, generate ASSUME instructions with special
+      // markers
       if (is_clause)
       {
         t = dest.add_instruction(ASSUME);
@@ -1291,11 +1294,13 @@ void goto_convertt::do_function_call_symbol(
     // __ESBMC_assigns_impl(&expr1, &expr2, ...): unified assigns clause handler
     //
     // The macro __ESBMC_assigns(x) expands to __ESBMC_assigns_impl(&(x))
-    // This allows accepting any lvalue expression (scalars, arrays, struct fields, etc.)
+    // This allows accepting any lvalue expression (scalars, arrays, struct
+    // fields, etc.)
     //
-    // Strategy: For each argument, unwrap the address_of to get the original expression,
-    // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
-    // tree for later evaluation during replace-call with proper parameter substitution.
+    // Strategy: For each argument, unwrap the address_of to get the original
+    // expression, then create an ASSIGN to a sideeffect "assigns_target". This
+    // stores the expression tree for later evaluation during replace-call with
+    // proper parameter substitution.
     //
     if (arguments.empty())
     {
@@ -1349,7 +1354,8 @@ void goto_convertt::do_function_call_symbol(
       }
     }
 
-    // For each argument, unwrap address_of and create an assigns_target sideeffect
+    // For each argument, unwrap address_of and create an assigns_target
+    // sideeffect
     for (size_t i = 0; i < arguments.size(); ++i)
     {
       exprt actual_arg = arguments[i];
@@ -1410,9 +1416,10 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__ESBMC_loop_assigns_impl")
   {
-    // __ESBMC_loop_assigns_impl(&expr1, &expr2, ...): loop assigns clause handler
-    // Similar to __ESBMC_assigns_impl but stores targets in LOOP_INVARIANT instruction
-    // for frame rule enforcement during loop invariant checking.
+    // __ESBMC_loop_assigns_impl(&expr1, &expr2, ...): loop assigns clause
+    // handler Similar to __ESBMC_assigns_impl but stores targets in
+    // LOOP_INVARIANT instruction for frame rule enforcement during loop
+    // invariant checking.
 
     if (arguments.empty())
     {
@@ -1493,13 +1500,15 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__ESBMC_old_raw")
   {
     // __ESBMC_old_raw(void* addr): low-level implementation of __ESBMC_old().
-    // Called via the macro: #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw(&(x)))
+    // Called via the macro: #define __ESBMC_old(x)
+    // (*(__typeof__(x)*)__ESBMC_old_raw(&(x)))
     //
     // The argument is (void*)(&x) — a pointer to the lvalue x.
-    // We strip the void* cast and address_of to recover the original expression x,
-    // then create an old_snapshot sideeffect with x as operand (type T).
-    // The sideeffect is typed as void* (matching the lhs) to avoid type mismatch;
-    // the contracts processing uses the operand's type T to create the snapshot.
+    // We strip the void* cast and address_of to recover the original expression
+    // x, then create an old_snapshot sideeffect with x as operand (type T). The
+    // sideeffect is typed as void* (matching the lhs) to avoid type mismatch;
+    // the contracts processing uses the operand's type T to create the
+    // snapshot.
     if (arguments.size() != 1)
     {
       log_error("`__ESBMC_old_raw' expected to have one argument");

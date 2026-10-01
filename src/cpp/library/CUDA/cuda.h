@@ -1,22 +1,22 @@
 #ifndef _CUDA_H
-#define _CUDA_H 1
+#  define _CUDA_H 1
 
-#include "cuda_error.h"
-#include "sm_atomic_functions.h"
-#include "curand_kernel.h"
-#include "curand.h"
-#include "call_kernel.h"
-#include "vector_types.h"
-#include "device_launch_parameters.h"
+#  include "cuda_error.h"
+#  include "sm_atomic_functions.h"
+#  include "curand_kernel.h"
+#  include "curand.h"
+#  include "call_kernel.h"
+#  include "vector_types.h"
+#  include "device_launch_parameters.h"
 
-#include <stddef.h>
-#include <cstdlib>
-#include <string.h>
-#include <pthread.h>
-#include <assert.h>
-#include <new>
+#  include <stddef.h>
+#  include <cstdlib>
+#  include <string.h>
+#  include <pthread.h>
+#  include <assert.h>
+#  include <new>
 
-//Structure that represents the threads of CUDA.
+// Structure that represents the threads of CUDA.
 
 typedef struct threadsList
 {

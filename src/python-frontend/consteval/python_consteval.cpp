@@ -1723,7 +1723,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             return std::nullopt;
           const std::string &needle = sub->string_val;
 
-          // Optional start/end search window (Python str.find(sub, start, end)).
+          // Optional start/end search window (Python str.find(sub, start,
+          // end)).
           long long start = 0;
           long long end = 0;
           if (!resolve_str_window(
@@ -1856,8 +1857,9 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         if (arg->kind == PyConstValue::INT)
           return PyConstValue::make_int(arg->int_val);
         if (arg->kind == PyConstValue::FLOAT)
-          return PyConstValue::make_int(static_cast<long long>(
-            round_ties_to_even_consteval(arg->float_val)));
+          return PyConstValue::make_int(
+            static_cast<long long>(
+              round_ties_to_even_consteval(arg->float_val)));
         return std::nullopt;
       }
 

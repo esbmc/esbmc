@@ -2913,8 +2913,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // no such scope, so flatten the single-decl labeled decl-block to the bare
     // decl: it round-trips as label(decl) and convert_decl defers the DEAD to
     // the enclosing scope, matching the legacy path. A label labels exactly one
-    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case has
-    // no flat label(decl) form and is left on the standalone decl-block arm
+    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case
+    // has no flat label(decl) form and is left on the standalone decl-block arm
     // below -- it is not exercised by the operational models this fix targets.
     const exprt &body = expr.op0();
     const exprt &labelled =
@@ -2966,7 +2966,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // A cpp-catch node is one of two things:
     //  - the source-level try/catch statement, whose operands[0] is the try
     //    block and operands[1..N] the catch-handler blocks (each carrying its
-    //    catchable-type id in the "exception_id" attribute set by adjust_catch);
+    //    catchable-type id in the "exception_id" attribute set by
+    //    adjust_catch);
     //  - the post-goto-convert CATCH-push/pop marker, built directly by
     //    convert_catch with only a catchable-type list and no operands.
     // Carry the operands and per-handler ids so the source form survives the
@@ -3165,7 +3166,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result-shr")
   {
-    // Overflow_result : {result = op0 >> op1, overflowed = overflow(op0 >> op1)}
+    // Overflow_result : {result = op0 >> op1, overflowed = overflow(op0 >>
+    // op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;

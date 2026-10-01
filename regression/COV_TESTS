@@ -1260,6 +1260,13 @@ regression/python/github_6211_shortcircuit
 regression/python/github_3707
 regression/python/github_6258
 regression/esbmc/interval_symex_guard_fail
+regression/esbmc/github_8055
+regression/esbmc/github_8055_deref
+regression/esbmc/github_8055_extern
+regression/esbmc/github_8055_global
+regression/esbmc/github_8055_param
+regression/esbmc/github_8055_recursion
+regression/esbmc/github_8055_safe
 regression/python/import-error2
 regression/python/string-rfind-more-fail
 regression/python/optional7
@@ -2055,6 +2062,12 @@ regression/python/list_pop_result_as_argument
 regression/python/list_pop_result_as_argument_fail
 regression/esbmc/vector_op_nonconstant_lane
 regression/esbmc/vector_op_nonconstant_lane_fail
+regression/esbmc/string_literal_brace_init
+regression/esbmc/string_literal_brace_init_fail
+regression/esbmc-cpp/cpp/string_literal_brace_init
+regression/esbmc-cpp/cpp/string_literal_brace_init_fail
+regression/esbmc-cpp/cpp/new_value_init_polymorphic
+regression/esbmc-cpp/cpp/new_value_init_polymorphic_fail
 regression/esbmc-cpp/cpp/new_array_runtime_count
 regression/esbmc-cpp/cpp/new_array_runtime_count_fail
 regression/esbmc/vector_union_bytes

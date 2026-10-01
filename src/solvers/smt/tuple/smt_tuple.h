@@ -76,9 +76,9 @@ public:
     uint64_t index,
     const type2tc &subtype) = 0;
 
-  virtual void add_tuple_constraints_for_solving(){};
-  virtual void push_tuple_ctx(){};
-  virtual void pop_tuple_ctx(){};
+  virtual void add_tuple_constraints_for_solving() {};
+  virtual void push_tuple_ctx() {};
+  virtual void pop_tuple_ctx() {};
 
   virtual ~tuple_iface() = default;
 };

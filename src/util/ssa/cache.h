@@ -10,7 +10,7 @@
  * @Brief This class stores all asserts conditions and guards
  *        for a given SSA, if some pair was already added
  *        then it will assume that it is UNSAT.
- *        Currently, this works for the base case check only.    
+ *        Currently, this works for the base case check only.
  */
 class assertion_cache : public ssa_step_algorithm
 {
