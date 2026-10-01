@@ -1670,6 +1670,9 @@ private:
     const nlohmann::json &arg,
     const std::string &unsupported_rank_error);
 
+  std::optional<std::vector<std::size_t>>
+  get_empty_numpy_literal_slice_shape(const nlohmann::json &arg) const;
+
   std::optional<exprt> build_numpy_descriptor_materialized_list(
     const nlohmann::json &arg,
     bool nested);
