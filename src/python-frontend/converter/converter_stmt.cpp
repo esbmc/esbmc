@@ -3610,12 +3610,14 @@ void python_converter::record_numpy_view_copy(
   }
 
   const std::string lhs_id = lhs.identifier().as_string();
-  if (numpy_pointer_view_info_.count(lhs_id) != 0)
+  if (
+    auto pointer_view = numpy_pointer_view_info_.find(lhs_id);
+    pointer_view != numpy_pointer_view_info_.end())
   {
-    // record_numpy_view_copy only runs when rhs_node is itself a view-copy
-    // expression (is_numpy_view_copy_expr), so a pointer_view_info_ entry
-    // here is whatever that subscript conversion just registered for lhs,
-    // not a stale one from an earlier statement -- leave it alone.
+    // A pointer view aliases its source through the pointer itself, so it is
+    // not a copy to mirror writes into; the source is kept to detach it when
+    // the source name is rebound.
+    pointer_view->second.source_id = storage_id;
     numpy_view_copy_sources_.erase(lhs_id);
     numpy_transpose_view_info_.erase(lhs_id);
     numpy_reshape_view_info_.erase(lhs_id);
@@ -6745,9 +6747,7 @@ void python_converter::get_var_assign(
   // through either one.
   if (should_detach_numpy_pointer_views_for_assignment(target, ast_node))
     detach_numpy_pointer_views_of(
-      target.value("id", lhs.identifier().as_string()),
-      location_begin,
-      target_block);
+      lhs.identifier().as_string(), location_begin, target_block);
 
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
