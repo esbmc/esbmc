@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Unprovable: mode may start TRUE, and q copies it in the first scan"

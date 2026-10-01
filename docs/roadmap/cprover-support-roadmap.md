@@ -1,9 +1,42 @@
 # CPROVER (CBMC) Support — Roadmap
 
-**Status:** IN PROGRESS
+**Status:** IN PROGRESS — see the status block below
 **Branch:** merged to `master` — the reader and adapter live in `src/goto-programs/`
-**Date:** 2026-06-10 (last re-measured against the corpus 2026-08-26)
+**Date:** 2026-06-10 (last re-measured against the corpus 2026-08-26; status reviewed 2026-10-01)
 **Related:** PR #2443 (CPROVER migration compatibility), the `verify-rust-std` / Kani initiative
+
+---
+
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+The document is in two parts: the reader and adapter roadmap (§1–§8), and the
+Kani support notes that follow ("Overview" onwards). Both are logs, so later
+sections correct earlier ones. Where they disagree, these hold:
+
+- **Reader and adapter.** §4.1 and §4.2 are done. §4.3's ">64-bit constants are
+  wrong" was fixed by #5960. In §4.4, `r_ok`/`w_ok` are no longer an
+  unconditionally-true placeholder: the real encoding landed and `r_ok_false`
+  and `cbmc_w_ok_false` are CORE, expecting FAILED. `__CPROVER_OBJECT_SIZE` no
+  longer hangs (#7410, #7417). §4.5 is audited with nothing left (#7427). §4.8's
+  heading says the family audit is open; its text closes it (#7424).
+- **Corpus.** `regression/goto-transcoder` holds 268 tests, all CORE. The
+  acceptance criteria in §3 and §5 name `mul.goto`, `mul_contract.goto` and
+  `hello-gb.goto`, which are not in the tree; the parity script lives in the
+  external goto-transcoder repository.
+- **Still open in the reader:** it accepts format version 6 only
+  (`read_cbmc_goto_object.cpp`); `is_fresh` separation and the `contracts_*`
+  helpers (§4.6); SIMD, `setjmp`, `va_start` and `__CPROVER_DYNAMIC_OBJECT`,
+  which are declined and pinned; and ESBMC's whole-array `==` reporting
+  may-differ on equal arrays (§4.4), which has no issue.
+- **Kani.** The 2026-08-26 sweep is the latest measurement: 76 crashes (44
+  "rvalue reference to array", 20 silent segfaults, 12 solver errors), 155
+  timeouts, and 3 mismatches, all `ptr::unique`. The earlier statements that
+  the 3 mismatches were fixed by #6138, and the eight UMBRELLA sections'
+  "BROKEN" headings, the priority matrix, the investigation order and the test
+  notes after them, predate the 2026-07-14 reassessment and that sweep. Nothing
+  newer has been measured, and no open issue carries the `cprover` label.
+- #7407, #7411, #7415, #7416, #7419, #7420, #7421 and #7423 were merged into
+  stacked branches; their content reached master through #7410 and #7417.
 
 ---
 
@@ -46,7 +79,7 @@ verdict** in ESBMC, for the C and Rust-derived subset exercised by the regressio
         ▼
   ┌─ ESBMC additions ───────────────────────────────┐   auto-synthesised in-process when a
   │ __ESBMC_main entry wrapper + CPROVER intrinsic   │   CBMC binary is detected
-  │ bodies, via the C frontend on a boilerplate TU   │   (esbmc_parseoptions.cpp)
+  │ bodies, via the C frontend on a boilerplate TU   │   (parseoptions/goto_program.cpp)
   └──────────────────────────────────────────────────┘
         │
         ▼
@@ -68,12 +101,12 @@ and the symbol/function table layout.
 | CBMC binary reader (varint, header v6, S/N/C refs, symbol/function tables) | ✅ | `src/goto-programs/read_cbmc_goto_object.{h,cpp}` |
 | Adapter: `fix_type`, `fix_expression`, `to_esbmc_irep`, target renumbering, struct-tag cache | ✅ | `src/goto-programs/cbmc_adapter.{h,cpp}` |
 | Format auto-detect dispatch | ✅ | `src/goto-programs/goto_binary_reader.cpp` |
-| Auto-link ESBMC additions (in-process synthesis; `--no-cprover-additions` opt-out) | ✅ | `src/esbmc/esbmc_parseoptions.cpp`, `src/esbmc/options.cpp` |
+| Auto-link ESBMC additions (in-process synthesis; `--no-cprover-additions` opt-out) | ✅ | `src/esbmc/parseoptions/goto_program.cpp`, `src/esbmc/options.cpp` |
 | CPROVER irep → intrinsic-call migration (overflow_result, r_ok) | ✅ (PR #2443) | migration + `regression/goto-transcoder/` |
 | Unit tests (varint/string/header, real v6 parse, load into context/goto_functions) | ✅ | `unit/goto-programs/read_cbmc_goto_object.test.cpp` |
 | Parity harness vs goto-transcoder reference | ✅ | `goto-transcoder/scripts/esbmc_parity.sh` |
 | CBMC→ESBMC instruction-type mapping table (§4.1, Phase 1) | ✅ (PR #5717) | `cbmc_adapter.{h,cpp}::map_cbmc_instruction_type` |
-| Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `esbmc_parseoptions.cpp::retarget_esbmc_main` |
+| Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `parseoptions/goto_program.cpp::retarget_esbmc_main` |
 | Pointer predicates: `pointer_offset` operand-wrap crash fix (§4.4, Phase 2) | ✅ (PR #5737) | `cbmc_adapter.cpp`, `migrate.cpp` |
 | `r_ok`/`w_ok`/`rw_ok` given a real encoding — they migrated to literal `true`, so every assertion over them passed vacuously (an **unsound miss**: ESBMC proved `__CPROVER_r_ok(malloc(8), 16)`, which CBMC refutes) (§4.4, Phase 2) | ✅ (PR #7411) | `migrate.cpp` |
 | Float-classification predicates: `isnan`/`isinf`/`isnormal` crash fix + verdict parity (ieee arith promotion, `sign`→`signbit(x)!=0` rewrite) (§4.4, Phase 2) | ✅ (PR #5741) | `cbmc_adapter.cpp` |
@@ -82,8 +115,8 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `alloca`/`__builtin_alloca` FUNCTION_CALLs → `side_effect("alloca")` (§4.8, Phase 2) | ✅ (PR #5793) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `free` FUNCTION_CALLs → OTHER `free` codet (deallocation, use-after-free/double-free detection) (§4.8, Phase 2) | ✅ (PR #5792) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `fabs`/`fabsf`/`fabsl` FUNCTION_CALLs → `abs` expr (§4.8, Phase 2) | ✅ (PR #5789) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
-| Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `rint`/`rintf`/`rintl` (round to nearest integer, ambient rounding mode) (§4.8, Phase 2) | ✅ (PR #6041) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Body bridge generalised to libc: `strlen`/`strcmp`/`strncmp` string.h query functions (byte-loop bodies, need `--unwind`); `link_cbmc_libm_bodies` → `link_cbmc_libc_bodies` (§4.8, Phase 2) | ✅ (PR #6045) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
@@ -91,10 +124,6 @@ and the symbol/function table layout.
 | Libc bridge extended to `strrchr` (reverse-scan search, returns ptr to last match / `NULL`; CBMC-modelled unlike `strstr`/`strspn`/`strcspn`/`strpbrk`/`memchr`) (§4.8, Phase 2) | ✅ (PR #6083) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
-| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #7419) | `cbmc_adapter.cpp::hex_to_bin` |
-| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Tag-cache keyed by symbol name so **function-local** struct/union tags resolve (§4.3, Phase 3) | ✅ (PR #5925) | `cbmc_adapter.cpp::cbmc_adapt` |
 | Type rewrite for `c_bit_field` (bitfield members) → underlying bv narrowed to the bitfield width + `#bitfield`/`subtype` (§4.3, Phase 3) | ✅ (PR #5924) | `cbmc_adapter.cpp::fix_type` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #5910) | `cbmc_adapter.cpp::fix_expression` |
@@ -102,25 +131,25 @@ and the symbol/function table layout.
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
-| Overflow predicates `overflow-+`/`overflow--`/`overflow-*` (+ `/`/`mod`/`shl`/`unary-`) wrapped (`__builtin_{add,sub,mul}_overflow_p`) (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
-| 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #7419) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
-| Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_type` |
-| Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
-| Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
+| Overflow predicates `overflow-+`/`overflow--`/`overflow-*` (+ `/`/`mod`/`shl`/`unary-`) wrapped (`__builtin_{add,sub,mul}_overflow_p`) (§4.4, Phase 2) | ✅ (PR #5962) | `cbmc_adapter.cpp::fix_expression` |
+| 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #5960) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
+| Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #5959) | `cbmc_adapter.cpp::fix_type` |
+| Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #5957) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #5979) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #5978) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
 | Builtin-call retarget for `memcmp` FUNCTION_CALLs → `c:@F@__ESBMC_memcmp` intrinsic (CBMC's bodyless external returns nondet); `__memcmp_impl` byte-loop fallback linked via the additions (§4.8, Phase 2) | ✅ (PR #6042) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
-| Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
-| `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
+| Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #5975) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #5974) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #5982) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #5980) | `cbmc_adapter.cpp::fix_expression` |
+| `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #6116) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
 | Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
 | `__CPROVER_havoc_object`: `HAVOC_OBJECT &obj` → `ASSIGN obj := side_effect("nondet")` over the whole containing object; a pointer *value* operand is still declined (§4.4, Phase 2) | ✅ (PR #6830) | `cbmc_adapter.cpp::rewrite_havoc_object` |
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
 | `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
-| `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::rewrite_array_equal` |
+| `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #6836) | `cbmc_adapter.cpp::rewrite_array_equal` |
 | Contracts `requires` bridge: `__CPROVER_enforce_requires_is_fresh(&p, n, map)` -> `__cbmc_is_fresh_impl(&p, n)` in the additions, which allocates and writes through; closes a FAILED-vs-SUCCESSFUL false alarm. Separation map dropped (§4.6, Phase 4) | ✅ (PR #7405) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp::synthesize_cprover_additions` |
 | Fatal-signal reporting on by default: a SIGSEGV/SIGBUS no longer leaves rc=139 as its only trace, and an alternate signal stack keeps a stack-exhaustion fault reportable (corpus sweep ranked item 3) | ✅ (PR #7404) | `util/base/signal_catcher.cpp::install_fatal_signal_reporter` |
 
@@ -149,7 +178,7 @@ CBMC's entry is `__CPROVER__start`; ESBMC's symex looks for `__ESBMC_main`. Prev
 auto-synthesised additions provided an `__ESBMC_main` that called the *boilerplate*
 `c:@F@main`, not the CBMC program's `main`/harness — verification ran over an effectively
 empty program and could report a spurious SUCCESSFUL. Resolved by
-`retarget_esbmc_main()` in `esbmc_parseoptions.cpp`: an explicit `--function` wins,
+`retarget_esbmc_main()` in `parseoptions/goto_program.cpp`: an explicit `--function` wins,
 otherwise a CBMC binary dispatches into `__CPROVER__start`. Regression-tested with real
 CBMC 6.8.0 binaries (`cbmc_entry_bridge`, `cbmc_entry_bridge_fail`) — the failing-assert
 case is the load-bearing guard, since without bridging it would spuriously report
@@ -629,7 +658,7 @@ just uninstrumented). Two scope cuts, both intentional and low-risk, left for fo
 - **Rounding-mode symbol dependency.** The promoted `ieee_*` nodes rely on
   `migrate_expr` defaulting to `c:@__ESBMC_rounding_mode` when no explicit
   `rounding_mode` operand is present — that symbol isn't defined by the CBMC
-  reader/adapter itself, only by `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+  reader/adapter itself, only by `parseoptions/goto_program.cpp`'s `synthesize_cprover_additions`
   step, which every normal `--binary` invocation runs. `--no-cprover-additions` skips it,
   but currently fails earlier for an unrelated reason (`main symbol not found`) before
   this would matter — so no live bug today, but a latent gap if that unrelated failure is
@@ -1346,7 +1375,7 @@ mechanism.** CBMC emits them as bodyless `FUNCTION_CALL` externals under their p
 linked by `add_cprover_library` under the C-frontend-mangled id (`c:@F@ceil`), and the
 additions boilerplate referenced nothing so they weren't linked at all — so ESBMC returned
 nondet and a valid `ceil(2.3)==3.0` reported `FAILED` where CBMC says `SUCCESSFUL`. Fixed in
-`esbmc_parseoptions.cpp`: the additions boilerplate now takes the addresses of the twelve
+`parseoptions/goto_program.cpp`: the additions boilerplate now takes the addresses of the twelve
 functions (forcing `add_cprover_library` to link their bodies), and `link_cbmc_libm_bodies`
 copies each bodied `c:@F@name`'s body **and type** onto the bodyless plain-named declaration
 after the binary loads — `argument_assignments` binds actual args via the copied type's
@@ -1480,7 +1509,7 @@ divergence). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 8`
 and `cbmc_atoi_fail` (`atoi("42") == 43`) `FAILED`, confirming the digits are really parsed.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
-diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+diagnosis pass): making `parseoptions/goto_program.cpp`'s `synthesize_cprover_additions`
 boilerplate *call* `sqrtf` so ESBMC's normal C-frontend linking supplies a body doesn't
 work — because there is no body to link (`ieee_sqrt` is an operator, not a library
 function), so this produces no observable effect. Tried and reverted.
@@ -1565,9 +1594,9 @@ state is CBMC-verdict parity as the sole oracle and goto-transcoder retired.
 
 - Reader / adapter: `src/goto-programs/read_cbmc_goto_object.{h,cpp}`,
   `src/goto-programs/cbmc_adapter.{h,cpp}`, `src/goto-programs/goto_binary_reader.cpp`
-- Consumers reused: `src/util/symbol.cpp` (`from_irep`),
+- Consumers reused: `src/util/symtab/symbol.cpp` (`from_irep`),
   `src/goto-programs/goto_program_irep.cpp` (`convert`)
-- Additions synthesis: `src/esbmc/esbmc_parseoptions.cpp`
+- Additions synthesis: `src/esbmc/parseoptions/goto_program.cpp`
   (`has_cbmc_binary_input`, `synthesize_cprover_additions`), `src/c2goto/cprover_library.cpp`
 - Tests: `unit/goto-programs/read_cbmc_goto_object.test.cpp`,
   `regression/goto-transcoder/`, `goto-transcoder/scripts/esbmc_parity.sh`

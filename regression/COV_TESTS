@@ -2079,5 +2079,14 @@ regression/esbmc/vector_union_bytes
 regression/esbmc/vector_union_bytes_fail
 regression/esbmc/vector_struct_array
 regression/esbmc/vector_struct_array_fail
+regression/esbmc/big_endian_union_array_lane
+regression/esbmc/big_endian_union_short_member
+regression/esbmc/big_endian_struct_byte_access
+regression/esbmc/big_endian_union_trace_fail
+regression/esbmc/github_571_1
+regression/esbmc/github_8048
+regression/esbmc/github_8048_fail
+regression/esbmc/github_8048_huge_vla
+regression/esbmc/github_8048_huge_vla_fail
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
