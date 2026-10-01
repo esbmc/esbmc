@@ -6,8 +6,10 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M8 closed**, **M9 in progress** (§15 verdict log). §6.4 records
-the tier-ordering rule M1 produced. Except where §15 records a discharged
+**Status (2026-10-01, `791ed8d1b8`):** **M0–M9 closed** as milestones (§10).
+"§15 M9 (…)" has since become the running defect log: every soundness fix adds
+a §9.2 row and a §15 entry under that heading, and the register now runs to
+R75. §6.4 records the tier-ordering rule M1 produced. Except where §15 records a discharged
 result, every harness below is a *proposal* and nothing here asserts a proof.
 Findings not marked discharged in §9.2 remain *hypotheses with cited evidence*,
 not confirmed end-to-end bugs.
@@ -22,26 +24,74 @@ disabled block is superseded; and R29 — found by M9's own access-shape census 
 is a **new High-severity false SUCCESSFUL**, partly fixed, with its residual
 traced out of this subsystem into `src/pointer-analysis`.
 
-**Still open:** the rows §9.2 records individually as not fixed, and the
-residuals named in the R38, R44 and R52 rows. R29's two bare-struct-member
-shapes, listed here until 2026-09-24, were closed on 2026-08-12 (§15 M9 (R29
+**Still open (2026-10-01):**
+
+- Not fixed, by the row's own record: **R4** (unchecked `*ns.lookup`, now 10
+  sites, no witness), **R8** (the `#if 0` block in `symex_valid_object.cpp`
+  is a dead-code candidate), and the **R25/R38** `--force-malloc-success` /
+  `--force-realloc-success` exemption, open by decision and pinned KNOWNBUG by
+  `force_malloc_success_unrepresentable` and
+  `ptr_rel_huge_object_force_success`. H-A6 / R29 completeness stays open by
+  design.
+- Residuals recorded in the rows of R44, R49, R52, R54, R55, R60, R61, R64,
+  R65, R68/R74, the second R69, R70 and R75. Each row says what is left.
+- Self-verification: WI-4, WI-5 and WI-6 (§13.6).
+
+Three identifiers each name two rows. **R37** has an "Open" row and a later
+"FIXED" row; the fixed one is current (`ptr_rel_huge_object` is CORE). **R50**
+has two rows whose residuals are both closed, the 3-D bound by R51 (#7490) and
+`expand_row_stores` as bounded (#7591). **R69** names two different findings,
+both fixed. R30 carries no FIXED marker but was fixed by #6783. R62, R63 and
+R73 were never assigned.
+
+R29's two bare-struct-member shapes were closed on 2026-08-12 (§15 M9 (R29
 residual)). R6 got its witness and its fix (#6785); A6.4, carried since M6, is
 discharged by the run-order invariant the engine now checks in release.
 
-**Self-verification, re-measured 2026-09-24 (§15 M9 (G14, R53)).** G12 and G13
-are fixed, and `irep2_type.h` and `renaming.h` convert. They then exposed
-**G14**, a symex abort caused by a frontend naming collision that also gave a
-false SUCCESSFUL on ordinary C++ (**R53**, fixed). Both headers now reach
-`VERIFICATION SUCCESSFUL` with an empty `main`. That covers only their static
-initialisers. The open question is now whether a driver that calls into
-`renaming::level1t` verifies (§13.6 WI-4), and `goto_symex_state.h` still fails
-to parse.
+**Self-verification.** G12 and G13 are fixed (#7702, #7801, #7938), as are
+G14–G17 (#7979, #7980); G14 was a symex abort from a frontend naming collision
+that also gave a false SUCCESSFUL on ordinary C++ (**R53**, fixed).
+`irep2_type.h` and `renaming.h` reach `VERIFICATION SUCCESSFUL` with an empty
+`main`, which covers only their static initialisers. WI-4 is still open, and
+G12 is no longer what blocks it: a driver that constructs a
+`renaming::level1t` does not finish in 60 s, unwinding inside immer's HAMT
+(§15 M9, WI-4 re-measured 2026-09-25). Whether `goto_symex_state.h` parses
+depends on the host's fmt and immer headers: the log records it verifying on
+macOS, and on Linux with fmt 10 it is a `PARSING ERROR`.
+
+**Paths.** `src/goto-symex` was partitioned on 2026-09-10 (#7695). Paths and
+line numbers written before then are pre-partition; §3 already says to treat
+the symbol name as authoritative. Map a bare file name as follows:
+
+| files | now under |
+|---|---|
+| `symex_{main,assign,goto,function,other,dereference,stack,valid_object}`, `dynamic_allocation`, `goto_symex.h`, `builtin_functions/` | `engine/` |
+| `goto_symex_state`, `renaming` | `state/` |
+| `execution_state`, `reachability_tree{,_cin}` | `scheduler/` |
+| `symex_target{,_equation}`, `slice`, `symex_symmetry`, `features`, `ssa_step_algorithm` | `equation/` |
+| `goto_trace`, `build_goto_trace`, `printf_formatter`, `xml_goto_trace`, `html`, `json`, `sarif` | `trace/` |
+| `witnesses` | `witness/` |
+| `ctest`, `pytest`, `test_gen_guard` | `testgen/` |
+
+`symex_invariant` and `waypoint.h` stay at the top level. `level1_map.h` no
+longer exists: since #7606 both renaming levels store their names in
+`persistent_map` (`src/util/persistent_map.h`, an immer HAMT), so the
+`std::unordered_map` container that §3, §4.1, the R3 row and §13.4 E1 describe
+is not the shipped one, and R3's rehash argument does not apply to it.
+
+Three follow-ups of the partition are not done, and no other document records
+them: `util/ssa/{cache,fingerprint,goto_expr_factory}.h` and
+`util/base/yaml_parser.h` still include goto-symex headers; `engine/goto_symex.h`
+is still one file; and `engine/builtin_functions/io.cpp` includes
+`trace/printf_formatter.h`, so only `testgen/` is unreachable from `symex_step`.
 
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
-**Companion:** `docs/irep2-verification-plan.md` (branch
-`docs/irep2-verification-plan`). Scope split is stated in §2.4 — this document
-does **not** re-verify irep2 internals.
+**Companion:** none. `docs/irep2-verification-plan.md` was deleted on
+2026-07-14 (`e6a384080e`) and its branch is gone; the references to it in
+§2.4, §7.3 and §14 resolve only in git history. Its H-B4 harness is on master
+as `unit/irep2/guard_algebra.test.cpp`. This document does **not** re-verify
+irep2 internals.
 
 > **Framing.** goto-symex is the last stage at which a defect is still
 > *invisible*. Everything downstream — SMT encoding, the solver — faithfully
@@ -973,13 +1023,13 @@ a reviewed re-transcription.
 |---|---|---|
 | Tier A (`regression/esbmc/symex_*`) | every PR, via the existing `ctest -L esbmc` path | each harness < 30 s; the suite's 120 s per-test harness cap is hard |
 | Tier B (`unit/goto-symex`) | every PR, `ctest -LE regression` | < 60 s total |
-| Tier C oracles | **scheduled**, `.github/workflows/aux-symex-oracles.yml`, called by `ci-nightly.yml` (`37 2 * * *`, C1/C2/C3) and `ci-weekly.yml` (`41 3 * * 0`, every leg) — plus `workflow_dispatch` on either | 120 min per leg, mirroring the sanitizer job; `continue-on-error` during bring-up |
-| Drift check | every PR touching `src/goto-symex/**` | seconds |
+| Tier C oracles | **scheduled**, `.github/workflows/aux-symex-oracles.yml` (`workflow_call` only), called by `ci-weekly.yml` on `41 3 * * 0`, every leg. `ci-nightly.yml` does not call it, and `ci-weekly.yml`'s `workflow_dispatch` runs only the equivalence job | 120 min per leg, mirroring the sanitizer job; `continue-on-error` during bring-up |
+| Drift check | weekly, the `symex-harness-drift` job in `ci-weekly.yml` (`17 4 * * 1`), since #7686; not per PR | seconds |
 | Sanitizers (Tier D) | the sanitizer job in `ci-weekly.yml` (asan/ubsan/tsan) — add an **msan** leg for R10 | existing budget |
 
-Per repo convention the local regression cap is **5 minutes**; a full-corpus
-Tier-C sweep is a CI-only activity and must never be run inside a PR loop.
-Remember `rm -rf /tmp/esbmc-headers-*` after large sweeps (~7.4 MB per test).
+Per repo convention (`CLAUDE.md`) the local regression cap is **10 minutes**; a
+full-corpus Tier-C sweep is a CI-only activity and must never be run inside a PR
+loop. C and C++ runs no longer extract headers to `/tmp`.
 
 ### 11.3 Acceptance / rejection criteria
 
@@ -1021,7 +1071,7 @@ prohibited.
 
 Each harness file header carries: target `file:symbol`, the property IDs it
 discharges, its assumption list, and the cited-region checksum. When
-`src/goto-symex` changes, the drift guard fails the PR and forces one of:
+`src/goto-symex` changes, the weekly drift guard fails and forces one of:
 re-transcribe, widen the harness, or explicitly retire it (with the property
 matrix updated in the same PR). The property matrix (§8) is the source of truth
 for what is claimed; a claim may not outlive its harness.
@@ -1033,13 +1083,13 @@ for what is claimed; a claim may not outlive its harness.
 | # | Deliverable | Location | Milestone |
 |---|---|---|---|
 | **D1** | This plan (architecture, scope, properties, risks, roadmap) | `docs/roadmap/goto-symex-verification-plan.md` | — |
-| **D2** | Prioritised verification backlog | §9.2 (R1–R12) × §10 milestones | M0 |
+| **D2** | Prioritised verification backlog | §9.2 (R1–R12 at M0; the register now runs to R75) × §10 milestones | M0 |
 | **D3** | Component-to-harness mapping | §8 property matrix + §7 harness list | M0 |
 | **D4** | Property matrix | §8 | M0 |
 | **D5** | Risk assessment (harness-design + code-level) | §9.1 / §9.2 | M0 |
-| **D6** | Tier-A harnesses: 10 kernels × {ok, fail} | `regression/esbmc/symex_*/` | M1–M6 |
+| **D6** | Tier-A harnesses: 10 kernels × {ok, fail} — **superseded by §6.4**: only `symex_ssa_00{,_fail,_probe}` exist, the rest moved to Tier B | `regression/esbmc/symex_*/` | M1–M6 |
 | **D7** | Tier-B suites (8 files) + working `unit/goto-symex` CMake wiring + drift guard | `unit/goto-symex/`, `scripts/verification/symex/drift_check.py` | M0, M4 |
-| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/aux-symex-oracles.yml` | M5, M7 — **delivered except H-C7**, §15 M7 |
+| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/aux-symex-oracles.yml` | M5, M7 — **delivered**, including H-C7 (`oracle_claim_parity.py`), §15 M7 |
 | **D9** | `SYMEX_INVARIANT` release-checked macro + promoted invariants + cost benchmark | `src/goto-symex/` | M3 |
 | **D10** | Fix PRs for confirmed findings (R2–R5, R7, R10 are tractable; R6/R8/R11 are investigations first) | code PRs, each with Mode-C proof where a branch changes | M1–M6 |
 | **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §15 | continuous |
@@ -1286,8 +1336,10 @@ defect-masking failure mode of §9.1. Rules:
 **Critical path:** ~~WI-1 → WI-2 → WI-3~~ — retired; all three are done
 (§15 M9 (G-remeasure)). ~~What stands between here and WI-4 is **G9**~~ —
 also retired: G9 closed on 2026-08-17 and parsing closed entirely on
-2026-09-06. What stands between here and WI-4 is **G12**, a frontend
-conversion abort rather than an operational-model gap. WI-4 is a gated
+2026-09-06. ~~What stands between here and WI-4 is **G12**, a frontend
+conversion abort rather than an operational-model gap.~~ G12 is fixed too
+(#7702, #7801, #7938); what stands there now is symex cost in immer's HAMT
+(§15 M9, WI-4 re-measured 2026-09-25). WI-4 is a gated
 experiment with an explicit accept-the-negative-result branch. WI-5/WI-6 are
 stretch goals; neither is a precondition for any property claimed in §8.
 
@@ -9493,8 +9545,8 @@ rm -rf /tmp/esbmc-headers-*
 Cross-check a Tier-A kernel against its source before transcription:
 
 ```sh
-grep -n "make_assignment\|coveredinbees" src/goto-symex/renaming.cpp
-grep -n "phi_function\|merge_state_guards\|merge_gotos" src/goto-symex/symex_goto.cpp
+grep -n "make_assignment\|coveredinbees" src/goto-symex/state/renaming.cpp
+grep -n "phi_function\|merge_state_guards\|merge_gotos" src/goto-symex/engine/symex_goto.cpp
 ```
 
 ## Appendix C — Reproducing the §13 measurements
@@ -9531,7 +9583,7 @@ template <class T> struct is_trivial { static constexpr bool value = true; };
 }
 EOF
 cat > probe.cpp <<'EOF'
-#include <goto-symex/renaming.h>
+#include <goto-symex/state/renaming.h>
 int main() { renaming::level1t l1; (void)l1; return 0; }
 EOF
 build/src/esbmc/esbmc probe.cpp -Wc,-include,shim.h \
@@ -9590,8 +9642,8 @@ rm -rf /tmp/esbmc-cpp-headers-* /tmp/esbmc-headers-*
 **Release-build assert census (R1).**
 
 ```sh
-cat src/goto-symex/*.cpp | grep -c '\bassert('   # 113
-cat src/goto-symex/*.h   | grep -c '\bassert('   # 5
+grep -rh --include='*.cpp' '\bassert(' src/goto-symex | wc -l   # 113 at M3; 144 on 2026-10-01
+grep -rh --include='*.h'   '\bassert(' src/goto-symex | wc -l   # 5 at M3; 1 on 2026-10-01
 python3 -c "import json;d=json.load(open('build/compile_commands.json'));\
 print(sum(1 for e in d if '-DNDEBUG' in e['command']),'of',len(d),'TUs with -DNDEBUG')"
 ```

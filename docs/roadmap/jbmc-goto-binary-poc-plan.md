@@ -1,6 +1,33 @@
 # PoC: Verifying JBMC-produced GOTO Programs with ESBMC
 
-**Status:** PROPOSED (plan only — no implementation yet)
+**Status (2026-10-01):** PoC run; partial success. Phases 0–2 and 4 are done,
+Phase 3's upstream PR is not opened, and Phase 5 has its fixtures but no
+write-up. The body below is the plan as proposed plus the dated run log (§4.1.1
+onwards, Runs 1–11).
+
+- **Works:** `T4Virtual` and `T4VirtualFail` (virtual dispatch) agree with JBMC,
+  with no unwinding bound (§4.1.7, §4.1.8), and are pinned as
+  `regression/goto-transcoder/jbmc_virtual_dispatch{,_fail}`. The harness is
+  `scripts/jbmc-poc-pipeline.sh` with the corpus in `scripts/jbmc-poc-corpus/`
+  (#6186, #6188). The adapter declines CPROVER's `string` type (#6185), lowers
+  `allocate`, `java_new_array_data` and `array_set`, and interns
+  `@class_identifier` (#6206); #7263, #7264 and #7269 are the robustness and
+  simplifier fixes the runs needed.
+- **Does not work:** library-scale ingestion. It costs about 2 GiB of resident
+  memory per MiB of binary (12.1 GiB for `java.lang.Integer` with
+  `--no-lazy-methods`) and stops at `java_new_array`, which has no handler
+  (§4.1.9). String programs need `jbmc --no-refine-strings`; with refinement on
+  the string primitives abort. `java.util` is unmodelled.
+- **Not recorded:** §4.1's criterion that T1–T3 and T5 match JBMC. Only T4 is
+  reported.
+- **Open follow-ups:** `java_new_array`; the string-primitive decline; the
+  upstream `--write-goto-binary` flag (`scripts/jbmc-write-goto-binary.patch`
+  is the local copy); the `--k-induction-parallel` `P_ERROR` path noted under
+  Phase 1.
+
+Counts quoted below are as written: `regression/goto-transcoder` now holds 268
+tests and `regression/jimple` 37.
+
 **Date:** 2026-07-18 (revised after technical review, 2026-07-18)
 **Related:** [`docs/roadmap/cprover-support-roadmap.md`](cprover-support-roadmap.md) (the CBMC
 goto-binary ingestion effort this builds on), `src/jimple-frontend/` (an unrelated,
