@@ -1,7 +1,7 @@
 #include <assert.h>
 
-/* The big-endian layout from #571: --big-endian does not change clang's
-   __BYTE_ORDER__, so the declaration cannot be chosen by it. */
+/* github_571_1 with the value the old little-endian layout gave under
+   --big-endian (#571). */
 
 struct S {
 	unsigned a : 4;
@@ -16,5 +16,5 @@ int main()
 		struct S s;
 		unsigned short sh;
 	} u = { { .a = 1, .b = 2, .c = 3, .d = 4 } };
-	assert(u.sh == 0x1234);
+	assert(u.sh == 0x4321);
 }
