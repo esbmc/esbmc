@@ -139,10 +139,11 @@ void function_call_builder::check_contract_call(
   // name. Reporting them here would fire on any call sharing the name, outside
   // any clause, and blame contracts for it.
   if (clause == kEsbmcAssigns)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} is not supported by the Python frontend yet",
-      clause,
-      call_.value("lineno", 0)));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} is not supported by the Python frontend yet",
+        clause,
+        call_.value("lineno", 0)));
 
   if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
     return;
@@ -150,12 +151,13 @@ void function_call_builder::check_contract_call(
   // goto_convert aborts on any other arity, so reject it here where the user
   // still gets a line number and a suggestion.
   if (call_["args"].size() != 1)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes exactly one argument, got {}; combine conditions "
-      "with 'and'",
-      clause,
-      call_.value("lineno", 0),
-      call_["args"].size()));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes exactly one argument, got {}; combine conditions "
+        "with 'and'",
+        clause,
+        call_.value("lineno", 0),
+        call_["args"].size()));
 
   check_contract_clause(call_["args"], clause);
 }
@@ -282,43 +284,48 @@ exprt function_call_builder::build_old_snapshot() const
   // instruction it plants would have no reader. Reporting it beats leaving a
   // statement that looks like it did something.
   if (!converter_.in_contract_clause())
-    throw std::runtime_error(fmt::format(
-      "{} at line {} is only meaningful inside a contract clause",
-      kEsbmcOld,
-      line));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} is only meaningful inside a contract clause",
+        kEsbmcOld,
+        line));
 
   if (call_["args"].size() != 1)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes exactly one argument, got {}",
-      kEsbmcOld,
-      line,
-      call_["args"].size()));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes exactly one argument, got {}",
+        kEsbmcOld,
+        line,
+        call_["args"].size()));
 
   const nlohmann::json &arg = call_["args"][0];
   if (arg.value("_type", "") != "Name")
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes a variable; {} cannot be snapshotted",
-      kEsbmcOld,
-      line,
-      describe_clause_node(arg.value("_type", ""))));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes a variable; {} cannot be snapshotted",
+        kEsbmcOld,
+        line,
+        describe_clause_node(arg.value("_type", ""))));
 
   const std::string &name = arg.value("id", "");
   if (!names_enclosing_parameter(name) && !names_module_global(name))
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes '{}', which is neither a parameter nor a "
-      "module-level global; a local has no pre-call value to snapshot",
-      kEsbmcOld,
-      line,
-      name));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes '{}', which is neither a parameter nor a "
+        "module-level global; a local has no pre-call value to snapshot",
+        kEsbmcOld,
+        line,
+        name));
 
   exprt target = converter_.get_expr(arg);
   if (!is_snapshottable_scalar(target.type()))
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes '{}', which is not an int, float or bool; only "
-      "scalars can be snapshotted by the Python frontend yet",
-      kEsbmcOld,
-      line,
-      arg.value("id", "")));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes '{}', which is not an int, float or bool; only "
+        "scalars can be snapshotted by the Python frontend yet",
+        kEsbmcOld,
+        line,
+        arg.value("id", "")));
 
   // Build what the C macro expands to,
   // `*(__typeof__(x)*)__ESBMC_old_raw((void*)(&x))`, which Python cannot spell
@@ -369,20 +376,22 @@ void function_call_builder::check_clause_name(
   if (name == kEsbmcReturnValue)
   {
     if (clause == kEsbmcRequires)
-      throw std::runtime_error(fmt::format(
-        "{} clause at line {} references {}; a precondition cannot mention "
-        "the return value",
-        clause,
-        node.value("lineno", 0),
-        kEsbmcReturnValue));
+      throw std::runtime_error(
+        fmt::format(
+          "{} clause at line {} references {}; a precondition cannot mention "
+          "the return value",
+          clause,
+          node.value("lineno", 0),
+          kEsbmcReturnValue));
 
     if (returns_no_value(enclosing_return_type()))
-      throw std::runtime_error(fmt::format(
-        "{} clause at line {} references {}, but '{}' returns None",
-        clause,
-        node.value("lineno", 0),
-        kEsbmcReturnValue,
-        converter_.current_function_name()));
+      throw std::runtime_error(
+        fmt::format(
+          "{} clause at line {} references {}, but '{}' returns None",
+          clause,
+          node.value("lineno", 0),
+          kEsbmcReturnValue,
+          converter_.current_function_name()));
   }
 
   symbol_id sid(
@@ -397,12 +406,13 @@ void function_call_builder::check_clause_name(
   if (!sym)
     sym = converter_.symbol_table().find_symbol(sid.global_to_string());
   if (sym && sym->get_type() == any_type())
-    throw std::runtime_error(fmt::format(
-      "{} clause at line {} references '{}', whose type could not be "
-      "determined; annotate the parameter so the clause constrains its value",
-      clause,
-      node.value("lineno", 0),
-      name));
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} references '{}', whose type could not be "
+        "determined; annotate the parameter so the clause constrains its value",
+        clause,
+        node.value("lineno", 0),
+        name));
 }
 
 // A contract clause is lowered into one ASSUME/ASSERT, so its argument has to
@@ -437,27 +447,29 @@ void function_call_builder::check_contract_clause(
     !node_type.empty() && !is_pure_clause_node(node_type) &&
     callee != kEsbmcOld)
   {
-    throw std::runtime_error(fmt::format(
-      "{} clause at line {} contains {}; a contract clause must be a pure "
-      "expression{}",
-      clause,
-      node.value("lineno", 0),
-      describe_clause_node(node_type),
-      is_unsupported_contract_intrinsic(callee)
-        ? fmt::format(
-            " ({} is not supported by the Python frontend yet)", callee)
-        : ""));
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} contains {}; a contract clause must be a pure "
+        "expression{}",
+        clause,
+        node.value("lineno", 0),
+        describe_clause_node(node_type),
+        is_unsupported_contract_intrinsic(callee)
+          ? fmt::format(
+              " ({} is not supported by the Python frontend yet)", callee)
+          : ""));
   }
 
   // A precondition already speaks about the pre-state, and nothing rewrites a
   // snapshot in it: `replace_old_in_expr` is applied to the ensures alone, so
   // the requires would be asserted over a symbol no instruction defines.
   if (callee == kEsbmcOld && clause == kEsbmcRequires)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} says nothing in a precondition, which already speaks "
-      "about the pre-state",
-      kEsbmcOld,
-      node.value("lineno", 0)));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} says nothing in a precondition, which already speaks "
+        "about the pre-state",
+        kEsbmcOld,
+        node.value("lineno", 0)));
 
   if (node_type == "Name")
     check_clause_name(node, clause);

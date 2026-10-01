@@ -443,10 +443,10 @@ static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 
   if (struct_union_packed(structure->type))
   {
-    /* Very (too?) conservative approach: all members of packed structures are to
-     * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
-     * if they can prove some member is always aligned, they'll use the faster
-     * instructions on aligned pointers. */
+    /* Very (too?) conservative approach: all members of packed structures are
+     * to be accessed in a known-unaligned way. Note, that's not true for
+     * GCC/Clang: if they can prove some member is always aligned, they'll use
+     * the faster instructions on aligned pointers. */
     return false;
   }
 
@@ -771,8 +771,9 @@ bool dereferencet::dereference_type_compare(
   if (object->type == dereference_type)
     return true;
 
-  if (same_function_pointer_ignoring_argument_names(
-        object_type, dereference_type))
+  if (
+    same_function_pointer_ignoring_argument_names(
+      object_type, dereference_type))
     return true;
 
   // Check for C++ subclasses; we can cast derived up to base safely.
@@ -1442,8 +1443,9 @@ void dereferencet::construct_from_array(
 
   unsigned int subtype_size = type_byte_size_bits(arr_subtype).to_uint64();
   expr2tc subtype_sz_expr = constant_int2tc(offset->type, BigInt(subtype_size));
-  // The value of "div" does not depend on the offset units (i.e., bits or bytes)
-  // as it essentially represents an index in the array of the given subtype
+  // The value of "div" does not depend on the offset units (i.e., bits or
+  // bytes) as it essentially represents an index in the array of the given
+  // subtype
   expr2tc div =
     typecast2tc(pointer_type2(), div2tc(offset->type, offset, subtype_sz_expr));
   simplify(div);
@@ -2673,10 +2675,12 @@ void dereferencet::valid_check(
   {
     // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
     // making dereferencet persistent.
-    if (has_prefix(
-          to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
+    if (
+      has_prefix(
+        to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
     {
-      // This is an invalid object; if we're in read or write mode, that's an error.
+      // This is an invalid object; if we're in read or write mode, that's an
+      // error.
       if (is_read(mode) || is_write(mode))
         dereference_failure("pointer dereference", "invalid pointer", guard);
       return;
@@ -2737,12 +2741,13 @@ void dereferencet::valid_check(
 }
 
 // True when `obj`'s base object is a heap allocation (malloc/calloc/realloc):
-// an "symex_dynamic::" object that is not the stack-resident "alloca::" variant.
-// Only heap overflows map to CWE-122 (Heap-based Buffer Overflow). When the base
-// is not a resolvable symbol (an unknown/nondet object), we deliberately fall
-// back to the stack classification (CWE-121): symex dereferences per concrete
-// object, so a genuine heap access resolves to a symbol here, and the fallback
-// only affects objects whose origin is already unknown.
+// an "symex_dynamic::" object that is not the stack-resident "alloca::"
+// variant. Only heap overflows map to CWE-122 (Heap-based Buffer Overflow).
+// When the base is not a resolvable symbol (an unknown/nondet object), we
+// deliberately fall back to the stack classification (CWE-121): symex
+// dereferences per concrete object, so a genuine heap access resolves to a
+// symbol here, and the fallback only affects objects whose origin is already
+// unknown.
 static bool is_heap_object(const expr2tc &obj, const namespacet &ns)
 {
   const expr2tc &base = get_base_object(obj);
@@ -2792,8 +2797,8 @@ void dereferencet::bounds_check(
     expr2tc in_cheri_bounds = or2tc(gt, lt);
     /*
      * In CHERI Clang if a pointer is marked as can_carry_provenance does not
-     * mean it must carries CHERI capability. Therefore, we need to determine here
-     * whether the capacity exists.
+     * mean it must carries CHERI capability. Therefore, we need to determine
+     * here whether the capacity exists.
      *
      * pointer_capability == zero ?
      */

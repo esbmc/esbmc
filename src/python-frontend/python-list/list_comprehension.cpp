@@ -284,8 +284,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // 10. Create while loop: while (i < length), built in IREP2 (V.1k keystone,
   // W). index_var (size_type) and length_expr can have mismatched widths (the
   // array path, length_expr = arr_type.size()), so reconcile with the same
-  // c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies --
-  // byte-identical, idempotent -- before building lessthan2t.
+  // c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies
+  // -- byte-identical, idempotent -- before building lessthan2t.
   exprt idx_op = build_symbol(index_var);
   exprt len_op = length_expr;
   namespacet ns(converter_.symbol_table());

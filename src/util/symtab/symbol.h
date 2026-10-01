@@ -58,9 +58,9 @@ public:
 
   // Value setters. Mirror of the type setters: legacy variants store the
   // legacy form and invalidate the IREP2 side; the IREP2-side setter
-  // stores expr2tc directly and invalidates the legacy side. `migrate_expr_back`
-  // covers every expr2t kind a symbol value may hold -- including
-  // code_block2t for function bodies -- so the lazy back-migration in
+  // stores expr2tc directly and invalidates the legacy side.
+  // `migrate_expr_back` covers every expr2t kind a symbol value may hold --
+  // including code_block2t for function bodies -- so the lazy back-migration in
   // get_value() is safe regardless of what was written.
   void set_value(const exprt &v);
   void set_value(exprt &&v);

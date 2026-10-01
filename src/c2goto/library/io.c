@@ -147,7 +147,7 @@ __ESBMC_HIDE:;
     stream == stdin || stream != NULL,
     "the pointer to a file object must be a valid argument");
 
-  //do nothing, report error
+  // do nothing, report error
   if (size < 2)
     return NULL;
 

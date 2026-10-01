@@ -12,7 +12,7 @@ private:
 
 public:
   symbol_serializationt(irep_serializationt::ireps_containert &ic)
-    : irepconverter(ic){};
+    : irepconverter(ic) {};
 
   void convert(const symbolt &, std::ostream &);
   void convert(std::istream &, irept &);

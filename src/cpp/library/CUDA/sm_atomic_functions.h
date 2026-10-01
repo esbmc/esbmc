@@ -201,7 +201,8 @@ __uAtomicDec(unsigned int *address, unsigned int val)
   old_value = *address;
 
   //	(((old == 0) | (old > val)) ? val : (old-1) )
-  //	((old_value == val) | (old_value > val)) ? (*address = val) : (*address = (old_value-1));
+  //	((old_value == val) | (old_value > val)) ? (*address = val) : (*address =
+  //(old_value-1));
 
   if ((old_value == val) | (old_value > val))
     *address = val;
@@ -442,7 +443,7 @@ atomicCAS(unsigned int *address, unsigned int compare, unsigned int val)
   return __uAtomicCAS(address, compare, val);
 }
 
-//sm_12_atomic_functions.h
+// sm_12_atomic_functions.h
 
 /*DEVICE_BUILTIN*/
 extern __device__ unsigned long long int
@@ -549,7 +550,7 @@ static __inline__ __device__ bool all(bool cond)
   return (bool)__all((int)cond);
 }
 
-//sm_20_atomic_functions.h
+// sm_20_atomic_functions.h
 
 /*DEVICE_BUILTIN*/
 extern __device__ float __fAtomicAdd(float *address, float val);
@@ -576,7 +577,7 @@ static __inline__ __device__ float atomicAdd(float *address, float val)
   return __fAtomicAdd(address, val);
 }
 
-//sm_32_atomic_functions.h
+// sm_32_atomic_functions.h
 
 extern __device__ __device_builtin__ long long
 __illAtomicMin(long long *address, long long val);
