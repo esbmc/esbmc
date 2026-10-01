@@ -8,6 +8,46 @@ Opened 2026-09-10 at master `35db62c320`. This document is the census and the
 design questions it forces. No slice is written yet, per §39.1's "census before
 writing".
 
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+The adjuster half of Phase 7 landed: the C++ pass, the hop-off flag
+`--clang-cpp-irep2-adjust-only` (#7718, default off), and the fixes in §3–§8
+(#7701, #7703, #7705, #7714, #7717, #7742, #7760, #7994, #7995). B-2* is 1, the `need_vptr_init` write in
+`clang_cpp_convert.cpp` (§13). B-1 is 651 lines. The legacy `clang_cpp_adjust`
+is still the default for C++ and Solidity. The sections below are a work log
+in the order written, and several numbers repeat (two §3.1–§3.17 series, two
+§7 series). Source comments cite these numbers, so they are not renumbered;
+a citation of §3.14, §3.15, §3.17, §7.2 or §7.4 may mean either copy.
+
+**§8.5's "every row agrees" no longer holds.** #7984 (merged 2026-09-25, after
+the census) added lazy initialisation of a dynamic local static, and the flag
+path does not reproduce it. Five of its seven tests diverge under the flag:
+
+| test | expected | under the flag |
+|---|---|---|
+| `static_local_dynamic_init_fail` | FAILED | **SUCCESSFUL** (false proof) |
+| `static_local_ctor_once` | SUCCESSFUL | FAILED |
+| `static_local_dynamic_init` | SUCCESSFUL | FAILED |
+| `static_local_init_throw` | SUCCESSFUL | FAILED |
+| `static_local_trivial_copy` | SUCCESSFUL | FAILED |
+
+`cxx14_elided_copy_static` (#8041) agrees on verdict, but under the flag
+`s=make(7)` moves into `__ESBMC_main` with no `s$init_guard`. A census of the
+corpus as it stands now has not been run.
+
+Still open:
+
+- the static-local divergence above, then a re-census;
+- the `need_vptr_init` write, which needs a design decision (§13);
+- making the flag the default, which needs an SV-COMP run (§8.5);
+- the converter's B-1;
+- `adjust_cpp_pseudo_destructor_call` in `clang_cpp_adjust_expr.cpp`, the dead
+  legacy arm §3.15 names as a clean-up.
+
+Done although the text below lists it as next: the §4 "no hop-off flag" note,
+§6's items 6 and 7 (§7.7, §7.8), and all four items of the first §7.2.
+#7719, #7724 and #7726 were closed unmerged; their content landed in #7742.
+
 ## 1. Census
 
 Re-measured at `35db62c320` with §1's own commands, alongside the 2026-08-03
@@ -2415,6 +2455,9 @@ array-bounds violation when the decay is forced on every array operand.
 default path does not.
 
 ### 8.5 Phase 7's census is exhausted
+
+> **Superseded (2026-10-01).** Tests added after this census diverge under the
+> flag, one of them a false SUCCESSFUL; see the status block at the top.
 
 The last row was the harness, not the pass.
 `vector_reserve_realloc_nested_fail` showed `none` for the *legacy* side, which

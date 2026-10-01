@@ -1,5 +1,42 @@
 # Roadmap — all frontends → IREP2-native construction
 
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+The sections below are a dated work log in the order they were written; this
+block is the current state. Section numbers are cited from source comments, so
+they are not renumbered.
+
+Bars, from `python3 scripts/irep2/bars.py` (B-1 as matching lines, B-2 refined):
+
+| frontend | B-1 lines | B-2* | adjuster flag (default off) |
+|---|---:|---:|---|
+| clang-c | 1 182 | 20 | `--clang-c-irep2-adjust-only` |
+| clang-cpp | 651 | 1 | `--clang-cpp-irep2-adjust-only` |
+| solidity | 1 413 | 44 | `--clang-cpp-irep2-adjust-only` |
+| python | 6 903 | 13 | `--python-irep2-adjust-only` |
+| jimple | 82 | 0 | none (native) |
+| **total** | **10 231** | **78** | |
+
+| phase | state | where |
+|---|---|---|
+| 0 — Option F spike | no-go for C/C++ (§36); Solidity's `sol_class` dropped (§37). What landed instead is an unreflected `irep_idt` field: `cpp_type` on the bitvector and float type kinds (§80), `cformat` on the constant kinds (#7864) | §36, §37, §80 |
+| 1 — dispatcher to 100 % | 0 declines over 8 660 corpus tests (§29–§30), but the round-trip fallback (`goto_convert_functions.cpp`) and `--no-irep2-native-body` are still there. Deleting them needs the five §31 origin sites settled and a Solidity decline census | §29–§31 |
+| 2 — W3 removal | struck (§37.3). B-4 is still not met: `cpp_expr2string.cpp`, `goto2c/expr2c.cpp`, `c_expr2string.cpp` and `clang_cpp_exception_id.cpp` read the spelling off legacy nodes | §33.4, §37 |
+| 3 / 9 — Python | the census recorded 5 077 of 5 078 agreeing, but on an asserting build five CORE tests abort under the flag (`precedence2`, `github_3866{,_fail}`, `return13-fail`, `missing-return14_fail`). Those, an SV-COMP run and the two-solver gate stand before the default can flip. `__ESBMC_list_eq` still unwinds without bound. The converter is largely untouched | `scope-python-irep2.md`, `scope-relational-float-reconciliation.md`, `scope-list-eq-unbounded-unwinding.md` |
+| 4 — shared kit | done | §38 |
+| 5 — jimple | done | `scope-jimple-irep2.md` |
+| 6 — clang-c | open. The two value writes are blocked on IREP2 having no bitfield type, a struct's `methods()` not crossing the seam, and the tag symbol not existing when the value is migrated | `scope-clang-c-irep2.md` §153, §160–§162 |
+| 7 — clang-cpp | B-2* is `need_vptr_init` alone. The 3 095-row census (2026-09-13) no longer holds: five of #7984's static-local tests diverge under the flag, one of them a false SUCCESSFUL | `scope-clang-cpp-irep2.md` |
+| 8 — solidity | adjust-and-seam half agrees (507/507); S.3, the converter, has not started; `#sol_type` is a design decision | `scope-solidity-irep2.md` §7.38, §13.2 |
+
+Not owned by any phase:
+
+- §48.3's override-thunk false alarm still reproduces on the default path
+  (`VERIFICATION FAILED` on a program that holds, when the override's
+  declaration leaves its parameters unnamed). It has no issue and no test.
+- #6759 is still open although #7633 says it fixes all eight tests.
+- Umbrella #5055 still links `docs/irep2-migration.md`, the pre-move path.
+
 > **Status: forward plan, opened 2026-08-03. This document reverses standing
 > decisions by owner direction.**
 > Part I's B1 ("frontends stay legacy"), Part III §14's Solidity close-out, and
@@ -9,9 +46,15 @@
 > discoveries** — the arguments behind them were sound and are answered here
 > (§5), not ignored.
 >
-> Parent record: `irep2-migration.md`. Sibling scopes:
-> `scope-coupled-arith-assign-conversion.md`, `scope-v2-w3-attribute-carriage.md`,
-> `scope-v1k-adjuster.md`.
+> Parent record: `irep2-migration.md`. Per-frontend scopes:
+> `scope-jimple-irep2.md`, `scope-clang-c-irep2.md`, `scope-clang-cpp-irep2.md`,
+> `scope-solidity-irep2.md`, `scope-python-irep2.md`. Python flip scopes:
+> `scope-coupled-arith-assign-conversion.md`,
+> `scope-relational-float-reconciliation.md`,
+> `scope-list-eq-unbounded-unwinding.md`. Deleted scopes, in git history:
+> `scope-v2-w3-attribute-carriage.md` and `scope-v1k-adjuster.md` (2026-08-03),
+> `scope-array-assignment-conversion.md` and `scope-c-spelling-carriage.md`
+> (2026-10-01).
 
 ## 1. The goal, as a measurable bar
 
@@ -2223,11 +2266,19 @@ after §30.2 is evidence and not proof.
 
 §33.3's "go for the scalar subset, not a B-4 closure" reads as though the
 semantics half can be taken now and the presentation half deferred. Measurement
-in `scope-clang-c-irep2.md` §102 shows the two are coupled: the printers need the
+in `scope-clang-c-irep2.md` §106 shows the two are coupled: the printers need the
 spelling to tell `char` from `int8_t`, which is the same question catch-matching
 asks, so a field carrying only the four catch-matching spellings does not serve
-them. The split, the options and the one measurement that decides between them
-are now in **`scope-c-spelling-carriage.md`**.
+them. The options were scoped in `scope-c-spelling-carriage.md` (deleted
+2026-10-01; see git history). The tree settled the question without choosing
+among them: `#cformat` crosses the seam as an unreflected field on the constant
+kinds (#7864) and `#cpp_type` as one on the bitvector and float type kinds (§80).
+B-4 is still not met, because the printers and the exception-id builder read the
+spelling off legacy nodes (`cpp_expr2string.cpp`, `goto2c/expr2c.cpp`,
+`c_expr2string.cpp`, `clang_cpp_exception_id.cpp`), and three `#cformat` readers
+were missed by that scope's census: `clang_c_convert.cpp:211` (a bitfield width,
+semantic), `solidity_convert_expr.cpp:1120` and `util/expr/array2string.cpp:16`.
+How `LLONG_MIN` and hex literals should print is still undecided.
 
 ## 33.3 Consequence for Phase 0
 

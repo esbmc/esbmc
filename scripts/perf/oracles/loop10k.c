@@ -1,4 +1,4 @@
-/* Oracle for the #6831 W0 bisect: a task in the 10-100 s band, where a
+/* Oracle for bisecting #6831's slowdown: a task in the 10-100 s band, where a
  * multiplicative term is visible and the fixed library cost is noise.
  *
  *   esbmc loop10k.c --unwind 10000 --overflow-check --quiet
