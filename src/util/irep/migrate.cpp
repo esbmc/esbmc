@@ -1274,6 +1274,59 @@ static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+// The parts of a cpp_new side effect that sideeffect2t has no field for.
+static void
+migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
+{
+  if (const exprt &sz = cpp_new_size(expr); sz.is_not_nil())
+    migrate_expr(sz, thesize);
+
+  // The new-expression's initializer lives in the "initializer" sub, not
+  // in the operands. Carry it through `arguments` so the round-trip back
+  // to side_effect_exprt re-attaches it; otherwise the object is left
+  // default-initialised (e.g. `new int(7)` becomes `new int` → 0).
+  if (expr.initializer().is_not_nil())
+  {
+    expr2tc init;
+    migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
+    args.push_back(init);
+  }
+
+  // A replaced operator new (github #6494) rides in arguments[1], for the
+  // same reason the initializer rides in arguments[0]: sideeffect2t has
+  // fixed fields, so a named sub on the side_effect_exprt does not survive
+  // the round trip. Keep slot 0 occupied so slot 1 stays meaningful.
+  const exprt &alloc_function =
+    static_cast<const exprt &>(expr.find("alloc_function"));
+  if (alloc_function.is_not_nil())
+  {
+    if (args.empty())
+      args.emplace_back();
+    expr2tc fn;
+    migrate_expr(alloc_function, fn);
+    args.push_back(fn);
+  }
+
+  // Value-initialisation of the elements (github #6588) rides in
+  // arguments[2], for the same reason as the two slots above.
+  if (expr.get_bool("zero_initialized"))
+  {
+    args.resize(2);
+    args.push_back(gen_true_expr());
+  }
+
+  // The braced list's filler, for elements past the list, rides in
+  // arguments[3].
+  const exprt &filler = static_cast<const exprt &>(expr.find("array_filler"));
+  if (filler.is_not_nil())
+  {
+    args.resize(3);
+    expr2tc f;
+    migrate_expr(filler, f);
+    args.push_back(f);
+  }
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -2334,44 +2387,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), operand);
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
-    {
-      if (const exprt &sz = cpp_new_size(expr); sz.is_not_nil())
-        migrate_expr(sz, thesize);
-
-      // The new-expression's initializer lives in the "initializer" sub, not
-      // in the operands. Carry it through `arguments` so the round-trip back
-      // to side_effect_exprt re-attaches it; otherwise the object is left
-      // default-initialised (e.g. `new int(7)` becomes `new int` → 0).
-      if (expr.initializer().is_not_nil())
-      {
-        expr2tc init;
-        migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
-        args.push_back(init);
-      }
-
-      // A replaced operator new (github #6494) rides in arguments[1], for the
-      // same reason the initializer rides in arguments[0]: sideeffect2t has
-      // fixed fields, so a named sub on the side_effect_exprt does not survive
-      // the round trip. Keep slot 0 occupied so slot 1 stays meaningful.
-      const exprt &alloc_function =
-        static_cast<const exprt &>(expr.find("alloc_function"));
-      if (alloc_function.is_not_nil())
-      {
-        if (args.empty())
-          args.emplace_back();
-        expr2tc fn;
-        migrate_expr(alloc_function, fn);
-        args.push_back(fn);
-      }
-
-      // Value-initialisation of the elements (github #6588) rides in
-      // arguments[2], for the same reason as the two slots above.
-      if (expr.get_bool("zero_initialized"))
-      {
-        args.resize(2);
-        args.push_back(gen_true_expr());
-      }
-    }
+      migrate_cpp_new(expr, thesize, args);
     else if (
       expr.statement() == "malloc" || expr.statement() == "realloc" ||
       expr.statement() == "alloca" || expr.statement() == "va_arg")
@@ -3597,14 +3613,16 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
 {
   // cpp_new has no operands in source form (size lives in the size field,
   // handled below; the initializer, if any, is carried in arguments[0], a
-  // replaced operator new in arguments[1], and the value-initialisation
-  // marker in arguments[2]).
+  // replaced operator new in arguments[1], the value-initialisation marker in
+  // arguments[2], and the braced list's filler in arguments[3]).
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
     theexpr.add("alloc_function") = migrate_expr_back(ref2.arguments[1]);
   if (ref2.arguments.size() > 2 && !is_nil_expr(ref2.arguments[2]))
     theexpr.set("zero_initialized", true);
+  if (ref2.arguments.size() > 3)
+    theexpr.add("array_filler") = migrate_expr_back(ref2.arguments[3]);
 }
 
 static void back_sideeffect_operands(const sideeffect2t &ref2, exprt &theexpr)

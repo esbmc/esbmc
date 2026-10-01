@@ -112,6 +112,24 @@ FBKind PlcopenXmlParser::fb_kind_from_string(const std::string &s)
 // Variable declaration parsing
 // -----------------------------------------------------------------------
 
+static void classify_address(VarDecl &v, const std::string &addr)
+{
+  if (addr.size() < 2 || addr[0] != '%')
+    return;
+  switch (toupper(static_cast<unsigned char>(addr[1])))
+  {
+  case 'I':
+    v.is_input = true;
+    break;
+  case 'Q':
+    v.is_output = true;
+    break;
+  case 'M':
+    v.shared = true;
+    break;
+  }
+}
+
 VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
 {
   const auto &n = *static_cast<const pugi::xml_node *>(node_ptr);
@@ -152,14 +170,7 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   // addresses: %IX... = physical input, %QX... = physical output.
   // Use the address attribute to set is_input / is_output when the parent
   // tag does not already encode direction (inputVars / outputVars).
-  std::string addr = n.attribute("address").as_string("");
-  if (!addr.empty())
-  {
-    if (addr.rfind("%I", 0) == 0 || addr.rfind("%i", 0) == 0)
-      v.is_input = true;
-    else if (addr.rfind("%Q", 0) == 0 || addr.rfind("%q", 0) == 0)
-      v.is_output = true;
-  }
+  classify_address(v, n.attribute("address").as_string(""));
 
   return v;
 }
@@ -1306,10 +1317,21 @@ reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
 // Top-level parse()
 // -----------------------------------------------------------------------
 
-// Every program body is merged into the one scan loop, so two programs would
-// share their variables and run as one (#7581).
-static void reject_several_programs(const pugi::xml_node &root)
+static bool shared_section(const pugi::xml_node &vars)
 {
+  const std::string tag = vars.name();
+  return tag == "inOutVars" || tag == "externalVars";
+}
+
+// The model has one scan loop running every program body once, in document
+// order: several tasks, program instances, or programs (#7581) would need a
+// schedule and separate scopes.
+static void reject_concurrent_programs(const pugi::xml_node &root)
+{
+  if (root.select_nodes("//task").size() > 1)
+    throw UnsupportedConstructError("more than one task", 2);
+  if (root.select_nodes("//pouInstance").size() > 1)
+    throw UnsupportedConstructError("more than one program instance", 2);
   if (root.select_nodes("//pou[@pouType='program']").size() > 1)
     throw UnsupportedConstructError("more than one program POU", 2);
 }
@@ -1343,7 +1365,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
 
   if (ast.has_interrupt_tasks)
     throw UnsupportedConstructError("InterruptTask", 2);
-  reject_several_programs(root);
+  reject_concurrent_programs(root);
 
   // The cyclic task period sets the tick length of the fixed-tick time model
   // (§3.3): one scan iteration advances time by exactly one interval.
@@ -1364,15 +1386,17 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   for (auto xpath_var : root.select_nodes(
          "//pou[@pouType='program']/interface/*[self::inputVars or "
          "self::outputVars or self::inOutVars or self::localVars or "
-         "self::globalVars]"))
+         "self::globalVars or self::externalVars]"))
   {
     pugi::xml_node vars_node = xpath_var.node();
     std::string vars_tag = vars_node.name();
+    const bool input = vars_tag == "inputVars";
+    const bool shared = shared_section(vars_node);
     for (auto var_node : vars_node.children("variable"))
     {
       VarDecl v = parse_var_decl(&var_node);
-      if (vars_tag.find("input") != std::string::npos)
-        v.is_input = true;
+      v.is_input |= input;
+      v.shared |= shared;
       if (vars_tag.find("output") != std::string::npos)
         v.is_output = true;
       ast.variables.push_back(std::move(v));

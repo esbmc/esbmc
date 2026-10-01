@@ -8,7 +8,7 @@ int *a[2] = {&g, &h};
 int **ap;
 
 // Segfaulted under --smt-during-symex: an array-of-pointers select projects
-// tuple elements that pop_ctx had already destroyed (issue #6831, W3.3).
+// tuple elements that pop_ctx had already destroyed (issue #6831, #7049).
 void *writer(void *arg)
 {
   (void)arg;

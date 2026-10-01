@@ -6,8 +6,10 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M8 closed**, **M9 in progress** (§15 verdict log). §6.4 records
-the tier-ordering rule M1 produced. Except where §15 records a discharged
+**Status (2026-10-01, `791ed8d1b8`):** **M0–M9 closed** as milestones (§10).
+"§15 M9 (…)" has since become the running defect log: every soundness fix adds
+a §9.2 row and a §15 entry under that heading, and the register now runs to
+R75. §6.4 records the tier-ordering rule M1 produced. Except where §15 records a discharged
 result, every harness below is a *proposal* and nothing here asserts a proof.
 Findings not marked discharged in §9.2 remain *hypotheses with cited evidence*,
 not confirmed end-to-end bugs.
@@ -22,26 +24,74 @@ disabled block is superseded; and R29 — found by M9's own access-shape census 
 is a **new High-severity false SUCCESSFUL**, partly fixed, with its residual
 traced out of this subsystem into `src/pointer-analysis`.
 
-**Still open:** the rows §9.2 records individually as not fixed, and the
-residuals named in the R38, R44 and R52 rows. R29's two bare-struct-member
-shapes, listed here until 2026-09-24, were closed on 2026-08-12 (§15 M9 (R29
+**Still open (2026-10-01):**
+
+- Not fixed, by the row's own record: **R4** (unchecked `*ns.lookup`, now 10
+  sites, no witness), **R8** (the `#if 0` block in `symex_valid_object.cpp`
+  is a dead-code candidate), and the **R25/R38** `--force-malloc-success` /
+  `--force-realloc-success` exemption, open by decision and pinned KNOWNBUG by
+  `force_malloc_success_unrepresentable` and
+  `ptr_rel_huge_object_force_success`. H-A6 / R29 completeness stays open by
+  design.
+- Residuals recorded in the rows of R44, R49, R52, R54, R55, R60, R61, R64,
+  R65, R68/R74, the second R69, R70 and R75. Each row says what is left.
+- Self-verification: WI-4, WI-5 and WI-6 (§13.6).
+
+Three identifiers each name two rows. **R37** has an "Open" row and a later
+"FIXED" row; the fixed one is current (`ptr_rel_huge_object` is CORE). **R50**
+has two rows whose residuals are both closed, the 3-D bound by R51 (#7490) and
+`expand_row_stores` as bounded (#7591). **R69** names two different findings,
+both fixed. R30 carries no FIXED marker but was fixed by #6783. R62, R63 and
+R73 were never assigned.
+
+R29's two bare-struct-member shapes were closed on 2026-08-12 (§15 M9 (R29
 residual)). R6 got its witness and its fix (#6785); A6.4, carried since M6, is
 discharged by the run-order invariant the engine now checks in release.
 
-**Self-verification, re-measured 2026-09-24 (§15 M9 (G14, R53)).** G12 and G13
-are fixed, and `irep2_type.h` and `renaming.h` convert. They then exposed
-**G14**, a symex abort caused by a frontend naming collision that also gave a
-false SUCCESSFUL on ordinary C++ (**R53**, fixed). Both headers now reach
-`VERIFICATION SUCCESSFUL` with an empty `main`. That covers only their static
-initialisers. The open question is now whether a driver that calls into
-`renaming::level1t` verifies (§13.6 WI-4), and `goto_symex_state.h` still fails
-to parse.
+**Self-verification.** G12 and G13 are fixed (#7702, #7801, #7938), as are
+G14–G17 (#7979, #7980); G14 was a symex abort from a frontend naming collision
+that also gave a false SUCCESSFUL on ordinary C++ (**R53**, fixed).
+`irep2_type.h` and `renaming.h` reach `VERIFICATION SUCCESSFUL` with an empty
+`main`, which covers only their static initialisers. WI-4 is still open, and
+G12 is no longer what blocks it: a driver that constructs a
+`renaming::level1t` does not finish in 60 s, unwinding inside immer's HAMT
+(§15 M9, WI-4 re-measured 2026-09-25). Whether `goto_symex_state.h` parses
+depends on the host's fmt and immer headers: the log records it verifying on
+macOS, and on Linux with fmt 10 it is a `PARSING ERROR`.
+
+**Paths.** `src/goto-symex` was partitioned on 2026-09-10 (#7695). Paths and
+line numbers written before then are pre-partition; §3 already says to treat
+the symbol name as authoritative. Map a bare file name as follows:
+
+| files | now under |
+|---|---|
+| `symex_{main,assign,goto,function,other,dereference,stack,valid_object}`, `dynamic_allocation`, `goto_symex.h`, `builtin_functions/` | `engine/` |
+| `goto_symex_state`, `renaming` | `state/` |
+| `execution_state`, `reachability_tree{,_cin}` | `scheduler/` |
+| `symex_target{,_equation}`, `slice`, `symex_symmetry`, `features`, `ssa_step_algorithm` | `equation/` |
+| `goto_trace`, `build_goto_trace`, `printf_formatter`, `xml_goto_trace`, `html`, `json`, `sarif` | `trace/` |
+| `witnesses` | `witness/` |
+| `ctest`, `pytest`, `test_gen_guard` | `testgen/` |
+
+`symex_invariant` and `waypoint.h` stay at the top level. `level1_map.h` no
+longer exists: since #7606 both renaming levels store their names in
+`persistent_map` (`src/util/persistent_map.h`, an immer HAMT), so the
+`std::unordered_map` container that §3, §4.1, the R3 row and §13.4 E1 describe
+is not the shipped one, and R3's rehash argument does not apply to it.
+
+Three follow-ups of the partition are not done, and no other document records
+them: `util/ssa/{cache,fingerprint,goto_expr_factory}.h` and
+`util/base/yaml_parser.h` still include goto-symex headers; `engine/goto_symex.h`
+is still one file; and `engine/builtin_functions/io.cpp` includes
+`trace/printf_formatter.h`, so only `testgen/` is unreachable from `symex_step`.
 
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
-**Companion:** `docs/irep2-verification-plan.md` (branch
-`docs/irep2-verification-plan`). Scope split is stated in §2.4 — this document
-does **not** re-verify irep2 internals.
+**Companion:** none. `docs/irep2-verification-plan.md` was deleted on
+2026-07-14 (`e6a384080e`) and its branch is gone; the references to it in
+§2.4, §7.3 and §14 resolve only in git history. Its H-B4 harness is on master
+as `unit/irep2/guard_algebra.test.cpp`. This document does **not** re-verify
+irep2 internals.
 
 > **Framing.** goto-symex is the last stage at which a defect is still
 > *invisible*. Everything downstream — SMT encoding, the solver — faithfully
@@ -753,6 +803,9 @@ this document** — each is a prioritised target for the cited harness.
 | **R65** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found driving WI-4, §15 M9 (R65); **FIXED**, same entry | **A placement new whose address has a side effect was modelled as an allocating new.** The lowering names the address twice, so for any call (`std::addressof(*it)`, immer's `uninitialized_copy`) the frontend warned and fell back: the object was built in fresh memory, the buffer kept its old bytes, and the address expression never ran. `*(int *)buf != 42` after `new (std::addressof(buf)) int(42)` was SUCCESSFUL. | `get_placement_new`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/placement_new_{call_address,address_once,class_call_address,no_initializer,recursive_mem_init,recursive_label}{,_fail}` | — | **Fixed**: the address is bound once, before the initializer, to a local of a statement expression. |
 | **R66** | **High (a crash, default configuration)** — found reviewing R65, §15 M9 (R66); **FIXED**, same entry | **R59's byte-view normalisation never terminated on an array of byte arrays.** The anchor of `unsigned char pool[8][32]` is `(char *)&pool[0]`, itself a byte view of the first row, and rewriting it again gives anchor + 0: `(char *)e == (char *)pool[0]`, a byte walk `for (q = pool[0]; q != pool[1]; ++q)`, and the same one level deeper all died with SIGBUS. | `byte_address_on_root`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/{byte_view_row_anchor,byte_walk_row,byte_view_3d_anchor}{,_fail}` | — | **Fixed**: an operand that already is the anchor is left alone. |
 | **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
+| **R69** | **High (false SUCCESSFUL, default configuration)** — found probing R67's residual, §15 M9 (R69); **FIXED**, same entry | **A class-element list ran its first constructor on every element, and an array list's filler was zeroed.** For `new C[2]{C(1), C(2)}`, goto-convert took the first constructor it found in the list and ran it in a loop, so `p[1].v == 1` was SUCCESSFUL. The frontend ignored every `InitListExpr` array filler, so `S s[2]{S{1, 2}}` with `int a = 5;` in `S` left `s[1].a` zero (`s[1].a == 0` SUCCESSFUL), and `C c[3]{C(1)}` did not call `C()` on the tail. Nested lists (`new int[2][2]{{1, 2}, {3, 4}}`) and aggregate lists were dropped as in R67. | `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `get_array_filler`, `src/clang-c-frontend/clang_c_convert.cpp`; `cpp_new` migration, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_new_init_list_{class,virtual,aggregate,nested,filler,filler_runtime}{,_fail}`, `array_init_list_filler{,_fail}`, `github_6588_multidim` | — | **Fixed**: each element runs its own initializer in place, and the filler fills the rest; a string-literal row and a nondet count with struct elements are still wrong. |
+| **R70** | **High (false SUCCESSFUL, default configuration, C and C++)** — found probing R69's string-literal residual, §15 M9 (R70); **FIXED** for declarations, same entry | **A braced string literal initialised one element with the literal's address.** `char a[4] = {"ab"}` went through the list conversion as a one-element list: the literal decayed to `&"ab"[0]`, was cast to `char` into `a[0]`, and the rest was zeroed, so `a[1] == 0` was SUCCESSFUL. | InitListExpr arm of `get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/string_literal_brace_init{,_fail}`, `regression/esbmc-cpp/cpp/string_literal_brace_init{,_fail}` | — | **Fixed**: a string-literal list initialises the whole array from the literal (C11 6.7.9p14); `new char[4]{"ab"}` is still dropped by `cpp_new_init_list`. |
+| **R72** | **High (a crash, default configuration)** — found probing R69's residual, §15 M9 (R72); **FIXED**, same entry | **A struct store at a dynamic offset was taken as a store to the element's base subobject.** `new D[2]()` for a class `D : B` with a vtable zero-fills each element through `*(p + i)`. `construct_struct_ref_from_dyn_offs_rec` matched the element, then recursed into its members, and `dereference_type_compare` accepts the `B` base (its `is_subclass_of` call is inverted on purpose), so both candidates were guarded by `offs == 0` and the base won. Symex then aborted in `symex_assign_typecast` assigning a `D` through `(struct D)element.@base`. | `construct_struct_ref_from_dyn_offs_rec`, `src/pointer-analysis/dereference.cpp`; `regression/esbmc-cpp/cpp/new_value_init_polymorphic{,_fail}` | — | **Fixed**: an exact match is the whole object, so its members are not searched. |
 | **R69** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R64's residual, §15 M9 (R69); **FIXED**, same entry | **Before C++17 an elided copy was built anyway.** Clang marks the copy in `C c = C::make();`, `C c = C(5);` and `return C(x);` elidable and elides it; ESBMC ran the copy constructor and destroyed a second object. `{ C c = C::make(3); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-c-frontend/clang_c_convert.cpp`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_{local,static,temporary}{,_fail}` | — | **Fixed**: a variable's initializer and a returned value are converted from the elided copy's source, the C++17 form. |
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
@@ -971,13 +1024,13 @@ a reviewed re-transcription.
 |---|---|---|
 | Tier A (`regression/esbmc/symex_*`) | every PR, via the existing `ctest -L esbmc` path | each harness < 30 s; the suite's 120 s per-test harness cap is hard |
 | Tier B (`unit/goto-symex`) | every PR, `ctest -LE regression` | < 60 s total |
-| Tier C oracles | **scheduled**, `.github/workflows/aux-symex-oracles.yml`, called by `ci-nightly.yml` (`37 2 * * *`, C1/C2/C3) and `ci-weekly.yml` (`41 3 * * 0`, every leg) — plus `workflow_dispatch` on either | 120 min per leg, mirroring the sanitizer job; `continue-on-error` during bring-up |
-| Drift check | every PR touching `src/goto-symex/**` | seconds |
+| Tier C oracles | **scheduled**, `.github/workflows/aux-symex-oracles.yml` (`workflow_call` only), called by `ci-weekly.yml` on `41 3 * * 0`, every leg. `ci-nightly.yml` does not call it, and `ci-weekly.yml`'s `workflow_dispatch` runs only the equivalence job | 120 min per leg, mirroring the sanitizer job; `continue-on-error` during bring-up |
+| Drift check | weekly, the `symex-harness-drift` job in `ci-weekly.yml` (`17 4 * * 1`), since #7686; not per PR | seconds |
 | Sanitizers (Tier D) | the sanitizer job in `ci-weekly.yml` (asan/ubsan/tsan) — add an **msan** leg for R10 | existing budget |
 
-Per repo convention the local regression cap is **5 minutes**; a full-corpus
-Tier-C sweep is a CI-only activity and must never be run inside a PR loop.
-Remember `rm -rf /tmp/esbmc-headers-*` after large sweeps (~7.4 MB per test).
+Per repo convention (`CLAUDE.md`) the local regression cap is **10 minutes**; a
+full-corpus Tier-C sweep is a CI-only activity and must never be run inside a PR
+loop. C and C++ runs no longer extract headers to `/tmp`.
 
 ### 11.3 Acceptance / rejection criteria
 
@@ -1019,7 +1072,7 @@ prohibited.
 
 Each harness file header carries: target `file:symbol`, the property IDs it
 discharges, its assumption list, and the cited-region checksum. When
-`src/goto-symex` changes, the drift guard fails the PR and forces one of:
+`src/goto-symex` changes, the weekly drift guard fails and forces one of:
 re-transcribe, widen the harness, or explicitly retire it (with the property
 matrix updated in the same PR). The property matrix (§8) is the source of truth
 for what is claimed; a claim may not outlive its harness.
@@ -1031,13 +1084,13 @@ for what is claimed; a claim may not outlive its harness.
 | # | Deliverable | Location | Milestone |
 |---|---|---|---|
 | **D1** | This plan (architecture, scope, properties, risks, roadmap) | `docs/roadmap/goto-symex-verification-plan.md` | — |
-| **D2** | Prioritised verification backlog | §9.2 (R1–R12) × §10 milestones | M0 |
+| **D2** | Prioritised verification backlog | §9.2 (R1–R12 at M0; the register now runs to R75) × §10 milestones | M0 |
 | **D3** | Component-to-harness mapping | §8 property matrix + §7 harness list | M0 |
 | **D4** | Property matrix | §8 | M0 |
 | **D5** | Risk assessment (harness-design + code-level) | §9.1 / §9.2 | M0 |
-| **D6** | Tier-A harnesses: 10 kernels × {ok, fail} | `regression/esbmc/symex_*/` | M1–M6 |
+| **D6** | Tier-A harnesses: 10 kernels × {ok, fail} — **superseded by §6.4**: only `symex_ssa_00{,_fail,_probe}` exist, the rest moved to Tier B | `regression/esbmc/symex_*/` | M1–M6 |
 | **D7** | Tier-B suites (8 files) + working `unit/goto-symex` CMake wiring + drift guard | `unit/goto-symex/`, `scripts/verification/symex/drift_check.py` | M0, M4 |
-| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/aux-symex-oracles.yml` | M5, M7 — **delivered except H-C7**, §15 M7 |
+| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/aux-symex-oracles.yml` | M5, M7 — **delivered**, including H-C7 (`oracle_claim_parity.py`), §15 M7 |
 | **D9** | `SYMEX_INVARIANT` release-checked macro + promoted invariants + cost benchmark | `src/goto-symex/` | M3 |
 | **D10** | Fix PRs for confirmed findings (R2–R5, R7, R10 are tractable; R6/R8/R11 are investigations first) | code PRs, each with Mode-C proof where a branch changes | M1–M6 |
 | **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §15 | continuous |
@@ -1284,8 +1337,10 @@ defect-masking failure mode of §9.1. Rules:
 **Critical path:** ~~WI-1 → WI-2 → WI-3~~ — retired; all three are done
 (§15 M9 (G-remeasure)). ~~What stands between here and WI-4 is **G9**~~ —
 also retired: G9 closed on 2026-08-17 and parsing closed entirely on
-2026-09-06. What stands between here and WI-4 is **G12**, a frontend
-conversion abort rather than an operational-model gap. WI-4 is a gated
+2026-09-06. ~~What stands between here and WI-4 is **G12**, a frontend
+conversion abort rather than an operational-model gap.~~ G12 is fixed too
+(#7702, #7801, #7938); what stands there now is symex cost in immer's HAMT
+(§15 M9, WI-4 re-measured 2026-09-25). WI-4 is a gated
 experiment with an explicit accept-the-negative-result branch. WI-5/WI-6 are
 stretch goals; neither is a precondition for any property claimed in §8.
 
@@ -9230,6 +9285,99 @@ express (`convert_typecast_to_ints_intmode`). Fixing it needs either a struct
 representation for byte operations under `--ir` or the multiple-inheritance
 layout that open PR #5552 reworks.
 
+### M9 (R69) — 2026-09-29, a list of class elements, and the filler nobody read
+
+R67 left a list of class elements dropped. It was worse than that:
+`new C[2]{C(1), C(2)}` ran `C(1)` on both elements, because the element loop
+takes the first constructor call it finds in the initializer. `p[1].v == 1`
+was SUCCESSFUL on master and fails natively. Probing the tail of a partial list
+found a second defect, in the frontend and not specific to `new`: the
+`InitListExpr` conversion zero-filled every element past the explicit
+initialisers and never read clang's array filler. `C c[3]{C(1), 2}` left
+`c[2].v` zero instead of calling `C()`, and `S s[2]{S{1, 2}}` ignored `S`'s
+default member initializer, so `s[1].a == 0` was SUCCESSFUL. Nested lists and
+lists of aggregates were dropped as R67 described.
+
+**Fixed** at both sites. `get_array_filler` converts the filler unless it is
+plain zero (an `ImplicitValueInitExpr`, or a trivial default constructor), and
+the list conversion puts it in every trailing slot. When the count is not a
+constant expression clang sizes the list to its explicit initialisers, so
+`cpp_new[]` carries the filler too, in `arguments[3]` across the irep2 round
+trip, which drops named subs. `cpp_new_init_list` now stores each listed
+element through its own initializer: a constructor temporary is built in
+place, with `this` pointed at the element, and any other value is assigned. A
+nested list is stored leaf by leaf through a pointer to the leaf type. The
+tail, from the end of the list to the count, gets the filler in a loop. The
+first version zeroed every element before constructing it, and a class with a
+vtable pointer then aborted `symex_assign_typecast`; only the tail is filled
+now. Code review found that the filler did not survive migration, so the
+run-time tail was zeroed: `unsigned n = 3; new S[n]{S{1, 2}}` with `int a =
+5;` in `S` gave a false SUCCESSFUL for `p[2].a == 0`, where master left the
+tail nondet. `github_6588_multidim_fail` pinned `new int[2][3]()` as
+indeterminate; it is now value-initialised, so `github_6588_multidim` asserts
+the zeros and the failing half asserts a real failure. The passing halves of
+`array_new_init_list_{class,virtual,aggregate,nested,filler,filler_runtime}`,
+`array_init_list_filler` and `github_6588_multidim` are FAILED on master;
+`array_new_init_list_{class,virtual}_fail` and `array_init_list_filler_fail`
+are SUCCESSFUL there, and `array_new_init_list_filler_runtime_fail` is
+SUCCESSFUL with the migration slot reverted.
+
+Not fixed. A string-literal row (`new char[4]{"ab"}`) is converted by the
+frontend as a pointer cast to `char`, so it is still a false FAILED. A count
+that is genuinely nondet with struct elements is a false FAILED on master for
+plain `new S[n]()` and `new C[n]` ("incompatible base type" on the store at a
+symbolic index), and still is; with a class filler over such a tail, Bitwuzla
+aborts in `execute_array_joining_ite` and Z3 gives master's false FAILED.
+Pre-existing, found by review: `new C[2][2]{...}` aborts ("Symbolic type id in
+size_typet::size_bits"), `new D[2]{}` for a class with a vtable aborts in
+`symex_assign_typecast`, a throw from the second listed constructor does not
+destroy the first, and a declaration's filler is unrolled per element, so
+`C a[5000]{}` builds 5000 constructor calls.
+### M9 (R70) — 2026-09-29, a braced string literal
+
+R69 left `new char[4]{"ab"}` open, as a frontend conversion of the literal to a
+pointer cast to `char`. The same conversion runs for any braced literal, in C
+too: `char a[4] = {"ab"}` stored the literal's address, truncated, in `a[0]`
+and zeroed the rest, so `a[1] == 0` was SUCCESSFUL and `a[1] == 'b'` FAILED.
+Clang marks the form with `InitListExpr::isStringLiteralInit` and has already
+typed the literal as the whole array (`char[4]`), but the list conversion
+treated it as a one-element list and cast the element to `char`. Nested rows
+(`char b[2][3] = {{"ab"}, "cd"}`) and struct members were already right,
+because there the literal meets an array element type.
+
+**Fixed** by converting such a list as its literal. `char a[] = {"ab"}`,
+`char a[2] = {"ab"}` (no terminator), `unsigned char`, a static array and the
+C++ `char a[4]{"ab"}` match the native program.
+`string_literal_brace_init{,_fail}` in `regression/esbmc` and
+`regression/esbmc-cpp/cpp` are wrong on master, both halves.
+
+Not fixed: `new char[4]{"ab"}` now reaches `cpp_new_init_list` as a string
+constant, which it does not expand, so the elements stay nondet (a false
+FAILED, as on master). The lowering is being rewritten by R69, so the fix
+follows it.
+### M9 (R72) — 2026-09-29, the base subobject that won the tie
+
+R69's review found `new D[2]{}` and `new D[2]()` aborting in
+`symex_assign_typecast` for a class with a vtable. The abort needs only the
+value-initialising zero fill, which stores a whole `D` through `*(p + i)` at a
+symbolic `i`; plain `new D[2]` and copy assignment through `p[i]` verify.
+Dereferencing that lvalue walks the array at a dynamic offset, and
+`construct_struct_ref_from_dyn_offs_rec` records the element as a match at
+offset zero, then keeps searching the element's members. `dereference_type_compare`
+also accepts the `@base` member, of type `B`, as a `D`: the type2tc
+`is_subclass_of` it calls is inverted by design (`base_type.cpp` warns not to
+change it without auditing its callers). Both candidates carried the guard
+`offs == 0`, the later one wrapped the earlier in the result's `if` chain, and
+symex received `(struct D)element.@base` as the lvalue, which its prefix
+assertion rejects.
+
+**Fixed** in the walk rather than in `is_subclass_of`: when the struct itself
+matches without a cast, it is the whole object, and no member of it can be the
+same object again, so the members are not searched. A cast match (a derived
+element read as its base) still searches them. Reads through the base pointer,
+a copy of an element, and member reads after `new D[2]()` match the native
+program; `new_value_init_polymorphic{,_fail}` abort on master, both halves.
+
 ### M9 (R69) — 2026-09-28, R64's residual: elided copies before C++17
 
 R64 left a local `C c = C::make();` under `--std c++14` destroying a surplus
@@ -9446,8 +9594,8 @@ rm -rf /tmp/esbmc-headers-*
 Cross-check a Tier-A kernel against its source before transcription:
 
 ```sh
-grep -n "make_assignment\|coveredinbees" src/goto-symex/renaming.cpp
-grep -n "phi_function\|merge_state_guards\|merge_gotos" src/goto-symex/symex_goto.cpp
+grep -n "make_assignment\|coveredinbees" src/goto-symex/state/renaming.cpp
+grep -n "phi_function\|merge_state_guards\|merge_gotos" src/goto-symex/engine/symex_goto.cpp
 ```
 
 ## Appendix C — Reproducing the §13 measurements
@@ -9484,7 +9632,7 @@ template <class T> struct is_trivial { static constexpr bool value = true; };
 }
 EOF
 cat > probe.cpp <<'EOF'
-#include <goto-symex/renaming.h>
+#include <goto-symex/state/renaming.h>
 int main() { renaming::level1t l1; (void)l1; return 0; }
 EOF
 build/src/esbmc/esbmc probe.cpp -Wc,-include,shim.h \
@@ -9543,8 +9691,8 @@ rm -rf /tmp/esbmc-cpp-headers-* /tmp/esbmc-headers-*
 **Release-build assert census (R1).**
 
 ```sh
-cat src/goto-symex/*.cpp | grep -c '\bassert('   # 113
-cat src/goto-symex/*.h   | grep -c '\bassert('   # 5
+grep -rh --include='*.cpp' '\bassert(' src/goto-symex | wc -l   # 113 at M3; 144 on 2026-10-01
+grep -rh --include='*.h'   '\bassert(' src/goto-symex | wc -l   # 5 at M3; 1 on 2026-10-01
 python3 -c "import json;d=json.load(open('build/compile_commands.json'));\
 print(sum(1 for e in d if '-DNDEBUG' in e['command']),'of',len(d),'TUs with -DNDEBUG')"
 ```

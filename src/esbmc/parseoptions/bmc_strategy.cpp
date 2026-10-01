@@ -177,7 +177,7 @@ static void report_non_termination_cwe(
   goto_trace_stept step;
   step.step_nr = 1;
   step.thread_nr = 0;
-  step.type = goto_trace_stept::ASSERT;
+  step.type = symex_targett::ASSERT;
   step.guard = false; // a violated assert
   step.pc = marker;
   step.comment = comment;
@@ -606,7 +606,7 @@ int esbmc_parseoptionst::do_context_bound_deepening(
   return 0;
 }
 
-// Falsification-only pre-pass over a deepening context bound (issue #6831, W4).
+// Falsification-only pre-pass over a deepening context bound (#6831, #6939).
 //
 // --incremental-context-bound cannot compose with the unwinding strategies
 // because both would own the verdict (driver.cpp, #6480). This composes by
