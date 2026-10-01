@@ -491,6 +491,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
       break;
     }
+    if (!T::is_representable(to_typecast2t(e).from->type))
+      break;
     auto inner = get_interval<T>(to_typecast2t(e).from);
     result = T::cast(inner, to_typecast2t(e).type);
     break;
@@ -569,6 +571,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   {
     const expr2tc &lhs = *e->get_sub_expr(0);
     const expr2tc &rhs = *e->get_sub_expr(1);
+    if (!T::is_representable(lhs->type) || !T::is_representable(rhs->type))
+      break;
 
     auto lhs_i = get_interval<T>(lhs);
     auto rhs_i = get_interval<T>(rhs);

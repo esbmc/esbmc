@@ -2086,3 +2086,7 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc/github_8103
+regression/esbmc/github_8103_fail
+regression/esbmc/github_8103_symex
+regression/esbmc/github_8103_symex_fail
