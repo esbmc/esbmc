@@ -1,14 +1,18 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-09-26.
+**Updated:** 2026-10-01.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
 or backlog entry, treat it as already implemented and covered by git history
 and `regression/numpy/`.
 
-Architectural decisions that gate specific pendencies here (referenced as
-`ADR-NP-XXX`) are the normative source in `numpy-architecture-decisions.md`.
+Architectural decisions that gate specific pendencies here are referenced as
+`ADR-NP-XXX`. The file meant to hold them, `numpy-architecture-decisions.md`,
+was never committed, so the only definitions are the uses in this document and
+in `src/python-frontend/` comments: ADR-NP-003 is the shared-buffer view model
+and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
+3" the rule that an unsupported case rejects with a diagnostic.
 
 ---
 
@@ -44,7 +48,7 @@ Architectural decisions that gate specific pendencies here (referenced as
    paths. Use `--python-no-fold` to force SMT encoding and compare verdicts.
 2. **Element-wise broadcasting** still requires concrete shapes at conversion
    time; symbolic shapes work only for selected array creation paths.
-3. **Scalability wall** (#5121): arrays are still represented as fully
+3. **Scalability wall** (#5121, closed): arrays are still represented as fully
    unrolled value lists. Large arrays can explode even when the operation is
    conceptually simple.
 4. **Descriptor views still rely on frontend maps instead of one runtime
@@ -69,6 +73,15 @@ This file has **no known open NumPy unsound-success gap**. Remaining NumPy
 items are documented backlog: unsupported cases should reject explicitly,
 and known false alarms are listed as gaps instead of treated as supported
 behavior. **A build can be cut for community testing from here.**
+
+`regression/numpy` pins eight `KNOWNBUG` tests (2026-10-01):
+
+| test | expected | today |
+|---|---|---|
+| `e`, `round2`, `view_branch_registration_conflict_knownbug` | SUCCESSFUL | `VERIFICATION FAILED` (false alarm) |
+| `isclose`, `nextafter`, `remainder` | SUCCESSFUL | internal error (an expression dump, no verdict) |
+| `array_return_call_arg_edge` | SUCCESSFUL | rejected: `'int' object is not subscriptable` |
+| `det2` | FAILED | rejected: `numpy.linalg.det supports only 2x2 and 3x3 matrices` |
 
 ---
 

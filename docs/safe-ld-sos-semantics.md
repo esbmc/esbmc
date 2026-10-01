@@ -7,7 +7,7 @@
 This document gives a Structural Operational Semantics (SOS) for the Tier-1
 subset of IEC 61131-3 Ladder Diagram that ESBMC-PLC verifies. It is the
 semantic ground truth referenced by the M1 gate in
-`docs/safe-ld-implementation-plan.md` §5, and it is the left-hand side of the
+`docs/roadmap/safe-ld-implementation-plan.md` §5, and it is the left-hand side of the
 semantic-preservation theorem in §3.7 of that document: `ld_converter` is
 correct exactly when the GOTO program it emits refines the transition relation
 defined here.

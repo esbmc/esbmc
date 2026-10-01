@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <util/arith/arith_tools.h>
 #include <util/arith/mp_arith.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
@@ -640,6 +641,29 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
 // Scan body construction
 // -----------------------------------------------------------------------
 
+// State in the verdict which variables the model lets the environment write.
+static void
+report_shared(const std::vector<VarDecl> &variables, bool closed_world)
+{
+  std::string names;
+  for (const auto &v : variables)
+    if (
+      v.shared && !v.is_input &&
+      names.find(" " + v.name + ",") == std::string::npos)
+      names += " " + v.name + ",";
+  if (names.empty())
+    return;
+  names.pop_back();
+  if (closed_world)
+    log_status(
+      "LD: --ld-closed-world: assuming only the program writes{}", names);
+  else
+    log_status(
+      "LD: sampling each scan, as writable outside the program:{} "
+      "(--ld-closed-world assumes otherwise)",
+      names);
+}
+
 code_blockt ld_converter::build_scan_body(const exprt &)
 {
   code_blockt scan_body;
@@ -648,9 +672,11 @@ code_blockt ld_converter::build_scan_body(const exprt &)
   // iteration each physical input is re-sampled nondeterministically.  Without
   // this the inputs stay frozen at their initial value and every property
   // verifies vacuously.
+  const bool closed_world = config.options.get_bool_option("ld-closed-world");
+  report_shared(ir_.variables, closed_world);
   for (const auto &v : ir_.variables)
   {
-    if (!v.is_input)
+    if (!v.is_input && (!v.shared || closed_world))
       continue;
     symbol_exprt input = var_expr(v.name);
     scan_body.copy_to_operands(
@@ -755,6 +781,13 @@ void ld_converter::emit_scan_function(const code_blockt &scan_body)
   loop.body() = scan_body;
 
   code_blockt body;
+  // Even when only the program writes them, the value a caller or the
+  // configuration gives these variables is not in the file.
+  if (config.options.get_bool_option("ld-closed-world"))
+    for (const auto &v : ir_.variables)
+      if (v.shared && !v.is_input)
+        body.copy_to_operands(code_assignt(
+          var_expr(v.name), side_effect_expr_nondett(var_expr(v.name).type())));
   body.copy_to_operands(loop);
   scan_sym.set_value(body);
   context_.move_symbol_to_context(scan_sym);

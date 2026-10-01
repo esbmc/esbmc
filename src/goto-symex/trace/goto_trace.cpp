@@ -30,15 +30,15 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 {
   switch (type)
   {
-  case goto_trace_stept::ASSERT:
+  case symex_targett::ASSERT:
     out << "ASSERT";
     break;
 
-  case goto_trace_stept::ASSUME:
+  case symex_targett::ASSUME:
     out << "ASSUME";
     break;
 
-  case goto_trace_stept::ASSIGNMENT:
+  case symex_targett::ASSIGNMENT:
     out << "ASSIGNMENT";
     break;
 
@@ -46,7 +46,7 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
     assert(false);
   }
 
-  if (type == ASSERT || type == ASSUME)
+  if (type == symex_targett::ASSERT || type == symex_targett::ASSUME)
     out << " (" << guard << ")";
 
   out << "\n";
@@ -171,7 +171,7 @@ void show_goto_trace_gui(
   {
     const locationt &location = step.pc->location;
 
-    if ((step.type == goto_trace_stept::ASSERT) && !step.guard)
+    if ((step.type == symex_targett::ASSERT) && !step.guard)
     {
       out << "FAILED"
           << "\n"
@@ -181,7 +181,7 @@ void show_goto_trace_gui(
           << location.line() << "\n"
           << location.column() << "\n";
     }
-    else if (step.type == goto_trace_stept::ASSIGNMENT)
+    else if (step.type == symex_targett::ASSIGNMENT)
     {
       irep_idt identifier;
 
@@ -412,7 +412,7 @@ void violation_graphml_goto_trace(
   {
     switch (step.type)
     {
-    case goto_trace_stept::ASSERT:
+    case symex_targett::ASSERT:
       if (!step.guard)
       {
         graph.check_create_new_thread(step.thread_nr, prev_node);
@@ -439,7 +439,7 @@ void violation_graphml_goto_trace(
       }
       break;
 
-    case goto_trace_stept::ASSIGNMENT:
+    case symex_targett::ASSIGNMENT:
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
@@ -516,7 +516,7 @@ void violation_yaml_goto_trace(
   {
     switch (step.type)
     {
-    case goto_trace_stept::ASSERT:
+    case symex_targett::ASSERT:
       if (!step.guard)
       {
         yml.segments.push_back(
@@ -529,7 +529,7 @@ void violation_yaml_goto_trace(
       }
       break;
 
-    case goto_trace_stept::BREANCHING:
+    case symex_targett::BREANCHING:
       if (step.pc->is_goto())
       {
         /* A validator cannot match a follow waypoint against a file it was
@@ -545,7 +545,7 @@ void violation_yaml_goto_trace(
       }
       break;
 
-    case goto_trace_stept::ASSIGNMENT:
+    case symex_targett::ASSIGNMENT:
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
@@ -674,11 +674,11 @@ void show_goto_trace(
   {
     // we only care about the counter example, which is only triggered by assert
     // steps. Ignore all other steps.
-    if (cex_only && step.type != goto_trace_stept::ASSERT)
+    if (cex_only && step.type != symex_targett::ASSERT)
       continue;
     switch (step.type)
     {
-    case goto_trace_stept::ASSERT:
+    case symex_targett::ASSERT:
       if (!step.guard)
       {
         show_state_header(
@@ -733,7 +733,7 @@ void show_goto_trace(
       }
       break;
 
-    case goto_trace_stept::ASSIGNMENT:
+    case symex_targett::ASSIGNMENT:
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
@@ -757,7 +757,7 @@ void show_goto_trace(
       }
       break;
 
-    case goto_trace_stept::OUTPUT:
+    case symex_targett::OUTPUT:
     {
       printf_formattert printf_formatter;
       printf_formatter(step.format_string, step.output_args);
@@ -766,14 +766,14 @@ void show_goto_trace(
       break;
     }
 
-    case goto_trace_stept::RENUMBER:
+    case symex_targett::RENUMBER:
       out << "Renumbered pointer to ";
       counterexample_value(out, ns, step.lhs, step.value);
       break;
 
-    case goto_trace_stept::ASSUME:
-    case goto_trace_stept::SKIP:
-    case goto_trace_stept::BREANCHING:
+    case symex_targett::ASSUME:
+    case symex_targett::SKIP:
+    case symex_targett::BREANCHING:
       // Something deliberately ignored
       break;
 

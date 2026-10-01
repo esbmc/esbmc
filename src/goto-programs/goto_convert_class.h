@@ -149,6 +149,13 @@ protected:
     const exprt &elem_count,
     goto_programt &dest);
 
+  void cpp_new_store_element(
+    const exprt &base,
+    const exprt &offset,
+    const exprt &init,
+    const locationt &location,
+    code_blockt &out);
+
   bool cpp_new_init_list(
     const exprt &lhs,
     const exprt &rhs,
