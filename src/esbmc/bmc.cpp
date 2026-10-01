@@ -2664,7 +2664,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         else
         {
           masked.push_back(it);
-          it->type = goto_trace_stept::SKIP;
+          it->type = symex_targett::SKIP;
         }
       }
 
@@ -2677,7 +2677,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
     }
 
     for (auto &it : masked)
-      it->type = goto_trace_stept::ASSERT;
+      it->type = symex_targett::ASSERT;
 
     return std::make_tuple(solver_result, num_asserts, std::move(smt_conv));
   };

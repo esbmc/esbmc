@@ -1,0 +1,8 @@
+properties:
+  # A property across two scans: k-induction cannot prove it without assuming
+  # it held in the earlier scan, so this is a bounded proof over 6 scans, and
+  # ld_open_world_fail is the same program and bound without the flag.
+  - id: P1
+    kind: invariant
+    expression: "!(r && q)"
+    description: "r holds the previous q; the program clears mode whenever q is on"

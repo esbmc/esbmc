@@ -17,7 +17,7 @@
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/config/options.h>
-#include <util/ssa/algorithms.h>
+#include <goto-symex/equation/ssa_step_algorithm.h>
 #include <util/config/cmdline.h>
 #include <atomic>
 

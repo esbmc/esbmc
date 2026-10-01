@@ -15,25 +15,6 @@
 #include <vector>
 #include <algorithm>
 
-// Largest request malloc may succeed for. PTRDIFF_MAX, as glibc >= 2.30: above
-// it pointer subtraction overflows, and an object's offset -- stored in
-// ptraddr_type2() but read signed by the bounds checks, pointer subtraction and
-// the relational comparator -- becomes indistinguishable from a below-base
-// pointer (R37). alloca bounds a symbolic request by assumption and reports a
-// constant one; realloc joins the cap to its failure condition (R38, R39).
-static BigInt max_object_size()
-{
-  return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
-}
-
-// Largest object smt_memspace.cpp can lay out at all: it places each object at
-// [start, start + size] over ptraddr_type2 and asserts the sum does not wrap.
-static BigInt max_layable_size()
-{
-  return BigInt::power2m1(ptraddr_type2()->get_width()) -
-         config.ansi_c.max_alignment();
-}
-
 // Collect the byte offset and class type of every (transitively) nested base
 // subobject of `t`, relative to the start of `t`.
 static void collect_base_subobject_offsets(

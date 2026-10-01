@@ -5,6 +5,62 @@ start with its own scope doc: census, phased decomposition, gates, risks.
 Phase 5 (jimple) closed at `scope-jimple-irep2.md` §31; §39 of the parent
 records what this phase inherits from it.
 
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+Phase 6 is **open**. The sections below are a work log in the order written;
+several numbers appear twice and some sections are out of order. Source
+comments and scripts cite them by number (`symtab_sweep.sh` cites §100.1,
+`lib.sh` §100, both of which exist twice), so new sections take fresh numbers
+rather than renumbering.
+
+- `--clang-c-irep2-adjust-only` is still experimental and default off;
+  `clang_c_language.cpp` runs the legacy `clang_c_adjust` without it. No exit
+  criterion for making it the default is written down.
+- B-1 is 1 182 lines; B-2* is **20**, not the 19 that §148–§155 record. The new
+  site is `clang_c_convert.cpp:4073`, from #7987.
+- The two value writes are still legacy, now at `clang_c_convert.cpp:606`
+  (static) and `:748` (local). Their blockers are unchanged: IREP2 has no
+  bitfield type (§153), a struct's `methods()` does not cross the seam (§161,
+  §162.4), and the tag symbol does not exist when the value is migrated (§160).
+- B-3 is not reached: `clang_c_adjust_irep2.cpp` still converts back to legacy
+  in six places.
+- Every PR §99, §101 and §104 describe as open is merged (#7086–#7105, #7111,
+  #7122, #7242–#7290, #7293, between 2026-08-17 and 2026-08-25).
+- §106's W4 witness no longer reproduces: over all 142 `cstd` tests the symbol
+  tables print char arrays the same way on both paths, because `#cformat`
+  crosses the seam (#7864) and the IREP2 `c_typecastt` gained the string-to-array
+  conversion (#7701).
+- `irep2_only_for_scope_knownbug` (§98.1) was removed in #7105;
+  `irep2_only_for_scope` is CORE.
+- §156's location fix shipped in #7864, which does not carry
+  `needs-svcomp-run`.
+
+Hop-off residue still open:
+
+- A file-scope function-pointer initialiser aborts under the flag in an
+  asserting build: `int g(int x){return x;} int (*p)(int) = g;` hits
+  `clang_c_main.cpp:19` `!value.type().is_code()`, with or without a cast. The
+  default path prints `ASSIGN p=&g;`. §144's 22 probes and
+  `github_4715_fnptr_cast_collapse_irep2` use a local, which is why they pass;
+  §142 ran with asserts compiled out.
+- `complex_25` and `complex_26` operand binding (§88.2): the
+  `$complex$` temporary is still missing under the flag.
+- `github_2220_vla_bound` (§62) is still KNOWNBUG.
+- `const` dropped from a cast (§133.3), and the `atexit-1` / `aligned_attr`
+  identity casts recorded as do-not-mirror (§115.4, §134.2).
+- Clean-ups named in §33.4, §105.3 and §137.6: the `adjust_float_arith` scalar
+  path, `restore_padding_flags`, the stale comment in `goto2c/expr2c.cpp`, the
+  six dead `#implicit` writes on dereferences, `#bitfield`/`#extint` carriage
+  (§137.4).
+
+Gone since it was written: the `github_2174` false alarm (§129.5) and the
+vector address-of difference (§133.3). One-argument `main` still aborts on the
+default path (`clang_c_main.cpp`, §112.2), out of scope here.
+
+References to "CLAUDE.md's C-Dead sub-mode" (§103.2, §105.2, §136.5, §137.6)
+mean the `esbmc-verifier` agent's dead-code mode; CLAUDE.md does not use that
+name.
+
 ## 1. Census
 
 ### 1.1 Surface
@@ -97,7 +153,7 @@ Three consequences:
    Migration is therefore per-*arm*, and the arms are not independently
    addressable the way 27 subclasses were.
 
-## 4. Proposed decomposition (not yet executed)
+## 4. Proposed decomposition (executed; see the status block)
 
 - **C.1** Census the corpus by construct, before writing anything
   (parent §39.1). jimple had five expression kinds at zero occurrences and one
@@ -3947,6 +4003,12 @@ job, and it is recorded here rather than attempted.
 - That is a legacy-side simplification, not a port, and it needs its own PR with
   the C-Dead gates; it does not block anything in Phase 6.
 ## 106. The `cstd` suite censused — and W4 has a witness
+
+> **No longer reproduces (2026-10-01).** Over all 142 `cstd` tests, the
+> symbol tables under `--clang-c-irep2-adjust-only` print char arrays the same
+> way as the default. `#cformat` now crosses the seam (#7864) and the IREP2
+> `c_typecastt` has the string-to-array conversion (#7701), so §106.2's "the
+> obvious fix is not available" no longer holds.
 
 §101 said the unowned work would come from the suites never censused. `cstd`
 is the first of them, measured with `symtab_sweep.sh`:

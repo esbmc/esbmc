@@ -701,11 +701,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 #endif
     const unsigned bits = type_byte_size_bits(expr->type).to_uint64();
     const unsigned mem_bits = type_byte_size_bits(src_expr->type).to_uint64();
-    expr2tc val = bitcast2tc(get_uint_type(mem_bits), src_expr);
-    if (lowest_address_high() && mem_bits && mem_bits < bits)
-      val = concat2tc(
-        get_uint_type(bits), val, gen_zero(get_uint_type(bits - mem_bits)));
-    a = convert_ast(typecast2tc(get_uint_type(bits), val));
+    a = convert_ast(typecast2tc(
+      get_uint_type(bits),
+      union_bits_of_member(
+        bitcast2tc(get_uint_type(mem_bits), src_expr), bits)));
     break;
   }
   case expr2t::constant_vector_id:
@@ -1057,25 +1056,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         expr2tc upd = bitcast2tc(
           get_uint_type(mem_bits),
           typecast2tc(tu.members[c], with.update_value));
-        if (mem_bits < bits && lowest_address_high())
-          upd = concat2tc(
-            get_uint_type(bits),
-            upd,
-            extract2tc(
-              get_uint_type(bits - mem_bits),
-              with.source_value,
-              bits - mem_bits - 1,
-              0));
-        else if (mem_bits < bits)
-          upd = concat2tc(
-            get_uint_type(bits),
-            extract2tc(
-              get_uint_type(bits - mem_bits),
-              with.source_value,
-              bits - 1,
-              mem_bits),
-            upd);
-        a = convert_ast(upd);
+        a = convert_ast(union_bits_with_member(with.source_value, upd, bits));
       }
     }
     else

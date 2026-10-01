@@ -22,44 +22,34 @@ public:
 
   bool is_assignment() const
   {
-    return type == ASSIGNMENT;
+    return type == symex_targett::ASSIGNMENT;
   }
   bool is_assume() const
   {
-    return type == ASSUME;
+    return type == symex_targett::ASSUME;
   }
   bool is_assert() const
   {
-    return type == ASSERT;
+    return type == symex_targett::ASSERT;
   }
   bool is_output() const
   {
-    return type == OUTPUT;
+    return type == symex_targett::OUTPUT;
   }
   bool is_skip() const
   {
-    return type == SKIP;
+    return type == symex_targett::SKIP;
   }
   bool is_renumber() const
   {
-    return type == RENUMBER;
+    return type == symex_targett::RENUMBER;
   }
   bool is_branching() const
   {
-    return type == BREANCHING;
+    return type == symex_targett::BREANCHING;
   }
 
-  typedef enum
-  {
-    ASSIGNMENT,
-    ASSUME,
-    ASSERT,
-    OUTPUT,
-    SKIP,
-    RENUMBER,
-    BREANCHING
-  } typet;
-  typet type;
+  symex_targett::step_typet type;
 
   goto_programt::const_targett pc;
 
