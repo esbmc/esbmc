@@ -2048,6 +2048,8 @@ regression/python/list_pop_result_as_argument
 regression/python/list_pop_result_as_argument_fail
 regression/esbmc/vector_op_nonconstant_lane
 regression/esbmc/vector_op_nonconstant_lane_fail
+regression/esbmc-cpp/cpp/new_value_init_polymorphic
+regression/esbmc-cpp/cpp/new_value_init_polymorphic_fail
 regression/esbmc-cpp/cpp/new_array_runtime_count
 regression/esbmc-cpp/cpp/new_array_runtime_count_fail
 regression/esbmc/vector_union_bytes
