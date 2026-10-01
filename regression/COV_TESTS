@@ -2081,3 +2081,7 @@ regression/python/github_8090_list_eq
 regression/python/github_8090_list_eq_fail
 regression/python/github_8090_list_eq_nested
 regression/python/github_8090_list_eq_nested_fail
+regression/python/github_8090_list_long
+regression/python/github_8090_list_long_fail
+regression/esbmc/memcmp_symbolic_len
+regression/esbmc/memcmp_symbolic_len_fail

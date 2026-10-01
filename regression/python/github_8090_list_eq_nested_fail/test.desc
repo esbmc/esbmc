@@ -1,4 +1,5 @@
 CORE
 main.py
---unwind 8
+--unwind 8 --bitwuzla
+main\.py line 13 column
 ^VERIFICATION FAILED$
