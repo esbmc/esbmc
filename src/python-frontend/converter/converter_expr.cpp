@@ -1355,7 +1355,11 @@ std::optional<exprt> python_converter::try_dispatch_chained_axis_index(
         throw_numpy_too_many_indices_error(*this, element, idx_nodes.size());
     }
 
+    exprt *outer_lhs = current_lhs;
+    if (axis + 1 < idx_nodes.size())
+      current_lhs = nullptr;
     current = list.index(current, idx_nodes[axis]);
+    current_lhs = outer_lhs;
     if (contains_cpp_throw(current))
       break;
   }
