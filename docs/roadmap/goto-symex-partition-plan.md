@@ -99,6 +99,9 @@ One non-trivial SCC survives: **`equation` ↔ `trace`**. Cause, exactly:
 `goto_trace_stept::typet` — the SSA step-kind enum lives in the *trace* header,
 so the equation cannot be compiled without it. See §11 for the follow-up.
 
+**Resolved by §11.1**: with the enum hoisted into `symex_targett`, the
+`equation -> trace` edge is gone, and the group graph is acyclic.
+
 Two further inversions worth naming, neither introduced here:
 
 * **`state/` → `witness/`.** `goto_symex_state.h:22` includes `witnesses.h` for
@@ -113,6 +116,7 @@ Two further inversions worth naming, neither introduced here:
   layer depending upward on this component. #6381 named the `ssa/` half and
   left it; the `yaml_parser.h` half is the reason `yaml_parser.cpp` sits in the
   affected-TU set of any change to `witnesses.h`. Still out of scope.
+  §11.3 slice 1 removed `algorithms.h` from this list.
 
 ## 5. Step 0 — prerequisite include repair — **DONE**
 
@@ -385,6 +389,15 @@ PR; each is a separate, small, testable change.
    depend on and which depends on nothing. Hoisting it removes the last group
    cycle. Mechanical but wide: every `goto_trace_stept::ASSERT`-style reference
    changes.
+   **DONE** on branch `refactor/symex-step-type-enum`: the enum is now
+   `symex_targett::step_typet`, and `symex_target_equation.h` no longer includes
+   `trace/goto_trace.h`. It is nested in the class because `goto_program.h`
+   declares a global unscoped enum with `ASSERT`, `ASSUME` and `SKIP`, which a
+   namespace-scope enum would clash with. For the same reason, an unqualified
+   enumerator inside a `goto_trace_stept` member now names the GOTO instruction
+   type. `-Wenum-compare` under `-Werror` caught the one comparison
+   (`goto_trace.cpp:49`), but it does not check `case` labels, so every site is
+   qualified explicitly.
 2. **`witnesses.h` is two headers.** Splitting the violation-witness replay
    types (`waypoint`) from the GraphML/YAML emitters would remove
    `state/` → `witness/` and stop the engine's state header from pulling in
@@ -405,6 +418,18 @@ PR; each is a separate, small, testable change.
    it because it changes CMake target topology. `util/base/yaml_parser.h`'s
    include of `witnesses.h` is the same inversion in a second place. The
    natural sequel to this PR, not part of it.
+   **Slice 1 DONE** on branch `refactor/split-ssa-algorithms`:
+   `util/ssa/algorithms.h` held two unrelated base classes. `algorithm<T>`,
+   which has no dependencies, is now `util/base/algorithm.h`.
+   `goto_functions_algorithm` moved to `goto-programs/` (library
+   `gotoprograms`), and `ssa_step_algorithm` moved to `goto-symex/equation/`
+   (library `symex`). The `algorithms` CMake library, and with it the
+   `ESBMC::algorithms` alias, is gone. `slice.h` had reached
+   `property_verdict.h` only through the old header, so it now includes it
+   directly. `cache` now links `symex` explicitly; before, it reached
+   `run_on_step` through `algorithms`. That makes the remaining inversion
+   visible in CMake. Remaining: `util/ssa/{cache, fingerprint, proof_cache,
+   goto_expr_factory}` and `yaml_parser`.
 4. **`goto_symex.h` is 66 KB in one file.** Splitting the `goto_symext`
    declaration is a real improvement and is emphatically *not* a move — it
    changes what each translation unit sees. Separate PR, separate risk.

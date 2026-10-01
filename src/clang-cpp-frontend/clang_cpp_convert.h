@@ -94,6 +94,8 @@ protected:
     const clang::FunctionDecl &fd,
     exprt &new_expr,
     const code_typet &ftype) override;
+  bool get_new_initializer(const clang::CXXNewExpr &ne, exprt &new_expr);
+
   bool get_member_initializer(
     const clang::Expr &init,
     const typet &member_type,

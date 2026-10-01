@@ -734,6 +734,30 @@ static bool zero_initialises(const clang::Expr &init)
   return false;
 }
 
+/// Attach a new-expression's initializer, and for an array its braced list's
+/// filler: a run-time element count can reach past the list.
+bool clang_cpp_convertert::get_new_initializer(
+  const clang::CXXNewExpr &ne,
+  exprt &new_expr)
+{
+  exprt init;
+  if (get_expr(*ne.getInitializer(), init))
+    return true;
+  convert_expression_to_code(init);
+  new_expr.initializer(init);
+
+  const auto *list = llvm::dyn_cast<clang::InitListExpr>(ne.getInitializer());
+  if (!ne.isArray() || list == nullptr)
+    return false;
+
+  exprt filler;
+  if (get_array_filler(*list, filler))
+    return true;
+  if (filler.is_not_nil())
+    new_expr.add("array_filler") = filler;
+  return false;
+}
+
 /// The id a catch handler matches a throw on. The catch type rides on the
 /// handler block's own type and is read off it exactly once -- here.
 /// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
@@ -1127,16 +1151,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       zero_initialises(*ne.getInitializer()))
       new_expr.set("zero_initialized", true);
 
-    if (ne.hasInitializer())
-    {
-      exprt init;
-      if (get_expr(*ne.getInitializer(), init))
-        return true;
-
-      convert_expression_to_code(init);
-
-      new_expr.initializer(init);
-    }
+    if (ne.hasInitializer() && get_new_initializer(ne, new_expr))
+      return true;
 
     break;
   }

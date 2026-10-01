@@ -7,7 +7,7 @@
 #include <util/config/cmdline.h>
 #include <util/config/options.h>
 #include <util/config/parseoptions.h>
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 #include <util/base/threeval.h>
 #include <string_view>
 

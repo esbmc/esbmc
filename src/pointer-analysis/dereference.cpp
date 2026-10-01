@@ -2227,6 +2227,48 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
 }
 
+void dereferencet::construct_struct_ref_from_dyn_offs_members(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const guard2tc &guard,
+  const expr2tc &accuml_guard,
+  modet mode,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  unsigned int i = 0;
+  for (auto const &it : struct_type.members)
+  {
+    // Quickly skip over scalar subtypes.
+    if (is_scalar_type(it))
+    {
+      i++;
+      continue;
+    }
+
+    BigInt memb_offs =
+      member_offset_bits(value->type, struct_type.member_names[i]);
+    BigInt size = type_byte_size_bits(it);
+    expr2tc memb_offs_expr = gen_long(bitsize_type2(), memb_offs);
+    expr2tc limit_expr = gen_long(offs->type, memb_offs + size);
+    expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
+
+    // Compute a guard and update the offset for an access to this field.
+    // Guard is that the offset is in the range of this field. Offset has
+    // offset to this field subtracted.
+    expr2tc new_offset = sub2tc(offs->type, offs, memb_offs_expr);
+    expr2tc gte = greaterthanequal2tc(offs, memb_offs_expr);
+    expr2tc lt = lessthan2tc(offs, limit_expr);
+    expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
+
+    simplify(new_offset);
+    construct_struct_ref_from_dyn_offs_rec(
+      memb, new_offset, type, guard, range_guard, mode, output);
+    i++;
+  }
+}
+
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
@@ -2293,40 +2335,16 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc offs_is_zero =
         and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
       output.emplace_back(offs_is_zero, tmp);
+
+      // An exact match is the whole object: a member can then only compare
+      // as a base class of it, and taking one would downcast it.
+      if (tmp == value)
+        return;
     }
 
     // It's not compatible, but a subtype may be. Iterate over all of them.
-    const struct_type2t &struct_type = to_struct_type(value->type);
-    unsigned int i = 0;
-    for (auto const &it : struct_type.members)
-    {
-      // Quickly skip over scalar subtypes.
-      if (is_scalar_type(it))
-      {
-        i++;
-        continue;
-      }
-
-      BigInt memb_offs =
-        member_offset_bits(value->type, struct_type.member_names[i]);
-      BigInt size = type_byte_size_bits(it);
-      expr2tc memb_offs_expr = gen_long(bitsize_type2(), memb_offs);
-      expr2tc limit_expr = gen_long(offs->type, memb_offs + size);
-      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
-
-      // Compute a guard and update the offset for an access to this field.
-      // Guard is that the offset is in the range of this field. Offset has
-      // offset to this field subtracted.
-      expr2tc new_offset = sub2tc(offs->type, offs, memb_offs_expr);
-      expr2tc gte = greaterthanequal2tc(offs, memb_offs_expr);
-      expr2tc lt = lessthan2tc(offs, limit_expr);
-      expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
-
-      simplify(new_offset);
-      construct_struct_ref_from_dyn_offs_rec(
-        memb, new_offset, type, guard, range_guard, mode, output);
-      i++;
-    }
+    construct_struct_ref_from_dyn_offs_members(
+      value, offs, type, guard, accuml_guard, mode, output);
     return;
   }
 
