@@ -3773,6 +3773,14 @@ numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
   if (!materialized)
     return std::nullopt;
 
+  // build_numpy_descriptor_materialized_elements is rank-generic (tolist()
+  // needs rank 3); reducers are not migrated past rank 2 yet (ADR-NP-003
+  // etapa 3, decision 7), so the rank gate has to be re-applied here.
+  if (materialized->first.size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy descriptor reducers currently support rank 1 or 2 "
+      "arrays");
+
   if (
     std::optional<exprt> axis_result =
       try_reduce_descriptor_call_along_axis(function, *materialized))
