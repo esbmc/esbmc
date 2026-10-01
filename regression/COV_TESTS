@@ -2081,3 +2081,5 @@ regression/esbmc/github_8083
 regression/esbmc/github_8083_memset
 regression/esbmc/github_8083_overflow
 regression/esbmc/github_8083_precision
+regression/esbmc/github_8083_symex_guard
+regression/esbmc/github_8083_symex_guard_scanf

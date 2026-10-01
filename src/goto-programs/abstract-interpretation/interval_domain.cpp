@@ -7,6 +7,7 @@
 #include <util/lang/c_typecast.h>
 #include <util/irep/std_expr.h>
 #include <util/base/prefix.h>
+#include <optional>
 #include <string_view>
 #include <unordered_set>
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -1278,14 +1279,12 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
     havoc_rec(c.target);
 }
 
-/* Body-less callees symex gives a write through a pointer argument: the input
- * functions and its intrinsics and builtins. An intrinsic missing from
- * read_only is assumed to write, which costs precision, never soundness. */
-static bool writes_through_arguments(const expr2tc &function)
+/* The first argument a body-less call that symex models may write through,
+ * or none: the input functions write past their format, its intrinsics and
+ * builtins anywhere. An intrinsic missing from read_only is assumed to write,
+ * which costs precision, never soundness. */
+static std::optional<size_t> first_written_argument(const irep_idt &callee)
 {
-  // A call through a pointer is ai_baset's: it resets the whole state.
-  if (!is_symbol2t(function))
-    return false;
   static const std::unordered_set<std::string_view> read_only = {
     "c:@F@__ESBMC_memcmp",
     "c:@F@__ESBMC_memchr",
@@ -1293,11 +1292,16 @@ static bool writes_through_arguments(const expr2tc &function)
     "c:@F@__ESBMC_is_fresh",
     "c:@F@__ESBMC_get_object_size",
     "c:@F@__ESBMC_builtin_object_size"};
-  const std::string &id = to_symbol2t(function).thename.as_string();
-  if (read_only.count(id))
-    return false;
-  return has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin") ||
-         id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf";
+  const std::string &id = callee.as_string();
+  if (id == "c:@F@scanf")
+    return 1;
+  if (id == "c:@F@sscanf" || id == "c:@F@fscanf")
+    return 2;
+  if (
+    read_only.count(id) ||
+    !(has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin")))
+    return std::nullopt;
+  return 0;
 }
 
 /// The object @p address points into, or nil when that is not statically known.
@@ -1316,21 +1320,31 @@ static expr2tc pointed_object(expr2tc address)
 
 void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
 {
-  if (!writes_through_arguments(call.function))
+  if (!is_symbol2t(call.function))
     return;
-  for (const expr2tc &arg : call.operands)
+  const std::optional<size_t> first =
+    first_written_argument(to_symbol2t(call.function).thename);
+  if (!first)
+    return;
+  for (size_t i = *first; i < call.operands.size(); ++i)
   {
-    if (is_nil_expr(arg) || !is_pointer_type(arg))
+    const expr2tc &arg = call.operands[i];
+    if (is_nil_expr(arg))
       continue;
     const expr2tc object = pointed_object(arg);
     if (object && is_constant_expr(object))
       continue;
-    if (!object || !is_symbol2t(object))
+    if (object && is_symbol2t(object))
+    {
+      havoc_rec(object);
+      continue;
+    }
+    // symex_input writes through each input argument whatever its type.
+    if (is_pointer_type(arg) || *first > 0)
     {
       clear_state();
       return;
     }
-    havoc_rec(object);
   }
 }
 

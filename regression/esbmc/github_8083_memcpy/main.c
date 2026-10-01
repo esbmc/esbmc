@@ -1,7 +1,7 @@
 #include <string.h>
 #include <assert.h>
 
-/* A loop bound copied in by memcpy. */
+/* A loop bound copied in by memcpy, through its pointer parameter. */
 int main()
 {
   int n = 3, m = nondet_int();

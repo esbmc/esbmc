@@ -408,6 +408,11 @@ void goto_symext::symex_step(reachability_treet &art)
       if (!is_nil_expr(operand))
         dereference(operand, dereferencet::READ);
 
+    // Symex models intrinsics, builtins and input functions itself and
+    // returns before process_instruction, so their writes are fed here (#8083).
+    if (interval_domain_state && !cur_state->guard.is_false())
+      interval_domain_state->havoc_written_arguments(call);
+
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
     // decision taken in another thread in this trace. In that case the
