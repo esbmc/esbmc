@@ -318,28 +318,6 @@ has_conditional_sideeffect(const exprt &expr, bool conditional = false)
   return false;
 }
 
-/// Drop the entries above `from` that clean up the object `value` names: a
-/// materialized return temporary (`return A(n);`) is the return slot and
-/// outlives the return (github #6075/#6076). With `drop_all`, drop every
-/// entry: the unwind would run a branch's destructors on both paths.
-static void drop_return_slot_entries(
-  const exprt &value,
-  bool drop_all,
-  std::vector<codet> &stack,
-  std::size_t from)
-{
-  stack.erase(
-    std::remove_if(
-      stack.begin() + from,
-      stack.end(),
-      [&value, drop_all](const codet &entry) {
-        return drop_all ||
-               (value.id() == "symbol" &&
-                destructor_entry_symbol(entry) == value.identifier());
-      }),
-    stack.end());
-}
-
 void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
   // The thrown operand may still carry side effects — most importantly a
@@ -1828,16 +1806,18 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
-    const bool conditional =
+    // A class-type value may be, or be copied bitwise from, a temporary of
+    // the expression (`return A(n);`, `return H{q};`), and a temporary under
+    // `?:`, `&&` or `||` exists on one path only; their entries are dropped.
+    const typet &type = ns.follow(new_code.return_value().type());
+    const bool drop_temporaries =
+      type.id() == "struct" || type.id() == "union" ||
       has_conditional_sideeffect(new_code.return_value());
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
-    drop_return_slot_entries(
-      new_code.return_value(),
-      conditional,
-      targets.destructor_stack,
-      value_stack_size);
+    if (drop_temporaries)
+      targets.destructor_stack.resize(value_stack_size);
   }
 
   // C++ [stmt.return]: the return value is computed before the local

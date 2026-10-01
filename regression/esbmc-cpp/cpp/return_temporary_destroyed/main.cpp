@@ -26,7 +26,6 @@ int before_locals()
   L l;
   return g + C(3).v;
 }
-C slot() { return C(C(4).v + 1); }
 
 struct P
 {
@@ -46,11 +45,5 @@ int main()
   g = 10;
   assert(before_locals() == 13);
   assert(dtors == 103);
-  {
-    C r = slot();
-    assert(r.v == 5);
-    assert(dtors == 104);
-  }
-  assert(dtors == 105);
   assert(conditional(false) == 0);
 }

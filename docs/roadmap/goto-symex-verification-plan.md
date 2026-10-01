@@ -811,7 +811,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
-| **R79** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's residual, §15 M9 (R79); **FIXED**, same entry | **A temporary in a `return` statement's full-expression was never destroyed.** `int k() { return C(1).v; }` left the destructor count at 0, so `k(); assert(dtors == 0);` verified and `assert(dtors == 1)` failed, in every `--std` mode; native destroys the temporary before `k` returns. `convert_return` dropped every scope-exit entry pushed while lowering the return value, to keep the return slot of `return A(n);` alive, and took the other temporaries with it. | `goto_convertt::convert_return`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/return_temporary_destroyed{,_fail}` | — | **Fixed**: only the return slot's entries are dropped; the rest are unwound after the value is captured and before the locals. A temporary in one branch of `?:`, `&&` or `||` is still not destroyed (open, §15). |
+| **R79** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's residual, §15 M9 (R79); **FIXED**, same entry | **A temporary in a `return` statement's full-expression was never destroyed.** `int k() { return C(1).v; }` left the destructor count at 0, so `k(); assert(dtors == 0);` verified and `assert(dtors == 1)` failed, in every `--std` mode; native destroys the temporary before `k` returns. `convert_return` dropped every scope-exit entry pushed while lowering the return value, to keep the return slot of `return A(n);` alive, and took the other temporaries with it. | `goto_convertt::convert_return`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/return_temporary_destroyed{,_fail}` | — | **Fixed** for a non-class return value: its temporaries are unwound after the value is captured and before the locals. A temporary in a class-type return value, or in one branch of `?:`, `&&` or `||`, is still not destroyed (open, §15). |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
@@ -9519,30 +9519,36 @@ slot: `return A(n);` materializes a temporary that is the returned object and
 must outlive the return (#6075/#6076). Every other temporary of the expression
 went with it, as the old comment said.
 
-**Fixed** by dropping only the entries naming the object the lowered return
-value is, using the `destructor_entry_symbol` helper `convert_throw` already
-uses for the thrown object. The remaining entries stay on the stack, so the
-existing unwind captures the value first and destroys them before the locals;
-the stack is cut back once the unwind is emitted. A temporary bound to a
-reference parameter, one read before a local's destructor runs, and the inner
-`C(4)` of `return C(C(4).v + 1);` now match the native program; the slot of
-`return C(…)` still survives to the caller.
+**Fixed** for a return value that is not a class: the entries now stay on the
+stack, so the existing unwind captures the value first and destroys the
+temporaries before the locals, and the stack is cut back once the unwind is
+emitted. A temporary read through a member, one bound to a reference
+parameter, and one read before a local's destructor runs now match the native
+program.
 
-A side effect under `?:`, `&&` or `||` keeps master's behaviour: the lowering
-puts each branch's code on its own path but pushes the branch's temporaries on
-the one destructor stack, so unwinding them destroys an object that path
-never built. `return c ? *P(6).p : 0;` with `c` false then frees an
-uninitialised pointer; that case is in the passing test, which fails with the
-fallback removed.
+Two shapes keep master's behaviour. A class-type value may be the temporary
+itself (`return A(n);`) or be copied bitwise from one: `return H{q};` builds
+the member `p` as a temporary and assigns it into the aggregate, so
+destroying it releases the returned object's `shared_ptr`. An earlier version
+that dropped only the return slot's entries turned
+`shared_ptr_copy_controls` into a false FAILED for exactly this reason. And a
+side effect under `?:`, `&&` or `||`: each branch's code goes on its own path,
+but its temporaries are pushed on the one destructor stack, so unwinding them
+destroys an object that path never built. `return c ? *P(6).p : 0;` with `c`
+false then frees an uninitialised pointer; that case is in the passing test,
+which fails with the conditional check removed.
 
 `return_temporary_destroyed{,_fail}` in `regression/esbmc-cpp/cpp`
-(`--std c++17`) are wrong on master, both halves, under Z3.
+(`--std c++17`) are wrong on master, both halves, under Z3; both give the same
+verdicts under `--std c++11`, `c++14` and `c++20`.
 
-Left open: a temporary created in one branch of a conditional is still never
-destroyed in a `return`. A declaration's initialiser has the opposite defect on
-master: `int x = c ? *P(6).p : 0;` with `c` false destroys the temporary
-anyway and reports `invalid pointer freed`. Both need the branch lowering to
-unwind its own temporaries. R69's other residuals (an elidable copy below the
+Left open: a temporary in a class-type return value that is not part of the
+result (`C(4)` in `return C(C(4).v + 1);`) is still never destroyed, and
+neither is one created in one branch of a conditional in a `return`. A
+declaration's initialiser has the opposite defect on master:
+`int x = c ? *P(6).p : 0;` with `c` false destroys the temporary anyway and
+reports `invalid pointer freed`. The conditional cases need the branch
+lowering to unwind its own temporaries. R69's other residuals (an elidable copy below the
 root, NRVO's extra move) are unchanged.
 
 ---
