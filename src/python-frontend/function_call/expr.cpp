@@ -2698,7 +2698,9 @@ bool function_call_expr::receiver_is_tracked_numpy_view(
 
   const std::string root_id = converter_.resolve_name_symbol_id(
     call_["func"]["value"]["id"].get<std::string>());
-  return !root_id.empty() && converter_.is_tracked_numpy_view_id(root_id);
+  return !root_id.empty() &&
+         (converter_.is_tracked_numpy_view_id(root_id) ||
+          converter_.numpy_pointer_view_info_.count(root_id) != 0);
 }
 
 // pop()/copy()/clear() are each shared between list and dict; disambiguate

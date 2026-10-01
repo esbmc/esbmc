@@ -1043,12 +1043,24 @@ bool is_same_name_assignment(
          target.value("id", "") == value.value("id", "");
 }
 
+std::string short_symbol_name(std::string id)
+{
+  const std::size_t at = id.rfind('@');
+  if (at != std::string::npos && at + 1 < id.size())
+    return id.substr(at + 1);
+  return id;
+}
+
+bool same_numpy_storage_id(const std::string &lhs, const std::string &rhs)
+{
+  return lhs == rhs || short_symbol_name(lhs) == short_symbol_name(rhs);
+}
+
 bool should_detach_numpy_pointer_views_for_assignment(
   const nlohmann::json &target,
-  const nlohmann::json &ast_node,
-  const symbolt *lhs_symbol)
+  const nlohmann::json &ast_node)
 {
-  return target.value("_type", "") == "Name" && lhs_symbol &&
+  return target.value("_type", "") == "Name" &&
          !is_same_name_assignment(target, ast_node);
 }
 
@@ -2509,7 +2521,13 @@ bool python_converter::is_tracked_numpy_view_name_node(
     return false;
 
   const std::string id = resolve_name_symbol_id(node["id"].get<std::string>());
-  return !id.empty() && is_tracked_numpy_view_id(id);
+  // is_tracked_numpy_view_id alone misses pointer-backed views (row/column/
+  // diagonal/ravel/slice, ADR-NP-003 etapa 2): those are never registered in
+  // numpy_view_copy_sources_, so escape detection has to check
+  // numpy_pointer_view_info_ here too, or `row = a[0]; consume(row)` escapes
+  // undetected.
+  return !id.empty() && (is_tracked_numpy_view_id(id) ||
+                         numpy_pointer_view_info_.count(id) != 0);
 }
 
 bool python_converter::is_basic_numpy_view_subscript_escape(
@@ -2636,7 +2654,9 @@ void python_converter::reject_numpy_view_mutating_method_call(
   if (root_id.empty())
     return;
 
-  if (numpy_view_copy_sources_.count(root_id) != 0)
+  if (
+    numpy_view_copy_sources_.count(root_id) != 0 ||
+    numpy_pointer_view_info_.count(root_id) != 0)
     throw std::runtime_error(
       "TypeError: writing through a copied numpy view is not supported");
 }
@@ -3592,7 +3612,13 @@ void python_converter::record_numpy_view_copy(
   const std::string lhs_id = lhs.identifier().as_string();
   if (numpy_pointer_view_info_.count(lhs_id) != 0)
   {
-    clear_numpy_view_copy(lhs);
+    // record_numpy_view_copy only runs when rhs_node is itself a view-copy
+    // expression (is_numpy_view_copy_expr), so a pointer_view_info_ entry
+    // here is whatever that subscript conversion just registered for lhs,
+    // not a stale one from an earlier statement -- leave it alone.
+    numpy_view_copy_sources_.erase(lhs_id);
+    numpy_transpose_view_info_.erase(lhs_id);
+    numpy_reshape_view_info_.erase(lhs_id);
     numpy_array_symbols_.insert(lhs_id);
     return;
   }
@@ -3756,6 +3782,17 @@ void python_converter::detach_numpy_pointer_views_of(
   for (const auto &entry : numpy_view_copy_sources_)
     if (entry.second == rebound_id)
       view_ids.push_back(entry.first);
+  const std::string rebound_storage_id =
+    resolve_numpy_array_storage_alias_id(rebound_id);
+  for (const auto &entry : numpy_pointer_view_info_)
+  {
+    const std::string view_source_id =
+      resolve_numpy_array_storage_alias_id(entry.second.source_id);
+    if (same_numpy_storage_id(view_source_id, rebound_storage_id))
+      view_ids.push_back(entry.first);
+  }
+  std::sort(view_ids.begin(), view_ids.end());
+  view_ids.erase(std::unique(view_ids.begin(), view_ids.end()), view_ids.end());
 
   for (const std::string &view_id : view_ids)
   {
@@ -3823,6 +3860,7 @@ void python_converter::detach_numpy_pointer_views_of(
     // rebound_id's buffer; length and read-only-ness (a diagonal view) are
     // unchanged by detaching.
     info_it->second.stride = 1;
+    info_it->second.source_id = snapshot.id.as_string();
 
     // The view no longer aliases rebound_id's storage; drop the source
     // link so a later write to the (new) rebound_id array is not held
@@ -4245,17 +4283,27 @@ void python_converter::update_numpy_array_binding(
   if (record_numpy_shape_stride_view(lhs, rhs_node))
     return;
 
-  if (numpy_pointer_view_info_.count(lhs_id) != 0)
-  {
-    clear_numpy_view_copy(lhs);
-    numpy_array_symbols_.insert(lhs_id);
-    return;
-  }
-
   if (is_numpy_view_copy_expr(rhs_node))
   {
     record_numpy_view_copy(lhs, rhs_node);
     return;
+  }
+
+  if (numpy_pointer_view_info_.count(lhs_id) != 0)
+  {
+    // rhs_node isn't a view-copy expression (the branch above would have
+    // claimed it), so any pointer_view_info_ entry here is stale from an
+    // earlier statement's binding (its DECL already committed pointer_typet,
+    // so the assignment itself still goes through array-to-pointer decay).
+    // Drop it and fall through to the constructor-expr handling below
+    // (instead of returning here) so a fresh shape gets registered for the
+    // rebound symbol; otherwise len()/shape on it keeps reporting the old
+    // view's length.
+    numpy_pointer_view_info_.erase(lhs_id);
+    numpy_view_copy_sources_.erase(lhs_id);
+    numpy_transpose_view_info_.erase(lhs_id);
+    numpy_reshape_view_info_.erase(lhs_id);
+    numpy_array_symbols_.insert(lhs_id);
   }
 
   if (unconditional_assignment || numpy_view_copy_sources_.count(lhs_id) == 0)
@@ -6695,11 +6743,11 @@ void python_converter::get_var_assign(
   // unannotated assignment branches above -- the annotator may inject an
   // annotation onto what the user wrote as a plain `a = ...`, routing it
   // through either one.
-  if (
-    should_detach_numpy_pointer_views_for_assignment(
-      target, ast_node, lhs_symbol))
+  if (should_detach_numpy_pointer_views_for_assignment(target, ast_node))
     detach_numpy_pointer_views_of(
-      lhs_symbol->id.as_string(), location_begin, target_block);
+      target.value("id", lhs.identifier().as_string()),
+      location_begin,
+      target_block);
 
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 

@@ -2352,6 +2352,7 @@ private:
     long long stride;
     bool readonly;
     std::vector<std::size_t> shape;
+    std::string source_id;
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
