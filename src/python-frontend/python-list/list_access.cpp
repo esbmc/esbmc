@@ -683,8 +683,8 @@ std::optional<long long> literal_slice_length(
 
 // Real identity of a numpy array's source symbol (ADR-NP-003's canonical
 // buffer_id), 0 for a non-symbol source. See docs/roadmap/
-// numpy-support-assessment.md, "Definitive view descriptor model", for why
-// nothing consults this yet.
+// numpy-support-assessment.md, "Soundness / performance concerns" item 4, for
+// why nothing consults this yet.
 std::size_t numpy_symbol_buffer_id(const exprt &array)
 {
   return array.is_symbol()
