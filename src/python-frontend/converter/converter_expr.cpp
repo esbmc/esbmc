@@ -620,6 +620,28 @@ static std::string undefined_variable_message(
 // 2, 1-D slice views): its own logical length is tracked separately, since
 // unwrapping the pointer reaches only the scalar element type, not a shape.
 // Views are always rank 1 in this PR's scope.
+std::optional<exprt>
+python_converter::symbolic_numpy_view_length(const std::string &name) const
+{
+  for (const std::string &id : {name, resolve_name_symbol_id(name)})
+  {
+    const auto view = numpy_pointer_view_info_.find(id);
+    if (view != numpy_pointer_view_info_.end() && view->second.is_symbolic())
+      return symbol_expr(
+        *symbol_table_.find_symbol(view->second.length_symbol));
+  }
+  return std::nullopt;
+}
+
+void python_converter::reject_symbolic_numpy_view(
+  const numpy_scalar_pointer_view_infot &info)
+{
+  if (info.is_symbolic())
+    throw std::runtime_error(
+      "TypeError: this operation does not support a numpy view whose slice "
+      "step is not a literal");
+}
+
 std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
@@ -629,6 +651,18 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
     it = numpy_pointer_view_info_.find(symbol.name.as_string());
   if (it == numpy_pointer_view_info_.end())
     return std::nullopt;
+
+  if (it->second.is_symbolic())
+  {
+    const exprt dim = typecast_exprt(
+      symbol_expr(*symbol_table_.find_symbol(it->second.length_symbol)),
+      int_type());
+    if (attr_name == "shape")
+      return build_shape_tuple_expr(*this, {dim});
+    if (attr_name == "ndim")
+      return from_integer(1, int_type());
+    return attr_name == "size" ? std::optional<exprt>(dim) : std::nullopt;
+  }
 
   std::vector<exprt> dims;
   const std::vector<std::size_t> shape =
@@ -875,9 +909,12 @@ python_converter::tracked_numpy_shape_from_name(const std::string &name) const
   {
     if (auto view = numpy_pointer_view_info_.find(id);
         view != numpy_pointer_view_info_.end())
+    {
+      reject_symbolic_numpy_view(view->second);
       return view->second.shape.empty()
                ? std::vector<std::size_t>{view->second.length}
                : view->second.shape;
+    }
     if (auto param = numpy_param_shapes_.find(id);
         param != numpy_param_shapes_.end())
       return param->second;
@@ -958,6 +995,15 @@ std::optional<exprt> python_converter::try_get_numpy_shape_subscript(
 
   const nlohmann::json &value = element["value"];
   const std::string name = value["value"].value("id", "");
+  if (std::optional<exprt> length = symbolic_numpy_view_length(name))
+  {
+    // A rank-1 view: only axis 0 (or -1) exists.
+    const std::optional<long long> axis = numpy_literal_index(element["slice"]);
+    if (!axis || (*axis != 0 && *axis != -1))
+      throw std::runtime_error(
+        "IndexError: tuple index out of range for a rank-1 numpy view");
+    return typecast_exprt(*length, int_type());
+  }
   std::optional<std::vector<std::size_t>> shape =
     tracked_numpy_shape_from_name(name);
   if (!shape)

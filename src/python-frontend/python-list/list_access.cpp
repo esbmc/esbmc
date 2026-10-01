@@ -1768,6 +1768,186 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
     false);
 }
 
+python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
+  const nlohmann::json &slice_node,
+  long long n)
+{
+  const typet ll_type = signedbv_typet(64);
+  const type2tc t = migrate_type(ll_type);
+  const locationt loc = converter_.get_location_from_decl(slice_node);
+
+  auto lit = [&](long long v) -> expr2tc {
+    return constant_int2tc(t, BigInt(v));
+  };
+  auto to_ll = [&](const exprt &e) -> expr2tc {
+    expr2tc result;
+    migrate_expr(build_typecast(e, ll_type), result);
+    return result;
+  };
+  // Every temporary is assigned once, so later reads see this slice's values
+  // even if the bound or step variables change afterwards.
+  auto emit_temp = [&](const char *name, const expr2tc &value) -> exprt {
+    symbolt &sym = converter_.create_tmp_symbol(
+      slice_node, name, ll_type, gen_zero(ll_type));
+    code_declt decl(build_symbol(sym));
+    decl.location() = loc;
+    converter_.add_instruction(decl);
+    code_assignt init(build_symbol(sym), migrate_expr_back(value));
+    init.location() = loc;
+    converter_.add_instruction(init);
+    return build_symbol(sym);
+  };
+  auto bound_temp = [&](const char *key, const char *name) {
+    std::optional<expr2tc> result;
+    if (slice_node.contains(key) && !slice_node[key].is_null())
+    {
+      exprt e = converter_.get_expr(slice_node[key]);
+      e = remove_function_calls_recursive(e, slice_node);
+      result = to_ll(emit_temp(name, to_ll(e)));
+    }
+    return result;
+  };
+
+  const expr2tc step = to_ll(
+    emit_temp("$numpy_step$", to_ll(converter_.get_expr(slice_node["step"]))));
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "slice step cannot be zero");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = loc;
+  code_ifthenelset zero_guard;
+  zero_guard.cond() = migrate_expr_back(equality2tc(step, lit(0)));
+  zero_guard.then_case() = throw_code;
+  zero_guard.location() = loc;
+  zero_guard.location().property("skipped");
+  converter_.add_instruction(zero_guard);
+
+  // CPython's PySlice_AdjustIndices: a given bound is wrapped once when
+  // negative and clamped to [min, max]; an omitted one takes `fallback`.
+  auto adjust = [&](
+                  const std::optional<expr2tc> &bound,
+                  long long min,
+                  long long max,
+                  long long fallback) {
+    if (!bound)
+      return lit(fallback);
+    const expr2tc wrapped =
+      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, lit(n)), *bound);
+    return if2tc(
+      t,
+      lessthan2tc(wrapped, lit(min)),
+      lit(min),
+      if2tc(t, greaterthan2tc(wrapped, lit(max)), lit(max), wrapped));
+  };
+  const std::optional<expr2tc> lower = bound_temp("lower", "$numpy_lower$");
+  const std::optional<expr2tc> upper = bound_temp("upper", "$numpy_upper$");
+  const expr2tc forward = greaterthan2tc(step, lit(0));
+  const expr2tc start = to_ll(emit_temp(
+    "$numpy_slice_start$",
+    if2tc(
+      t, forward, adjust(lower, 0, n, 0), adjust(lower, -1, n - 1, n - 1))));
+  const expr2tc stop = to_ll(emit_temp(
+    "$numpy_slice_stop$",
+    if2tc(t, forward, adjust(upper, 0, n, n), adjust(upper, -1, n - 1, -1))));
+
+  auto count = [&](const expr2tc &span, const expr2tc &magnitude) {
+    return add2tc(t, div2tc(t, sub2tc(t, span, lit(1)), magnitude), lit(1));
+  };
+  const expr2tc forward_count = if2tc(
+    t, lessthan2tc(start, stop), count(sub2tc(t, stop, start), step), lit(0));
+  const expr2tc backward_count = if2tc(
+    t,
+    greaterthan2tc(start, stop),
+    count(sub2tc(t, start, stop), sub2tc(t, lit(0), step)),
+    lit(0));
+  const exprt length = emit_temp(
+    "$numpy_view_len$", if2tc(t, forward, forward_count, backward_count));
+  // An empty view keeps offset 0: start may be -1 (before the object).
+  const exprt offset = emit_temp(
+    "$numpy_view_offset$",
+    if2tc(t, greaterthan2tc(to_ll(length), lit(0)), start, lit(0)));
+  return {offset, emit_temp("$numpy_view_stride$", step), length};
+}
+
+exprt python_list::build_symbolic_step_slice(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet array_type = ns.follow(array.type());
+  if (
+    !array.is_symbol() || !array_type.is_array() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) ==
+      0 ||
+    ns.follow(to_array_type(array_type).subtype()).is_array() ||
+    !to_array_type(array_type).size().is_constant())
+    throw std::runtime_error(
+      "TypeError: numpy view slicing requires a literal stride");
+
+  const array_typet &source_type = to_array_type(array_type);
+  const typet elem_type = source_type.subtype();
+
+  // Without a bare-name target the slice is read as an independent copy, as
+  // for a literal step.
+  exprt *lhs = converter_.current_lhs;
+  const bool as_view = lhs && lhs->is_symbol();
+  const typet view_ptr_type = pointer_typet(elem_type);
+  // A discarded type probe only needs the result type, not the statements.
+  if (!converter_.safe_to_emit_side_effecting_statement())
+    return as_view ? build_typecast(build_address_of(array), view_ptr_type)
+                   : array;
+  if (
+    as_view && converter_.numpy_pointer_view_info_.count(
+                 lhs->identifier().as_string()) != 0)
+    throw std::runtime_error(
+      "TypeError: numpy view slicing requires a literal stride");
+
+  const symbolic_slice_params params = emit_symbolic_slice_params(
+    slice_node,
+    binary2integer(source_type.size().value().c_str(), false).to_int64());
+
+  if (!as_view)
+  {
+    const locationt loc = converter_.get_location_from_decl(slice_node);
+    array_typet result_type(
+      elem_type, build_typecast(params.length, size_type()));
+    symbolt &result = converter_.create_tmp_symbol(
+      slice_node, "$array_slice$", result_type, exprt());
+    code_declt result_decl(build_symbol(result));
+    result_decl.location() = loc;
+    converter_.add_instruction(result_decl);
+    code_blockt copy_block;
+    converter_.emit_strided_copy(
+      copy_block,
+      build_symbol(result),
+      array,
+      params.offset,
+      params.stride,
+      params.length,
+      loc);
+    converter_.add_instruction(copy_block);
+    return build_symbol(result);
+  }
+
+  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt view_ptr = build_add(
+    base_ptr, build_typecast(params.offset, size_type()), view_ptr_type);
+  lhs->type() = view_ptr_type;
+  converter_.update_symbol(*lhs);
+
+  python_converter::numpy_scalar_pointer_view_infot info;
+  info.length = 0;
+  info.stride = 0;
+  info.readonly = false;
+  info.length_symbol = params.length.identifier().as_string();
+  info.stride_symbol = params.stride.identifier().as_string();
+  const std::string lhs_id = lhs->identifier().as_string();
+  converter_.numpy_pointer_view_info_[lhs_id] = info;
+  if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
+    converter_.numpy_pointer_view_info_[lhs_symbol->id.as_string()] = info;
+  return view_ptr;
+}
+
 std::optional<exprt> python_list::try_build_row_pointer_view(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -2345,6 +2525,20 @@ exprt python_list::normalize_and_scale_index(
   const nlohmann::json &slice_node)
 {
   const typet ll_type = signedbv_typet(64);
+  return normalize_and_scale_index(
+    index,
+    from_integer(length, ll_type),
+    from_integer(stride, ll_type),
+    slice_node);
+}
+
+exprt python_list::normalize_and_scale_index(
+  const exprt &index,
+  const exprt &length,
+  const exprt &stride,
+  const nlohmann::json &slice_node)
+{
+  const typet ll_type = signedbv_typet(64);
   const locationt loc = converter_.get_location_from_decl(slice_node);
   symbolt &idx_sym = converter_.create_tmp_symbol(
     slice_node, "$numpy_view_idx$", ll_type, gen_zero(ll_type));
@@ -2356,7 +2550,7 @@ exprt python_list::normalize_and_scale_index(
   idx_init.location() = loc;
   converter_.add_instruction(idx_init);
 
-  exprt view_len = from_integer(length, ll_type);
+  const exprt &view_len = length;
   exprt idx_lt_zero =
     build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
   code_assignt normalize(
@@ -2390,11 +2584,9 @@ exprt python_list::normalize_and_scale_index(
   oob_guard.location().property("skipped");
   converter_.add_instruction(oob_guard);
 
-  exprt scaled =
-    stride == 1
-      ? build_symbol(idx_sym)
-      : build_mul(
-          build_symbol(idx_sym), from_integer(stride, ll_type), ll_type);
+  exprt scaled = stride == from_integer(1, ll_type)
+                   ? build_symbol(idx_sym)
+                   : build_mul(build_symbol(idx_sym), stride, ll_type);
   return build_typecast(scaled, size_type());
 }
 
@@ -2411,8 +2603,19 @@ exprt python_list::guard_numpy_pointer_view_index(
   if (info_it == converter_.numpy_pointer_view_info_.end())
     return index;
 
-  return normalize_and_scale_index(
-    index, info_it->second.length, info_it->second.stride, slice_node);
+  const auto &info = info_it->second;
+  if (info.is_symbolic())
+  {
+    auto symbol_value = [&](const std::string &id) {
+      return symbol_expr(*converter_.symbol_table().find_symbol(id));
+    };
+    return normalize_and_scale_index(
+      index,
+      symbol_value(info.length_symbol),
+      symbol_value(info.stride_symbol),
+      slice_node);
+  }
+  return normalize_and_scale_index(index, info.length, info.stride, slice_node);
 }
 
 exprt python_list::guard_numpy_static_array_index(
@@ -2667,8 +2870,7 @@ exprt python_list::handle_range_slice(
     }
 
     if (!step_info.literal && elem_type != char_type())
-      throw std::runtime_error(
-        "TypeError: numpy view slicing requires a literal stride");
+      return build_symbolic_step_slice(array, slice_node);
 
     // Process slice bounds (handles null, negative indices)
     auto process_bound =

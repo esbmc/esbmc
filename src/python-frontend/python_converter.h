@@ -2353,9 +2353,42 @@ private:
     bool readonly;
     std::vector<std::size_t> shape;
     std::string source_id;
+    // Runtime length/stride for a view whose slice step is not a literal;
+    // `length` and `stride` are placeholders in that case.
+    std::string length_symbol;
+    std::string stride_symbol;
+    bool is_symbolic() const
+    {
+      return !length_symbol.empty();
+    }
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
+  // Runtime length of the named view when its slice step is not a literal.
+  std::optional<exprt>
+  symbolic_numpy_view_length(const std::string &name) const;
+  // Consumers that need a constant length/stride reject a symbolic view.
+  static void
+  reject_symbolic_numpy_view(const numpy_scalar_pointer_view_infot &info);
+  /// Appends `dst[i] = src[offset + i * stride]` for i in [0, length) to
+  /// `block`; offset, stride and length are signed 64-bit expressions.
+  void emit_strided_copy(
+    codet &block,
+    const exprt &dst,
+    const exprt &src,
+    const exprt &offset,
+    const exprt &stride,
+    const exprt &length,
+    const locationt &location);
+
+  /// Detach for a view with a runtime length/stride: copies what the view
+  /// sees into a fresh dense snapshot with a loop and repoints the view at
+  /// it. Returns the snapshot's id.
+  std::string snapshot_symbolic_numpy_view(
+    const exprt &old_ptr,
+    const numpy_scalar_pointer_view_infot &info,
+    const locationt &location,
+    codet &target_block);
   struct numpy_transpose_view_infot
   {
     std::string source_id;

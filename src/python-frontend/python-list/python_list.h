@@ -769,6 +769,35 @@ private:
     long long stride,
     const nlohmann::json &slice_node);
 
+  exprt normalize_and_scale_index(
+    const exprt &index,
+    const exprt &length,
+    const exprt &stride,
+    const nlohmann::json &slice_node);
+
+  /**
+   * @brief a[lo:hi:st] with a non-literal step st. Assigned to a bare name it
+   * is a pointer view whose offset, length and stride are runtime values
+   * computed with CPython's slice rules (a step of zero raises ValueError);
+   * anywhere else it is an independent copy. Throws TypeError unless a is a
+   * tracked 1-D numpy array and the target is not already a registered view.
+   */
+  struct symbolic_slice_params
+  {
+    exprt offset;
+    exprt stride;
+    exprt length;
+  };
+
+  /// Emits the runtime offset/stride/length of a[lo:hi:st] over a length-n
+  /// axis, raising ValueError for st == 0.
+  symbolic_slice_params
+  emit_symbolic_slice_params(const nlohmann::json &slice_node, long long n);
+
+  exprt build_symbolic_step_slice(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
   exprt guard_numpy_pointer_view_index(
     const exprt &array,
     const exprt &index,

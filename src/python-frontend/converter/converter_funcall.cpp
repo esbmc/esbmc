@@ -619,6 +619,9 @@ std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
     return std::nullopt;
 
   const std::string arg_name = arg["id"].get<std::string>();
+  if (std::optional<exprt> length = symbolic_numpy_view_length(arg_name))
+    return typecast_exprt(*length, long_long_int_type());
+
   if (
     std::optional<std::vector<std::size_t>> shape =
       tracked_numpy_shape_from_name(arg_name))

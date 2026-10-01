@@ -2821,6 +2821,7 @@ python_converter::build_numpy_descriptor_materialized_elements(
     if (!pointer_type.is_pointer())
       return std::nullopt;
 
+    reject_symbolic_numpy_view(pointer_it->second);
     const typet elem_type = ns.follow(pointer_type.subtype());
     std::vector<exprt> elems;
     elems.reserve(pointer_it->second.length);
@@ -2926,7 +2927,10 @@ python_converter::get_numpy_nditer_logical_shape(
   if (
     auto pointer_it = numpy_pointer_view_info_.find(root_id);
     pointer_it != numpy_pointer_view_info_.end())
+  {
+    reject_symbolic_numpy_view(pointer_it->second);
     return std::vector<std::size_t>{pointer_it->second.length};
+  }
 
   if (
     auto reshape_it = numpy_reshape_view_info_.find(root_id);
@@ -3813,6 +3817,13 @@ void python_converter::detach_numpy_pointer_views_of(
     const exprt old_ptr = symbol_expr(*view_symbol);
     const typet ptr_type = old_ptr.type();
     const typet elem_type = ns.follow(view_symbol->get_type()).subtype();
+    if (info_it->second.is_symbolic())
+    {
+      info_it->second.source_id = snapshot_symbolic_numpy_view(
+        old_ptr, info_it->second, location, target_block);
+      numpy_view_copy_sources_.erase(view_id);
+      continue;
+    }
     const std::size_t length = info_it->second.length;
     const long long stride = info_it->second.stride;
 
@@ -3869,6 +3880,95 @@ void python_converter::detach_numpy_pointer_views_of(
     // responsible for a view it can no longer affect.
     numpy_view_copy_sources_.erase(view_id);
   }
+}
+
+void python_converter::emit_strided_copy(
+  codet &block,
+  const exprt &dst,
+  const exprt &src,
+  const exprt &offset,
+  const exprt &stride,
+  const exprt &length,
+  const locationt &location)
+{
+  const typet ll_type = signedbv_typet(64);
+  const typet elem_type = dst.type().subtype();
+
+  symbolt &idx =
+    create_tmp_symbol(location, "$strided_copy_i$", ll_type, exprt());
+  code_declt idx_decl(symbol_expr(idx));
+  idx_decl.location() = location;
+  block.copy_to_operands(idx_decl);
+  block.copy_to_operands(
+    code_assignt(symbol_expr(idx), from_integer(0, ll_type)));
+
+  // The pointer add treats the two's-complement bit pattern of a negative
+  // product as a backward offset, as in the constant-stride snapshot.
+  const exprt src_idx = python_expr::build_typecast(
+    python_expr::build_add(
+      offset,
+      python_expr::build_mul(symbol_expr(idx), stride, ll_type),
+      ll_type),
+    size_type());
+  const exprt dst_idx =
+    python_expr::build_typecast(symbol_expr(idx), size_type());
+  code_blockt body;
+  code_assignt copy(
+    python_expr::build_index(dst, dst_idx, elem_type),
+    python_expr::build_index(src, src_idx, elem_type));
+  copy.location() = location;
+  body.copy_to_operands(copy);
+  body.copy_to_operands(code_assignt(
+    symbol_expr(idx),
+    python_expr::build_add(
+      symbol_expr(idx), from_integer(1, ll_type), ll_type)));
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(
+    python_expr::build_less_than(symbol_expr(idx), length), body);
+  loop.location() = location;
+  block.copy_to_operands(loop);
+}
+
+std::string python_converter::snapshot_symbolic_numpy_view(
+  const exprt &old_ptr,
+  const numpy_scalar_pointer_view_infot &info,
+  const locationt &location,
+  codet &target_block)
+{
+  const typet ll_type = signedbv_typet(64);
+  const exprt length =
+    symbol_expr(*symbol_table_.find_symbol(info.length_symbol));
+  const exprt stride =
+    symbol_expr(*symbol_table_.find_symbol(info.stride_symbol));
+
+  array_typet snapshot_type(
+    old_ptr.type().subtype(), python_expr::build_typecast(length, size_type()));
+  symbolt &snapshot =
+    create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
+  code_declt snap_decl(symbol_expr(snapshot));
+  snap_decl.location() = location;
+  target_block.copy_to_operands(snap_decl);
+  emit_strided_copy(
+    target_block,
+    symbol_expr(snapshot),
+    old_ptr,
+    from_integer(0, ll_type),
+    stride,
+    length,
+    location);
+
+  const exprt new_ptr = python_expr::build_typecast(
+    python_expr::build_address_of(symbol_expr(snapshot)), old_ptr.type());
+  code_assignt repoint(old_ptr, new_ptr);
+  repoint.location() = location;
+  target_block.copy_to_operands(repoint);
+
+  // The snapshot is densely packed, so the view is unit-stride from here.
+  code_assignt unit_stride(stride, from_integer(1, ll_type));
+  unit_stride.location() = location;
+  target_block.copy_to_operands(unit_stride);
+  return snapshot.id.as_string();
 }
 
 void python_converter::clear_numpy_transpose_views_of(
