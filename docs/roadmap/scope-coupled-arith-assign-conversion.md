@@ -1,9 +1,21 @@
 # Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
 
-> **Status: Phases 0-2 discharged against the gates this scope owns
-> (2026-07-31, §11-§13); Phase 3 blocked on two foreign mechanisms, not on
-> this scope's implementation.**
-> **Status: Phases 0 and 1 discharged (2026-07-30); Phases 2-3 not started.**
+> **Status at 2026-10-01: Phases 0-2 done** (#6567, #6572, both merged
+> 2026-08-01). **Phase 3, the flip, has not happened**: `--python-irep2-adjust-only`
+> is default off. The two foreign mechanisms §15 waited on are closed (#6700,
+> #6702, #6775, #6839, #7760). What stands now is G4 and G5: on an asserting
+> build with Z3, `precedence2`, `github_3866`, `github_3866_fail`,
+> `return13-fail` and `missing-return14_fail` abort under the flag, so G5 fails.
+> `scope-relational-float-reconciliation.md` and `scope-python-irep2.md` carry
+> that list. §19's list-equality hang moved to
+> `scope-list-eq-unbounded-unwinding.md` and is still open. §20's list of arms
+> missing from the IREP2 `c_typecastt` is partly out of date: #7701 ported
+> derived-to-base and string-to-array, #7705 the reference arms.
+> `jimple_assignment` (§20.3) converts since #6858.
+>
+> `scope-v1k-adjuster.md` and `scope-v2-w3-attribute-carriage.md`, cited below,
+> were deleted on 2026-08-03 and are in git history.
+>
 > This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own
@@ -728,7 +740,7 @@ mechanisms it disowns. Neither had an owner; both now do.
 
 | blocker | owner | finding |
 |---|---|---|
-| the `github_5571` array-typecast pair (§14) | `scope-array-assignment-conversion.md` | every existing arm declines it because they all guard on a **pointer** target, while this shape casts to an **array** type |
+| the `github_5571` array-typecast pair (§14) | the array-assignment scope (closed by #6700; in git history) | every existing arm declines it because they all guard on a **pointer** target, while this shape casts to an **array** type |
 | the §9.4 second mechanism | `scope-relational-float-reconciliation.md` | **hypothesis refuted, see that document's §11-§14.** `sum_tuple` has no heterogeneous comparison at all; and the equality that aborts `lambda15` in bitwuzla's `mk_eq` never reaches `python_adjust`'s comparison dispatch (0 width-mismatched nodes across all four witnesses), so no admission rule there can fix it. Likely two mechanisms, one of them downstream of the frontend |
 
 Both were recorded as hypotheses gated on a Phase 0 measurement rather than as
@@ -741,7 +753,7 @@ rather than a merged fix.
 §15 left Phase 3 blocked on two foreign mechanisms plus G4/G5. Both have moved.
 
 **The array-typecast blocker is closed.** Phase 1 of
-`scope-array-assignment-conversion.md` shipped as PR #6700 (`c5efabb9c1`) and
+the array-assignment scope shipped as PR #6700 (`c5efabb9c1`) and
 its remaining gates were discharged in PR #6733.
 
 **The §9.4 second mechanism is down to two witnesses, and one of them is root-

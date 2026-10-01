@@ -23,6 +23,24 @@ preserves every per-stage plan and decision rationale.
 > is independent of the goal change: **§V.1's W1 row was stale** and is fixed
 > in place below.
 
+> **Status at 2026-10-01: closed record.** Nothing in this document is a live
+> work item; the current state of every frontend is the status block at the top
+> of `frontends-to-irep2.md`. Several statements below are now superseded, and
+> are left in place because source comments cite these sections:
+>
+> - Part II and Part III open with "Status: planning"; Part II concluded at §11
+>   and Part III at §14 (and reopened as Phase 8 of the forward plan).
+> - Part III F2's "no structured CF kinds" is stale for the same reason as the
+>   W1 row (#5265).
+> - `#member_name` has no reader any more; `#cpp_type` and `#cformat` now cross
+>   the seam (`migrate.cpp`), so the V.2 "carriage stays legacy" row no longer
+>   holds.
+> - The Python hop-off census figures (Part V F-A1/F-B) are superseded by
+>   `scope-python-irep2.md` (5 077 of 5 078 agree); the flag is still default off.
+> - Links to `scope-v2-w3-attribute-carriage.md`, `scope-v1k-adjuster.md`
+>   (deleted 2026-08-03) and `spike-v1k-w1loc.md` (deleted 2026-07-30) resolve
+>   only in git history. V.5's only record is this document.
+
 ## Headline
 
 `symbolt::type` and `symbolt::value` are now stored as `type2tc` /
@@ -247,10 +265,10 @@ durable boundary.
 
 | What | Where |
 |------|-------|
-| Symbol storage layout | `src/util/symbol.h` |
-| Lazy cache implementation | `src/util/symbol.cpp` |
-| Migration layer (forward, back, chokepoints) | `src/util/migrate.{h,cpp}` |
-| `migrate_expr_back` switch (all 109 kinds covered after V1) | `src/util/migrate.cpp` (~line 2486 onwards) |
+| Symbol storage layout | `src/util/symtab/symbol.h` |
+| Lazy cache implementation | `src/util/symtab/symbol.cpp` |
+| Migration layer (forward, back, chokepoints) | `src/util/irep/migrate.{h,cpp}` |
+| `migrate_expr_back` switch (all 109 kinds covered after V1) | `src/util/irep/migrate.cpp`, `migrate_expr_back` |
 | IREP2 kind manifest | `src/irep2/expr_kinds.inc`, `src/irep2/type_kinds.inc` |
 | Round-trip unit tests | `unit/util/migrate.test.cpp`, `unit/util/symbol.test.cpp` |
 | rw_set IREP2 paths + tests | `src/goto-programs/rw_set.{h,cpp}`, `unit/goto-programs/rw_set.test.cpp` |
@@ -284,7 +302,10 @@ issue, not under the umbrella that closed with this retrospective.
 
 # Part II — `util/` analysis & helper migration (forward plan)
 
-> **Status: planning.** Part I above is a closed retrospective of the
+> **Status: concluded (§11, Phase 2 at the frontend boundary).** The
+> paragraph below is the plan as written before any of it landed.
+>
+> Part I above is a closed retrospective of the
 > symbol-table boundary (B1–B6). This part is the *focused follow-on*
 > that the retrospective anticipated ("future incremental work … should
 > live under its own focused tracking issue"). It is a plan, not a
@@ -795,7 +816,13 @@ scope — and so belongs to its own, much larger tracking effort.
 
 # Part III — Solidity frontend → IREP2 (forward plan)
 
-> **Status: planning.** Parts I and II are closed records. This part is a
+> **Status: concluded at the accessor milestone (§14); reopened as Phase 8 of
+> `frontends-to-irep2.md`, tracked in `scope-solidity-irep2.md`.** The two raw
+> `#sol_*` writes §14 left (`solidity_convert_modifier.cpp`,
+> `solidity_convert_stmt.cpp`) are still there. The paragraph below is the plan
+> as written.
+>
+> Parts I and II are closed records. This part is a
 > *forward plan* that deliberately **reopens boundary B1** ("Frontend →
 > goto input", marked *Deferred indefinitely* in Part I) for **one
 > frontend only — Solidity**. Nothing here has landed. Tracking issue:
