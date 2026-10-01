@@ -1318,6 +1318,19 @@ static expr2tc pointed_object(expr2tc address)
   return object;
 }
 
+bool interval_domaint::havoc_pointee(const expr2tc &arg, bool any_type)
+{
+  const expr2tc object = pointed_object(arg);
+  if (object && is_constant_expr(object))
+    return true;
+  if (object && is_symbol2t(object))
+  {
+    havoc_rec(object);
+    return true;
+  }
+  return !is_pointer_type(arg) && !any_type;
+}
+
 void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
 {
   if (!is_symbol2t(call.function))
@@ -1326,26 +1339,16 @@ void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
     first_written_argument(to_symbol2t(call.function).thename);
   if (!first)
     return;
+  // symex_input writes through each input argument whatever its type.
+  const bool any_type = *first > 0;
   for (size_t i = *first; i < call.operands.size(); ++i)
-  {
-    const expr2tc &arg = call.operands[i];
-    if (is_nil_expr(arg))
-      continue;
-    const expr2tc object = pointed_object(arg);
-    if (object && is_constant_expr(object))
-      continue;
-    if (object && is_symbol2t(object))
-    {
-      havoc_rec(object);
-      continue;
-    }
-    // symex_input writes through each input argument whatever its type.
-    if (is_pointer_type(arg) || *first > 0)
+    if (
+      !is_nil_expr(call.operands[i]) &&
+      !havoc_pointee(call.operands[i], any_type))
     {
       clear_state();
       return;
     }
-  }
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
