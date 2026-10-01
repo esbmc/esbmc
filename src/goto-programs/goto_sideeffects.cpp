@@ -534,7 +534,8 @@ bool summary_has_sideeffect(const exprt &e)
 /// Fold @p e to a constant boolean: 1 = true, 0 = false, -1 = not a constant.
 /// -1 covers both "genuinely symbolic" and "constant, but the simplifier could
 /// not fold it"; either way the caller rejects the callee, so a stronger
-/// simplifier only widens the set of accepted shapes, it never changes a result.
+/// simplifier only widens the set of accepted shapes, it never changes a
+/// result.
 int summary_fold_bool(const exprt &e)
 {
   expr2tc e2;
@@ -559,10 +560,10 @@ void summary_coerce(exprt &e, const typet &t)
     e.make_typecast(t);
 }
 
-/// Whether `if(c, e, e')' may be pushed into the operands of @p id.  `/', `mod',
-/// `index' and `dereference' are excluded because the mux would then select
-/// their operand rather than their result, leaving a single site where the
-/// source had one per arm -- a divisor check, say, would cover only the
+/// Whether `if(c, e, e')' may be pushed into the operands of @p id.  `/',
+/// `mod', `index' and `dereference' are excluded because the mux would then
+/// select their operand rather than their result, leaving a single site where
+/// the source had one per arm -- a divisor check, say, would cover only the
 /// selected divisor.  (goto_check does not currently instrument inside a
 /// quantifier body, so this is about not depending on that.)
 bool summary_mux_pushable(const irep_idt &id)
@@ -877,9 +878,9 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
     st.locals = outer;
     // Merge every outer-scope local written on either path; a variable written
     // in only one branch takes its pre-branch value on the other.  Values only
-    // defined on one path (declared without initializer, assigned in one branch)
-    // are left unset so a later unconditional read bails.  Locals declared
-    // inside a branch drop out of scope with the restore above.
+    // defined on one path (declared without initializer, assigned in one
+    // branch) are left unset so a later unconditional read bails.  Locals
+    // declared inside a branch drop out of scope with the restore above.
     std::set<irep_idt> keys;
     for (const auto &kv : then_env)
       if (outer.count(kv.first))
@@ -973,7 +974,8 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
       if (!summarize_code(*body, st, ns))
         return false;
       // The frontend wraps the loop iterator in a code_expressiont; route it
-      // through summarize_code, which unwraps the statement to apply its effect.
+      // through summarize_code, which unwraps the statement to apply its
+      // effect.
       if (iter && iter->is_not_nil())
       {
         if (iter->is_code())
@@ -1349,7 +1351,8 @@ bool goto_convertt::has_sideeffect(const expr2tc &expr)
   if (is_nil_expr(expr))
     return false;
 
-  // A legacy "sideeffect" exprt migrates to sideeffect2t (function_call, malloc,
+  // A legacy "sideeffect" exprt migrates to sideeffect2t (function_call,
+  // malloc,
   // ++/--, …) OR sideeffect_assign2t (assignment / compound-assignment used as
   // an expression); the legacy has_sideeffect treats both as side effects.
   if (is_sideeffect2t(expr) || is_sideeffect_assign2t(expr))
@@ -1567,8 +1570,8 @@ void goto_convertt::remove_sideeffects(
     // If neither branch has a sideeffect and we are not validating a violation
     // witness, the ternary can stay as an if_exprt — no lowering needed.
     // Under --validate-violation-witness we always lower so that the resulting
-    // IF instruction carries the ? column from expr.location(), which symex_goto
-    // uses for column-accurate branching waypoint matching.
+    // IF instruction carries the ? column from expr.location(), which
+    // symex_goto uses for column-accurate branching waypoint matching.
     if (
       !has_sideeffect(to_if_expr(expr).true_case()) &&
       !has_sideeffect(to_if_expr(expr).false_case()) &&
@@ -1794,7 +1797,8 @@ void goto_convertt::remove_sideeffects(
           }
         }
         // Only bypass Forall_operands when we actually rewrote the && chain;
-        // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal path.
+        // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal
+        // path.
         if (and_expr)
         {
           remove_function_call(expr, dest, result_is_used);
@@ -1817,9 +1821,10 @@ void goto_convertt::remove_sideeffects(
             (inner->op0().is_and() || inner->op0().id() == "or"))
             inner = &inner->op0();
 
-          // Recurse through the full &&/|| tree so a side effect nested inside a
-          // disjunct's && chain is hoisted at the leaf rather than lowering the
-          // whole nested chain at once (which dropped leading conjuncts, #6298).
+          // Recurse through the full &&/|| tree so a side effect nested inside
+          // a disjunct's && chain is hoisted at the leaf rather than lowering
+          // the whole nested chain at once (which dropped leading conjuncts,
+          // #6298).
           if (inner->is_and() || inner->id() == "or")
           {
             flatten_contract_clause(args.front(), dest);
@@ -2456,9 +2461,8 @@ void goto_convertt::remove_function_call(
     ftype.return_type().id() == "constructor" &&
     call.arguments().size() < to_code_type(ftype).arguments().size())
   {
-    // for constructor, we need to add the implicit `this` as the first argument,
-    // so convert to:
-    // BLAH(&return_value$_BLAH$1, ...)
+    // for constructor, we need to add the implicit `this` as the first
+    // argument, so convert to: BLAH(&return_value$_BLAH$1, ...)
     side_effect_expr_function_callt ctor_call;
     ctor_call.function() = call.function();
     exprt::operandst &args = ctor_call.arguments();
@@ -2508,10 +2512,11 @@ void goto_convertt::remove_cpp_new(
   goto_programt &dest,
   bool result_is_used)
 {
-  // For side effect with 'cpp_new' statement, `expr' refers to the side effect that
-  // contains an initializer. Technically, this function converts the cpp_new side effect
-  // and replaces it with a new symbol if `result_is_used` is true. It's not just simply
-  // removing the side effect node in the exprt tree.
+  // For side effect with 'cpp_new' statement, `expr' refers to the side effect
+  // that contains an initializer. Technically, this function converts the
+  // cpp_new side effect and replaces it with a new symbol if `result_is_used`
+  // is true. It's not just simply removing the side effect node in the exprt
+  // tree.
   codet call;
 
   symbolt new_symbol;

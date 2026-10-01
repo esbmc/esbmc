@@ -20,7 +20,8 @@
  * @endcode
  *
  * Dictionary values are stored as PyObject instances with type information
- * (type_id) that allows runtime type identification for proper value extraction.
+ * (type_id) that allows runtime type identification for proper value
+ * extraction.
  *
  * @section nested_dict_support Nested Dictionary Support
  *
@@ -114,8 +115,10 @@ public:
   /**
    * @brief Constructs a new dictionary handler.
    *
-   * @param converter Reference to the main Python converter for expression handling.
-   * @param symbol_table Reference to the symbol table (context) for symbol management.
+   * @param converter Reference to the main Python converter for expression
+   * handling.
+   * @param symbol_table Reference to the symbol table (context) for symbol
+   * management.
    * @param type_handler Reference to the type handler for type operations.
    */
   python_dict_handler(
@@ -217,7 +220,8 @@ public:
     const typet &expected_type = typet());
 
   /**
-   * @brief Handles dictionary subscript assignment (e.g., `dict['key'] = value`).
+   * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
+   * value`).
    *
    * Generates GOTO instructions to update or insert a key-value pair:
    * - If key exists: updates the existing value at that index
@@ -469,8 +473,9 @@ public:
    * @brief Returns true for dict methods that return a value and emit IR.
    *
    * Used to avoid double-evaluation during type inference: these methods
-   * must not be called via get_expr() in create_symbol_for_unannotated_assign(),
-   * because they already emit GOTO instructions as a side-effect.
+   * must not be called via get_expr() in
+   * create_symbol_for_unannotated_assign(), because they already emit GOTO
+   * instructions as a side-effect.
    *
    * Keep in sync with handle_dict_method() when adding new value-returning
    * dict methods.
@@ -539,7 +544,8 @@ public:
    * Implements dict.fromkeys(iterable, value=None):
    * - Creates a new dict whose keys come from iterable and whose values
    *   all share the same given value (None by default).
-   * - Only supports iterable passed as a list literal (e.g. dict.fromkeys([1, 2, 3])).
+   * - Only supports iterable passed as a list literal (e.g. dict.fromkeys([1,
+   * 2, 3])).
    *
    * @param call_node The function call AST node.
    * @return Expression for the resulting dict symbol.
@@ -646,8 +652,9 @@ private:
 
   /**
    * @brief Generate a unique type hash for nested dictionary types
-   * Creates a stable hash based on the full type structure including key/value types.
-   * This ensures type safety when retrieving nested dicts from the generic list.
+   * Creates a stable hash based on the full type structure including key/value
+   * types. This ensures type safety when retrieving nested dicts from the
+   * generic list.
    * @param dict_type The dictionary type to hash
    * @return A unique hash value for this specific dict type
    */

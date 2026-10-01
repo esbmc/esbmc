@@ -88,14 +88,6 @@ void clang_c_adjust_irep2::pad_type_symbol(symbolt &symbol)
   symbol.set_type(std::move(t));
 }
 
-
-
-
-
-
-
-
-
 namespace
 {
 /// A call decoded to interior pointers into the live node. IREP2 spells a call
@@ -163,7 +155,6 @@ std::optional<const_call_view> as_call(const expr2tc &expr)
   return std::nullopt;
 }
 } // namespace
-
 
 /// The source location of `expr` when it is a statement that can hold a call
 /// in a sub-expression, empty otherwise. sideeffect2t carries none of its own,
@@ -253,8 +244,7 @@ void clang_c_adjust_irep2::adjust_comma_type(expr2tc &expr)
 /// Name and member from one token, so the string the ordering test matches on
 /// and the member it names cannot drift apart.
 #define ARM(member)                                                            \
-#  member,                                                                     \
-    +[](clang_c_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
+  #member, +[](clang_c_adjust_irep2 &self, expr2tc &expr) { self.member(expr); }
 
 /// The arms that run when this pass is the sole adjuster, in application order.
 ///
@@ -822,8 +812,9 @@ void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
   // inserts no bit-field pad (scope-clang-cpp-irep2.md §8.3).
   type2tc padded;
   const std::string tag = "tag-" + to_struct_type(t).name.as_string();
-  if (const symbolt *s = ns.lookup(irep_idt(tag));
-      s != nullptr && s->get_type().is_struct())
+  if (
+    const symbolt *s = ns.lookup(irep_idt(tag));
+    s != nullptr && s->get_type().is_struct())
     padded = s->get_type2();
 
   // No tag symbol under that name: a struct declared inside a Solidity contract
@@ -1830,10 +1821,11 @@ void clang_c_adjust_irep2::adjust_index(expr2tc &expr)
   expr2tc index_expr = idx.index;
 
   // The operands may be the other way round: `i[a]` is legal C.
-  if (const type2tc a = ns.follow(array_expr->type),
-      i = ns.follow(index_expr->type);
-      !is_array_type(a) && !is_pointer_type(a) &&
-      (is_array_type(i) || is_pointer_type(i)))
+  if (
+    const type2tc a = ns.follow(array_expr->type),
+    i = ns.follow(index_expr->type);
+    !is_array_type(a) && !is_pointer_type(a) &&
+    (is_array_type(i) || is_pointer_type(i)))
     std::swap(array_expr, index_expr);
 
   // migrate_type(index_type()), not index_type2(): despite the name they are

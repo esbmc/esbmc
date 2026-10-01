@@ -65,10 +65,10 @@ enum terminate_reasont : unsigned
 } // namespace exception_globals
 
 /// Idempotently register the exception-state globals in @p context,
-/// zero-initialised (thrown=false, typeid=0, value=NULL, uncaught_count=0). If a
-/// symbol already exists — e.g. the operational-model std::uncaught_exceptions()
-/// pulled in `__ESBMC_exc_uncaught_count` as an extern declaration during library
-/// linking — its storage flags are upgraded in place (static, thread-local,
-/// zero-initialised) rather than left as a bare declaration. Safe to call once
-/// per run before lowering.
+/// zero-initialised (thrown=false, typeid=0, value=NULL, uncaught_count=0). If
+/// a symbol already exists — e.g. the operational-model
+/// std::uncaught_exceptions() pulled in `__ESBMC_exc_uncaught_count` as an
+/// extern declaration during library linking — its storage flags are upgraded
+/// in place (static, thread-local, zero-initialised) rather than left as a bare
+/// declaration. Safe to call once per run before lowering.
 void create_exception_state_symbols(contextt &context);

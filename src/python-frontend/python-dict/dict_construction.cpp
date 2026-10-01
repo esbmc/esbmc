@@ -183,9 +183,10 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   {
     // numeric_element_type() is non-throwing: it returns the common numeric
     // element type (double for an int/float mix), or an empty typet() when the
-    // list is unknown, empty, or contains any non-numeric / mixed-width element.
-    // Restricting specialisation to all-numeric lists keeps the read sound and
-    // leaves every other case on the previous any_type() path (no regression).
+    // list is unknown, empty, or contains any non-numeric / mixed-width
+    // element. Restricting specialisation to all-numeric lists keeps the read
+    // sound and leaves every other case on the previous any_type() path (no
+    // regression).
     const std::string list_id = iterable_expr.identifier().as_string();
     typet num =
       converter_.get_element_type_registry().numeric_element_type(list_id);

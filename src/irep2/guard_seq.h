@@ -101,7 +101,8 @@ public:
   /** Logical suffix [n, size). immer::vector has no drop(), so rebuild
    *  [n,size) element-wise. O(suffix), but the suffix length in symex guard
    *  subtraction is ~1 in practice (guards diverge one conjunct at a time at
-   *  merge points), so this is cheaper than flex_vector's relaxed-radix drop. */
+   *  merge points), so this is cheaper than flex_vector's relaxed-radix drop.
+   */
   guard_seq suffix(std::size_t n) const
   {
     vector_t r;

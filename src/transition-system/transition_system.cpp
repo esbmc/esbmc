@@ -20,8 +20,8 @@ void collect_symbols(
     out.insert(e);
     return;
   }
-  e->foreach_operand([&](const expr2tc &op)
-                     { collect_symbols(op, out, seen); });
+  e->foreach_operand(
+    [&](const expr2tc &op) { collect_symbols(op, out, seen); });
 }
 
 bool transition_systemt::has_local(const expr2tc &e) const
@@ -68,12 +68,10 @@ expr2tc ts_step_renamert::operator()(const expr2tc &x)
   else
   {
     out = x;
-    out.get()->Foreach_operand(
-      [&](expr2tc &op)
-      {
-        if (!is_nil_expr(op))
-          op = (*this)(op);
-      });
+    out.get()->Foreach_operand([&](expr2tc &op) {
+      if (!is_nil_expr(op))
+        op = (*this)(op);
+    });
   }
   memo.emplace(x.get(), out);
   return out;
@@ -85,21 +83,19 @@ void transition_systemt::dump(std::ostream &out, const namespacet &ns) const
   const size_t limit = 400;
   std::unordered_map<const expr2t *, size_t> sizes;
   std::function<size_t(const expr2tc &)> tree_size =
-    [&](const expr2tc &e) -> size_t
-  {
+    [&](const expr2tc &e) -> size_t {
     if (is_nil_expr(e))
       return 0;
     auto it = sizes.find(e.get());
     if (it != sizes.end())
       return it->second;
     size_t n = 1;
-    e->foreach_operand([&](const expr2tc &op)
-                       { n = std::min(limit + 1, n + tree_size(op)); });
+    e->foreach_operand(
+      [&](const expr2tc &op) { n = std::min(limit + 1, n + tree_size(op)); });
     sizes.emplace(e.get(), n);
     return n;
   };
-  auto show = [&](const expr2tc &e)
-  {
+  auto show = [&](const expr2tc &e) {
     return tree_size(e) > limit ? std::string("<large expression>")
                                 : from_expr(ns, "", e);
   };
