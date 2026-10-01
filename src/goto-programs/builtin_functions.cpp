@@ -680,7 +680,8 @@ static exprt list_element(const exprt &init, std::size_t i)
 {
   if (init.id() != "string-constant")
     return init.operands()[i];
-  return index_exprt(init, from_integer(i, index_type()), init.type().subtype());
+  return index_exprt(
+    init, from_integer(i, index_type()), init.type().subtype());
 }
 
 // Whether every nested list in `init` is spelled element by element, so
