@@ -10,8 +10,9 @@
 
 class python_converter;
 
-// P26: Cached double type — avoids constructing a new floatbv_typet on every call.
-// Initialized once on first use; thread-safe (C++11 static local semantics).
+// P26: Cached double type — avoids constructing a new floatbv_typet on every
+// call. Initialized once on first use; thread-safe (C++11 static local
+// semantics).
 inline const typet &cached_double_type()
 {
   static const typet instance = double_type();
@@ -91,8 +92,9 @@ inline exprt complex_to_bool_expr(const exprt &complex_expr)
   // V.3: build `z.real != 0.0 || z.imag != 0.0` in IREP2, back-migrating once.
   // member2t over a complex source is exactly the node migrate_expr builds for
   // the legacy member access at goto-convert (util/migrate.cpp:1580), and the
-  // not(equal) shape mirrors the legacy or_exprt(not_exprt(equality_exprt(...)))
-  // verbatim, so the back-migrated tree is byte-identical to the old one.
+  // not(equal) shape mirrors the legacy
+  // or_exprt(not_exprt(equality_exprt(...))) verbatim, so the back-migrated
+  // tree is byte-identical to the old one.
   const type2tc dt2 = migrate_type(dt);
   expr2tc complex2;
   migrate_expr(complex_expr, complex2);
@@ -115,7 +117,7 @@ public:
    * Checks if the AST node represents a constructor call.
    * @param json AST node in JSON format corresponding to a function call.
    * @return true if the node is a constructor call, false otherwise.
-  */
+   */
   bool is_constructor_call(const nlohmann::json &json) const;
 
   /*
@@ -162,7 +164,8 @@ public:
   /*
    * Creates a typet based on a Python type.
    * @param ast_type The name of the Python type (e.g., "int", "str").
-   * @param type_size The size used for container types like arrays and lists (default is 0).
+   * @param type_size The size used for container types like arrays and lists
+   * (default is 0).
    * @return The corresponding typet.
    */
   typet get_typet(const std::string &ast_type, size_t type_size = 0) const;
@@ -196,7 +199,8 @@ public:
   bool has_multiple_types(const nlohmann::json &container) const;
 
   /*
-   * Builds an array_typet from a list of JSON elements by detecting the elements' subtypes and size.
+   * Builds an array_typet from a list of JSON elements by detecting the
+   * elements' subtypes and size.
    * @param list_value The list of elements of an array.
    * @return The array_typet capable of holding the list's values.
    */

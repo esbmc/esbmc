@@ -1130,7 +1130,8 @@ NetworkNode PlcopenXmlParser::parse_network(const void *node_ptr)
 // Replace TIA Portal / Rockwell element names with canonical PLCopen names.
 static void rename_vendor_tags(pugi::xml_node node)
 {
-  // Rockwell uses "contactNO" / "contactNC"; normalise to "contact" with negated attr.
+  // Rockwell uses "contactNO" / "contactNC"; normalise to "contact" with
+  // negated attr.
   for (auto child : node.children())
   {
     std::string tag = child.name();
@@ -1258,9 +1259,9 @@ reject_unmodelled_wires(const pugi::xml_node &root, const LdAst &ast)
 static void
 reject_untranslated_bodies(const pugi::xml_node &root, const LdAst &ast)
 {
-  for (auto xpath_node :
-       root.select_nodes("//pou/body/* | //pou/actions/action/body/* | "
-                         "//pou/transitions/transition/body/*"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou/body/* | //pou/actions/action/body/* | "
+         "//pou/transitions/transition/body/*"))
   {
     const pugi::xml_node lang = xpath_node.node();
     const std::string tag = lang.name();
@@ -1386,9 +1387,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // locations must be searched, or the action-nested rungs are silently
   // skipped and the program verifies vacuously (no rung assignments,
   // all variables at their zero-initialised default).
-  for (auto xpath_node :
-       root.select_nodes("//pou[@pouType='program']/body/LD | "
-                         "//pou[@pouType='program']/actions/action/body/LD"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou[@pouType='program']/body/LD | "
+         "//pou[@pouType='program']/actions/action/body/LD"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);

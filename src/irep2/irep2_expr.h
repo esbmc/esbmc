@@ -142,7 +142,7 @@ irep_typedefs(greaterthan);
 irep_typedefs(lessthanequal);
 irep_typedefs(greaterthanequal);
 irep_typedefs(cmp_three_way);
-irep_typedefs(not );
+irep_typedefs(not);
 irep_typedefs(and);
 irep_typedefs(or);
 irep_typedefs(xor);

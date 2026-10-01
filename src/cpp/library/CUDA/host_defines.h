@@ -12,9 +12,9 @@ extern "C"
 #  define __no_return__ __attribute__((noreturn))
 
 #  if defined(__CUDACC__) || defined(__CUDA_ARCH__)
-/* gcc allows users to define attributes with underscores, 
+/* gcc allows users to define attributes with underscores,
    e.g., __attribute__((__noinline__)).
-   Consider a non-CUDA source file (e.g. .cpp) that has the 
+   Consider a non-CUDA source file (e.g. .cpp) that has the
    above attribute specification, and includes this header file. In that case,
    defining __noinline__ as below  would cause a gcc compilation error.
    Hence, only define __noinline__ when the code is being processed
@@ -63,13 +63,13 @@ extern "C"
 
 #  if !defined(__align__)
 
-#    error--- !!! UNKNOWN COMPILER: please provide a CUDA compatible definition for '__align__' !!! ---
+#    error --- !!! UNKNOWN COMPILER: please provide a CUDA compatible definition for '__align__' !!! ---
 
 #  endif /* !__align__ */
 
 #  if !defined(CUDARTAPI)
 
-#    error--- !!! UNKNOWN COMPILER: please provide a CUDA compatible definition for 'CUDARTAPI' !!! ---
+#    error --- !!! UNKNOWN COMPILER: please provide a CUDA compatible definition for 'CUDARTAPI' !!! ---
 
 #  endif /* !CUDARTAPI */
 
@@ -84,7 +84,8 @@ extern "C"
 
 #  define __specialization_static
 
-#endif /* !__GNUC__ || __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 3) */
+#endif /* !__GNUC__ || __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 3)   \
+        */
 
 #if !defined(__CUDACC__) && !defined(__CUDABE__)
 

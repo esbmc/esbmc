@@ -32,7 +32,8 @@ struct module_ast
  * corrected at read time by the stored-type_id dispatch in the list model.
  *
  * @param modules Every module in the import graph. Call sites are searched in
- *                all of them; only those with a non-null @c write are rewritten.
+ *                all of them; only those with a non-null @c write are
+ * rewritten.
  */
 void propagate_tuple_list_params(const std::vector<module_ast> &modules);
 } // namespace python_param_annotations

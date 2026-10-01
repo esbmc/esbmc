@@ -117,4 +117,4 @@ public:
   {
   }
 };
-#endif //ESBMC_ALGORITHM_H
+#endif // ESBMC_ALGORITHM_H

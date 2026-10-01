@@ -10,7 +10,7 @@ class python_converter;
 /**
  * @class python_set
  * @brief Handles Python set operations and set-specific functionality
- * 
+ *
  * This class is responsible for converting Python set operations into
  * ESBMC's intermediate representation. Sets are internally represented
  * as lists with unique elements.
@@ -141,7 +141,8 @@ public:
    * @param lhs Left operand
    * @param rhs Right operand
    * @param element JSON element with location info
-   * @return Expression representing the result set, or nil_exprt if not a set operation
+   * @return Expression representing the result set, or nil_exprt if not a set
+   * operation
    */
   static exprt handle_operations(
     python_converter &converter,

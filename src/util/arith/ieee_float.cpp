@@ -112,7 +112,7 @@ std::string ieee_floatt::format(const format_spect &format_spec) const
     }
     else // _exponent<0
     {
-      if (true) //base10_digits(fraction)+_exponent<-4)
+      if (true) // base10_digits(fraction)+_exponent<-4)
         result += to_string_scientific(format_spec.precision);
       else
         result += to_string_decimal(format_spec.precision);

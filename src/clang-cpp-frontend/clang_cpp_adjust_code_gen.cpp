@@ -34,11 +34,12 @@ void gen_vptr_initializations(contextt &context, symbolt &symbol)
    *
    *  where vtable::BLEH@BLEH contains overriding function,
    *  and vtable::BLAH@BLEH contains the function pointers to
-   *  the thunk function that does last casting and redirects the call to the overriding function
+   *  the thunk function that does last casting and redirects the call to the
+   * overriding function
    *
-   *  N.B. For a derived class, this function assumes that all vptrs are properly
-   *  copied to the `components` list in its type, which should have been
-   *  done in the converter.
+   *  N.B. For a derived class, this function assumes that all vptrs are
+   * properly copied to the `components` list in its type, which should have
+   * been done in the converter.
    */
   if (!symbol.get_value().need_vptr_init() || symbol.get_value().is_nil())
     return;

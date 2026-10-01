@@ -19,7 +19,8 @@ struct fmt::formatter<side_effect_expr_function_callt>
     return it;
   }
 
-  // This will teach fmt how to convert side_effect_expr_function_callt into a str.
+  // This will teach fmt how to convert side_effect_expr_function_callt into a
+  // str.
   template <typename FormatContext>
   auto
   format(const side_effect_expr_function_callt &p, FormatContext &ctx) const

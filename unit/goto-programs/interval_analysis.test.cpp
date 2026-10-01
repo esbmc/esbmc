@@ -81,7 +81,8 @@ public:
         run_test<0>(baseline);
       }
 
-      // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
+      // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic
+      // 2015" paper)
       SECTION("Wrapped Intervals")
       {
         log_status("Wrapped");
@@ -152,7 +153,8 @@ public:
 
               const auto &value = property_it->v;
 
-              // we need to find the actual interval however... getting the original name is hard
+              // we need to find the actual interval however... getting the
+              // original name is hard
               auto interval_it = state->begin();
               for (; interval_it != state->end(); interval_it++)
               {
@@ -162,8 +164,9 @@ public:
                 if (var_name.size() > real_name.size())
                   continue;
 
-                if (std::equal(
-                      var_name.rbegin(), var_name.rend(), real_name.rbegin()))
+                if (
+                  std::equal(
+                    var_name.rbegin(), var_name.rend(), real_name.rbegin()))
                   break;
               }
 
@@ -322,7 +325,7 @@ TEST_CASE(
   T.property["4"].push_back({"@F@main@a", 49, true});
   T.property["4"].push_back({"@F@main@a", 51, false});
   // TODO: ESBMC needs to convert < into <=
-  //T.property["4"].push_back({"@F@main@a", 50, false});
+  // T.property["4"].push_back({"@F@main@a", 50, false});
   T.property["6"].push_back({"@F@main@a", 52, true});
   T.property["6"].push_back({"@F@main@a", 53, false});
   T.property["6"].push_back({"@F@main@a", 51, false});
@@ -334,7 +337,7 @@ TEST_CASE(
   T.property["12"].push_back({"@F@main@a", 51, true});
   T.property["12"].push_back({"@F@main@a", 52, true});
   T.property["12"].push_back({"@F@main@a", 53, false});
-  //T.property["12"].push_back({"@F@main@a", 50, false});
+  // T.property["12"].push_back({"@F@main@a", 50, false});
 
   T.run_configs();
 }
