@@ -21,6 +21,11 @@ case, tracked by the umbrella issue
 A program whose correctness depends on one of these orderings may verify when it
 should not, or vice versa.
 
+A function-local static *array* with a dynamic initialiser is still initialised
+before `main`, so its initialiser's side effects happen even if the function is
+never called. Other dynamically initialised local statics are initialised on
+the first pass through their declaration, as [stmt.dcl]/3 requires.
+
 ## Containers
 
 - **`insert` on a nested `std::vector` does not converge under an unbounded
