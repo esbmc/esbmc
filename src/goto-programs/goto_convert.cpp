@@ -444,7 +444,10 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
     }
 
     const codet &code_it = to_code(it);
-    convert(code_it, dest);
+    if (code_it.get_statement() == "expression")
+      convert_full_expression(code_it, dest);
+    else
+      convert(code_it, dest);
   }
 
   // see if we need to do any destructors -- may have been processed
@@ -534,7 +537,6 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
   else
   {
-    const std::size_t stack_size = targets.destructor_stack.size();
     remove_sideeffects(expr, dest, false);
 
     if (expr.is_not_nil())
@@ -544,10 +546,16 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
       tmp.location() = expr.location();
       copy(tmp, OTHER, dest);
     }
-
-    // An expression statement is a full-expression ([class.temporary]/4).
-    destroy_full_expression_temporaries(stack_size, code.location(), dest);
   }
+}
+
+void goto_convertt::convert_full_expression(
+  const codet &code,
+  goto_programt &dest)
+{
+  const std::size_t stack_size = targets.destructor_stack.size();
+  convert(code, dest);
+  destroy_full_expression_temporaries(stack_size, code.location(), dest);
 }
 
 bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
@@ -1437,7 +1445,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   else
   {
     exprt tmp_B = code.op2();
-    convert(to_code(code.op2()), tmp_x);
+    convert_full_expression(to_code(code.op2()), tmp_x);
   }
 
   // optimize the v label

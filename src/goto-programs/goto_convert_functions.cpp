@@ -536,6 +536,8 @@ bool goto_convert_functionst::convert_native_rec(
     const locationt &here = effective_location(block.location, inherited);
 
     for (const expr2tc &stmt : block.operands)
+    {
+      const std::size_t stack_size = targets.destructor_stack.size();
       if (!convert_native_rec(stmt, dest, here))
       {
         // Fallback: undo any code_dead this partial walk pushed, so the
@@ -544,6 +546,11 @@ bool goto_convert_functionst::convert_native_rec(
         targets.destructor_stack = old_stack;
         return false;
       }
+      // Mirrors convert_block's convert_full_expression.
+      if (is_code_expression2t(stmt))
+        destroy_full_expression_temporaries(
+          stack_size, to_code_expression2t(stmt).location, dest);
+    }
 
     // Mirror convert_block's unreachable guard: a code_return2t emits a
     // trailing unconditional goto (to the end-of-function target), after which
@@ -739,7 +746,6 @@ bool goto_convert_functionst::convert_native_rec(
       // for `+=`, remove_pre/remove_post, do_function_call -- stays
       // byte-identical, including the temp symbols they allocate (rolled back
       // by convert_function if a later statement forces a fallback).
-      const std::size_t stack_size = targets.destructor_stack.size();
       remove_sideeffects(op, dest, false);
       if (op.is_not_nil())
       {
@@ -747,7 +753,6 @@ bool goto_convert_functionst::convert_native_rec(
         other.location() = op.location();
         copy(other, OTHER, dest);
       }
-      destroy_full_expression_temporaries(stack_size, expr_stmt.location, dest);
       return true;
     }
 
@@ -1355,7 +1360,12 @@ bool goto_convert_functionst::convert_native_rec(
       tmp_x.instructions.back().location = f.location;
     }
     else
+    {
+      const std::size_t stack_size = targets.destructor_stack.size();
       iter_ok = convert_native_rec(f.iter, tmp_x, here);
+      if (iter_ok)
+        destroy_full_expression_temporaries(stack_size, f.location, tmp_x);
+    }
 
     if (!iter_ok || tmp_x.instructions.empty())
     {
