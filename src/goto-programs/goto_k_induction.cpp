@@ -1303,12 +1303,12 @@ loopst::loop_varst clobbered_by_pointees(const loop_writest &w, covert &cover)
 /// The inductive step havocs only its loop's modified variables, so storage
 /// the loop writes through a pointer would keep its pre-loop value and the
 /// step would prove too much (#5224). Add that storage to the modified
-/// variables: `*p` itself for a write inside `*p` while the loop leaves `p`
-/// alone, otherwise the named objects the whole-program points-to sets
-/// resolve the written pointer to. Failing those, the pointer is traced to
-/// loop-head pointers, added to \p through, whose objects are to be havoced
-/// whole. Returns false, and the caller disables the inductive step, when
-/// nothing covers a write.
+/// variables: `*p` itself for a write inside `*p` while no loop moves `p`,
+/// otherwise the named objects the whole-program points-to sets resolve the
+/// written pointer to. Failing those, the pointer is traced to loop-head
+/// pointers, added to \p through, whose objects are to be havoced whole.
+/// Returns false, and the caller disables the inductive step, when nothing
+/// covers a write.
 bool havoc_written_objects(const loop_writest &w, loopst::loop_varst &through)
 {
   loopst &loop = w.loop;
@@ -1323,14 +1323,16 @@ bool havoc_written_objects(const loop_writest &w, loopst::loop_varst &through)
   const loopst::loop_varst clobbered = clobbered_by_pointees(w, cover);
 
   // check_var_name also filters the modified set, so a pointer it rejects may
-  // be reassigned unseen.
+  // be reassigned unseen. A pointer another loop assigns is havoced there,
+  // and a havoc through it here would reach nothing.
   std::vector<expr2tc> pointees(
     loop.get_written_pointees().begin(), loop.get_written_pointees().end());
   const auto moves = [&](const expr2tc &pointee) {
     const expr2tc &ptr = to_dereference2t(pointee).value;
     const irep_idt &name = to_symbol2t(ptr).thename;
     return !check_var_name(ptr) || names(loop.get_modified_loop_vars(), name) ||
-           names(cover.objects, name) || names(clobbered, name) ||
+           w.derivations.assigned_in_loop(name) || names(cover.objects, name) ||
+           names(clobbered, name) ||
            (cover.anything && w.address_taken.count(name));
   };
   for (auto it = std::find_if(pointees.begin(), pointees.end(), moves);
