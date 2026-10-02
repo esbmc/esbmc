@@ -751,6 +751,55 @@ void goto_convertt::convert_dynamic_static_init(
   skip->make_goto(end, flag2);
 }
 
+/// Remove the side effects of @p initializer, the value of @p object. A class
+/// element of a braced list is a subobject of @p object, initialised directly
+/// by its constructor ([dcl.init.aggr]/4, [dcl.init]/17.6.1): constructing a
+/// temporary and copying it in bitwise left the temporary its own destructor,
+/// so the element was destroyed twice.
+void goto_convertt::remove_initializer_sideeffects(
+  const exprt &object,
+  exprt &initializer,
+  goto_programt &dest)
+{
+  const typet &type = ns.follow(initializer.type());
+  const bool is_list =
+    (initializer.id() == "struct" && type.is_struct() &&
+     to_struct_type(type).components().size() ==
+       initializer.operands().size()) ||
+    (initializer.id() == "array" && type.is_array());
+  if (!is_list)
+  {
+    remove_sideeffects(initializer, dest);
+    return;
+  }
+
+  for (std::size_t i = 0; i < initializer.operands().size(); ++i)
+  {
+    exprt element;
+    if (type.is_array())
+      element = index_exprt(object, from_integer(i, index_type()), type.subtype());
+    else
+    {
+      const auto &c = to_struct_type(type).components()[i];
+      element = member_exprt(object, c.name(), c.type());
+    }
+
+    exprt &op = initializer.operands()[i];
+    const exprt &ctor = static_cast<const exprt &>(op.initializer());
+    if (
+      op.id() == "sideeffect" && op.statement() == "temporary_object" &&
+      ctor.is_not_nil())
+    {
+      exprt code = ctor;
+      replace_new_object(element, code);
+      convert(to_code(code), dest);
+      op = element;
+    }
+    else
+      remove_initializer_sideeffects(element, op, dest);
+  }
+}
+
 /// Lower the initializer of a declaration into @p dest. Kept out of
 /// convert_decl so that neither exceeds the complexity gate.
 void goto_convertt::convert_decl_initializer(
@@ -808,7 +857,7 @@ void goto_convertt::convert_decl_initializer(
     goto_programt sideeffects;
     // the side effect is not just removed. Actually, it's converted and
     // removed.
-    remove_sideeffects(initializer, sideeffects);
+    remove_initializer_sideeffects(var, initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
     code_assignt assign(var, initializer);

@@ -209,6 +209,10 @@ protected:
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  void remove_initializer_sideeffects(
+    const exprt &object,
+    exprt &initializer,
+    goto_programt &dest);
   void convert_dynamic_static_init(
     const codet &decl,
     const symbolt &s,
