@@ -1673,6 +1673,7 @@ bool goto_convert_functionst::convert_native_rec(
     t->make_function_call(normalise_native_code(
       code2, effective_location(f.location, inherited), ns));
     t->location = f.location;
+    record_exception_unwind(*t);
     return true;
   }
 
