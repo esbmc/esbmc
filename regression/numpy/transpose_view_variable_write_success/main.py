@@ -5,4 +5,4 @@ t = np.transpose(a)
 i = 0
 
 t[i][1] = 99
-
+assert a[1][0] == 99
