@@ -1228,8 +1228,16 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
       // the allocation for such a class is itself zero bytes, so its element
       // count comes out as zero and no destructor runs -- see the limitation
       // noted on #6584.
-      BigInt esz =
-        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype())));
+      // `new T[n][m]` built n * m class elements: step through them with a
+      // pointer to the class, not to a row.
+      typet leaf = tmp_op.type().subtype();
+      while (ns.follow(leaf).is_array())
+        leaf = ns.follow(leaf).subtype();
+      exprt base = tmp_op;
+      if (leaf != tmp_op.type().subtype())
+        base = typecast_exprt(tmp_op, pointer_typet(leaf));
+
+      BigInt esz = type_byte_size(migrate_type(ns.follow(leaf)), &ns);
       if (esz == 0)
         esz = 1;
       exprt elem_size = from_integer(esz, size_type());
@@ -1242,9 +1250,9 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
       // *(p + i). As in the scalar arm the destructor is retargeted at the
       // pointee, since a virtually-bound destructor reads the vtable pointer
       // out of that dereference.
-      exprt element_addr("+", tmp_op.type());
-      element_addr.copy_to_operands(tmp_op, index);
-      exprt element("dereference", ns.follow(tmp_op.type().subtype()));
+      exprt element_addr("+", base.type());
+      element_addr.copy_to_operands(base, index);
+      exprt element("dereference", ns.follow(leaf));
       element.copy_to_operands(element_addr);
 
       codet tmp_code = to_code(destructor);

@@ -1185,10 +1185,13 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr.add("dealloc_function") = dealloc_function;
     }
 
-    if (de.getDestroyedType()->getAsCXXRecordDecl())
+    // `delete[]` of a `T (*)[m]` destroys T elements ([expr.delete]/6).
+    const clang::QualType destroyed =
+      ASTContext->getBaseElementType(de.getDestroyedType());
+    if (destroyed->getAsCXXRecordDecl())
     {
       typet destt;
-      if (get_type(de.getDestroyedType(), destt))
+      if (get_type(destroyed, destt))
         return true;
       new_expr.type() = destt;
     }

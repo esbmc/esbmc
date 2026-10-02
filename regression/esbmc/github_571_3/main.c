@@ -1,7 +1,6 @@
 #include <assert.h>
 
-/* The big-endian layout from #571: --big-endian does not change clang's
-   __BYTE_ORDER__, so the declaration cannot be chosen by it. */
+/* The big-endian layout from #571. */
 
 struct S {
 	unsigned a : 12;
