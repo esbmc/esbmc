@@ -809,6 +809,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R73** | **High (a crash and false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R73); **FIXED**, same entry | **`new T[n][m]` of a class was lowered one row at a time.** Any element type that is an array of structs aborted ("Symbolic type id in size_typet::size_bits"): C++ keeps a class as a symbol below the top level of a type, and `do_cpp_new` and `symex_cpp_new` resolved only the outermost one. Past the crash, the constructor loop stepped through rows, so only `p[i][0]` was built, and `delete[]` attached no destructor, since clang's destroyed type is the row. | `do_cpp_new`, `cpp_new_initializer`, `src/goto-programs/builtin_functions.cpp`; `convert_cpp_delete`, `src/goto-programs/goto_convert.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `CXXDeleteExpr`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/new_multidim_class{,_fail}` | — | **Fixed**: every level is resolved, and construction and destruction step through the class elements. |
 | **R69** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R64's residual, §15 M9 (R69); **FIXED**, same entry | **Before C++17 an elided copy was built anyway.** Clang marks the copy in `C c = C::make();`, `C c = C(5);` and `return C(x);` elidable and elides it; ESBMC ran the copy constructor and destroyed a second object. `{ C c = C::make(3); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-c-frontend/clang_c_convert.cpp`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_{local,static,temporary}{,_fail}` | — | **Fixed**: a variable's initializer and a returned value are converted from the elided copy's source, the C++17 form. |
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
+| **R88** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R88); **FIXED**, same entry | **The `<op>_fetch` atomics did nothing, and nand was and.** `__atomic_<op>_fetch` and `__sync_<op>_and_fetch` were instantiated with an empty body that returned a nondet value and left the object unchanged: `x = 1; __atomic_add_fetch(&x, 1, 5); assert(x == 1);` was SUCCESSFUL. `__atomic_fetch_nand` and `__sync_fetch_and_nand` stored `old & val` instead of `~(old & val)`. | `fetch_op_expr`, `instantiate_read_modify_write`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/atomic_op_fetch{,_fail}`, `atomic_fetch_nand{,_fail}` | — | **Fixed**: one body serves both orders and returns the old or the stored value; nand negates. The CAS, exchange and lock builtins still listed `// TODO` are open. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
@@ -9587,6 +9588,44 @@ read the bytes little-endian, a false SUCCESSFUL where master aborted.
 and one-byte-struct cases under `--big-endian`. Master aborts on all four, and
 each half agrees under Bitwuzla and Z3. The 114 other regression tests that call
 these functions keep their verdicts.
+
+---
+
+### M9 (R88) — 2026-10-02, the atomics that return the new value
+
+A probe battery of 60 deterministic C programs, each run natively and through
+ESBMC with every assertion negated in turn, found `__atomic_add_fetch` wrong.
+`clang_c_adjust` gives each polymorphic `__atomic`/`__sync` builtin a body
+per type. The fetch-then-op names (`__atomic_fetch_add`, `__sync_fetch_and_add`,
+...) had one; the op-then-fetch names, all six `__atomic_<op>_fetch` and all six
+`__sync_<op>_and_fetch`, fell into two arms that read `// TODO`. Their body
+was the atomic begin and a nondet return: the object kept its value, so
+`x = 1; __atomic_add_fetch(&x, 1, 5); assert(x == 1);` was SUCCESSFUL, and
+`assert(__atomic_add_fetch(&x, 3, 5) == 8)` FAILED. The atomic section they
+opened was never closed. Separately, `fetch_op_expr` mapped nand to `bitand`,
+so `__atomic_fetch_nand` and `__sync_fetch_and_nand` stored `old & val`;
+GCC defines nand as `~(old & val)`.
+
+**Fixed** by building both orders in one helper, `instantiate_read_modify_write`,
+which stores `old <op> val` and returns the old value or the stored one, and by
+negating nand's result. `atomic_op_fetch{,_fail}` cover all twelve names and
+are FAILED and SUCCESSFUL on master; `atomic_fetch_nand{,_fail}` are too.
+Reverting the dispatch flips the first pair, and reverting the negation flips
+the second. The other 47 regression tests that call these builtins or include
+`<stdatomic.h>`/`<atomic>` keep their verdicts (Z3; Bitwuzla was not built).
+
+Not fixed, all wrong on master and outside this change:
+`__sync_bool_compare_and_swap`, `__sync_val_compare_and_swap`,
+`__sync_lock_test_and_set`, `__sync_lock_release` and the generic
+`__atomic_exchange` still have empty bodies, so each leaves the object
+unchanged. A `__sync_*` call on `unsigned char` or `unsigned short` returns
+through a temporary typed from the sized builtin's signed declaration
+(`__sync_fetch_and_add_1` returns `char`):
+`unsigned char c = 200; int k = __sync_fetch_and_add(&c, 0);` gives `k == -56`.
+The same battery found four more programs that pass natively and fail on
+master, not yet reduced: `__builtin_rotateleft32(0x80000001u, 1) == 3`,
+`__builtin_clrsb(-1) == 31`, a Z3 sort error on `int i = 10; i /= 3.5;`, and a
+struct passed by value and read back with `va_arg`.
 
 ---
 
