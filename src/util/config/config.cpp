@@ -88,6 +88,11 @@ static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
   abort();
 }
 
+bool configt::ansi_ct::endianess_overrides_target() const
+{
+  return endianess != arch_endianness(target.arch);
+}
+
 bool configt::triple::is_windows_abi() const
 {
   return std::regex_match(os, WINDOWS_ABI);

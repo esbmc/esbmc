@@ -8,7 +8,8 @@
 #include <util/lang/c_expr2string.h>
 #include <util/config/config.h>
 #include <util/message/message.h>
-#include <algorithm> #include <iostream>
+#include <algorithm>
+#include <iostream>
 
 languaget *new_ld_language()
 {

@@ -1,0 +1,4 @@
+CORE
+main.c
+--interval-analysis --goto-functions-only
+(^\s*(1: )?ASSERT 1 // assertion y == 3$[\s\S]*){3}
