@@ -800,6 +800,9 @@ void goto_convertt::remove_initializer_sideeffects(
   exprt &initializer,
   goto_programt &dest)
 {
+  if (!has_sideeffect(initializer))
+    return;
+
   const typet &type = ns.follow(initializer.type());
   const bool is_list =
     (initializer.id() == "struct" || initializer.id() == "array" ||
