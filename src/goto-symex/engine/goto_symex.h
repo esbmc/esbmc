@@ -646,6 +646,10 @@ protected:
     reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
+  /** Perform havoc_object; assign nondet to every object the argument may
+   *  point to, whole and of any size. k-induction emits it at a loop head for
+   *  a pointer the loop writes through at offsets it cannot bound. */
+  void intrinsic_havoc_object(const code_function_call2t &call);
   /** Perform init_thread_local; seeds each `__thread`-qualified global
    *  to its static initializer in the active thread's renaming scope. */
   void intrinsic_init_thread_local(reachability_treet &art);
