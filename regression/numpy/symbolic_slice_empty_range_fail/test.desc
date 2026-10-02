@@ -2,4 +2,4 @@ CORE
 main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
-array bounds violated: array .s' upper bound
+line +10 +uncaught exception: IndexError

@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: this operation does not support a numpy view whose slice step is not a literal
