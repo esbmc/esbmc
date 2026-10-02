@@ -393,6 +393,22 @@ algorithm works, see
 `--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
 increment granularity.
 
+### Extracting a transition system (experimental)
+
+```sh
+esbmc file.c --ts-check
+esbmc file.c --ts-check --ts-dump
+```
+
+`--ts-check` applies the k-induction transformation, recognises a single
+unbounded loop in `main`, and extracts it as a transition system: the initial
+state, a one-iteration step relation, the loop's inputs and the bad-state
+conditions, sliced to what the properties depend on. It prints one `TS-CHECK`
+line saying whether extraction succeeded (`TS-CHECK accepted ...` or
+`TS-CHECK rejected`) and stops with `VERIFICATION UNKNOWN`; it proves nothing.
+`--ts-dump` also prints the extracted system. No verification engine consumes
+it yet ([#8081](https://github.com/esbmc/esbmc/pull/8081)).
+
 ## Reusing common subexpressions
 
 `--gcse` precomputes a subexpression shared between assignments into an
@@ -403,6 +419,11 @@ analysis over the GOTO program. The analysis is deliberately imprecise —
 symbolic execution supplies the real precision — and abstains on any expression
 whose targets it cannot determine, in which case the rewrite is not made. The
 flag is off by default.
+
+The available-expressions analysis is sequential, so `--gcse` is skipped with a
+warning on a program that may create threads: another thread can write a
+variable between two reads that the analysis treats as equal
+([#8072](https://github.com/esbmc/esbmc/pull/8072)).
 
 ## Selecting the floating-point rounding mode
 
@@ -711,8 +732,13 @@ recorded ends `VERIFICATION FAILED` ([#7913](https://github.com/esbmc/esbmc/pull
 a run that neither violated nor proved anything ends `VERIFICATION UNKNOWN`.
 `--falsification` does not stop after a violation, because a larger k can raise
 claims that no smaller k did; with `--unlimited-k-steps` it runs until killed
-and prints no table, so give it `--max-k-step`. Claims with the same
-comment at the same location still share one row
+and prints no table, so give it `--max-k-step`.
+
+Two assertions at the same position with the same description, such as the two
+bound checks of `a[i] + a[j]`, get one row each, and rows that would otherwise
+read the same end with their condition, e.g. `[(signed long int)j < 4]`
+([#7923](https://github.com/esbmc/esbmc/pull/7923)). Two claims that symbolic
+execution raises at one instruction still share a row
 ([#7900](https://github.com/esbmc/esbmc/discussions/7900)).
 
 ### Enumerating all violating inputs

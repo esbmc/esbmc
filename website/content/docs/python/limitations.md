@@ -51,23 +51,27 @@ weight: 4
 
 ## Lambda Expressions
 
-- Return type inference is naive and defaults to `float`.
+- The return type follows an integral body; otherwise it defaults to `float`.
 - A parameter's type is recovered from the calls made through the bound name
-  when every call agrees on it, and when a subscripted parameter's argument is
-  bound to a list literal. Anything less certain keeps the `float` default, so a
-  lambda whose parameter is neither annotated nor pinned by its call sites is
-  still assumed to be a float.
+  when every call agrees on it: a scalar literal, a name whose every binding in
+  the enclosing scope is a top-level assignment, a list literal for a
+  subscripted parameter, and a class instance read from a list literal
+  (`cars[0]`). Anything less certain — a parameter, a `global` write or a
+  branch-local rebinding as the argument — keeps the `float` default.
 
 ## F-Strings
 
 - Complex expressions inside f-strings may have limited support.
 - Custom format specifications for user-defined types are not supported.
+- `!r`, `!a` and `=` are modelled for ints, bools, floats, `None` and ASCII strings. A container, a non-ASCII string, and any `!r`/`!a` field that also has a format spec (`f"{x!r:>6}"`) yield an unconstrained string, so an assertion on the exact text reports `VERIFICATION FAILED`.
+- `str()` of a runtime float is exact only for integral values below 2**53 and values in [1e-4, 2**32) whose 6-digit decimal reads back as the same value; any other runtime float renders as an unconstrained string. Float constants are always rendered exactly.
 
 ## Strings
 
 - Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](/docs/python/supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
 - `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
 - `splitlines()` on a non-constant receiver returns an empty list.
+- Strings are stored as UTF-8 bytes. `len()` counts code points for a literal or a folded `chr()`, and `ord()` decodes the first code point, but a string built at run time (`chr(n) * 2`, `s = chr(n); len(s)`) and indexing (`s[i]`) still work on bytes.
 
 ## Dynamic Typing
 
@@ -81,6 +85,7 @@ within these bounds:
 - A tagged scalar can be **stored in a list** and read back. The push and insert paths use a bounded copy, because a tagged scalar's size can be symbolic after a branch join and the generic `memcpy`-based copy never finishes unwinding over it.
 - Ordered comparisons (`<`, `<=`, `>`, `>=`) work against a literal and between two tagged operands, raising `TypeError` on a type mismatch. `==` treats `bool` and `int` as the same type, so `True == 1`.
 - Divergence is detected across an `if`/`elif`/`else` chain only when every branch assigns the name; a chain with a branch that leaves it unassigned is not tagged.
+- An element of a list mixing strings and numbers (`[3.0, "+", 2.0]`) is read as a tagged value, so `isinstance` answers per element.
 - `x is None` is folded only against a literal `None`. A computed operand is not folded, since that would drop its side effects.
 - Rebinding a tagged variable to a list, tuple or class instance is refused inside a loop or a conditional body, where the join of the retyped aliases is not modelled.
 
@@ -88,6 +93,7 @@ within these bounds:
 
 - A union whose members are **all scalars** is resolved to the widest of them (`float > int > bool`) at verification time; true union semantics are not maintained.
 - A union **mixing a scalar with a container** — `int | list[int]`, in the PEP 604, `typing.Union`, chained, keyword and module-qualified spellings — is opaque rather than narrowed to one member. Narrowing it to the scalar folded a comparison against the returned list to false and its negation to true, proving a property that is false ([#7872](https://github.com/esbmc/esbmc/issues/7872)); on a parameter it also made `--strict-types` reject a valid list argument ([#7876](https://github.com/esbmc/esbmc/issues/7876)). An argument whose type the annotation does not name is still rejected. A union containing `None` keeps its existing typing.
+- `Optional[int|float|bool]` and `T | None` use the `Optional<T>` struct; `Optional[str]`, `Optional[List]` and `Optional[Set]` use a pointer with `None` as NULL. `Optional[Dict]` and `Optional[Tuple]` are struct values and remain open ([#8017](https://github.com/esbmc/esbmc/issues/8017)).
 - Union types containing types beyond basic primitives (`int`, `float`, `bool`) may default to pointer types.
 - Type narrowing based on runtime type checks within Union-typed functions is not tracked.
 - `Any` type inference only supports primitive return types (`int`, `float`, `bool`) and expressions evaluating to those types; string return values are not supported and will produce an error.
@@ -129,6 +135,7 @@ within these bounds:
 ## Heapq Module
 
 - `heapify()` is modelled as a no-op; the heap invariant is not enforced structurally.
+- A heap of tuples takes its element type from the caller's tuples, so `d, n = heappop(h)` unpacks; a heap built from an empty `[]` has no tuples to infer it from.
 - `nlargest()`, `nsmallest()`, and `merge()` are not supported.
 
 ## Time Module
@@ -139,12 +146,12 @@ within these bounds:
 ## NumPy Module
 
 - Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. 1-D and 2-D shapes are supported; arrays of higher rank are rejected explicitly, and full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
-- Sorting and searching (`np.sort`, `np.argsort`, `np.searchsorted`, and the `a.sort()` / `a.argsort()` method forms) accept concrete ndarray variables, row and column views (`a[i]`, `a[:, j]`), and 2-D arrays with an `axis` argument given positionally or as `axis=` — not both. Each row or column is sorted independently by a conversion-time sorting network capped at `max_numpy_sort_elements`. Still missing: stable-kind variants, the sorter and vector-value forms of `searchsorted`, `searchsorted` on a genuine 2-D array as opposed to a 1-D view of one, and symbolic arrays.
+- Sorting and searching (`np.sort`, `np.argsort`, `np.searchsorted`, and the `a.sort()` / `a.argsort()` method forms) accept concrete ndarray variables, row and column views (`a[i]`, `a[:, j]`), and 2-D arrays with an `axis` argument given positionally or as `axis=` — not both. Each row or column is sorted independently by a conversion-time sorting network capped at `max_numpy_sort_elements`. `kind='stable'`, `'mergesort'` and `None` are accepted. `searchsorted` takes a vector of values, a symbolic value, and a `sorter=` argument. Still missing: `searchsorted` on a genuine 2-D array as opposed to a 1-D view of one (rejected, as NumPy rejects it), and symbolic arrays.
 - Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
 - Only the NumPy functions listed in [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy) have executable support.
 - The reductions (`sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax`), comparison/logical ufuncs (`greater`/`less`/`equal`/`logical_*`/`where`), and constructors (`arange`/`full`/`eye`/`identity`/`linspace`) are constant-folded over list-backed (1D/2D) inputs and constant shapes; runtime-constructed inputs and higher-rank shapes are rejected with deterministic frontend errors.
 - `np.arange()` materialises its result at conversion time, so its arguments must be constant — a name bound to a literal is resolved first, but a function parameter is rejected with `TypeError: numpy.arange() currently supports constant numeric inputs only` rather than routed through the operational model's while loop, which did not terminate in practice. A range past 10000 elements is declined for the same reason, and `step=0` raises `ValueError`.
-- A returned array keeps its metadata only for the shapes listed under [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy). A **2-D array parameter** now keeps its full shape through the C-ABI row-pointer decay, so `.shape`, `.ndim`, `.size` and `numpy.transpose` / `.T` / `.transpose()` read it rather than the decayed 1-D type — this was the one shape here that produced a silently wrong array value rather than an explicit rejection, and it is now a `CORE` regression test rather than a `KNOWNBUG` ([#7722](https://github.com/esbmc/esbmc/pull/7722)). Two gaps remain pinned as `KNOWNBUG`, both of which surface as an explicit wrong verdict: an unannotated function that builds an array through a local before returning it, and a captured list mutated without a `global` declaration. A parameter with a genuinely symbolic shape is rejected, but through a generic `AttributeError` on the first metadata access rather than a purpose-built diagnostic.
+- A returned array keeps its metadata only for the shapes listed under [Supported Features — NumPy](/docs/python/supported-features#numpy-module-numpy). A **2-D array parameter** now keeps its full shape through the C-ABI row-pointer decay, so `.shape`, `.ndim`, `.size` and `numpy.transpose` / `.T` / `.transpose()` read it rather than the decayed 1-D type — this was the one shape here that produced a silently wrong array value rather than an explicit rejection, and it is now a `CORE` regression test rather than a `KNOWNBUG` ([#7722](https://github.com/esbmc/esbmc/pull/7722)). An unannotated function that builds an array through a local before returning it now keeps the array's type ([#7925](https://github.com/esbmc/esbmc/pull/7925)). One gap remains pinned as `KNOWNBUG` and surfaces as an explicit wrong verdict: a captured list mutated without a `global` declaration. A parameter with a genuinely symbolic shape is rejected with `numpy array parameter shape must be concrete` when `.shape`, `.ndim`, `.size`, `.T`, `transpose()`, `sort()` or `argsort()` reads it.
 - A view onto the base array needs literal bounds and a fixed-shape 1-D or 2-D source: 1-D slices (any step, including reversed), 2-D row and column views, `np.diagonal`, `np.ravel` and `a.flat[i]` alias the buffer; a symbolic bound or index, or a 3-D source, still produces an independent copy. `np.diagonal` is read-only, and a diagonal used inline (`np.diagonal(a)[i]`) rather than bound to a name is declined. `np.fill_diagonal` requires a value whose length matches the diagonal exactly.
 - `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.arccos` rejects runtime 2D arrays; `np.fmod` rejects `np.array(...)`-wrapped operands (`Unsupported operation: numpy.fmod on array operands`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
 - `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
@@ -159,6 +166,13 @@ within these bounds:
 - A method call whose receiver class cannot be resolved — most commonly a method invoked directly on a **container literal**, e.g. `{1}.isdisjoint({2})` or `[1].foobar()` — evaluates to a **nondeterministic value**, so neither the assertion nor its negation can be discharged and both report `VERIFICATION FAILED`. This is deliberate: the previous fallback returned a null (falsy) value, which *proved* the negation of any such call. Binding the receiver to a name first (`s = {1}` … `s.isdisjoint({2})`) gets the modelled semantics.
 - An attribute assigned from a method whose return type is not the enclosing class, then used as a receiver (`self.pub = self.make_publisher()` followed by `self.pub.publish(...)`), degrades to `Unsupported function 'publish' is reached` / `VERIFICATION FAILED` rather than resolving the call.
 - `self.attr = self.method()` types `attr` by the **enclosing** class and does not perform virtual dispatch, so a subclass override is ignored and a valid polymorphic program can be reported as a false `VERIFICATION FAILED` (pinned as a KNOWNBUG in `regression/python/github_6242_override`).
+
+## Classes
+
+- A method called through a class name (`Base.m(self)`) follows Python's C3 method resolution order when every class involved is bound once in the file by its own `class` statement; if the class that binds the name has no converted method yet at the call, the call is refused rather than bound to another class's method. Hierarchies with imported, rebound or qualified bases keep a depth-first search.
+- Two classes of the same name at different scopes of one program (module level and inside a function or method) are refused, listing the conflicting lines; a class nested directly in a class body is not affected. A program class that shares its name with a class in an imported module is renamed apart, unless the name is also bound by a parameter or `except ... as`, comes from a star, late or function-local import, or is read before the local class; those remain refused.
+- `cls(...)` in a `@classmethod` is rewritten to the class the method runs on only where that class is known statically.
+- `len(xs[i])` dispatches to `__len__` when the program defines a single class; with several classes, or an index that is not a plain read, conversion stops with an error.
 
 ## Class Attributes
 
