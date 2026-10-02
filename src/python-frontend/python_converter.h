@@ -1677,8 +1677,29 @@ private:
     const nlohmann::json &arg,
     bool nested);
 
-  std::optional<exprt>
-  build_numpy_descriptor_materialized_array(const nlohmann::json &arg);
+  /// Set when a view-shaped call (transpose, ravel, ...) was lowered to an
+  /// independent copy rather than a view; consumed by the assignment binding.
+  bool numpy_result_is_fresh_copy_ = false;
+  /// Set when a numpy call registered the assignment target as a view.
+  bool numpy_result_is_view_ = false;
+
+  /// `a[...]` with a slice axis over a numpy parameter.
+  bool is_numpy_param_slice(const nlohmann::json &subscript) const;
+
+  /// `element` copied into a named temporary (or itself without a block).
+  exprt hoist_numpy_element(const exprt &element);
+
+  /// Named temporary holding `elems` (row-major) as an array of `shape`.
+  exprt materialize_numpy_elements(
+    const nlohmann::json &location_node,
+    const std::vector<std::size_t> &shape,
+    const std::vector<exprt> &elems,
+    const typet &elem_type);
+
+  /// `reshape_to`, when given, lays the same elements out in that shape.
+  std::optional<exprt> build_numpy_descriptor_materialized_array(
+    const nlohmann::json &arg,
+    const std::vector<std::size_t> *reshape_to = nullptr);
 
   std::optional<std::vector<std::size_t>>
   get_numpy_nditer_logical_shape(const std::string &root_id) const;
@@ -2307,6 +2328,8 @@ private:
   // and evaluate a side-effecting divisor an extra time).
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
+  // Set while probe_expr() evaluates a node only to inspect its result.
+  bool in_scratch_probe_ = false;
   // A clause is a specification, not code: converting one must not plant a
   // statement into the enclosing block. The guard did, so annotating a file
   // changed its verification result with contracts switched off, and a `//` in
@@ -2353,40 +2376,67 @@ private:
     bool readonly;
     std::vector<std::size_t> shape;
     std::string source_id;
-    // Runtime length/stride for a view whose slice step is not a literal;
-    // `length` and `stride` are placeholders in that case.
-    std::string length_symbol;
-    std::string stride_symbol;
+    // Per-axis element strides of an N-D view over a scalar pointer; empty
+    // for a contiguous view (typed pointer to rows) or a legacy 1-D view.
+    std::vector<long long> strides;
+    // Runtime extents and strides, as the ids of the signed 64-bit temporaries
+    // holding them ("" for an axis whose value is a constant). Parallel to
+    // shape/strides, whose entries are placeholders for a runtime axis.
+    std::vector<std::string> shape_symbols;
+    std::vector<std::string> stride_symbols;
     bool is_symbolic() const
     {
-      return !length_symbol.empty();
+      for (const std::string &id : shape_symbols)
+        if (!id.empty())
+          return true;
+      for (const std::string &id : stride_symbols)
+        if (!id.empty())
+          return true;
+      return false;
     }
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
-  // Runtime length of the named view when its slice step is not a literal.
+  const numpy_scalar_pointer_view_infot *
+  find_numpy_pointer_view_info(const std::string &name) const;
+  // Runtime length of the named view when its extent is not a constant.
   std::optional<exprt>
   symbolic_numpy_view_length(const std::string &name) const;
+  // Axis `axis` extent / stride of a view as signed 64-bit expressions.
+  exprt numpy_view_extent(
+    const numpy_scalar_pointer_view_infot &info,
+    std::size_t axis) const;
+  exprt numpy_view_stride(
+    const numpy_scalar_pointer_view_infot &info,
+    std::size_t axis) const;
   // Consumers that need a constant length/stride reject a symbolic view.
   static void
   reject_symbolic_numpy_view(const numpy_scalar_pointer_view_infot &info);
-  /// Appends `dst[i] = src[offset + i * stride]` for i in [0, length) to
-  /// `block`; offset, stride and length are signed 64-bit expressions.
+
+  /// One axis of an N-D copy loop: signed 64-bit extent and stride.
+  struct strided_copy_axis
+  {
+    exprt extent;
+    exprt stride;
+  };
+
+  /// Appends `dst[i0]..[ik] = src[offset + sum(ik * stride_k)]` over every
+  /// index, as nested loops, to `block`. `dst` has one array level per axis,
+  /// `src` is a scalar pointer, `offset` a size_type element count.
   void emit_strided_copy(
     codet &block,
     const exprt &dst,
     const exprt &src,
     const exprt &offset,
-    const exprt &stride,
-    const exprt &length,
+    const std::vector<strided_copy_axis> &axes,
     const locationt &location);
 
-  /// Detach for a view with a runtime length/stride: copies what the view
-  /// sees into a fresh dense snapshot with a loop and repoints the view at
+  /// Detach for a view with a runtime extent or stride: copies what the view
+  /// sees into a fresh dense snapshot with loops and repoints the view at
   /// it. Returns the snapshot's id.
   std::string snapshot_symbolic_numpy_view(
     const exprt &old_ptr,
-    const numpy_scalar_pointer_view_infot &info,
+    numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
   struct numpy_transpose_view_infot

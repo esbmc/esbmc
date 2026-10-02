@@ -986,49 +986,44 @@ std::optional<diagonal_pointer_view_info> get_diagonal_pointer_view_info(
     shape->elem_type, offset, length, shape->col_count + 1};
 }
 
-struct flat_array_shape_info
-{
-  typet elem_type;
-  long long total_length;
-};
-
-// Resolves array's compile-time-known total element count for a fixed-shape
-// 1-D or 2-D array, or nullopt for anything else (including 3-D+, which
-// np.ravel()'s pointer-view aliasing does not cover -- it keeps using the
-// existing copy path there).
-std::optional<flat_array_shape_info>
-get_flat_1d_or_2d_shape_info(const exprt &array, const contextt &symbol_table)
+// Compile-time-known total element count and scalar element type of a
+// fixed-shape array of any rank, or of a contiguous N-D subarray view
+// (`view_shape` is its registered shape, empty for anything else).
+std::optional<flat_array_shape_info> get_flat_shape_info(
+  const exprt &array,
+  const std::vector<std::size_t> &view_shape,
+  const contextt &symbol_table)
 {
   const namespacet ns(symbol_table);
-  const typet outer_type = ns.follow(array.type());
-  if (!outer_type.is_array())
-    return std::nullopt;
+  typet current = ns.follow(array.type());
+  long long total = 1;
+  if (current.is_pointer())
+  {
+    if (view_shape.size() < 2)
+      return std::nullopt;
+    for (std::size_t dim : view_shape)
+      total *= static_cast<long long>(dim);
+    current = ns.follow(current.subtype());
+    while (current.is_array())
+      current = ns.follow(to_array_type(current).subtype());
+    return flat_array_shape_info{current, total};
+  }
 
-  const array_typet &outer_array = to_array_type(outer_type);
-  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+  if (!current.is_array())
     return std::nullopt;
-  const long long outer_count =
-    binary2integer(outer_array.size().value().c_str(), false).to_int64();
-  if (outer_count < 0)
-    return std::nullopt;
-
-  const typet inner_type = ns.follow(outer_array.subtype());
-  if (!inner_type.is_array())
-    return flat_array_shape_info{inner_type, outer_count};
-
-  const array_typet &inner_array = to_array_type(inner_type);
-  if (inner_array.size().is_nil() || !inner_array.size().is_constant())
-    return std::nullopt;
-  const long long inner_count =
-    binary2integer(inner_array.size().value().c_str(), false).to_int64();
-  if (inner_count < 0)
-    return std::nullopt;
-
-  const typet elem_type = ns.follow(inner_array.subtype());
-  if (elem_type.is_array())
-    return std::nullopt;
-
-  return flat_array_shape_info{elem_type, outer_count * inner_count};
+  while (current.is_array())
+  {
+    const array_typet &array_type = to_array_type(current);
+    if (array_type.size().is_nil() || !array_type.size().is_constant())
+      return std::nullopt;
+    const long long count =
+      binary2integer(array_type.size().value().c_str(), false).to_int64();
+    if (count < 0)
+      return std::nullopt;
+    total *= count;
+    current = ns.follow(array_type.subtype());
+  }
+  return flat_array_shape_info{current, total};
 }
 } // namespace
 
@@ -1703,11 +1698,12 @@ std::optional<exprt> python_list::build_scalar_pointer_view(
   // dereference (C 6.5.6p8). index2tc would route it through the array
   // bounds checker as an out-of-bounds subscript; add2tc over the decayed
   // pointer is checked under pointer, not array-index, rules.
-  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt base_ptr = scalar_storage_pointer(array, view_ptr_type);
   exprt view_ptr =
     build_add(base_ptr, from_integer(offset, size_type()), view_ptr_type);
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_result_is_view_ = true;
   python_converter::numpy_scalar_pointer_view_infot info{
     length, stride, readonly, {length}};
   converter_.numpy_pointer_view_info_[lhs_id] = info;
@@ -1768,6 +1764,54 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
     false);
 }
 
+namespace
+{
+std::vector<long long> contiguous_strides(const std::vector<long long> &shape)
+{
+  std::vector<long long> strides(shape.size(), 1);
+  for (std::size_t axis = shape.size(); axis-- > 1;)
+    strides[axis - 1] = strides[axis] * shape[axis];
+  return strides;
+}
+
+typet innermost_element_type(typet type, const namespacet &ns)
+{
+  while (type.is_array())
+    type = ns.follow(to_array_type(type).subtype());
+  return type;
+}
+
+bool has_nonliteral_slice_bound(const nlohmann::json &slice_node)
+{
+  for (const char *key : {"lower", "upper"})
+  {
+    BigInt value;
+    if (
+      slice_node.contains(key) && !slice_node[key].is_null() &&
+      !try_get_literal_int(slice_node[key], value))
+      return true;
+  }
+  return false;
+}
+
+bool has_symbolic_axis(const std::vector<python_list::strided_axis> &axes)
+{
+  return std::any_of(
+    axes.begin(), axes.end(), [](const python_list::strided_axis &axis) {
+      return axis.symbolic();
+    });
+}
+
+long long
+constant_element_count(const std::vector<python_list::strided_axis> &axes)
+{
+  long long count = 1;
+  for (const python_list::strided_axis &axis : axes)
+    count *= axis.extent;
+  return count;
+}
+} // namespace
+
 python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const nlohmann::json &slice_node,
   long long n)
@@ -1808,8 +1852,11 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
     return result;
   };
 
-  const expr2tc step = to_ll(
-    emit_temp("$numpy_step$", to_ll(converter_.get_expr(slice_node["step"]))));
+  const bool has_step =
+    slice_node.contains("step") && !slice_node["step"].is_null();
+  const expr2tc step = to_ll(emit_temp(
+    "$numpy_step$",
+    has_step ? to_ll(converter_.get_expr(slice_node["step"])) : lit(1)));
   exprt raise = converter_.get_exception_handler().gen_exception_raise(
     "ValueError", "slice step cannot be zero");
   codet throw_code("expression");
@@ -1873,79 +1920,453 @@ exprt python_list::build_symbolic_step_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
 {
+  const std::string rejection =
+    "TypeError: numpy view slicing requires a literal stride";
   const namespacet ns(converter_.symbol_table());
   const typet array_type = ns.follow(array.type());
   if (
     !array.is_symbol() || !array_type.is_array() ||
     converter_.numpy_array_symbols_.count(array.identifier().as_string()) ==
       0 ||
-    ns.follow(to_array_type(array_type).subtype()).is_array() ||
     !to_array_type(array_type).size().is_constant())
-    throw std::runtime_error(
-      "TypeError: numpy view slicing requires a literal stride");
+    throw std::runtime_error(rejection);
 
-  const array_typet &source_type = to_array_type(array_type);
-  const typet elem_type = source_type.subtype();
-
-  // Without a bare-name target the slice is read as an independent copy, as
-  // for a literal step.
   exprt *lhs = converter_.current_lhs;
   const bool as_view = lhs && lhs->is_symbol();
-  const typet view_ptr_type = pointer_typet(elem_type);
   // A discarded type probe only needs the result type, not the statements.
   if (!converter_.safe_to_emit_side_effecting_statement())
-    return as_view ? build_typecast(build_address_of(array), view_ptr_type)
+    return as_view ? build_typecast(
+                       build_address_of(array),
+                       pointer_typet(innermost_element_type(array_type, ns)))
                    : array;
   if (
     as_view && converter_.numpy_pointer_view_info_.count(
                  lhs->identifier().as_string()) != 0)
-    throw std::runtime_error(
-      "TypeError: numpy view slicing requires a literal stride");
+    throw std::runtime_error(rejection);
 
-  const symbolic_slice_params params = emit_symbolic_slice_params(
-    slice_node,
-    binary2integer(source_type.size().value().c_str(), false).to_int64());
+  if (
+    std::optional<exprt> view = try_build_strided_basic_view(
+      array, {slice_node}, /*allow_plain_array=*/true))
+    return *view;
+  throw std::runtime_error(rejection);
+}
 
-  if (!as_view)
+exprt python_list::emit_ll_temp(
+  const nlohmann::json &node,
+  const char *name,
+  const exprt &value)
+{
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(node);
+  symbolt &sym =
+    converter_.create_tmp_symbol(node, name, ll_type, gen_zero(ll_type));
+  code_declt decl(build_symbol(sym));
+  decl.location() = loc;
+  converter_.add_instruction(decl);
+  code_assignt init(build_symbol(sym), build_typecast(value, ll_type));
+  init.location() = loc;
+  converter_.add_instruction(init);
+  return build_symbol(sym);
+}
+
+std::optional<python_list::strided_view_desc>
+python_list::describe_strided_view(const exprt &array)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet type = ns.follow(array.type());
+  strided_view_desc desc;
+
+  auto constant_axes = [&](
+                         const std::vector<long long> &shape,
+                         const std::vector<long long> &strides) {
+    for (std::size_t axis = 0; axis < shape.size(); ++axis)
+    {
+      strided_axis described;
+      described.extent = shape[axis];
+      described.stride = strides[axis];
+      desc.axes.push_back(described);
+    }
+  };
+
+  if (type.is_array())
   {
-    const locationt loc = converter_.get_location_from_decl(slice_node);
-    array_typet result_type(
-      elem_type, build_typecast(params.length, size_type()));
-    symbolt &result = converter_.create_tmp_symbol(
-      slice_node, "$array_slice$", result_type, exprt());
-    code_declt result_decl(build_symbol(result));
-    result_decl.location() = loc;
-    converter_.add_instruction(result_decl);
-    code_blockt copy_block;
-    converter_.emit_strided_copy(
-      copy_block,
-      build_symbol(result),
-      array,
-      params.offset,
-      params.stride,
-      params.length,
-      loc);
-    converter_.add_instruction(copy_block);
-    return build_symbol(result);
+    std::optional<std::vector<std::size_t>> shape =
+      get_fixed_array_shape(type, converter_.symbol_table());
+    if (!shape || shape->empty())
+      return std::nullopt;
+    desc.elem_type = innermost_element_type(type, ns);
+    const std::vector<long long> extents(shape->begin(), shape->end());
+    constant_axes(extents, contiguous_strides(extents));
+    desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
+    return desc;
   }
 
-  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  if (!type.is_pointer() || !array.is_symbol())
+    return std::nullopt;
+  const auto view =
+    converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
+  if (view == converter_.numpy_pointer_view_info_.end())
+  {
+    // A numpy array parameter decays to a pointer; its tracked shape is the
+    // contiguous layout it points at.
+    const auto param =
+      converter_.numpy_param_shapes_.find(array.identifier().as_string());
+    if (param == converter_.numpy_param_shapes_.end())
+      return std::nullopt;
+    desc.elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
+    const std::vector<long long> extents(
+      param->second.begin(), param->second.end());
+    constant_axes(extents, contiguous_strides(extents));
+    desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
+    return desc;
+  }
+  const auto &info = view->second;
+
+  desc.elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
+  const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
+  for (std::size_t axis = 0; axis < rank; ++axis)
+  {
+    strided_axis described;
+    const exprt extent = converter_.numpy_view_extent(info, axis);
+    const exprt stride = converter_.numpy_view_stride(info, axis);
+    if (axis < info.shape_symbols.size() && !info.shape_symbols[axis].empty())
+      described.extent_expr = extent;
+    else
+      described.extent =
+        binary2integer(to_constant_expr(extent).value().c_str(), true)
+          .to_int64();
+    if (axis < info.stride_symbols.size() && !info.stride_symbols[axis].empty())
+      described.stride_expr = stride;
+    else
+      described.stride =
+        binary2integer(to_constant_expr(stride).value().c_str(), true)
+          .to_int64();
+    desc.axes.push_back(described);
+  }
+  desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
+  return desc;
+}
+
+exprt python_list::register_strided_view(
+  const strided_view_desc &source,
+  const exprt &offset,
+  const std::vector<strided_axis> &axes,
+  bool readonly)
+{
+  const typet view_ptr_type = pointer_typet(source.elem_type);
+  if (converter_.in_rhs_type_probe_)
+    return source.base;
+
+  // A constant-empty view keeps offset 0: a slice's start may be past the
+  // object, and forming that pointer would be undefined.
+  const bool known_empty =
+    !has_symbolic_axis(axes) && constant_element_count(axes) == 0;
   exprt view_ptr = build_add(
-    base_ptr, build_typecast(params.offset, size_type()), view_ptr_type);
-  lhs->type() = view_ptr_type;
-  converter_.update_symbol(*lhs);
+    source.base,
+    known_empty ? from_integer(0, size_type()) : offset,
+    view_ptr_type);
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_result_is_view_ = true;
 
   python_converter::numpy_scalar_pointer_view_infot info;
-  info.length = 0;
-  info.stride = 0;
-  info.readonly = false;
-  info.length_symbol = params.length.identifier().as_string();
-  info.stride_symbol = params.stride.identifier().as_string();
-  const std::string lhs_id = lhs->identifier().as_string();
+  info.readonly = readonly;
+  for (const strided_axis &axis : axes)
+  {
+    info.shape.push_back(static_cast<std::size_t>(axis.extent));
+    info.strides.push_back(axis.stride);
+    info.shape_symbols.push_back(
+      axis.extent_expr.is_not_nil() ? axis.extent_expr.identifier().as_string()
+                                    : std::string());
+    info.stride_symbols.push_back(
+      axis.stride_expr.is_not_nil() ? axis.stride_expr.identifier().as_string()
+                                    : std::string());
+  }
+  info.length = info.shape.front();
+  info.stride = info.strides.front();
+  const std::string lhs_id = converter_.current_lhs->identifier().as_string();
   converter_.numpy_pointer_view_info_[lhs_id] = info;
   if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
     converter_.numpy_pointer_view_info_[lhs_symbol->id.as_string()] = info;
   return view_ptr;
+}
+
+exprt python_list::copy_strided_view(
+  const strided_view_desc &source,
+  const exprt &offset,
+  const std::vector<strided_axis> &axes,
+  const std::vector<std::size_t> *out_shape)
+{
+  const typet ptr_type = pointer_typet(source.elem_type);
+
+  if (!has_symbolic_axis(axes))
+  {
+    std::vector<exprt> elems;
+    std::vector<long long> index(axes.size(), 0);
+    elems.reserve(static_cast<std::size_t>(constant_element_count(axes)));
+    for (long long n = constant_element_count(axes); n > 0; --n)
+    {
+      long long delta = 0;
+      for (std::size_t axis = 0; axis < axes.size(); ++axis)
+        delta += index[axis] * axes[axis].stride;
+      exprt position =
+        build_add(offset, from_integer(delta, size_type()), size_type());
+      elems.push_back(build_dereference(
+        build_add(source.base, position, ptr_type), source.elem_type));
+      for (std::size_t axis = axes.size(); axis-- > 0;)
+      {
+        if (++index[axis] < axes[axis].extent)
+          break;
+        index[axis] = 0;
+      }
+    }
+    std::vector<std::size_t> shape;
+    for (const strided_axis &axis : axes)
+      shape.push_back(static_cast<std::size_t>(axis.extent));
+    return converter_.materialize_numpy_elements(
+      list_value_, out_shape ? *out_shape : shape, elems, source.elem_type);
+  }
+
+  // A run-time extent: copy into a variable-length array with loops. Nested
+  // variable-length arrays are not supported downstream, so an N-D result
+  // must be bound to a name (where it is a view) instead.
+  if (axes.size() > 1)
+  {
+    if (converter_.in_rhs_type_probe_ || converter_.in_scratch_probe_)
+      return source.base;
+    throw std::runtime_error(
+      "TypeError: an N-D numpy slice with run-time bounds must be assigned to "
+      "a name");
+  }
+  typet result_type = source.elem_type;
+  std::vector<python_converter::strided_copy_axis> copy_axes;
+  for (const strided_axis &axis : axes)
+    copy_axes.push_back(
+      {python_list::axis_extent(axis), python_list::axis_stride(axis)});
+  for (std::size_t axis = axes.size(); axis-- > 0;)
+    result_type = array_typet(
+      result_type, build_typecast(copy_axes[axis].extent, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    list_value_, "$array_slice$", result_type, exprt());
+  const locationt loc = converter_.get_location_from_decl(list_value_);
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = loc;
+  converter_.add_instruction(result_decl);
+  code_blockt copy_block;
+  converter_.emit_strided_copy(
+    copy_block, build_symbol(result), source.base, offset, copy_axes, loc);
+  converter_.add_instruction(copy_block);
+  return build_symbol(result);
+}
+
+std::optional<exprt> python_list::try_build_strided_basic_view(
+  const exprt &array,
+  const std::vector<nlohmann::json> &idx_nodes,
+  bool allow_plain_array)
+{
+  std::optional<strided_view_desc> src = describe_strided_view(array);
+  if (!src || idx_nodes.size() > src->axes.size())
+    return std::nullopt;
+
+  exprt *lhs = converter_.current_lhs;
+  const bool as_view = lhs && lhs->is_symbol();
+  // Plain arrays with literal indices keep their existing copy-based
+  // handling unless the result is bound to a name; rank <= 2 keeps its
+  // dedicated row/column views.
+  const bool literal_indices = std::all_of(
+    idx_nodes.begin(), idx_nodes.end(), [](const nlohmann::json &node) {
+      BigInt literal;
+      if (node.value("_type", "") != "Slice")
+        return try_get_literal_int(node, literal);
+      return get_slice_step_info(node).literal &&
+             !has_nonliteral_slice_bound(node);
+    });
+  if (
+    !allow_plain_array && array.type().is_array() && literal_indices &&
+    !as_view)
+    return std::nullopt;
+  if (
+    as_view && converter_.numpy_pointer_view_info_.count(
+                 lhs->identifier().as_string()) != 0)
+    return std::nullopt;
+
+  const typet ll_type = signedbv_typet(64);
+  std::vector<strided_axis> axes;
+  exprt offset = from_integer(0, size_type());
+  auto add_offset = [&](const exprt &position) {
+    offset = build_add(offset, position, size_type());
+  };
+  // Run-time slice: start/step/length are evaluated once into temporaries.
+  auto runtime_slice =
+    [&](
+      const strided_axis &source,
+      const nlohmann::json &node) -> std::optional<strided_axis> {
+    if (source.symbolic())
+      return std::nullopt;
+    const symbolic_slice_params params =
+      emit_symbolic_slice_params(node, source.extent);
+    strided_axis axis;
+    axis.extent_expr = params.length;
+    const slice_step_info step = get_slice_step_info(node);
+    if (step.literal)
+      axis.stride = source.stride * step.value;
+    else
+      axis.stride_expr = emit_ll_temp(
+        node,
+        "$numpy_axis_stride$",
+        build_mul(
+          params.stride, from_integer(source.stride, ll_type), ll_type));
+    add_offset(build_typecast(
+      build_mul(params.offset, from_integer(source.stride, ll_type), ll_type),
+      size_type()));
+    return axis;
+  };
+
+  for (std::size_t axis_number = 0; axis_number < src->axes.size();
+       ++axis_number)
+  {
+    const strided_axis &source = src->axes[axis_number];
+    if (axis_number >= idx_nodes.size())
+    {
+      axes.push_back(source);
+      continue;
+    }
+
+    const nlohmann::json &node = idx_nodes[axis_number];
+    if (node.value("_type", "") == "Slice")
+    {
+      const slice_step_info step = get_slice_step_info(node);
+      if (step.literal_zero)
+        return std::nullopt;
+      if (
+        step.literal && !has_nonliteral_slice_bound(node) && !source.symbolic())
+      {
+        long long start = 0;
+        std::optional<long long> length =
+          literal_slice_length(node, source.extent, step.value, &start);
+        if (!length)
+          return std::nullopt;
+        if (*length > 0)
+          add_offset(from_integer(start * source.stride, size_type()));
+        strided_axis axis;
+        axis.extent = *length;
+        axis.stride = source.stride * step.value;
+        axes.push_back(axis);
+        continue;
+      }
+      std::optional<strided_axis> sliced = runtime_slice(source, node);
+      if (!sliced)
+        return std::nullopt;
+      axes.push_back(*sliced);
+      continue;
+    }
+
+    BigInt literal;
+    if (try_get_literal_int(node, literal) && !source.symbolic())
+    {
+      long long index = literal.to_int64();
+      if (index < 0)
+        index += source.extent;
+      if (index < 0 || index >= source.extent)
+        return std::nullopt;
+      add_offset(from_integer(index * source.stride, size_type()));
+      continue;
+    }
+    add_offset(normalize_and_scale_index(
+      converter_.get_expr(node),
+      python_list::axis_extent(source),
+      python_list::axis_stride(source),
+      node));
+  }
+  if (axes.empty())
+    return std::nullopt;
+
+  if (as_view)
+    return register_strided_view(*src, offset, axes);
+  return copy_strided_view(*src, offset, axes);
+}
+
+std::optional<exprt>
+python_list::try_build_strided_view_index(const nlohmann::json &element)
+{
+  std::vector<std::vector<nlohmann::json>> groups;
+  const nlohmann::json *node = &element;
+  while (node->is_object() && node->value("_type", "") == "Subscript" &&
+         node->contains("value") && node->contains("slice"))
+  {
+    const nlohmann::json &slice = (*node)["slice"];
+    std::vector<nlohmann::json> group;
+    if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+      group.assign(slice["elts"].begin(), slice["elts"].end());
+    else
+      group.push_back(slice);
+    groups.push_back(std::move(group));
+    node = &(*node)["value"];
+  }
+  if (!node->is_object() || node->value("_type", "") != "Name")
+    return std::nullopt;
+
+  const auto view = converter_.numpy_pointer_view_info_.find(
+    converter_.resolve_name_symbol_id(node->value("id", "")));
+  if (
+    view == converter_.numpy_pointer_view_info_.end() ||
+    view->second.strides.empty() || view->second.shape.size() < 2)
+    return std::nullopt;
+
+  std::vector<nlohmann::json> indices;
+  for (auto group = groups.rbegin(); group != groups.rend(); ++group)
+    indices.insert(indices.end(), group->begin(), group->end());
+
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt array = converter_.get_expr(*node);
+  converter_.current_lhs = lhs;
+  std::optional<strided_view_desc> src = describe_strided_view(array);
+  if (!src)
+    return std::nullopt;
+
+  const auto is_slice = [](const nlohmann::json &index) {
+    return index.value("_type", "") == "Slice";
+  };
+  if (std::any_of(indices.begin(), indices.end(), is_slice))
+  {
+    if (
+      std::optional<exprt> sliced =
+        try_build_strided_basic_view(array, indices))
+      return sliced;
+    throw std::runtime_error(
+      "TypeError: slicing an N-D numpy view of this form is not supported");
+  }
+  if (indices.size() > src->axes.size())
+    throw std::runtime_error(
+      "IndexError: too many indices for array: array is " +
+      std::to_string(src->axes.size()) + "-dimensional, but " +
+      std::to_string(indices.size()) + " were indexed");
+
+  exprt offset = from_integer(0, size_type());
+  for (std::size_t axis = 0; axis < indices.size(); ++axis)
+    offset = build_add(
+      offset,
+      normalize_and_scale_index(
+        converter_.get_expr(indices[axis]),
+        python_list::axis_extent(src->axes[axis]),
+        python_list::axis_stride(src->axes[axis]),
+        indices[axis]),
+      size_type());
+
+  const typet ptr_type = pointer_typet(src->elem_type);
+  if (indices.size() == src->axes.size())
+    return build_dereference(
+      build_add(src->base, offset, ptr_type), src->elem_type);
+
+  const std::vector<strided_axis> rest(
+    src->axes.begin() + indices.size(), src->axes.end());
+  if (
+    lhs && lhs->is_symbol() &&
+    converter_.numpy_pointer_view_info_.count(lhs->identifier().as_string()) ==
+      0)
+    return register_strided_view(*src, offset, rest);
+  return copy_strided_view(*src, offset, rest);
 }
 
 std::optional<exprt> python_list::try_build_row_pointer_view(
@@ -1970,6 +2391,65 @@ std::optional<exprt> python_list::try_build_row_pointer_view(
     false);
 }
 
+std::optional<exprt> python_list::build_contiguous_shaped_view(
+  const exprt &array,
+  const std::vector<std::size_t> &shape,
+  std::size_t offset,
+  bool readonly)
+{
+  std::optional<flat_array_shape_info> source = flat_shape_info_of(array);
+  if (!source || shape.empty())
+    return std::nullopt;
+
+  if (converter_.in_rhs_type_probe_)
+  {
+    typet probe_type = source->elem_type;
+    for (auto dim = shape.rbegin(); dim != shape.rend() - 1; ++dim)
+      probe_type = converter_.type_handler_.build_array(probe_type, *dim);
+    return build_typecast(
+      scalar_storage_pointer(array, pointer_typet(source->elem_type)),
+      pointer_typet(probe_type));
+  }
+
+  if (shape.size() == 1)
+    return build_scalar_pointer_view(
+      array, source->elem_type, offset, shape.front(), 1, readonly);
+
+  const std::string lhs_id = converter_.current_lhs->identifier().as_string();
+  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
+    return std::nullopt;
+
+  const namespacet ns(converter_.symbol_table());
+  typet row_type = source->elem_type;
+  for (auto dim = shape.rbegin(); dim != shape.rend() - 1; ++dim)
+    row_type = converter_.type_handler_.build_array(row_type, *dim);
+
+  const typet view_ptr_type = pointer_typet(row_type);
+  exprt scalar_base =
+    scalar_storage_pointer(array, pointer_typet(source->elem_type));
+  exprt view_ptr = build_typecast(
+    build_add(
+      scalar_base,
+      from_integer(offset, size_type()),
+      pointer_typet(source->elem_type)),
+    view_ptr_type);
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_result_is_view_ = true;
+
+  python_converter::numpy_scalar_pointer_view_infot info{
+    shape.front(), 1, readonly, shape};
+  converter_.numpy_pointer_view_info_[lhs_id] = info;
+  converter_.numpy_param_shapes_[lhs_id] = shape;
+  if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
+  {
+    const std::string resolved_id = lhs_symbol->id.as_string();
+    converter_.numpy_pointer_view_info_[resolved_id] = info;
+    converter_.numpy_param_shapes_[resolved_id] = shape;
+  }
+  return view_ptr;
+}
+
 std::optional<exprt> python_list::try_build_nd_subarray_pointer_view(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1985,51 +2465,34 @@ std::optional<exprt> python_list::try_build_nd_subarray_pointer_view(
   if (!try_get_literal_int(slice_node, literal_index))
     return std::nullopt;
 
-  const namespacet ns(converter_.symbol_table());
-  const typet array_type = ns.follow(array.type());
-  typet storage_type = array_type;
-  if (storage_type.is_pointer())
-    storage_type = ns.follow(storage_type.subtype());
-  std::optional<std::vector<std::size_t>> shape =
-    get_fixed_array_shape(storage_type, converter_.symbol_table());
-  if (!shape || shape->size() < 3)
+  // A plain array must be rank 3+ (rank-2 rows have their own scalar view); a
+  // contiguous view already carries its full shape.
+  std::vector<std::size_t> shape;
+  const auto view =
+    converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
+  if (view != converter_.numpy_pointer_view_info_.end())
+    shape = view->second.shape;
+  else if (
+    std::optional<std::vector<std::size_t>> fixed =
+      get_fixed_array_shape(array.type(), converter_.symbol_table()))
+    shape = *fixed;
+  if (
+    shape.size() < (view != converter_.numpy_pointer_view_info_.end() ? 2 : 3))
     return std::nullopt;
 
   long long index = literal_index.to_int64();
-  const long long outer = static_cast<long long>((*shape)[0]);
+  const long long outer = static_cast<long long>(shape.front());
   if (index < 0)
     index += outer;
   if (index < 0 || index >= outer)
     return std::nullopt;
 
-  const typet selected_type = ns.follow(to_array_type(storage_type).subtype());
-  const typet view_type = ns.follow(to_array_type(selected_type).subtype());
-  std::vector<std::size_t> view_shape(shape->begin() + 1, shape->end());
-  const std::size_t length = view_shape.front();
-  const std::string lhs_id = converter_.current_lhs->identifier().as_string();
-  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
-    return std::nullopt;
-
-  const typet view_ptr_type = pointer_typet(view_type);
-  exprt base_ptr = array_type.is_pointer() ? array : build_address_of(array);
-  base_ptr = build_typecast(base_ptr, view_ptr_type);
-  exprt view_ptr = build_add(
-    base_ptr,
-    from_integer(index * static_cast<long long>(length), size_type()),
-    view_ptr_type);
-  converter_.current_lhs->type() = view_ptr_type;
-  converter_.update_symbol(*converter_.current_lhs);
-  python_converter::numpy_scalar_pointer_view_infot info{
-    length, 1, false, view_shape};
-  converter_.numpy_pointer_view_info_[lhs_id] = info;
-  converter_.numpy_param_shapes_[lhs_id] = view_shape;
-  if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
-  {
-    const std::string resolved_id = lhs_symbol->id.as_string();
-    converter_.numpy_pointer_view_info_[resolved_id] = info;
-    converter_.numpy_param_shapes_[resolved_id] = view_shape;
-  }
-  return view_ptr;
+  const std::vector<std::size_t> view_shape(shape.begin() + 1, shape.end());
+  std::size_t row_elems = 1;
+  for (std::size_t dim : view_shape)
+    row_elems *= dim;
+  return build_contiguous_shaped_view(
+    array, view_shape, static_cast<std::size_t>(index) * row_elems, false);
 }
 
 struct chained_subarray_literal_indices
@@ -2411,6 +2874,48 @@ bool python_list::try_build_fill_diagonal_mutation(
 // the pre-existing copy path (see the shared ravel/flatten/nditer handling
 // in numpy_call_expr.cpp, tried only after this declines) -- flatten()
 // itself is a distinct dispatch and always stays a copy.
+std::optional<flat_array_shape_info>
+python_list::flat_shape_info_of(const exprt &array) const
+{
+  std::vector<std::size_t> view_shape;
+  if (array.is_symbol())
+  {
+    const auto view =
+      converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
+    if (view != converter_.numpy_pointer_view_info_.end())
+    {
+      const auto &info = view->second;
+      if (info.is_symbolic())
+        return std::nullopt;
+      if (
+        !info.strides.empty() &&
+        info.strides !=
+          contiguous_strides(
+            std::vector<long long>(info.shape.begin(), info.shape.end())))
+        return std::nullopt;
+      // A unit-stride 1-D view is contiguous as well.
+      if (info.shape.size() == 1 && info.stride == 1)
+      {
+        const namespacet ns(converter_.symbol_table());
+        return flat_array_shape_info{
+          ns.follow(array.type().subtype()),
+          static_cast<long long>(info.length)};
+      }
+      view_shape = info.shape;
+    }
+  }
+  return get_flat_shape_info(array, view_shape, converter_.symbol_table());
+}
+
+exprt python_list::scalar_storage_pointer(
+  const exprt &array,
+  const typet &scalar_ptr_type) const
+{
+  return build_typecast(
+    array.type().is_pointer() ? array : build_address_of(array),
+    scalar_ptr_type);
+}
+
 std::optional<exprt>
 python_list::try_build_ravel_pointer_view(const exprt &array)
 {
@@ -2419,14 +2924,12 @@ python_list::try_build_ravel_pointer_view(const exprt &array)
     converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
     return std::nullopt;
 
-  std::optional<flat_array_shape_info> shape =
-    get_flat_1d_or_2d_shape_info(array, converter_.symbol_table());
+  std::optional<flat_array_shape_info> shape = flat_shape_info_of(array);
   if (!shape)
     return std::nullopt;
 
   if (converter_.in_rhs_type_probe_)
-    return build_typecast(
-      build_address_of(array), pointer_typet(shape->elem_type));
+    return scalar_storage_pointer(array, pointer_typet(shape->elem_type));
 
   if (!converter_.current_lhs || !converter_.current_lhs->is_symbol())
     return std::nullopt;
@@ -2598,23 +3101,18 @@ exprt python_list::guard_numpy_pointer_view_index(
   if (!array.is_symbol() || !array.type().is_pointer())
     return index;
 
-  const std::string view_id = array.identifier().as_string();
-  auto info_it = converter_.numpy_pointer_view_info_.find(view_id);
+  const auto info_it =
+    converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
   if (info_it == converter_.numpy_pointer_view_info_.end())
     return index;
 
   const auto &info = info_it->second;
   if (info.is_symbolic())
-  {
-    auto symbol_value = [&](const std::string &id) {
-      return symbol_expr(*converter_.symbol_table().find_symbol(id));
-    };
     return normalize_and_scale_index(
       index,
-      symbol_value(info.length_symbol),
-      symbol_value(info.stride_symbol),
+      converter_.numpy_view_extent(info, 0),
+      converter_.numpy_view_stride(info, 0),
       slice_node);
-  }
   return normalize_and_scale_index(index, info.length, info.stride, slice_node);
 }
 
@@ -2656,8 +3154,7 @@ std::optional<exprt> python_list::try_build_flat_index_assignment_target(
     converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
     return std::nullopt;
 
-  std::optional<flat_array_shape_info> shape =
-    get_flat_1d_or_2d_shape_info(array, converter_.symbol_table());
+  std::optional<flat_array_shape_info> shape = flat_shape_info_of(array);
   if (!shape)
     return std::nullopt;
 
@@ -2666,7 +3163,7 @@ std::optional<exprt> python_list::try_build_flat_index_assignment_target(
     index, shape->total_length, /*stride=*/1, index_node);
 
   const typet ptr_type = pointer_typet(shape->elem_type);
-  exprt base_ptr = build_typecast(build_address_of(array), ptr_type);
+  exprt base_ptr = scalar_storage_pointer(array, ptr_type);
   exprt elem_ptr = build_add(base_ptr, normalized_idx, ptr_type);
   return build_dereference(elem_ptr, shape->elem_type);
 }
@@ -2765,6 +3262,19 @@ exprt python_list::handle_range_slice(
   // of the slice IR (kept consistent with step_val==1) is a dead path.
   emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
   bool negative_step = (step_val < 0);
+
+  // A numpy array parameter (decayed to a pointer) is sliced through its
+  // tracked shape, like a local array.
+  if (
+    array.is_symbol() && resolved_array_type.is_pointer() &&
+    resolved_array_type.subtype() != char_type() &&
+    converter_.numpy_param_shapes_.count(array.identifier().as_string()) != 0 &&
+    converter_.numpy_pointer_view_info_.count(array.identifier().as_string()) ==
+      0)
+    if (
+      std::optional<exprt> param_view = try_build_strided_basic_view(
+        array, {slice_node}, /*allow_plain_array=*/true))
+      return *param_view;
 
   if (
     std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
@@ -2869,7 +3379,18 @@ exprt python_list::handle_range_slice(
                       : array_len;
     }
 
-    if (!step_info.literal && elem_type != char_type())
+    // A run-time step, or run-time bounds on an array bound to a name, is
+    // lowered with run-time offset/extent/stride temporaries.
+    const bool bound_to_name =
+      converter_.current_lhs && converter_.current_lhs->is_symbol() &&
+      array.is_symbol() &&
+      converter_.numpy_array_symbols_.count(array.identifier().as_string()) !=
+        0;
+    if (
+      elem_type != char_type() &&
+      (!step_info.literal ||
+       (bound_to_name && (has_nonliteral_slice_bound(slice_node) ||
+                          ns.follow(elem_type).is_array()))))
       return build_symbolic_step_slice(array, slice_node);
 
     // Process slice bounds (handles null, negative indices)

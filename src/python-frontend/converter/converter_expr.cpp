@@ -616,21 +616,54 @@ static std::string undefined_variable_message(
   return error_msg.str();
 }
 
-// v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003 etapa
-// 2, 1-D slice views): its own logical length is tracked separately, since
-// unwrapping the pointer reaches only the scalar element type, not a shape.
-// Views are always rank 1 in this PR's scope.
-std::optional<exprt>
-python_converter::symbolic_numpy_view_length(const std::string &name) const
+const python_converter::numpy_scalar_pointer_view_infot *
+python_converter::find_numpy_pointer_view_info(const std::string &name) const
 {
   for (const std::string &id : {name, resolve_name_symbol_id(name)})
   {
     const auto view = numpy_pointer_view_info_.find(id);
-    if (view != numpy_pointer_view_info_.end() && view->second.is_symbolic())
-      return symbol_expr(
-        *symbol_table_.find_symbol(view->second.length_symbol));
+    if (view != numpy_pointer_view_info_.end())
+      return &view->second;
   }
-  return std::nullopt;
+  return nullptr;
+}
+
+exprt python_converter::numpy_view_extent(
+  const numpy_scalar_pointer_view_infot &info,
+  std::size_t axis) const
+{
+  if (axis < info.shape_symbols.size() && !info.shape_symbols[axis].empty())
+    return symbol_expr(*symbol_table_.find_symbol(info.shape_symbols[axis]));
+  const std::size_t extent =
+    info.shape.empty() ? info.length : info.shape[axis];
+  return from_integer(extent, signedbv_typet(64));
+}
+
+exprt python_converter::numpy_view_stride(
+  const numpy_scalar_pointer_view_infot &info,
+  std::size_t axis) const
+{
+  const typet ll_type = signedbv_typet(64);
+  if (axis < info.stride_symbols.size() && !info.stride_symbols[axis].empty())
+    return symbol_expr(*symbol_table_.find_symbol(info.stride_symbols[axis]));
+  if (!info.strides.empty())
+    return from_integer(info.strides[axis], ll_type);
+  if (info.shape.size() <= 1)
+    return from_integer(info.stride, ll_type);
+  long long stride = 1;
+  for (std::size_t later = axis + 1; later < info.shape.size(); ++later)
+    stride *= static_cast<long long>(info.shape[later]);
+  return from_integer(stride, ll_type);
+}
+
+std::optional<exprt>
+python_converter::symbolic_numpy_view_length(const std::string &name) const
+{
+  const numpy_scalar_pointer_view_infot *info =
+    find_numpy_pointer_view_info(name);
+  if (!info || !info->is_symbolic())
+    return std::nullopt;
+  return numpy_view_extent(*info, 0);
 }
 
 void python_converter::reject_symbolic_numpy_view(
@@ -638,10 +671,13 @@ void python_converter::reject_symbolic_numpy_view(
 {
   if (info.is_symbolic())
     throw std::runtime_error(
-      "TypeError: this operation does not support a numpy view whose slice "
-      "step is not a literal");
+      "TypeError: this operation does not support a numpy view whose extent "
+      "or stride is only known at run time");
 }
 
+// v.shape / v.ndim / v.size where v is a pointer-backed numpy view: its own
+// logical shape is tracked separately, since unwrapping the pointer reaches
+// only the scalar element type, not a shape.
 std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
@@ -652,36 +688,24 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   if (it == numpy_pointer_view_info_.end())
     return std::nullopt;
 
-  if (it->second.is_symbolic())
-  {
-    const exprt dim = typecast_exprt(
-      symbol_expr(*symbol_table_.find_symbol(it->second.length_symbol)),
-      int_type());
-    if (attr_name == "shape")
-      return build_shape_tuple_expr(*this, {dim});
-    if (attr_name == "ndim")
-      return from_integer(1, int_type());
-    return attr_name == "size" ? std::optional<exprt>(dim) : std::nullopt;
-  }
-
+  const numpy_scalar_pointer_view_infot &info = it->second;
+  const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
   std::vector<exprt> dims;
-  const std::vector<std::size_t> shape =
-    it->second.shape.empty() ? std::vector<std::size_t>{it->second.length}
-                             : it->second.shape;
-  dims.reserve(shape.size());
-  std::size_t size = 1;
-  for (std::size_t dim : shape)
+  dims.reserve(rank);
+  exprt size = from_integer(1, signedbv_typet(64));
+  for (std::size_t axis = 0; axis < rank; ++axis)
   {
-    dims.push_back(from_integer(dim, int_type()));
-    size *= dim;
+    const exprt extent = numpy_view_extent(info, axis);
+    dims.push_back(typecast_exprt(extent, int_type()));
+    size = python_expr::build_mul(size, extent, signedbv_typet(64));
   }
 
   if (attr_name == "shape")
     return build_shape_tuple_expr(*this, dims);
   if (attr_name == "ndim")
-    return from_integer(shape.size(), int_type());
+    return from_integer(rank, int_type());
   if (attr_name == "size")
-    return from_integer(size, int_type());
+    return typecast_exprt(size, int_type());
   return std::nullopt;
 }
 
@@ -995,14 +1019,19 @@ std::optional<exprt> python_converter::try_get_numpy_shape_subscript(
 
   const nlohmann::json &value = element["value"];
   const std::string name = value["value"].value("id", "");
-  if (std::optional<exprt> length = symbolic_numpy_view_length(name))
+  if (
+    const auto *view = find_numpy_pointer_view_info(name);
+    view && view->is_symbolic())
   {
-    // A rank-1 view: only axis 0 (or -1) exists.
-    const std::optional<long long> axis = numpy_literal_index(element["slice"]);
-    if (!axis || (*axis != 0 && *axis != -1))
+    const long long rank = view->shape.empty() ? 1 : view->shape.size();
+    std::optional<long long> axis = numpy_literal_index(element["slice"]);
+    if (axis && *axis < 0)
+      *axis += rank;
+    if (!axis || *axis < 0 || *axis >= rank)
       throw std::runtime_error(
-        "IndexError: tuple index out of range for a rank-1 numpy view");
-    return typecast_exprt(*length, int_type());
+        "IndexError: tuple index out of range for this numpy view");
+    return typecast_exprt(
+      numpy_view_extent(*view, static_cast<std::size_t>(*axis)), int_type());
   }
   std::optional<std::vector<std::size_t>> shape =
     tracked_numpy_shape_from_name(name);
@@ -1335,6 +1364,12 @@ std::optional<exprt> python_converter::try_dispatch_multidim_tuple_axes(
   const nlohmann::json &element,
   const std::vector<nlohmann::json> &idx_nodes)
 {
+  if (
+    std::optional<exprt> view =
+      python_list(*this, element)
+        .try_build_strided_basic_view(array, idx_nodes))
+    return view;
+
   // 2-D slicing: a[:, j] (column select) and a[i, :] (row select,
   // equivalent to chained a[i][:]). Any other slice/index tuple
   // combination (partial bounds, both dims sliced, 3+ dims, ...)
@@ -1671,6 +1706,15 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   // this needs to be special-cased ahead of the generic Subscript path.
   if (std::optional<exprt> flat_value = try_build_flat_index_read(element))
     return *flat_value;
+
+  // An N-D strided view has no C array type, so its whole index chain is
+  // lowered at once.
+  {
+    python_list list(*this, element);
+    if (
+      std::optional<exprt> strided = list.try_build_strided_view_index(element))
+      return *strided;
+  }
 
   if (std::optional<exprt> shape_dim = try_get_numpy_shape_subscript(element))
     return *shape_dim;

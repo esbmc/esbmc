@@ -4554,6 +4554,14 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
     return std::nullopt;
 
+  const nlohmann::json &reduced_operand =
+    call_["args"].empty() ? call_["func"]["value"] : call_["args"][0];
+  if (
+    std::optional<exprt> runtime_result =
+      python_list(converter_, call_)
+        .try_reduce_symbolic_view(func_name, reduced_operand))
+    return runtime_result;
+
   std::optional<any_all_receiver> receiver =
     resolve_any_all_receiver(func_name);
   if (!receiver)

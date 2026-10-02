@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <utility>
@@ -174,6 +175,23 @@ private:
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);
+  std::vector<std::size_t>
+  resolve_reshape_shape(std::optional<std::size_t> total) const;
+  std::optional<exprt> try_build_reshape_pointer_view();
+  static bool
+  axes_are_symbolic(const std::vector<python_list::strided_axis> &axes);
+  bool describe_view_operand(
+    const nlohmann::json &arg,
+    python_list &list,
+    std::optional<python_list::strided_view_desc> &source);
+  exprt emit_strided_result(
+    python_list &list,
+    const python_list::strided_view_desc &source,
+    const std::vector<python_list::strided_axis> &axes,
+    bool readonly);
+  std::optional<exprt> try_build_view_flatten_copy();
+  std::optional<exprt> try_build_axis_permutation_view();
+  std::optional<exprt> try_build_shape_only_view();
   std::optional<exprt> try_materialize_descriptor_copy_call();
   std::optional<exprt>
   try_materialize_descriptor_array_call(nlohmann::json &array_arg);

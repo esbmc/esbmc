@@ -4,7 +4,9 @@
 #include <python-frontend/type/element_type_registry.h>
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_expr.h>
 #include <util/symtab/symbol.h>
+#include <functional>
 #include <optional>
 #include <set>
 #include <utility>
@@ -21,6 +23,12 @@ struct list_elem_info
   symbolt *elem_symbol;
   exprt elem_size;
   locationt location;
+};
+
+struct flat_array_shape_info
+{
+  typet elem_type;
+  long long total_length;
 };
 
 class python_list
@@ -249,6 +257,150 @@ public:
    * @param array Source 1-D or 2-D array expression.
    */
   std::optional<exprt> try_build_ravel_pointer_view(const exprt &array);
+
+  /// One axis of a strided view, in elements: its extent and stride are
+  /// constants unless the matching expression is set (a signed 64-bit
+  /// temporary computed at run time).
+  struct strided_axis
+  {
+    long long extent = 0;
+    exprt extent_expr = nil_exprt();
+    long long stride = 0;
+    exprt stride_expr = nil_exprt();
+
+    bool symbolic() const
+    {
+      return extent_expr.is_not_nil() || stride_expr.is_not_nil();
+    }
+  };
+
+  /// A numpy array or view as a scalar base pointer plus its axes: the
+  /// descriptor every N-D view is built from.
+  struct strided_view_desc
+  {
+    exprt base;
+    typet elem_type;
+    std::vector<strided_axis> axes;
+  };
+
+  std::optional<strided_view_desc> describe_strided_view(const exprt &array);
+
+  /// `base + offset` as a registered view with these axes for the assignment
+  /// target (offset is a size_type element count).
+  exprt register_strided_view(
+    const strided_view_desc &source,
+    const exprt &offset,
+    const std::vector<strided_axis> &axes,
+    bool readonly = false);
+
+  /// Independent array holding the elements a view with these axes reads, in
+  /// row-major order. `out_shape` (constant axes only) lays them out in
+  /// another shape of the same size.
+  exprt copy_strided_view(
+    const strided_view_desc &source,
+    const exprt &offset,
+    const std::vector<strided_axis> &axes,
+    const std::vector<std::size_t> *out_shape = nullptr);
+
+  static exprt axis_extent(const strided_axis &axis);
+  static exprt axis_stride(const strided_axis &axis);
+
+  /// The descriptor of the named view when its extents or strides are known
+  /// only at run time; nullopt for anything else.
+  std::optional<strided_view_desc>
+  symbolic_view_operand(const nlohmann::json &arg);
+
+  /// Element lvalue of a view at a signed 64-bit multi-index.
+  exprt view_element(
+    const strided_view_desc &view,
+    const std::vector<exprt> &index) const;
+
+  /// `idx = 0; while (idx < extent) { body(idx); idx++; }`, with the body's
+  /// statements emitted inside the loop.
+  void emit_counted_loop(
+    const nlohmann::json &node,
+    const exprt &extent,
+    const std::function<void(const exprt &)> &body);
+
+  /// Nested loops over every index of a view; `leaf` is called once, inside
+  /// the innermost body, with the element lvalue.
+  void emit_view_loops(
+    const nlohmann::json &node,
+    const strided_view_desc &view,
+    const std::function<void(const exprt &)> &leaf);
+
+  exprt
+  view_element_count(const nlohmann::json &node, const strided_view_desc &view);
+
+  /// sum / mean / min / max / any / all of a run-time-extent view, as loops.
+  std::optional<exprt> try_reduce_symbolic_view(
+    const std::string &function,
+    const nlohmann::json &arg);
+
+  /// A Python list of a run-time-extent view's elements (nested per axis when
+  /// `nested`, flat otherwise).
+  std::optional<exprt>
+  try_build_symbolic_view_list(const nlohmann::json &arg, bool nested);
+
+  enum class view_contiguity
+  {
+    contiguous,
+    not_contiguous,
+    unknown // depends on a run-time stride
+  };
+
+  /// Whether a view covers its storage densely in row-major order.
+  static view_contiguity
+  classify_view_contiguity(const strided_view_desc &view);
+
+  /// reshape of a run-time-extent view to constant `new_shape`: an alias when
+  /// it is contiguous, a copy otherwise; ValueError if the sizes differ.
+  std::optional<exprt> try_reshape_symbolic_view(
+    const nlohmann::json &arg,
+    const std::vector<std::size_t> &new_shape);
+
+  /// np.copy / np.array / .copy of a run-time-extent view.
+  std::optional<exprt> try_copy_symbolic_view(
+    const nlohmann::json &arg,
+    bool flatten = false,
+    bool alias_if_contiguous = false);
+
+  /// Signed 64-bit temporary holding `value`, assigned once here.
+  exprt emit_ll_temp(
+    const nlohmann::json &node,
+    const char *name,
+    const exprt &value);
+
+  /// `v = a[i, :, 1:3, ...]` over a rank-3+ array or any N-D view, with
+  /// literal or run-time indices and slice bounds: a view into the source's
+  /// own storage (aliasing in both directions) when assigned to a bare name,
+  /// otherwise an independent copy. Declines for anything else.
+  std::optional<exprt> try_build_strided_basic_view(
+    const exprt &array,
+    const std::vector<nlohmann::json> &idx_nodes,
+    bool allow_plain_array = false);
+
+  /// `b[i][j]`, `b[i, j]` or `x = b[i]` over a registered N-D strided view.
+  std::optional<exprt>
+  try_build_strided_view_index(const nlohmann::json &element);
+
+  /// Total element count and scalar element type of a fixed-shape array of
+  /// any rank, or of a contiguous N-D subarray view.
+  std::optional<flat_array_shape_info>
+  flat_shape_info_of(const exprt &array) const;
+
+  /// Pointer into `array`'s own contiguous storage, `offset` elements in,
+  /// that reads as an N-D array of `shape`; registers it for the assignment
+  /// target. Declines unless `array` is a fixed-shape array or contiguous view.
+  std::optional<exprt> build_contiguous_shaped_view(
+    const exprt &array,
+    const std::vector<std::size_t> &shape,
+    std::size_t offset,
+    bool readonly);
+
+  /// `array`'s storage as a pointer to its scalar element type.
+  exprt scalar_storage_pointer(const exprt &array, const typet &scalar_ptr_type)
+    const;
 
   /**
    * @brief a.flat[i] = x: builds a dereferenced-pointer lvalue into a's own
