@@ -2116,3 +2116,5 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
+regression/esbmc/union_struct_member_bound
+regression/esbmc/union_struct_member_bound_fail

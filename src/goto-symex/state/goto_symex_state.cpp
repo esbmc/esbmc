@@ -521,11 +521,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // #7446: an update may also be an immutable symbol, not just a literal --
       // a cross-member read folds through fold_union_member_read only at equal
       // width, and correctly, because the carried value cannot change.
+      // A struct-typed update (`u.a.p = 4` writes `u.a WITH [p := 4]`) is
+      // gated as the struct arm gates its updates.
+      unsigned symbolic_updates = 0;
       for (const expr2tc *current = &expr; is_with2t(*current);
            current = &to_with2t(*current).source_value)
       {
         const expr2tc &update = to_with2t(*current).update_value;
-        if (!is_constant_expr(update) && !is_immutable_value(update))
+        if (
+          !is_constant_expr(update) &&
+          !update_may_propagate(*this, update, symbolic_updates))
           return false;
       }
 
