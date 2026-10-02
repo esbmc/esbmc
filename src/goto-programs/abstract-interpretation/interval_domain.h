@@ -221,6 +221,14 @@ public:
    */
   void havoc_rec(const expr2tc &expr);
 
+  /// Forget what a body-less call that symex models may write through its
+  /// pointer arguments (#8083).
+  void havoc_written_arguments(const code_function_call2t &call);
+
+  /// Havoc the variable @p arg points into; false when that is unknown and
+  /// @p arg, a pointer or @p any_type, may still have been written through.
+  bool havoc_pointee(const expr2tc &arg, bool any_type);
+
   /**
    * @brief Uses the abstract state to simplify a given expression using
    * context- specific information.

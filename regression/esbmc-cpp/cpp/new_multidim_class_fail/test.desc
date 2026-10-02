@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 8
+^VERIFICATION FAILED$
+^\s+assertion live != 0$
