@@ -812,6 +812,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
+| **R86** | **Medium (false FAILED, default configuration, C++)** — R73's residual, §15 M9 (R86); **FIXED**, same entry | **A value-initialised `new T[n][m]` was not zeroed.** `cpp_new_zero_fill` skipped an array element type, because symex rejects a dereference that yields an array, so `new S[2][3]()` for `struct S { int a = 1; int b; }` left `b` nondet and `assert(p[1][2].b == 0)` was FAILED while the native program passes ([dcl.init]/9). | `goto_convertt::cpp_new_zero_fill` (`src/goto-programs/builtin_functions.cpp`) |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
@@ -9406,7 +9407,7 @@ FAILED on the destructor count.
 
 Not fixed: value-initialising such an array (`new S[2][3]()`) still skips the
 zero fill for an array element type, so members no constructor writes stay
-nondet, as on master; R69 (#8069) rewrites that lowering.
+nondet, as on master; R69 (#8069) rewrites that lowering. Fixed as R86.
 
 ### M9 (R69) — 2026-09-28, R64's residual: elided copies before C++17
 
@@ -9587,6 +9588,30 @@ read the bytes little-endian, a false SUCCESSFUL where master aborted.
 and one-byte-struct cases under `--big-endian`. Master aborts on all four, and
 each half agrees under Bitwuzla and Z3. The 114 other regression tests that call
 these functions keep their verdicts.
+
+### M9 (R86) — 2026-10-02, the zero fill R73 left out
+
+R73 noted that value-initialising an array new whose element type is itself an
+array skipped the zero fill. `cpp_new_initializer` called `cpp_new_zero_fill`
+only for a non-array element, since the fill dereferenced `lhs + i` at the
+element type and symex rejects a dereference that yields an array. So
+`new S[2][3]()` for `struct S { int a = 1; int b; int *q; }` ran the
+default member initialisers and left `b` and `q` nondet:
+`assert(p[1][2].b == 0)` was FAILED, and the native program passes
+([dcl.init]/9: such an `S` is zero-initialised before its constructor runs). A
+polymorphic element, `new D[2][2]()` with `D : B` and a member no initialiser
+writes, read that member back nondet through a virtual call the same way.
+`new int[2][3]()` was already right.
+
+**Fixed** by filling n * m leaves through a pointer to the leaf type, as the
+constructor loop already does, with `array_leaves` giving the leaf and the
+stride. `new_multidim_value_init` is FAILED on master and SUCCESSFUL with the
+change, under Bitwuzla and Z3. `new_multidim_value_init_fail`, whose assertion
+fails natively, is FAILED on both: master's nondet member covers every value
+the fill could store, so no failing half can change verdict here. It pins that
+the fill does not overwrite the default member initialiser. The 1275 tests in
+`esbmc-cpp/cpp` keep their verdicts; six fail on this host with master's binary
+too.
 
 ---
 
