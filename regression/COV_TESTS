@@ -1869,6 +1869,13 @@ regression/esbmc/vla_middle_dim_decl_fail
 regression/esbmc/github_7992
 regression/esbmc/github_8007
 regression/esbmc/github_8007_safe
+regression/esbmc/github_8006
+regression/esbmc/github_8006_alias
+regression/esbmc/github_8006_intcast
+regression/esbmc/github_8006_nonpointer
+regression/esbmc/github_8006_realloc
+regression/esbmc/github_8006_safe
+regression/esbmc/github_8006_scope
 regression/esbmc/github_8008
 regression/esbmc/github_8008_deref_deref
 regression/esbmc/github_8008_int_slot
