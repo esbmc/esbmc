@@ -70,10 +70,13 @@ static bool target_is_big_endian()
 }
 
 /* The shift, in bytes, that moves the low byte of a value into the place of
- * the @p n bytes at byte @p offset of a scalar of @p type. */
+ * the @p n bytes at byte @p offset of a scalar of @p type. A range running
+ * past the scalar's end, as gen_value_by_byte passes, ends at its last byte. */
 static size_t byte_shift(const type2tc &type, size_t offset, size_t n)
 {
-  return target_is_big_endian() ? type->get_width() / 8 - offset - n : offset;
+  const size_t width = type->get_width() / 8;
+  return target_is_big_endian() ? width - offset - std::min(n, width - offset)
+                                : offset;
 }
 
 // Computes the equivalent object value when considering a memset operation on

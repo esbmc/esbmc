@@ -24,6 +24,10 @@ int main()
   memset(a, 0x11, 3);
   assert(a[0] == 0x1111 && a[1] == 0x1100);
 
+  unsigned b[2] = {0, 0};
+  memset((char *)b + 1, 0x33, 4);
+  assert(b[0] == 0x00333333u && b[1] == 0x33000000u);
+
   struct S s = {0, 0};
   memset(&s, 0x22, 1);
   assert(s.h == 0x2200);
