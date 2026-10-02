@@ -2103,10 +2103,6 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
-regression/esbmc/github_8096
-regression/esbmc/github_8096_fail
-regression/esbmc/github_8096_int_min
-regression/esbmc/github_8096_int_min_fail
 regression/esbmc/github_8102
 regression/esbmc/github_8102_fail
 regression/esbmc/github_8102_sub
@@ -2126,5 +2122,9 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
+regression/esbmc/github_8096
+regression/esbmc/github_8096_fail
+regression/esbmc/github_8096_int_min
+regression/esbmc/github_8096_int_min_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
