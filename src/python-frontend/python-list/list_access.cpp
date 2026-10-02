@@ -1,6 +1,5 @@
 #include "python_list_internal.h"
 #include <python-frontend/python-dict/python_dict_handler.h>
-#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <algorithm>
 #include <optional>
 
@@ -719,30 +718,6 @@ std::optional<long long> literal_slice_length(
   if (start >= stop)
     return 0;
   return ((stop - start - 1) / step) + 1;
-}
-
-// Real identity of a numpy array's source symbol (ADR-NP-003's canonical
-// buffer_id), 0 for a non-symbol source. See docs/roadmap/
-// numpy-support-assessment.md, "Soundness / performance concerns" item 4, for
-// why nothing consults this yet.
-std::size_t numpy_symbol_buffer_id(const exprt &array)
-{
-  return array.is_symbol()
-           ? std::hash<std::string>{}(array.identifier().as_string())
-           : 0;
-}
-
-void append_array_shape(const typet &type, std::vector<long long> &shape)
-{
-  if (!type.is_array())
-    return;
-
-  const array_typet &array_type = to_array_type(type);
-  if (array_type.size().is_nil() || !array_type.size().is_constant())
-    return;
-  shape.push_back(
-    binary2integer(array_type.size().value().c_str(), false).to_int64());
-  append_array_shape(array_type.subtype(), shape);
 }
 
 struct row_pointer_view_info
@@ -3492,12 +3467,6 @@ exprt python_list::handle_range_slice(
             slice_node, source_len, step_val, &literal_start))
         {
           result_size = from_integer(*static_slice_len, size_type());
-          std::vector<long long> view_shape;
-          view_shape.push_back(*static_slice_len);
-          append_array_shape(ns.follow(elem_type), view_shape);
-          ndarray_descriptor descriptor(
-            view_shape, "", numpy_symbol_buffer_id(array));
-          descriptor.validate();
 
           if (
             std::optional<exprt> view_ptr = try_build_1d_pointer_view(

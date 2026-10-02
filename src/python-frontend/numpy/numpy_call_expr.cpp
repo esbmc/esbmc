@@ -1,5 +1,5 @@
 #include <python-frontend/json_utils.h>
-#include <python-frontend/numpy/ndarray_descriptor.h>
+#include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/python_converter.h>

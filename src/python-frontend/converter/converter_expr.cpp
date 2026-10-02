@@ -14,7 +14,6 @@
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
@@ -1107,13 +1106,7 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
     if (attr_name == "shape")
       return build_shape_tuple_expr(*this, dim_exprs);
     if (attr_name == "ndim")
-    {
-      std::vector<int> dims = type_handler_.get_array_type_shape(base_type);
-      ndarray_descriptor descriptor(
-        std::vector<long long>(dims.begin(), dims.end()), "", 0);
-      descriptor.validate();
-      return from_integer(descriptor.rank(), int_type());
-    }
+      return from_integer(dim_exprs.size(), int_type());
     return build_shape_size_expr(dim_exprs);
   }
 
@@ -2351,8 +2344,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
-      // `.ndim`: mirrors the `.shape` block above (see the general
-      // attribute-access path for the descriptor-backed rank computation).
+      // `.ndim`: mirrors the `.shape` block above.
       if (attr_name == "ndim")
       {
         typet sym_type = symbol->get_type();
@@ -2365,11 +2357,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           sym_type.is_array() &&
           numpy_array_symbols_.count(symbol->id.as_string()) != 0)
         {
-          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
-          ndarray_descriptor descriptor(
-            std::vector<long long>(dims.begin(), dims.end()), "", 0);
-          descriptor.validate();
-          expr = from_integer(descriptor.rank(), int_type());
+          expr = from_integer(
+            type_handler_.get_array_type_shape(sym_type).size(), int_type());
           break;
         }
 
