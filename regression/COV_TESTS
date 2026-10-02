@@ -2095,6 +2095,7 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc/big_endian_byte_order_macros
 regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
