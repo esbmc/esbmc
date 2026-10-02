@@ -1202,7 +1202,7 @@ bool goto_convert_functionst::convert_native_rec(
       exprt cond = migrate_expr_back(dw.cond);
       if (!here.get_file().empty())
         stamp_value_locations(cond, here);
-      remove_sideeffects(cond, sideeffects);
+      remove_condition_sideeffects(cond, sideeffects);
       migrate_expr(cond, guard);
     }
 
@@ -1320,7 +1320,7 @@ bool goto_convert_functionst::convert_native_rec(
       exprt cond = migrate_expr_back(f.cond);
       if (!here.get_file().empty())
         stamp_value_locations(cond, here);
-      remove_sideeffects(cond, sideeffects);
+      remove_condition_sideeffects(cond, sideeffects);
       migrate_expr(cond, guard);
     }
 
