@@ -2120,3 +2120,5 @@ regression/esbmc/github_8103
 regression/esbmc/github_8103_fail
 regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
