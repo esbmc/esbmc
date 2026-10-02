@@ -2121,3 +2121,5 @@ regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
 regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
 regression/esbmc-cpp/cpp/shared_ptr_member_copy
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
