@@ -70,13 +70,10 @@ static bool target_is_big_endian()
 }
 
 /* The shift, in bytes, that moves the low byte of a value into the place of
- * the @p n bytes at byte @p offset of a scalar of @p type. A range running
- * past the scalar's end, as gen_value_by_byte passes, ends at its last byte. */
+ * the @p n bytes at byte @p offset of a scalar of @p type. */
 static size_t byte_shift(const type2tc &type, size_t offset, size_t n)
 {
-  const size_t width = type->get_width() / 8;
-  return target_is_big_endian() ? width - offset - std::min(n, width - offset)
-                                : offset;
+  return target_is_big_endian() ? type->get_width() / 8 - offset - n : offset;
 }
 
 // Computes the equivalent object value when considering a memset operation on
@@ -301,8 +298,7 @@ static inline expr2tc gen_value_by_byte(
       }
       else
       {
-        uint64_t bytes_to_write =
-          bytes_left < base_size ? bytes_left : base_size;
+        uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
         data.datatype_members[i] = gen_value_by_byte(
           to_array_type(type).subtype,
           local_member,
@@ -311,8 +307,7 @@ static inline expr2tc gen_value_by_byte(
           offset_left);
         if (!data.datatype_members[i])
           return expr2tc();
-        bytes_left =
-          bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
+        bytes_left -= bytes_to_write;
         offset_left = 0;
       }
     }
@@ -363,7 +358,8 @@ static inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < current_member_size);
-        uint64_t bytes_to_write = std::min(bytes_left, current_member_size);
+        uint64_t bytes_to_write =
+          std::min(bytes_left, current_member_size - offset_left);
         data.datatype_members[i] = gen_value_by_byte(
           current_member_type,
           local_member,
@@ -374,9 +370,7 @@ static inline expr2tc gen_value_by_byte(
         if (!data.datatype_members[i])
           return expr2tc();
 
-        bytes_left = bytes_left < current_member_size
-                       ? 0
-                       : bytes_left - (current_member_size - offset_left);
+        bytes_left -= bytes_to_write;
         offset_left = 0;
       }
     }

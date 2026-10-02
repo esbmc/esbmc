@@ -2122,3 +2122,5 @@ regression/esbmc/big_endian_memset
 regression/esbmc/big_endian_memset_fail
 regression/esbmc/big_endian_memcpy
 regression/esbmc/big_endian_memcpy_fail
+regression/esbmc/memset_offset_span
+regression/esbmc/memset_offset_span_fail
