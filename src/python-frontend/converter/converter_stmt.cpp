@@ -1079,6 +1079,20 @@ bool same_numpy_storage_id(const std::string &lhs, const std::string &rhs)
   return lhs == rhs || short_symbol_name(lhs) == short_symbol_name(rhs);
 }
 
+// A view local to another function is out of scope at this rebind; with the
+// short-name match above, its parameter source can collide with a global.
+bool is_local_to_other_function(
+  const std::string &id,
+  const std::string &current_function)
+{
+  const std::size_t marker = id.rfind("@F@");
+  if (marker == std::string::npos)
+    return false;
+  const std::size_t name_begin = marker + 3;
+  const std::size_t name_end = id.find('@', name_begin);
+  return id.substr(name_begin, name_end - name_begin) != current_function;
+}
+
 bool should_detach_numpy_pointer_views_for_assignment(
   const nlohmann::json &target,
   const nlohmann::json &ast_node)
@@ -3933,7 +3947,9 @@ void python_converter::detach_numpy_pointer_views_of(
   {
     const std::string view_source_id =
       resolve_numpy_array_storage_alias_id(entry.second.source_id);
-    if (same_numpy_storage_id(view_source_id, rebound_storage_id))
+    if (
+      same_numpy_storage_id(view_source_id, rebound_storage_id) &&
+      !is_local_to_other_function(entry.first, current_func_name_))
       view_ids.push_back(entry.first);
   }
   std::sort(view_ids.begin(), view_ids.end());
