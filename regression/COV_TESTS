@@ -2086,3 +2086,6 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc-cpp/cpp/expression_statement_temporary
+regression/esbmc-cpp/cpp/expression_statement_temporary_fail
+regression/esbmc-cpp/cpp/expression_statement_temporary_legacy

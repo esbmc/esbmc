@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <map>
 #include <goto-programs/destructor.h>
@@ -533,6 +534,7 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
   else
   {
+    const std::size_t stack_size = targets.destructor_stack.size();
     remove_sideeffects(expr, dest, false);
 
     if (expr.is_not_nil())
@@ -542,6 +544,9 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
       tmp.location() = expr.location();
       copy(tmp, OTHER, dest);
     }
+
+    // An expression statement is a full-expression ([class.temporary]/4).
+    destroy_full_expression_temporaries(stack_size, code.location(), dest);
   }
 }
 
@@ -823,24 +828,8 @@ void goto_convertt::convert_decl_initializer(
     // destructor-free tail (plain DEADs of C-style temps) keeps
     // block-level scope, so both retain the old shape.
     if (!is_lvalue_or_rvalue_reference(s.get_type()))
-    {
-      bool have_destructor = false;
-      for (std::size_t i = stack_size; i < targets.destructor_stack.size(); i++)
-        if (targets.destructor_stack[i].get_statement() == "function_call")
-        {
-          have_destructor = true;
-          break;
-        }
-
-      if (have_destructor)
-        while (targets.destructor_stack.size() > stack_size)
-        {
-          codet d_code = targets.destructor_stack.back();
-          targets.destructor_stack.pop_back();
-          d_code.location() = new_code.location();
-          convert(d_code, dest);
-        }
-    }
+      destroy_full_expression_temporaries(
+        stack_size, new_code.location(), dest);
   }
 }
 
@@ -2286,6 +2275,24 @@ void goto_convertt::generate_conditional_branch(
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 {
   return tmp_symbol.new_symbol(context, type, "tmp$");
+}
+
+bool goto_convertt::destroy_full_expression_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  const destructor_stackt &stack = targets.destructor_stack;
+  if (
+    std::none_of(
+      stack.begin() + stack_size, stack.end(), [](const codet &entry) {
+        return entry.get_statement() == "function_call";
+      }))
+    return false;
+
+  unwind_destructor_stack(location, stack_size, dest);
+  targets.destructor_stack.resize(stack_size);
+  return true;
 }
 
 void goto_convertt::unwind_destructor_stack(

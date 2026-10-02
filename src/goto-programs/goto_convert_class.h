@@ -258,6 +258,13 @@ protected:
 
   typedef std::vector<codet> destructor_stackt;
 
+  /// Emits the scope-exit entries pushed above `stack_size` when one of them
+  /// is a destructor call, as the temporaries of a full-expression; plain
+  /// DEADs of C temporaries keep block scope.
+  bool destroy_full_expression_temporaries(
+    std::size_t stack_size,
+    const locationt &,
+    goto_programt &dest);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,

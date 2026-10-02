@@ -739,6 +739,7 @@ bool goto_convert_functionst::convert_native_rec(
       // for `+=`, remove_pre/remove_post, do_function_call -- stays
       // byte-identical, including the temp symbols they allocate (rolled back
       // by convert_function if a later statement forces a fallback).
+      const std::size_t stack_size = targets.destructor_stack.size();
       remove_sideeffects(op, dest, false);
       if (op.is_not_nil())
       {
@@ -746,6 +747,7 @@ bool goto_convert_functionst::convert_native_rec(
         other.location() = op.location();
         copy(other, OTHER, dest);
       }
+      destroy_full_expression_temporaries(stack_size, expr_stmt.location, dest);
       return true;
     }
 

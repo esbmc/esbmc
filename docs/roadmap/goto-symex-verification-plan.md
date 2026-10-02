@@ -811,6 +811,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
+| **R82** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R69's C++14 residual, §15 M9 (R82); **FIXED** for expression statements, same entry | **A temporary in an expression statement outlived it.** `get(C(1));`, `take(C(1));` with a by-value class parameter, `k = get(C(1));` and a `for` increment that builds a temporary ran the destructor at the end of the enclosing block, not at the end of the statement ([class.temporary]/4). `assert(live == 1)` after `get(C(1));` was SUCCESSFUL. Only a declaration's initializer and a discarded `temporary_object` unwound their full-expression's entries. | `convert_expression`, `src/goto-programs/goto_convert.cpp`; the `code_expression2t` arm of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/expression_statement_temporary{,_fail,_legacy}` | — | **Fixed**: an expression statement destroys the temporaries it created when it ends; the three sites share `destroy_full_expression_temporaries`. A temporary in an `if`, `while` or `for` condition is still destroyed at block exit. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
@@ -9501,6 +9502,44 @@ address, read from its low bits, is now `cursor` rather than `pesbt`.
 Not fixed: clang still predefines the host's `__BYTE_ORDER__` under
 `--big-endian`, so a program that selects its layout by that macro verifies the
 little-endian variant.
+
+---
+
+### M9 (R82) — 2026-10-02, the statement that kept its temporaries
+
+R69's C++14 residual named elidable copies that are still converted. Probing
+them natively against ESBMC found a defect under the default C++17 mode first:
+`take(C(1));`, where `take` has a by-value class parameter, left the
+temporary alive past the statement. The destructor call was there, but at the
+end of the block. Any expression statement did the same: `get(C(1));` for a
+`const C &` parameter, `k = get(C(1));`, `k += get(C(1));`, a comma operand,
+and a `for` increment. In the loop the temporary was built once per iteration
+and destroyed once. `assert(live == 1)` after `get(C(1));` was SUCCESSFUL on
+master; natively it aborts. A bare `C(1);` and `int k = get(C(1));` were
+already right: a discarded `temporary_object` and a declaration's initializer
+were the only places that emitted the entries pushed while lowering their
+expression ([class.temporary]/4, #6075, #6076).
+
+**Fixed** by doing the same at the end of an expression statement, in both
+`convert_expression` and the irep2-native `code_expression2t` arm of
+`convert_native_rec`, which reproduces it and is the default path. The three
+sites share `destroy_full_expression_temporaries`, which keeps the old rule
+that entries with no destructor call (the DEADs of C temporaries) stay at block
+scope, so C is unchanged. `expression_statement_temporary{,_fail}` change
+verdict against master under Bitwuzla and Z3, and fail with the native arm
+reverted; `expression_statement_temporary_legacy` runs under
+`--no-irep2-native-body` and fails with `convert_expression` reverted.
+
+Not fixed: a temporary in an `if`, `while` or `for` condition is still
+destroyed at block exit (`if (get(C(1))) ...` followed by `assert(live == 0)`
+is a false FAILED). Each successor of the condition's branch needs the
+destructor, which is a change to `convert_ifthenelse` and the loop lowerings.
+Also measured, and wrong in C++17 too, so not elision: `C a[2] = {C(1), C(2)}`
+runs four destructors, likely the helper-copy mechanism
+`aggregate_init_temp_double_destroy` pins as a KNOWNBUG; `catch (C c)` after
+`throw C(1)` runs one constructor and one destructor where the native program
+runs two of each. In C++14, `C c = b ? C(1) : C(2);` and `C c = C(C(1));` run
+a surplus copy and destructor each, as R69 left them.
 
 ---
 
