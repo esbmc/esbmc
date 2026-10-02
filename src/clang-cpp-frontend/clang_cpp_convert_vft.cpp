@@ -484,10 +484,15 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
   // from it (frontends-to-irep2.md §44).
   assert(code_type.argument_base_names.size() == code_type.arguments.size());
   std::vector<irep_idt> identifiers = code_type.argument_names;
+  std::vector<irep_idt> base_names = code_type.argument_base_names;
 
   for (std::size_t i = 0; i < code_type.arguments.size(); i++)
   {
-    const irep_idt &base_name = code_type.argument_base_names[i];
+    // An override declared with unnamed parameters has empty base names,
+    // which would collapse every argument onto one symbol (github #8090).
+    irep_idt &base_name = base_names[i];
+    if (base_name.empty())
+      base_name = "__anon_arg" + std::to_string(i);
 
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
@@ -526,7 +531,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     code_type.ret_type,
     identifiers,
     code_type.ellipsis,
-    code_type.argument_base_names));
+    base_names));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
