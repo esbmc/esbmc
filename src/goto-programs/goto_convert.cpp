@@ -1776,6 +1776,24 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
   t->location = code.location();
 }
 
+void goto_convertt::remove_return_value_sideeffects(
+  exprt &value,
+  goto_programt &dest)
+{
+  // A class-type value may be, or be copied bitwise from, a temporary of the
+  // expression (`return A(n);`, `return H{q};`), and a temporary under `?:`,
+  // `&&` or `||` exists on one path only; their entries are dropped.
+  const typet &type = ns.follow(value.type());
+  const bool drop_temporaries = type.id() == "struct" || type.id() == "union" ||
+                                has_conditional_sideeffect(value);
+  const std::size_t stack_size = targets.destructor_stack.size();
+  goto_programt sideeffects;
+  remove_sideeffects(value, sideeffects);
+  dest.destructive_append(sideeffects);
+  if (drop_temporaries)
+    targets.destructor_stack.resize(stack_size);
+}
+
 void goto_convertt::convert_return(
   const code_returnt &code,
   goto_programt &dest)
@@ -1806,18 +1824,7 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
-    // A class-type value may be, or be copied bitwise from, a temporary of
-    // the expression (`return A(n);`, `return H{q};`), and a temporary under
-    // `?:`, `&&` or `||` exists on one path only; their entries are dropped.
-    const typet &type = ns.follow(new_code.return_value().type());
-    const bool drop_temporaries =
-      type.id() == "struct" || type.id() == "union" ||
-      has_conditional_sideeffect(new_code.return_value());
-    goto_programt sideeffects;
-    remove_sideeffects(new_code.return_value(), sideeffects);
-    dest.destructive_append(sideeffects);
-    if (drop_temporaries)
-      targets.destructor_stack.resize(value_stack_size);
+    remove_return_value_sideeffects(new_code.return_value(), dest);
   }
 
   // C++ [stmt.return]: the return value is computed before the local

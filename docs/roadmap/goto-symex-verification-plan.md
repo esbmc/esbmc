@@ -9540,7 +9540,10 @@ which fails with the conditional check removed.
 
 `return_temporary_destroyed{,_fail}` in `regression/esbmc-cpp/cpp`
 (`--std c++17`) are wrong on master, both halves, under Z3; both give the same
-verdicts under `--std c++11`, `c++14` and `c++20`.
+verdicts under `--std c++11`, `c++14` and `c++20`. Of the 3372 tests under
+`regression/esbmc-cpp*`, 111 get a different `--goto-functions-only` output
+(most through the operational models' `return` statements), and all 111 keep
+their verdict.
 
 Left open: a temporary in a class-type return value that is not part of the
 result (`C(4)` in `return C(C(4).v + 1);`) is still never destroyed, and
