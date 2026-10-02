@@ -295,6 +295,17 @@ void goto_symext::key_intrinsic_pointer_reads(
       analyze_args(dereference2tc(get_uint_type(8), operand));
 }
 
+/* Symex models intrinsics, builtins and input functions itself and returns
+ * before process_instruction, so their writes are fed here (#8083). */
+static void havoc_modelled_writes(
+  std::optional<interval_domaint> &domain,
+  bool reachable,
+  const code_function_call2t &call)
+{
+  if (domain && reachable)
+    domain->havoc_written_arguments(call);
+}
+
 void goto_symext::symex_step(reachability_treet &art)
 {
   assert(!cur_state->call_stack.empty());
@@ -407,6 +418,9 @@ void goto_symext::symex_step(reachability_treet &art)
     for (auto &operand : call.operands)
       if (!is_nil_expr(operand))
         dereference(operand, dereferencet::READ);
+
+    havoc_modelled_writes(
+      interval_domain_state, !cur_state->guard.is_false(), call);
 
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
