@@ -125,16 +125,23 @@ static std::optional<BigInt> array_element_count(const type2tc &t)
   return n * *sub;
 }
 
+/* Longest chain of writes an infinite array may carry as a propagated value:
+ * 16 and 64 leave 30- and 100-element Python string lists unbounded in
+ * __ESBMC_list_eq, 256 folds both (#8090). */
+static constexpr unsigned inf_array_write_bound = 256;
+
 /* Whether an array value is cheap and well-formed enough to carry as a
  * propagated constant. */
 static bool array_may_propagate(const expr2tc &e)
 {
   const array_type2t &arr = to_array_type(e->type);
 
-  // Infinite-size arrays are special modelling arrays needing their own
-  // handling at SMT or some other level, so optimising them is a Bad Plan (TM).
+  // An infinite array has no literal value, only its initial symbol and the
+  // writes to it; constant_propagation bounds that chain. Only the Python list
+  // model's element storage is let through, whose element type_id and size
+  // must fold for __ESBMC_list_eq to terminate (#8090).
   if (arr.size_is_infinite)
-    return false;
+    return config.language.lid == language_idt::PYTHON;
 
   if (!is_array_type(arr.subtype))
     return true;
@@ -174,9 +181,9 @@ static bool is_const_foldable_arith(const expr2tc &e)
 /// The types a read may be carried at. Scalars, and fixed-size struct, union or
 /// array aggregates: a read of a whole member denotes it exactly and folds a
 /// sibling the same way, which is what a write into an array member needs
-/// (#7597). The aggregate gates are the ones constant_propagation applies to an
-/// aggregate value -- infinite-size modelling arrays and oversized nests stay
-/// out, because a read at a symbolic index inlines the whole constant. A union
+/// (#7597). Infinite-size arrays stay out through type_has_constant_size, and
+/// oversized nests through array_may_propagate, because a read at a symbolic
+/// index inlines the whole constant. A union
 /// is admitted as a read only, for the reason given at the return below. A
 /// pointer stays out because carrying one resolves a later dereference against
 /// the wrong object, a false "Incorrect alignment when accessing data object"
@@ -336,6 +343,32 @@ static bool aggregate_literal_may_propagate(
   return noconst;
 }
 
+/* Whether every update in an array's `with` chain may be carried. An infinite
+ * array has no literal value, so its chain must be a bounded run of
+ * constant-index writes over its initial symbol (#8090). */
+static bool array_with_chain_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &expr)
+{
+  const bool infinite = to_array_type(expr->type).size_is_infinite;
+  unsigned symbolic_updates = 0;
+  unsigned writes = 0;
+  expr2tc current = expr;
+
+  while (is_with2t(current))
+  {
+    const with2t &w = to_with2t(current);
+    if (
+      !update_may_propagate(state, w.update_value, symbolic_updates) ||
+      (infinite && (!is_constant_int2t(w.update_field) ||
+                    ++writes > inf_array_write_bound)))
+      return false;
+    current = w.source_value;
+  }
+
+  return !infinite || is_symbol2t(current);
+}
+
 /// Whether an incremental strategy is driving the unwind. Both re-bound it
 /// themselves rather than reading a folded guard, so carrying a `with` costs
 /// without paying (#7597, and constant_propagation's own opt-out).
@@ -475,28 +508,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     }
 
     // Handle WITH chains for arrays where all updates are constants
-    if (is_array_type(expr->type))
-    {
-      // Check if this is a chain of WITHs with all constant updates
-      bool all_constant_updates = true;
-      unsigned symbolic_updates = 0;
-      expr2tc current = expr;
-
-      while (is_with2t(current))
-      {
-        const with2t &w = to_with2t(current);
-        if (!update_may_propagate(*this, w.update_value, symbolic_updates))
-        {
-          all_constant_updates = false;
-          break;
-        }
-        current = w.source_value;
-      }
-
-      // If all updates in the chain were constants, propagate
-      if (all_constant_updates)
-        return true;
-    }
+    if (
+      is_array_type(expr->type) && array_with_chain_may_propagate(*this, expr))
+      return true;
 
     // Handle WITH chains for unions where all updates are constants
     if (is_union_type(expr->type))
@@ -911,7 +925,7 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   if (use_value_set)
   {
     // update value sets
-    expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
+    expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs);
     level2.get_original_name(l1_rhs);
 
     value_set.assign(l1_lhs, l1_rhs);
@@ -929,6 +943,33 @@ static bool has_symbolic_array_size(const type2tc &type)
   const array_type2t &arr = to_array_type(type);
   return (!is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size)) ||
          has_symbolic_array_size(arr.subtype);
+}
+
+/* A propagated array write carries every earlier write to the same object
+ * under its top-level `with`. Those earlier values are already in the L1
+ * object's value set, so only the newest update is new: re-walking the chain
+ * per write made long Python list builds quadratic (#8090). */
+expr2tc goto_symex_statet::shallow_array_update(
+  const expr2tc &rhs,
+  const expr2tc &l1_lhs) const
+{
+  if (!is_with2t(rhs) || !is_array_type(rhs))
+    return rhs;
+
+  const with2t &top_write = to_with2t(rhs);
+  const expr2tc *base = &top_write.source_value;
+  while (is_with2t(*base))
+    base = &to_with2t(*base).source_value;
+  if (!is_symbol2t(*base) || is_symbol2t(top_write.source_value))
+    return rhs;
+
+  expr2tc l1_base = *base;
+  level2.get_original_name(l1_base);
+  if (l1_base != l1_lhs)
+    return rhs;
+
+  return with2tc(
+    rhs->type, l1_lhs, top_write.update_field, top_write.update_value);
 }
 
 void goto_symex_statet::rename_type(expr2tc &expr)

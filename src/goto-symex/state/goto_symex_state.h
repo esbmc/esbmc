@@ -396,6 +396,10 @@ public:
    */
   void assignment(expr2tc &lhs, const expr2tc &rhs);
 
+  /** @p rhs with the earlier writes under its top-level array `with`
+   *  replaced by @p l1_lhs, when they all write that same object. */
+  expr2tc shallow_array_update(const expr2tc &rhs, const expr2tc &l1_lhs) const;
+
   /**
    *  Determine whether to constant propagate the value of an expression.
    *  These obey a few efficiency rules regarding whether or not its efficient
