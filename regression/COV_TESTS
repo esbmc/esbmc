@@ -2119,3 +2119,5 @@ regression/esbmc/calloc_force_malloc_success_sv_comp_fail
 regression/esbmc/sync_swap_builtins
 regression/esbmc/sync_swap_builtins_fail
 regression/esbmc/sync_lock_release_race_fail
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
