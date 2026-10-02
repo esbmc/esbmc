@@ -2118,3 +2118,5 @@ regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
 regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional
 regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional_fail
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
