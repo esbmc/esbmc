@@ -1,0 +1,5 @@
+CORE
+main.c
+--gcse --goto-functions-only
+^\s*OTHER FREE\(\(void \*\)addr\);$
+^\s*ASSIGN b=\*p \+ 1;$
