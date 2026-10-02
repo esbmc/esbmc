@@ -810,6 +810,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
+| **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
@@ -9039,7 +9040,7 @@ Not fixed, and unchanged by R64: a local `C c = C::make();` under
 initializer throws are not destroyed ([except.ctor]/3), mem-initializer
 temporaries die at the end of the constructor rather than of their
 full-expression, and the aggregate-initialisation surplus destructor pinned by
-`aggregate_init_temp_double_destroy` (KNOWNBUG) is a separate path.
+`aggregate_init_temp_double_destroy` (KNOWNBUG) is a separate path. Fixed as R83.
 
 **WI-4's next wall.** With R64, the empty node is no longer freed on any path
 (`--unwind 1` passes a probe asserting it), yet the unbounded run still unwinds
@@ -9501,6 +9502,45 @@ address, read from its low bits, is now `cursor` rather than `pesbt`.
 Not fixed: clang still predefines the host's `__BYTE_ORDER__` under
 `--big-endian`, so a program that selects its layout by that macro verifies the
 little-endian variant.
+
+### M9 (R83) — 2026-10-02, the temporary an aggregate destroyed twice
+
+R64 left the KNOWNBUG `aggregate_init_temp_double_destroy` open as a separate
+path. An aggregate's element initialised from a temporary was destroyed twice.
+`remove_temporary_object` gives every temporary a scope-exit destructor;
+inside a braced or parenthesised aggregate initialiser the temporary is copied
+bitwise into the element and destroyed at the end of the full-expression, and
+the aggregate's destructor then destroys the element. C++ makes the temporary
+the element ([dcl.init.aggr]/4), so g++ runs one destructor per element.
+`{ W a{M(5)}; } assert(ctors == dtors);` is a false FAILED on master, as are
+the named form `W a{t}`, a call result `W a{make()}`, an array
+`M arr[2] = {M(1), M(2)}`, nested aggregates and C++20's `W a(M(5))`; an
+assertion that the temporary is already destroyed inside the scope, which
+aborts natively, is a false SUCCESSFUL. With a `shared_ptr` member the surplus
+destructor is a second `__release`, so `H a{std::make_shared<int>(1)}; H b = a;`
+reported an invalidated dynamic object (the KNOWNBUG `shared_ptr_member_copy`).
+
+**Fixed** in `remove_sideeffects`: when a `temporary_object` is a direct
+operand of a struct or constant array, the destructor call on the symbol it
+lowers to is removed from the entries pushed while lowering that operand. The
+DEAD stays. Temporaries in the element's constructor arguments are still
+destroyed at the end of the full-expression. A `#` marker set by the frontend
+does not work here: function bodies reach `goto_convert` through irep2, which
+drops comment fields.
+
+`aggregate_init_temp_double_destroy`, `aggregate_init_named_double_destroy` and
+`shared_ptr_member_copy` flip from KNOWNBUG to CORE.
+`aggregate_element_temporary{,_fail}` are wrong on master, both halves; the
+failing half runs `--multi-property` and pins one assertion per shape: a
+member, an array element and a call result. All five fail with the fix
+reverted.
+Z3 only: this build could not fetch Bitwuzla. The C++ suites keep their
+verdicts against master where they completed within the cap.
+
+Not fixed, and separate paths: a lambda's by-copy capture (`[m]{}`) is
+unbalanced the same way, and a temporary bound to an aggregate's reference
+member (`R x{M(1)}`, lifetime-extended by [class.temporary]/6) is destroyed at
+the end of the full-expression. Both are false FAILED on master and here.
 
 ---
 
