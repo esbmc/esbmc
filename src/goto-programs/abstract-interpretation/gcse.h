@@ -115,6 +115,10 @@ protected:
   /// `sym`
   void havoc_symbol(const irep_idt &sym);
 
+  /// Remove every expression that may read the object `ptr` points to, which
+  /// is about to be deallocated
+  void havoc_pointee(expr2tc ptr, const goto_programt::const_targett &);
+
   // Helper function to check whether `src` depends on `taint`
   bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
   // Helper function to check whether `src` depends on symbol `sym`

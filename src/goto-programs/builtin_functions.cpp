@@ -494,7 +494,7 @@ void goto_convertt::do_cpp_new(
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
-    BigInt sz = type_byte_size(subtype);
+    BigInt sz = type_byte_size(subtype, &ns);
     expr2tc sz_expr = constant_int2tc(size_type2(), sz);
     expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
@@ -924,7 +924,22 @@ void goto_convertt::cpp_new_initializer(
 
       // do_cpp_new already evaluated the count for the allocation; reusing it
       // is what keeps `new T[f()]` from calling f() a second time here.
-      const exprt &count = elem_count;
+      exprt count = elem_count;
+
+      // `new T[n][m]` constructs n * m class elements: step through them
+      // with a pointer to the class, not to a row.
+      exprt base = lhs;
+      typet leaf = rhs.type().subtype();
+      while (ns.follow(leaf).is_array())
+      {
+        BigInt size;
+        if (to_integer(to_array_type(ns.follow(leaf)).size(), size))
+          return;
+        count = mult_exprt(count, from_integer(size, size_type()));
+        count.type() = size_type();
+        leaf = ns.follow(leaf).subtype();
+        base = typecast_exprt(lhs, pointer_typet(leaf));
+      }
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
 
@@ -934,8 +949,8 @@ void goto_convertt::cpp_new_initializer(
       // trips the "no sudden transition back to scalars" assertion. `p[i]` in
       // user code only reaches symex as a dereference because the adjuster
       // rewrites it, and this runs after adjust.
-      plus_exprt element_addr(lhs, index);
-      element_addr.type() = lhs.type();
+      plus_exprt element_addr(base, index);
+      element_addr.type() = base.type();
 
       // The frontend's initializer is shaped for the whole array: a
       // temporary_object of type T[n] wrapping the element constructor, whose

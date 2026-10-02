@@ -141,6 +141,9 @@ public:
 
     triple target;
 
+    /** Whether --big-endian or --little-endian contradicts the target. */
+    bool endianess_overrides_target() const;
+
     /* TODO: make this configurable.
      *
      * While it is not, the empty string means that we assume that the given

@@ -807,9 +807,12 @@ this document** — each is a prioritised target for the cited harness.
 | **R70** | **High (false SUCCESSFUL, default configuration, C and C++)** — found probing R69's string-literal residual, §15 M9 (R70); **FIXED** for declarations, same entry | **A braced string literal initialised one element with the literal's address.** `char a[4] = {"ab"}` went through the list conversion as a one-element list: the literal decayed to `&"ab"[0]`, was cast to `char` into `a[0]`, and the rest was zeroed, so `a[1] == 0` was SUCCESSFUL. | InitListExpr arm of `get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/string_literal_brace_init{,_fail}`, `regression/esbmc-cpp/cpp/string_literal_brace_init{,_fail}` | — | **Fixed**: a string-literal list initialises the whole array from the literal (C11 6.7.9p14); `new char[4]{"ab"}` is still dropped by `cpp_new_init_list`. Fixed as R80. |
 | **R80** | **High (false FAILED, default configuration, C++)** — R70's open note, §15 M9 (R80); **FIXED**, same entry | **A string literal initialising a new-expression's array was dropped.** For `new char[4]{"ab"}` the frontend hands `cpp_new_init_list` the literal as one `string-constant` of type `char[4]`, which it did not count as a list, so neither it nor the constructor loop stored anything and every element stayed nondet: `p[0] == 'a'` FAILED. `new wchar_t[5]{L"hi"}` and a count only known at run time went the same way. | `cpp_new_init_list`, `cpp_new_store_element` and `is_splittable_list`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/cpp/new_array_string_literal{,_fail}` | — | **Fixed**: a string literal is a list of its characters and the zeros padding it to its array type; the filler covers any elements past it. |
 | **R72** | **High (a crash, default configuration)** — found probing R69's residual, §15 M9 (R72); **FIXED**, same entry | **A struct store at a dynamic offset was taken as a store to the element's base subobject.** `new D[2]()` for a class `D : B` with a vtable zero-fills each element through `*(p + i)`. `construct_struct_ref_from_dyn_offs_rec` matched the element, then recursed into its members, and `dereference_type_compare` accepts the `B` base (its `is_subclass_of` call is inverted on purpose), so both candidates were guarded by `offs == 0` and the base won. Symex then aborted in `symex_assign_typecast` assigning a `D` through `(struct D)element.@base`. | `construct_struct_ref_from_dyn_offs_rec`, `src/pointer-analysis/dereference.cpp`; `regression/esbmc-cpp/cpp/new_value_init_polymorphic{,_fail}` | — | **Fixed**: an exact match is the whole object, so its members are not searched. |
+| **R73** | **High (a crash and false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R73); **FIXED**, same entry | **`new T[n][m]` of a class was lowered one row at a time.** Any element type that is an array of structs aborted ("Symbolic type id in size_typet::size_bits"): C++ keeps a class as a symbol below the top level of a type, and `do_cpp_new` and `symex_cpp_new` resolved only the outermost one. Past the crash, the constructor loop stepped through rows, so only `p[i][0]` was built, and `delete[]` attached no destructor, since clang's destroyed type is the row. | `do_cpp_new`, `cpp_new_initializer`, `src/goto-programs/builtin_functions.cpp`; `convert_cpp_delete`, `src/goto-programs/goto_convert.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `CXXDeleteExpr`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/new_multidim_class{,_fail}` | — | **Fixed**: every level is resolved, and construction and destruction step through the class elements. |
 | **R69** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R64's residual, §15 M9 (R69); **FIXED**, same entry | **Before C++17 an elided copy was built anyway.** Clang marks the copy in `C c = C::make();`, `C c = C(5);` and `return C(x);` elidable and elides it; ESBMC ran the copy constructor and destroyed a second object. `{ C c = C::make(3); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-c-frontend/clang_c_convert.cpp`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_{local,static,temporary}{,_fail}` | — | **Fixed**: a variable's initializer and a returned value are converted from the elided copy's source, the C++17 form. |
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
+| **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
+| **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
@@ -9407,6 +9410,33 @@ element read as its base) still searches them. Reads through the base pointer,
 a copy of an element, and member reads after `new D[2]()` match the native
 program; `new_value_init_polymorphic{,_fail}` abort on master, both halves.
 
+### M9 (R73) — 2026-09-29, an array new whose element is an array of classes
+
+R69's review found `new C[2][2]{...}` aborting. The list is irrelevant: plain
+`new S[2][2]` aborts for any struct, while `new int[2][2]` and C's
+`struct S (*p)[2]` verify. C++ keeps a class as a `symbol` type below the top
+level of a type, so `S[2]` reaches `do_cpp_new`'s element-size computation with
+an unresolved element, and `symex_cpp_new` followed only the outermost level
+of the object's type, which dereference then took for a multi-dimensional
+array of scalars. Resolving both exposed two more defects on the same shape:
+the constructor loop stepped `new_ptr + i` over rows of type `C[2]`, so only
+`p[i][0]` was constructed, and `delete[]` destroyed nothing, because the
+frontend attached a destructor only when clang's destroyed type was a record,
+and for `delete[]` of a `C (*)[2]` it is the row ([expr.delete]/6 destroys the
+elements).
+
+**Fixed** at all four sites. The size is taken with the namespace, the object
+type is resolved at every level with `base_type`, the constructor and
+destructor loops walk a pointer to the class over n * m elements, and the
+frontend takes the destroyed type's base element. `const` elements and
+three dimensions match the native program. `new_multidim_class{,_fail}` abort
+on master, both halves; with the frontend change reverted the passing half is
+FAILED on the destructor count.
+
+Not fixed: value-initialising such an array (`new S[2][3]()`) still skips the
+zero fill for an array element type, so members no constructor writes stay
+nondet, as on master; R69 (#8069) rewrites that lowering.
+
 ### M9 (R69) — 2026-09-28, R64's residual: elided copies before C++17
 
 R64 left a local `C c = C::make();` under `--std c++14` destroying a surplus
@@ -9527,9 +9557,65 @@ tests keep their verdicts otherwise. `regression/cheri-128` is all
 `--big-endian` and needs a CHERI build; it was not run. The capability union's
 address, read from its low bits, is now `cursor` rather than `pesbt`.
 
-Not fixed: clang still predefines the host's `__BYTE_ORDER__` under
-`--big-endian`, so a program that selects its layout by that macro verifies the
-little-endian variant.
+Not fixed here: clang still predefined the host's `__BYTE_ORDER__` under
+`--big-endian`, so a program that selects its layout by that macro verified the
+little-endian variant. Fixed as R78.
+
+---
+
+### M9 (R78) — 2026-10-01, the byte order the preprocessor sees
+
+R76 recorded that `--big-endian` leaves clang's `__BYTE_ORDER__` at the host's
+value. The option sets `config.ansi_c.endianess`, and every later stage reads
+that, but the clang invocation is built from the target triple alone. On a
+little-endian triple clang predefines `__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__`
+and `__LITTLE_ENDIAN__`, so under `--big-endian` an `#if` on either picked the
+little-endian code, and ESBMC verified a program other than the one asked for.
+`--little-endian` on a big-endian triple has the mirror problem.
+
+**Fixed** by redefining `__BYTE_ORDER__` and the `__LITTLE_ENDIAN__`/
+`__BIG_ENDIAN__` pair whenever the option contradicts the target; a matching
+option changes nothing. Arch-specific macros (`__AARCH64EB__`, `_BIG_ENDIAN` on
+PowerPC) are left alone. `big_endian_byte_order_macros{,_fail}` read a byte
+through a pointer, which master already lays out correctly, and choose the
+expected value by the macros; both change verdict against master.
+
+Fixing the macros alone breaks `github_571_{1,2,3}` as they stood on master:
+they passed because the macro picked the little-endian bit-field order *and*
+R76's layout bug laid it out little-endian. R78 therefore needs R76, whose
+rewrite of those tests no longer depends on the macro. On top of R76,
+every non-CHERI `--big-endian`/`--little-endian` test passes (59, one skipped).
+
+---
+
+### M9 (R77) — 2026-09-30, symex's memory builtins on arrays of wider elements
+
+Found by code review of R76's fix (PR #8084). The symex-level `memcmp`,
+`memchr`, and the symbolic-length path of `memcpy`/`memmove` resolve each
+operand to one object and a constant offset, then read and write it a byte at
+a time with `byte_extract` and `byte_update`. `memcmp_resolve_operand` treats
+every fixed-size array as byte-extractable, but `convert_byte_extract` asserts
+that its source is not an array. Arrays of single bytes worked only because
+`byte_extract2t::do_simplify` rewrites a byte read of such an array into an
+element read. Any other element type aborted ESBMC in the default
+configuration: `memcmp(b, &words[1], 4)` for `unsigned words[4]`, `memchr` over
+the same, and `memcpy(d, &pairs[1], n)` with a symbolic `n` over an array of
+structs, in either direction. A constant-length `memcpy` takes another path and
+was unaffected.
+
+**Fixed** by indexing an array of multi-byte elements down to the element
+holding the byte, with constant indices since the offsets are constant: reads
+go through `index2t`, writes through `with2t`. Arrays of byte-wide integers
+keep the simplifier's path; one of `_Bool` or of one-byte structs, which the
+simplifier does not rewrite, is indexed down too. A struct element is then read
+with `byte_extract` on the struct, which is right under `--big-endian` only
+with R76's layout: without it a symbolic-length copy out of an array of structs
+read the bytes little-endian, a false SUCCESSFUL where master aborted.
+`mem_intrinsics_multibyte_array{,_fail}` exercise all six call sites (both
+`memcmp` operands); `mem_intrinsics_struct_array_be{,_fail}` pin the struct
+and one-byte-struct cases under `--big-endian`. Master aborts on all four, and
+each half agrees under Bitwuzla and Z3. The 114 other regression tests that call
+these functions keep their verdicts.
 
 ---
 
