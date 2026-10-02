@@ -2090,3 +2090,9 @@ regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
 regression/esbmc/github_8096_int_min_fail
+regression/esbmc/github_8102
+regression/esbmc/github_8102_fail
+regression/esbmc/github_8102_sub
+regression/esbmc/github_8102_sub_fail
+regression/esbmc/github_8102_mul
+regression/esbmc/github_8102_mul_fail
