@@ -516,6 +516,20 @@ static void ensure_nonempty(goto_programt &p, const expr2tc &stmt)
   p.instructions.back().location = statement_location(stmt);
 }
 
+bool goto_convert_functionst::convert_native_full_expression(
+  const expr2tc &code2,
+  goto_programt &dest,
+  const locationt &inherited)
+{
+  const std::size_t stack_size = targets.destructor_stack.size();
+  if (!convert_native_rec(code2, dest, inherited))
+    return false;
+  if (is_code_expression2t(code2))
+    destroy_full_expression_temporaries(
+      stack_size, to_code_expression2t(code2).location, dest);
+  return true;
+}
+
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest,
@@ -536,9 +550,7 @@ bool goto_convert_functionst::convert_native_rec(
     const locationt &here = effective_location(block.location, inherited);
 
     for (const expr2tc &stmt : block.operands)
-    {
-      const std::size_t stack_size = targets.destructor_stack.size();
-      if (!convert_native_rec(stmt, dest, here))
+      if (!convert_native_full_expression(stmt, dest, here))
       {
         // Fallback: undo any code_dead this partial walk pushed, so the
         // caller's goto_convert_rec re-converts against a clean destructor
@@ -546,11 +558,6 @@ bool goto_convert_functionst::convert_native_rec(
         targets.destructor_stack = old_stack;
         return false;
       }
-      // Mirrors convert_block's convert_full_expression.
-      if (is_code_expression2t(stmt))
-        destroy_full_expression_temporaries(
-          stack_size, to_code_expression2t(stmt).location, dest);
-    }
 
     // Mirror convert_block's unreachable guard: a code_return2t emits a
     // trailing unconditional goto (to the end-of-function target), after which
@@ -1360,12 +1367,7 @@ bool goto_convert_functionst::convert_native_rec(
       tmp_x.instructions.back().location = f.location;
     }
     else
-    {
-      const std::size_t stack_size = targets.destructor_stack.size();
-      iter_ok = convert_native_rec(f.iter, tmp_x, here);
-      if (iter_ok)
-        destroy_full_expression_temporaries(stack_size, f.location, tmp_x);
-    }
+      iter_ok = convert_native_full_expression(f.iter, tmp_x, here);
 
     if (!iter_ok || tmp_x.instructions.empty())
     {
