@@ -100,8 +100,8 @@ public:
 
   const std::string &path() const noexcept;
 
-  tmp_path &keep(bool yes) &noexcept;
-  tmp_path &&keep(bool yes) &&noexcept;
+  tmp_path &keep(bool yes) & noexcept;
+  tmp_path &&keep(bool yes) && noexcept;
 };
 
 /**

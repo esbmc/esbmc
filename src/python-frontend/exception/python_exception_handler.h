@@ -122,7 +122,8 @@ public:
    *
    * @param element              AST node used for location information.
    * @param func_call_expr       The function-call expression.
-   * @param is_negated           True when the test was wrapped in a UnaryOp Not.
+   * @param is_negated           True when the test was wrapped in a UnaryOp
+   * Not.
    * @param block                Target block.
    * @param attach_assert_message Callback to set the assertion comment.
    */

@@ -38,7 +38,7 @@ add_subdirectory(goto2c)
 # ESBMC:: aliases for the libraries another project links against
 foreach(esbmc_target
     util_esbmc irep2 bigint langapi filesystem string_pool usr_utils cache
-    algorithms gotoprograms gotoalgorithms abstract-interpretation
+    gotoprograms gotoalgorithms abstract-interpretation
     pointeranalysis symex solvers smt clibs goto2c esbmc-driver
     clangcfrontend clangcppfrontend)
   esbmc_add_alias(${esbmc_target})

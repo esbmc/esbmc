@@ -699,11 +699,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
 #endif
+    const unsigned bits = type_byte_size_bits(expr->type).to_uint64();
+    const unsigned mem_bits = type_byte_size_bits(src_expr->type).to_uint64();
     a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
-        src_expr)));
+      get_uint_type(bits),
+      union_bits_of_member(
+        bitcast2tc(get_uint_type(mem_bits), src_expr), bits)));
     break;
   }
   case expr2t::constant_vector_id:
@@ -1055,16 +1056,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         expr2tc upd = bitcast2tc(
           get_uint_type(mem_bits),
           typecast2tc(tu.members[c], with.update_value));
-        if (mem_bits < bits)
-          upd = concat2tc(
-            get_uint_type(bits),
-            extract2tc(
-              get_uint_type(bits - mem_bits),
-              with.source_value,
-              bits - 1,
-              mem_bits),
-            upd);
-        a = convert_ast(upd);
+        a = convert_ast(union_bits_with_member(with.source_value, upd, bits));
       }
     }
     else
@@ -1777,8 +1769,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     // We only want expressions of typecast(address_of(symbol)) or
     // address_of(symbol).
     {
-      if (const typecast2t *tc = try_to_typecast2t(symbol);
-          tc && is_address_of2t(tc->from))
+      if (
+        const typecast2t *tc = try_to_typecast2t(symbol);
+        tc && is_address_of2t(tc->from))
         symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))
@@ -2409,9 +2402,7 @@ smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
     }
 
     return convert_ast(bitcast2tc(
-      type,
-      typecast2tc(
-        get_uint_type(type_byte_size_bits(type).to_uint64()), to_bv)));
+      type, union_member_bits(to_bv, type_byte_size_bits(type).to_uint64())));
   }
 
   assert(
@@ -3664,9 +3655,8 @@ expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
     {
       expr2tc cast = bitcast2tc(
         member_type,
-        typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
+        union_member_bits(
+          uint_rep, type_byte_size_bits(member_type).to_uint64()));
       simplify(cast);
       members.push_back(cast);
     }

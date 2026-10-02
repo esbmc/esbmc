@@ -82,9 +82,16 @@ __ESBMC_HIDE:;
 }
 #pragma clang diagnostic pop
 
+_Bool __ESBMC_sv_comp(void);
+
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
+  // SV-COMP rules exempt only malloc and alloca from failing, so calloc may
+  // return NULL there even under --force-malloc-success (C11 7.22.3.2p3).
+  if (__ESBMC_sv_comp() && nondet_bool())
+    return NULL;
+
   // A zero element count or zero element size is a zero-byte request.
   // Defer to malloc(0) so the result honours --force-malloc-success and
   // --malloc-zero-is-null, exactly like a direct malloc(0).  Returning

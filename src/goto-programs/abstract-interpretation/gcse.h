@@ -8,7 +8,8 @@
 /**
  * @brief Abstract domain to obtain all available expressions (AE)
  *
- * The domain is the set of expressions that were already computed up to this point.
+ * The domain is the set of expressions that were already computed up to this
+ * point.
  *
  * ... // AE: []
  * int x = a + b + c // AE: [a + b, a + b + c]
@@ -16,10 +17,10 @@
  * c = 42 // AE: [a + b, a + b + d]
  *
  *
- * There are some level of precision to be considered. We shouldn't track constants
- * or symbols as there is no point in saying that something like '42' is available.
- * However, '42 + a' will be cached. This opens a path for canonization algorithms as
- * '42 + a' = 'a + 42'
+ * There are some level of precision to be considered. We shouldn't track
+ * constants or symbols as there is no point in saying that something like '42'
+ * is available. However, '42 + a' will be cached. This opens a path for
+ * canonization algorithms as '42 + a' = 'a + 42'
  *
  * TODO: add a canonization method for expr2tc.
  *
@@ -32,7 +33,8 @@
  *   Otherwise, compute the intersection between "prev" and "new".
  * - Transform operator:
  *   + RETURN: the returned expression (and sub-expressions) is now available
- *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and dependencies) is not available anymore
+ *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and
+ * dependencies) is not available anymore
  *   + GOTO/ASSERT/ASSUME: guard (and sub-expressions) is now available
  *   + DECL/DEAD: variable is no longer available
  *   + FUNCTION_CALL: same as assign
@@ -101,14 +103,21 @@ public:
   bool bottom = true;
 
 protected:
-  /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.
+  /// Add non-primitive expression `e` (and its sub-expressions) into
+  /// available_expressions.
   void make_expression_available(const expr2tc &e);
 
-  /// Remove expression `e` (and everything that it depends on) from available_expressions
+  /// Remove expression `e` (and everything that it depends on) from
+  /// available_expressions
   void havoc_expr(const expr2tc &e, const goto_programt::const_targett &);
 
-  /// Remove every expression from available_expressions that depends on symbol `sym`
+  /// Remove every expression from available_expressions that depends on symbol
+  /// `sym`
   void havoc_symbol(const irep_idt &sym);
+
+  /// Remove every expression that may read the object `ptr` points to, which
+  /// is about to be deallocated
+  void havoc_pointee(expr2tc ptr, const goto_programt::const_targett &);
 
   // Helper function to check whether `src` depends on `taint`
   bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
@@ -116,16 +125,16 @@ protected:
   bool should_remove_expr(const irep_idt &sym, const expr2tc &src) const;
 
 public:
-  // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
-  // that contains a points-to analysis
+  // TODO: clearly this shouldn't be here. The proper way is to create a new
+  // Abstract Interpreter that contains a points-to analysis
   static std::shared_ptr<value_setst> vsa;
 };
 
-#include <util/ssa/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *
- * Compute all common subexpression in a goto program. 
+ * Compute all common subexpression in a goto program.
  * For each common subexpression, a new intermediate variable
  * `__ESBMC_cse_symbol$` is created and assigned to the common
  * value.
@@ -156,7 +165,8 @@ public:
   virtual bool
   runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
 
-  // TODO: we should have a method to convert an cse_symbol back to the original expr for CE.
+  // TODO: we should have a method to convert an cse_symbol back to the original
+  // expr for CE.
 
 protected:
   ait<cse_domaint> available_expressions;

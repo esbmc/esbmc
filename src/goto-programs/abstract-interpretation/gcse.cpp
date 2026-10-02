@@ -12,6 +12,18 @@
 // TODO: Do an points-to abstract interpreter
 std::shared_ptr<value_setst> cse_domaint::vsa = nullptr;
 
+static void collect_reallocs(const expr2tc &e, std::vector<expr2tc> &dest)
+{
+  if (!e)
+    return;
+  if (
+    is_sideeffect2t(e) &&
+    to_sideeffect2t(e).kind == sideeffect2t::allockind::realloc)
+    dest.push_back(e);
+  e->foreach_operand(
+    [&dest](const expr2tc &op) { collect_reallocs(op, dest); });
+}
+
 void cse_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
@@ -24,12 +36,18 @@ void cse_domaint::transform(
   case ASSIGN:
   {
     const code_assign2t &code = to_code_assign2t(instruction.code);
+    // realloc deallocates the old object (C11 7.22.3.5p2).
+    std::vector<expr2tc> reallocs;
+    collect_reallocs(code.source, reallocs);
+    for (const expr2tc &r : reallocs)
+      havoc_pointee(to_sideeffect2t(r).operand, to);
     make_expression_available(code.source);
     // Expressions that contain the target will need to be recomputed
     havoc_expr(code.target, to);
     // Target may be an expression as well
-    // TODO: skip recursive definitions only. For example, x = x + 1 should be skipped as 'x' isn't available.
-    //make_expression_available(code.target);
+    // TODO: skip recursive definitions only. For example, x = x + 1 should be
+    // skipped as 'x' isn't available.
+    // make_expression_available(code.target);
   }
   break;
 
@@ -42,20 +60,32 @@ void cse_domaint::transform(
     havoc_symbol(to_code_decl2t(instruction.code).value);
     break;
   case DEAD:
-    havoc_symbol(to_code_dead2t(instruction.code).value);
+  {
+    // Readers through a pointer to the dead variable must be recomputed too.
+    const code_dead2t &dead = to_code_dead2t(instruction.code);
+    havoc_symbol(dead.value);
+    havoc_expr(symbol2tc(dead.type, dead.value), to);
     break;
+  }
   case RETURN:
   {
     const code_return2t &cr = to_code_return2t(instruction.code);
     make_expression_available(cr.operand);
     break;
   }
+  case OTHER:
+    // A read of the freed object must be recomputed so that its dereference
+    // check still runs (#8006).
+    if (is_code_free2t(instruction.code))
+      havoc_pointee(to_code_free2t(instruction.code).operand, to);
+    break;
   case FUNCTION_CALL:
   {
     const code_function_call2t &func =
       to_code_function_call2t(instruction.code);
 
-    // each operand should be available now (unless someone is doing a sideeffect)
+    // each operand should be available now (unless someone is doing a
+    // sideeffect)
 #if 0
     // Skip functions for now, the abstract interpreter is not context-aware
     // so it can't deal with function parameters properly.
@@ -376,6 +406,22 @@ void cse_domaint::havoc_expr(
     available_expressions.erase(x);
 }
 
+void cse_domaint::havoc_pointee(
+  expr2tc ptr,
+  const goto_programt::const_targett &i_it)
+{
+  while (is_typecast2t(ptr) && is_pointer_type(to_typecast2t(ptr).from->type))
+    ptr = to_typecast2t(ptr).from;
+
+  if (!is_pointer_type(ptr->type))
+  {
+    available_expressions.clear();
+    return;
+  }
+
+  havoc_expr(dereference2tc(to_pointer_type(ptr->type).subtype, ptr), i_it);
+}
+
 bool goto_cse::runOnProgram(goto_functionst &F)
 {
   // Initialization for the abstract analysis.
@@ -383,7 +429,8 @@ bool goto_cse::runOnProgram(goto_functionst &F)
   log_status("{}", "[CSE] Computing Available Expressions for program");
   available_expressions(F, ns);
   log_status("{}", "[CSE] Finished computing AE for program");
-  // Let's release the reference. TODO: create the "VSA aware" abstract interpreter
+  // Let's release the reference. TODO: create the "VSA aware" abstract
+  // interpreter
   cse_domaint::vsa = nullptr;
   return false;
 }
@@ -503,7 +550,8 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
   if (!F.second.body_available)
     return false;
 
-  // 1. Let's count expressions, the idea is to go through all program statements
+  // 1. Let's count expressions, the idea is to go through all program
+  // statements
   //    and check if any sub-expr is already available
   std::unordered_set<expr2tc, irep2_hash> expressions_set;
   for (auto it = (F.second.body).instructions.begin();

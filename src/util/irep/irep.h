@@ -36,7 +36,7 @@ class irept
 {
 public:
   typedef std::vector<irept> subt;
-  //typedef std::list<irept> subt;
+  // typedef std::list<irept> subt;
 
   typedef std::map<irep_idt, irept> named_subt;
 
@@ -123,7 +123,7 @@ public:
 
   // These methods should be protected; however to make things play nice with
   // the C++ frontend right now, they're made public.
-  //protected:
+  // protected:
   // This class has to be able to fiddle with ireps directly.
   friend class irep_serializationt;
 
@@ -145,7 +145,7 @@ public:
 
   void set(const irep_idt &name, const long value);
   void set(const irep_idt &name, const irept &irep);
-  //public:
+  // public:
   void remove(const irep_idt &name);
   void move_to_sub(irept &irep);
   void move_to_named_sub(const irep_idt &name, irept &irep);
@@ -1310,8 +1310,8 @@ public:
   // annotation for typecasting derived class `this` to base class type
   static const irep_idt a_derived_this_arg, a_base_ctor_derived;
   /*
-   * annotation to indicate whether virtual pointer(vptr) has been initialized in contrustor
-   * This is used by implicit IR generation in adjuster
+   * annotation to indicate whether virtual pointer(vptr) has been initialized
+   * in contrustor This is used by implicit IR generation in adjuster
    */
   static const irep_idt a_need_vptr_init;
 

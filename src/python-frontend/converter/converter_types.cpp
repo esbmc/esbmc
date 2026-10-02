@@ -139,7 +139,8 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
           std::string subscript_type = value_node["id"].get<std::string>();
           if (subscript_type == "Literal")
             return "__LITERAL__"; // Special marker for Literal types
-          // For Sequence[str], List[int], etc., return "list" as the concrete type
+          // For Sequence[str], List[int], etc., return "list" as the concrete
+          // type
           if (subscript_type == "Sequence" || subscript_type == "List")
             return "list";
           // For other generic types, return the base type
@@ -584,7 +585,8 @@ typet python_converter::get_type_from_annotation(
         {
           return get_type_from_annotation(slice, element);
         }
-        // Handle Literal with single value (e.g., Literal["foo"] or Literal[NAME])
+        // Handle Literal with single value (e.g., Literal["foo"] or
+        // Literal[NAME])
         if (slice["_type"] == "Constant" && slice.contains("value"))
         {
           // Bignum literal annotation: tagged Constants carry a null value
@@ -727,7 +729,8 @@ typet python_converter::get_type_from_annotation(
     if (annotation_node["value"].is_null())
       return none_type();
 
-    // Handle string annotations like "CoordinateData | None" (forward references)
+    // Handle string annotations like "CoordinateData | None" (forward
+    // references)
     std::string type_string = annotation_node["value"].get<std::string>();
     type_string = type_utils::remove_quotes(type_string);
     // Support PEP 604 unions inside string annotations: "T | None"
@@ -907,7 +910,8 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     if (operand_type.is_empty() || operand_type.is_bool())
       continue;
 
-    // Arrays are special, they have a length property which we don't care about right now
+    // Arrays are special, they have a length property which we don't care about
+    // right now
     if (operand_type.is_array())
       return gen_zero(any_type());
 

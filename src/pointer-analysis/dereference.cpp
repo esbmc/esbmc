@@ -443,10 +443,10 @@ static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 
   if (struct_union_packed(structure->type))
   {
-    /* Very (too?) conservative approach: all members of packed structures are to
-     * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
-     * if they can prove some member is always aligned, they'll use the faster
-     * instructions on aligned pointers. */
+    /* Very (too?) conservative approach: all members of packed structures are
+     * to be accessed in a known-unaligned way. Note, that's not true for
+     * GCC/Clang: if they can prove some member is always aligned, they'll use
+     * the faster instructions on aligned pointers. */
     return false;
   }
 
@@ -771,8 +771,9 @@ bool dereferencet::dereference_type_compare(
   if (object->type == dereference_type)
     return true;
 
-  if (same_function_pointer_ignoring_argument_names(
-        object_type, dereference_type))
+  if (
+    same_function_pointer_ignoring_argument_names(
+      object_type, dereference_type))
     return true;
 
   // Check for C++ subclasses; we can cast derived up to base safely.
@@ -1442,8 +1443,9 @@ void dereferencet::construct_from_array(
 
   unsigned int subtype_size = type_byte_size_bits(arr_subtype).to_uint64();
   expr2tc subtype_sz_expr = constant_int2tc(offset->type, BigInt(subtype_size));
-  // The value of "div" does not depend on the offset units (i.e., bits or bytes)
-  // as it essentially represents an index in the array of the given subtype
+  // The value of "div" does not depend on the offset units (i.e., bits or
+  // bytes) as it essentially represents an index in the array of the given
+  // subtype
   expr2tc div =
     typecast2tc(pointer_type2(), div2tc(offset->type, offset, subtype_sz_expr));
   simplify(div);
@@ -1820,16 +1822,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   {
     uint64_t struct_bits = type_byte_size_bits(value->type, &ns).to_uint64();
     value = bitcast2tc(get_uint_type(struct_bits), value);
-    // flatten_to_bitvector places the first struct member in the low bits
-    // regardless of target endianness, so under big-endian we must mirror
-    // the bit offset before delegating to the scalar byte extractor.
-    expr2tc adjusted_offset = offset;
-    if (is_big_endian)
-      adjusted_offset = sub2tc(
-        offset->type,
-        gen_long(offset->type, struct_bits - config.ansi_c.char_width),
-        offset);
-    return construct_from_dyn_offset(value, adjusted_offset, type);
+    return construct_from_dyn_offset(value, offset, type);
   }
 
   // For each element of the struct, look at the alignment, and produce an
@@ -2225,6 +2218,48 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
 }
 
+void dereferencet::construct_struct_ref_from_dyn_offs_members(
+  const expr2tc &value,
+  const expr2tc &offs,
+  const type2tc &type,
+  const guard2tc &guard,
+  const expr2tc &accuml_guard,
+  modet mode,
+  std::list<std::pair<expr2tc, expr2tc>> &output)
+{
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  unsigned int i = 0;
+  for (auto const &it : struct_type.members)
+  {
+    // Quickly skip over scalar subtypes.
+    if (is_scalar_type(it))
+    {
+      i++;
+      continue;
+    }
+
+    BigInt memb_offs =
+      member_offset_bits(value->type, struct_type.member_names[i]);
+    BigInt size = type_byte_size_bits(it);
+    expr2tc memb_offs_expr = gen_long(bitsize_type2(), memb_offs);
+    expr2tc limit_expr = gen_long(offs->type, memb_offs + size);
+    expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
+
+    // Compute a guard and update the offset for an access to this field.
+    // Guard is that the offset is in the range of this field. Offset has
+    // offset to this field subtracted.
+    expr2tc new_offset = sub2tc(offs->type, offs, memb_offs_expr);
+    expr2tc gte = greaterthanequal2tc(offs, memb_offs_expr);
+    expr2tc lt = lessthan2tc(offs, limit_expr);
+    expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
+
+    simplify(new_offset);
+    construct_struct_ref_from_dyn_offs_rec(
+      memb, new_offset, type, guard, range_guard, mode, output);
+    i++;
+  }
+}
+
 void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
@@ -2291,40 +2326,16 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc offs_is_zero =
         and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
       output.emplace_back(offs_is_zero, tmp);
+
+      // An exact match is the whole object: a member can then only compare
+      // as a base class of it, and taking one would downcast it.
+      if (tmp == value)
+        return;
     }
 
     // It's not compatible, but a subtype may be. Iterate over all of them.
-    const struct_type2t &struct_type = to_struct_type(value->type);
-    unsigned int i = 0;
-    for (auto const &it : struct_type.members)
-    {
-      // Quickly skip over scalar subtypes.
-      if (is_scalar_type(it))
-      {
-        i++;
-        continue;
-      }
-
-      BigInt memb_offs =
-        member_offset_bits(value->type, struct_type.member_names[i]);
-      BigInt size = type_byte_size_bits(it);
-      expr2tc memb_offs_expr = gen_long(bitsize_type2(), memb_offs);
-      expr2tc limit_expr = gen_long(offs->type, memb_offs + size);
-      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
-
-      // Compute a guard and update the offset for an access to this field.
-      // Guard is that the offset is in the range of this field. Offset has
-      // offset to this field subtracted.
-      expr2tc new_offset = sub2tc(offs->type, offs, memb_offs_expr);
-      expr2tc gte = greaterthanequal2tc(offs, memb_offs_expr);
-      expr2tc lt = lessthan2tc(offs, limit_expr);
-      expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
-
-      simplify(new_offset);
-      construct_struct_ref_from_dyn_offs_rec(
-        memb, new_offset, type, guard, range_guard, mode, output);
-      i++;
-    }
+    construct_struct_ref_from_dyn_offs_members(
+      value, offs, type, guard, accuml_guard, mode, output);
     return;
   }
 
@@ -2673,10 +2684,12 @@ void dereferencet::valid_check(
   {
     // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
     // making dereferencet persistent.
-    if (has_prefix(
-          to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
+    if (
+      has_prefix(
+        to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
     {
-      // This is an invalid object; if we're in read or write mode, that's an error.
+      // This is an invalid object; if we're in read or write mode, that's an
+      // error.
       if (is_read(mode) || is_write(mode))
         dereference_failure("pointer dereference", "invalid pointer", guard);
       return;
@@ -2737,12 +2750,13 @@ void dereferencet::valid_check(
 }
 
 // True when `obj`'s base object is a heap allocation (malloc/calloc/realloc):
-// an "symex_dynamic::" object that is not the stack-resident "alloca::" variant.
-// Only heap overflows map to CWE-122 (Heap-based Buffer Overflow). When the base
-// is not a resolvable symbol (an unknown/nondet object), we deliberately fall
-// back to the stack classification (CWE-121): symex dereferences per concrete
-// object, so a genuine heap access resolves to a symbol here, and the fallback
-// only affects objects whose origin is already unknown.
+// an "symex_dynamic::" object that is not the stack-resident "alloca::"
+// variant. Only heap overflows map to CWE-122 (Heap-based Buffer Overflow).
+// When the base is not a resolvable symbol (an unknown/nondet object), we
+// deliberately fall back to the stack classification (CWE-121): symex
+// dereferences per concrete object, so a genuine heap access resolves to a
+// symbol here, and the fallback only affects objects whose origin is already
+// unknown.
 static bool is_heap_object(const expr2tc &obj, const namespacet &ns)
 {
   const expr2tc &base = get_base_object(obj);
@@ -2792,8 +2806,8 @@ void dereferencet::bounds_check(
     expr2tc in_cheri_bounds = or2tc(gt, lt);
     /*
      * In CHERI Clang if a pointer is marked as can_carry_provenance does not
-     * mean it must carries CHERI capability. Therefore, we need to determine here
-     * whether the capacity exists.
+     * mean it must carries CHERI capability. Therefore, we need to determine
+     * here whether the capacity exists.
      *
      * pointer_capability == zero ?
      */

@@ -3,6 +3,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
 #include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -415,8 +416,16 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc end_value = add2tc(ptr_loc_type, start_sym, the_size);
   expr2tc endisequal = equality2tc(end_value, end_sym);
 
-  // Assert that start + size == end
-  assert_expr(endisequal);
+  /* Assert that start + size == end. The size is unguarded: a VLA declared on
+   * a path not taken still gets a layout, so a size no object can have (e.g. a
+   * negative bound, sign-extended) must not make every path infeasible
+   * (#8048). The bound is the largest size symex lets an object have. */
+  const BigInt max_size = options.get_bool_option("no-vla-size-check")
+                            ? max_layable_size()
+                            : max_object_size();
+  expr2tc size_fits =
+    lessthanequal2tc(the_size, constant_int2tc(ptr_loc_type, max_size));
+  assert_expr(implies2tc(size_fits, endisequal));
 
   // Even better, if we're operating in bitvector mode, it's possible that
   // The solver will try to be clever and arrange the pointer range to cross
@@ -429,7 +438,8 @@ smt_astt smt_solver_baset::init_pointer_obj(
    * [basic.align]), so constrain the base address to it. This covers both an
    * explicit alignas and the natural alignment every other object has; without
    * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
-   * yields a spurious counterexample. Types of alignment 1 constrain nothing. */
+   * yields a spurious counterexample. Types of alignment 1 constrain nothing.
+   */
   if (type)
   {
     /* dereferencet::check_alignment() reads a scalar access as aligned from its
@@ -532,9 +542,9 @@ void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 
       // Tong: When a dynamic object gets registered/freed in __ESBMC_alloc by
       // symex_malloc()/symex_free(), the alloc bit "alive" is assigned to 1/0.
-      // However, in dataraces check we introduce infinite array to store the address of
-      // shared objects, and if they are not dynamically managed by symex_malloc()/symex_free(),
-      // and it's alloc bit is always 0 by default.
+      // However, in dataraces check we introduce infinite array to store the
+      // address of shared objects, and if they are not dynamically managed by
+      // symex_malloc()/symex_free(), and it's alloc bit is always 0 by default.
       // For now, we just modify the races check.
 
       if (options.get_bool_option("data-races-check") && cur_dynamic)

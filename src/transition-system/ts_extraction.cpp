@@ -45,8 +45,8 @@ expr2tc bind_execution_guard_rec(
   if (it != memo.end())
     return it->second;
   expr2tc out = e;
-  out.get()->Foreach_operand([&memo](expr2tc &op)
-                             { op = bind_execution_guard_rec(op, memo); });
+  out.get()->Foreach_operand(
+    [&memo](expr2tc &op) { op = bind_execution_guard_rec(op, memo); });
   memo.emplace(e.get(), out);
   return out;
 }
@@ -224,16 +224,12 @@ bool recognise(const goto_functionst &fns, loop_shapet &shape)
   if (entry_fn != fns.function_map.end())
   {
     const auto &insns = entry_fn->second.body.instructions;
-    auto call_main = std::find_if(
-      insns.begin(),
-      insns.end(),
-      [](auto &i)
-      {
-        if (!i.is_function_call())
-          return false;
-        const expr2tc &f = to_code_function_call2t(i.code).function;
-        return is_symbol2t(f) && to_symbol2t(f).thename == main_id;
-      });
+    auto call_main = std::find_if(insns.begin(), insns.end(), [](auto &i) {
+      if (!i.is_function_call())
+        return false;
+      const expr2tc &f = to_code_function_call2t(i.code).function;
+      return is_symbol2t(f) && to_symbol2t(f).thename == main_id;
+    });
     std::vector<irep_idt> entry_stack{fns.main_id()};
     if (!calls_are_supported(fns, insns.begin(), call_main, false, entry_stack))
       return false;

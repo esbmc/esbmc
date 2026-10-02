@@ -288,7 +288,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 
   if concurrency:
     # --smt-symex-guard also turns on --smt-during-symex, which is what makes
-    # sibling schedules share a solver context (issue #6831, W3.3); do not add
+    # sibling schedules share a solver context (issue #6831, #7043); do not add
     # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
@@ -344,7 +344,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
   # Add strategy
   if concurrency: # Concurrency only works with incremental
     # A violation needing few context switches can sit deep in unbounded DFS
-    # order, where the task times out with no answer at all (issue #6831, W4).
+    # order, where the task times out with no answer at all (issue #6831, #6947).
     # One bounded round first costs a median 0.02s and can only report a
     # violation -- it never claims a proof, so --incremental-bmc still owns
     # every other verdict.

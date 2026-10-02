@@ -183,6 +183,9 @@ struct VarDecl
   VarKind kind = VarKind::BOOL;
   bool is_input = false;
   bool is_output = false;
+  // Writable from outside the program (program VAR_IN_OUT or VAR_EXTERNAL,
+  // %M memory): sampled each scan unless --ld-closed-world.
+  bool shared = false;
   bool synthesized =
     false; // invented by the graphical resolver (pins, power flow)
   // Initial value for numeric variables. Graphical LD wires FB presets from
@@ -209,11 +212,11 @@ struct FBVarDecl
 
 struct UserFBDef
 {
-  std::string type_name;               // e.g. "EQ_0"
-  std::vector<FBVarDecl> input_vars;   // formal inputs (IN1, IN2, ...) + types
-  std::vector<FBVarDecl> local_vars;   // FB-local variables (e.g. "i") + types
-  std::vector<FBVarDecl> output_vars;  // every formal output + types
-  std::string st_body;                 // raw Structured Text body
+  std::string type_name;              // e.g. "EQ_0"
+  std::vector<FBVarDecl> input_vars;  // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars;  // FB-local variables (e.g. "i") + types
+  std::vector<FBVarDecl> output_vars; // every formal output + types
+  std::string st_body;                // raw Structured Text body
 };
 
 // Wiring of an FB output pin to a program variable: "prog_var := <inst>__pin".
@@ -235,9 +238,9 @@ struct FBInWire
 
 struct UserFBInstance
 {
-  std::string type_name;     // references a UserFBDef
-  std::string instance_name; // e.g. "EQ_00"
-  std::string block_id;      // graphical localId of the block
+  std::string type_name;            // references a UserFBDef
+  std::string instance_name;        // e.g. "EQ_00"
+  std::string block_id;             // graphical localId of the block
   std::vector<FBInWire> in_wires;   // input pins and their sources
   std::vector<FBOutWire> out_wires; // pins consumed by program outVariables
   LdLocation loc;
