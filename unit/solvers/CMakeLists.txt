@@ -24,6 +24,13 @@ if(ENABLE_Z3)
                 "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
   target_include_directories(array_conv_bounded_index_test
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
+
+  # mk_guarded_choice's pinned-default arm has no in-tree caller (mk_select
+  # always passes null), so only a direct call can state its contract.
+  new_unit_test(guarded_choice_test "guarded_choice.test.cpp"
+                "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
+  target_include_directories(guarded_choice_test
+    PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 endif()
 
 if(ENABLE_BITWUZLA)

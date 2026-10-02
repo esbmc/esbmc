@@ -427,6 +427,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("ir-ieee", true);
   }
 
+  // The implication select encoding lives in array_convt, so it only takes
+  // effect when the solver's native array theory is bypassed.
+  if (cmdline.isset("array-implication-select"))
+    options.set_option("array-flattener", true);
+
   // --ir requests integer/real arithmetic encoding via the SMT Int sort.
   // Bitwuzla and Boolector are bit-vector-only backends; pairing them with
   // --ir silently produces wrong-answer behaviour at solve time. cvc4, cvc5,

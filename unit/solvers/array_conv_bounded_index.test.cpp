@@ -41,7 +41,7 @@ SCENARIO(
     create_new_z3_solver(options, ns, &tuple_api, &array_api, &fp_api)};
   REQUIRE(solver != nullptr);
 
-  array_convt flattener(solver.get());
+  array_convt flattener(solver.get(), /*implication_select=*/false);
 
   GIVEN("a bounded array of four elements")
   {
