@@ -3789,6 +3789,17 @@ static bool is_constructor_temporary(const exprt &e)
          e.initializer().is_not_nil();
 }
 
+/* Before C++17 each branch is an elidable copy of its prvalue, bound as a
+ * temporary; the copy is elided as in elided_copy_source. */
+static const clang::Expr &conditional_branch_source(const clang::Expr &branch)
+{
+  const clang::Expr *e = branch.IgnoreParens();
+  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
+    e = bind->getSubExpr();
+  const clang::Expr *source = peel_elided_copy(e);
+  return source ? *source->IgnoreParens() : *branch.IgnoreParens();
+}
+
 bool clang_cpp_convertert::get_conditional_class_prvalue(
   const clang::ConditionalOperator &ternary,
   exprt &new_expr,
@@ -3804,11 +3815,11 @@ bool clang_cpp_convertert::get_conditional_class_prvalue(
     return true;
 
   exprt then;
-  if (get_expr(*ternary.getTrueExpr()->IgnoreParens(), then))
+  if (get_expr(conditional_branch_source(*ternary.getTrueExpr()), then))
     return true;
 
   exprt else_expr;
-  if (get_expr(*ternary.getFalseExpr()->IgnoreParens(), else_expr))
+  if (get_expr(conditional_branch_source(*ternary.getFalseExpr()), else_expr))
     return true;
 
   if (!is_constructor_temporary(then) || !is_constructor_temporary(else_expr))

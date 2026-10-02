@@ -2116,3 +2116,5 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
+regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional
+regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional_fail
