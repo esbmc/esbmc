@@ -494,7 +494,7 @@ void goto_convertt::do_cpp_new(
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
-    BigInt sz = type_byte_size(subtype);
+    BigInt sz = type_byte_size(subtype, &ns);
     expr2tc sz_expr = constant_int2tc(size_type2(), sz);
     expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
@@ -665,8 +665,27 @@ array_leaves(const namespacet &ns, const typet &type, typet &leaf, BigInt &n)
   return true;
 }
 
+// A list's elements; a string literal's are its characters and the zeros
+// padding it to its array type ([dcl.init.string]/3).
+static std::size_t list_size(const exprt &init)
+{
+  if (init.id() != "string-constant")
+    return init.operands().size();
+  BigInt n;
+  to_integer(to_array_type(init.type()).size(), n);
+  return n.to_uint64();
+}
+
+static exprt list_element(const exprt &init, std::size_t i)
+{
+  if (init.id() != "string-constant")
+    return init.operands()[i];
+  return index_exprt(
+    init, from_integer(i, index_type()), init.type().subtype());
+}
+
 // Whether every nested list in `init` is spelled element by element, so
-// cpp_new_store_element can reach each leaf (a string literal row is not).
+// cpp_new_store_element can reach each leaf.
 static bool is_splittable_list(const namespacet &ns, const exprt &init)
 {
   if (!ns.follow(init.type()).is_array())
@@ -675,7 +694,8 @@ static bool is_splittable_list(const namespacet &ns, const exprt &init)
   typet leaf;
   BigInt n;
   if (
-    (!init.is_constant() && init.id() != "array") ||
+    (!init.is_constant() && init.id() != "array" &&
+     init.id() != "string-constant") ||
     !array_leaves(ns, init.type(), leaf, n))
     return false;
 
@@ -713,12 +733,12 @@ void goto_convertt::cpp_new_store_element(
     typet leaf;
     BigInt stride;
     array_leaves(ns, type.subtype(), leaf, stride);
-    for (std::size_t i = 0; i < init.operands().size(); ++i)
+    for (std::size_t i = 0; i < list_size(init); ++i)
     {
       exprt at = plus_exprt(offset, from_integer(stride * i, size_type()));
       at.type() = size_type();
       simplify_via_irep2(at);
-      cpp_new_store_element(base, at, init.operands()[i], location, out);
+      cpp_new_store_element(base, at, list_element(init, i), location, out);
     }
     return;
   }
@@ -799,7 +819,7 @@ bool goto_convertt::cpp_new_init_list(
 
   code_fort tail;
   tail.init() =
-    code_assignt(index, from_integer(init->operands().size(), size_type()));
+    code_assignt(index, from_integer(list_size(*init), size_type()));
   tail.cond() = binary_relation_exprt(index, "<", elem_count);
   tail.iter() = code_assignt(index, next);
   tail.body() = body;
@@ -904,7 +924,22 @@ void goto_convertt::cpp_new_initializer(
 
       // do_cpp_new already evaluated the count for the allocation; reusing it
       // is what keeps `new T[f()]` from calling f() a second time here.
-      const exprt &count = elem_count;
+      exprt count = elem_count;
+
+      // `new T[n][m]` constructs n * m class elements: step through them
+      // with a pointer to the class, not to a row.
+      exprt base = lhs;
+      typet leaf = rhs.type().subtype();
+      while (ns.follow(leaf).is_array())
+      {
+        BigInt size;
+        if (to_integer(to_array_type(ns.follow(leaf)).size(), size))
+          return;
+        count = mult_exprt(count, from_integer(size, size_type()));
+        count.type() = size_type();
+        leaf = ns.follow(leaf).subtype();
+        base = typecast_exprt(lhs, pointer_typet(leaf));
+      }
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
 
@@ -914,8 +949,8 @@ void goto_convertt::cpp_new_initializer(
       // trips the "no sudden transition back to scalars" assertion. `p[i]` in
       // user code only reaches symex as a dereference because the adjuster
       // rewrites it, and this runs after adjust.
-      plus_exprt element_addr(lhs, index);
-      element_addr.type() = lhs.type();
+      plus_exprt element_addr(base, index);
+      element_addr.type() = base.type();
 
       // The frontend's initializer is shaped for the whole array: a
       // temporary_object of type T[n] wrapping the element constructor, whose
