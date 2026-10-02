@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <goto-programs/goto_convert_class.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
@@ -1585,11 +1586,16 @@ void goto_convertt::remove_sideeffects(
 
     const locationt location = expr.location();
 
+    const std::size_t true_size = targets.destructor_stack.size();
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
 
+    const std::size_t false_size = targets.destructor_stack.size();
     goto_programt tmp_false;
     remove_sideeffects(if_expr.false_case(), tmp_false, result_is_used);
+
+    guard_arm_destructors(
+      if_expr.cond(), true_size, false_size, location, dest);
 
     if (result_is_used)
     {
@@ -1908,7 +1914,7 @@ void goto_convertt::remove_sideeffects(
         bool have_destructor = false;
         for (std::size_t i = stack_size; i < targets.destructor_stack.size();
              i++)
-          if (targets.destructor_stack[i].get_statement() == "function_call")
+          if (is_destructor_entry(targets.destructor_stack[i]))
           {
             have_destructor = true;
             break;
@@ -1974,6 +1980,52 @@ void goto_convertt::remove_sideeffects(
   exprt legacy = migrate_expr_back(expr);
   remove_sideeffects(legacy, dest, result_is_used);
   migrate_expr(legacy, expr);
+}
+
+bool goto_convertt::is_destructor_entry(const codet &entry)
+{
+  return entry.get_statement() == "function_call" ||
+         entry.get_statement() == "ifthenelse";
+}
+
+// A temporary materialized in one arm of `c ? a : b` exists only if that arm
+// ran, yet its destructor runs at the end of the full-expression
+// ([class.temporary]/4), so guard it by the arm's condition, saved before
+// either arm can change what it reads.
+void goto_convertt::guard_arm_destructors(
+  exprt &cond,
+  std::size_t true_size,
+  std::size_t false_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  destructor_stackt &stack = targets.destructor_stack;
+  if (std::none_of(stack.begin() + true_size, stack.end(), is_destructor_entry))
+    return;
+
+  const symbolt &flag = new_tmp_symbol(bool_typet());
+  const symbol_exprt flag_expr(flag.id, flag.get_type());
+
+  code_declt decl(flag_expr);
+  decl.location() = location;
+  copy(decl, DECL, dest);
+
+  code_assignt assign(flag_expr, cond);
+  assign.location() = location;
+  copy(assign, ASSIGN, dest);
+
+  for (std::size_t i = true_size; i < stack.size(); i++)
+    if (is_destructor_entry(stack[i]))
+    {
+      code_ifthenelset guarded;
+      guarded.cond() = i < false_size ? exprt(flag_expr) : not_exprt(flag_expr);
+      guarded.then_case() = stack[i];
+      guarded.then_case().location() = location;
+      stack[i] = guarded;
+    }
+
+  stack.insert(stack.begin() + true_size, code_deadt(flag_expr));
+  cond = flag_expr;
 }
 
 void goto_convertt::remove_assignment(

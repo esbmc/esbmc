@@ -2116,3 +2116,5 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
+regression/esbmc-cpp/cpp/conditional_arm_temporary
+regression/esbmc-cpp/cpp/conditional_arm_temporary_fail

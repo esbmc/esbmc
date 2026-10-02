@@ -826,7 +826,7 @@ void goto_convertt::convert_decl_initializer(
     {
       bool have_destructor = false;
       for (std::size_t i = stack_size; i < targets.destructor_stack.size(); i++)
-        if (targets.destructor_stack[i].get_statement() == "function_call")
+        if (is_destructor_entry(targets.destructor_stack[i]))
         {
           have_destructor = true;
           break;
