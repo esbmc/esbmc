@@ -6,6 +6,10 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
 #include <util/irep/std_expr.h>
+#include <util/base/prefix.h>
+#include <optional>
+#include <string_view>
+#include <unordered_set>
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif
@@ -1000,6 +1004,9 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
+    havoc_written_arguments(to_code_function_call2t(instruction.code));
+    break;
+
   case END_FUNCTION:
   case ATOMIC_BEGIN:
   case ATOMIC_END:
@@ -1278,6 +1285,78 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else
     // Unmodelled assignment: the old range must not survive the write.
     havoc_rec(c.target);
+}
+
+/* The first argument a body-less call that symex models may write through,
+ * or none: the input functions write past their format, its intrinsics and
+ * builtins anywhere. An intrinsic missing from read_only is assumed to write,
+ * which costs precision, never soundness. */
+static std::optional<size_t> first_written_argument(const irep_idt &callee)
+{
+  static const std::unordered_set<std::string_view> read_only = {
+    "c:@F@__ESBMC_memcmp",
+    "c:@F@__ESBMC_memchr",
+    "c:@F@__ESBMC_r_ok",
+    "c:@F@__ESBMC_is_fresh",
+    "c:@F@__ESBMC_get_object_size",
+    "c:@F@__ESBMC_builtin_object_size"};
+  const std::string &id = callee.as_string();
+  if (id == "c:@F@scanf")
+    return 1;
+  if (id == "c:@F@sscanf" || id == "c:@F@fscanf")
+    return 2;
+  if (
+    read_only.count(id) ||
+    !(has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin")))
+    return std::nullopt;
+  return 0;
+}
+
+/// The object @p address points into, or nil when that is not statically known.
+static expr2tc pointed_object(expr2tc address)
+{
+  while (is_typecast2t(address))
+    address = to_typecast2t(address).from;
+  if (!is_address_of2t(address))
+    return expr2tc();
+  expr2tc object = to_address_of2t(address).ptr_obj;
+  while (is_index2t(object) || is_member2t(object))
+    object = is_index2t(object) ? to_index2t(object).source_value
+                                : to_member2t(object).source_value;
+  return object;
+}
+
+bool interval_domaint::havoc_pointee(const expr2tc &arg, bool any_type)
+{
+  const expr2tc object = pointed_object(arg);
+  if (object && is_constant_expr(object))
+    return true;
+  if (object && is_symbol2t(object))
+  {
+    havoc_rec(object);
+    return true;
+  }
+  return !is_pointer_type(arg) && !any_type;
+}
+
+void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
+{
+  if (!is_symbol2t(call.function))
+    return;
+  const std::optional<size_t> first =
+    first_written_argument(to_symbol2t(call.function).thename);
+  if (!first)
+    return;
+  // symex_input writes through each input argument whatever its type.
+  const bool any_type = *first > 0;
+  for (size_t i = *first; i < call.operands.size(); ++i)
+    if (
+      !is_nil_expr(call.operands[i]) &&
+      !havoc_pointee(call.operands[i], any_type))
+    {
+      clear_state();
+      return;
+    }
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
