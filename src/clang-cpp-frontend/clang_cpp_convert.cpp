@@ -2058,6 +2058,150 @@ exprt clang_cpp_convertert::base_dtor_this(
   return this_expr;
 }
 
+const symbolt *
+clang_cpp_convertert::nontrivial_dtor(const clang::CXXDestructorDecl *dd)
+{
+  if (!dd || dd->isTrivial())
+    return nullptr;
+  std::string name, id;
+  get_decl_name(*dd, name, id);
+  return ns.lookup(irep_idt(id));
+}
+
+static void append_dtor_call(const symbolt &sym, exprt arg, code_blockt &body)
+{
+  exprt fn("symbol", sym.get_type());
+  fn.identifier(sym.id);
+  code_function_callt call;
+  call.function() = fn;
+  call.arguments().push_back(std::move(arg));
+  body.operands().push_back(std::move(call));
+}
+
+bool clang_cpp_convertert::append_member_dtor(
+  const clang::FieldDecl &field,
+  const exprt &deref,
+  code_blockt &body)
+{
+  clang::QualType qt = field.getType();
+
+  // An array member of class type has each element destroyed; peel the
+  // (possibly nested) array dimensions to reach the element record type,
+  // since QualType::getAsCXXRecordDecl returns null for array types.
+  clang::QualType elem_qt = qt;
+  while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
+    elem_qt = at->getElementType();
+
+  const clang::CXXRecordDecl *rec = elem_qt->getAsCXXRecordDecl();
+  if (!rec)
+    return false;
+  const symbolt *sym = nontrivial_dtor(rec->getDestructor());
+  if (!sym)
+    return false;
+
+  typet field_type;
+  if (get_type(qt, field_type))
+    return true;
+
+  std::string field_name, field_id;
+  get_decl_name(field, field_name, field_id);
+  exprt member = member_exprt(deref, field_name, field_type);
+
+  if (!qt->isArrayType())
+  {
+    append_dtor_call(*sym, address_of_exprt(member), body);
+    return false;
+  }
+
+  // C++ [class.dtor]/9: array elements are destroyed in reverse index
+  // order.  Emit one destructor call per element, recursing into nested
+  // arrays so every leaf element is destroyed.
+  std::function<bool(const exprt &)> destroy_elements =
+    [&](const exprt &arr) -> bool {
+    const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
+    BigInt count;
+    if (to_integer(arr_type.size(), count))
+    {
+      log_error("cannot determine array size for member dtor chain");
+      return true;
+    }
+
+    const typet &elem_type = arr_type.subtype();
+    for (BigInt i = 0; i < count; ++i)
+    {
+      index_exprt element(
+        arr, from_integer(count - 1 - i, index_type()), elem_type);
+      if (ns.follow(elem_type).is_array())
+      {
+        if (destroy_elements(element))
+          return true;
+      }
+      else
+        append_dtor_call(*sym, address_of_exprt(element), body);
+    }
+    return false;
+  };
+  return destroy_elements(member);
+}
+
+exprt clang_cpp_convertert::this_deref(const clang::FunctionDecl &fd)
+{
+  auto this_it =
+    this_map.find(reinterpret_cast<std::size_t>(fd.getFirstDecl()));
+  assert(this_it != this_map.end());
+  const typet &this_ptr_type = this_it->second.second;
+  return dereference_exprt(
+    symbol_exprt(this_it->second.first, this_ptr_type), this_ptr_type);
+}
+
+// [except.ctor]/3: a constructor that exits by an exception destroys the
+// members it has constructed, newest first. Everything initialised after a
+// member runs in a try whose catch-all destroys it and rethrows. Base
+// initializers are never wrapped: gen_vptr_initializations looks for them at
+// the top of the body.
+void clang_cpp_convertert::guard_constructed_members(
+  const clang::FunctionDecl &fd,
+  const std::vector<std::pair<const clang::CXXCtorInitializer *, std::size_t>>
+    &constructed,
+  const exprt::operandst &initializers,
+  code_blockt &body)
+{
+  exprt::operandst rest = body.operands();
+  std::size_t end = initializers.size();
+  for (auto it = constructed.rbegin(); it != constructed.rend(); ++it)
+  {
+    code_blockt handler;
+    if (
+      !it->first->isMemberInitializer() ||
+      append_member_dtor(*it->first->getMember(), this_deref(fd), handler) ||
+      !handler.has_operands())
+      continue;
+
+    code_blockt try_block;
+    try_block.operands().assign(
+      initializers.begin() + it->second, initializers.begin() + end);
+    try_block.operands().insert(
+      try_block.operands().end(), rest.begin(), rest.end());
+    try_block.end_location(body.end_location());
+
+    handler.type().set("ellipsis", 1);
+    handler.set("exception_id", "ellipsis");
+    handler.operands().insert(handler.operands().begin(), code_skipt());
+    exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+    convert_expression_to_code(rethrow);
+    handler.operands().push_back(rethrow);
+
+    codet guarded("cpp-catch");
+    guarded.location() = initializers[it->second - 1].location();
+    guarded.move_to_operands(try_block, handler);
+    rest = {guarded};
+    end = it->second;
+  }
+
+  body.operands().assign(initializers.begin(), initializers.begin() + end);
+  body.operands().insert(body.operands().end(), rest.begin(), rest.end());
+}
+
 bool clang_cpp_convertert::build_destructor_chain(
   const clang::CXXDestructorDecl &dd,
   code_blockt &body)
@@ -2074,27 +2218,7 @@ bool clang_cpp_convertert::build_destructor_chain(
 
   const irep_idt &this_id = this_it->second.first;
   const typet &this_ptr_type = this_it->second.second;
-  exprt deref =
-    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
-
-  // Trivial destructors are no-ops; skip symbol table lookup for them.
-  auto lookup_dtor = [&](const clang::CXXDestructorDecl *d) -> const symbolt * {
-    if (!d || d->isTrivial())
-      return nullptr;
-    std::string name, id;
-    get_decl_name(*d, name, id);
-    return ns.lookup(irep_idt(id));
-  };
-
-  // Build and append a destructor call to `body`.
-  auto emit_dtor_call = [&](const symbolt &sym, exprt arg) {
-    exprt fn("symbol", sym.get_type());
-    fn.identifier(sym.id);
-    code_function_callt call;
-    call.function() = fn;
-    call.arguments().push_back(std::move(arg));
-    body.operands().push_back(std::move(call));
-  };
+  exprt deref = this_deref(dd);
 
   // Cast `this` to the base's expected pointer type and emit the call.
   auto emit_base_dtor =
@@ -2102,73 +2226,14 @@ bool clang_cpp_convertert::build_destructor_chain(
       exprt this_expr = base_dtor_this(*rec, deref, this_id, this_ptr_type);
       gen_typecast(
         ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
-      emit_dtor_call(sym, std::move(this_expr));
+      append_dtor_call(sym, std::move(this_expr), body);
     };
 
   // 1. Member subobjects, reverse declaration order (C++ [class.dtor]/9).
   llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
   for (const clang::FieldDecl *field : llvm::reverse(fields))
-  {
-    clang::QualType qt = field->getType();
-
-    // An array member of class type has each element destroyed; peel the
-    // (possibly nested) array dimensions to reach the element record type,
-    // since QualType::getAsCXXRecordDecl returns null for array types.
-    clang::QualType elem_qt = qt;
-    while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
-      elem_qt = at->getElementType();
-
-    const clang::CXXRecordDecl *rec = elem_qt->getAsCXXRecordDecl();
-    if (!rec)
-      continue;
-    const symbolt *sym = lookup_dtor(rec->getDestructor());
-    if (!sym)
-      continue;
-
-    typet field_type;
-    if (get_type(qt, field_type))
+    if (append_member_dtor(*field, deref, body))
       return true;
-
-    std::string field_name, field_id;
-    get_decl_name(*field, field_name, field_id);
-    exprt member = member_exprt(deref, field_name, field_type);
-
-    if (qt->isArrayType())
-    {
-      // C++ [class.dtor]/9: array elements are destroyed in reverse index
-      // order.  Emit one destructor call per element, recursing into nested
-      // arrays so every leaf element is destroyed.
-      std::function<bool(const exprt &)> destroy_elements =
-        [&](const exprt &arr) -> bool {
-        const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
-        BigInt count;
-        if (to_integer(arr_type.size(), count))
-        {
-          log_error("cannot determine array size for member dtor chain");
-          return true;
-        }
-
-        const typet &elem_type = arr_type.subtype();
-        for (BigInt i = 0; i < count; ++i)
-        {
-          index_exprt element(
-            arr, from_integer(count - 1 - i, index_type()), elem_type);
-          if (ns.follow(elem_type).is_array())
-          {
-            if (destroy_elements(element))
-              return true;
-          }
-          else
-            emit_dtor_call(*sym, address_of_exprt(element));
-        }
-        return false;
-      };
-      if (destroy_elements(member))
-        return true;
-    }
-    else
-      emit_dtor_call(*sym, address_of_exprt(member));
-  }
 
   // 2. Direct non-virtual base subobjects, reverse declaration order.
   for (const clang::CXXBaseSpecifier &base : llvm::reverse(parent->bases()))
@@ -2178,7 +2243,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     const clang::CXXRecordDecl *rec = base.getType()->getAsCXXRecordDecl();
     if (!rec)
       continue;
-    const symbolt *sym = lookup_dtor(rec->getDestructor());
+    const symbolt *sym = nontrivial_dtor(rec->getDestructor());
     if (!sym)
       continue;
     emit_base_dtor(*sym, rec);
@@ -2187,14 +2252,14 @@ bool clang_cpp_convertert::build_destructor_chain(
   // 3. Virtual base subobjects, reverse declaration order.
   // ESBMC does not model the Itanium D1/D2 destructor split, so virtual bases
   // are called unconditionally. Diamond hierarchies with non-trivial virtual-
-  // base destructors are not yet supported (lookup_dtor skips trivial ones,
+  // base destructors are not yet supported (nontrivial_dtor skips trivial ones,
   // so structural-only diamond tests are safe).
   for (const clang::CXXBaseSpecifier &vbase : llvm::reverse(parent->vbases()))
   {
     const clang::CXXRecordDecl *rec = vbase.getType()->getAsCXXRecordDecl();
     if (!rec)
       continue;
-    const symbolt *sym = lookup_dtor(rec->getDestructor());
+    const symbolt *sym = nontrivial_dtor(rec->getDestructor());
     if (!sym)
       continue;
     emit_base_dtor(*sym, rec);
@@ -2427,6 +2492,10 @@ bool clang_cpp_convertert::get_function_body(
     // Resize the number of operands
     exprt::operandst initializers;
     initializers.reserve(cxxcd.getNumCtorInitializers());
+
+    // Each initializer, and how many initializers have run once it has.
+    std::vector<std::pair<const clang::CXXCtorInitializer *, std::size_t>>
+      constructed;
 
     /* State to track initialization of array member initializers. */
     symbolt *array_init_sym = nullptr; /* temp symbol for array init */
@@ -2726,14 +2795,14 @@ bool clang_cpp_convertert::get_function_body(
         log_error("Unsupported initializer in {}", __func__);
         abort();
       }
+
+      constructed.emplace_back(init, initializers.size());
     }
 
     for (exprt &initializer : initializers)
       convert_expression_to_code(initializer);
 
-    // Insert initializers at the beginning of the body
-    body.operands().insert(
-      body.operands().begin(), initializers.begin(), initializers.end());
+    guard_constructed_members(fd, constructed, initializers, body);
     if (array_init_sym)
     {
       /* Need to declare the temp symbol for array initialization if it has

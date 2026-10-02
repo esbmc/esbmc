@@ -182,6 +182,24 @@ protected:
   bool
   build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
 
+  // The symbol of a destructor that is not trivial, else null.
+  const symbolt *nontrivial_dtor(const clang::CXXDestructorDecl *dd);
+
+  // Append to `body` the destructor calls of member `field` of `*this`.
+  bool append_member_dtor(
+    const clang::FieldDecl &field,
+    const exprt &deref,
+    code_blockt &body);
+
+  exprt this_deref(const clang::FunctionDecl &fd);
+
+  void guard_constructed_members(
+    const clang::FunctionDecl &fd,
+    const std::vector<std::pair<const clang::CXXCtorInitializer *, std::size_t>>
+      &constructed,
+    const exprt::operandst &initializers,
+    code_blockt &body);
+
   /*
    * The `this` a base destructor is called with: the address of the derived
    * object's base subobject, not the derived object itself.

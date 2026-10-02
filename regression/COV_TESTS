@@ -2118,3 +2118,5 @@ regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
+regression/esbmc-cpp/try_catch/ctor_throw_member_dtor
+regression/esbmc-cpp/try_catch/ctor_throw_member_dtor_fail

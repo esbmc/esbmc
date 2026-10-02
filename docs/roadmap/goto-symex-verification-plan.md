@@ -813,6 +813,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
+| **R92** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R64's [except.ctor] residual, §15 M9 (R92); **FIXED** for members, same entry | **A constructor that threw left its constructed members alive.** `W() : m(1) { throw 1; }` and `W() : m(1), t(2) {}` with a throwing `T` never ran `~M`, though [except.ctor]/3 destroys every fully constructed member before the exception leaves the constructor. A program counting destructors was a false FAILED, and one asserting the member was not destroyed verified. | `guard_constructed_members`, `append_member_dtor`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/try_catch/ctor_throw_member_dtor{,_fail}` | — | **Fixed** for members: everything initialised after a member with a non-trivial destructor runs in a try whose catch-all destroys that member and rethrows. Base subobjects and a delegating constructor are left open. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
@@ -9616,6 +9617,40 @@ read the bytes little-endian, a false SUCCESSFUL where master aborted.
 and one-byte-struct cases under `--big-endian`. Master aborts on all four, and
 each half agrees under Bitwuzla and Z3. The 114 other regression tests that call
 these functions keep their verdicts.
+
+---
+
+### M9 (R92) — 2026-10-02, the members a throwing constructor leaves behind
+
+R64 and R87 recorded that members constructed before a constructor throws are
+not destroyed ([except.ctor]/3). The frontend puts the mem-initializers at the
+top of the constructor's body, and nothing marked a member as constructed, so
+a `throw` in the body or in a later initializer left the constructor with
+every member alive. `struct W { M m; W() : m(1) { throw 1; } };` caught in
+`main` never ran `~M`: `assert(dtors == 1)` was FAILED, though native passes,
+and `assert(dtors == 0)` verified. A throw from a later member's constructor
+(`W() : m(1), t(2) {}`) is the same.
+
+**Fixed** in the frontend. After the initializers are converted, everything
+that follows a member with a non-trivial destructor (the later initializers
+and the body) is wrapped in a try whose catch-all destroys that member and
+rethrows, so the members are destroyed newest first and before any handler,
+the constructor's own function-try-block included. A member whose own
+constructor throws is not destroyed. A union's variant member is destroyed
+too, as native g++ does: [except.ctor]/3 exempts variant members only during
+destruction. The member half of
+`build_destructor_chain` is now `append_member_dtor`, shared by both paths.
+
+`ctor_throw_member_dtor` covers a throw in the body, in a later member's
+constructor and in a class member's constructor, an array member, and a normal
+construction that destroys nothing early; it is FAILED on master.
+`ctor_throw_member_dtor_fail` is SUCCESSFUL on master, where native aborts.
+Both were run with Z3 only: Bitwuzla was not available in this build.
+
+Left open: base subobjects are not destroyed when a later base or member
+throws, because `gen_vptr_initializations` expects the base constructor calls
+at the top of the body, and a delegating constructor whose body throws does
+not run the destructor.
 
 ---
 
