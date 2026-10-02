@@ -7,6 +7,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_guard.h>
 #include <pointer-analysis/andersen.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
@@ -183,35 +184,45 @@ std::vector<expr2tc> ordered_modified_vars(const loopst &loop)
   return ordered;
 }
 
+/// Assignments that follow the havocs and give back to a havoced pointer the
+/// objects it may point to (see pin_havoced_pointers).
+using pinst = std::vector<std::pair<expr2tc, expr2tc>>;
+
 void add_havoc_assigns(
   goto_programt &dest,
   const std::vector<expr2tc> &vars,
+  const pinst &pins,
   const locationt &location)
 {
-  for (auto const &lhs : vars)
-  {
+  const auto add = [&](const expr2tc &lhs, const expr2tc &rhs) {
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
-    t->code = code_assign2tc(lhs, gen_nondet(lhs->type));
+    t->code = code_assign2tc(lhs, rhs);
     t->location = location;
-  }
+  };
+  for (auto const &lhs : vars)
+    add(lhs, gen_nondet(lhs->type));
+  for (auto const &[lhs, rhs] : pins)
+    add(lhs, rhs);
 }
 
 void make_nondet_assign(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  const std::vector<expr2tc> &vars)
+  const std::vector<expr2tc> &vars,
+  const pinst &pins)
 {
   goto_programt dest;
-  add_havoc_assigns(dest, vars, loop_head->location);
+  add_havoc_assigns(dest, vars, pins, loop_head->location);
+  const size_t inserted = dest.instructions.size();
   goto_function.body.insert_swap(loop_head, dest);
 
   // insert_swap leaves loop_head on the first inserted instruction, so put it
-  // back on the original head: exactly vars.size() forward, and never the old
+  // back on the original head: exactly `inserted` forward, and never the old
   // "walk while inductive_step_instruction" heuristic, which also swallowed an
   // ASSUME a previous pass had left after the head and so retargeted the back
   // edge past the loop's exit IF.
-  std::advance(loop_head, vars.size());
+  std::advance(loop_head, inserted);
 }
 
 bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
@@ -451,6 +462,7 @@ std::vector<goto_programt::targett> collect_entry_jumps(
 void havoc_entry_jumps(
   goto_programt &body,
   const std::vector<expr2tc> &vars,
+  const pinst &pins,
   const std::vector<goto_programt::targett> &jumps)
 {
   for (const goto_programt::targett &jump : jumps)
@@ -459,7 +471,7 @@ void havoc_entry_jumps(
     // collect_entry_jumps excluded it, so the iterator still holds the GOTO.
     assert(jump->is_goto() && is_true(jump->guard));
     goto_programt havocs;
-    add_havoc_assigns(havocs, vars, jump->location);
+    add_havoc_assigns(havocs, vars, pins, jump->location);
     body.insert_swap(jump, havocs);
   }
 }
@@ -470,6 +482,7 @@ void havoc_entry_jumps(
 void transform_loop(
   goto_functiont &goto_function,
   loopst &loop,
+  const pinst &pins,
   bool continue_past_failed_assertions)
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
@@ -501,7 +514,7 @@ void transform_loop(
   // and the ASSUME ends up between the havocs and the IF.
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, vars);
+  make_nondet_assign(goto_function, loop_head, vars, pins);
 
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
@@ -510,7 +523,7 @@ void transform_loop(
   // assume that was inserted in the previous transformation
   adjust_loop_head_and_exit(loop_head, loop_exit);
 
-  havoc_entry_jumps(goto_function.body, vars, entry_jumps);
+  havoc_entry_jumps(goto_function.body, vars, pins, entry_jumps);
 }
 
 /// What a pointer may point to: the named objects, and whether it may also
@@ -643,6 +656,121 @@ bool havoc_written_objects(
   return true;
 }
 
+/// What the storage \p lvalue designates may hold. A pointee `*p` has no node
+/// of its own: it holds what the objects p points to hold.
+targetst
+held_by(andersent &points_to, const loopst &loop, const expr2tc &lvalue)
+{
+  if (!is_dereference2t(lvalue))
+    return targets_of(points_to, loop, lvalue);
+
+  value_setst::valuest objects;
+  points_to.get_values(
+    loop.get_original_loop_head(), to_dereference2t(lvalue).value, objects);
+  targetst held;
+  for (const expr2tc &v : objects)
+  {
+    const expr2tc object =
+      is_object_descriptor2t(v) ? to_object_descriptor2t(v).object : expr2tc();
+    if (is_nil_expr(object))
+      held.anything = true;
+    else if (!andersent::is_nondet_object(object))
+    {
+      const targetst t = targets_of(points_to, loop, object);
+      held.named.insert(t.named.begin(), t.named.end());
+      held.heap |= t.heap;
+      held.anything |= t.anything;
+      held.nondet |= t.nondet;
+    }
+  }
+  return held;
+}
+
+/// A value of \p type with the provenance \p t allows: an address into one of
+/// its named objects at any offset, NULL, or, when the pointer may be
+/// unconstrained, anything. The offset is unbounded, so an integer keeps its
+/// full range.
+expr2tc pinned_value(const type2tc &type, const targetst &t)
+{
+  const type2tc bytes = pointer_type2tc(get_uint8_type());
+  std::vector<expr2tc> named(t.named.begin(), t.named.end());
+  std::sort(named.begin(), named.end(), [](const expr2tc &a, const expr2tc &b) {
+    return a->pretty() < b->pretty();
+  });
+  expr2tc value = t.nondet ? gen_nondet(bytes) : gen_zero(bytes);
+  for (const expr2tc &obj : named)
+    value = if2tc(
+      bytes,
+      gen_nondet(get_bool_type()),
+      add2tc(
+        bytes,
+        typecast2tc(bytes, address_of2tc(obj->type, obj)),
+        gen_nondet(signed_size_type2())),
+      value);
+  return typecast2tc(type, value);
+}
+
+/// Whether a value of \p type can hold a data address. CIL computes field
+/// addresses in integers, `(unsigned long)p + off`, so a pointer-wide integer
+/// can.
+bool carries_address(const type2tc &type)
+{
+  if (is_pointer_type(type))
+    return !is_code_type(to_pointer_type(type).subtype);
+  if (is_bv_type(type))
+    return type->get_width() >= config.ansi_c.pointer_width();
+  if (is_array_type(type))
+    return carries_address(to_array_type(type).subtype);
+  if (is_struct_type(type) || is_union_type(type))
+  {
+    const std::vector<type2tc> members = struct_union_members(type);
+    return std::any_of(members.begin(), members.end(), carries_address);
+  }
+  return is_symbol_type(type);
+}
+
+/// Adds to \p pins an assignment of a \p t value to each address \p lvalue
+/// stores. Returns false when one sits in an array element or a union member,
+/// which no single assignment reaches.
+bool pin(const expr2tc &lvalue, const targetst &t, pinst &pins)
+{
+  const type2tc &type = lvalue->type;
+  if (is_struct_type(type))
+  {
+    const struct_type2t &s = to_struct_type(type);
+    for (size_t i = 0; i < s.members.size(); ++i)
+      if (!pin(member2tc(s.members[i], lvalue, s.member_names[i]), t, pins))
+        return false;
+    return true;
+  }
+  if (!carries_address(type))
+    return true;
+  if (!is_pointer_type(type) && !is_bv_type(type))
+    return false;
+  pins.emplace_back(lvalue, pinned_value(type, t));
+  return true;
+}
+
+/// Symex resolves a dereference of a havoced, hence nondet, pointer to an
+/// invalid object, so a write through it would be dropped and the inductive
+/// step would prove too much. Pin each havoced value that may hold a named
+/// address back to the objects the points-to sets give it. One that may also
+/// hold a heap or unknown address needs no pin: by inclusion it never reaches
+/// a pointer the loop writes through, or havoc_written_objects would have
+/// refused that pointer. Returns false when a value cannot be pinned.
+bool pin_havoced_pointers(andersent &points_to, const loopst &loop, pinst &pins)
+{
+  for (const expr2tc &var : ordered_modified_vars(loop))
+  {
+    const targetst t = held_by(points_to, loop, var);
+    if (t.named.empty() || t.heap || t.anything)
+      continue;
+    if (!pin(var, t, pins))
+      return false;
+  }
+  return true;
+}
+
 void for_each_subexpr(
   const expr2tc &e,
   const std::function<void(const expr2tc &)> &f)
@@ -768,7 +896,12 @@ bool goto_k_induction(
 
       if (loop.get_modified_loop_vars().empty())
         continue;
-      transform_loop(it->second, loop, continue_past_failed_assertions);
+      pinst pins;
+      if (
+        loop.writes_through_pointer() &&
+        !pin_havoced_pointers(points_to, loop, pins) && decides)
+        disable_inductive_step = true;
+      transform_loop(it->second, loop, pins, continue_past_failed_assertions);
     }
   }
   goto_functions.update();
