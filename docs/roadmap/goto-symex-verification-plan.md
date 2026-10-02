@@ -9647,6 +9647,14 @@ construction that destroys nothing early; it is FAILED on master.
 `ctor_throw_member_dtor_fail` is SUCCESSFUL on master, where native aborts.
 Both were run with Z3 only: Bitwuzla was not available in this build.
 
+**WIP, not yet mergeable.** The synthesized `CATCH` and bare rethrow make
+`remove_exceptions` treat every program with such a class as using exceptions.
+A concurrent program that never throws, whose start routine is also called
+directly, is now declined ("cannot lower a thread start routine that is also
+called directly"); `ctor_member_guard_thread` pins it and fails on this branch.
+Next: emit the guard only where the try block can throw, or mark it so the
+thread-entry check and the no-op gate in `remove_exceptions` ignore it.
+
 Left open: base subobjects are not destroyed when a later base or member
 throws, because `gen_vptr_initializations` expects the base constructor calls
 at the top of the body, and a delegating constructor whose body throws does
