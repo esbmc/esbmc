@@ -1988,6 +1988,11 @@ python_list::describe_strided_view(const exprt &array)
     }
   };
 
+  // np.eye/np.full can bind list objects; only numeric storage is strided.
+  auto numeric_storage = [&desc]() {
+    return is_number(desc.elem_type) || desc.elem_type.is_bool();
+  };
+
   if (type.is_array())
   {
     std::optional<std::vector<std::size_t>> shape =
@@ -1995,6 +2000,8 @@ python_list::describe_strided_view(const exprt &array)
     if (!shape || shape->empty())
       return std::nullopt;
     desc.elem_type = innermost_element_type(type, ns);
+    if (!numeric_storage())
+      return std::nullopt;
     const std::vector<long long> extents(shape->begin(), shape->end());
     constant_axes(extents, contiguous_strides(extents));
     desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
@@ -2014,6 +2021,8 @@ python_list::describe_strided_view(const exprt &array)
     if (param == converter_.numpy_param_shapes_.end())
       return std::nullopt;
     desc.elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
+    if (!numeric_storage())
+      return std::nullopt;
     const std::vector<long long> extents(
       param->second.begin(), param->second.end());
     constant_axes(extents, contiguous_strides(extents));
@@ -2023,6 +2032,8 @@ python_list::describe_strided_view(const exprt &array)
   const auto &info = view->second;
 
   desc.elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
+  if (!numeric_storage())
+    return std::nullopt;
   const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
   for (std::size_t axis = 0; axis < rank; ++axis)
   {
