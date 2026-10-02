@@ -2120,3 +2120,5 @@ regression/esbmc-cpp/cpp/static_local_array_dynamic_init
 regression/esbmc-cpp/cpp/static_local_array_dynamic_init_fail
 regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
