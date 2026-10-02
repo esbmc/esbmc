@@ -2118,3 +2118,7 @@ regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
+regression/esbmc/big_endian_memset
+regression/esbmc/big_endian_memset_fail
+regression/esbmc/big_endian_memcpy
+regression/esbmc/big_endian_memcpy_fail
