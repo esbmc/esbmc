@@ -311,7 +311,7 @@ static irep_idt constructed_symbol(const expr2tc &code, const namespacet &ns)
   const code_function_call2t &call = to_code_function_call2t(code);
   if (
     !is_symbol2t(call.function) || call.operands.empty() ||
-    !is_address_of2t(call.operands[0]))
+    is_nil_expr(call.operands[0]) || !is_address_of2t(call.operands[0]))
     return irep_idt();
   const symbolt *callee = ns.lookup(to_symbol2t(call.function).thename);
   const expr2tc &obj = to_address_of2t(call.operands[0]).ptr_obj;
