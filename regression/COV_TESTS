@@ -2120,3 +2120,5 @@ regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
 regression/esbmc/github_8096_int_min_fail
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
