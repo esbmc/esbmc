@@ -2117,3 +2117,5 @@ regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
 regression/esbmc-cpp/cpp/new_multidim_value_init
+regression/esbmc-cpp/cpp/new_array_string_literal
+regression/esbmc-cpp/cpp/new_array_string_literal_fail
