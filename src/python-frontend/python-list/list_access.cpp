@@ -2594,6 +2594,7 @@ std::optional<exprt> python_list::try_build_pointer_array_index(
 
   exprt guarded_pos =
     guard_numpy_pointer_view_index(array, pos_expr, slice_node);
+  guarded_pos = guard_numpy_static_array_index(array, guarded_pos, slice_node);
   return build_index(array, guarded_pos, pointee);
 }
 
