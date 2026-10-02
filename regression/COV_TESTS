@@ -2078,6 +2078,8 @@ regression/esbmc-cpp/cpp/string_literal_brace_init
 regression/esbmc-cpp/cpp/string_literal_brace_init_fail
 regression/esbmc-cpp/cpp/new_value_init_polymorphic
 regression/esbmc-cpp/cpp/new_value_init_polymorphic_fail
+regression/esbmc-cpp/cpp/new_multidim_class
+regression/esbmc-cpp/cpp/new_multidim_class_fail
 regression/esbmc-cpp/cpp/new_array_runtime_count
 regression/esbmc-cpp/cpp/new_array_runtime_count_fail
 regression/esbmc/vector_union_bytes
@@ -2093,3 +2095,5 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc/calloc_force_malloc_success
+regression/esbmc/calloc_force_malloc_success_sv_comp_fail
