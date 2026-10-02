@@ -2095,6 +2095,8 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc-cpp/cpp/github_8090_unnamed_override
+regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
 regression/esbmc/github_8083_memset
 regression/esbmc/github_8083_overflow
