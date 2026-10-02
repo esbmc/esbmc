@@ -209,6 +209,10 @@ protected:
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  bool construct_in_place(
+    const exprt &object,
+    const exprt &initializer,
+    goto_programt &dest);
   void remove_initializer_sideeffects(
     const exprt &object,
     exprt &initializer,

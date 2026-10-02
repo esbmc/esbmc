@@ -2086,3 +2086,10 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place_fail
+regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
+regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
+regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
+regression/esbmc-cpp/cpp/shared_ptr_member_copy
+regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail

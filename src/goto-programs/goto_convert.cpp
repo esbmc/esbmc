@@ -751,11 +751,50 @@ void goto_convertt::convert_dynamic_static_init(
   skip->make_goto(end, flag2);
 }
 
+/// Construct @p object from @p initializer directly when it is a class
+/// temporary: a constructor call retargeted at @p object, or a call returning
+/// by value made with @p object as its lhs. Constructing the temporary and
+/// copying it would leave it with its own scope-exit destructor, a second
+/// destructor for what is semantically one object (github #2306). Returns
+/// false, emitting nothing, for any other initializer.
+bool goto_convertt::construct_in_place(
+  const exprt &object,
+  const exprt &initializer,
+  goto_programt &dest)
+{
+  if (
+    initializer.id() != "sideeffect" ||
+    initializer.statement() != "temporary_object")
+    return false;
+
+  const exprt &ctor = static_cast<const exprt &>(initializer.initializer());
+  if (ctor.is_not_nil())
+  {
+    exprt code = ctor;
+    replace_new_object(object, code);
+    convert(to_code(code), dest);
+    return true;
+  }
+
+  if (
+    initializer.operands().size() != 1 ||
+    initializer.op0().id() != "sideeffect" ||
+    initializer.op0().statement() != "function_call")
+    return false;
+
+  const exprt &call_expr = initializer.op0();
+  code_function_callt call;
+  call.location() = call_expr.location();
+  call.lhs() = object;
+  call.function() = call_expr.op0();
+  call.arguments() = call_expr.op1().operands();
+  convert_function_call(call, dest);
+  return true;
+}
+
 /// Remove the side effects of @p initializer, the value of @p object. A class
-/// element of a braced list is a subobject of @p object, initialised directly
-/// by its constructor ([dcl.init.aggr]/4, [dcl.init]/17.6.1): constructing a
-/// temporary and copying it in bitwise left the temporary its own destructor,
-/// so the element was destroyed twice.
+/// element of a braced list is a subobject of @p object and is initialised in
+/// place ([dcl.init.aggr]/4, [dcl.init]/17.6.1).
 void goto_convertt::remove_initializer_sideeffects(
   const exprt &object,
   exprt &initializer,
@@ -763,10 +802,11 @@ void goto_convertt::remove_initializer_sideeffects(
 {
   const typet &type = ns.follow(initializer.type());
   const bool is_list =
-    (initializer.id() == "struct" && type.is_struct() &&
-     to_struct_type(type).components().size() ==
-       initializer.operands().size()) ||
-    (initializer.id() == "array" && type.is_array());
+    (initializer.id() == "struct" || initializer.id() == "array" ||
+     initializer.id() == "constant") &&
+    (type.is_array() ||
+     (type.is_struct() && to_struct_type(type).components().size() ==
+                            initializer.operands().size()));
   if (!is_list)
   {
     remove_sideeffects(initializer, dest);
@@ -777,7 +817,8 @@ void goto_convertt::remove_initializer_sideeffects(
   {
     exprt element;
     if (type.is_array())
-      element = index_exprt(object, from_integer(i, index_type()), type.subtype());
+      element =
+        index_exprt(object, from_integer(i, index_type()), type.subtype());
     else
     {
       const auto &c = to_struct_type(type).components()[i];
@@ -785,16 +826,8 @@ void goto_convertt::remove_initializer_sideeffects(
     }
 
     exprt &op = initializer.operands()[i];
-    const exprt &ctor = static_cast<const exprt &>(op.initializer());
-    if (
-      op.id() == "sideeffect" && op.statement() == "temporary_object" &&
-      ctor.is_not_nil())
-    {
-      exprt code = ctor;
-      replace_new_object(element, code);
-      convert(to_code(code), dest);
+    if (construct_in_place(element, op, dest))
       op = element;
-    }
     else
       remove_initializer_sideeffects(element, op, dest);
   }
@@ -809,48 +842,12 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
-  // A temporary_object initializer carrying a constructor (C++ `T t;` or
-  // `T t = T(...)`) constructs the object in place: retarget the
-  // constructor's new_object to `var` and emit it directly, instead of
-  // constructing a separate temporary and copying it. The copy path would
-  // leave that temporary with its own scope-exit destructor -- a spurious
-  // second destructor for what is semantically a single object.
-  if (
-    initializer.id() == "sideeffect" &&
-    initializer.statement() == "temporary_object" &&
-    static_cast<const exprt &>(initializer.initializer()).is_not_nil())
-  {
-    exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
-    replace_new_object(var, ctor_code);
-    convert(to_code(ctor_code), dest);
-  }
-  else if (
-    initializer.id() == "sideeffect" &&
-    initializer.statement() == "temporary_object" &&
-    initializer.operands().size() == 1 &&
-    initializer.op0().id() == "sideeffect" &&
-    initializer.op0().statement() == "function_call")
-  {
-    // A temporary_object wrapping a plain (non-constructor) function call
-    // (C++ `T t = f(...);` where f returns T by value): call it with `var`
-    // as the lhs directly instead of routing the result through a fresh
-    // return_value$ temporary. The generic path below would give that
-    // temporary its own scope-exit destructor for what is semantically the
-    // same object as `var` (github #2306). `var`'s own destructor is
-    // scheduled below via targets.destructor_stack regardless of which
-    // branch above ran; if that destructor appears to not fire for a
-    // function ending in an explicit `return <expr>;`, look at
-    // convert_return's handling of its local unwind program instead of
-    // here -- that path is a separate, pre-existing gap.
-    const exprt &call_expr = initializer.op0();
-    code_function_callt call;
-    call.location() = call_expr.location();
-    call.lhs() = var;
-    call.function() = call_expr.op0();
-    call.arguments() = call_expr.op1().operands();
-    convert_function_call(call, dest);
-  }
-  else
+  // `T t;`, `T t = T(...)` and `T t = f(...)` construct `t` itself.
+  // convert_decl schedules `t`'s destructor either way; if it appears to not
+  // fire for a function ending in an explicit `return <expr>;`, look at
+  // convert_return's handling of its local unwind program instead of here --
+  // that path is a separate, pre-existing gap.
+  if (!construct_in_place(var, initializer, dest))
   {
     std::size_t stack_size = targets.destructor_stack.size();
 

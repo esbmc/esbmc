@@ -1,5 +1,3 @@
-// The named-argument half of aggregate_init_temp_double_destroy: the member is
-// copy-constructed from `t` in place, so 2 constructors and 2 destructors run.
 #include <cassert>
 
 int c = 0, d = 0;
@@ -33,6 +31,6 @@ int main()
     W a{t};
     assert(a.m.v == 5); // the stored value is correct
   }
-  assert(c == d);
+  assert(d == 3);
   return 0;
 }
