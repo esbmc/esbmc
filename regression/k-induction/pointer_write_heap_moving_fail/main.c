@@ -1,5 +1,6 @@
-// The loop writes a heap array through a moving pointer, which neither a
-// named object nor *p covers, so the inductive step is disabled and the base
+// The loop writes a heap array at a moving offset from a, which it never
+// moves, so the inductive step havocs a's whole object. Without that havoc
+// a[0] keeps its pre-loop 0 and the step proves a[0] < 3; with it the base
 // case finds the bug.
 #include <stdlib.h>
 extern void abort(void);
