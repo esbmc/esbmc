@@ -2175,6 +2175,16 @@ bool python_converter::is_tracked_numpy_view_id(
   return numpy_view_copy_sources_.count(symbol_id) != 0;
 }
 
+// The first target of an Assign node, or a null node when it has none.
+static const nlohmann::json &first_assign_target(const nlohmann::json &ast_node)
+{
+  static const nlohmann::json none;
+  return ast_node.contains("targets") && ast_node["targets"].is_array() &&
+             !ast_node["targets"].empty()
+           ? ast_node["targets"][0]
+           : none;
+}
+
 void python_converter::reject_nonconstant_numpy_view_write(
   const nlohmann::json &target) const
 {
@@ -4859,10 +4869,7 @@ void python_converter::handle_function_call_rhs(
   }
 
   target_block.copy_to_operands(rhs);
-  if (
-    ast_node.contains("targets") && ast_node["targets"].is_array() &&
-    !ast_node["targets"].empty())
-    reject_nonconstant_numpy_view_write(ast_node["targets"][0]);
+  reject_nonconstant_numpy_view_write(first_assign_target(ast_node));
 }
 
 exprt python_converter::handle_string_literal_rhs(
