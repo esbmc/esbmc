@@ -277,6 +277,11 @@ protected:
     std::size_t stack_size,
     const locationt &,
     goto_programt &dest);
+  void destroy_unextended_temporaries(
+    const exprt &init,
+    std::size_t stack_size,
+    const locationt &location,
+    goto_programt &dest);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,
