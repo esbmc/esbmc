@@ -280,6 +280,15 @@ static void lift_old_over_bound_index(
   expr.swap(element);
 }
 
+/// x=f(...), and a mem-initializer, whose braced list initialises the member
+/// in place: convert_assign lowers both without removing the rhs first.
+static bool is_assigned_whole(const exprt &assign)
+{
+  const exprt &rhs = assign.op1();
+  return (rhs.id() == "sideeffect" && rhs.statement() == "function_call") ||
+         assign.op0().get_bool("#member_init");
+}
+
 /// A class temporary initialised from a braced list, whose class elements
 /// remove_temporary_object constructs in place.
 static bool is_braced_temporary(const exprt &e)
@@ -1720,14 +1729,9 @@ void goto_convertt::remove_sideeffects(
 
     if (statement == "assign")
     {
-      // we do a special treatment for x=f(...), and for a mem-initializer,
-      // whose braced list initialises the member in place
       assert(expr.operands().size() == 2);
 
-      if (
-        (expr.op1().id() == "sideeffect" &&
-         to_side_effect_expr(expr.op1()).get_statement() == "function_call") ||
-        expr.op0().get_bool("#member_init"))
+      if (is_assigned_whole(expr))
       {
         remove_sideeffects(expr.op0(), dest);
         exprt lhs = expr.op0();
