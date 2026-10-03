@@ -9912,7 +9912,10 @@ declare a variable-size array or a pointer to an array, in `esbmc`, `cbmc`,
 `k-induction` and `esbmc-cpp/cpp`, keep master's verdicts. Bitwuzla was not
 built for this run.
 
-This closes R62: its renaming half was fixed by R82 (#8109).
+Not checked: two such sizes that differ at run time are undefined behaviour
+(6.7.6.2p6), and the read now takes the wanted type's size without flagging
+it, as the struct-prefix cast already does for its types. This closes R62:
+its renaming half was fixed by R82 (#8109).
 
 ---
 
