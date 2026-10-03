@@ -217,11 +217,6 @@ protected:
     std::vector<subobject_destructort> &out);
 
   /*
-   * Destroy the subobjects a constructor has built when an exception leaves
-   * it ([except.ctor]/3). starts[i] is where the code of cd's i-th
-   * initializer begins in body, and starts.back() where its own body does.
-   */
-  /*
    * Whether anything in this translation unit can throw. Without a throw no
    * constructor needs the handler that unwinds its subobjects, and the
    * program keeps out of exception lowering.
@@ -229,6 +224,11 @@ protected:
   std::optional<bool> tu_may_throw;
   bool translation_unit_may_throw();
 
+  /*
+   * Destroy the subobjects a constructor has built when an exception leaves
+   * it ([except.ctor]/3). starts[i] is where the code of cd's i-th
+   * initializer begins in body, and starts.back() where its own body does.
+   */
   bool unwind_constructed_subobjects(
     const clang::CXXConstructorDecl &cd,
     const std::vector<std::size_t> &starts,
