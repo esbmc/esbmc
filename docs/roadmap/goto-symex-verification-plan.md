@@ -816,6 +816,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
+| **R104** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — #8141's open note, §15 M9 (R104); **FIXED**, same entry | **A declaration's constructor or by-value call kept its argument temporaries to block exit.** `D d(C(6));`, `D e{C(1), C(2)};`, `D h = D(C(7));` and `D m = make(C(4));` for a destructible `D` built `d` in place, and the temporaries their arguments created were destroyed at the end of the enclosing block, not of the declaration ([class.temporary]/4). `assert(live == 0)` after the declaration was FAILED, and a pointer kept from the argument, `Q q(P(3)); *q.q` with `~P` deleting it, read freed memory natively and verified. | `convert_decl_initializer`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/decl_argument_temporary{,_fail}` | — | **Fixed**: all three initializer paths destroy the temporaries they created when the declaration ends; only the generic assignment path did. That exposed a second defect: `typeid` built its `type_info` as a temporary, so `std::type_index i(typeid(int));` (the CORE `typeindex_model`) then read a dead object, as `const std::type_info *p = &typeid(int);` already did on master. `typeid` now refers to a static object, one per type, or per site for a polymorphic operand ([expr.typeid]/1; `typeid_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/typeid_static_storage{,_fail}`). |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
 | **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
@@ -9953,6 +9954,68 @@ invariant naming the loop variable outside its scope),
 `esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
 `PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
 `accepted under KNOWNBUG`.
+
+---
+
+### M9 (R104) — 2026-10-03, the arguments a declaration kept alive
+
+Open PR #8141 recorded that the argument temporary of a direct-initialised
+variable is never destroyed: `{ D d(C(6)); assert(live == 0); }` for
+`D(C)` is FAILED on master, and passes natively under g++ in every mode. The
+temporary was destroyed, but at the end of the block. `convert_decl_initializer`
+has three paths. The generic one assigns the lowered initializer and then
+destroys the full-expression's temporaries (#6075). The other two, a
+constructor run in place on the variable (`D d(C(6))`, `D e{C(1), C(2)}`,
+`D h = D(C(7))`) and a by-value call returning into it
+(`D m = make(C(4))` for a `D` with a destructor), returned without doing so.
+The same holds for a nested call (`E g(get(C(5)))`). The other direction is a
+false SUCCESSFUL: with `struct Q { int *q; Q(const P &x) : q(x.p) {} };` and
+`~P` deleting `p`, `Q q(P(3)); return *q.q;` is a heap use after free under
+ASan and verified on master.
+
+**Fixed** in `convert_decl_initializer`: the destructor-stack level is taken
+before any of the three paths, and the drain follows all of them, still
+skipped for a reference declaration ([class.temporary]/6).
+
+The fix turned the CORE `typeindex_model` FAILED: `std::type_index
+i1(typeid(int));` keeps a pointer to the `type_info`, and the frontend built
+that object as a temporary of the full-expression, which now died at the end
+of the declaration. The temporary was the defect: `typeid` refers to an object
+of static storage duration ([expr.typeid]/1), and on master
+`const std::type_info *p = &typeid(int); assert(*p == typeid(int));` already
+reported `accessed expired variable pointer`. A `typeid` whose operand is not a
+polymorphic glvalue now refers to a static `c:@__ESBMC_typeid@<type name>`
+object, one per type name, the identity `typeid` already compares by. A
+polymorphic operand's dynamic type is read from the vtable when `typeid` is
+evaluated, so each such site gets its own static object, assigned there; left
+a temporary, `std::type_index k(typeid(*b));` read a dead object once the
+declaration drained it, which code review found.
+
+`decl_argument_temporary` (five shapes, each assertion FAILED on master) and
+`decl_argument_temporary_fail` (pins `invalidated dynamic object`) change
+verdict against master and back with the `goto_convert.cpp` change reverted.
+`typeid_static_storage` (FAILED on master) and `typeid_static_storage_fail`
+(pins the assertion; master reports the expired pointer instead) do the same
+with the `typeid_object` change reverted. Z3 only: this build
+could not fetch Bitwuzla; `--z3` agrees. The `esbmc-cpp/cpp`, `destructors`,
+`try_catch`, `bug_fixes`, `cbmc`, `inheritance`, `template` and
+`polymorphism_bringup` suites keep master's verdicts apart from these four,
+under a 60 s per-test cap, as do the 52 tests matching
+`typeid|rtti|type_info|typeindex|bad_cast|dynamic_cast`.
+
+Not fixed: `return D(c);` in `make(C c)` still keeps its copy of `c` past the
+return (open PR #8151). A `catch (C c)` parameter is bound by a bitwise copy
+instead of `C`'s copy constructor, and the exception object is never
+destroyed, so `try { throw C(1); } catch (const C &) {} assert(ctors ==
+dtors);` is a false FAILED on master; that needs both changes together.
+Pre-existing, found in review: two local classes `S` in different functions
+print the same name and so share one `type_info` (`*f() != *g()` is a false
+FAILED, as it was when the names were compared); two evaluations of one
+polymorphic `typeid` site share its object, so a pointer kept from the first
+sees the second's type; and `&typeid(*p) == &typeid(D)` is false.
+`std::initializer_list<C> il = {C(1)};` and a reference member of a braced
+aggregate still lose their temporaries at the end of the declaration (the
+second is open PR #8158).
 
 ---
 

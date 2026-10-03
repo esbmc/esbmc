@@ -787,6 +787,8 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
+  const std::size_t stack_size = targets.destructor_stack.size();
+
   // A temporary_object initializer carrying a constructor (C++ `T t;` or
   // `T t = T(...)`) constructs the object in place: retarget the
   // constructor's new_object to `var` and emit it directly, instead of
@@ -830,8 +832,6 @@ void goto_convertt::convert_decl_initializer(
   }
   else
   {
-    std::size_t stack_size = targets.destructor_stack.size();
-
     goto_programt sideeffects;
     // the side effect is not just removed. Actually, it's converted and
     // removed.
@@ -841,18 +841,18 @@ void goto_convertt::convert_decl_initializer(
     code_assignt assign(var, initializer);
     assign.location() = new_code.location();
     copy(assign, ASSIGN, dest);
-
-    // Temporaries materialized while lowering the initializer die at the
-    // end of the full expression (C++ [class.temporary]/4, github #6075):
-    // emit their pending scope-exit entries (destructor then DEAD) right
-    // after the assignment. A reference declaration extends its
-    // temporary's lifetime to the scope ([class.temporary]/6) and a
-    // destructor-free tail (plain DEADs of C-style temps) keeps
-    // block-level scope, so both retain the old shape.
-    if (!is_lvalue_or_rvalue_reference(s.get_type()))
-      destroy_full_expression_temporaries(
-        stack_size, new_code.location(), dest);
   }
+
+  // Temporaries materialized while lowering the initializer, including a
+  // constructor's or a call's arguments, die at the end of the full
+  // expression (C++ [class.temporary]/4, github #6075): emit their pending
+  // scope-exit entries (destructor then DEAD) right after the
+  // initialization. A reference declaration extends its temporary's
+  // lifetime to the scope ([class.temporary]/6) and a destructor-free tail
+  // (plain DEADs of C-style temps) keeps block-level scope, so both retain
+  // the old shape.
+  if (!is_lvalue_or_rvalue_reference(s.get_type()))
+    destroy_full_expression_temporaries(stack_size, new_code.location(), dest);
 }
 
 void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
