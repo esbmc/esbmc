@@ -10,6 +10,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
@@ -2214,6 +2215,40 @@ static std::size_t construction_position(
   return bases.size() + field->getFieldIndex();
 }
 
+namespace
+{
+/// Finds an expression that can put an exception in flight: a throw, or a
+/// dynamic_cast to a reference, which throws std::bad_cast.
+class throw_findert : public clang::RecursiveASTVisitor<throw_findert>
+{
+public:
+  bool found = false;
+
+  bool VisitCXXThrowExpr(clang::CXXThrowExpr *)
+  {
+    found = true;
+    return false;
+  }
+
+  bool VisitCXXDynamicCastExpr(clang::CXXDynamicCastExpr *e)
+  {
+    found = e->getTypeAsWritten()->isReferenceType();
+    return !found;
+  }
+};
+} // namespace
+
+bool clang_cpp_convertert::translation_unit_may_throw()
+{
+  if (!tu_may_throw)
+  {
+    throw_findert finder;
+    finder.TraverseDecl(ASTContext->getTranslationUnitDecl());
+    tu_may_throw = finder.found;
+  }
+  return *tu_may_throw;
+}
+
 static bool cannot_throw(const clang::CXXConstructorDecl &cd)
 {
   const auto *fpt =
@@ -2248,7 +2283,9 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
   const std::vector<std::size_t> &starts,
   code_blockt &body)
 {
-  if (cd.isDelegatingConstructor() || cannot_throw(cd))
+  if (
+    cd.isDelegatingConstructor() || cannot_throw(cd) ||
+    !translation_unit_may_throw())
     return false;
 
   std::vector<subobject_destructort> dtors;
