@@ -2158,3 +2158,7 @@ regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
+regression/esbmc-cpp/cpp/braced_list_member_init
+regression/esbmc-cpp/cpp/braced_list_member_init_fail
+regression/esbmc-cpp/cpp/braced_list_temporary
+regression/esbmc-cpp/cpp/braced_list_temporary_fail

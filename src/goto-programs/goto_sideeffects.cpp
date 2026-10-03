@@ -280,6 +280,15 @@ static void lift_old_over_bound_index(
   expr.swap(element);
 }
 
+/// A class temporary initialised from a braced list, whose class elements
+/// remove_temporary_object constructs in place.
+static bool is_braced_temporary(const exprt &e)
+{
+  return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
+         e.operands().size() == 1 &&
+         (e.op0().id() == "struct" || e.op0().id() == "array");
+}
+
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
 /// cannot be replicated by argument substitution.
 static bool has_non_call_sideeffect(const exprt &e)
@@ -1711,12 +1720,14 @@ void goto_convertt::remove_sideeffects(
 
     if (statement == "assign")
     {
-      // we do a special treatment for x=f(...)
+      // we do a special treatment for x=f(...), and for a mem-initializer,
+      // whose braced list initialises the member in place
       assert(expr.operands().size() == 2);
 
       if (
-        expr.op1().id() == "sideeffect" &&
-        to_side_effect_expr(expr.op1()).get_statement() == "function_call")
+        (expr.op1().id() == "sideeffect" &&
+         to_side_effect_expr(expr.op1()).get_statement() == "function_call") ||
+        expr.op0().get_bool("#member_init"))
       {
         remove_sideeffects(expr.op0(), dest);
         exprt lhs = expr.op0();
@@ -1867,8 +1878,9 @@ void goto_convertt::remove_sideeffects(
   }
 
   // TODO: evaluation order
-  Forall_operands (it, expr)
-    remove_sideeffects(*it, dest);
+  if (!is_braced_temporary(expr))
+    Forall_operands (it, expr)
+      remove_sideeffects(*it, dest);
 
   if (expr.id() == "sideeffect")
   {
@@ -2565,6 +2577,7 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 
   if (expr.operands().size() == 1)
   {
+    remove_initializer_sideeffects(symbol_expr(new_symbol), expr.op0(), dest);
     codet assignment("assign");
     assignment.reserve_operands(2);
     new_symbol.set_value(expr.op0());

@@ -816,6 +816,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
+| **R99** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R83's open note, §15 M9 (R99); **FIXED**, same entry | **A braced list in a mem-initializer or a class temporary still built each class element twice.** `V() : w{M(5)} {}` and `a = W{M(5)};` constructed `M(5)` in a `tmp$`, copied it into the element and destroyed the `tmp$`, so the element's destructor ran once more than its constructor. | `remove_sideeffects`, `remove_temporary_object`, `src/goto-programs/goto_sideeffects.cpp`; `convert_assign`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/braced_list_member_init{,_fail}`, `braced_list_temporary{,_fail}` | — | **Fixed** in C++17. In C++14, a class element of a list bound to a reference still keeps the elidable copy's temporary to the end of the block (R69's nested-copy residual). |
 | **R83** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R64's note on `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **A braced list built each class element in a temporary, copied it in and destroyed both.** `W a{M(5)};`, `W a{t};` and `M arr[2] = {M(6), M(7)};` ran one destructor per element too many: the temporary got its own scope-exit destructor and the element was destroyed again with the object. `assert(dtors == 2)` after `{ W a{M(5)}; }` was SUCCESSFUL, and copying a class holding a `shared_ptr` member read a released control block. | `construct_in_place`, `remove_initializer_sideeffects`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_init_member_in_place{,_fail}`, `aggregate_init_temp_double_destroy`, `aggregate_init_named_double_destroy{,_fail}`, `shared_ptr_member_copy{,_fail}` | — | **Fixed** for a declaration's initialiser; a list assigned to an object or in a mem-initializer still destroys one element too many. |
 | **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
 | **R82** | **High (false FAILED, default configuration)** — R61's residual, §15 M9 (R82); **FIXED**, same entry | **A pointer to a variable-length array scaled by a free size.** `rename_type` renamed a symbolic array size only on an expression's own array type and its first subtype, and only when the size was a bare symbol. A pointer's subtype was never renamed, so `p = a + 1` with `int (*p)[m]` scaled by `m` as an unconstrained L0 symbol, and `(*p)[2]` of a correct program was an array-bounds violation. Sizes deeper than the second level, or spelt `m + 1`, were missed the same way. | `goto_symex_statet::rename_type`, `rename_array_sizes` and `fixup_renamed_type`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/vla_pointer_stride{,_fail}` | — | **Fixed**: every non-constant array size is renamed, through array and pointer subtypes. A VLA size reassigned after its declarator is still read at its current value (#8019). |
@@ -9911,6 +9912,45 @@ output, and all 19 keep their verdict.
 Not fixed: a list assigned to an existing object (`a = W{M(5)};`) and one in
 a mem-initializer (`V() : w{M(5)} {}`) still run a destructor too many; both
 are FAILED on master too. `new W{M(5)}` was already balanced.
+
+---
+
+### M9 (R99) — 2026-10-03, the list R83 left in two places
+
+R83 constructed a declaration's braced list in place and left two shapes that
+still destroyed a class element twice: a list in a mem-initializer
+(`V() : w{M(5)} {}`) and a class temporary built from a list
+(`a = W{M(5)};`, `f(W{M(6)})`). After `{ V v; }` or the assignment,
+`assert(live == 1)` was FAILED, where the native program (`g++ -std=c++17`)
+passes, and `assert(live == 0)` was SUCCESSFUL, where it aborts.
+
+Both reached `remove_sideeffects`, which removes an expression's operands
+first. A mem-initializer is an `assign` side effect with a `#member_init` lhs,
+and a temporary is a `temporary_object` with the list as its operand; by the
+time either was lowered, each element was already a `tmp$` with its own
+destructor. **Fixed** by lowering both before their operands: the
+mem-initializer goes to `convert_assign`, which hands a `#member_init` rhs to
+R83's `remove_initializer_sideeffects` with the member as the object, and
+`remove_temporary_object` does the same for its list with the temporary as
+the object. Arrays and nested lists come through the same walk.
+
+`braced_list_member_init` (a struct member, an array member and a nested
+list) and `braced_list_temporary` (two assignments and a by-reference
+argument) are FAILED on master; `braced_list_member_init_fail` and
+`braced_list_temporary_fail` are SUCCESSFUL there. Each pair changes verdict
+when its half of the change is reverted, under Z3 (the default solver of this
+build). All four pin `--std c++17`: before C++17 the element may be copied from
+the temporary, and with the `_fail` tests' implicit copy constructor the count
+is then 0 natively too.
+
+Not fixed: in C++14, `const W &r = W{M(8)};` still destroys the copied-from
+`M(8)` at block exit rather than at the end of the declaration, so
+`assert(live == 1)` there is FAILED. That is R69's nested elidable copy.
+
+R64's note that mem-initializer temporaries die at the end of the constructor
+no longer reproduces on master: since #8110, `P() : a(get(C(1))) {}` destroys
+`C(1)` before the next initializer, for a member, a base and a default member
+initializer.
 
 ---
 
