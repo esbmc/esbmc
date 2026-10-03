@@ -1647,17 +1647,6 @@ private:
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
 
-  bool record_numpy_transpose_view(
-    const exprt &lhs,
-    const nlohmann::json &view_node);
-
-  bool
-  record_numpy_reshape_view(const exprt &lhs, const nlohmann::json &view_node);
-
-  bool record_numpy_shape_stride_view(
-    const exprt &lhs,
-    const nlohmann::json &rhs_node);
-
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
   void reject_nonconstant_numpy_view_write(const nlohmann::json &target) const;
@@ -1709,8 +1698,6 @@ private:
 
   bool is_numpy_readonly_view_arg(const nlohmann::json &arg) const;
 
-  bool has_numpy_transpose_view_of(const std::string &source_id) const;
-
   void clear_numpy_view_copy(const exprt &lhs);
 
   void
@@ -1761,48 +1748,6 @@ private:
     const std::string &rebound_id,
     const locationt &location,
     codet &target_block);
-
-  void clear_numpy_transpose_views_of(const std::string &source_id);
-
-  void mirror_numpy_transpose_assignment(
-    const nlohmann::json &target,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void mirror_numpy_transpose_assignment_from_targets(
-    const nlohmann::json &ast_node,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void mirror_numpy_reshape_assignment(
-    const nlohmann::json &target,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void emit_numpy_transpose_mirror_assignment(
-    const std::string &symbol_id,
-    const std::vector<long long> &cell_indices,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void emit_numpy_view_cell_assignment(
-    const std::string &symbol_id,
-    const std::vector<long long> &cell_indices,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void mirror_numpy_source_write_to_views(
-    const std::string &source_id,
-    const std::vector<long long> &source_indices,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block,
-    const std::string &skip_view_id = "");
 
   bool should_rebuild_cached_numpy_row_subscript_rhs(
     const nlohmann::json &rhs_node) const;
@@ -2439,24 +2384,6 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
-  struct numpy_transpose_view_infot
-  {
-    std::string source_id;
-    std::size_t rank;
-    bool swaps_axes;
-  };
-  std::unordered_map<std::string, numpy_transpose_view_infot>
-    numpy_transpose_view_info_;
-  struct numpy_reshape_view_infot
-  {
-    std::string source_id;
-    std::vector<std::size_t> source_shape;
-    std::vector<std::size_t> view_shape;
-    bool readonly = false;
-    bool broadcast = false;
-  };
-  std::unordered_map<std::string, numpy_reshape_view_infot>
-    numpy_reshape_view_info_;
   /// Namespace of each operational model loaded this run, in load order.
   std::vector<std::string> model_namespaces_;
   // A 2-D+ numpy array parameter's full logical shape, keyed by the
