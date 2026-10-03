@@ -2348,7 +2348,7 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
   for (auto it = cd.init_rbegin(); it != cd.init_rend(); ++it)
   {
     const std::size_t start = starts[--i];
-    if (!(*it)->isBaseVirtual())
+    if (!(*it)->isBaseInitializer() || !(*it)->isBaseVirtual())
       ops.insert(
         ops.begin() + start, progress(construction_position(**it, bases)));
   }
