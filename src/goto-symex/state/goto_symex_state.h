@@ -365,6 +365,7 @@ public:
   void rename(expr2tc &expr);
 
   void rename_type(expr2tc &expr);
+  void rename_array_sizes(type2tc &type);
 
   /**
    *  Perform renaming of contents of an address_of operation.
