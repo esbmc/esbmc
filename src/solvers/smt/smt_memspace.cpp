@@ -434,6 +434,17 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
 
+  // Integer encoding does not bound the address to its width, and an address
+  // outside it cannot be rebuilt from its bytes.
+  if (int_encoding)
+  {
+    assert_expr(greaterthanequal2tc(start_sym, gen_zero(ptr_loc_type)));
+    assert_expr(lessthanequal2tc(
+      end_sym,
+      constant_int2tc(
+        ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width()))));
+  }
+
   /* An object's address is a multiple of its type's alignment (C11 6.2.8,
    * [basic.align]), so constrain the base address to it. This covers both an
    * explicit alignas and the natural alignment every other object has; without

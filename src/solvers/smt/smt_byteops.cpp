@@ -292,24 +292,25 @@ smt_solver_baset::convert_byte_update_int_mode(const byte_update2t &data)
 
   unsigned int src_width = source->type->get_width();
 
-  // Preserve original source type for conversion back
-  type2tc original_source_type = source->type;
-  bool need_type_conversion_back = false;
-
   // Use consistent integer type for all operations
   type2tc target_type = get_uint_type(src_width);
 
-  if (!is_number_type(source->type) || !is_bv_type(source->type))
+  if (!is_bv_type(source->type))
   {
-    source = typecast2tc(target_type, source);
-    need_type_conversion_back = true;
+    // Update the integer image, as BV mode does, so that a pointer result
+    // reaches convert_typecast_to_ptr as a cast from a byte update and keeps
+    // the address its bytes spell out.
+    expr2tc new_update = byte_update2tc(
+      target_type,
+      typecast2tc(target_type, source),
+      offs,
+      update_value,
+      data.big_endian);
+    return convert_ast(typecast2tc(source->type, new_update));
   }
-  else if (source->type != target_type)
-  {
+
+  if (source->type != target_type)
     source = typecast2tc(target_type, source);
-    if (!is_bv_type(original_source_type))
-      need_type_conversion_back = true;
-  }
 
   // Ensure update value is properly sized and typed
   if (!is_number_type(update_value->type))
@@ -317,16 +318,8 @@ smt_solver_baset::convert_byte_update_int_mode(const byte_update2t &data)
   else if (update_value->type->get_width() != 8)
     update_value = typecast2tc(get_uint_type(8), update_value);
 
-  expr2tc result;
-
-  result = convert_byte_update_int_mode_expr(
-    data, source, offs, update_value, src_width);
-
-  // Convert back to original type if we converted from non-numeric
-  if (need_type_conversion_back)
-    result = typecast2tc(original_source_type, result);
-
-  return convert_ast(result);
+  return convert_ast(convert_byte_update_int_mode_expr(
+    data, source, offs, update_value, src_width));
 }
 
 expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
@@ -363,6 +356,9 @@ expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
   {
     expr2tc byte_pos_expr = constant_int2tc(target_type, BigInt(byte_pos));
     expr2tc condition = equality2tc(offs, byte_pos_expr);
+    simplify(condition);
+    if (is_false(condition))
+      continue;
 
     // Calculate bit offset for this byte position
     unsigned int shift_amount = byte_pos * config.ansi_c.char_width;
