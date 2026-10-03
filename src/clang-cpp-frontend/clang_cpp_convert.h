@@ -716,6 +716,8 @@ protected:
     exprt &new_expr,
     bool &elided);
 
+  bool get_new_storage(const clang::CXXNewExpr &ne, exprt &new_expr);
+
   /* Lower a non-allocating placement new to
    * comma(<initialize *(T*)place>, (T*)place); a side-effecting place is
    * first bound to a local, ({ void *p = place; <that comma on p>; }).
