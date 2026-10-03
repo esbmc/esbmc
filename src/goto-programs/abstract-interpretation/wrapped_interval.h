@@ -12,12 +12,16 @@ public:
   explicit wrapped_interval(const type2tc &t)
     : t(t), upper_bound(compute_upper_bound(t))
   {
-    assert(
-      is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
-      is_pointer_type(t));
+    assert(is_representable(t));
 
     lower = 0;
     upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
+  }
+
+  static bool is_representable(const type2tc &t)
+  {
+    return is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
+           is_pointer_type(t);
   }
 
   BigInt convert_to_wrap(const BigInt &b) const

@@ -428,6 +428,13 @@ public:
     return result;
   }
 
+  /// Whether an interval can be built for a value of type `t`; when it cannot,
+  /// expressions over such values evaluate to top.
+  static bool is_representable(const type2tc &)
+  {
+    return true;
+  }
+
   static interval_templatet<T>
   cast(const interval_templatet<T> &, const type2tc &)
   {
