@@ -244,6 +244,7 @@ protected:
   void convert_switch(const codet &code, goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
+  void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
   void convert_continue(const code_continuet &code, goto_programt &dest);
   void convert_ifthenelse(const codet &code, goto_programt &dest);
   void convert_init(const codet &code, goto_programt &dest);
