@@ -1101,21 +1101,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
-    // A program may replace ::operator new, and a class may supply its own
-    // ([basic.stc.dynamic.allocation], [expr.new]/9). The built-in cpp_new
-    // below conjures a fresh object and never calls it, so ESBMC verifies a
-    // different program: two allocations from a pool allocator that alias
-    // are modelled as distinct objects, hiding real bugs (github #6494).
-    // Record the resolved function for goto-conversion to call instead.
-    // Only the plain (size) form is routed -- the aligned and user-placement
-    // forms take further arguments this lowering does not supply, and an
-    // allocation function without a body in this TU has nothing to call.
-    const clang::FunctionDecl *op_new = ne.getOperatorNew();
-    const bool replaced_new = op_new && op_new->isDefined() &&
-                              !op_new->isReservedGlobalPlacementOperator() &&
-                              op_new->getNumParams() == 1 &&
-                              ne.getNumPlacementArgs() == 0;
-
     if (ne.isArray())
     {
       new_expr = side_effect_exprt("cpp_new[]", t);
@@ -1133,13 +1118,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = side_effect_exprt("cpp_new", t);
     }
 
-    if (replaced_new)
-    {
-      exprt alloc_function;
-      if (get_decl_ref(*op_new, alloc_function))
-        return true;
-      new_expr.add("alloc_function") = alloc_function;
-    }
+    if (get_new_storage(ne, new_expr))
+      return true;
 
     // [expr.new]/24: `new T[n]()` and `new T[n]{}` value-initialise every
     // element, which zero-initialises whatever the element constructor -- if
@@ -3831,6 +3811,44 @@ bool clang_cpp_convertert::get_conditional_class_prvalue(
 
   new_expr = tmp_obj;
   elided = true;
+  return false;
+}
+
+// An array placement new constructs its elements at the given address:
+// ::operator new[](size_t, void *) adds no array overhead (CWG2382).
+//
+// A program may replace ::operator new, and a class may supply its own
+// ([basic.stc.dynamic.allocation], [expr.new]/9). The built-in cpp_new
+// conjures a fresh object and never calls it, so ESBMC verifies a
+// different program: two allocations from a pool allocator that alias
+// are modelled as distinct objects, hiding real bugs (github #6494).
+// Record the resolved function for goto-conversion to call instead.
+// Only the plain (size) form is routed -- the aligned and user-placement
+// forms take further arguments this lowering does not supply, and an
+// allocation function without a body in this TU has nothing to call.
+bool clang_cpp_convertert::get_new_storage(
+  const clang::CXXNewExpr &ne,
+  exprt &new_expr)
+{
+  const clang::FunctionDecl *op_new = ne.getOperatorNew();
+  if (op_new && op_new->isReservedGlobalPlacementOperator())
+  {
+    exprt place;
+    if (get_expr(*ne.getPlacementArg(0), place))
+      return true;
+    new_expr.add("placement") = place;
+    return false;
+  }
+
+  if (
+    !op_new || !op_new->isDefined() || op_new->getNumParams() != 1 ||
+    ne.getNumPlacementArgs() != 0)
+    return false;
+
+  exprt alloc_function;
+  if (get_decl_ref(*op_new, alloc_function))
+    return true;
+  new_expr.add("alloc_function") = alloc_function;
   return false;
 }
 
