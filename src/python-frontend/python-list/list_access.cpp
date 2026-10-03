@@ -1741,14 +1741,6 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
 
 namespace
 {
-std::vector<long long> contiguous_strides(const std::vector<long long> &shape)
-{
-  std::vector<long long> strides(shape.size(), 1);
-  for (std::size_t axis = shape.size(); axis-- > 1;)
-    strides[axis - 1] = strides[axis] * shape[axis];
-  return strides;
-}
-
 typet innermost_element_type(typet type, const namespacet &ns)
 {
   while (type.is_array())
@@ -1944,92 +1936,102 @@ exprt python_list::emit_ll_temp(
   return build_symbol(sym);
 }
 
-std::optional<python_list::strided_view_desc>
-python_list::describe_strided_view(const exprt &array)
+// np.eye/np.full can bind list objects; only numeric storage is strided.
+static bool is_numeric_storage(const typet &elem_type)
 {
-  const namespacet ns(converter_.symbol_table());
-  const typet type = ns.follow(array.type());
+  return is_number(elem_type) || elem_type.is_bool();
+}
+
+std::optional<python_list::strided_view_desc> python_list::contiguous_view_desc(
+  const exprt &array,
+  const typet &elem_type,
+  const std::vector<std::size_t> &shape) const
+{
+  if (shape.empty() || !is_numeric_storage(elem_type))
+    return std::nullopt;
   strided_view_desc desc;
-
-  auto constant_axes = [&](
-                         const std::vector<long long> &shape,
-                         const std::vector<long long> &strides) {
-    for (std::size_t axis = 0; axis < shape.size(); ++axis)
-    {
-      strided_axis described;
-      described.extent = shape[axis];
-      described.stride = strides[axis];
-      desc.axes.push_back(described);
-    }
-  };
-
-  // np.eye/np.full can bind list objects; only numeric storage is strided.
-  auto numeric_storage = [&desc]() {
-    return is_number(desc.elem_type) || desc.elem_type.is_bool();
-  };
-
-  if (type.is_array())
+  desc.elem_type = elem_type;
+  const std::vector<long long> extents(shape.begin(), shape.end());
+  const std::vector<long long> strides = contiguous_strides(extents);
+  for (std::size_t axis = 0; axis < extents.size(); ++axis)
   {
-    std::optional<std::vector<std::size_t>> shape =
-      get_fixed_array_shape(type, converter_.symbol_table());
-    if (!shape || shape->empty())
-      return std::nullopt;
-    desc.elem_type = innermost_element_type(type, ns);
-    if (!numeric_storage())
-      return std::nullopt;
-    const std::vector<long long> extents(shape->begin(), shape->end());
-    constant_axes(extents, contiguous_strides(extents));
-    desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
-    return desc;
+    strided_axis described;
+    described.extent = extents[axis];
+    described.stride = strides[axis];
+    desc.axes.push_back(described);
   }
+  desc.base = scalar_storage_pointer(array, pointer_typet(elem_type));
+  return desc;
+}
 
-  if (!type.is_pointer() || !array.is_symbol())
-    return std::nullopt;
-  const auto view =
-    converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
-  if (view == converter_.numpy_pointer_view_info_.end())
-  {
-    // A numpy array parameter decays to a pointer; its tracked shape is the
-    // contiguous layout it points at.
-    const auto param =
-      converter_.numpy_param_shapes_.find(array.identifier().as_string());
-    if (param == converter_.numpy_param_shapes_.end())
-      return std::nullopt;
-    desc.elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
-    if (!numeric_storage())
-      return std::nullopt;
-    const std::vector<long long> extents(
-      param->second.begin(), param->second.end());
-    constant_axes(extents, contiguous_strides(extents));
-    desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
-    return desc;
-  }
-  const auto &info = view->second;
-
-  desc.elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
-  if (!numeric_storage())
-    return std::nullopt;
+std::vector<python_list::strided_axis>
+python_list::tracked_view_axes(const std::string &view_id) const
+{
+  const auto &info = converter_.numpy_pointer_view_info_.at(view_id);
+  auto constant_of = [](const exprt &value) {
+    return binary2integer(to_constant_expr(value).value().c_str(), true)
+      .to_int64();
+  };
+  auto is_symbolic = [](const std::vector<std::string> &ids, std::size_t axis) {
+    return axis < ids.size() && !ids[axis].empty();
+  };
+  std::vector<strided_axis> axes;
   const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
   for (std::size_t axis = 0; axis < rank; ++axis)
   {
     strided_axis described;
     const exprt extent = converter_.numpy_view_extent(info, axis);
     const exprt stride = converter_.numpy_view_stride(info, axis);
-    if (axis < info.shape_symbols.size() && !info.shape_symbols[axis].empty())
+    if (is_symbolic(info.shape_symbols, axis))
       described.extent_expr = extent;
     else
-      described.extent =
-        binary2integer(to_constant_expr(extent).value().c_str(), true)
-          .to_int64();
-    if (axis < info.stride_symbols.size() && !info.stride_symbols[axis].empty())
+      described.extent = constant_of(extent);
+    if (is_symbolic(info.stride_symbols, axis))
       described.stride_expr = stride;
     else
-      described.stride =
-        binary2integer(to_constant_expr(stride).value().c_str(), true)
-          .to_int64();
-    desc.axes.push_back(described);
+      described.stride = constant_of(stride);
+    axes.push_back(described);
   }
-  desc.base = scalar_storage_pointer(array, pointer_typet(desc.elem_type));
+  return axes;
+}
+
+std::optional<python_list::strided_view_desc>
+python_list::describe_strided_view(const exprt &array)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet type = ns.follow(array.type());
+
+  if (type.is_array())
+  {
+    std::optional<std::vector<std::size_t>> shape =
+      get_fixed_array_shape(type, converter_.symbol_table());
+    if (!shape)
+      return std::nullopt;
+    return contiguous_view_desc(
+      array, innermost_element_type(type, ns), *shape);
+  }
+
+  if (!type.is_pointer() || !array.is_symbol())
+    return std::nullopt;
+  const std::string id = array.identifier().as_string();
+  const typet elem_type = innermost_element_type(ns.follow(type.subtype()), ns);
+  const auto view = converter_.numpy_pointer_view_info_.find(id);
+  if (view == converter_.numpy_pointer_view_info_.end())
+  {
+    // A numpy array parameter decays to a pointer; its tracked shape is the
+    // contiguous layout it points at.
+    const auto param = converter_.numpy_param_shapes_.find(id);
+    if (param == converter_.numpy_param_shapes_.end())
+      return std::nullopt;
+    return contiguous_view_desc(array, elem_type, param->second);
+  }
+  if (!is_numeric_storage(elem_type))
+    return std::nullopt;
+
+  strided_view_desc desc;
+  desc.elem_type = elem_type;
+  desc.axes = tracked_view_axes(id);
+  desc.base = scalar_storage_pointer(array, pointer_typet(elem_type));
   return desc;
 }
 
@@ -2145,21 +2147,9 @@ exprt python_list::copy_strided_view(
   return build_symbol(result);
 }
 
-std::optional<exprt> python_list::try_build_strided_basic_view(
-  const exprt &array,
-  const std::vector<nlohmann::json> &idx_nodes,
-  bool allow_plain_array)
+static bool all_literal_indices(const std::vector<nlohmann::json> &idx_nodes)
 {
-  std::optional<strided_view_desc> src = describe_strided_view(array);
-  if (!src || idx_nodes.size() > src->axes.size())
-    return std::nullopt;
-
-  exprt *lhs = converter_.current_lhs;
-  const bool as_view = lhs && lhs->is_symbol();
-  // Plain arrays with literal indices keep their existing copy-based
-  // handling unless the result is bound to a name; rank <= 2 keeps its
-  // dedicated row/column views.
-  const bool literal_indices = std::all_of(
+  return std::all_of(
     idx_nodes.begin(), idx_nodes.end(), [](const nlohmann::json &node) {
       BigInt literal;
       if (node.value("_type", "") != "Slice")
@@ -2167,47 +2157,125 @@ std::optional<exprt> python_list::try_build_strided_basic_view(
       return get_slice_step_info(node).literal &&
              !has_nonliteral_slice_bound(node);
     });
-  if (
-    !allow_plain_array && array.type().is_array() && literal_indices &&
-    !as_view)
+}
+
+bool python_list::strided_basic_view_declines(
+  const exprt &array,
+  const std::vector<nlohmann::json> &idx_nodes,
+  bool allow_plain_array) const
+{
+  const exprt *lhs = converter_.current_lhs;
+  const bool as_view = lhs && lhs->is_symbol();
+  // Plain arrays with literal indices keep their existing copy-based
+  // handling unless the result is bound to a name; rank <= 2 keeps its
+  // dedicated row/column views.
+  if (as_view)
+    return converter_.numpy_pointer_view_info_.count(
+             lhs->identifier().as_string()) != 0;
+  return !allow_plain_array && array.type().is_array() &&
+         all_literal_indices(idx_nodes);
+}
+
+// Run-time slice of one axis: start/step/length are evaluated once into
+// temporaries.
+std::optional<python_list::strided_axis> python_list::runtime_slice_axis(
+  const strided_axis &source,
+  const nlohmann::json &node,
+  exprt &offset)
+{
+  if (source.symbolic())
     return std::nullopt;
+  const typet ll_type = signedbv_typet(64);
+  const symbolic_slice_params params =
+    emit_symbolic_slice_params(node, source.extent);
+  strided_axis axis;
+  axis.extent_expr = params.length;
+  const slice_step_info step = get_slice_step_info(node);
+  if (step.literal)
+    axis.stride = source.stride * step.value;
+  else
+    axis.stride_expr = emit_ll_temp(
+      node,
+      "$numpy_axis_stride$",
+      build_mul(params.stride, from_integer(source.stride, ll_type), ll_type));
+  offset = build_add(
+    offset,
+    build_typecast(
+      build_mul(params.offset, from_integer(source.stride, ll_type), ll_type),
+      size_type()),
+    size_type());
+  return axis;
+}
+
+std::optional<python_list::strided_axis> python_list::slice_strided_axis(
+  const strided_axis &source,
+  const nlohmann::json &node,
+  exprt &offset)
+{
+  const slice_step_info step = get_slice_step_info(node);
+  if (step.literal_zero)
+    return std::nullopt;
+  if (!step.literal || has_nonliteral_slice_bound(node) || source.symbolic())
+    return runtime_slice_axis(source, node, offset);
+  long long start = 0;
+  std::optional<long long> length =
+    literal_slice_length(node, source.extent, step.value, &start);
+  if (!length)
+    return std::nullopt;
+  if (*length > 0)
+    offset = build_add(
+      offset, from_integer(start * source.stride, size_type()), size_type());
+  strided_axis axis;
+  axis.extent = *length;
+  axis.stride = source.stride * step.value;
+  return axis;
+}
+
+// Adds an integer index of one axis to `offset`; false for a literal index
+// out of range.
+bool python_list::index_strided_axis(
+  const strided_axis &source,
+  const nlohmann::json &node,
+  exprt &offset)
+{
+  BigInt literal;
+  if (!try_get_literal_int(node, literal) || source.symbolic())
+  {
+    offset = build_add(
+      offset,
+      normalize_and_scale_index(
+        converter_.get_expr(node),
+        python_list::axis_extent(source),
+        python_list::axis_stride(source),
+        node),
+      size_type());
+    return true;
+  }
+  long long index = literal.to_int64();
+  if (index < 0)
+    index += source.extent;
+  if (index < 0 || index >= source.extent)
+    return false;
+  offset = build_add(
+    offset, from_integer(index * source.stride, size_type()), size_type());
+  return true;
+}
+
+std::optional<exprt> python_list::try_build_strided_basic_view(
+  const exprt &array,
+  const std::vector<nlohmann::json> &idx_nodes,
+  bool allow_plain_array)
+{
+  std::optional<strided_view_desc> src = describe_strided_view(array);
   if (
-    as_view && converter_.numpy_pointer_view_info_.count(
-                 lhs->identifier().as_string()) != 0)
+    !src || idx_nodes.size() > src->axes.size() ||
+    strided_basic_view_declines(array, idx_nodes, allow_plain_array))
     return std::nullopt;
 
-  const typet ll_type = signedbv_typet(64);
+  const exprt *lhs = converter_.current_lhs;
+  const bool as_view = lhs && lhs->is_symbol();
   std::vector<strided_axis> axes;
   exprt offset = from_integer(0, size_type());
-  auto add_offset = [&](const exprt &position) {
-    offset = build_add(offset, position, size_type());
-  };
-  // Run-time slice: start/step/length are evaluated once into temporaries.
-  auto runtime_slice =
-    [&](
-      const strided_axis &source,
-      const nlohmann::json &node) -> std::optional<strided_axis> {
-    if (source.symbolic())
-      return std::nullopt;
-    const symbolic_slice_params params =
-      emit_symbolic_slice_params(node, source.extent);
-    strided_axis axis;
-    axis.extent_expr = params.length;
-    const slice_step_info step = get_slice_step_info(node);
-    if (step.literal)
-      axis.stride = source.stride * step.value;
-    else
-      axis.stride_expr = emit_ll_temp(
-        node,
-        "$numpy_axis_stride$",
-        build_mul(
-          params.stride, from_integer(source.stride, ll_type), ll_type));
-    add_offset(build_typecast(
-      build_mul(params.offset, from_integer(source.stride, ll_type), ll_type),
-      size_type()));
-    return axis;
-  };
-
   for (std::size_t axis_number = 0; axis_number < src->axes.size();
        ++axis_number)
   {
@@ -2217,52 +2285,17 @@ std::optional<exprt> python_list::try_build_strided_basic_view(
       axes.push_back(source);
       continue;
     }
-
     const nlohmann::json &node = idx_nodes[axis_number];
     if (node.value("_type", "") == "Slice")
     {
-      const slice_step_info step = get_slice_step_info(node);
-      if (step.literal_zero)
-        return std::nullopt;
-      if (
-        step.literal && !has_nonliteral_slice_bound(node) && !source.symbolic())
-      {
-        long long start = 0;
-        std::optional<long long> length =
-          literal_slice_length(node, source.extent, step.value, &start);
-        if (!length)
-          return std::nullopt;
-        if (*length > 0)
-          add_offset(from_integer(start * source.stride, size_type()));
-        strided_axis axis;
-        axis.extent = *length;
-        axis.stride = source.stride * step.value;
-        axes.push_back(axis);
-        continue;
-      }
-      std::optional<strided_axis> sliced = runtime_slice(source, node);
+      std::optional<strided_axis> sliced =
+        slice_strided_axis(source, node, offset);
       if (!sliced)
         return std::nullopt;
       axes.push_back(*sliced);
-      continue;
     }
-
-    BigInt literal;
-    if (try_get_literal_int(node, literal) && !source.symbolic())
-    {
-      long long index = literal.to_int64();
-      if (index < 0)
-        index += source.extent;
-      if (index < 0 || index >= source.extent)
-        return std::nullopt;
-      add_offset(from_integer(index * source.stride, size_type()));
-      continue;
-    }
-    add_offset(normalize_and_scale_index(
-      converter_.get_expr(node),
-      python_list::axis_extent(source),
-      python_list::axis_stride(source),
-      node));
+    else if (!index_strided_axis(source, node, offset))
+      return std::nullopt;
   }
   if (axes.empty())
     return std::nullopt;
@@ -2272,8 +2305,11 @@ std::optional<exprt> python_list::try_build_strided_basic_view(
   return copy_strided_view(*src, offset, axes);
 }
 
-std::optional<exprt>
-python_list::try_build_strided_view_index(const nlohmann::json &element)
+// The root Name of a subscript chain, with every index from the outermost
+// axis in; nullptr when the chain does not end at a Name.
+static const nlohmann::json *flatten_subscript_chain(
+  const nlohmann::json &element,
+  std::vector<nlohmann::json> &indices)
 {
   std::vector<std::vector<nlohmann::json>> groups;
   const nlohmann::json *node = &element;
@@ -2290,6 +2326,40 @@ python_list::try_build_strided_view_index(const nlohmann::json &element)
     node = &(*node)["value"];
   }
   if (!node->is_object() || node->value("_type", "") != "Name")
+    return nullptr;
+  for (auto group = groups.rbegin(); group != groups.rend(); ++group)
+    indices.insert(indices.end(), group->begin(), group->end());
+  return node;
+}
+
+exprt python_list::strided_index_offset(
+  const strided_view_desc &src,
+  const std::vector<nlohmann::json> &indices)
+{
+  if (indices.size() > src.axes.size())
+    throw std::runtime_error(
+      "IndexError: too many indices for array: array is " +
+      std::to_string(src.axes.size()) + "-dimensional, but " +
+      std::to_string(indices.size()) + " were indexed");
+  exprt offset = from_integer(0, size_type());
+  for (std::size_t axis = 0; axis < indices.size(); ++axis)
+    offset = build_add(
+      offset,
+      normalize_and_scale_index(
+        converter_.get_expr(indices[axis]),
+        python_list::axis_extent(src.axes[axis]),
+        python_list::axis_stride(src.axes[axis]),
+        indices[axis]),
+      size_type());
+  return offset;
+}
+
+std::optional<exprt>
+python_list::try_build_strided_view_index(const nlohmann::json &element)
+{
+  std::vector<nlohmann::json> indices;
+  const nlohmann::json *node = flatten_subscript_chain(element, indices);
+  if (!node)
     return std::nullopt;
 
   const auto view = converter_.numpy_pointer_view_info_.find(
@@ -2298,10 +2368,6 @@ python_list::try_build_strided_view_index(const nlohmann::json &element)
     view == converter_.numpy_pointer_view_info_.end() ||
     view->second.strides.empty() || view->second.shape.size() < 2)
     return std::nullopt;
-
-  std::vector<nlohmann::json> indices;
-  for (auto group = groups.rbegin(); group != groups.rend(); ++group)
-    indices.insert(indices.end(), group->begin(), group->end());
 
   exprt *lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
@@ -2323,23 +2389,8 @@ python_list::try_build_strided_view_index(const nlohmann::json &element)
     throw std::runtime_error(
       "TypeError: slicing an N-D numpy view of this form is not supported");
   }
-  if (indices.size() > src->axes.size())
-    throw std::runtime_error(
-      "IndexError: too many indices for array: array is " +
-      std::to_string(src->axes.size()) + "-dimensional, but " +
-      std::to_string(indices.size()) + " were indexed");
 
-  exprt offset = from_integer(0, size_type());
-  for (std::size_t axis = 0; axis < indices.size(); ++axis)
-    offset = build_add(
-      offset,
-      normalize_and_scale_index(
-        converter_.get_expr(indices[axis]),
-        python_list::axis_extent(src->axes[axis]),
-        python_list::axis_stride(src->axes[axis]),
-        indices[axis]),
-      size_type());
-
+  const exprt offset = strided_index_offset(*src, indices);
   const typet ptr_type = pointer_typet(src->elem_type);
   if (indices.size() == src->axes.size())
     return build_dereference(

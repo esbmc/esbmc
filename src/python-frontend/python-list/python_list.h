@@ -284,6 +284,72 @@ public:
   };
 
   std::optional<strided_view_desc> describe_strided_view(const exprt &array);
+  std::optional<exprt> unnamed_nd_view_placeholder(
+    const strided_view_desc &view,
+    bool as_view,
+    bool flat_result,
+    const char *unnamed_error) const;
+  std::optional<exprt> alias_contiguous_ravel(
+    const nlohmann::json &arg,
+    const strided_view_desc &view);
+  exprt emit_view_copy_buffer(
+    const nlohmann::json &arg,
+    const strided_view_desc &view,
+    const exprt &count);
+  std::vector<strided_axis> owned_copy_axes(
+    const nlohmann::json &arg,
+    const strided_view_desc &view,
+    bool flatten,
+    const exprt &count);
+  void emit_reshape_size_guard(
+    const nlohmann::json &arg,
+    const exprt &count,
+    const std::vector<std::size_t> &new_shape);
+  void scale_split_axis_strides(
+    const nlohmann::json &arg,
+    const strided_axis &source,
+    std::vector<strided_axis> &axes);
+  void reshape_registered_copy(
+    const std::string &lhs_id,
+    const std::vector<std::size_t> &new_shape);
+  exprt emit_view_accumulator(
+    const nlohmann::json &arg,
+    const typet &type,
+    const exprt &init);
+  exprt reduce_view_truth(
+    bool is_any,
+    const nlohmann::json &arg,
+    const strided_view_desc &view);
+  exprt reduce_view_extreme(
+    const std::string &function,
+    const nlohmann::json &arg,
+    const strided_view_desc &view,
+    const exprt &count);
+  bool strided_basic_view_declines(
+    const exprt &array,
+    const std::vector<nlohmann::json> &idx_nodes,
+    bool allow_plain_array) const;
+  std::optional<strided_axis> runtime_slice_axis(
+    const strided_axis &source,
+    const nlohmann::json &node,
+    exprt &offset);
+  std::optional<strided_axis> slice_strided_axis(
+    const strided_axis &source,
+    const nlohmann::json &node,
+    exprt &offset);
+  bool index_strided_axis(
+    const strided_axis &source,
+    const nlohmann::json &node,
+    exprt &offset);
+  exprt strided_index_offset(
+    const strided_view_desc &src,
+    const std::vector<nlohmann::json> &indices);
+  std::optional<strided_view_desc> contiguous_view_desc(
+    const exprt &array,
+    const typet &elem_type,
+    const std::vector<std::size_t> &shape) const;
+  /// Axes of the pointer view registered under `view_id`.
+  std::vector<strided_axis> tracked_view_axes(const std::string &view_id) const;
 
   /// `base + offset` as a registered view with these axes for the assignment
   /// target (offset is a size_type element count).
