@@ -902,6 +902,22 @@ void goto_symext::track_new_pointer(
     is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
 
   symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true, guard);
+
+  expr2tc ptr = to_pointer_object2t(ptr_obj).ptr_obj;
+  while (is_typecast2t(ptr))
+    ptr = to_typecast2t(ptr).from;
+  if (!is_address_of2t(ptr))
+    return;
+
+  expr2tc obj = to_address_of2t(ptr).ptr_obj;
+  while (is_index2t(obj))
+    obj = to_index2t(obj).source_value;
+  if (!is_symbol2t(obj))
+    return;
+
+  cur_state->rename(object_size_exp);
+  do_simplify(object_size_exp);
+  dynamic_object_sizes[to_symbol2t(obj).thename] = object_size_exp;
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
