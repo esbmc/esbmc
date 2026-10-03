@@ -1395,57 +1395,59 @@ find_function_def(const nlohmann::json &module_body, const std::string &name)
 // flagged here decays to pointer-to-*whole-array* instead (see
 // register_function_argument), preserving its length/rank for the
 // SUBSCRIPT converter to recognize.
-// True when `node` binds `name` to a visibly integer value: an `int`
-// annotation, an integer literal, `nondet_int()`/`int()`/`len()`, or a
-// `range` loop target. Such a name indexes positions, never a mask.
+static bool
+is_name_target(const nlohmann::json &target, const std::string &name)
+{
+  return target.is_object() && target.value("_type", "") == "Name" &&
+         target.value("id", "") == name;
+}
+
+static bool is_integer_valued(const nlohmann::json &value)
+{
+  if (!value.is_object())
+    return false;
+  if (value.value("_type", "") == "Constant")
+    return value.contains("value") && value["value"].is_number_integer();
+  static const std::set<std::string> integer_calls = {
+    "nondet_int", "int", "len"};
+  return value.value("_type", "") == "Call" &&
+         value["func"].value("_type", "") == "Name" &&
+         integer_calls.count(value["func"].value("id", "")) != 0;
+}
+
+// True when this single statement binds `name` to a visibly integer value:
+// an `int` annotation, an integer literal, `nondet_int()`/`int()`/`len()`,
+// or a `range` loop target.
+static bool
+statement_binds_integer(const std::string &name, const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "AnnAssign")
+    return is_name_target(node["target"], name) &&
+           node["annotation"].value("id", "") == "int";
+  if (type == "For")
+    return is_name_target(node["target"], name) &&
+           node["iter"].value("_type", "") == "Call" &&
+           node["iter"]["func"].value("id", "") == "range";
+  if (type != "Assign" || !node.contains("targets"))
+    return false;
+  for (const auto &target : node["targets"])
+    if (is_name_target(target, name) && is_integer_valued(node["value"]))
+      return true;
+  return false;
+}
+
+// True when anything in `node` binds `name` to an integer. Such a name
+// indexes positions, never a mask.
 static bool
 binds_integer_index(const std::string &name, const nlohmann::json &node)
 {
-  if (node.is_array())
-  {
-    for (const auto &elem : node)
-      if (binds_integer_index(name, elem))
-        return true;
-    return false;
-  }
-  if (!node.is_object())
-    return false;
-
-  const std::string type = node.value("_type", "");
-  auto targets_name = [&name](const nlohmann::json &target) {
-    return target.is_object() && target.value("_type", "") == "Name" &&
-           target.value("id", "") == name;
-  };
-  auto is_integer_value = [](const nlohmann::json &value) {
-    if (!value.is_object())
-      return false;
-    if (value.value("_type", "") == "Constant")
-      return value.contains("value") && value["value"].is_number_integer();
-    static const std::set<std::string> integer_calls = {
-      "nondet_int", "int", "len"};
-    return value.value("_type", "") == "Call" &&
-           value["func"].value("_type", "") == "Name" &&
-           integer_calls.count(value["func"].value("id", "")) != 0;
-  };
-
-  if (
-    type == "AnnAssign" && targets_name(node["target"]) &&
-    node["annotation"].value("id", "") == "int")
+  if (node.is_object() && statement_binds_integer(name, node))
     return true;
-  if (type == "Assign" && node.contains("targets"))
-    for (const auto &target : node["targets"])
-      if (targets_name(target) && is_integer_value(node["value"]))
-        return true;
-  if (
-    type == "For" && targets_name(node["target"]) &&
-    node["iter"].value("_type", "") == "Call" &&
-    node["iter"]["func"].value("id", "") == "range")
-    return true;
-
-  for (auto it = node.begin(); it != node.end(); ++it)
-    if (
-      (it.value().is_object() || it.value().is_array()) &&
-      binds_integer_index(name, it.value()))
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (binds_integer_index(name, child))
       return true;
   return false;
 }
