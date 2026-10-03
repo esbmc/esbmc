@@ -932,6 +932,19 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   }
 }
 
+static bool has_symbolic_array_size(const type2tc &type)
+{
+  if (is_pointer_type(type))
+    return has_symbolic_array_size(to_pointer_type(type).subtype);
+
+  if (!is_array_type(type))
+    return false;
+
+  const array_type2t &arr = to_array_type(type);
+  return (!is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size)) ||
+         has_symbolic_array_size(arr.subtype);
+}
+
 /* A propagated array write carries every earlier write to the same object
  * under its top-level `with`. Those earlier values are already in the L1
  * object's value set, so only the newest update is new: re-walking the chain
@@ -974,25 +987,32 @@ void goto_symex_statet::rename_type(expr2tc &expr)
 
   // expr->type is const; rename symbolic array sizes on a CoW-detached copy
   // and, if it changed, rebuild the expression with the renamed type.
-  if (is_array_type(expr->type))
+  if (has_symbolic_array_size(expr->type))
   {
     type2tc renamed = expr->type;
-    expr2tc &arr_size = to_array_type(renamed).array_size;
-    if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-      rename(arr_size);
-
-    renamed->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
-
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        rename(arr_size);
-    });
-
+    rename_array_sizes(renamed);
     if (renamed != expr->type)
       expr = expr->with_type(renamed);
   }
+}
+
+// Pointer subtypes too: pointer arithmetic over `int (*)[n]` scales by the
+// pointee's size, which would otherwise reach the solver as a free symbol.
+void goto_symex_statet::rename_array_sizes(type2tc &type)
+{
+  if (is_pointer_type(type))
+  {
+    rename_array_sizes(to_pointer_type(type).subtype);
+    return;
+  }
+
+  if (!is_array_type(type))
+    return;
+
+  array_type2t &arr = to_array_type(type);
+  if (!is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size))
+    rename(arr.array_size);
+  rename_array_sizes(arr.subtype);
 }
 
 void goto_symex_statet::rename_quantified(
@@ -1129,6 +1149,27 @@ void goto_symex_statet::rename_address(
   }
 }
 
+// The bit width of a pointer's subtype, or none for a symbolic type or an
+// array of non-constant size.
+static std::optional<unsigned int> pointee_width(const type2tc &subtype)
+{
+  if (is_empty_type(subtype))
+    return 8;
+
+  try
+  {
+    return subtype->get_width();
+  }
+  catch (const type2t::symbolic_type_excp &)
+  {
+    return std::nullopt;
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return std::nullopt;
+  }
+}
+
 void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
@@ -1163,31 +1204,16 @@ void goto_symex_statet::fixup_renamed_type(
     if (origsubtype == newsubtype)
       return;
 
-    // Fetch the (bit) size of the pointer subtype.
     // We can't rename pointers to incomplete types (symbol subtypes, or arrays
     // thereof), because here we'd end up trying to get a concrete type for
-    // them, which is incorrect. If get_width() throws symbolic_type_excp,
-    // treat the subtype as unresolvable: insert a typecast when the types
-    // differ (which might lead to some needless casts) and bail out.
-    unsigned int origsize, newsize;
-
-    try
-    {
-      origsize = is_empty_type(origsubtype) ? 8 : origsubtype->get_width();
-      newsize = is_empty_type(newsubtype) ? 8 : newsubtype->get_width();
-    }
-    catch (const type2t::symbolic_type_excp &)
-    {
+    // them, which is incorrect. If either subtype has no width, treat it as
+    // unresolvable and insert a typecast (which might be needless). If the
+    // renaming process has changed the size of the pointer subtype, this will
+    // break all kinds of pointer arith; insert a cast too.
+    const std::optional<unsigned int> origsize = pointee_width(origsubtype);
+    const std::optional<unsigned int> newsize = pointee_width(newsubtype);
+    if (!origsize || !newsize || *origsize != *newsize)
       expr = typecast2tc(orig_type, expr);
-      return;
-    }
-
-    // If the renaming process has changed the size of the pointer subtype, this
-    // will break all kinds of pointer arith; insert a cast.
-    if (origsize != newsize)
-    {
-      expr = typecast2tc(orig_type, expr);
-    }
   }
   else if (is_scalar_type(orig_type) && is_scalar_type(expr->type))
   {

@@ -9,6 +9,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_types.h>
 #include <util/symtab/symbol_generator.h>
+#include <unordered_map>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -111,6 +112,13 @@ protected:
    *  thus means file scope.
    */
   code_blockt *current_block;
+
+  /** A block-scope VLA's size, bound to a local just before its declarator
+   *  (C11 6.7.6.2p5, 6.7.8p3). Keyed by clang's size expression, which every
+   *  expression typed by that declarator shares. */
+  std::unordered_map<const clang::Expr *, exprt> vla_size_snapshots;
+  bool snapshot_vla_sizes(const clang::Decl &decl, codet &dest);
+  bool get_vla_size(const clang::Expr &size, exprt &new_expr);
 
   clang::SourceManager *sm;
 
