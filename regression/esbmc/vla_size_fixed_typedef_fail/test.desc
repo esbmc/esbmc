@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^\s+assertion sizeof\(x\) == 5 \* sizeof\(int\)$

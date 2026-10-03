@@ -305,6 +305,20 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
+/// Whether a side effect sits under `?:`, `&&` or `||`, so the temporaries it
+/// creates exist on one path only.
+static bool
+has_conditional_sideeffect(const exprt &expr, bool conditional = false)
+{
+  if (conditional && expr.id() == "sideeffect")
+    return true;
+  conditional |= expr.id() == "if" || expr.is_and() || expr.is_or();
+  forall_operands (it, expr)
+    if (has_conditional_sideeffect(*it, conditional))
+      return true;
+  return false;
+}
+
 void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
   // The thrown operand may still carry side effects — most importantly a
@@ -1767,6 +1781,24 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
   t->location = code.location();
 }
 
+void goto_convertt::remove_return_value_sideeffects(
+  exprt &value,
+  goto_programt &dest)
+{
+  // A class-type value may be, or be copied bitwise from, a temporary of the
+  // expression (`return A(n);`, `return H{q};`), and a temporary under `?:`,
+  // `&&` or `||` exists on one path only; their entries are dropped.
+  const typet &type = ns.follow(value.type());
+  const bool drop_temporaries = type.id() == "struct" || type.id() == "union" ||
+                                has_conditional_sideeffect(value);
+  const std::size_t stack_size = targets.destructor_stack.size();
+  goto_programt sideeffects;
+  remove_sideeffects(value, sideeffects);
+  dest.destructive_append(sideeffects);
+  if (drop_temporaries)
+    targets.destructor_stack.resize(stack_size);
+}
+
 void goto_convertt::convert_return(
   const code_returnt &code,
   goto_programt &dest)
@@ -1777,6 +1809,10 @@ void goto_convertt::convert_return(
     abort();
   }
 
+  // Entries pushed while lowering the return value belong to its
+  // full-expression temporaries; they are unwound below with the locals and
+  // then dropped, so the enclosing block's fall-through unwind skips them.
+  const std::size_t value_stack_size = targets.destructor_stack.size();
   code_returnt new_code(code);
   if (new_code.has_return_value())
   {
@@ -1793,17 +1829,7 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
-    // Scope-exit entries pushed while lowering the return value are dropped
-    // wholesale: a materialized return temporary (e.g. `return A(n);`) is the
-    // return slot itself and must survive both this return's unwind and the
-    // enclosing block's fall-through unwind. This also skips destructors of
-    // other full-expression temporaries (e.g. `return A(n).num;`), matching
-    // pre-existing behaviour (github #6075/#6076).
-    std::size_t value_stack_size = targets.destructor_stack.size();
-    goto_programt sideeffects;
-    remove_sideeffects(new_code.return_value(), sideeffects);
-    dest.destructive_append(sideeffects);
-    targets.destructor_stack.resize(value_stack_size);
+    remove_return_value_sideeffects(new_code.return_value(), dest);
   }
 
   // C++ [stmt.return]: the return value is computed before the local
@@ -1835,6 +1861,7 @@ void goto_convertt::convert_return(
     }
     unwind_destructor_stack(code.location(), 0, dest);
   }
+  targets.destructor_stack.resize(value_stack_size);
 
   if (targets.has_return_value)
   {
