@@ -839,6 +839,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
 | **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
+| **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died with the full-expression.** `convert_decl_initializer` destroys every temporary of a non-reference declaration's initializer after the assignment, so `R x{M(1)};` ran `~M` before the next statement, although [class.temporary]/6 extends the temporary to the lifetime of `x`. A C++20 parenthesised `R y(M(1))` is not extended and lowers to the same GOTO. | `goto_convertt::convert_decl_initializer`, `goto_convert.cpp`; `CXXParenListInitExprClass`, `clang_c_convert.cpp` | — | **Fixed**: the entries of a temporary whose address is an operand of the declared aggregate, at any nesting depth, stay on the destructor stack until scope exit; the parenthesised form casts that address so it is not matched. |
 
 ---
 
@@ -9953,6 +9954,37 @@ invariant naming the loop variable outside its scope),
 `esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
 `PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
 `accepted under KNOWNBUG`.
+
+---
+
+### M9 (R103) — 2026-10-03, the temporary a reference member kept alive
+
+R83 left open a temporary bound to an aggregate's reference member. With
+`struct R { const M &m; };`, `{ R x{M(1)}; assert(dtors == 0); }` holds
+natively and is a false FAILED on master: `convert_decl_initializer` emits
+the destructor of every temporary in a non-reference declaration's
+initializer right after the assignment, so `~M` ran before the assertion. A
+temporary bound to a reference member of a braced aggregate lives as long as
+the aggregate ([class.temporary]/6), so `assert(dtors == 1)` there aborts
+natively and was SUCCESSFUL on master. When `M` owns heap memory, a read
+through `x.m` after the declaration is a false use-after-free. Nested
+aggregates and arrays of aggregates behave the same.
+
+**Fixed** in `keep_reference_member_temporaries`: after lowering, a temporary
+whose address is an operand of the declared struct or array, at any depth,
+keeps its destructor and DEAD on the stack below the full-expression's other
+temporaries, so they run at scope exit after the variable's own. C++20's
+parenthesised `R y(M(1))` does not extend the temporary
+([class.temporary]/6) but lowers to the same GOTO, so the frontend's
+`CXXParenListInitExpr` case casts a reference member's address, which keeps
+it out of the match.
+
+`reference_member_temporary{,_fail}` in `regression/esbmc-cpp/cpp` are wrong
+on master, both halves; the failing half runs `--multi-property` and pins the
+braced and the parenthesised assertion. Reverting either half of the fix
+flips a test: without the goto_convert change both behave as on master,
+without the cast the parenthesised assertions flip. Z3 only: this build
+could not fetch Bitwuzla.
 
 ---
 

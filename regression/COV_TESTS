@@ -2168,3 +2168,5 @@ regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc/fam_false_2
 regression/esbmc/fam_true_4
+regression/esbmc-cpp/cpp/reference_member_temporary
+regression/esbmc-cpp/cpp/reference_member_temporary_fail
