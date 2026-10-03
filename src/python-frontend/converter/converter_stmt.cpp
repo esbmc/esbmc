@@ -3262,6 +3262,13 @@ void python_converter::record_numpy_view_copy(
     auto pointer_view = numpy_pointer_view_info_.find(lhs_id);
     pointer_view != numpy_pointer_view_info_.end())
   {
+    // The view builders decline a target that is already a view, so this
+    // statement's value is a copy while the entry still describes the old
+    // view's shape and strides.
+    if (!numpy_result_is_view_)
+      throw std::runtime_error(
+        "TypeError: rebinding a numpy view name to another view is not "
+        "supported");
     // A pointer view aliases its source through the pointer itself, so it is
     // not a copy to mirror writes into; the source is kept to detach it when
     // the source name is rebound.
