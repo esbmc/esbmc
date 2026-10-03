@@ -260,6 +260,9 @@ static bool bridge_binary_entry_point(
 // \param options - options to be passed through,
 // \param goto_functions - this is where the created GOTO program is stored.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions);
+static void skip_property_classes(
+  const std::list<std::string> &classes,
+  goto_functionst &goto_functions);
 
 bool esbmc_parseoptionst::create_goto_program(
   optionst &options,
@@ -304,6 +307,10 @@ bool esbmc_parseoptionst::create_goto_program(
 
       if (read_goto_binary(goto_functions))
         return true;
+
+      if (cmdline.isset("ignore-property-class"))
+        skip_property_classes(
+          cmdline.get_values("ignore-property-class"), goto_functions);
 
       // Resolve CBMC's bodyless libc externals (ceil/floor/..., strlen/strcmp/
       // strncmp) to the operational-model bodies the additions linked, before
@@ -386,6 +393,24 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
       return true;
   }
   return false;
+}
+
+// CBMC tags each ASSERT with a property class in its location. Kani's
+// reachability_check and cover assertions are informational: CBMC reports them
+// as failures and Kani's driver discounts them, so skipping them is opt-in.
+static void skip_property_classes(
+  const std::list<std::string> &classes,
+  goto_functionst &goto_functions)
+{
+  std::set<irep_idt> ignored(classes.begin(), classes.end());
+  // An ASSERT without a class reads back as the empty id; never match it.
+  ignored.erase(irep_idt());
+  for (auto &[name, function] : goto_functions.function_map)
+    for (auto &instruction : function.body.instructions)
+      if (
+        instruction.is_assert() &&
+        ignored.count(instruction.location.get("property_class")))
+        instruction.make_skip();
 }
 
 // Bridge CBMC's plain-named bodyless libc externals (e.g. `ceil`, `strlen`) to
