@@ -868,7 +868,7 @@ bool goto_convertt::user_code_throws()
 
 /* Convert the code constructing the elements of a `new T[n]`. When an element's
  * initialization exits by an exception, the elements already constructed are
- * destroyed in reverse order ([except.ctor]/3, [expr.new]/26): `construction`
+ * destroyed in reverse order ([except.ctor]/3): `construction`
  * then runs in a try block whose catch-all destroys the `built` leaves before
  * `base + built`, newest first, and rethrows. */
 void goto_convertt::convert_cpp_new_elements(
