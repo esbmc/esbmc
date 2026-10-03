@@ -2121,6 +2121,12 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/python/github_8100
+regression/python/github_8100_fail
+regression/python/github_8100_alias
+regression/python/github_8100_alias_fail
+regression/python/list_eq_nested_comprehension
+regression/python/list_eq_nested_comprehension_fail
 regression/esbmc-cpp/cpp/github_8090_unnamed_override
 regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
@@ -2141,6 +2147,12 @@ regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
 regression/esbmc-cpp/cpp/shared_ptr_member_copy
 regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
+regression/esbmc-cpp/cpp/aggregate_element_temporary
+regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
+regression/esbmc/github_8096
+regression/esbmc/github_8096_fail
+regression/esbmc/github_8096_int_min
+regression/esbmc/github_8096_int_min_fail
 regression/esbmc-cpp/cpp/delete_array_dtor_bound
 regression/esbmc-cpp/cpp/delete_array_dtor_bound_fail
 regression/esbmc-cpp/cpp/expression_statement_temporary
@@ -2162,3 +2174,5 @@ regression/esbmc-cpp/cpp/braced_list_member_init
 regression/esbmc-cpp/cpp/braced_list_member_init_fail
 regression/esbmc-cpp/cpp/braced_list_temporary
 regression/esbmc-cpp/cpp/braced_list_temporary_fail
+regression/esbmc/fam_false_2
+regression/esbmc/fam_true_4

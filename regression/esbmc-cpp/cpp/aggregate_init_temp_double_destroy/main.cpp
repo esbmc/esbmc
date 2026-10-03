@@ -1,7 +1,7 @@
-// Aggregate-initialising a class from a temporary of a member type with a
-// destructor constructs the member in place: one constructor, one destructor.
-// ESBMC built the temporary, copied it into the member bitwise and destroyed
-// both.
+// Aggregate-initialising a class whose member type has a destructor runs as
+// many destructors as constructors: the temporary that initialises the member
+// is the member ([dcl.init.aggr]/4), destroyed with the object. ESBMC used to
+// destroy the temporary as well, one destructor too many.
 #include <cassert>
 
 int ctors = 0, dtors = 0;

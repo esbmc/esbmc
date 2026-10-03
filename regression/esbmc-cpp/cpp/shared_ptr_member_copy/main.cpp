@@ -1,6 +1,8 @@
-// Copying a class that holds a shared_ptr member. The member of `a` used to be
-// built in a temporary that was copied in bitwise and then destroyed, releasing
-// a reference `a` still held, so the copy read a freed control block.
+// Copying a class that holds a shared_ptr member keeps the control block
+// alive. The aggregate initialisation used to destroy the temporary
+// shared_ptr as well as the member, a second __release that freed the shared
+// object while an owner still referred to it. g++ runs this program with the
+// assertion holding.
 #include <memory>
 #include <cassert>
 
