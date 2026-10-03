@@ -1011,6 +1011,8 @@ protected:
    */
   void replace_dynamic_allocation(expr2tc &expr);
 
+  /// The object \p ptr addresses, resolved through the value set, or nil.
+  expr2tc value_set_object(const expr2tc &ptr);
   /// The named object \p ptr addresses, resolved through the value set, or nil.
   expr2tc value_set_named_object(const expr2tc &ptr);
   bool resolve_valid_object_by_value_set(expr2tc &expr, const expr2tc &obj_ref);
@@ -1481,6 +1483,12 @@ protected:
    *  away the originals' assignments and degrades counterexamples.
    */
   std::unordered_map<irep_idt, expr2tc> copy_definitions;
+
+  /** The renamed byte size each heap object was allocated with, by symbol.
+   *  __ESBMC_alloc_size holds it too, but symex cannot read that array back,
+   *  so a DYNAMIC_SIZE loop bound would never become constant. */
+  std::unordered_map<irep_idt, expr2tc> dynamic_object_sizes;
+
   /** Loop numbers. */
   unsigned first_loop;
   /** Number of assertions executed. */
