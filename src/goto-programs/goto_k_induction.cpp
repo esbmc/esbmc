@@ -928,6 +928,14 @@ public:
     return looped.count(symbol) != 0;
   }
 
+  /// Whether \p symbol is a local or parameter of a function other than
+  /// \p function, which every call of that function declares afresh.
+  bool local_elsewhere(const irep_idt &symbol, const irep_idt &function) const
+  {
+    const auto it = owner.find(symbol);
+    return it != owner.end() && it->second != function;
+  }
+
 private:
   /// An assignment to a symbol: a value, the result of a call to \p callee,
   /// or neither, for a write to part of the symbol or a call through a
@@ -1407,16 +1415,18 @@ bool pin(const expr2tc &lvalue, const targetst &t, pinst &pins)
 /// address back to the objects the points-to sets give it. One that may also
 /// hold a heap or unknown address needs no pin: by inclusion it never reaches
 /// a pointer the loop writes through, or havoc_written_objects would have
-/// refused that pointer. Returns false when a value cannot be pinned.
-bool pin_havoced_pointers(
-  andersent &points_to,
-  const loopst &loop,
-  const sitest &fresh,
-  pinst &pins)
+/// refused that pointer. A local of a function the loop calls needs none
+/// either: every call declares it afresh, so the step never reads its havoced
+/// value. Returns false when a value cannot be pinned.
+bool pin_havoced_pointers(const loop_writest &w, pinst &pins)
 {
-  for (const expr2tc &var : ordered(loop.get_modified_loop_vars()))
+  for (const expr2tc &var : ordered(w.loop.get_modified_loop_vars()))
   {
-    const targetst t = held_by(points_to, loop, fresh, var);
+    if (
+      is_symbol2t(var) &&
+      w.derivations.local_elsewhere(to_symbol2t(var).thename, w.function))
+      continue;
+    const targetst t = held_by(w.points_to, w.loop, w.fresh, var);
     if (t.named.empty() || t.heap || t.anything)
       continue;
     if (!pin(var, t, pins))
@@ -1517,10 +1527,8 @@ bool havoc_loop(
   if (loop.get_modified_loop_vars().empty() && through.empty())
     return covered;
 
-  havocst havocs{ordered(through), ordered(loop.get_modified_loop_vars())};
-  if (
-    loop.writes_through_pointer() &&
-    !pin_havoced_pointers(w.points_to, loop, w.fresh, havocs.pins))
+  havocst havocs{ordered(through), ordered(loop.get_modified_loop_vars()), {}};
+  if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
     covered = false;
   // Symex answers the call by name, but goto_loopst, for the loops still to
   // come, and later passes resolve every call through function_map.
