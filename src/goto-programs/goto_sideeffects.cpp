@@ -1866,9 +1866,7 @@ void goto_convertt::remove_sideeffects(
     }
   }
 
-  // TODO: evaluation order
-  Forall_operands (it, expr)
-    remove_sideeffects(*it, dest);
+  remove_operand_sideeffects(expr, dest);
 
   if (expr.id() == "sideeffect")
   {
@@ -1903,29 +1901,10 @@ void goto_convertt::remove_sideeffects(
       // (destructors before DEADs, innermost temporaries first) right here.
       // A result that is used keeps block-level scope, as does anything
       // without a pending destructor call (plain DEADs of C-style temps).
-      if (!result_is_used)
-      {
-        bool have_destructor = false;
-        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
-             i++)
-          if (targets.destructor_stack[i].get_statement() == "function_call")
-          {
-            have_destructor = true;
-            break;
-          }
-
-        if (have_destructor)
-        {
-          while (targets.destructor_stack.size() > stack_size)
-          {
-            codet d_code = targets.destructor_stack.back();
-            targets.destructor_stack.pop_back();
-            d_code.location() = location;
-            convert(d_code, dest);
-          }
-          expr.make_nil();
-        }
-      }
+      if (
+        !result_is_used &&
+        destroy_full_expression_temporaries(stack_size, location, dest))
+        expr.make_nil();
     }
     else if (statement == "nondet")
     {
@@ -2554,6 +2533,48 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   convert_cpp_delete(tmp, dest);
 
   expr.make_nil();
+}
+
+/// Remove the side effects of \p expr's operands. A temporary initialising an
+/// aggregate's element is that element ([dcl.init.aggr]/4), destroyed with the
+/// aggregate rather than on its own.
+void goto_convertt::remove_operand_sideeffects(exprt &expr, goto_programt &dest)
+{
+  const bool aggregate =
+    expr.id() == "struct" || (expr.is_constant() && expr.type().is_array());
+
+  // TODO: evaluation order
+  Forall_operands (it, expr)
+  {
+    const bool element_temporary = aggregate && it->id() == "sideeffect" &&
+                                   it->statement() == "temporary_object";
+    const std::size_t pushed = targets.destructor_stack.size();
+    remove_sideeffects(*it, dest);
+    if (element_temporary && it->is_symbol())
+      drop_destructor(to_symbol_expr(*it), pushed);
+  }
+}
+
+/// Unschedule the destructor call on \p object among the scope-exit entries
+/// pushed since the stack held \p from of them.
+void goto_convertt::drop_destructor(
+  const symbol_exprt &object,
+  std::size_t from)
+{
+  auto &stack = targets.destructor_stack;
+  for (std::size_t i = stack.size(); i-- > from;)
+  {
+    if (stack[i].get_statement() != "function_call")
+      continue;
+    const exprt &arg = to_code_function_call(stack[i]).arguments().front();
+    if (
+      arg.id() == "address_of" && arg.op0().is_symbol() &&
+      to_symbol_expr(arg.op0()).get_identifier() == object.get_identifier())
+    {
+      stack.erase(stack.begin() + i);
+      return;
+    }
+  }
 }
 
 void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)

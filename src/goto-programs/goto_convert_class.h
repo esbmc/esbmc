@@ -125,6 +125,8 @@ protected:
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_delete(exprt &expr, goto_programt &dest);
+  void remove_operand_sideeffects(exprt &expr, goto_programt &dest);
+  void drop_destructor(const symbol_exprt &object, std::size_t from);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,
@@ -136,6 +138,12 @@ protected:
   do_cpp_new(const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
   static void replace_new_object(const exprt &object, exprt &dest);
+
+  void cpp_new_at(
+    const exprt &lhs,
+    const exprt &placement,
+    const locationt &location,
+    goto_programt &dest);
 
   void cpp_new_initializer(
     const exprt &lhs,
@@ -238,6 +246,7 @@ protected:
   void convert_switch(const codet &code, goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
+  void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
   void convert_continue(const code_continuet &code, goto_programt &dest);
   void convert_ifthenelse(const codet &code, goto_programt &dest);
   void convert_init(const codet &code, goto_programt &dest);
@@ -258,6 +267,16 @@ protected:
 
   typedef std::vector<codet> destructor_stackt;
 
+  /// Converts a statement that is a full-expression ([class.temporary]/4), so
+  /// the temporaries it creates are destroyed when it ends.
+  void convert_full_expression(const codet &code, goto_programt &dest);
+  /// Emits the scope-exit entries pushed above `stack_size` when one of them
+  /// is a destructor call, as the temporaries of a full-expression; plain
+  /// DEADs of C temporaries keep block scope.
+  bool destroy_full_expression_temporaries(
+    std::size_t stack_size,
+    const locationt &,
+    goto_programt &dest);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,

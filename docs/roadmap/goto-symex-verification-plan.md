@@ -803,6 +803,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R65** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found driving WI-4, §15 M9 (R65); **FIXED**, same entry | **A placement new whose address has a side effect was modelled as an allocating new.** The lowering names the address twice, so for any call (`std::addressof(*it)`, immer's `uninitialized_copy`) the frontend warned and fell back: the object was built in fresh memory, the buffer kept its old bytes, and the address expression never ran. `*(int *)buf != 42` after `new (std::addressof(buf)) int(42)` was SUCCESSFUL. | `get_placement_new`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/placement_new_{call_address,address_once,class_call_address,no_initializer,recursive_mem_init,recursive_label}{,_fail}` | — | **Fixed**: the address is bound once, before the initializer, to a local of a statement expression. |
 | **R66** | **High (a crash, default configuration)** — found reviewing R65, §15 M9 (R66); **FIXED**, same entry | **R59's byte-view normalisation never terminated on an array of byte arrays.** The anchor of `unsigned char pool[8][32]` is `(char *)&pool[0]`, itself a byte view of the first row, and rewriting it again gives anchor + 0: `(char *)e == (char *)pool[0]`, a byte walk `for (q = pool[0]; q != pool[1]; ++q)`, and the same one level deeper all died with SIGBUS. | `byte_address_on_root`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/{byte_view_row_anchor,byte_walk_row,byte_view_3d_anchor}{,_fail}` | — | **Fixed**: an operand that already is the anchor is left alone. |
 | **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
+| **R62** | **Medium (false FAILED, default configuration)** — R61's residual, §15 M9 (R62, R63); **OPEN**, after R63 | **A VLA size inside a pointer type, or three levels deep, reaches the formula unrenamed.** `rename_type` renames an array-typed expression's size and its direct array subtypes only, so `int (*p)[n] = a + 1; (*p)[1]` and `int b[n1][n2][n3][n4]` leave `n` and `n4` as free L0 symbols, and the solver picks a stride that fails a true assertion. | `rename_type`, `src/goto-symex/state/goto_symex_state.cpp` | — | Open: renaming at any depth is only sound once R63 fixes each size at its declaration, and it also needs `dereference_type_compare` to tolerate renamed sizes inside a pointer subtype (§15). |
+| **R63** | **High (false SUCCESSFUL, default configuration)** — found while fixing R62, §15 M9 (R62, R63); **FIXED**, same entry | **A variably modified type's size was read where it was used, not where it was declared.** C fixes it at the declaration (C11 6.7.6.2p5). `int (*p)[n] = a; n = 5; assert(p[1][0] != 7)` and `typedef int row[n]; n = 5; row x;` gave false SUCCESSFUL, a size changed in a loop gave the next iteration's, and `int a[2][n]; n = 5; a[1][0] = 7;` aborted `assert_type_compat_for_with`. | `snapshot_vla_sizes`, `get_vla_size`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/vla_size_{fixed_pointer,fixed_typedef,fixed_loop,fixed_array,same_declaration,label_goto,loop_pointer}{,_fail}`, `esbmc-cpp/cpp/vla_size_type_alias{,_fail}` | — | **Fixed**: each block-scope declarator's VLA size is bound to a local just before the declarator, and every type that names it reads that local. |
 | **R69** | **High (false SUCCESSFUL, default configuration)** — found probing R67's residual, §15 M9 (R69); **FIXED**, same entry | **A class-element list ran its first constructor on every element, and an array list's filler was zeroed.** For `new C[2]{C(1), C(2)}`, goto-convert took the first constructor it found in the list and ran it in a loop, so `p[1].v == 1` was SUCCESSFUL. The frontend ignored every `InitListExpr` array filler, so `S s[2]{S{1, 2}}` with `int a = 5;` in `S` left `s[1].a` zero (`s[1].a == 0` SUCCESSFUL), and `C c[3]{C(1)}` did not call `C()` on the tail. Nested lists (`new int[2][2]{{1, 2}, {3, 4}}`) and aggregate lists were dropped as in R67. | `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `get_array_filler`, `src/clang-c-frontend/clang_c_convert.cpp`; `cpp_new` migration, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_new_init_list_{class,virtual,aggregate,nested,filler,filler_runtime}{,_fail}`, `array_init_list_filler{,_fail}`, `github_6588_multidim` | — | **Fixed**: each element runs its own initializer in place, and the filler fills the rest; a string-literal row and a nondet count with struct elements are still wrong. |
 | **R70** | **High (false SUCCESSFUL, default configuration, C and C++)** — found probing R69's string-literal residual, §15 M9 (R70); **FIXED** for declarations, same entry | **A braced string literal initialised one element with the literal's address.** `char a[4] = {"ab"}` went through the list conversion as a one-element list: the literal decayed to `&"ab"[0]`, was cast to `char` into `a[0]`, and the rest was zeroed, so `a[1] == 0` was SUCCESSFUL. | InitListExpr arm of `get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/string_literal_brace_init{,_fail}`, `regression/esbmc-cpp/cpp/string_literal_brace_init{,_fail}` | — | **Fixed**: a string-literal list initialises the whole array from the literal (C11 6.7.9p14); `new char[4]{"ab"}` is still dropped by `cpp_new_init_list`. Fixed as R80. |
 | **R80** | **High (false FAILED, default configuration, C++)** — R70's open note, §15 M9 (R80); **FIXED**, same entry | **A string literal initialising a new-expression's array was dropped.** For `new char[4]{"ab"}` the frontend hands `cpp_new_init_list` the literal as one `string-constant` of type `char[4]`, which it did not count as a list, so neither it nor the constructor loop stored anything and every element stayed nondet: `p[0] == 'a'` FAILED. `new wchar_t[5]{L"hi"}` and a count only known at run time went the same way. | `cpp_new_init_list`, `cpp_new_store_element` and `is_splittable_list`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/cpp/new_array_string_literal{,_fail}` | — | **Fixed**: a string literal is a list of its characters and the zeros padding it to its array type; the filler covers any elements past it. |
@@ -813,8 +815,15 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
+| **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
+| **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
+| **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
+| **R82** | **High (false FAILED, default configuration)** — R61's residual, §15 M9 (R82); **FIXED**, same entry | **A pointer to a variable-length array scaled by a free size.** `rename_type` renamed a symbolic array size only on an expression's own array type and its first subtype, and only when the size was a bare symbol. A pointer's subtype was never renamed, so `p = a + 1` with `int (*p)[m]` scaled by `m` as an unconstrained L0 symbol, and `(*p)[2]` of a correct program was an array-bounds violation. Sizes deeper than the second level, or spelt `m + 1`, were missed the same way. | `goto_symex_statet::rename_type`, `rename_array_sizes` and `fixup_renamed_type`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/vla_pointer_stride{,_fail}` | — | **Fixed**: every non-constant array size is renamed, through array and pointer subtypes. A VLA size reassigned after its declarator is still read at its current value (#8019). |
+| **R81** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R65's open note, §15 M9 (R81); **FIXED**, same entry | **An array placement new allocated.** The frontend routed only the scalar form of `::operator new(size_t, void *)` to `get_placement_new`; `new (buf) T[n]` took the allocating `cpp_new[]` path, so its elements were built in fresh memory and `buf` was left alone. `new (buf) int[2]{1, 2}` made `p == buf` fail and `assert(((int *)buf)[1] != 2)` verify. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `cpp_new_at` and `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_placement_new{,_fail}` | — | **Fixed**: the placement address is recorded on the `cpp_new[]` side effect, evaluated once, and assigned in place of the allocation; the elements' initialisation runs as before. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
+| **R82** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R69's C++14 residual, §15 M9 (R82); **FIXED** for expression statements, same entry | **A temporary in an expression statement outlived it.** `get(C(1));`, `take(C(1));` with a by-value class parameter, `k = get(C(1));` and a `for` increment that builds a temporary ran the destructor at the end of the enclosing block, not at the end of the statement ([class.temporary]/4). `assert(live == 1)` after `get(C(1));` was SUCCESSFUL. Only a declaration's initializer and a discarded `temporary_object` unwound their full-expression's entries. | `convert_block` and `convert_for`, `src/goto-programs/goto_convert.cpp`; the block and `for` arms of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/expression_statement_temporary{,_fail,_legacy}` | — | **Fixed**: an expression statement destroys the temporaries it created when it ends; a declaration, a discarded temporary and an expression statement share `destroy_full_expression_temporaries`. A temporary in an `if`, `while` or `for` condition is still destroyed at block exit. |
+| **R79** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's residual, §15 M9 (R79); **FIXED**, same entry | **A temporary in a `return` statement's full-expression was never destroyed.** `int k() { return C(1).v; }` left the destructor count at 0, so `k(); assert(dtors == 0);` verified and `assert(dtors == 1)` failed, in every `--std` mode; native destroys the temporary before `k` returns. `convert_return` dropped every scope-exit entry pushed while lowering the return value, to keep the return slot of `return A(n);` alive, and took the other temporaries with it. | `goto_convertt::convert_return`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/return_temporary_destroyed{,_fail}` | — | **Fixed** for a non-class return value: its temporaries are unwound after the value is captured and before the locals. A temporary in a class-type return value, or in one branch of `?:`, `&&` or `||`, is still not destroyed (open, §15). |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
 | **R53** | **High (false SUCCESSFUL, default configuration)** — found by the G14 re-measure of self-verification, §15 M9 (G14, R53); **FIXED**, same entry | **Template specialisations that differ only in a member-pointer argument share one symbol.** Functions, methods, parameters and variables take clang's USR as their id, and the USR spells a member-pointer type argument as nothing: `get<int A::*>` and `get<long B::*>` are both `c:@F@get<# >#S0_#`, so the last body converted wins for both. A trait read through `get` returns the wrong specialisation's value, and `assert(get(&A::b) == 2)` reports **SUCCESSFUL** under Bitwuzla and Z3 where the native binary aborts. Members of `W<int A::*>` and `W<long B::*>` collide the same way, and so do plain overloads `f(int A::*)` and `f(long B::*)` (`c:@F@f# #`). Records are unaffected: their ids are fully qualified names, which spell `int A::*`. | `clang_cpp_convertert::get_decl_name`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/member_pointer_{,class_}template_arg{,_fail}`, `member_pointer_overload{,_fail}`, `member_pointer_var_template{,_fail}`, `member_pointer_make_tuple`, `nullptr_template_arg{,_fail}` | §13 G14 | **Fixed**: a USR-derived id whose enclosing template arguments or function types print a member pointer gets that text appended; every other id is unchanged. A `nullptr` template argument, spelled as nothing too, is covered by recording its type. |
@@ -9043,7 +9052,7 @@ Not fixed, and unchanged by R64: a local `C c = C::make();` under
 initializer throws are not destroyed ([except.ctor]/3), mem-initializer
 temporaries die at the end of the constructor rather than of their
 full-expression, and the aggregate-initialisation surplus destructor pinned by
-`aggregate_init_temp_double_destroy` (KNOWNBUG) is a separate path.
+`aggregate_init_temp_double_destroy` (KNOWNBUG) is a separate path. Fixed as R83.
 
 **WI-4's next wall.** With R64, the empty node is no longer freed on any path
 (`--unwind 1` passes a probe asserting it), yet the unbounded run still unwinds
@@ -9145,6 +9154,54 @@ master finished. `byte_view_row_anchor{,_fail}`,
 `byte_walk_row{,_fail}` and `byte_view_3d_anchor{,_fail}` crash on master and
 match the native program here. The C, k-induction and `cbmc` suites pass apart
 from a local pre-existing failure.
+
+### M9 (R62, R63) — 2026-09-27, VLA sizes inside types
+
+R61's review found `m` and `c` of `int a[2][3][u][m][c]` named in the SMT
+formula with no SSA suffix. `rename_type` renames an array-typed expression's
+size and its immediate array subtypes, and nothing else, so a pointer to a
+VLA (`int (*p)[n] = a + 1`) and a size three or more levels deep
+(`int b[n1][n2][n3][n4]`) keep a free L0 size: a false FAILED on master (R62).
+
+Extending the renaming through pointer levels and to any depth fixed both, and
+its review showed it was unsound. A free size over-approximates; a renamed one
+takes the value the variable holds where the type is *used*, while C fixes it
+where the type is *declared* (C11 6.7.6.2p5). With `n` changed after the
+declaration, pointer arithmetic that master answered FAILED correctly became a
+false SUCCESSFUL, and a depth-three access that master answered correctly
+aborted. Master was already wrong the same way wherever it did rename:
+`int (*p)[n] = a; n = 5; assert(p[1][0] != 7)` is SUCCESSFUL on master and
+fails natively (R63). R62 therefore waits on R63.
+
+**R63, fixed** in the frontend. `goto_convert`'s `rewrite_vla_decl` copied a
+declared array's size into a temporary for the symbol's type alone; every
+expression kept the clang type, which names `n`. Clang shares one
+`VariableArrayType` between a declarator and every expression it types, so
+`snapshot_vla_sizes` binds each size of a block-scope variable, typedef or C++
+alias to a local, keyed by the size expression, and `get_vla_size` reads that
+local wherever the type is converted. The binding goes into the declaration's
+own decl-block, just before its declarator. The first version put it ahead of
+the whole statement, and review found three ways that was wrong: `int m = 2 - k,
+(*p)[m]` in a loop read the previous iteration's `m`, a false SUCCESSFUL; a
+label or `case` on the declaration jumped past it, so a backward `goto` kept
+the first size, another false SUCCESSFUL; and `int m = 3, a[m]` read `m` before
+it was declared. `vla_size_{same_declaration,label_goto,loop_pointer}{,_fail}`
+fail with that placement and pass on master.
+`vla_size_fixed_{pointer,typedef,loop,array}{,_fail}` and
+`esbmc-cpp/cpp/vla_size_type_alias{,_fail}` get the wrong verdict or abort on
+master, both halves of every pair; every disputed case matches the native
+program under ASan and UBSan. `github_2220_vla_bound`
+(KNOWNBUG) stopped reproducing because its size no longer stays in a type; the
+IREP2-adjust defect it pins is still live on a `sizeof(char[strlen(...) + 2])`
+operand, so the test moved there instead of becoming CORE. Not covered, and
+read at use as before: a VLA parameter's size (`void f(int n, int x[][n])`)
+and a C++ condition variable of variably modified type.
+
+**R62, open.** On top of R63, the renaming patch still raises a false alarm on
+every dereference through a pointer to a pointer-to-VLA
+(`int (**pp)[n] = &p; (*pp)[1][1]`): `dereference_type_compare` compares
+pointer types exactly, and the renamed size in the dereferenced type no
+longer matches the object's.
 ### M9 (R61) — 2026-09-27, the stride of a flattened VLA
 
 The H-C1 census (default slicing against `--no-slice`) left
@@ -9616,6 +9673,286 @@ read the bytes little-endian, a false SUCCESSFUL where master aborted.
 and one-byte-struct cases under `--big-endian`. Master aborts on all four, and
 each half agrees under Bitwuzla and Z3. The 114 other regression tests that call
 these functions keep their verdicts.
+
+### M9 (R83) — 2026-10-02, the temporary an aggregate destroyed twice
+
+R64 left the KNOWNBUG `aggregate_init_temp_double_destroy` open as a separate
+path. An aggregate's element initialised from a temporary was destroyed twice.
+`remove_temporary_object` gives every temporary a scope-exit destructor;
+inside a braced or parenthesised aggregate initialiser the temporary is copied
+bitwise into the element and destroyed at the end of the full-expression, and
+the aggregate's destructor then destroys the element. C++ makes the temporary
+the element ([dcl.init.aggr]/4), so g++ runs one destructor per element.
+`{ W a{M(5)}; } assert(ctors == dtors);` is a false FAILED on master, as are
+the named form `W a{t}`, a call result `W a{make()}`, an array
+`M arr[2] = {M(1), M(2)}`, nested aggregates and C++20's `W a(M(5))`; an
+assertion that the temporary is already destroyed inside the scope, which
+aborts natively, is a false SUCCESSFUL. With a `shared_ptr` member the surplus
+destructor is a second `__release`, so `H a{std::make_shared<int>(1)}; H b = a;`
+reported an invalidated dynamic object (the KNOWNBUG `shared_ptr_member_copy`).
+
+**Fixed** in `remove_sideeffects`: when a `temporary_object` is a direct
+operand of a struct or constant array, the destructor call on the symbol it
+lowers to is removed from the entries pushed while lowering that operand. The
+DEAD stays. Temporaries in the element's constructor arguments are still
+destroyed at the end of the full-expression. A `#` marker set by the frontend
+does not work here: function bodies reach `goto_convert` through irep2, which
+drops comment fields.
+
+`aggregate_init_temp_double_destroy`, `aggregate_init_named_double_destroy` and
+`shared_ptr_member_copy` flip from KNOWNBUG to CORE.
+`aggregate_element_temporary{,_fail}` are wrong on master, both halves; the
+failing half runs `--multi-property` and pins one assertion per shape: a
+member, an array element and a call result. All five fail with the fix
+reverted.
+Z3 only: this build could not fetch Bitwuzla. The C++ suites keep their
+verdicts against master where they completed within the cap.
+
+Not fixed, and separate paths: a lambda's by-copy capture (`[m]{}`) is
+unbalanced the same way, and a temporary bound to an aggregate's reference
+member (`R x{M(1)}`, lifetime-extended by [class.temporary]/6) is destroyed at
+the end of the full-expression. Both are false FAILED on master and here.
+
+---
+
+### M9 (R81) — 2026-10-01, an array placement new that allocated
+
+R65 left an array placement new open. It is wider than a side-effecting
+address: the frontend sent only the scalar form of the reserved
+`::operator new(size_t, void *)` to `get_placement_new`, so every
+`new (buf) T[n]` became an ordinary `cpp_new[]`. The elements were constructed
+in fresh memory and `buf` was never written. With
+`alignas(int) unsigned char buf[8];` and `int *p = new (buf) int[2]{1, 2};`,
+`p == (int *)buf` is FAILED on master and `((int *)buf)[1] != 2` is
+SUCCESSFUL. Both are wrong: natively the first holds and the second aborts.
+CWG2382 fixes the array overhead of the reserved placement form at zero, so
+the result is the placement address.
+
+**Fixed.** `get_new_storage` records the placement address on the `cpp_new[]`
+side effect, beside the replaced `operator new` it already recorded, and
+`do_cpp_new` evaluates the address once and assigns it to the result instead
+of allocating. The initializer runs as for any array new; without one, the
+storage is left as the program wrote it, as for a replaced `operator new`. The
+address rides in `arguments[4]` of `sideeffect2t` for the same reason the
+other named subs do: without it the round trip through irep2 drops it and the
+allocation comes back.
+
+`regression/esbmc-cpp/cpp/array_placement_new` (an `int` list, and a class
+array at a call's address with a runtime count, checking the call runs once)
+and `array_placement_new_fail` change verdict against master; dropping the
+migration slot alone restores master's verdicts on both. The 119 C++ tests
+whose sources use `new (` or `new T[` pass, and `esbmc-cpp/cpp` otherwise
+keeps master's verdicts (local failures and 60 s timeouts identical on both
+binaries). Bitwuzla could not be built in this run's container, so only Z3
+was measured.
+
+Not fixed: a non-reserved placement form (`new (pool) T[n]` with a
+user-declared `operator new[](size_t, Pool &)`) still allocates, as its scalar
+counterpart does.
+
+---
+
+### M9 (R79) — 2026-10-01, the temporary a `return` forgot
+
+R69's entry left open that a temporary in a `return` statement's
+full-expression is never destroyed. `int k() { return C(1).v; }` returns 1 and,
+natively, runs `~C` once before `k` returns (C++ [class.temporary]/4). On
+master the destructor never runs, in C++11, 14, 17 and 20: after `k();`,
+`assert(dtors == 0)` is SUCCESSFUL and `assert(dtors == 1)` FAILED.
+
+`convert_return` lowered the return value's side effects and then cut the
+destructor stack back to its size before them. That was meant for the return
+slot: `return A(n);` materializes a temporary that is the returned object and
+must outlive the return (#6075/#6076). Every other temporary of the expression
+went with it, as the old comment said.
+
+**Fixed** for a return value that is not a class: the entries now stay on the
+stack, so the existing unwind captures the value first and destroys the
+temporaries before the locals, and the stack is cut back once the unwind is
+emitted. A temporary read through a member, one bound to a reference
+parameter, and one read before a local's destructor runs now match the native
+program.
+
+Two shapes keep master's behaviour. A class-type value may be the temporary
+itself (`return A(n);`) or be copied bitwise from one: `return H{q};` builds
+the member `p` as a temporary and assigns it into the aggregate, so
+destroying it releases the returned object's `shared_ptr`. An earlier version
+that dropped only the return slot's entries turned
+`shared_ptr_copy_controls` into a false FAILED for exactly this reason. And a
+side effect under `?:`, `&&` or `||`: each branch's code goes on its own path,
+but its temporaries are pushed on the one destructor stack, so unwinding them
+destroys an object that path never built. `return c ? *P(6).p : 0;` with `c`
+false then frees an uninitialised pointer; that case is in the passing test,
+which fails with the conditional check removed.
+
+`return_temporary_destroyed{,_fail}` in `regression/esbmc-cpp/cpp`
+(`--std c++17`) are wrong on master, both halves, under Z3; both give the same
+verdicts under `--std c++11`, `c++14` and `c++20`. Of the 3372 tests under
+`regression/esbmc-cpp*`, 111 get a different `--goto-functions-only` output
+(most through the operational models' `return` statements), and all 111 keep
+their verdict.
+
+Left open: a temporary in a class-type return value that is not part of the
+result (`C(4)` in `return C(C(4).v + 1);`) is still never destroyed, and
+neither is one created in one branch of a conditional in a `return`. A
+declaration's initialiser has the opposite defect on master:
+`int x = c ? *P(6).p : 0;` with `c` false destroys the temporary anyway and
+reports `invalid pointer freed`. The conditional cases need the branch
+lowering to unwind its own temporaries. R69's other residuals (an elidable copy below the
+root, NRVO's extra move) are unchanged.
+
+---
+
+### M9 (R82) — 2026-10-02, a pointer to a VLA scaled by a free size
+
+R61 left two shapes open: a VLA size deep in an array's type reaching the
+solver unrenamed, and a 2-D `(*p)[j]` through `p = a + i`, a false FAILED on
+master. Both have one cause. `rename_type` renamed an expression's array size
+and its first subtype's, and only when the size was a bare symbol; it never
+looked inside a pointer's subtype. Pointer arithmetic scales by the pointee's
+size, so with `int (*p)[m] = a + 1` the offset was `1 * m * 4` with `m` a
+free L0 symbol, and the VCC named `m` without an SSA suffix:
+
+```c
+int m = 3;
+int a[2][m];
+a[1][2] = 7;
+int (*p)[m] = a + 1;
+assert((*p)[2] == 7); /* master: array bounds violated */
+```
+
+A pointer difference `p - q` over the same type, a size spelt `m + 1`, and
+`int a[2][3][u][m][c]` read through a flat pointer were false FAILED as well.
+
+**Fixed** by renaming every non-constant array size, recursing through array
+and pointer subtypes. Renaming pointer subtypes means a symbol and its value
+can now carry pointer types whose subtypes differ only in a VLA size;
+`fixup_renamed_type` threw on those (`github_2440` aborted), and now casts as
+it already did for a symbolic subtype. `vla_pointer_stride{,_fail}` change
+verdict against master; the failing half runs `--multi-property` and pins the
+bounds check as passing, since master's spurious violation otherwise shadows
+the real assertion. The `esbmc` suite and 1,019 `esbmc-cpp/cpp` tests keep
+their verdicts against master, as do the 371 tests whose sources declare a
+variable-size array or a pointer to an array. Bitwuzla could not be built for
+this run; all of it ran on Z3.
+
+Not fixed, and unchanged: a size read after it is reassigned is taken at its
+current value, not the one at its declarator (`int (*p)[m] = a; m = 1;
+p[1][0]` is a false SUCCESSFUL on master and here). Open PR #8019 binds the
+size where the declarator is reached.
+
+---
+
+### M9 (R82) — 2026-10-02, the statement that kept its temporaries
+
+R69's C++14 residual named elidable copies that are still converted. Probing
+them natively against ESBMC found a defect under the default C++17 mode first:
+`take(C(1));`, where `take` has a by-value class parameter, left the
+temporary alive past the statement. The destructor call was there, but at the
+end of the block. Any expression statement did the same: `get(C(1));` for a
+`const C &` parameter, `k = get(C(1));`, `k += get(C(1));`, a comma operand,
+and a `for` increment. In the loop the temporary was built once per iteration
+and destroyed once. `assert(live == 1)` after `get(C(1));` was SUCCESSFUL on
+master; natively it aborts. A bare `C(1);` and `int k = get(C(1));` were
+already right: a discarded `temporary_object` and a declaration's initializer
+were the only places that emitted the entries pushed while lowering their
+expression ([class.temporary]/4, #6075, #6076).
+
+**Fixed** by doing the same after each expression statement of a block and
+after a `for` increment, in `convert_block` and `convert_for` and in the block
+and `for` arms of the irep2-native `convert_native_rec`, the default path. It
+is not done in `convert_expression` itself: `cpp_new_initializer` converts the
+initializer of `new B()` as an internal expression statement, and its
+temporary is copied bitwise into the new object, so its entry is dropped on
+purpose. The first version unwound there, destroyed that temporary, and broke
+eleven `delete` and destructor tests. The three sites share
+`destroy_full_expression_temporaries`, which keeps the old rule that entries
+with no destructor call (the DEADs of C temporaries) stay at block scope, so C
+is unchanged. `expression_statement_temporary{,_fail}` change verdict against
+master under Bitwuzla and Z3, and fail with the native arms reverted;
+`expression_statement_temporary_legacy` runs under `--no-irep2-native-body`
+and fails with the `convert_block` and `convert_for` calls reverted.
+
+Not fixed: a temporary in an `if`, `while` or `for` condition is still
+destroyed at block exit (`if (get(C(1))) ...` followed by `assert(live == 0)`
+is a false FAILED). Each successor of the condition's branch needs the
+destructor, which is a change to `convert_ifthenelse` and the loop lowerings.
+Also measured, and wrong in C++17 too, so not elision: `C a[2] = {C(1), C(2)}`
+runs four destructors, likely the helper-copy mechanism
+`aggregate_init_temp_double_destroy` pins as a KNOWNBUG; `catch (C c)` after
+`throw C(1)` runs one constructor and one destructor where the native program
+runs two of each. In C++14, `C c = b ? C(1) : C(2);` and `C c = C(C(1));` run
+a surplus copy and destructor each, as R69 left them.
+
+---
+
+### M9 (R83) — 2026-10-02, a `delete[]` bound symex could not read
+
+Probing R69's residuals, `new D[2]{}` for a class with a vtable no longer
+aborts, but never finishes either. Neither does
+`E *p = new E[3]; delete[] p;` for any `E` with a destructor. `delete[]` does
+not carry the element count, so `convert_cpp_delete` runs the destructors
+while `i < DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's
+`DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, an array it writes
+at allocation and cannot read back, so the bound is never constant and the
+loop unwinds until the timeout. #7464 resolves `DYNAMIC_SIZE` through the value
+set, but only for objects with automatic or static storage. #6584's own tests
+run under `--incremental-bmc`, which hides it.
+
+**Fixed.** `track_new_pointer` records the renamed size each heap object was
+allocated with, and `DYNAMIC_SIZE(p)` resolves to it when the value set names
+that one object. A heap object's size is written only there, so the recorded
+value is the one `__ESBMC_alloc_size` holds. A pointer the value set does not
+pin to a single object keeps the array read.
+
+`delete_array_dtor_bound{,_fail}` in `regression/esbmc-cpp/cpp` give no verdict
+on master within 60 s and are SUCCESSFUL and FAILED with the fix, under Z3;
+Bitwuzla was not built for this run. `github_6584{,_fail,_dtor}` without
+`--incremental-bmc` also hang on master and decide now. `esbmc-cpp/cpp` keeps
+master's verdicts otherwise (the same 15 local timeouts and Z3 errors on both
+binaries), as do the 382 tests in `regression/esbmc` whose sources allocate on
+the heap.
+
+Not fixed: a count known only at run time (`new E[n]` with `n` nondet) leaves
+the bound symbolic, as it leaves the construction loop.
+
+---
+
+### M9 (R97) — 2026-10-03, two KNOWNBUG tests that never reached symex
+
+Looking for a live KNOWNBUG that expects `VERIFICATION FAILED`, the smallest
+candidate, `fam_false_2`, did not run at all: its `main()` has an implicit
+`int`, clang rejects that without `-Wno-error=implicit-int`, and ESBMC printed
+`PARSING ERROR`. A KNOWNBUG passes whenever its expected output is missing, so
+the test reported `Passed` without reaching symex. `fam_true_4` fails the same
+way. Its siblings `fam_false_1`, `_3`, `_4` and `fam_true_2` already carry the
+flags.
+
+With the flags, `fam_false_2`'s out-of-bounds write through
+`malloc(sizeof(FAM))` is reported as `Access to object out of bounds: heap
+object`, as AddressSanitizer reports it natively, so the bug it was waiting on
+is gone. `fam_true_4` expected SUCCESSFUL for `FAM deref = *ptr;
+deref.arr[2] = 42;`. Copying a structure copies none of its flexible array
+elements (C17 6.7.2.1p18), so the write is past the end of `deref`. ESBMC's
+FAILED is right and the expectation was wrong; `fam_false_4` already pins
+that write at index 3.
+
+**Fixed** by making both tests CORE with the siblings' flags. `fam_false_2`
+also pins the property. `fam_true_4` keeps the copy and reads `arr[2]` through
+the heap object, which holds three elements. Each bites: allocating one more
+`int` in `fam_false_2`, or restoring the write through the copy in
+`fam_true_4`, flips its verdict, under Bitwuzla and Z3.
+
+Left open. Six more C/C++ KNOWNBUG tests stop at a parse error under clang 20
+(`--parse-tree-only` on every KNOWNBUG test with a C or C++ source):
+`k-induction/z_sum_array` and `k-induction-parallel/z_sum_array` (implicit
+`int`; with the flags the VLA size check fails on the uninitialised `M`, which
+is right, so the program needs rewriting rather than flipping),
+`loop-invariants/cpp_priority_queue_size_bug` and `cpp_stack_top_bug` (an
+invariant naming the loop variable outside its scope),
+`esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
+`PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
+`accepted under KNOWNBUG`.
 
 ---
 
