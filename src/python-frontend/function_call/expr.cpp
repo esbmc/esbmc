@@ -1262,7 +1262,8 @@ exprt function_call_expr::build_constant_from_arg() const
       const typet &vt = value_expr.type();
       if (
         vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv() ||
-        type_utils::is_string_type(vt))
+        type_utils::is_string_type(vt) ||
+        type_handler_.is_tagged_scalar_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
 
       // Element of a list whose element type could not be statically resolved
