@@ -9635,9 +9635,9 @@ looks through the bound temporary, parentheses and the functional cast, and a
 further elidable copy is peeled too. What is converted is the innermost copy's
 source, the form `C c = C(1);` already had. A copy from a named object is not
 elidable and still runs. `cxx14_elided_copy_nested{,_fail}`, pinned to
-`--std c++14`, are wrong on master, both halves, under Z3; they were not run
-under Bitwuzla. The 296 tests pinned to a standard before C++17 keep their
-verdicts otherwise.
+`--std c++14`, are wrong on master, both halves, under Z3, and each fails with
+the fix reverted; they were not run under Bitwuzla. The other 281 tests ctest
+runs with `--std` before C++17 pass, and `esbmc-cpp/cpp` keeps its verdicts.
 
 Still open from R69's list: an elidable copy of an init-list element or a
 by-value argument, a catch-by-value parameter, and NRVO `return local;`.
