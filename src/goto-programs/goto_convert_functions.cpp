@@ -1439,7 +1439,7 @@ bool goto_convert_functionst::convert_native_rec(
     {
       if (!here.get_file().empty())
         stamp_value_locations(argument, here);
-      remove_sideeffects(argument, sideeffects);
+      remove_condition_sideeffects(argument, sideeffects);
     }
 
     break_switch_targetst old_targets(targets);

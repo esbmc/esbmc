@@ -2119,5 +2119,8 @@ regression/esbmc/calloc_force_malloc_success_sv_comp_fail
 regression/esbmc-cpp/cpp/condition_temporary
 regression/esbmc-cpp/cpp/condition_temporary_fail
 regression/esbmc-cpp/cpp/condition_temporary_legacy
+regression/esbmc-cpp/cpp/switch_condition_temporary
+regression/esbmc-cpp/cpp/switch_condition_temporary_fail
+regression/esbmc-cpp/cpp/switch_condition_temporary_legacy
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail

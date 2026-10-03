@@ -1694,7 +1694,7 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
   exprt argument = code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(argument, sideeffects);
+  remove_condition_sideeffects(argument, sideeffects);
 
   // save break/default/cases targets
   break_switch_targetst old_targets(targets);
