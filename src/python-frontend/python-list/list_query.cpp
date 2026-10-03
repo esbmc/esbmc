@@ -167,10 +167,92 @@ exprt python_list::compare(
       equality2tc(er2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
   }
 
+  // __ESBMC_list_eq(l1, l2, ...) without a result; elem_size_bytes 0 makes the
+  // model read each element's own size.
+  auto build_list_eq_call = [&](const BigInt &elem_size_bytes) {
+    const typet &list_type = l1.type();
+    const std::string list_type_name =
+      converter_.get_type_handler().type_to_string(list_type);
+    constant_exprt list_type_id(size_type());
+    list_type_id.set_value(integer2binary(
+      std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
+
+    int max_depth = get_list_compare_depth();
+    constant_exprt max_depth_expr(size_type());
+    max_depth_expr.set_value(
+      integer2binary(max_depth, config.ansi_c.address_width));
+
+    // Merge the float element type_id from both operands so that mixed
+    // int/float elements compare numerically (Python's 1 == 1.0), as list_lt
+    // already does.
+    int type_flag_lhs = 0, type_flag_rhs = 0;
+    size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
+    elem_types().type_flags(
+      lhs_symbol->id.as_string(),
+      converter_.get_type_handler(),
+      type_flag_lhs,
+      float_type_id_lhs);
+    elem_types().type_flags(
+      rhs_symbol->id.as_string(),
+      converter_.get_type_handler(),
+      type_flag_rhs,
+      float_type_id_rhs);
+    const size_t float_type_id =
+      float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
+
+    const list_eq_target eq_target = select_list_eq(
+      converted_l1,
+      converted_l2,
+      *list_eq_func_sym,
+      {list_type_id,
+       max_depth_expr,
+       from_integer(float_type_id, size_type()),
+       from_integer(elem_size_bytes, size_type())});
+
+    code_function_callt call;
+    call.function() = build_symbol(*eq_target.func);
+    exprt::operandst &eq_args = call.arguments();
+    eq_args.push_back(build_symbol(*lhs_symbol));
+    eq_args.push_back(build_symbol(*rhs_symbol));
+    eq_args.insert(
+      eq_args.end(),
+      eq_target.trailing_args.begin(),
+      eq_target.trailing_args.end());
+    call.type() = bool_type();
+    call.location() = converter_.get_location_from_decl(list_value_);
+    return call;
+  };
+
   // Fast path for list equality/inequality when we have concrete type-map
   // entries for both operands. This avoids __ESBMC_list_eq loops.
   if (op == "Eq" || op == "NotEq")
   {
+    // The type map misses appends made through a parameter or an alias, so
+    // the fast path holds only while every list it read keeps its size (#8100).
+    const symbolt *list_size_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    assert(list_size_sym);
+    auto size_is = [&](const symbolt &list, std::size_t n) {
+      expr2tc size;
+      migrate_expr(
+        build_call_expr(
+          *list_size_sym,
+          size_type(),
+          {list.get_type().is_pointer()
+             ? build_symbol(list)
+             : build_address_of(build_symbol(list))}),
+        size);
+      return equality2tc(size, constant_int2tc(size->type, BigInt(n)));
+    };
+    auto unless_resized = [&](const expr2tc &fast, const expr2tc &sizes_ok) {
+      const code_function_callt call = build_list_eq_call(BigInt(0));
+      expr2tc slow;
+      migrate_expr(
+        build_call(call.function(), bool_type(), call.arguments()), slow);
+      const expr2tc eq = if2tc(get_bool_type(), sizes_ok, fast, slow);
+      return migrate_expr_back(op == "NotEq" ? not2tc(eq) : eq);
+    };
+
     auto resolve_map_id = [&](const symbolt *sym) -> std::string {
       const std::string direct_id = sym->id.as_string();
       auto has_map = [&](const std::string &id) {
@@ -256,13 +338,14 @@ exprt python_list::compare(
     // from blowing up into large __ESBMC_list_eq trees.
     const typet list_model_type = converter_.get_type_handler().get_list_type();
     std::function<bool(
-      const symbolt *, const symbolt *, std::size_t, expr2tc &)>
+      const symbolt *, const symbolt *, std::size_t, expr2tc &, expr2tc &)>
       build_nested_equality;
     build_nested_equality = [&](
                               const symbolt *lhs_list,
                               const symbolt *rhs_list,
                               std::size_t depth,
-                              expr2tc &result) -> bool {
+                              expr2tc &result,
+                              expr2tc &sizes_ok) -> bool {
       if (
         !lhs_list || !rhs_list ||
         depth >= static_cast<std::size_t>(get_list_compare_depth()))
@@ -277,6 +360,9 @@ exprt python_list::compare(
 
       const std::size_t lhs_size = lhs_recorded->size();
       const std::size_t rhs_size = rhs_recorded->size();
+      sizes_ok = and2tc(
+        sizes_ok,
+        and2tc(size_is(*lhs_list, lhs_size), size_is(*rhs_list, rhs_size)));
       if (lhs_size != rhs_size)
       {
         result = gen_false_expr();
@@ -312,7 +398,7 @@ exprt python_list::compare(
             const symbolt *lhs_nested = converter_.find_symbol(lhs_nested_id);
             const symbolt *rhs_nested = converter_.find_symbol(rhs_nested_id);
             if (!build_nested_equality(
-                  lhs_nested, rhs_nested, depth + 1, elem_equal))
+                  lhs_nested, rhs_nested, depth + 1, elem_equal, sizes_ok))
               return false;
           }
         }
@@ -356,12 +442,11 @@ exprt python_list::compare(
     if (lhs_first_type == list_model_type && rhs_first_type == list_model_type)
     {
       expr2tc nested_equal;
-      if (build_nested_equality(lhs_symbol, rhs_symbol, 0, nested_equal))
-      {
-        if (op == "NotEq")
-          nested_equal = not2tc(nested_equal);
-        return migrate_expr_back(nested_equal);
-      }
+      expr2tc sizes_ok = gen_true_expr();
+      if (
+        build_nested_equality(
+          lhs_symbol, rhs_symbol, 0, nested_equal, sizes_ok))
+        return unless_resized(nested_equal, sizes_ok);
     }
 
     if (is_concrete_map(lhs_id) && is_concrete_map(rhs_id))
@@ -438,11 +523,9 @@ exprt python_list::compare(
           }
 
           if (comparable)
-          {
-            if (op == "NotEq")
-              return migrate_expr_back(not2tc(all_equal));
-            return migrate_expr_back(all_equal);
-          }
+            return unless_resized(
+              all_equal,
+              and2tc(size_is(*lhs_symbol, lhs_n), size_is(*rhs_symbol, rhs_n)));
         }
       }
     }
@@ -554,41 +637,10 @@ exprt python_list::compare(
 
   // ── Equality operators: Eq, NotEq ─────────────────────────────────────────
 
-  // Compute list type_id for nested list detection
-  const typet &list_type = l1.type();
-  const std::string list_type_name =
-    converter_.get_type_handler().type_to_string(list_type);
-  constant_exprt list_type_id(size_type());
-  list_type_id.set_value(integer2binary(
-    std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
-
   symbolt &eq_ret = converter_.create_tmp_symbol(
     list_value_, "eq_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
   code_declt eq_ret_decl(build_symbol(eq_ret));
   converter_.add_instruction(eq_ret_decl);
-
-  // Get max depth from configuration option
-  int max_depth = get_list_compare_depth();
-  constant_exprt max_depth_expr(size_type());
-  max_depth_expr.set_value(
-    integer2binary(max_depth, config.ansi_c.address_width));
-
-  // Merge the float element type_id from both operands so that mixed int/float
-  // elements compare numerically (Python's 1 == 1.0), as list_lt already does.
-  int type_flag_lhs = 0, type_flag_rhs = 0;
-  size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
-  elem_types().type_flags(
-    lhs_symbol->id.as_string(),
-    converter_.get_type_handler(),
-    type_flag_lhs,
-    float_type_id_lhs);
-  elem_types().type_flags(
-    rhs_symbol->id.as_string(),
-    converter_.get_type_handler(),
-    type_flag_rhs,
-    float_type_id_rhs);
-  const size_t float_type_id =
-    float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
 
   // Statically-known element byte size for the primitive comparison, so the
   // model's __ESBMC_values_equal takes its branch-free fast path instead of
@@ -604,27 +656,9 @@ exprt python_list::compare(
     (lhs_elem_size != 0 && lhs_elem_size == rhs_elem_size) ? lhs_elem_size
                                                            : BigInt(0);
 
-  const list_eq_target eq_target = select_list_eq(
-    converted_l1,
-    converted_l2,
-    *list_eq_func_sym,
-    {list_type_id,
-     max_depth_expr,
-     from_integer(float_type_id, size_type()),
-     from_integer(eq_elem_size_bytes, size_type())});
-
-  code_function_callt list_eq_func_call;
+  code_function_callt list_eq_func_call =
+    build_list_eq_call(eq_elem_size_bytes);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
-  list_eq_func_call.function() = build_symbol(*eq_target.func);
-  exprt::operandst &eq_args = list_eq_func_call.arguments();
-  eq_args.push_back(build_symbol(*lhs_symbol)); // l1
-  eq_args.push_back(build_symbol(*rhs_symbol)); // l2
-  eq_args.insert(
-    eq_args.end(),
-    eq_target.trailing_args.begin(),
-    eq_target.trailing_args.end());
-  list_eq_func_call.type() = bool_type();
-  list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
 
   // V.3: build `eq_ret == (op == "Eq")` in IREP2.

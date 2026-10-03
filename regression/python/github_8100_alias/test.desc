@@ -1,4 +1,4 @@
 CORE
-main.cpp
---std=c++20
+main.py
+--unwind 4
 ^VERIFICATION SUCCESSFUL$
