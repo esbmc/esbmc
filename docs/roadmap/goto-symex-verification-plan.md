@@ -819,6 +819,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R82** | **High (false FAILED, default configuration)** — R61's residual, §15 M9 (R82); **FIXED**, same entry | **A pointer to a variable-length array scaled by a free size.** `rename_type` renamed a symbolic array size only on an expression's own array type and its first subtype, and only when the size was a bare symbol. A pointer's subtype was never renamed, so `p = a + 1` with `int (*p)[m]` scaled by `m` as an unconstrained L0 symbol, and `(*p)[2]` of a correct program was an array-bounds violation. Sizes deeper than the second level, or spelt `m + 1`, were missed the same way. | `goto_symex_statet::rename_type`, `rename_array_sizes` and `fixup_renamed_type`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/vla_pointer_stride{,_fail}` | — | **Fixed**: every non-constant array size is renamed, through array and pointer subtypes. A VLA size reassigned after its declarator is still read at its current value (#8019). |
 | **R81** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R65's open note, §15 M9 (R81); **FIXED**, same entry | **An array placement new allocated.** The frontend routed only the scalar form of `::operator new(size_t, void *)` to `get_placement_new`; `new (buf) T[n]` took the allocating `cpp_new[]` path, so its elements were built in fresh memory and `buf` was left alone. `new (buf) int[2]{1, 2}` made `p == buf` fail and `assert(((int *)buf)[1] != 2)` verify. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `cpp_new_at` and `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_placement_new{,_fail}` | — | **Fixed**: the placement address is recorded on the `cpp_new[]` side effect, evaluated once, and assigned in place of the allocation; the elements' initialisation runs as before. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
+| **R82** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R69's C++14 residual, §15 M9 (R82); **FIXED** for expression statements, same entry | **A temporary in an expression statement outlived it.** `get(C(1));`, `take(C(1));` with a by-value class parameter, `k = get(C(1));` and a `for` increment that builds a temporary ran the destructor at the end of the enclosing block, not at the end of the statement ([class.temporary]/4). `assert(live == 1)` after `get(C(1));` was SUCCESSFUL. Only a declaration's initializer and a discarded `temporary_object` unwound their full-expression's entries. | `convert_block` and `convert_for`, `src/goto-programs/goto_convert.cpp`; the block and `for` arms of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/expression_statement_temporary{,_fail,_legacy}` | — | **Fixed**: an expression statement destroys the temporaries it created when it ends; a declaration, a discarded temporary and an expression statement share `destroy_full_expression_temporaries`. A temporary in an `if`, `while` or `for` condition is still destroyed at block exit. |
 | **R79** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's residual, §15 M9 (R79); **FIXED**, same entry | **A temporary in a `return` statement's full-expression was never destroyed.** `int k() { return C(1).v; }` left the destructor count at 0, so `k(); assert(dtors == 0);` verified and `assert(dtors == 1)` failed, in every `--std` mode; native destroys the temporary before `k` returns. `convert_return` dropped every scope-exit entry pushed while lowering the return value, to keep the return slot of `return A(n);` alive, and took the other temporaries with it. | `goto_convertt::convert_return`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/return_temporary_destroyed{,_fail}` | — | **Fixed** for a non-class return value: its temporaries are unwound after the value is captured and before the locals. A temporary in a class-type return value, or in one branch of `?:`, `&&` or `||`, is still not destroyed (open, §15). |
 | **R61** | **High (false SUCCESSFUL, default configuration; aborts)** — found by the H-C1 slicing census, §15 M9 (R61); **FIXED**, same entry | **A flattened VLA's stride is computed in whatever type its sizes have.** `flatten_array_type` multiplied the level sizes in the second level's type, and a VLA size keeps its own (`int`, `long`), while a constant level over a variably-modified element is an `int`. Where the widths differed (`int a[2][m][3]`, `int a[2][3][m]` with `long m`) the multiplication tripped `assert_arith_2ops_consistency` on a symbolic index, or under `--no-slice` on the declaration alone; where they agreed at 32 bits the stride wrapped silently: `int a[2][3][m]` with `3 * m == 2^32 + 2` makes `a[1][0][0]` alias `a[0][0][2]`, a false SUCCESSFUL. | `flatten_array_type`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/vla_{middle_dim,two_dims_flat,middle_dim_decl,stride_wrap_inner,stride_wrap_middle,long_size_truncation}{,_fail}` | — | **Fixed**: the product is taken in `size_t`. |
 | **R60** | **Medium–High (no verdict, default configuration; an abort)** — found by the H-C1 slicing census, §15 M9 (R60); **FIXED**, same entry | **An array of GCC vectors aborts the SMT layer.** `__attribute__((vector_size(16))) int a[1]; a[0][0] = c;` trips the `mk_store` width assertion on Bitwuzla and Z3: the array's range was the vector's element while each store wrote a whole vector. Behind it, a subscript into a vector read out of an array was lowered as another array dimension (`mk_eq` abort), and a counterexample over such an array aborted in `smt get` and in `get_index_value`. | `get_flattened_array_subtype`, `convert_array_index`, `get_index_value`, `get_by_ast`, `src/solvers/smt/smt_solver.cpp`; `regression/esbmc/array_of_vector_{store,symbolic,vla}{,_fail}`, `array_of_vector_{ops,trace_fail}` | — | **Fixed**: a vector inside an array is the element, not a dimension, and a vector model is read back as a finite array of its elements. `--array-flattener` and Boolector residuals in §15. |
@@ -9795,6 +9796,49 @@ Not fixed, and unchanged: a size read after it is reassigned is taken at its
 current value, not the one at its declarator (`int (*p)[m] = a; m = 1;
 p[1][0]` is a false SUCCESSFUL on master and here). Open PR #8019 binds the
 size where the declarator is reached.
+
+---
+
+### M9 (R82) — 2026-10-02, the statement that kept its temporaries
+
+R69's C++14 residual named elidable copies that are still converted. Probing
+them natively against ESBMC found a defect under the default C++17 mode first:
+`take(C(1));`, where `take` has a by-value class parameter, left the
+temporary alive past the statement. The destructor call was there, but at the
+end of the block. Any expression statement did the same: `get(C(1));` for a
+`const C &` parameter, `k = get(C(1));`, `k += get(C(1));`, a comma operand,
+and a `for` increment. In the loop the temporary was built once per iteration
+and destroyed once. `assert(live == 1)` after `get(C(1));` was SUCCESSFUL on
+master; natively it aborts. A bare `C(1);` and `int k = get(C(1));` were
+already right: a discarded `temporary_object` and a declaration's initializer
+were the only places that emitted the entries pushed while lowering their
+expression ([class.temporary]/4, #6075, #6076).
+
+**Fixed** by doing the same after each expression statement of a block and
+after a `for` increment, in `convert_block` and `convert_for` and in the block
+and `for` arms of the irep2-native `convert_native_rec`, the default path. It
+is not done in `convert_expression` itself: `cpp_new_initializer` converts the
+initializer of `new B()` as an internal expression statement, and its
+temporary is copied bitwise into the new object, so its entry is dropped on
+purpose. The first version unwound there, destroyed that temporary, and broke
+eleven `delete` and destructor tests. The three sites share
+`destroy_full_expression_temporaries`, which keeps the old rule that entries
+with no destructor call (the DEADs of C temporaries) stay at block scope, so C
+is unchanged. `expression_statement_temporary{,_fail}` change verdict against
+master under Bitwuzla and Z3, and fail with the native arms reverted;
+`expression_statement_temporary_legacy` runs under `--no-irep2-native-body`
+and fails with the `convert_block` and `convert_for` calls reverted.
+
+Not fixed: a temporary in an `if`, `while` or `for` condition is still
+destroyed at block exit (`if (get(C(1))) ...` followed by `assert(live == 0)`
+is a false FAILED). Each successor of the condition's branch needs the
+destructor, which is a change to `convert_ifthenelse` and the loop lowerings.
+Also measured, and wrong in C++17 too, so not elision: `C a[2] = {C(1), C(2)}`
+runs four destructors, likely the helper-copy mechanism
+`aggregate_init_temp_double_destroy` pins as a KNOWNBUG; `catch (C c)` after
+`throw C(1)` runs one constructor and one destructor where the native program
+runs two of each. In C++14, `C c = b ? C(1) : C(2);` and `C c = C(C(1));` run
+a surplus copy and destructor each, as R69 left them.
 
 ---
 

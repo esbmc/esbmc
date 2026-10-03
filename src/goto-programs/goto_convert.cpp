@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <map>
 #include <goto-programs/destructor.h>
@@ -457,7 +458,10 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
     }
 
     const codet &code_it = to_code(it);
-    convert(code_it, dest);
+    if (code_it.get_statement() == "expression")
+      convert_full_expression(code_it, dest);
+    else
+      convert(code_it, dest);
   }
 
   // see if we need to do any destructors -- may have been processed
@@ -557,6 +561,15 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
       copy(tmp, OTHER, dest);
     }
   }
+}
+
+void goto_convertt::convert_full_expression(
+  const codet &code,
+  goto_programt &dest)
+{
+  const std::size_t stack_size = targets.destructor_stack.size();
+  convert(code, dest);
+  destroy_full_expression_temporaries(stack_size, code.location(), dest);
 }
 
 bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
@@ -837,24 +850,8 @@ void goto_convertt::convert_decl_initializer(
     // destructor-free tail (plain DEADs of C-style temps) keeps
     // block-level scope, so both retain the old shape.
     if (!is_lvalue_or_rvalue_reference(s.get_type()))
-    {
-      bool have_destructor = false;
-      for (std::size_t i = stack_size; i < targets.destructor_stack.size(); i++)
-        if (targets.destructor_stack[i].get_statement() == "function_call")
-        {
-          have_destructor = true;
-          break;
-        }
-
-      if (have_destructor)
-        while (targets.destructor_stack.size() > stack_size)
-        {
-          codet d_code = targets.destructor_stack.back();
-          targets.destructor_stack.pop_back();
-          d_code.location() = new_code.location();
-          convert(d_code, dest);
-        }
-    }
+      destroy_full_expression_temporaries(
+        stack_size, new_code.location(), dest);
   }
 }
 
@@ -1470,7 +1467,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   else
   {
     exprt tmp_B = code.op2();
-    convert(to_code(code.op2()), tmp_x);
+    convert_full_expression(to_code(code.op2()), tmp_x);
   }
 
   // optimize the v label
@@ -2321,6 +2318,24 @@ void goto_convertt::generate_conditional_branch(
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 {
   return tmp_symbol.new_symbol(context, type, "tmp$");
+}
+
+bool goto_convertt::destroy_full_expression_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  const destructor_stackt &stack = targets.destructor_stack;
+  if (
+    std::none_of(
+      stack.begin() + stack_size, stack.end(), [](const codet &entry) {
+        return entry.get_statement() == "function_call";
+      }))
+    return false;
+
+  unwind_destructor_stack(location, stack_size, dest);
+  targets.destructor_stack.resize(stack_size);
+  return true;
 }
 
 void goto_convertt::unwind_destructor_stack(
