@@ -1410,6 +1410,59 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return converter_.get_string_builder().build_runtime_str_conversion_call(
       "__python_float_to_str", double_type(), expr);
 
+  // A tagged scalar's own type_id, not `t`, decides which OM conversion
+  // applies. Only int vs str is modelled here (bool/float tagged values
+  // fall through to the nondet fallback below) since the test suite
+  // exercises isinstance()-guarded int/str joins.
+  if (type_handler_.is_tagged_scalar_type(t))
+  {
+    const locationt &location = expr.location();
+    const typet char_ptr_type = gen_pointer_type(char_type());
+    symbolt &result_sym = converter_.create_tmp_symbol(
+      location, "$tagged_to_str$", char_ptr_type, exprt());
+    code_declt result_decl(build_symbol(result_sym));
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    exprt value_ptr = build_member(expr, "value", pointer_typet(empty_typet()));
+    exprt tagged_type_id = build_member(expr, "type_id", size_type());
+    exprt str_id =
+      type_handler_.tagged_scalar_type_id(type_handler_.get_typet("str", 0));
+    exprt int_id = type_handler_.tagged_scalar_type_id(long_long_int_type());
+
+    code_assignt str_assign(
+      build_symbol(result_sym), build_typecast(value_ptr, char_ptr_type));
+    str_assign.location() = location;
+
+    exprt as_int = build_dereference(
+      build_typecast(value_ptr, pointer_typet(long_long_int_type())),
+      long_long_int_type());
+    code_assignt int_assign(
+      build_symbol(result_sym),
+      converter_.get_string_builder().build_runtime_str_conversion_call(
+        "__python_int_to_str", long_long_int_type(), as_int));
+    int_assign.location() = location;
+
+    code_assignt fallback_assign(
+      build_symbol(result_sym), build_nondet_string_fallback(location));
+    fallback_assign.location() = location;
+
+    code_ifthenelset inner;
+    inner.cond() = build_equal(tagged_type_id, int_id);
+    inner.location() = location;
+    inner.then_case() = int_assign;
+    inner.else_case() = fallback_assign;
+
+    code_ifthenelset outer;
+    outer.cond() = build_equal(tagged_type_id, str_id);
+    outer.location() = location;
+    outer.then_case() = str_assign;
+    outer.else_case() = inner;
+
+    converter_.add_instruction(outer);
+    return build_symbol(result_sym);
+  }
+
   // Anything else (struct, array of non-char, etc.) is currently unsupported.
   std::string placeholder = "<expr>";
   typet string_type =
