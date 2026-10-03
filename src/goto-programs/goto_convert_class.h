@@ -137,6 +137,12 @@ protected:
 
   static void replace_new_object(const exprt &object, exprt &dest);
 
+  void cpp_new_at(
+    const exprt &lhs,
+    const exprt &placement,
+    const locationt &location,
+    goto_programt &dest);
+
   void cpp_new_initializer(
     const exprt &lhs,
     const exprt &rhs,

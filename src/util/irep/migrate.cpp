@@ -1325,6 +1325,16 @@ migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
     migrate_expr(filler, f);
     args.push_back(f);
   }
+
+  // An array placement new's address rides in arguments[4].
+  const exprt &placement = static_cast<const exprt &>(expr.find("placement"));
+  if (placement.is_not_nil())
+  {
+    args.resize(4);
+    expr2tc place;
+    migrate_expr(placement, place);
+    args.push_back(place);
+  }
 }
 
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
@@ -3614,7 +3624,8 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
   // cpp_new has no operands in source form (size lives in the size field,
   // handled below; the initializer, if any, is carried in arguments[0], a
   // replaced operator new in arguments[1], the value-initialisation marker in
-  // arguments[2], and the braced list's filler in arguments[3]).
+  // arguments[2], the braced list's filler in arguments[3], and an array
+  // placement new's address in arguments[4]).
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
@@ -3623,6 +3634,8 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
     theexpr.set("zero_initialized", true);
   if (ref2.arguments.size() > 3)
     theexpr.add("array_filler") = migrate_expr_back(ref2.arguments[3]);
+  if (ref2.arguments.size() > 4)
+    theexpr.add("placement") = migrate_expr_back(ref2.arguments[4]);
 }
 
 static void back_sideeffect_operands(const sideeffect2t &ref2, exprt &theexpr)

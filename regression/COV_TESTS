@@ -2134,6 +2134,8 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
+regression/esbmc-cpp/cpp/array_placement_new
+regression/esbmc-cpp/cpp/array_placement_new_fail
 regression/esbmc/github_8103
 regression/esbmc/github_8103_fail
 regression/esbmc/github_8103_symex
