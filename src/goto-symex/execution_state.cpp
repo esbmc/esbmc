@@ -1132,13 +1132,16 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-  // Mutex / condition-var / rwlock / barrier / spinlock accesses should
-  // contribute to MPOR dependency tracking (so lock/unlock pairs create
-  // dependency chains between threads), but must not by themselves force
-  // a context switch point here — they already drive scheduling through
-  // the pthread library's explicit switch mechanisms, and treating every
-  // lock access as a cswitch point blows up the DFS width.
-  auto is_pthread_sync_type = [](const type2tc &t) {
+  // Accesses to pthread synchronisation objects (mutex, condition variable,
+  // rwlock, barrier, spinlock) and to the join variables read by
+  // pthread_join contribute to MPOR dependency tracking, but must not by
+  // themselves force a context switch point here: the pthread operational
+  // model already places a switch point before these operations (a yield
+  // before its atomic blocks, or the forced switch at thread spawn), and
+  // treating every such access as a cswitch point blows up the DFS width.
+  auto is_pthread_sync_type = [](type2tc t) {
+    while (is_array_type(t))
+      t = to_array_type(t).subtype;
     if (is_nil_type(t))
       return false;
     if (is_struct_type(t))
@@ -1161,9 +1164,17 @@ bool execution_statet::has_cswitch_point_occured() const
     return false;
   };
 
+  auto is_pthread_join_var = [](const expr2tc &e) {
+    if (!is_symbol2t(e))
+      return false;
+    const irep_idt &n = to_symbol2t(e).thename;
+    return n == "c:@__ESBMC_pthread_thread_ended" ||
+           n == "c:@__ESBMC_pthread_end_values";
+  };
+
   auto any_non_sync = [&](const std::set<expr2tc> &s) {
     for (const auto &e : s)
-      if (!is_pthread_sync_type(e->type))
+      if (!is_pthread_sync_type(e->type) && !is_pthread_join_var(e))
         return true;
     return false;
   };
