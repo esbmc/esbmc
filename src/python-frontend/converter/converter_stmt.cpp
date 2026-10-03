@@ -608,12 +608,12 @@ bool is_local_to_other_function(
   const std::string &id,
   const std::string &current_function)
 {
-  const std::size_t marker = id.rfind("@F@");
+  // The function path of a nested function's local is outer@F@inner.
+  const std::size_t marker = id.find("@F@");
   if (marker == std::string::npos)
     return false;
-  const std::size_t name_begin = marker + 3;
-  const std::size_t name_end = id.find('@', name_begin);
-  return id.substr(name_begin, name_end - name_begin) != current_function;
+  const std::size_t path_begin = marker + 3;
+  return id.substr(path_begin, id.rfind('@') - path_begin) != current_function;
 }
 
 bool should_detach_numpy_pointer_views_for_assignment(
