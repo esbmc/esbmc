@@ -26,7 +26,8 @@ int take(C c)
 }
 int main()
 {
-  take(C::make(3));
+  int r = take(C::make(3));
+  assert(r == 3);
   assert(dtors == 2);
   return 0;
 }

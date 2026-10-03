@@ -23,6 +23,17 @@ struct C
   {
     return v + o.v;
   }
+  int operator*(C o)
+  {
+    return v * o.v;
+  }
+};
+struct D
+{
+  int w;
+  D(C c) : w(c.v)
+  {
+  }
 };
 int take(C c)
 {
@@ -33,9 +44,15 @@ int main()
   int r = take(C::make(3));
   assert(r == 3);
   assert(dtors == 1 && copies == 0);
-  C a(1);
-  r = a.add(C::make(2));
-  assert(r == 3);
+  C a(2);
+  int s = a.add(C::make(2));
+  assert(s == 4);
   assert(dtors == 2 && copies == 0);
+  int t = a * C::make(5);
+  assert(t == 10);
+  assert(dtors == 3 && copies == 0);
+  int w = D(C::make(6)).w;
+  assert(w == 6);
+  assert(dtors == 4 && copies == 0);
   return 0;
 }
