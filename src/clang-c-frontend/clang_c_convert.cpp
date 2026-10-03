@@ -410,6 +410,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   struct_union_typet t(c_tag);
   t.tag(name);
 
+  /* Struct not complete yet. Still need methods. */
+  t.incomplete(true); 
+
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
@@ -450,10 +453,12 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   {
     typet t = sym->get_type();
     if (get_struct_union_class_methods_decls(*rd_def, t))
-    {
-      sym->set_type(std::move(t));
-      return true;
-    }
+      {
+        sym->set_type(std::move(t));
+        return true;
+      }
+    // Struct is complete
+    t.remove(irept::a_incomplete);
     sym->set_type(std::move(t));
   }
 
