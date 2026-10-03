@@ -995,13 +995,6 @@ private:
     const exprt &stride,
     const nlohmann::json &slice_node);
 
-  /**
-   * @brief a[lo:hi:st] with a non-literal step st. Assigned to a bare name it
-   * is a pointer view whose offset, length and stride are runtime values
-   * computed with CPython's slice rules (a step of zero raises ValueError);
-   * anywhere else it is an independent copy. Throws TypeError unless a is a
-   * tracked 1-D numpy array and the target is not already a registered view.
-   */
   struct symbolic_slice_params
   {
     exprt offset;
@@ -1014,6 +1007,13 @@ private:
   symbolic_slice_params
   emit_symbolic_slice_params(const nlohmann::json &slice_node, long long n);
 
+  /**
+   * @brief a[lo:hi:st] with a non-literal step st. Assigned to a bare name it
+   * is a pointer view whose offset, length and stride are runtime values
+   * computed with CPython's slice rules (a step of zero raises ValueError);
+   * anywhere else it is an independent copy. Throws TypeError unless a is a
+   * tracked 1-D numpy array and the target is not already a registered view.
+   */
   exprt build_symbolic_step_slice(
     const exprt &array,
     const nlohmann::json &slice_node);

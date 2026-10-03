@@ -743,11 +743,7 @@ std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
   return std::nullopt;
 }
 
-// Tries both tracked-shape sources for a `.shape`/`.ndim`/`.size` attribute
-// access: a pointer-view symbol, then a numpy array parameter. One combined
-// check so get_expr's own Attribute dispatch needs a single `if` for both,
-// instead of growing its own decision count by one per source.
-bool is_numpy_shape_subscript_node(const nlohmann::json &element)
+static bool is_numpy_shape_subscript_node(const nlohmann::json &element)
 {
   if (
     !element.is_object() || element.value("_type", "") != "Subscript" ||
@@ -766,7 +762,7 @@ bool is_numpy_shape_subscript_node(const nlohmann::json &element)
          slice.contains("value") && slice["value"].is_number_integer();
 }
 
-std::optional<exprt> numpy_shape_dim_expr(
+static std::optional<exprt> numpy_shape_dim_expr(
   const std::vector<std::size_t> &shape,
   const nlohmann::json &slice)
 {
@@ -890,6 +886,11 @@ exprt python_converter::numpy_shape_attr_expr(
   return from_integer(total, int_type());
 }
 
+// Tries the tracked-shape sources for a `.shape`/`.ndim`/`.size` attribute
+// access: a pointer-view symbol, a numpy array parameter, then the shape of
+// the indexed array a name was declared from. One combined check so
+// get_expr's own Attribute dispatch needs a single `if` for all of them,
+// instead of growing its own decision count by one per source.
 std::optional<exprt> python_converter::try_get_numpy_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)

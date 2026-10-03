@@ -123,6 +123,12 @@ private:
   std::optional<exprt> handle_ravel_pointer_view_attempt();
   exprt handle_axis_permutation_view_call(const std::string &function);
 
+  exprt return_retyped_or_temp(exprt value);
+
+  exprt build_default_axis_transpose_expr(
+    const exprt &source_expr,
+    const std::string &error_message);
+
   // numpy.transpose()'s parameter-shaped fast path: when `t` (the single-
   // pointer-unwrapped type of `arg`) isn't a fully nested 2-D array -- most
   // commonly a 2-D parameter, whose C-ABI row-pointer decay
@@ -133,12 +139,6 @@ private:
   // non-2-D, or not a tracked array at all), leaving the caller's own
   // fully-nested-array handling (e.g. a local array) unchanged. Split out of
   // create_expr_from_call to keep that function's own decision count down.
-  exprt return_retyped_or_temp(exprt value);
-
-  exprt build_default_axis_transpose_expr(
-    const exprt &source_expr,
-    const std::string &error_message);
-
   std::optional<exprt>
   try_transpose_decayed_2d_param(const nlohmann::json &arg, typet t);
 
