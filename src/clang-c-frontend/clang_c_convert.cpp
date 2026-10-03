@@ -638,6 +638,71 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   context.move_symbol_to_context(guard);
 }
 
+bool clang_c_convertert::snapshot_vla_sizes(
+  const clang::Decl &decl,
+  codet &dest)
+{
+  clang::QualType type;
+  if (const auto *vd = llvm::dyn_cast<clang::VarDecl>(&decl))
+    type = vd->getType();
+  else if (const auto *td = llvm::dyn_cast<clang::TypedefNameDecl>(&decl))
+    type = td->getUnderlyingType();
+  if (!current_block || type.isNull())
+    return false;
+
+  locationt loc;
+  get_location_from_decl(decl, loc);
+  const clang::Type *t = type.getTypePtr();
+  while (t)
+  {
+    t = t->getUnqualifiedDesugaredType();
+    if (const auto *ptr = llvm::dyn_cast<clang::PointerType>(t))
+    {
+      t = ptr->getPointeeType().getTypePtr();
+      continue;
+    }
+    const auto *arr = llvm::dyn_cast<clang::ArrayType>(t);
+    if (!arr)
+      break;
+    t = arr->getElementType().getTypePtr();
+
+    const auto *vla = llvm::dyn_cast<clang::VariableArrayType>(arr);
+    const clang::Expr *size = vla ? vla->getSizeExpr() : nullptr;
+    if (!size || vla_size_snapshots.count(size))
+      continue;
+
+    exprt value;
+    if (get_expr(*size, value))
+      return true;
+
+    const std::string path = loc.file().as_string();
+    symbolt &sym = anon_symbol.new_symbol(
+      context,
+      value.type(),
+      path + ":" + loc.get_line().as_string() + "$vla-size$");
+    get_default_symbol(
+      sym, get_modulename_from_path(path), value.type(), sym.name, sym.id, loc);
+    sym.file_local = true;
+    sym.lvalue = true;
+
+    code_declt decl(symbol_expr(sym));
+    decl.copy_to_operands(value);
+    decl.location() = loc;
+    dest.move_to_operands(decl);
+    vla_size_snapshots.emplace(size, symbol_expr(sym));
+  }
+  return false;
+}
+
+bool clang_c_convertert::get_vla_size(const clang::Expr &size, exprt &new_expr)
+{
+  auto snap = vla_size_snapshots.find(&size);
+  if (snap == vla_size_snapshots.end())
+    return get_expr(size, new_expr);
+  new_expr = snap->second;
+  return false;
+}
+
 const clang::Expr &
 clang_c_convertert::elided_copy_source(const clang::Expr &init)
 {
@@ -1240,7 +1305,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (auto const *s = arr.getSizeExpr())
     {
       exprt size_expr;
-      if (get_expr(*s, size_expr))
+      if (get_vla_size(*s, size_expr))
         return true;
 
       typet subtype;
@@ -3301,7 +3366,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (auto it : declgroup)
     {
       exprt single_decl;
-      if (get_decl(*it, single_decl))
+      if (snapshot_vla_sizes(*it, decls) || get_decl(*it, single_decl))
         return true;
 
       decls.operands().push_back(single_decl);
