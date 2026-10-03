@@ -225,6 +225,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  dynamic_object_sizes = sym.dynamic_object_sizes;
   uf_applications = sym.uf_applications;
   va_started = sym.va_started;
   interval_domain_state = sym.interval_domain_state;
