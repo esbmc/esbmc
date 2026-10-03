@@ -376,6 +376,30 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 }
 
 template <class T>
+T interval_domaint::get_interval_from_typecast(const typecast2t &cast, T result)
+  const
+{
+  // Special case: boolean
+  if (is_bool_type(cast.type))
+  {
+    tvt truth = eval_boolean_expression(cast.from, *this);
+    result.set_lower(0);
+    result.set_upper(1);
+
+    if (truth.is_true())
+      result.set_lower(1);
+
+    if (truth.is_false())
+      result.set_upper(0);
+
+    return result;
+  }
+  if (!T::is_representable(cast.from->type))
+    return result;
+  return T::cast(get_interval<T>(cast.from), cast.type);
+}
+
+template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
   T result = get_top_interval_from_expr<T>(e);
@@ -507,26 +531,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   }
 
   case expr2t::typecast_id:
-  {
-    // Special case: boolean
-    if (is_bool_type(to_typecast2t(e).type))
-    {
-      tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
-      result.set_lower(0);
-      result.set_upper(1);
-
-      if (truth.is_true())
-        result.set_lower(1);
-
-      if (truth.is_false())
-        result.set_upper(0);
-
-      break;
-    }
-    auto inner = get_interval<T>(to_typecast2t(e).from);
-    result = T::cast(inner, to_typecast2t(e).type);
+    result = get_interval_from_typecast<T>(to_typecast2t(e), result);
     break;
-  }
 
   case expr2t::add_id:
   case expr2t::sub_id:
@@ -603,6 +609,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   {
     const expr2tc &lhs = *e->get_sub_expr(0);
     const expr2tc &rhs = *e->get_sub_expr(1);
+    if (!T::is_representable(lhs->type) || !T::is_representable(rhs->type))
+      break;
 
     auto lhs_i = get_interval<T>(lhs);
     auto rhs_i = get_interval<T>(rhs);
