@@ -244,6 +244,81 @@ TEST_CASE("Interval Analysis - Base Unsigned", "[ai][interval-analysis]")
   T.run_configs();
 }
 
+TEST_CASE(
+  "Interval Analysis - Unsigned negation wraps",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int one = 1;\n"
+    "unsigned int a = -one;\n"
+    "int b;\n"
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", (long)pow(2, 32) - 1, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation of a range wraps",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint() ? 1 : 5;\n"
+    "unsigned int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 1, true});
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 5, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation of a range containing zero",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint() ? 0 : 5;\n"
+    "unsigned int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", 0, true});
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 5, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Negation of a half-bounded range",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = nondet_int();\n"
+    "if (a < 0) return 0;\n"
+    "int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["5"].push_back({"@F@main@b", -2147483647, true});
+
+  T.run_configs();
+}
+
 TEST_CASE("Interval Analysis - Ternary", "[ai][interval-analysis]")
 {
   // Setup global options here
