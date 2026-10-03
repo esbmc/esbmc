@@ -4892,8 +4892,10 @@ static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
   {
   case clang::AtomicExpr::AO__c11_atomic_load:
   case clang::AtomicExpr::AO__atomic_load_n:
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
   case clang::AtomicExpr::AO__atomic_clear:
+#endif
     return false;
   default:
     return true;
@@ -5041,6 +5043,7 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
     name = "__atomic_test_and_set";
     break;
@@ -5048,6 +5051,7 @@ bool clang_c_convertert::get_atomic_expr(
   case clang::AtomicExpr::AO__atomic_clear:
     name = "__atomic_clear";
     break;
+#endif
 
   default:
     log_error("Unknown Atomic expression");

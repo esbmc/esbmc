@@ -92,6 +92,16 @@ static bool is_atomic_flag_builtin(const irep_idt &identifier)
     identifier, {"c:@F@__atomic_test_and_set", "c:@F@__atomic_clear"});
 }
 
+/* The byte both of them act on. Before clang 20 their pointer parameter is
+ * `volatile void *`, and a void pointer is valid with any clang. */
+static exprt atomic_flag_byte(const code_typet::argumentt &arg)
+{
+  exprt ptr = symbol_exprt(arg.cmt_identifier(), arg.type());
+  if (to_pointer_type(ptr.type()).subtype().id() == "empty")
+    ptr = typecast_exprt(ptr, pointer_typet(unsigned_char_type()));
+  return dereference_exprt(ptr, ptr.type());
+}
+
 /* These two families differ from every other name handled here: they take their
  * result pointer last rather than first, are pure computation rather than
  * shared-memory access, and their parameters do not all share one type. */
@@ -770,10 +780,8 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if (is_atomic_flag_builtin(identifier))
   {
-    code_typet::argumentt arg0 = code_type.arguments()[0];
-    const typet &byte_type = to_pointer_type(arg0.type()).subtype();
-    dereference_exprt byte(
-      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+    const exprt byte = atomic_flag_byte(code_type.arguments()[0]);
+    const typet &byte_type = byte.type();
 
     const bool test_and_set =
       has_prefix(identifier.as_string(), "c:@F@__atomic_test_and_set");
