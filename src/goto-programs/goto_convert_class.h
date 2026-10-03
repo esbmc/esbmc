@@ -125,6 +125,8 @@ protected:
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_delete(exprt &expr, goto_programt &dest);
+  void remove_operand_sideeffects(exprt &expr, goto_programt &dest);
+  void drop_destructor(const symbol_exprt &object, std::size_t from);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,
