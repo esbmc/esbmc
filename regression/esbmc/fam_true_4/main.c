@@ -8,6 +8,6 @@ typedef struct {
 main() {
   FAM *ptr = (FAM*) malloc(sizeof(FAM) + sizeof(int)*3);
   FAM deref = *ptr;
-  deref.arr[2] = 42; // out-of-bounds
+  deref.v = ptr->arr[2]; // a copy holds no flexible array elements, the heap object does
   free(ptr);
 }
