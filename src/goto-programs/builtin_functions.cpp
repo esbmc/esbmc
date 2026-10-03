@@ -3,9 +3,12 @@
 #include <ac_config.h>
 
 #include <cassert>
+#include <functional>
+#include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
 #include <util/arith/arith_tools.h>
+#include <util/base/filesystem.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -725,6 +728,7 @@ void goto_convertt::cpp_new_store_element(
   const exprt &offset,
   const exprt &init,
   const locationt &location,
+  const exprt &built,
   code_blockt &out)
 {
   const typet &type = ns.follow(init.type());
@@ -738,10 +742,14 @@ void goto_convertt::cpp_new_store_element(
       exprt at = plus_exprt(offset, from_integer(stride * i, size_type()));
       at.type() = size_type();
       simplify_via_irep2(at);
-      cpp_new_store_element(base, at, list_element(init, i), location, out);
+      cpp_new_store_element(
+        base, at, list_element(init, i), location, built, out);
     }
     return;
   }
+
+  if (built.is_not_nil())
+    out.copy_to_operands(code_assignt(built, offset));
 
   plus_exprt element_addr(base, offset);
   element_addr.type() = base.type();
@@ -768,13 +776,15 @@ void goto_convertt::cpp_new_store_element(
  * frontend attached one ([dcl.init.aggr]/5). A nested list is stored leaf by
  * leaf through a pointer to the leaf type, since symex rejects a dereference
  * that yields an array. The initializer is the list decayed to
- * `&list[0]...[0]`; false for any other initializer. */
+ * `&list[0]...[0]`; false for any other initializer. A non-nil `built` is set
+ * to each leaf's index before it is initialised. */
 bool goto_convertt::cpp_new_init_list(
   const exprt &lhs,
   const exprt &rhs,
   const exprt &decayed,
   const exprt &elem_count,
-  goto_programt &dest)
+  const exprt &built,
+  code_blockt &out)
 {
   if (!decayed.is_address_of())
     return false;
@@ -800,9 +810,8 @@ bool goto_convertt::cpp_new_init_list(
     base = typecast_exprt(lhs, pointer_typet(leaf));
   const locationt &location = rhs.find_location();
 
-  code_blockt block;
   cpp_new_store_element(
-    base, from_integer(0, size_type()), *init, location, block);
+    base, from_integer(0, size_type()), *init, location, built, out);
 
   symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
   exprt at = index;
@@ -812,7 +821,7 @@ bool goto_convertt::cpp_new_init_list(
     at.type() = size_type();
   }
   code_blockt body;
-  cpp_new_store_element(base, at, filler, location, body);
+  cpp_new_store_element(base, at, filler, location, built, body);
 
   plus_exprt next(index, from_integer(1, size_type()));
   next.type() = size_type();
@@ -824,14 +833,89 @@ bool goto_convertt::cpp_new_init_list(
   tail.iter() = code_assignt(index, next);
   tail.body() = body;
   tail.location() = location;
-  block.move_to_operands(tail);
+  out.move_to_operands(tail);
+  return true;
+}
 
+bool goto_convertt::user_code_throws()
+{
+  if (user_code_throws_cache)
+    return *user_code_throws_cache;
+
+  std::function<bool(const irept &)> throws = [&](const irept &irep) {
+    const irep_idt &statement = irep.statement();
+    if (statement == "cpp-throw" || statement == "cpp-catch")
+      return true;
+    for (const irept &sub : irep.get_sub())
+      if (throws(sub))
+        return true;
+    for (const auto &named : irep.get_named_sub())
+      if (throws(named.second))
+        return true;
+    return false;
+  };
+
+  bool result = false;
+  context.foreach_operand([&](const symbolt &s) {
+    if (
+      !result && s.get_type().is_code() &&
+      !file_operations::is_bundled_source(s.location.file().as_string()))
+      result = throws(s.get_value());
+  });
+  user_code_throws_cache = result;
+  return result;
+}
+
+/* Convert the code constructing the elements of a `new T[n]`. When an element's
+ * initialization exits by an exception, the elements already constructed are
+ * destroyed in reverse order ([except.ctor]/3, [expr.new]/26): `construction`
+ * then runs in a try block whose catch-all destroys the `built` leaves before
+ * `base + built`, newest first, and rethrows. */
+void goto_convertt::convert_cpp_new_elements(
+  const exprt &base,
+  const exprt &built,
+  const codet &construction,
+  goto_programt &dest)
+{
   // A class-typed element may lower to a temporary copied into place, which
-  // must not get its own scope-exit destructor, as for the element loop below.
-  std::size_t stack_size = targets.destructor_stack.size();
+  // must not get its own scope-exit destructor.
+  const std::size_t stack_size = targets.destructor_stack.size();
+  code_function_callt destructor;
+  if (built.is_nil() || !get_destructor(ns, base.type().subtype(), destructor))
+  {
+    convert(construction, dest);
+    targets.destructor_stack.resize(stack_size);
+    return;
+  }
+
+  const locationt &location = construction.location();
+  exprt prev("-", size_type());
+  prev.copy_to_operands(built, from_integer(1, size_type()));
+  plus_exprt element_addr(base, built);
+  element_addr.type() = base.type();
+  destructor.arguments().push_back(element_addr);
+
+  code_blockt destroy;
+  destroy.copy_to_operands(code_assignt(built, prev), destructor);
+  code_whilet unwind;
+  unwind.cond() =
+    binary_relation_exprt(built, ">", from_integer(0, size_type()));
+  unwind.body() = destroy;
+
+  code_blockt handler;
+  handler.set("exception_id", "ellipsis");
+  handler.copy_to_operands(unwind, codet("cpp-throw"));
+
+  codet guarded("cpp-catch");
+  guarded.location() = location;
+  guarded.copy_to_operands(construction, handler);
+
+  code_blockt block;
+  block.location() = location;
+  block.copy_to_operands(
+    code_assignt(built, from_integer(0, size_type())), guarded);
   convert(block, dest);
   targets.destructor_stack.resize(stack_size);
-  return true;
 }
 
 void goto_convertt::cpp_new_initializer(
@@ -915,13 +999,6 @@ void goto_convertt::cpp_new_initializer(
       //
       //   for (size_type i = 0; i < n; ++i)
       //     <element constructor, with `this` = lhs + i>
-      if (cpp_new_init_list(lhs, rhs, initializer.op0(), elem_count, dest))
-        return;
-
-      exprt *ctor = find_cpp_new_constructor(initializer);
-      if (ctor == nullptr)
-        return;
-
       // do_cpp_new already evaluated the count for the allocation; reusing it
       // is what keeps `new T[f()]` from calling f() a second time here.
       exprt count = elem_count;
@@ -941,6 +1018,24 @@ void goto_convertt::cpp_new_initializer(
         base = typecast_exprt(lhs, pointer_typet(leaf));
       }
 
+      exprt built = nil_exprt();
+      if (user_code_throws())
+        built = symbol_exprt(new_tmp_symbol(size_type()).id, size_type());
+
+      code_blockt construction;
+      construction.location() = rhs.find_location();
+      if (
+        cpp_new_init_list(
+          lhs, rhs, initializer.op0(), elem_count, built, construction))
+      {
+        convert_cpp_new_elements(base, built, construction, dest);
+        return;
+      }
+
+      exprt *ctor = find_cpp_new_constructor(initializer);
+      if (ctor == nullptr)
+        return;
+
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
 
       // The element address is plain pointer arithmetic on lhs. Building it as
@@ -958,8 +1053,10 @@ void goto_convertt::cpp_new_initializer(
       // at lhs + i, so each iteration constructs its own element in place.
       exprt call = *ctor;
       call.op1().operands().at(0) = element_addr;
-      code_expressiont body;
-      body.expression() = call;
+      code_blockt body;
+      if (built.is_not_nil())
+        body.copy_to_operands(code_assignt(built, index));
+      body.copy_to_operands(code_expressiont(call));
       body.location() = rhs.find_location();
 
       plus_exprt next(index, from_integer(1, size_type()));
@@ -971,13 +1068,7 @@ void goto_convertt::cpp_new_initializer(
       loop.iter() = code_assignt(index, next);
       loop.body() = body;
       loop.location() = rhs.find_location();
-
-      // Same reasoning as the scalar arm: a class-typed initializer may lower
-      // to a stack temporary copied into the element, and that slot must not
-      // get its own scope-exit destructor.
-      std::size_t stack_size = targets.destructor_stack.size();
-      convert(loop, dest);
-      targets.destructor_stack.resize(stack_size);
+      convert_cpp_new_elements(base, built, loop, dest);
     }
     else if (rhs.statement() == "cpp_new")
     {
