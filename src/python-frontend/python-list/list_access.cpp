@@ -3276,6 +3276,45 @@ void python_list::copy_dict_view_elem_types(
   }
 }
 
+// A numpy array parameter (decayed to a pointer) is sliced through its
+// tracked shape, like a local array.
+std::optional<exprt> python_list::try_build_numpy_param_slice_view(
+  const exprt &array,
+  const typet &resolved_array_type,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !array.is_symbol() || !resolved_array_type.is_pointer() ||
+    resolved_array_type.subtype() == char_type())
+    return std::nullopt;
+  const std::string id = array.identifier().as_string();
+  if (
+    converter_.numpy_param_shapes_.count(id) == 0 ||
+    converter_.numpy_pointer_view_info_.count(id) != 0)
+    return std::nullopt;
+  return try_build_strided_basic_view(
+    array, {slice_node}, /*allow_plain_array=*/true);
+}
+
+// A run-time step, or run-time bounds on an array bound to a name, is
+// lowered with run-time offset/extent/stride temporaries.
+bool python_list::is_runtime_numpy_slice(
+  const exprt &array,
+  const typet &elem_type,
+  const nlohmann::json &slice_node) const
+{
+  if (elem_type == char_type())
+    return false;
+  if (!get_slice_step_info(slice_node).literal)
+    return true;
+  const bool bound_to_name =
+    converter_.current_lhs && converter_.current_lhs->is_symbol() &&
+    array.is_symbol() &&
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) != 0;
+  return bound_to_name && (has_nonliteral_slice_bound(slice_node) ||
+                           converter_.ns.follow(elem_type).is_array());
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -3303,18 +3342,10 @@ exprt python_list::handle_range_slice(
   emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
   bool negative_step = (step_val < 0);
 
-  // A numpy array parameter (decayed to a pointer) is sliced through its
-  // tracked shape, like a local array.
   if (
-    array.is_symbol() && resolved_array_type.is_pointer() &&
-    resolved_array_type.subtype() != char_type() &&
-    converter_.numpy_param_shapes_.count(array.identifier().as_string()) != 0 &&
-    converter_.numpy_pointer_view_info_.count(array.identifier().as_string()) ==
-      0)
-    if (
-      std::optional<exprt> param_view = try_build_strided_basic_view(
-        array, {slice_node}, /*allow_plain_array=*/true))
-      return *param_view;
+    std::optional<exprt> param_view =
+      try_build_numpy_param_slice_view(array, resolved_array_type, slice_node))
+    return *param_view;
 
   if (
     std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
@@ -3419,18 +3450,7 @@ exprt python_list::handle_range_slice(
                       : array_len;
     }
 
-    // A run-time step, or run-time bounds on an array bound to a name, is
-    // lowered with run-time offset/extent/stride temporaries.
-    const bool bound_to_name =
-      converter_.current_lhs && converter_.current_lhs->is_symbol() &&
-      array.is_symbol() &&
-      converter_.numpy_array_symbols_.count(array.identifier().as_string()) !=
-        0;
-    if (
-      elem_type != char_type() &&
-      (!step_info.literal ||
-       (bound_to_name && (has_nonliteral_slice_bound(slice_node) ||
-                          ns.follow(elem_type).is_array()))))
+    if (is_runtime_numpy_slice(array, elem_type, slice_node))
       return build_symbolic_step_slice(array, slice_node);
 
     // Process slice bounds (handles null, negative indices)

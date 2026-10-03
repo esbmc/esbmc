@@ -286,6 +286,14 @@ public:
   };
 
   std::optional<strided_view_desc> describe_strided_view(const exprt &array);
+  std::optional<exprt> try_build_numpy_param_slice_view(
+    const exprt &array,
+    const typet &resolved_array_type,
+    const nlohmann::json &slice_node);
+  bool is_runtime_numpy_slice(
+    const exprt &array,
+    const typet &elem_type,
+    const nlohmann::json &slice_node) const;
   std::optional<exprt> unnamed_nd_view_placeholder(
     const strided_view_desc &view,
     bool as_view,
