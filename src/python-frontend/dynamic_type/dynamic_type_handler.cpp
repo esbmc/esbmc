@@ -1,5 +1,6 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/dynamic_type/literal_divergence.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -82,7 +83,20 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   std::unordered_map<std::string, int> leaf_count;
   int leaf_total = 0;
 
-  if (!collect_if_node_literal_kinds(if_node, kinds, leaf_count, leaf_total))
+  // Module scope by default, or the current function's body.
+  const nlohmann::json &module_body = converter_.ast()["body"];
+  nlohmann::json func_def;
+  const nlohmann::json *scope_body = &module_body;
+  if (!converter_.current_function_name().empty())
+  {
+    func_def = json_utils::try_find_function(
+      module_body, converter_.current_function_name());
+    if (!func_def.empty() && func_def.contains("body"))
+      scope_body = &func_def["body"];
+  }
+
+  if (!collect_if_node_literal_kinds(
+        if_node, kinds, leaf_count, leaf_total, *scope_body))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
