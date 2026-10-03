@@ -427,6 +427,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "do not not merge gotos when restoring the last paths after a "
      "context-switch"},
     {"no-por", NULL, "do not do partial order reduction"},
+    {"cswitch-skip-readonly-globals",
+     NULL,
+     "skip context switches on globals that are never written anywhere "
+     "in the program (off by default)"},
     {"all-runs",
      NULL,
      "check all interleavings, even if a bug was already found"}}},
