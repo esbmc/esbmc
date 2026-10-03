@@ -1,8 +1,6 @@
-// KNOWNBUG, the named-argument half of aggregate_init_temp_double_destroy: the
-// imbalance is not caused by a temporary in the initialiser. Here the argument
-// is an ordinary named object, and ESBMC still runs 2 constructors and 3
-// destructors where g++ runs 2 and 2, because the member is copied through a
-// helper that is destroyed in addition to the member.
+// The named-argument half of aggregate_init_temp_double_destroy: the member is
+// copy-constructed from a named object, and that copy is the member, so g++
+// runs 2 constructors and 2 destructors.
 #include <cassert>
 
 int c = 0, d = 0;
