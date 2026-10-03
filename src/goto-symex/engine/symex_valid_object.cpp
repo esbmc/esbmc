@@ -20,15 +20,8 @@ static const expr2tc *get_object(const expr2tc &expr)
   return nullptr;
 }
 
-/// The named object \p ptr addresses, resolved through the value set, or nil.
-///
-/// A pointer reaching a check through a parameter or a local variable is a
-/// plain symbol, so the syntactic address_of tests below find no name and the
-/// check falls back on __ESBMC_alloc and DYNAMIC_SIZE. Neither is maintained
-/// for automatic storage, so the solver may pick a live stack object invalid
-/// or size it arbitrarily, and a caller cannot discharge an is_fresh
-/// precondition it plainly satisfies (#7464).
-expr2tc goto_symext::value_set_named_object(const expr2tc &ptr)
+/// The object \p ptr addresses, resolved through the value set, or nil.
+expr2tc goto_symext::value_set_object(const expr2tc &ptr)
 {
   expr2tc p = ptr;
   while (is_typecast2t(p))
@@ -47,10 +40,24 @@ expr2tc goto_symext::value_set_named_object(const expr2tc &ptr)
     return expr2tc();
 
   const expr2tc *base = get_object(obj);
-  if (base == nullptr)
-    return expr2tc();
+  return base == nullptr ? expr2tc() : *base;
+}
 
-  const symbolt *sym = ns.lookup(to_symbol2t(*base).thename);
+/// The named object \p ptr addresses, resolved through the value set, or nil.
+///
+/// A pointer reaching a check through a parameter or a local variable is a
+/// plain symbol, so the syntactic address_of tests below find no name and the
+/// check falls back on __ESBMC_alloc and DYNAMIC_SIZE. Neither is maintained
+/// for automatic storage, so the solver may pick a live stack object invalid
+/// or size it arbitrarily, and a caller cannot discharge an is_fresh
+/// precondition it plainly satisfies (#7464).
+expr2tc goto_symext::value_set_named_object(const expr2tc &ptr)
+{
+  expr2tc base = value_set_object(ptr);
+  if (is_nil_expr(base))
+    return base;
+
+  const symbolt *sym = ns.lookup(to_symbol2t(base).thename);
   if (sym == nullptr || sym->get_type().dynamic())
     return expr2tc();
 
@@ -60,7 +67,7 @@ expr2tc goto_symext::value_set_named_object(const expr2tc &ptr)
   if (id2string(sym->id).rfind("__ESBMC_harness_ptr_", 0) == 0)
     return expr2tc();
 
-  return *base;
+  return base;
 }
 
 /// Decide VALID_OBJECT from the object the value set names, if it names one.
@@ -82,14 +89,27 @@ bool goto_symext::resolve_valid_object_by_value_set(
   return true;
 }
 
-/// Size an object with automatic or static storage by its type.
+/// Size a heap object by its allocation, and an object with automatic or
+/// static storage by its type.
 ///
 /// DYNAMIC_SIZE is maintained for the heap alone, so it says nothing about the
 /// extent an is_fresh precondition has to compare against for such an object
 /// (#7464).
 bool goto_symext::resolve_dynamic_size_by_value_set(expr2tc &expr)
 {
-  expr2tc named = value_set_named_object(to_dynamic_size2t(expr).value);
+  const expr2tc &ptr = to_dynamic_size2t(expr).value;
+  expr2tc obj = value_set_object(ptr);
+  if (is_nil_expr(obj))
+    return false;
+
+  auto heap = dynamic_object_sizes.find(to_symbol2t(obj).thename);
+  if (heap != dynamic_object_sizes.end())
+  {
+    expr = heap->second;
+    return true;
+  }
+
+  expr2tc named = value_set_named_object(ptr);
   if (is_nil_expr(named))
     return false;
 
