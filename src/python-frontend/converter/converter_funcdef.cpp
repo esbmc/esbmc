@@ -1415,13 +1415,17 @@ static bool is_integer_valued(const nlohmann::json &value)
          integer_calls.count(value["func"].value("id", "")) != 0;
 }
 
-// True when this single statement binds `name` to a visibly integer value:
-// an `int` annotation, an integer literal, `nondet_int()`/`int()`/`len()`,
-// or a `range` loop target.
+// True when this single node binds `name` to a visibly integer value: an
+// `int` annotation (parameter or variable), an integer literal,
+// `nondet_int()`/`int()`/`len()`, or a `range` loop target.
 static bool
 statement_binds_integer(const std::string &name, const nlohmann::json &node)
 {
   const std::string type = node.value("_type", "");
+  if (type == "arg")
+    return node.value("arg", "") == name && node.contains("annotation") &&
+           node["annotation"].is_object() &&
+           node["annotation"].value("id", "") == "int";
   if (type == "AnnAssign")
     return is_name_target(node["target"], name) &&
            node["annotation"].value("id", "") == "int";
@@ -1455,12 +1459,12 @@ binds_integer_index(const std::string &name, const nlohmann::json &node)
 static bool param_used_in_variable_index_subscript(
   const std::string &param_name,
   const nlohmann::json &node,
-  const nlohmann::json &body)
+  const nlohmann::json &function)
 {
   if (node.is_array())
   {
     for (const auto &elem : node)
-      if (param_used_in_variable_index_subscript(param_name, elem, body))
+      if (param_used_in_variable_index_subscript(param_name, elem, function))
         return true;
     return false;
   }
@@ -1474,13 +1478,15 @@ static bool param_used_in_variable_index_subscript(
     node["slice"].value("_type", "") == "Name" &&
     (node["value"].value("id", "") == param_name ||
      node["slice"].value("id", "") == param_name) &&
-    !binds_integer_index(node["slice"].value("id", ""), body))
+    !binds_integer_index(node["slice"].value("id", ""), function))
     return true;
 
   for (auto it = node.begin(); it != node.end(); ++it)
   {
     if (it.value().is_object() || it.value().is_array())
-      if (param_used_in_variable_index_subscript(param_name, it.value(), body))
+      if (
+        param_used_in_variable_index_subscript(
+          param_name, it.value(), function))
         return true;
   }
   return false;
@@ -2573,7 +2579,7 @@ size_t python_converter::register_function_argument(
       used_in_variable_index_subscript =
         owning_function != nullptr &&
         param_used_in_variable_index_subscript(
-          arg_name, (*owning_function)["body"], (*owning_function)["body"]);
+          arg_name, (*owning_function)["body"], *owning_function);
     }
 
     arg_type = used_in_variable_index_subscript
