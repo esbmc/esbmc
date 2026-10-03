@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property
+^  FAILED .* assertion \(\*p\)\[m - 1\] == 8$
+^  PASSED .* dereference failure: array bounds violated$
+^\*\* 1 of [0-9]+ properties failed
+^VERIFICATION FAILED$
