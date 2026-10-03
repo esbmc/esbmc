@@ -77,6 +77,12 @@ protected:
     const expr2tc &code2,
     goto_programt &dest,
     const locationt &inherited);
+  // convert_native_rec, then convert_full_expression's unwind for an
+  // expression statement.
+  bool convert_native_full_expression(
+    const expr2tc &code2,
+    goto_programt &dest,
+    const locationt &inherited);
 
   void wallop_type_impl(
     irep_idt name,
