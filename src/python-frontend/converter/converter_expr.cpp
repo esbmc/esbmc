@@ -778,104 +778,6 @@ std::optional<exprt> numpy_shape_dim_expr(
   return from_integer(shape[static_cast<std::size_t>(index)], int_type());
 }
 
-static std::optional<long long> numpy_literal_index(const nlohmann::json &node)
-{
-  if (
-    node.is_object() && node.value("_type", "") == "Constant" &&
-    node.contains("value") && node["value"].is_number_integer())
-    return node["value"].get<long long>();
-
-  if (
-    node.is_object() && node.value("_type", "") == "UnaryOp" &&
-    node.contains("op") && node["op"].value("_type", "") == "USub" &&
-    node.contains("operand"))
-  {
-    std::optional<long long> value = numpy_literal_index(node["operand"]);
-    if (value)
-      return -*value;
-  }
-  return std::nullopt;
-}
-
-static std::optional<long long> numpy_slice_step(const nlohmann::json &slice)
-{
-  if (!slice.contains("step") || slice["step"].is_null())
-    return 1;
-
-  std::optional<long long> step = numpy_literal_index(slice["step"]);
-  if (!step || *step == 0)
-    return std::nullopt;
-  return step;
-}
-
-static long long numpy_default_slice_bound(
-  const long long axis_len,
-  const long long step,
-  const bool lower)
-{
-  if (step > 0)
-    return lower ? 0 : axis_len;
-  return lower ? axis_len - 1 : -1;
-}
-
-static std::optional<long long> numpy_slice_bound(
-  const nlohmann::json &slice,
-  const std::string &name,
-  const bool lower,
-  const long long axis_len,
-  const long long step)
-{
-  if (!slice.contains(name) || slice[name].is_null())
-    return numpy_default_slice_bound(axis_len, step, lower);
-
-  std::optional<long long> value = numpy_literal_index(slice[name]);
-  if (!value)
-    return std::nullopt;
-
-  long long resolved = *value;
-  if (resolved < 0)
-    resolved += axis_len;
-  if (step > 0)
-    return std::max(0LL, std::min(resolved, axis_len));
-  return std::max(-1LL, std::min(resolved, axis_len - 1));
-}
-
-static std::size_t numpy_slice_len(
-  const long long start,
-  const long long stop,
-  const long long step)
-{
-  std::size_t length = 0;
-  if (step > 0)
-  {
-    for (long long i = start; i < stop; i += step)
-      ++length;
-  }
-  else
-  {
-    for (long long i = start; i > stop; i += step)
-      ++length;
-  }
-  return length;
-}
-
-static std::optional<std::size_t>
-numpy_literal_slice_len(const std::size_t dim, const nlohmann::json &slice)
-{
-  std::optional<long long> step = numpy_slice_step(slice);
-  if (!step)
-    return std::nullopt;
-
-  const long long axis_len = static_cast<long long>(dim);
-  std::optional<long long> start =
-    numpy_slice_bound(slice, "lower", true, axis_len, *step);
-  std::optional<long long> stop =
-    numpy_slice_bound(slice, "upper", false, axis_len, *step);
-  if (!start || !stop)
-    return std::nullopt;
-  return numpy_slice_len(*start, *stop, *step);
-}
-
 static std::optional<std::vector<std::size_t>> numpy_subscript_shape(
   const std::vector<std::size_t> &source_shape,
   const nlohmann::json &slice_node)
@@ -901,14 +803,15 @@ static std::optional<std::vector<std::size_t>> numpy_subscript_shape(
     if (index.is_object() && index.value("_type", "") == "Slice")
     {
       std::optional<std::size_t> len =
-        numpy_literal_slice_len(source_shape[axis], index);
+        python_frontend::literal_slice_length(source_shape[axis], index);
       if (!len)
         return std::nullopt;
       result.push_back(*len);
       continue;
     }
 
-    std::optional<long long> literal_index = numpy_literal_index(index);
+    std::optional<long long> literal_index =
+      python_frontend::literal_int_value(index);
     if (!literal_index)
       return std::nullopt;
     long long normalized = *literal_index;
@@ -1023,7 +926,8 @@ std::optional<exprt> python_converter::try_get_numpy_shape_subscript(
     view && view->is_symbolic())
   {
     const long long rank = view->shape.empty() ? 1 : view->shape.size();
-    std::optional<long long> axis = numpy_literal_index(element["slice"]);
+    std::optional<long long> axis =
+      python_frontend::literal_int_value(element["slice"]);
     if (axis && *axis < 0)
       *axis += rank;
     if (!axis || *axis < 0 || *axis >= rank)

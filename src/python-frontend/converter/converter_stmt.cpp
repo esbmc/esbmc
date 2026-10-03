@@ -97,30 +97,8 @@ bool ast_contains_call(const nlohmann::json &n)
   return false;
 }
 
-bool is_literal_int_node(const nlohmann::json &node)
-{
-  if (
-    node.value("_type", "") == "Constant" && node.contains("value") &&
-    node["value"].is_number_integer())
-    return true;
-
-  return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
-         node["op"].value("_type", "") == "USub" && node.contains("operand") &&
-         node["operand"].value("_type", "") == "Constant" &&
-         node["operand"].contains("value") &&
-         node["operand"]["value"].is_number_integer();
-}
-
-std::optional<long long> literal_int_value(const nlohmann::json &node)
-{
-  if (!is_literal_int_node(node))
-    return std::nullopt;
-
-  if (node.value("_type", "") == "Constant")
-    return node["value"].get<long long>();
-
-  return -node["operand"]["value"].get<long long>();
-}
+using python_frontend::is_literal_int_node;
+using python_frontend::literal_int_value;
 
 bool has_runtime_slice_axis(const nlohmann::json &subscript)
 {
@@ -145,66 +123,17 @@ bool has_runtime_slice_axis(const nlohmann::json &subscript)
   return false;
 }
 
-bool has_nonliteral_slice_bound(const nlohmann::json &slice, const char *key)
-{
-  return slice.contains(key) && !slice[key].is_null() &&
-         !literal_int_value(slice[key]);
-}
-
-std::optional<long long>
-literal_slice_bound(const nlohmann::json &slice, const char *key)
-{
-  if (!slice.contains(key) || slice[key].is_null())
-    return std::nullopt;
-  return literal_int_value(slice[key]);
-}
-
-long long normalize_positive_slice_bound(
-  std::optional<long long> bound,
-  long long fallback,
-  long long source_len)
-{
-  long long value = bound.value_or(fallback);
-  if (bound && value < 0)
-    value += source_len;
-  return std::min(std::max(value, 0LL), source_len);
-}
-
-std::optional<long long>
-positive_literal_slice_step(const nlohmann::json &slice)
-{
-  if (has_nonliteral_slice_bound(slice, "step"))
-    return std::nullopt;
-
-  std::optional<long long> step = literal_slice_bound(slice, "step");
-  if (step && *step <= 0)
-    return std::nullopt;
-  return step.value_or(1);
-}
-
 std::optional<std::size_t> positive_literal_slice_length(
   const nlohmann::json &slice,
   std::size_t source_len)
 {
-  if (
-    slice.value("_type", "") != "Slice" ||
-    has_nonliteral_slice_bound(slice, "lower") ||
-    has_nonliteral_slice_bound(slice, "upper"))
+  if (slice.value("_type", "") != "Slice")
     return std::nullopt;
-
-  std::optional<long long> stride = positive_literal_slice_step(slice);
-  if (!stride)
+  const std::optional<long long> step =
+    python_frontend::literal_slice_step(slice);
+  if (!step || *step < 0)
     return std::nullopt;
-
-  const long long length = static_cast<long long>(source_len);
-  const long long start = normalize_positive_slice_bound(
-    literal_slice_bound(slice, "lower"), 0, length);
-  const long long stop = normalize_positive_slice_bound(
-    literal_slice_bound(slice, "upper"), length, length);
-  if (start >= stop)
-    return 0;
-
-  return static_cast<std::size_t>(((stop - start - 1) / *stride) + 1);
+  return python_frontend::literal_slice_length(source_len, slice);
 }
 
 std::optional<std::pair<std::string, nlohmann::json>>
