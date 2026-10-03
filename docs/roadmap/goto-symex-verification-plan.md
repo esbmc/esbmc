@@ -815,6 +815,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
+| **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
 | **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
@@ -9914,6 +9915,44 @@ the heap.
 
 Not fixed: a count known only at run time (`new E[n]` with `n` nondet) leaves
 the bound symbolic, as it leaves the construction loop.
+
+---
+
+### M9 (R97) — 2026-10-03, two KNOWNBUG tests that never reached symex
+
+Looking for a live KNOWNBUG that expects `VERIFICATION FAILED`, the smallest
+candidate, `fam_false_2`, did not run at all: its `main()` has an implicit
+`int`, clang rejects that without `-Wno-error=implicit-int`, and ESBMC printed
+`PARSING ERROR`. A KNOWNBUG passes whenever its expected output is missing, so
+the test reported `Passed` without reaching symex. `fam_true_4` fails the same
+way. Its siblings `fam_false_1`, `_3`, `_4` and `fam_true_2` already carry the
+flags.
+
+With the flags, `fam_false_2`'s out-of-bounds write through
+`malloc(sizeof(FAM))` is reported as `Access to object out of bounds: heap
+object`, as AddressSanitizer reports it natively, so the bug it was waiting on
+is gone. `fam_true_4` expected SUCCESSFUL for `FAM deref = *ptr;
+deref.arr[2] = 42;`. Copying a structure copies none of its flexible array
+elements (C17 6.7.2.1p18), so the write is past the end of `deref`. ESBMC's
+FAILED is right and the expectation was wrong; `fam_false_4` already pins
+that write at index 3.
+
+**Fixed** by making both tests CORE with the siblings' flags. `fam_false_2`
+also pins the property. `fam_true_4` keeps the copy and reads `arr[2]` through
+the heap object, which holds three elements. Each bites: allocating one more
+`int` in `fam_false_2`, or restoring the write through the copy in
+`fam_true_4`, flips its verdict, under Bitwuzla and Z3.
+
+Left open. Six more C/C++ KNOWNBUG tests stop at a parse error under clang 20
+(`--parse-tree-only` on every KNOWNBUG test with a C or C++ source):
+`k-induction/z_sum_array` and `k-induction-parallel/z_sum_array` (implicit
+`int`; with the flags the VLA size check fails on the uninitialised `M`, which
+is right, so the program needs rewriting rather than flipping),
+`loop-invariants/cpp_priority_queue_size_bug` and `cpp_stack_top_bug` (an
+invariant naming the loop variable outside its scope),
+`esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
+`PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
+`accepted under KNOWNBUG`.
 
 ---
 
