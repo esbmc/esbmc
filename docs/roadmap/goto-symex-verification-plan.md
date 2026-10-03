@@ -9910,7 +9910,7 @@ makes, gated on `n` as the C models' loops read nothing for `n == 0`.
 `mem_intrinsics_invalid_pointer_fail` pins all five claims and is SUCCESSFUL
 on master; `mem_intrinsics_invalid_pointer` is FAILED on master through the
 `memchr` result, and fails again if the `n == 0` exemption is dropped. Both
-agree under Z3, the only solver this run built. The NNN other regression
+agree under Z3, the only solver this run built. The 243 other regression
 tests whose sources call these functions keep their verdicts.
 
 ---
