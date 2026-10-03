@@ -1456,39 +1456,37 @@ binds_integer_index(const std::string &name, const nlohmann::json &node)
   return false;
 }
 
+// `a[idx]` with bare names on both sides, `param_name` being one of them and
+// `idx` not visibly an integer.
+static bool is_variable_index_subscript_of(
+  const std::string &param_name,
+  const nlohmann::json &node,
+  const nlohmann::json &function)
+{
+  if (
+    node.value("_type", "") != "Subscript" || !node.contains("value") ||
+    !node.contains("slice") || node["value"].value("_type", "") != "Name" ||
+    node["slice"].value("_type", "") != "Name")
+    return false;
+  const std::string index = node["slice"].value("id", "");
+  return (node["value"].value("id", "") == param_name || index == param_name) &&
+         !binds_integer_index(index, function);
+}
+
 static bool param_used_in_variable_index_subscript(
   const std::string &param_name,
   const nlohmann::json &node,
   const nlohmann::json &function)
 {
-  if (node.is_array())
-  {
-    for (const auto &elem : node)
-      if (param_used_in_variable_index_subscript(param_name, elem, function))
-        return true;
+  if (!node.is_object() && !node.is_array())
     return false;
-  }
-
-  if (!node.is_object())
-    return false;
-
   if (
-    node.value("_type", "") == "Subscript" && node.contains("value") &&
-    node["value"].value("_type", "") == "Name" && node.contains("slice") &&
-    node["slice"].value("_type", "") == "Name" &&
-    (node["value"].value("id", "") == param_name ||
-     node["slice"].value("id", "") == param_name) &&
-    !binds_integer_index(node["slice"].value("id", ""), function))
+    node.is_object() &&
+    is_variable_index_subscript_of(param_name, node, function))
     return true;
-
-  for (auto it = node.begin(); it != node.end(); ++it)
-  {
-    if (it.value().is_object() || it.value().is_array())
-      if (
-        param_used_in_variable_index_subscript(
-          param_name, it.value(), function))
-        return true;
-  }
+  for (const auto &child : node)
+    if (param_used_in_variable_index_subscript(param_name, child, function))
+      return true;
   return false;
 }
 
