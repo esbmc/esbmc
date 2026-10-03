@@ -803,6 +803,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R65** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found driving WI-4, §15 M9 (R65); **FIXED**, same entry | **A placement new whose address has a side effect was modelled as an allocating new.** The lowering names the address twice, so for any call (`std::addressof(*it)`, immer's `uninitialized_copy`) the frontend warned and fell back: the object was built in fresh memory, the buffer kept its old bytes, and the address expression never ran. `*(int *)buf != 42` after `new (std::addressof(buf)) int(42)` was SUCCESSFUL. | `get_placement_new`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/placement_new_{call_address,address_once,class_call_address,no_initializer,recursive_mem_init,recursive_label}{,_fail}` | — | **Fixed**: the address is bound once, before the initializer, to a local of a statement expression. |
 | **R66** | **High (a crash, default configuration)** — found reviewing R65, §15 M9 (R66); **FIXED**, same entry | **R59's byte-view normalisation never terminated on an array of byte arrays.** The anchor of `unsigned char pool[8][32]` is `(char *)&pool[0]`, itself a byte view of the first row, and rewriting it again gives anchor + 0: `(char *)e == (char *)pool[0]`, a byte walk `for (q = pool[0]; q != pool[1]; ++q)`, and the same one level deeper all died with SIGBUS. | `byte_address_on_root`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/{byte_view_row_anchor,byte_walk_row,byte_view_3d_anchor}{,_fail}` | — | **Fixed**: an operand that already is the anchor is left alone. |
 | **R68** | **High (a crash, default configuration)** — found by the C++ H-C1 census, §15 M9 (R68); **FIXED**, same entry | **A folded pointer difference kept its offset's type.** `sub2t::do_simplify` rewrote `(a + k) - a` to `k` under an `is_bv_type` guard that a pointer difference also passes, so the result had the offset's width, not `ptrdiff_t`'s. `ptrdiff_t n = k; if (c) n = (a + 3) - a;` aborted both solvers at the merge, and an unused difference kept by `--no-slice` aborted `mk_eq` (`heap_cxx03_fail`, through `std::make_heap`). The neighbouring `x - (x + y)` and `x - (x - y)` rules had the same defect, so `a - (a + j)` and `p - (p - j)` aborted with no branch at all. | `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; `regression/esbmc/pointer_diff_{branch,unused,neg_add,sub_sub,unsigned}{,_fail}` | — | **Fixed**: the folded operand is cast to the difference's type, before any negation. |
+| **R62** | **Medium (false FAILED, default configuration)** — R61's residual, §15 M9 (R62, R63); **OPEN**, after R63 | **A VLA size inside a pointer type, or three levels deep, reaches the formula unrenamed.** `rename_type` renames an array-typed expression's size and its direct array subtypes only, so `int (*p)[n] = a + 1; (*p)[1]` and `int b[n1][n2][n3][n4]` leave `n` and `n4` as free L0 symbols, and the solver picks a stride that fails a true assertion. | `rename_type`, `src/goto-symex/state/goto_symex_state.cpp` | — | Open: renaming at any depth is only sound once R63 fixes each size at its declaration, and it also needs `dereference_type_compare` to tolerate renamed sizes inside a pointer subtype (§15). |
+| **R63** | **High (false SUCCESSFUL, default configuration)** — found while fixing R62, §15 M9 (R62, R63); **FIXED**, same entry | **A variably modified type's size was read where it was used, not where it was declared.** C fixes it at the declaration (C11 6.7.6.2p5). `int (*p)[n] = a; n = 5; assert(p[1][0] != 7)` and `typedef int row[n]; n = 5; row x;` gave false SUCCESSFUL, a size changed in a loop gave the next iteration's, and `int a[2][n]; n = 5; a[1][0] = 7;` aborted `assert_type_compat_for_with`. | `snapshot_vla_sizes`, `get_vla_size`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/vla_size_{fixed_pointer,fixed_typedef,fixed_loop,fixed_array,same_declaration,label_goto,loop_pointer}{,_fail}`, `esbmc-cpp/cpp/vla_size_type_alias{,_fail}` | — | **Fixed**: each block-scope declarator's VLA size is bound to a local just before the declarator, and every type that names it reads that local. |
 | **R69** | **High (false SUCCESSFUL, default configuration)** — found probing R67's residual, §15 M9 (R69); **FIXED**, same entry | **A class-element list ran its first constructor on every element, and an array list's filler was zeroed.** For `new C[2]{C(1), C(2)}`, goto-convert took the first constructor it found in the list and ran it in a loop, so `p[1].v == 1` was SUCCESSFUL. The frontend ignored every `InitListExpr` array filler, so `S s[2]{S{1, 2}}` with `int a = 5;` in `S` left `s[1].a` zero (`s[1].a == 0` SUCCESSFUL), and `C c[3]{C(1)}` did not call `C()` on the tail. Nested lists (`new int[2][2]{{1, 2}, {3, 4}}`) and aggregate lists were dropped as in R67. | `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `get_array_filler`, `src/clang-c-frontend/clang_c_convert.cpp`; `cpp_new` migration, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_new_init_list_{class,virtual,aggregate,nested,filler,filler_runtime}{,_fail}`, `array_init_list_filler{,_fail}`, `github_6588_multidim` | — | **Fixed**: each element runs its own initializer in place, and the filler fills the rest; a string-literal row and a nondet count with struct elements are still wrong. |
 | **R70** | **High (false SUCCESSFUL, default configuration, C and C++)** — found probing R69's string-literal residual, §15 M9 (R70); **FIXED** for declarations, same entry | **A braced string literal initialised one element with the literal's address.** `char a[4] = {"ab"}` went through the list conversion as a one-element list: the literal decayed to `&"ab"[0]`, was cast to `char` into `a[0]`, and the rest was zeroed, so `a[1] == 0` was SUCCESSFUL. | InitListExpr arm of `get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/string_literal_brace_init{,_fail}`, `regression/esbmc-cpp/cpp/string_literal_brace_init{,_fail}` | — | **Fixed**: a string-literal list initialises the whole array from the literal (C11 6.7.9p14); `new char[4]{"ab"}` is still dropped by `cpp_new_init_list`. Fixed as R80. |
 | **R80** | **High (false FAILED, default configuration, C++)** — R70's open note, §15 M9 (R80); **FIXED**, same entry | **A string literal initialising a new-expression's array was dropped.** For `new char[4]{"ab"}` the frontend hands `cpp_new_init_list` the literal as one `string-constant` of type `char[4]`, which it did not count as a list, so neither it nor the constructor loop stored anything and every element stayed nondet: `p[0] == 'a'` FAILED. `new wchar_t[5]{L"hi"}` and a count only known at run time went the same way. | `cpp_new_init_list`, `cpp_new_store_element` and `is_splittable_list`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/cpp/new_array_string_literal{,_fail}` | — | **Fixed**: a string literal is a list of its characters and the zeros padding it to its array type; the filler covers any elements past it. |
@@ -9146,6 +9148,54 @@ master finished. `byte_view_row_anchor{,_fail}`,
 `byte_walk_row{,_fail}` and `byte_view_3d_anchor{,_fail}` crash on master and
 match the native program here. The C, k-induction and `cbmc` suites pass apart
 from a local pre-existing failure.
+
+### M9 (R62, R63) — 2026-09-27, VLA sizes inside types
+
+R61's review found `m` and `c` of `int a[2][3][u][m][c]` named in the SMT
+formula with no SSA suffix. `rename_type` renames an array-typed expression's
+size and its immediate array subtypes, and nothing else, so a pointer to a
+VLA (`int (*p)[n] = a + 1`) and a size three or more levels deep
+(`int b[n1][n2][n3][n4]`) keep a free L0 size: a false FAILED on master (R62).
+
+Extending the renaming through pointer levels and to any depth fixed both, and
+its review showed it was unsound. A free size over-approximates; a renamed one
+takes the value the variable holds where the type is *used*, while C fixes it
+where the type is *declared* (C11 6.7.6.2p5). With `n` changed after the
+declaration, pointer arithmetic that master answered FAILED correctly became a
+false SUCCESSFUL, and a depth-three access that master answered correctly
+aborted. Master was already wrong the same way wherever it did rename:
+`int (*p)[n] = a; n = 5; assert(p[1][0] != 7)` is SUCCESSFUL on master and
+fails natively (R63). R62 therefore waits on R63.
+
+**R63, fixed** in the frontend. `goto_convert`'s `rewrite_vla_decl` copied a
+declared array's size into a temporary for the symbol's type alone; every
+expression kept the clang type, which names `n`. Clang shares one
+`VariableArrayType` between a declarator and every expression it types, so
+`snapshot_vla_sizes` binds each size of a block-scope variable, typedef or C++
+alias to a local, keyed by the size expression, and `get_vla_size` reads that
+local wherever the type is converted. The binding goes into the declaration's
+own decl-block, just before its declarator. The first version put it ahead of
+the whole statement, and review found three ways that was wrong: `int m = 2 - k,
+(*p)[m]` in a loop read the previous iteration's `m`, a false SUCCESSFUL; a
+label or `case` on the declaration jumped past it, so a backward `goto` kept
+the first size, another false SUCCESSFUL; and `int m = 3, a[m]` read `m` before
+it was declared. `vla_size_{same_declaration,label_goto,loop_pointer}{,_fail}`
+fail with that placement and pass on master.
+`vla_size_fixed_{pointer,typedef,loop,array}{,_fail}` and
+`esbmc-cpp/cpp/vla_size_type_alias{,_fail}` get the wrong verdict or abort on
+master, both halves of every pair; every disputed case matches the native
+program under ASan and UBSan. `github_2220_vla_bound`
+(KNOWNBUG) stopped reproducing because its size no longer stays in a type; the
+IREP2-adjust defect it pins is still live on a `sizeof(char[strlen(...) + 2])`
+operand, so the test moved there instead of becoming CORE. Not covered, and
+read at use as before: a VLA parameter's size (`void f(int n, int x[][n])`)
+and a C++ condition variable of variably modified type.
+
+**R62, open.** On top of R63, the renaming patch still raises a false alarm on
+every dereference through a pointer to a pointer-to-VLA
+(`int (**pp)[n] = &p; (*pp)[1][1]`): `dereference_type_compare` compares
+pointer types exactly, and the renamed size in the dereferenced type no
+longer matches the object's.
 ### M9 (R61) — 2026-09-27, the stride of a flattened VLA
 
 The H-C1 census (default slicing against `--no-slice`) left
