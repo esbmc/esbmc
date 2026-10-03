@@ -3203,8 +3203,10 @@ void python_converter::record_numpy_view_copy(
   {
     // The view builders decline a target that is already a view, so this
     // statement's value is a copy while the entry still describes the old
-    // view's shape and strides.
-    if (!numpy_result_is_view_)
+    // view's shape and strides. Inside a branch the entry may belong to the
+    // other path (view_branch_registration_conflict_knownbug), so only an
+    // unconditional rebind is rejected.
+    if (!numpy_result_is_view_ && block_nesting_ == function_body_depth_ + 1)
       throw std::runtime_error(
         "TypeError: rebinding a numpy view name to another view is not "
         "supported");
