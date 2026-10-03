@@ -829,16 +829,18 @@ python_converter::tracked_numpy_shape_from_name(const std::string &name) const
 {
   for (const std::string &id : {name, resolve_name_symbol_id(name)})
   {
-    if (auto view = numpy_pointer_view_info_.find(id);
-        view != numpy_pointer_view_info_.end())
+    if (
+      auto view = numpy_pointer_view_info_.find(id);
+      view != numpy_pointer_view_info_.end())
     {
       reject_symbolic_numpy_view(view->second);
       return view->second.shape.empty()
                ? std::vector<std::size_t>{view->second.length}
                : view->second.shape;
     }
-    if (auto param = numpy_param_shapes_.find(id);
-        param != numpy_param_shapes_.end())
+    if (
+      auto param = numpy_param_shapes_.find(id);
+      param != numpy_param_shapes_.end())
       return param->second;
   }
   return std::nullopt;

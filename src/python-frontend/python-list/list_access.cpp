@@ -779,8 +779,9 @@ get_fixed_array_shape(const typet &type, const contextt &symbol_table)
     const array_typet &array_type = to_array_type(current);
     if (array_type.size().is_nil() || !array_type.size().is_constant())
       return std::nullopt;
-    shape.push_back(static_cast<std::size_t>(
-      binary2integer(array_type.size().value().c_str(), false).to_int64()));
+    shape.push_back(
+      static_cast<std::size_t>(
+        binary2integer(array_type.size().value().c_str(), false).to_int64()));
     current = ns.follow(array_type.subtype());
   }
   return shape;
