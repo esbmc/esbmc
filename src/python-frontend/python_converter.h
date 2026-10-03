@@ -1744,6 +1744,16 @@ private:
   /// semantics leave the old array object -- and anything still viewing it
   /// -- untouched; without this, a view's raw pointer would keep aliasing
   /// the same storage and silently start observing the new value instead.
+  std::vector<std::string> numpy_views_of(const std::string &rebound_id) const;
+
+  bool keep_numpy_result_view(const std::string &lhs_id);
+
+  void record_numpy_constructor_binding(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
   void detach_numpy_pointer_views_of(
     const std::string &rebound_id,
     const locationt &location,
@@ -2381,6 +2391,22 @@ private:
   /// it. Returns the snapshot's id.
   std::string snapshot_symbolic_numpy_view(
     const exprt &old_ptr,
+    numpy_scalar_pointer_view_infot &info,
+    const locationt &location,
+    codet &target_block);
+  /// Detach for a constant-shape view: copies what it sees into a dense
+  /// snapshot and repoints it there. Returns the snapshot's id.
+  std::vector<exprt> read_strided_view_elements(
+    const exprt &base,
+    const std::vector<long long> &strides,
+    const std::vector<std::size_t> &shape);
+  std::vector<exprt> read_contiguous_view_elements(
+    exprt base,
+    std::size_t count,
+    long long stride,
+    const std::vector<std::size_t> &shape);
+  std::string snapshot_constant_numpy_view(
+    const symbolt &view_symbol,
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);

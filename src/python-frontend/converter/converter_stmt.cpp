@@ -2390,6 +2390,75 @@ exprt python_converter::hoist_numpy_element(const exprt &element)
   return tmp_expr;
 }
 
+// N-D strided view: read each element through its own stride vector.
+std::vector<exprt> python_converter::read_strided_view_elements(
+  const exprt &base,
+  const std::vector<long long> &strides,
+  const std::vector<std::size_t> &shape)
+{
+  const namespacet ns(symbol_table_);
+  const typet pointer_type = ns.follow(base.type());
+  std::vector<exprt> elems;
+  std::vector<std::size_t> index(shape.size(), 0);
+  std::size_t count = 1;
+  for (std::size_t dim : shape)
+    count *= dim;
+  for (; count > 0; --count)
+  {
+    long long delta = 0;
+    for (std::size_t axis = 0; axis < index.size(); ++axis)
+      delta += static_cast<long long>(index[axis]) * strides[axis];
+    exprt element_ptr = python_expr::build_add(
+      base, from_integer(delta, size_type()), pointer_type);
+    elems.push_back(hoist_numpy_element(
+      python_expr::build_dereference(
+        element_ptr, ns.follow(pointer_type.subtype()))));
+    for (std::size_t axis = index.size(); axis-- > 0;)
+    {
+      if (++index[axis] < shape[axis])
+        break;
+      index[axis] = 0;
+    }
+  }
+  return elems;
+}
+
+// A 1-D view with one stride, or a rank-3+ subarray view that points at rows
+// of the source and is read through a scalar pointer over its storage.
+std::vector<exprt> python_converter::read_contiguous_view_elements(
+  exprt base,
+  std::size_t count,
+  long long stride,
+  const std::vector<std::size_t> &shape)
+{
+  const namespacet ns(symbol_table_);
+  typet base_type = ns.follow(base.type());
+  typet elem_type = ns.follow(base_type.subtype());
+  if (elem_type.is_array())
+  {
+    while (elem_type.is_array())
+      elem_type = ns.follow(to_array_type(elem_type).subtype());
+    base_type = pointer_typet(elem_type);
+    base = python_expr::build_typecast(base, base_type);
+    count = 1;
+    for (std::size_t dim : shape)
+      count *= dim;
+    stride = 1;
+  }
+  std::vector<exprt> elems;
+  elems.reserve(count);
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    exprt element_ptr = python_expr::build_add(
+      base,
+      from_integer(static_cast<long long>(i) * stride, size_type()),
+      base_type);
+    elems.push_back(hoist_numpy_element(
+      python_expr::build_dereference(element_ptr, elem_type)));
+  }
+  return elems;
+}
+
 std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
 python_converter::build_numpy_descriptor_materialized_elements(
   const nlohmann::json &arg,
@@ -2427,64 +2496,13 @@ python_converter::build_numpy_descriptor_materialized_elements(
       return std::nullopt;
 
     reject_symbolic_numpy_view(pointer_it->second);
-    if (!pointer_it->second.strides.empty())
-    {
-      // N-D strided view: read each element through its own stride vector.
-      const std::vector<long long> &strides = pointer_it->second.strides;
-      std::vector<exprt> elems;
-      std::vector<std::size_t> index(shape->size(), 0);
-      std::size_t count = 1;
-      for (std::size_t dim : *shape)
-        count *= dim;
-      for (; count > 0; --count)
-      {
-        long long delta = 0;
-        for (std::size_t axis = 0; axis < index.size(); ++axis)
-          delta += static_cast<long long>(index[axis]) * strides[axis];
-        exprt element_ptr = python_expr::build_add(
-          symbol_expr(*symbol), from_integer(delta, size_type()), pointer_type);
-        elems.push_back(hoist_numpy_element(
-          python_expr::build_dereference(
-            element_ptr, ns.follow(pointer_type.subtype()))));
-        for (std::size_t axis = index.size(); axis-- > 0;)
-        {
-          if (++index[axis] < (*shape)[axis])
-            break;
-          index[axis] = 0;
-        }
-      }
-      return std::make_pair(*shape, elems);
-    }
-    typet elem_type = ns.follow(pointer_type.subtype());
-    // A rank-3+ subarray view points at rows of the source, so its elements
-    // are read through a scalar pointer over the contiguous storage.
-    exprt base = symbol_expr(*symbol);
-    std::size_t count = pointer_it->second.length;
-    long long stride = pointer_it->second.stride;
-    typet base_type = pointer_type;
-    if (elem_type.is_array())
-    {
-      while (elem_type.is_array())
-        elem_type = ns.follow(to_array_type(elem_type).subtype());
-      base_type = pointer_typet(elem_type);
-      base = python_expr::build_typecast(base, base_type);
-      count = 1;
-      for (std::size_t dim : *shape)
-        count *= dim;
-      stride = 1;
-    }
-    std::vector<exprt> elems;
-    elems.reserve(count);
-    for (std::size_t i = 0; i < count; ++i)
-    {
-      exprt element_ptr = python_expr::build_add(
-        base,
-        from_integer(static_cast<long long>(i) * stride, size_type()),
-        base_type);
-      elems.push_back(hoist_numpy_element(
-        python_expr::build_dereference(element_ptr, elem_type)));
-    }
-    return std::make_pair(*shape, elems);
+    const exprt base = symbol_expr(*symbol);
+    return std::make_pair(
+      *shape,
+      pointer_it->second.strides.empty()
+        ? read_contiguous_view_elements(
+            base, pointer_it->second.length, pointer_it->second.stride, *shape)
+        : read_strided_view_elements(base, pointer_it->second.strides, *shape));
   }
 
   std::optional<std::vector<nlohmann::json>> element_nodes =
@@ -3295,15 +3313,9 @@ void python_converter::clear_numpy_view_copy(const exprt &lhs)
   numpy_pointer_view_info_.erase(lhs_id);
 }
 
-void python_converter::detach_numpy_pointer_views_of(
-  const std::string &rebound_id,
-  const locationt &location,
-  codet &target_block)
+std::vector<std::string>
+python_converter::numpy_views_of(const std::string &rebound_id) const
 {
-  const namespacet ns(symbol_table_);
-
-  // numpy_view_copy_sources_ is mutated below (erase), so collect the
-  // matching keys first rather than erasing mid-iteration.
   std::vector<std::string> view_ids;
   for (const auto &entry : numpy_view_copy_sources_)
     if (entry.second == rebound_id)
@@ -3321,8 +3333,17 @@ void python_converter::detach_numpy_pointer_views_of(
   }
   std::sort(view_ids.begin(), view_ids.end());
   view_ids.erase(std::unique(view_ids.begin(), view_ids.end()), view_ids.end());
+  return view_ids;
+}
 
-  for (const std::string &view_id : view_ids)
+void python_converter::detach_numpy_pointer_views_of(
+  const std::string &rebound_id,
+  const locationt &location,
+  codet &target_block)
+{
+  // numpy_view_copy_sources_ is mutated below (erase), so collect the
+  // matching keys first rather than erasing mid-iteration.
+  for (const std::string &view_id : numpy_views_of(rebound_id))
   {
     auto info_it = numpy_pointer_view_info_.find(view_id);
     if (info_it == numpy_pointer_view_info_.end())
@@ -3336,107 +3357,123 @@ void python_converter::detach_numpy_pointer_views_of(
     // creation point; retyping the symbol table entry now would desync it
     // from that DECL. Keep the declared type and just repoint the pointer
     // *value* at a fresh, independent snapshot instead.
-    const exprt old_ptr = symbol_expr(*view_symbol);
-    const typet ptr_type = old_ptr.type();
-    const typet elem_type = ns.follow(view_symbol->get_type()).subtype();
-    if (info_it->second.is_symbolic())
-    {
-      info_it->second.source_id = snapshot_symbolic_numpy_view(
-        old_ptr, info_it->second, location, target_block);
-      numpy_view_copy_sources_.erase(view_id);
-      continue;
-    }
-    // What the view reads, as a shape and per-axis element strides over a
-    // scalar pointer (a contiguous N-D view points at rows of its source).
-    const auto &view_info = info_it->second;
-    typet scalar_type = elem_type;
-    while (scalar_type.is_array())
-      scalar_type = ns.follow(to_array_type(scalar_type).subtype());
-    std::vector<long long> shape(
-      view_info.shape.begin(), view_info.shape.end());
-    if (shape.empty())
-      shape = {static_cast<long long>(view_info.length)};
-    std::vector<long long> strides = view_info.strides;
-    if (strides.empty())
-    {
-      strides.assign(shape.size(), 1);
-      if (shape.size() == 1)
-        strides[0] = view_info.stride;
-      else
-        for (std::size_t axis = shape.size() - 1; axis-- > 0;)
-          strides[axis] = strides[axis + 1] * shape[axis + 1];
-    }
-    std::size_t count = 1;
-    for (long long dim : shape)
-      count *= static_cast<std::size_t>(dim);
-    const exprt scalar_base =
-      elem_type.is_array()
-        ? python_expr::build_typecast(old_ptr, pointer_typet(scalar_type))
-        : old_ptr;
-
-    array_typet snapshot_type(scalar_type, from_integer(count, size_type()));
-    symbolt &snapshot =
-      create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
-    code_declt snap_decl(symbol_expr(snapshot));
-    snap_decl.location() = location;
-    target_block.copy_to_operands(snap_decl);
-
-    // Copy what the view currently sees (still the pre-rebind source
-    // storage at this point in program order) into a densely packed
-    // snapshot. A negative stride's product is unsigned size_type()'s
-    // two's-complement bit pattern, which the pointer add treats as a
-    // backward offset (view_strided_reverse_rebind_source_edge).
-    std::vector<long long> index(shape.size(), 0);
-    for (std::size_t i = 0; i < count; ++i)
-    {
-      long long delta = 0;
-      for (std::size_t axis = 0; axis < index.size(); ++axis)
-        delta += index[axis] * strides[axis];
-      exprt src = python_expr::build_index(
-        scalar_base, from_integer(delta, size_type()), scalar_type);
-      exprt dst = python_expr::build_index(
-        symbol_expr(snapshot), from_integer(i, size_type()), scalar_type);
-      code_assignt elem_assign(dst, src);
-      elem_assign.location() = location;
-      target_block.copy_to_operands(elem_assign);
-      for (std::size_t axis = index.size(); axis-- > 0;)
-      {
-        if (++index[axis] < shape[axis])
-          break;
-        index[axis] = 0;
-      }
-    }
-
-    // Address-of the snapshot symbol directly rather than
-    // build_index(snapshot, 0, ...): a zero-length view (e.g. a[3:3])
-    // makes that index2tc an out-of-bounds subscript on an empty array.
-    exprt new_ptr = python_expr::build_typecast(
-      python_expr::build_address_of(symbol_expr(snapshot)), ptr_type);
-    code_assignt repoint(old_ptr, new_ptr);
-    repoint.location() = location;
-    target_block.copy_to_operands(repoint);
-
-    // The detached view's storage is a fresh, densely-packed snapshot, so it
-    // is unit-stride (row-major for an N-D view) from here; length and
-    // read-only-ness (a diagonal view) are unchanged by detaching.
-    if (!info_it->second.strides.empty())
-    {
-      for (std::size_t axis = shape.size(); axis-- > 0;)
-        info_it->second.strides[axis] =
-          axis + 1 == shape.size()
-            ? 1
-            : info_it->second.strides[axis + 1] * shape[axis + 1];
-      info_it->second.stride = info_it->second.strides.front();
-    }
-    else
-      info_it->second.stride = 1;
-    info_it->second.source_id = snapshot.id.as_string();
+    info_it->second.source_id =
+      info_it->second.is_symbolic()
+        ? snapshot_symbolic_numpy_view(
+            symbol_expr(*view_symbol), info_it->second, location, target_block)
+        : snapshot_constant_numpy_view(
+            *view_symbol, info_it->second, location, target_block);
 
     // The view no longer aliases rebound_id's storage; drop the source
     // link so a later write to the (new) rebound_id array is not held
     // responsible for a view it can no longer affect.
     numpy_view_copy_sources_.erase(view_id);
   }
+}
+
+// What a constant-shape view reads, as a shape and per-axis element strides
+// over a scalar pointer (a contiguous N-D view points at rows of its source).
+static void constant_view_layout(
+  const std::vector<std::size_t> &view_shape,
+  std::size_t length,
+  const std::vector<long long> &view_strides,
+  long long stride,
+  std::vector<long long> &shape,
+  std::vector<long long> &strides)
+{
+  shape.assign(view_shape.begin(), view_shape.end());
+  if (shape.empty())
+    shape = {static_cast<long long>(length)};
+  strides = view_strides;
+  if (!strides.empty())
+    return;
+  strides.assign(shape.size(), 1);
+  if (shape.size() == 1)
+    strides[0] = stride;
+  else
+    for (std::size_t axis = shape.size() - 1; axis-- > 0;)
+      strides[axis] = strides[axis + 1] * shape[axis + 1];
+}
+
+std::string python_converter::snapshot_constant_numpy_view(
+  const symbolt &view_symbol,
+  numpy_scalar_pointer_view_infot &info,
+  const locationt &location,
+  codet &target_block)
+{
+  const namespacet ns(symbol_table_);
+  const exprt old_ptr = symbol_expr(view_symbol);
+  const typet elem_type = ns.follow(view_symbol.get_type()).subtype();
+  typet scalar_type = elem_type;
+  while (scalar_type.is_array())
+    scalar_type = ns.follow(to_array_type(scalar_type).subtype());
+  std::vector<long long> shape;
+  std::vector<long long> strides;
+  constant_view_layout(
+    info.shape, info.length, info.strides, info.stride, shape, strides);
+  std::size_t count = 1;
+  for (long long dim : shape)
+    count *= static_cast<std::size_t>(dim);
+  const exprt scalar_base =
+    elem_type.is_array()
+      ? python_expr::build_typecast(old_ptr, pointer_typet(scalar_type))
+      : old_ptr;
+
+  array_typet snapshot_type(scalar_type, from_integer(count, size_type()));
+  symbolt &snapshot =
+    create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
+  code_declt snap_decl(symbol_expr(snapshot));
+  snap_decl.location() = location;
+  target_block.copy_to_operands(snap_decl);
+
+  // Copy what the view currently sees (still the pre-rebind source
+  // storage at this point in program order) into a densely packed
+  // snapshot. A negative stride's product is unsigned size_type()'s
+  // two's-complement bit pattern, which the pointer add treats as a
+  // backward offset (view_strided_reverse_rebind_source_edge).
+  std::vector<long long> index(shape.size(), 0);
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    long long delta = 0;
+    for (std::size_t axis = 0; axis < index.size(); ++axis)
+      delta += index[axis] * strides[axis];
+    exprt src = python_expr::build_index(
+      scalar_base, from_integer(delta, size_type()), scalar_type);
+    exprt dst = python_expr::build_index(
+      symbol_expr(snapshot), from_integer(i, size_type()), scalar_type);
+    code_assignt elem_assign(dst, src);
+    elem_assign.location() = location;
+    target_block.copy_to_operands(elem_assign);
+    for (std::size_t axis = index.size(); axis-- > 0;)
+    {
+      if (++index[axis] < shape[axis])
+        break;
+      index[axis] = 0;
+    }
+  }
+
+  // Address-of the snapshot symbol directly rather than
+  // build_index(snapshot, 0, ...): a zero-length view (e.g. a[3:3])
+  // makes that index2tc an out-of-bounds subscript on an empty array.
+  exprt new_ptr = python_expr::build_typecast(
+    python_expr::build_address_of(symbol_expr(snapshot)), old_ptr.type());
+  code_assignt repoint(old_ptr, new_ptr);
+  repoint.location() = location;
+  target_block.copy_to_operands(repoint);
+
+  // The detached view's storage is a fresh, densely-packed snapshot, so it
+  // is unit-stride (row-major for an N-D view) from here; length and
+  // read-only-ness (a diagonal view) are unchanged by detaching.
+  if (!info.strides.empty())
+  {
+    for (std::size_t axis = shape.size(); axis-- > 0;)
+      info.strides[axis] =
+        axis + 1 == shape.size() ? 1 : info.strides[axis + 1] * shape[axis + 1];
+    info.stride = info.strides.front();
+  }
+  else
+    info.stride = 1;
+  return snapshot.id.as_string();
 }
 
 void python_converter::emit_strided_copy(
@@ -3698,6 +3735,27 @@ bool python_converter::update_numpy_array_binding_from_name(
   return true;
 }
 
+// True when the RHS registered `lhs_id` as a view of its own; otherwise a
+// pointer-view entry left from an earlier binding is dropped.
+bool python_converter::keep_numpy_result_view(const std::string &lhs_id)
+{
+  if (numpy_pointer_view_info_.count(lhs_id) == 0)
+    return false;
+  numpy_array_symbols_.insert(lhs_id);
+  // A numpy call that is not view-shaped (np.copy of a view with run-time
+  // extents) registered its own result as a view.
+  if (numpy_result_is_view_)
+    return true;
+  // rhs_node isn't a view-copy expression, so the entry is stale from an
+  // earlier statement's binding (its DECL already committed pointer_typet,
+  // so the assignment itself still goes through array-to-pointer decay).
+  // Drop it so a fresh shape gets registered for the rebound symbol;
+  // otherwise len()/shape on it keeps reporting the old view's length.
+  numpy_pointer_view_info_.erase(lhs_id);
+  numpy_view_copy_sources_.erase(lhs_id);
+  return false;
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3742,32 +3800,22 @@ void python_converter::update_numpy_array_binding(
     return;
   }
 
-  if (numpy_result_is_view_ && numpy_pointer_view_info_.count(lhs_id) != 0)
-  {
-    // A numpy call that is not view-shaped (np.copy of a view with run-time
-    // extents) registered its own result as a view.
-    numpy_array_symbols_.insert(lhs_id);
+  if (keep_numpy_result_view(lhs_id))
     return;
-  }
-
-  if (numpy_pointer_view_info_.count(lhs_id) != 0)
-  {
-    // rhs_node isn't a view-copy expression (the branch above would have
-    // claimed it), so any pointer_view_info_ entry here is stale from an
-    // earlier statement's binding (its DECL already committed pointer_typet,
-    // so the assignment itself still goes through array-to-pointer decay).
-    // Drop it and fall through to the constructor-expr handling below
-    // (instead of returning here) so a fresh shape gets registered for the
-    // rebound symbol; otherwise len()/shape on it keeps reporting the old
-    // view's length.
-    numpy_pointer_view_info_.erase(lhs_id);
-    numpy_view_copy_sources_.erase(lhs_id);
-    numpy_array_symbols_.insert(lhs_id);
-  }
 
   if (unconditional_assignment || numpy_view_copy_sources_.count(lhs_id) == 0)
     clear_numpy_view_copy(lhs);
 
+  record_numpy_constructor_binding(
+    lhs, lhs_id, rhs_node, unconditional_assignment);
+}
+
+void python_converter::record_numpy_constructor_binding(
+  const exprt &lhs,
+  const std::string &lhs_id,
+  const nlohmann::json &rhs_node,
+  bool unconditional_assignment)
+{
   // `y = identity(x)`: a call to a locally-defined function returning a numpy
   // array used to fall through to the erase below -- registering `y`'s type
   // correctly as an array (Commit 4's own array-return fix) but leaving it
