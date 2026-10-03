@@ -9634,7 +9634,9 @@ operator and a constructor call through `elided_copy_source`, which now looks
 through the bound temporary in front of the copy. `cxx14_elided_copy_argument`
 covers all four sites and is FAILED on master under `--std c++11` and
 `c++14`; `cxx14_elided_copy_argument_fail` is SUCCESSFUL on master. Reverting
-any one site fails the first; both were run under Z3 only.
+any one site fails the first, as does dropping the bound-temporary peel. Both
+were run under Z3 only. The other tests that pass `--std` before C++17, and
+`esbmc-cpp/destructors` and `esbmc-cpp/try_catch`, keep their verdicts.
 
 Not fixed, and not tied to C++ version: an argument temporary is never
 destroyed when the call is an expression statement (`take(C(3));`, open PR
