@@ -280,13 +280,18 @@ static void lift_old_over_bound_index(
   expr.swap(element);
 }
 
-/// x=f(...), and a mem-initializer, whose braced list initialises the member
-/// in place: convert_assign lowers both without removing the rhs first.
+static bool is_braced_list(const exprt &e)
+{
+  return e.id() == "struct" || e.id() == "array" || e.id() == "constant";
+}
+
+/// x=f(...), and a mem-initializer from a braced list, which initialises the
+/// member in place: convert_assign lowers both without removing the rhs first.
 static bool is_assigned_whole(const exprt &assign)
 {
   const exprt &rhs = assign.op1();
   return (rhs.id() == "sideeffect" && rhs.statement() == "function_call") ||
-         assign.op0().get_bool("#member_init");
+         (assign.op0().get_bool("#member_init") && is_braced_list(rhs));
 }
 
 /// A class temporary initialised from a braced list, whose class elements
@@ -294,8 +299,7 @@ static bool is_assigned_whole(const exprt &assign)
 static bool is_braced_temporary(const exprt &e)
 {
   return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
-         e.operands().size() == 1 &&
-         (e.op0().id() == "struct" || e.op0().id() == "array");
+         e.operands().size() == 1 && is_braced_list(e.op0());
 }
 
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
