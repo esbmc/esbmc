@@ -178,6 +178,11 @@ private:
   std::vector<std::size_t>
   resolve_reshape_shape(std::optional<std::size_t> total) const;
   std::optional<exprt> try_build_reshape_pointer_view();
+  std::optional<exprt> reshape_strided_view(
+    python_list &list,
+    const python_list::strided_view_desc &strided,
+    const nlohmann::json &arg,
+    bool as_view) const;
   static bool
   axes_are_symbolic(const std::vector<python_list::strided_axis> &axes);
   bool describe_view_operand(

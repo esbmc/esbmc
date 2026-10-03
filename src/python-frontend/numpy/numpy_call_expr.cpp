@@ -3456,101 +3456,94 @@ numpy_call_expr::try_build_nditer_descriptor_list(const nlohmann::json &arg)
   return list.build_list_from_exprs(elems);
 }
 
-std::vector<std::size_t>
-numpy_call_expr::resolve_reshape_shape(std::optional<std::size_t> total) const
+// One reshape dimension: an integer literal, possibly negated; INT64_MIN when
+// the node is not a concrete integer.
+static int64_t parse_reshape_dim(const nlohmann::json &node)
 {
-  auto parse_reshape_dim = [](const nlohmann::json &node) -> int64_t {
-    if (
-      node.is_object() && node.contains("_type") &&
-      node["_type"] == "Constant" && node.contains("value") &&
-      node["value"].is_number_integer())
-      return node["value"].get<int64_t>();
-    if (
-      node.is_object() && node.contains("_type") &&
-      node["_type"] == "UnaryOp" && node.contains("op") &&
-      node["op"]["_type"] == "USub" && node.contains("operand") &&
-      node["operand"]["_type"] == "Constant" &&
-      node["operand"]["value"].is_number_integer())
-      return -node["operand"]["value"].get<int64_t>();
+  if (!node.is_object())
     return INT64_MIN;
-  };
-
-  std::vector<int64_t> raw_shape;
-  const auto &shape_arg = call_["args"][1];
   if (
-    shape_arg.is_object() && shape_arg.contains("_type") &&
-    (shape_arg["_type"] == "Tuple" || shape_arg["_type"] == "List") &&
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return node["value"].get<int64_t>();
+  if (
+    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+    node["op"]["_type"] == "USub" && node.contains("operand") &&
+    node["operand"]["_type"] == "Constant" &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<int64_t>();
+  return INT64_MIN;
+}
+
+static int64_t require_reshape_dim(const nlohmann::json &node, const char *msg)
+{
+  const int64_t dim = parse_reshape_dim(node);
+  if (dim == INT64_MIN)
+    throw std::runtime_error(msg);
+  return dim;
+}
+
+// The requested dimensions of a reshape call, as written (-1 included).
+static std::vector<int64_t> raw_reshape_dims(const nlohmann::json &call)
+{
+  static const char *const not_concrete =
+    "TypeError: numpy.reshape() shape must contain concrete integers";
+  std::vector<int64_t> raw_shape;
+  const auto &shape_arg = call["args"][1];
+  if (
+    shape_arg.is_object() &&
+    (shape_arg.value("_type", "") == "Tuple" ||
+     shape_arg.value("_type", "") == "List") &&
     shape_arg.contains("elts"))
   {
     for (const auto &e : shape_arg["elts"])
-    {
-      int64_t d = parse_reshape_dim(e);
-      if (d == INT64_MIN)
-        throw std::runtime_error(
-          "TypeError: numpy.reshape() shape must contain concrete integers");
-      raw_shape.push_back(d);
-    }
+      raw_shape.push_back(require_reshape_dim(e, not_concrete));
+    return raw_shape;
   }
-  else if (call_["args"].size() > 2)
+  if (call["args"].size() > 2)
   {
     // Method form with each dimension as its own positional argument
-    // (a.reshape(d1, d2, ...)), equivalent to a.reshape((d1, d2, ...)).
-    // Only reachable here (not the single-tuple-arg branch above) because
-    // a single dimension can't be split into more than one argument, so
-    // more than one argument past the array itself always means this
-    // form -- for the method-form rewrite. A genuine module-function call
-    // numpy.reshape(a, 2, 3) has no such form: numpy's real signature is
-    // reshape(a, newshape, order='C'), so the third positional argument
-    // is `order`, not another dimension. Reject that case explicitly
-    // instead of silently reinterpreting it as split dimensions.
-    if (!call_.value("_numpy_method_form", false))
+    // (a.reshape(d1, d2, ...)). numpy.reshape(a, 2, 3) has no such form:
+    // its third positional argument is `order`, so reject it rather than
+    // reinterpret it as a split dimension.
+    if (!call.value("_numpy_method_form", false))
       throw std::runtime_error(
         "TypeError: numpy.reshape() does not accept dimensions as "
         "separate positional arguments; pass a tuple, or use the "
         "a.reshape(d1, d2, ...) method form");
-
-    for (std::size_t i = 1; i < call_["args"].size(); ++i)
-    {
-      int64_t d = parse_reshape_dim(call_["args"][i]);
-      if (d == INT64_MIN)
-        throw std::runtime_error(
-          "TypeError: numpy.reshape() shape must contain concrete integers");
-      raw_shape.push_back(d);
-    }
+    for (std::size_t i = 1; i < call["args"].size(); ++i)
+      raw_shape.push_back(require_reshape_dim(call["args"][i], not_concrete));
+    return raw_shape;
   }
-  else
-  {
-    int64_t d = parse_reshape_dim(shape_arg);
-    if (d == INT64_MIN)
-      throw std::runtime_error(
-        "TypeError: numpy.reshape() shape must be a concrete integer or "
-        "tuple");
-    raw_shape.push_back(d);
-  }
+  raw_shape.push_back(require_reshape_dim(
+    shape_arg,
+    "TypeError: numpy.reshape() shape must be a concrete integer or tuple"));
+  return raw_shape;
+}
 
+// Resolves a -1 entry against `total` (unknown for run-time extents) and
+// checks the element count.
+static std::vector<std::size_t> resolve_reshape_dims(
+  const std::vector<int64_t> &raw_shape,
+  std::optional<std::size_t> total)
+{
   std::vector<std::size_t> new_shape;
   std::size_t inferred_idx = raw_shape.size();
   std::size_t known_product = 1;
   for (std::size_t i = 0; i < raw_shape.size(); ++i)
   {
-    if (raw_shape[i] == -1)
-    {
-      if (inferred_idx != raw_shape.size())
-        throw std::runtime_error(
-          "ValueError: can only specify one unknown dimension");
-      inferred_idx = i;
-      new_shape.push_back(0);
-    }
-    else if (raw_shape[i] < 0)
-    {
+    if (raw_shape[i] == -1 && inferred_idx != raw_shape.size())
+      throw std::runtime_error(
+        "ValueError: can only specify one unknown dimension");
+    if (raw_shape[i] < -1)
       throw std::runtime_error(
         "ValueError: negative dimensions are not allowed");
-    }
-    else
-    {
-      new_shape.push_back(static_cast<std::size_t>(raw_shape[i]));
+    if (raw_shape[i] == -1)
+      inferred_idx = i;
+    new_shape.push_back(
+      raw_shape[i] == -1 ? 0 : static_cast<std::size_t>(raw_shape[i]));
+    if (raw_shape[i] != -1)
       known_product *= new_shape.back();
-    }
   }
   if (inferred_idx != raw_shape.size())
   {
@@ -3575,9 +3568,44 @@ numpy_call_expr::resolve_reshape_shape(std::optional<std::size_t> total) const
   return new_shape;
 }
 
+std::vector<std::size_t>
+numpy_call_expr::resolve_reshape_shape(std::optional<std::size_t> total) const
+{
+  return resolve_reshape_dims(raw_reshape_dims(call_), total);
+}
+
 // NumPy's _attempt_nocopy_reshape for C order (element strides): the strides
 // of a view with `new_shape` over an array of `old_shape`/`old_strides`, or
 // nullopt when the elements must be copied. Size-1 axes never constrain it.
+static std::vector<long long>
+row_major_element_strides(const std::vector<std::size_t> &shape)
+{
+  std::vector<long long> strides(shape.size(), 1);
+  for (std::size_t k = shape.size(); k-- > 1;)
+    strides[k - 1] = strides[k] * static_cast<long long>(shape[k]);
+  return strides;
+}
+
+// Drops the size-1 axes of a shape/strides pair; false when an axis is empty.
+static bool drop_unit_axes(
+  const std::vector<long long> &old_shape,
+  const std::vector<long long> &old_strides,
+  std::vector<long long> &dims,
+  std::vector<long long> &strides)
+{
+  for (std::size_t axis = 0; axis < old_shape.size(); ++axis)
+  {
+    if (old_shape[axis] == 0)
+      return false;
+    if (old_shape[axis] != 1)
+    {
+      dims.push_back(old_shape[axis]);
+      strides.push_back(old_strides[axis]);
+    }
+  }
+  return true;
+}
+
 static std::optional<std::vector<long long>> nocopy_reshape_strides(
   const std::vector<long long> &old_shape,
   const std::vector<long long> &old_strides,
@@ -3585,21 +3613,8 @@ static std::optional<std::vector<long long>> nocopy_reshape_strides(
 {
   std::vector<long long> dims;
   std::vector<long long> strides;
-  for (std::size_t axis = 0; axis < old_shape.size(); ++axis)
-  {
-    if (old_shape[axis] == 0)
-    {
-      std::vector<long long> empty(new_shape.size(), 1);
-      for (std::size_t k = new_shape.size(); k-- > 1;)
-        empty[k - 1] = empty[k] * static_cast<long long>(new_shape[k]);
-      return empty;
-    }
-    if (old_shape[axis] != 1)
-    {
-      dims.push_back(old_shape[axis]);
-      strides.push_back(old_strides[axis]);
-    }
-  }
+  if (!drop_unit_axes(old_shape, old_strides, dims, strides))
+    return row_major_element_strides(new_shape);
 
   const std::size_t old_rank = dims.size();
   const std::size_t new_rank = new_shape.size();
@@ -3640,6 +3655,43 @@ static std::optional<std::vector<long long>> nocopy_reshape_strides(
   return new_strides;
 }
 
+std::optional<exprt> numpy_call_expr::reshape_strided_view(
+  python_list &list,
+  const python_list::strided_view_desc &strided,
+  const nlohmann::json &arg,
+  bool as_view) const
+{
+  if (axes_are_symbolic(strided.axes))
+    return list.try_reshape_symbolic_view(
+      arg, resolve_reshape_shape(std::nullopt));
+  long long total = 1;
+  std::vector<long long> old_shape;
+  std::vector<long long> old_strides;
+  for (const auto &axis : strided.axes)
+  {
+    total *= axis.extent;
+    old_shape.push_back(axis.extent);
+    old_strides.push_back(axis.stride);
+  }
+  const std::vector<std::size_t> new_shape =
+    resolve_reshape_shape(static_cast<std::size_t>(total));
+  // NumPy returns a view whenever the strides can be adjusted, a copy else.
+  const std::optional<std::vector<long long>> strides =
+    as_view ? nocopy_reshape_strides(old_shape, old_strides, new_shape)
+            : std::nullopt;
+  if (!strides)
+    return list.copy_strided_view(
+      strided, from_integer(0, size_type()), strided.axes, &new_shape);
+  std::vector<python_list::strided_axis> axes(new_shape.size());
+  for (std::size_t axis = 0; axis < axes.size(); ++axis)
+  {
+    axes[axis].extent = static_cast<long long>(new_shape[axis]);
+    axes[axis].stride = (*strides)[axis];
+  }
+  return list.register_strided_view(
+    strided, from_integer(0, size_type()), axes);
+}
+
 std::optional<exprt> numpy_call_expr::try_build_reshape_pointer_view()
 {
   const nlohmann::json &arg = call_["args"][0];
@@ -3663,43 +3715,12 @@ std::optional<exprt> numpy_call_expr::try_build_reshape_pointer_view()
     list.flat_shape_info_of(array);
   if (!source)
   {
-    // A non-contiguous view cannot be reshaped in place: NumPy copies.
+    // A non-contiguous view cannot always be reshaped in place.
     const std::optional<python_list::strided_view_desc> strided =
       list.describe_strided_view(array);
     if (!strided)
       return std::nullopt;
-    if (axes_are_symbolic(strided->axes))
-      return list.try_reshape_symbolic_view(
-        arg, resolve_reshape_shape(std::nullopt));
-    long long total = 1;
-    for (const auto &axis : strided->axes)
-      total *= axis.extent;
-    const std::vector<std::size_t> new_shape =
-      resolve_reshape_shape(static_cast<std::size_t>(total));
-    std::vector<long long> old_shape;
-    std::vector<long long> old_strides;
-    for (const auto &axis : strided->axes)
-    {
-      old_shape.push_back(axis.extent);
-      old_strides.push_back(axis.stride);
-    }
-    // NumPy returns a view whenever the strides can be adjusted, a copy else.
-    if (lhs && lhs->is_symbol())
-      if (
-        std::optional<std::vector<long long>> strides =
-          nocopy_reshape_strides(old_shape, old_strides, new_shape))
-      {
-        std::vector<python_list::strided_axis> axes(new_shape.size());
-        for (std::size_t axis = 0; axis < axes.size(); ++axis)
-        {
-          axes[axis].extent = static_cast<long long>(new_shape[axis]);
-          axes[axis].stride = (*strides)[axis];
-        }
-        return list.register_strided_view(
-          *strided, from_integer(0, size_type()), axes);
-      }
-    return list.copy_strided_view(
-      *strided, from_integer(0, size_type()), strided->axes, &new_shape);
+    return reshape_strided_view(list, *strided, arg, lhs && lhs->is_symbol());
   }
 
   const std::vector<std::size_t> shape =
@@ -3801,6 +3822,84 @@ std::optional<exprt> numpy_call_expr::try_build_view_flatten_copy()
     *source, from_integer(0, size_type()), source->axes, &flat);
 }
 
+static std::optional<long long> literal_int(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (!try_extract_numeric_constant(node, value) || !value.is_int)
+    return std::nullopt;
+  return value.int_value;
+}
+
+// A literal axis normalized against `rank`; nullopt when out of range.
+static std::optional<long long>
+literal_axis(const nlohmann::json &node, long long rank)
+{
+  std::optional<long long> axis = literal_int(node);
+  if (axis && *axis < 0)
+    *axis += rank;
+  if (!axis || *axis < 0 || *axis >= rank)
+    return std::nullopt;
+  return axis;
+}
+
+// The permutation spelled by transpose's explicit `axes` tuple.
+static std::optional<std::vector<long long>>
+transpose_axes_order(const nlohmann::json &axes, long long rank)
+{
+  if (
+    !axes.is_object() ||
+    (axes.value("_type", "") != "Tuple" && axes.value("_type", "") != "List") ||
+    axes["elts"].size() != static_cast<std::size_t>(rank))
+    return std::nullopt;
+  std::vector<long long> order;
+  for (const auto &element : axes["elts"])
+  {
+    std::optional<long long> axis = literal_axis(element, rank);
+    if (!axis)
+      return std::nullopt;
+    order.push_back(*axis);
+  }
+  std::vector<long long> sorted = order;
+  std::sort(sorted.begin(), sorted.end());
+  for (long long i = 0; i < rank; ++i)
+    if (sorted[static_cast<std::size_t>(i)] != i)
+      return std::nullopt;
+  return order;
+}
+
+// Source axis for each result axis of transpose/swapaxes/moveaxis.
+static std::optional<std::vector<long long>> axis_permutation_order(
+  const std::string &function,
+  const nlohmann::json &args,
+  long long rank)
+{
+  std::vector<long long> order(static_cast<std::size_t>(rank));
+  std::iota(order.begin(), order.end(), 0);
+  if (function == "transpose" && args.size() == 1)
+  {
+    std::reverse(order.begin(), order.end());
+    return order;
+  }
+  if (function == "transpose" && args.size() == 2)
+    return transpose_axes_order(args[1], rank);
+  if (function == "transpose" || args.size() != 3)
+    return std::nullopt;
+  const std::optional<long long> first = literal_axis(args[1], rank);
+  const std::optional<long long> second = literal_axis(args[2], rank);
+  if (!first || !second)
+    return std::nullopt;
+  if (function == "swapaxes")
+    std::swap(
+      order[static_cast<std::size_t>(*first)],
+      order[static_cast<std::size_t>(*second)]);
+  else
+  {
+    order.erase(order.begin() + *first);
+    order.insert(order.begin() + *second, *first);
+  }
+  return order;
+}
+
 std::optional<exprt> numpy_call_expr::try_build_axis_permutation_view()
 {
   const std::string &function = function_id_.get_function();
@@ -3817,72 +3916,109 @@ std::optional<exprt> numpy_call_expr::try_build_axis_permutation_view()
     source->axes.empty())
     return std::nullopt;
 
-  const long long rank = static_cast<long long>(source->axes.size());
-  auto literal_axis =
-    [&](const nlohmann::json &node) -> std::optional<long long> {
-    numeric_value value;
-    if (!try_extract_numeric_constant(node, value) || !value.is_int)
-      return std::nullopt;
-    const long long axis =
-      value.int_value < 0 ? value.int_value + rank : value.int_value;
-    if (axis < 0 || axis >= rank)
-      return std::nullopt;
-    return axis;
-  };
-
-  std::vector<long long> order(static_cast<std::size_t>(rank));
-  std::iota(order.begin(), order.end(), 0);
-  const std::size_t arg_count = call_["args"].size();
-  if (function == "transpose" && arg_count == 1)
-    std::reverse(order.begin(), order.end());
-  else if (function == "transpose" && arg_count == 2)
-  {
-    const nlohmann::json &axes = call_["args"][1];
-    if (
-      !axes.is_object() ||
-      (axes.value("_type", "") != "Tuple" &&
-       axes.value("_type", "") != "List") ||
-      axes["elts"].size() != order.size())
-      return std::nullopt;
-    for (std::size_t i = 0; i < order.size(); ++i)
-    {
-      std::optional<long long> axis = literal_axis(axes["elts"][i]);
-      if (!axis)
-        return std::nullopt;
-      order[i] = *axis;
-    }
-    std::vector<long long> sorted = order;
-    std::sort(sorted.begin(), sorted.end());
-    for (long long i = 0; i < rank; ++i)
-      if (sorted[static_cast<std::size_t>(i)] != i)
-        return std::nullopt;
-  }
-  else if (function == "swapaxes" && arg_count == 3)
-  {
-    std::optional<long long> first = literal_axis(call_["args"][1]);
-    std::optional<long long> second = literal_axis(call_["args"][2]);
-    if (!first || !second)
-      return std::nullopt;
-    std::swap(
-      order[static_cast<std::size_t>(*first)],
-      order[static_cast<std::size_t>(*second)]);
-  }
-  else if (function == "moveaxis" && arg_count == 3)
-  {
-    std::optional<long long> from = literal_axis(call_["args"][1]);
-    std::optional<long long> to = literal_axis(call_["args"][2]);
-    if (!from || !to)
-      return std::nullopt;
-    order.erase(order.begin() + *from);
-    order.insert(order.begin() + *to, *from);
-  }
-  else
+  const std::optional<std::vector<long long>> order = axis_permutation_order(
+    function, call_["args"], static_cast<long long>(source->axes.size()));
+  if (!order)
     return std::nullopt;
 
   std::vector<python_list::strided_axis> permuted;
-  for (long long axis : order)
+  for (long long axis : *order)
     permuted.push_back(source->axes[static_cast<std::size_t>(axis)]);
   return emit_strided_result(list, *source, permuted, false);
+}
+
+// squeeze: drops size-1 axes (or only the named one). Which extents equal 1
+// is only known at run time for a symbolic axis, so those decline.
+static std::optional<std::vector<python_list::strided_axis>> squeeze_view_axes(
+  const std::vector<python_list::strided_axis> &axes,
+  const nlohmann::json &args)
+{
+  const long long rank = static_cast<long long>(axes.size());
+  if (
+    args.size() > 2 ||
+    std::any_of(axes.begin(), axes.end(), [](const auto &axis) {
+      return axis.symbolic();
+    }))
+    return std::nullopt;
+  std::optional<long long> only_axis;
+  if (args.size() == 2)
+  {
+    only_axis = literal_axis(args[1], rank);
+    if (!only_axis || axes[*only_axis].extent != 1)
+      return std::nullopt;
+  }
+  std::vector<python_list::strided_axis> kept;
+  for (long long axis = 0; axis < rank; ++axis)
+    if (axes[axis].extent != 1 || (only_axis && *only_axis != axis))
+      kept.push_back(axes[axis]);
+  return kept;
+}
+
+// expand_dims: inserts a size-1 axis whose stride keeps the layout
+// row-major-consistent.
+static std::optional<std::vector<python_list::strided_axis>>
+expand_dims_view_axes(
+  std::vector<python_list::strided_axis> axes,
+  const nlohmann::json &args)
+{
+  const long long rank = static_cast<long long>(axes.size());
+  if (args.size() != 2)
+    return std::nullopt;
+  const std::optional<long long> axis = literal_axis(args[1], rank + 1);
+  if (!axis || (*axis < rank && axes[*axis].symbolic()))
+    return std::nullopt;
+  python_list::strided_axis inserted;
+  inserted.extent = 1;
+  inserted.stride = *axis < rank ? axes[*axis].extent * axes[*axis].stride : 1;
+  axes.insert(axes.begin() + *axis, inserted);
+  return axes;
+}
+
+static std::optional<std::vector<long long>>
+literal_broadcast_shape(const nlohmann::json &target)
+{
+  std::vector<long long> shape;
+  const bool sequence =
+    target.is_object() && (target.value("_type", "") == "Tuple" ||
+                           target.value("_type", "") == "List");
+  for (const auto &element :
+       sequence ? target["elts"] : nlohmann::json::array({target}))
+  {
+    const std::optional<long long> dim = literal_int(element);
+    if (!dim || *dim < 0)
+      return std::nullopt;
+    shape.push_back(*dim);
+  }
+  return shape;
+}
+
+// broadcast_to: aligns from the right; a size-1 (or missing) axis repeats
+// with stride 0.
+static std::optional<std::vector<python_list::strided_axis>>
+broadcast_view_axes(
+  const std::vector<python_list::strided_axis> &axes,
+  const nlohmann::json &args)
+{
+  if (args.size() < 2)
+    return std::nullopt;
+  const std::optional<std::vector<long long>> new_shape =
+    literal_broadcast_shape(args[1]);
+  if (!new_shape || new_shape->size() < axes.size() || new_shape->empty())
+    return std::nullopt;
+
+  std::vector<python_list::strided_axis> broadcast(new_shape->size());
+  const std::size_t lead = new_shape->size() - axes.size();
+  for (std::size_t i = 0; i < new_shape->size(); ++i)
+    broadcast[i].extent = (*new_shape)[i];
+  for (std::size_t axis = 0; axis < axes.size(); ++axis)
+  {
+    const long long target_dim = (*new_shape)[lead + axis];
+    if (!axes[axis].symbolic() && axes[axis].extent == target_dim)
+      broadcast[lead + axis] = axes[axis];
+    else if (axes[axis].symbolic() || axes[axis].extent != 1)
+      return std::nullopt;
+  }
+  return broadcast;
 }
 
 std::optional<exprt> numpy_call_expr::try_build_shape_only_view()
@@ -3906,113 +4042,18 @@ std::optional<exprt> numpy_call_expr::try_build_shape_only_view()
                                     converter_.ast()))
     return std::nullopt;
 
-  const long long rank = static_cast<long long>(source->axes.size());
-  auto literal = [&](const nlohmann::json &node) -> std::optional<long long> {
-    numeric_value value;
-    if (!try_extract_numeric_constant(node, value) || !value.is_int)
-      return std::nullopt;
-    return value.int_value;
-  };
-
-  std::vector<python_list::strided_axis> axes = source->axes;
-  bool readonly = false;
-  const std::size_t arg_count = call_["args"].size();
-  // Which extents equal 1 is only known at run time for a symbolic axis.
-  if (function == "squeeze" && axes_are_symbolic(axes))
-    return std::nullopt;
+  std::optional<std::vector<python_list::strided_axis>> axes;
   if (function == "squeeze")
-  {
-    std::optional<long long> only_axis;
-    if (arg_count == 2)
-    {
-      only_axis = literal(call_["args"][1]);
-      if (!only_axis)
-        return std::nullopt;
-      if (*only_axis < 0)
-        *only_axis += rank;
-      if (
-        *only_axis < 0 || *only_axis >= rank || axes[*only_axis].symbolic() ||
-        axes[*only_axis].extent != 1)
-        return std::nullopt;
-    }
-    else if (arg_count != 1)
-      return std::nullopt;
-    std::vector<python_list::strided_axis> kept;
-    for (long long axis = 0; axis < rank; ++axis)
-    {
-      const bool drop = !axes[axis].symbolic() && axes[axis].extent == 1 &&
-                        (!only_axis || *only_axis == axis);
-      if (!drop)
-        kept.push_back(axes[axis]);
-    }
-    axes = kept;
-  }
+    axes = squeeze_view_axes(source->axes, call_["args"]);
   else if (function == "expand_dims")
-  {
-    std::optional<long long> axis =
-      arg_count == 2 ? literal(call_["args"][1]) : std::nullopt;
-    if (!axis)
-      return std::nullopt;
-    if (*axis < 0)
-      *axis += rank + 1;
-    if (*axis < 0 || *axis > rank)
-      return std::nullopt;
-    python_list::strided_axis inserted;
-    inserted.extent = 1;
-    if (*axis < rank)
-    {
-      if (axes[*axis].symbolic())
-        return std::nullopt;
-      inserted.stride = axes[*axis].extent * axes[*axis].stride;
-    }
-    else
-      inserted.stride = 1;
-    axes.insert(axes.begin() + *axis, inserted);
-  }
+    axes = expand_dims_view_axes(source->axes, call_["args"]);
   else
-  {
-    const nlohmann::json &target =
-      call_["args"].size() > 1 ? call_["args"][1] : nlohmann::json();
-    std::vector<long long> new_shape;
-    if (
-      target.is_object() && (target.value("_type", "") == "Tuple" ||
-                             target.value("_type", "") == "List"))
-    {
-      for (const auto &element : target["elts"])
-      {
-        std::optional<long long> dim = literal(element);
-        if (!dim || *dim < 0)
-          return std::nullopt;
-        new_shape.push_back(*dim);
-      }
-    }
-    else if (std::optional<long long> dim = literal(target); dim && *dim >= 0)
-      new_shape.push_back(*dim);
-    else
-      return std::nullopt;
-    if (new_shape.size() < axes.size() || new_shape.empty())
-      return std::nullopt;
-
-    // Align from the right; a size-1 (or missing) axis repeats with stride 0.
-    std::vector<python_list::strided_axis> broadcast(new_shape.size());
-    const std::size_t lead = new_shape.size() - axes.size();
-    for (std::size_t i = 0; i < new_shape.size(); ++i)
-      broadcast[i].extent = new_shape[i];
-    for (std::size_t axis = 0; axis < axes.size(); ++axis)
-    {
-      const long long target_dim = new_shape[lead + axis];
-      if (!axes[axis].symbolic() && axes[axis].extent == target_dim)
-        broadcast[lead + axis] = axes[axis];
-      else if (axes[axis].symbolic() || axes[axis].extent != 1)
-        return std::nullopt;
-    }
-    axes = broadcast;
-    readonly = true;
-  }
-  if (axes.empty())
+    axes = broadcast_view_axes(source->axes, call_["args"]);
+  if (!axes || axes->empty())
     return std::nullopt;
 
-  return emit_strided_result(list, *source, axes, readonly);
+  return emit_strided_result(
+    list, *source, *axes, /*readonly=*/function == "broadcast_to");
 }
 
 std::optional<exprt> numpy_call_expr::try_materialize_descriptor_copy_call()
