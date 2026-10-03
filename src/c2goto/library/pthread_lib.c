@@ -234,7 +234,6 @@ __ESBMC_HIDE:;
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
-  __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 
   // Ensure that there is no subsequent execution path
