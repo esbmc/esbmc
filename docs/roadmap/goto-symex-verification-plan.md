@@ -816,6 +816,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
+| **R98** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R81's open note, §15 M9 (R98); **FIXED**, same entry | **A user-placement new allocated.** `get_new_storage` routed a program's own `operator new` to goto-conversion only when it took the size alone, so `new (pool) T` and `new (pool) T[n]` with a user-declared `operator new(size_t, Pool &)` became a fresh built-in allocation and the function never ran. A pool that hands out its buffer verified `(unsigned char *)p == pool.buf` as FAILED, and a pool that hands out one slot twice verified as SUCCESSFUL. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `adjust_new` in `src/clang-cpp-frontend/clang_cpp_adjust_expr.cpp`; `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/user_placement_new{,_fail}` | — | **Fixed**: an allocation function whose parameters are the size and the placement arguments is called with them. |
 | **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
 | **R82** | **High (false FAILED, default configuration)** — R61's residual, §15 M9 (R82); **FIXED**, same entry | **A pointer to a variable-length array scaled by a free size.** `rename_type` renamed a symbolic array size only on an expression's own array type and its first subtype, and only when the size was a bare symbol. A pointer's subtype was never renamed, so `p = a + 1` with `int (*p)[m]` scaled by `m` as an unconstrained L0 symbol, and `(*p)[2]` of a correct program was an array-bounds violation. Sizes deeper than the second level, or spelt `m + 1`, were missed the same way. | `goto_symex_statet::rename_type`, `rename_array_sizes` and `fixup_renamed_type`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/vla_pointer_stride{,_fail}` | — | **Fixed**: every non-constant array size is renamed, through array and pointer subtypes. A VLA size reassigned after its declarator is still read at its current value (#8019). |
 | **R81** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R65's open note, §15 M9 (R81); **FIXED**, same entry | **An array placement new allocated.** The frontend routed only the scalar form of `::operator new(size_t, void *)` to `get_placement_new`; `new (buf) T[n]` took the allocating `cpp_new[]` path, so its elements were built in fresh memory and `buf` was left alone. `new (buf) int[2]{1, 2}` made `p == buf` fail and `assert(((int *)buf)[1] != 2)` verify. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `cpp_new_at` and `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_placement_new{,_fail}` | — | **Fixed**: the placement address is recorded on the `cpp_new[]` side effect, evaluated once, and assigned in place of the allocation; the elements' initialisation runs as before. |
@@ -9872,6 +9873,43 @@ the heap.
 
 Not fixed: a count known only at run time (`new E[n]` with `n` nondet) leaves
 the bound symbolic, as it leaves the construction loop.
+
+---
+
+### M9 (R98) — 2026-10-03, a user-placement new that allocated
+
+R81 left open that a non-reserved placement form still allocates. With
+`void *operator new(size_t, Pool &)` and `void *operator new[](size_t, Pool &)`
+defined by the program, `new (pool) int(7)` and `new (pool) int[3]{1, 2, 3}`
+are built in fresh memory and the program's function never runs. A pool that
+returns its buffer makes `(unsigned char *)a == pool.buf` FAILED on master; a
+pool that forgets to advance, so that `new (pool) int(2)` overwrites
+`new (pool) int(1)`, verifies `assert(*a == 1)` as SUCCESSFUL. Natively the
+first holds and the second aborts ([expr.new]/16: the placement arguments are
+passed to the allocation function after the size).
+
+`get_new_storage` recorded a program's `operator new` only when it took the
+size alone (#6494), and a class's static `operator new(size_t, Pool &, int)`
+was skipped the same way.
+
+**Fixed.** `get_new_storage` now records any defined allocation function whose
+parameter count is one plus the placement argument count, unless clang passes
+an alignment, together with the placement arguments. `adjust_new` binds each
+to its parameter type, so a reference parameter takes the argument's address,
+and `do_cpp_new` evaluates them once and passes them after the byte count. The
+arguments ride in `arguments[5]` onwards of `sideeffect2t`; dropping that slot
+alone restores master's false FAILED.
+
+`regression/esbmc-cpp/cpp/user_placement_new` (a scalar and an array from a
+global pool, and a class `operator new` with a side-effecting `int` argument
+evaluated once) and `user_placement_new_fail` change verdict against master.
+The `esbmc-cpp/cpp` suite keeps master's verdicts apart from these two (21
+local failures, timeouts under a 60 s cap and LLVM 18 differences, identical
+on both binaries). Only Z3 was built in this run's container.
+
+Not fixed: the aligned forms (`operator new(size_t, std::align_val_t)`) still
+allocate, and an allocation function declared without a body in the
+translation unit is still replaced by the built-in allocation.
 
 ---
 

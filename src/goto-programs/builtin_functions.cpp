@@ -543,6 +543,12 @@ void goto_convertt::do_cpp_new(
     call.lhs() = raw;
     call.function() = alloc_function;
     call.arguments().push_back(byte_size);
+    for (exprt arg :
+         static_cast<const exprt &>(rhs.find("alloc_arguments")).operands())
+    {
+      remove_sideeffects(arg, dest);
+      call.arguments().push_back(arg);
+    }
     call.location() = rhs.find_location();
 
     goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
