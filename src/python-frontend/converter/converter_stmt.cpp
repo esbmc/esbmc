@@ -3514,20 +3514,17 @@ void python_converter::emit_strided_copy(
       source_position,
       python_expr::build_mul(index[axis], axes[axis].stride, ll_type),
       ll_type);
-  const typet elem_type = [&] {
-    typet t = dst.type();
-    while (t.is_array())
-      t = ns.follow(to_array_type(t).subtype());
-    return t;
-  }();
-  exprt target = dst;
+  // The destination is one flat array filled in row-major order: nested
+  // variable-length arrays are not supported downstream.
+  const typet elem_type = to_array_type(ns.follow(dst.type())).subtype();
+  exprt target_position = from_integer(0, ll_type);
   for (std::size_t axis = 0; axis < axes.size(); ++axis)
-    target = python_expr::build_index(
-      target,
-      python_expr::build_typecast(index[axis], size_type()),
-      axis + 1 == axes.size()
-        ? elem_type
-        : to_array_type(ns.follow(target.type())).subtype());
+    target_position = python_expr::build_add(
+      python_expr::build_mul(target_position, axes[axis].extent, ll_type),
+      index[axis],
+      ll_type);
+  const exprt target = python_expr::build_index(
+    dst, python_expr::build_typecast(target_position, size_type()), elem_type);
   code_assignt copy(
     target,
     python_expr::build_index(
@@ -3568,14 +3565,24 @@ std::string python_converter::snapshot_symbolic_numpy_view(
   const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
 
   std::vector<strided_copy_axis> axes;
-  typet snapshot_type = old_ptr.type().subtype();
-  for (std::size_t axis = rank; axis-- > 0;)
-    snapshot_type = array_typet(
-      snapshot_type,
-      python_expr::build_typecast(numpy_view_extent(info, axis), size_type()));
+  exprt count = from_integer(1, ll_type);
   for (std::size_t axis = 0; axis < rank; ++axis)
+  {
     axes.push_back(
       {numpy_view_extent(info, axis), numpy_view_stride(info, axis)});
+    count = python_expr::build_mul(count, axes.back().extent, ll_type);
+  }
+  symbolt &count_temp =
+    create_tmp_symbol(location, "$view_snapshot_count$", ll_type, exprt());
+  code_declt count_decl(symbol_expr(count_temp));
+  count_decl.location() = location;
+  target_block.copy_to_operands(count_decl);
+  code_assignt count_init(symbol_expr(count_temp), count);
+  count_init.location() = location;
+  target_block.copy_to_operands(count_init);
+  const array_typet snapshot_type(
+    old_ptr.type().subtype(),
+    python_expr::build_typecast(symbol_expr(count_temp), size_type()));
 
   symbolt &snapshot =
     create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
