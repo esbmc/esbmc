@@ -3151,7 +3151,9 @@ void python_converter::reject_unsafe_numpy_view_write_to(
   // *through* the view itself is refused.
   {
     auto it = numpy_pointer_view_info_.find(root_id);
-    if (it != numpy_pointer_view_info_.end() && it->second.readonly)
+    if (
+      numpy_readonly_arrays_.count(root_id) != 0 ||
+      (it != numpy_pointer_view_info_.end() && it->second.readonly))
       throw std::runtime_error(
         "ValueError: assignment destination is read-only");
   }
@@ -3756,6 +3758,28 @@ bool python_converter::keep_numpy_result_view(const std::string &lhs_id)
   return false;
 }
 
+// A view of a read-only array is read-only: anything indexed out of a
+// broadcast_to() result, or a view of a name already bound to one.
+bool python_converter::is_readonly_numpy_view_expr(
+  const nlohmann::json &node) const
+{
+  const nlohmann::json *root = &node;
+  while (root->is_object() && root->value("_type", "") == "Subscript" &&
+         root->contains("value"))
+    root = &(*root)["value"];
+  if (
+    root->is_object() && root->value("_type", "") == "Call" &&
+    (*root)["func"].is_object() &&
+    (*root)["func"].value("attr", "") == "broadcast_to")
+    return true;
+
+  if (numpy_result_is_fresh_copy_ || !is_numpy_view_copy_expr(node))
+    return false;
+  const std::string source_id =
+    resolve_name_symbol_id(root_name_from_numpy_view_copy_expr(node));
+  return numpy_readonly_arrays_.count(source_id) != 0;
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3764,6 +3788,10 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
+  if (is_readonly_numpy_view_expr(rhs_node))
+    numpy_readonly_arrays_.insert(lhs_id);
+  else
+    numpy_readonly_arrays_.erase(lhs_id);
   const bool unconditional_assignment =
     block_nesting_ == function_body_depth_ + 1;
   if (

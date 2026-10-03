@@ -1747,6 +1747,7 @@ private:
   std::vector<std::string> numpy_views_of(const std::string &rebound_id) const;
 
   bool keep_numpy_result_view(const std::string &lhs_id);
+  bool is_readonly_numpy_view_expr(const nlohmann::json &node) const;
 
   void record_numpy_constructor_binding(
     const exprt &lhs,
@@ -2410,6 +2411,8 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  /// Names bound to a read-only numpy view that is not a pointer view.
+  std::unordered_set<std::string> numpy_readonly_arrays_;
   /// Namespace of each operational model loaded this run, in load order.
   std::vector<std::string> model_namespaces_;
   // A 2-D+ numpy array parameter's full logical shape, keyed by the

@@ -2031,6 +2031,7 @@ python_list::describe_strided_view(const exprt &array)
   strided_view_desc desc;
   desc.elem_type = elem_type;
   desc.axes = tracked_view_axes(id);
+  desc.readonly = view->second.readonly;
   desc.base = scalar_storage_pointer(array, pointer_typet(elem_type));
   return desc;
 }
@@ -2058,7 +2059,7 @@ exprt python_list::register_strided_view(
   converter_.numpy_result_is_view_ = true;
 
   python_converter::numpy_scalar_pointer_view_infot info;
-  info.readonly = readonly;
+  info.readonly = readonly || source.readonly;
   for (const strided_axis &axis : axes)
   {
     info.shape.push_back(static_cast<std::size_t>(axis.extent));

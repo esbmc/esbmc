@@ -281,6 +281,8 @@ public:
     exprt base;
     typet elem_type;
     std::vector<strided_axis> axes;
+    /// A view of a read-only view (broadcast_to, diagonal) is read-only.
+    bool readonly = false;
   };
 
   std::optional<strided_view_desc> describe_strided_view(const exprt &array);
