@@ -721,7 +721,16 @@ protected:
   void memcpy_finish(
     const code_function_call2t &func_call,
     const expr2tc &dst_arg,
-    const expr2tc &src_arg);
+    const expr2tc &src_arg,
+    const expr2tc &n_arg);
+
+  /** An INTERNAL dereference drops an unknown or invalid target without a
+   *  claim, so the memory builtins claim it themselves when @p ptr's value
+   *  set holds one and @p n is nonzero. */
+  void claim_valid_operand(
+    const expr2tc &ptr,
+    const expr2tc &n,
+    const std::string &func);
 
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an

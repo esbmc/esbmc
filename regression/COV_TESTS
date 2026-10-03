@@ -2151,3 +2151,5 @@ regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
+regression/esbmc/mem_intrinsics_invalid_pointer
+regression/esbmc/mem_intrinsics_invalid_pointer_fail
