@@ -9954,6 +9954,34 @@ invariant naming the loop variable outside its scope),
 `PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
 `accepted under KNOWNBUG`.
 
+### M9 (examined, open) — 2026-10-03, a pointer's bytes copied under `--ir`
+
+`memcpy(b, &q, sizeof q); memcpy(&r, b, sizeof q); assert(r == &g);` with
+`q = &g` is SUCCESSFUL by default and natively, and FAILED under `--ir`
+(`regression/esbmc/ir_pointer_byte_copy`). Under the integer encoding,
+`convert_byte_update_int_mode` updates a pointer by casting it to an integer
+and back, so the cast misses `convert_typecast_to_ptr`'s byte-update case and
+each partial address maps to the invalid object.
+
+Two approaches were tried and neither closes it:
+
+- In the solver, update the integer image as BV mode does, bound object
+  addresses to the address width, and skip byte positions a constant offset
+  rules out (the first commit on `fix/ir-pointer-byte-copy`). The verdict is
+  right, but Z3 does not decide either half within 120 s even under `--32`:
+  each of the eight updates goes through a pointer-to-integer and an
+  integer-to-pointer conversion plus div/mod over the address.
+- In the simplifier, fold a byte-update chain that writes every byte of a
+  value with the same byte of one same-typed `x` to `x`. The rule is exact
+  (C11 6.2.6.1p4) but never fires: `--show-vcc` shows every step through an
+  SSA symbol (`r#k`, `b#k`), because symex does not propagate a `WITH` chain
+  over the nondet base of `b`, and admitting byte operations to
+  `constant_propagation` does not change that.
+
+Closing it needs either array propagation over a nondet base, which risks
+performance elsewhere, or an integer encoding of byte operations on pointers
+that keeps the object id apart from the offset.
+
 ---
 
 ## Appendix A — Methodological basis
