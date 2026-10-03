@@ -2121,6 +2121,12 @@ regression/esbmc/github_8048
 regression/esbmc/github_8048_fail
 regression/esbmc/github_8048_huge_vla
 regression/esbmc/github_8048_huge_vla_fail
+regression/python/github_8100
+regression/python/github_8100_fail
+regression/python/github_8100_alias
+regression/python/github_8100_alias_fail
+regression/python/list_eq_nested_comprehension
+regression/python/list_eq_nested_comprehension_fail
 regression/esbmc-cpp/cpp/github_8090_unnamed_override
 regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
@@ -2134,6 +2140,11 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
+regression/esbmc-cpp/cpp/aggregate_element_temporary
+regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
+regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
+regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
+regression/esbmc-cpp/cpp/shared_ptr_member_copy
 regression/esbmc-cpp/cpp/condition_temporary
 regression/esbmc-cpp/cpp/condition_temporary_fail
 regression/esbmc-cpp/cpp/condition_temporary_legacy
@@ -2157,3 +2168,5 @@ regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
+regression/esbmc/fam_false_2
+regression/esbmc/fam_true_4
