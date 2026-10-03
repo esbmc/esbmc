@@ -2217,36 +2217,54 @@ static std::size_t construction_position(
 
 namespace
 {
-/// Finds an expression that can put an exception in flight: a throw, or a
-/// dynamic_cast to a reference, which throws std::bad_cast.
-class throw_findert : public clang::RecursiveASTVisitor<throw_findert>
+/// Finds user code that can throw or catch: a throw, a try, or a dynamic_cast
+/// to a reference, which throws std::bad_cast. The operational models are
+/// system headers; an exception they throw is observable only where user
+/// code catches it.
+class exception_findert : public clang::RecursiveASTVisitor<exception_findert>
 {
 public:
+  explicit exception_findert(const clang::SourceManager &sm) : sm(sm)
+  {
+  }
+
   bool found = false;
 
-  bool VisitCXXThrowExpr(clang::CXXThrowExpr *)
+  bool VisitCXXThrowExpr(clang::CXXThrowExpr *e)
   {
-    found = true;
-    return false;
+    return !in_user_code(e);
+  }
+
+  bool VisitCXXTryStmt(clang::CXXTryStmt *s)
+  {
+    return !in_user_code(s);
   }
 
   bool VisitCXXDynamicCastExpr(clang::CXXDynamicCastExpr *e)
   {
-    found = e->getTypeAsWritten()->isReferenceType();
-    return !found;
+    return !(e->getTypeAsWritten()->isReferenceType() && in_user_code(e));
+  }
+
+private:
+  const clang::SourceManager &sm;
+
+  bool in_user_code(const clang::Stmt *s)
+  {
+    found = !sm.isInSystemHeader(s->getBeginLoc());
+    return found;
   }
 };
 } // namespace
 
-bool clang_cpp_convertert::translation_unit_may_throw()
+bool clang_cpp_convertert::user_code_uses_exceptions()
 {
-  if (!tu_may_throw)
+  if (!uses_exceptions)
   {
-    throw_findert finder;
+    exception_findert finder(ASTContext->getSourceManager());
     finder.TraverseDecl(ASTContext->getTranslationUnitDecl());
-    tu_may_throw = finder.found;
+    uses_exceptions = finder.found;
   }
-  return *tu_may_throw;
+  return *uses_exceptions;
 }
 
 static bool cannot_throw(const clang::CXXConstructorDecl &cd)
@@ -2285,7 +2303,7 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
 {
   if (
     cd.isDelegatingConstructor() || cannot_throw(cd) ||
-    !translation_unit_may_throw())
+    !user_code_uses_exceptions())
     return false;
 
   std::vector<subobject_destructort> dtors;
@@ -2312,10 +2330,7 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
     method_this(cd).first + "_subobjects_built$",
     location);
   built_sym.lvalue = true;
-  symbolt *built_ptr = nullptr;
-  if (context.move(built_sym, built_ptr))
-    return true;
-  const exprt built = symbol_expr(*built_ptr);
+  const exprt built = symbol_expr(*context.move_symbol_to_context(built_sym));
 
   auto progress = [&](std::size_t n) {
     code_assignt assign(built, from_integer(n, built.type()));

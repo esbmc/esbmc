@@ -2120,3 +2120,4 @@ regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc-cpp/try_catch/ctor_subobject_unwind
 regression/esbmc-cpp/try_catch/ctor_subobject_unwind_fail
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind_thread
