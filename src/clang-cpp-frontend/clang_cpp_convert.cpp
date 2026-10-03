@@ -2264,20 +2264,24 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
       bases.push_back(
         base.getType()->getCanonicalTypeUnqualified().getTypePtr());
 
-  // The subobjects before `built` in construction order are complete.
+  // The subobjects before `built` in construction order are complete. Another
+  // translation unit may have converted this constructor already.
+  const std::string built_id = method_this(cd).first + "_subobjects_built$";
   const locationt &location = body.location();
-  symbolt built_sym;
-  get_default_symbol(
-    built_sym,
-    get_modulename_from_path(location.file().as_string()),
-    size_type(),
-    "subobjects_built$",
-    method_this(cd).first + "_subobjects_built$",
-    location);
-  built_sym.lvalue = true;
-  symbolt *built_ptr = nullptr;
-  if (context.move(built_sym, built_ptr))
-    return true;
+  symbolt *built_ptr = context.find_symbol(built_id);
+  if (!built_ptr)
+  {
+    symbolt built_sym;
+    get_default_symbol(
+      built_sym,
+      get_modulename_from_path(location.file().as_string()),
+      size_type(),
+      "subobjects_built$",
+      built_id,
+      location);
+    built_sym.lvalue = true;
+    context.move(built_sym, built_ptr);
+  }
   const exprt built = symbol_expr(*built_ptr);
 
   auto progress = [&](std::size_t n) {
