@@ -1,5 +1,6 @@
 // The named-argument half of aggregate_init_temp_double_destroy: the member is
-// copy-constructed from `t` in place, so 2 constructors and 2 destructors run.
+// copy-constructed from a named object, and that copy is the member, so g++
+// runs 2 constructors and 2 destructors.
 #include <cassert>
 
 int c = 0, d = 0;
