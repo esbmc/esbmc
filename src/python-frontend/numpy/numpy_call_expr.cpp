@@ -3814,7 +3814,7 @@ std::optional<exprt> numpy_call_expr::try_build_axis_permutation_view()
   python_list list(converter_, call_);
   if (
     !describe_view_operand(call_["args"][0], list, source) ||
-    source->axes.size() < 2)
+    source->axes.empty())
     return std::nullopt;
 
   const long long rank = static_cast<long long>(source->axes.size());
