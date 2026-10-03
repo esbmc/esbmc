@@ -14,8 +14,9 @@ int main()
 
   priority_queue<int> myints;
 
+  int i;
   __ESBMC_loop_invariant(myints.size() == i);
-  for (int i = 0; i <= N; i++)
+  for (i = 0; i <= N; i++)
     myints.push(i);
 
   assert(myints.size() == N + 1);
