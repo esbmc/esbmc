@@ -135,7 +135,7 @@ public:
   }
 
   /** Get the number of context switches performed by this ex_state */
-  int get_context_switch()
+  int get_context_switch() const
   {
     return CS_number;
   }

@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-por --context-bound 2 --state-hashing
+^VERIFICATION SUCCESSFUL$

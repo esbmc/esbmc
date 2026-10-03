@@ -8,6 +8,7 @@
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
 
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <util/crypto_hash.h>
@@ -369,8 +370,11 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Set of state hashes we've discovered */
-  std::set<crypto_hash> hit_hashes;
+  /** State hashes discovered, mapped to the smallest context-switch count at
+   *  which each was seen. A collision prunes only when the recorded cswitch is
+   *  no greater than the current state's; pruning a state with more remaining
+   *  budget would be unsound under --context-bound. */
+  std::map<crypto_hash, int> hit_hashes;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;
