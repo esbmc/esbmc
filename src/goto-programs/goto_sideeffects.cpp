@@ -1909,29 +1909,10 @@ void goto_convertt::remove_sideeffects(
       // (destructors before DEADs, innermost temporaries first) right here.
       // A result that is used keeps block-level scope, as does anything
       // without a pending destructor call (plain DEADs of C-style temps).
-      if (!result_is_used)
-      {
-        bool have_destructor = false;
-        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
-             i++)
-          if (is_destructor_entry(targets.destructor_stack[i]))
-          {
-            have_destructor = true;
-            break;
-          }
-
-        if (have_destructor)
-        {
-          while (targets.destructor_stack.size() > stack_size)
-          {
-            codet d_code = targets.destructor_stack.back();
-            targets.destructor_stack.pop_back();
-            d_code.location() = location;
-            convert(d_code, dest);
-          }
-          expr.make_nil();
-        }
-      }
+      if (
+        !result_is_used &&
+        destroy_full_expression_temporaries(stack_size, location, dest))
+        expr.make_nil();
     }
     else if (statement == "nondet")
     {
