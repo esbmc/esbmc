@@ -295,6 +295,7 @@ protected:
     std::size_t false_size,
     const locationt &location,
     goto_programt &dest);
+  void record_exception_unwind(goto_programt::instructiont &call);
 
   //
   // Try-catch conversion
