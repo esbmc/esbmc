@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-01.
+**Updated:** 2026-10-02.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -21,8 +21,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Partial | Concrete array/view/descriptor returns from supported constructors, bare parameters, parameter subscript/subarrays, and supported descriptor calls over parameters are implemented. Remaining gap: `array_return_call_arg_edge` is still pinned as `KNOWNBUG`; mutating a captured list/array inside a function without a `global` declaration is a pre-existing symbol-resolution gap, not specific to array returns. Genuinely symbolic parameter shapes are rejected when unsupported metadata/view consumers need concrete shape information; `len()` on such parameters remains supported through its independent path. |
-| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases fixed-shape 1-D/2-D views through frontend view metadata. Implemented consumers include literal 1-D slices (unit stride, step != 1, and reversed), 2-D row/column views, `diagonal`, `trace`, `fill_diagonal`, `ravel`/`.flat`, 2-D transpose (`np.transpose`, `.T`, `.transpose()`, `swapaxes`, `moveaxis`), contiguous `reshape` rank 1/2, `squeeze`, `expand_dims`, read-only `broadcast_to`, basic single-operand `nditer`, explicit descriptor materialization (`np.copy`, `view.copy`, `np.array(view)`, including empty descriptors), descriptor `tolist()` rank 1/2, and flattened descriptor reducers (`sum`, `mean`, `min`, `max`, `view.any()`, `view.all()`). Literal-index writes are mirrored across sibling 1-D/2-D descriptor views; non-constant view writes are rejected explicitly. Remaining gaps are 3-D+ view aliasing, symbolic shapes/axes/bounds, non-literal descriptor mutation, non-contiguous reshape beyond the explicit recut, advanced `nditer`, descriptor escape through unknown calls/containers/returns, and making `ndarray_descriptor` itself the consulted runtime structure rather than auxiliary frontend maps. |
-| Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
+| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T`/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. Remaining gaps: a view that escapes through unknown calls, containers or returns; advanced `nditer`; `reshape`/`ravel` of an N-D view whose stride is only known at run time (rejected with `TypeError`, since whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name (rejected). |
 
 ---
 
@@ -37,7 +36,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
 | Structured arrays | Record dtypes. |
-| Views / strides | Higher-rank (3-D+) view aliasing, symbolic/non-literal-stride slices, symbolic shape/axis handling, non-literal descriptor mutation, advanced descriptor escape handling, and replacing frontend-only maps with a fully consulted `ndarray_descriptor` runtime model. |
+| Views / strides | View escape through unknown calls/containers/returns; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
 | Iteration | Advanced `nditer` flags/options, multi-operand iteration, `external_loop`, `multi_index`, buffering, non-C order, casting/op_dtypes/op_axes, and broader mutable item forms. |
 
 ---
@@ -51,12 +50,12 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 3. **Scalability wall** (#5121, closed): arrays are still represented as fully
    unrolled value lists. Large arrays can explode even when the operation is
    conceptually simple.
-4. **Descriptor views still rely on frontend maps instead of one runtime
-   descriptor abstraction.** The implemented 1-D/2-D literal-index paths
-   propagate writes across tracked sibling views, and unsupported non-literal
-   writes reject explicitly; 3-D+, symbolic shape/axis/bound cases, broad
-   escape handling, and advanced iterator/method semantics remain
-   intentionally incomplete.
+4. **Views alias through pointers, not through copied mirrors.** A symbolic
+   index on an array or a view is normalized like NumPy's (negative values
+   count from the end) and an out-of-range one raises a catchable
+   `IndexError`; before, a negative symbolic index on a plain array was read
+   unnormalized. Arrays with no static bound on their shape remain out of
+   scope, and views that escape through unknown calls stay rejected.
 ---
 
 ## Community testing readiness
@@ -74,7 +73,7 @@ items are documented backlog: unsupported cases should reject explicitly,
 and known false alarms are listed as gaps instead of treated as supported
 behavior. **A build can be cut for community testing from here.**
 
-`regression/numpy` pins eight `KNOWNBUG` tests (2026-10-01):
+`regression/numpy` pins eight `KNOWNBUG` tests (2026-10-02):
 
 | test | expected | today |
 |---|---|---|
@@ -90,16 +89,13 @@ behavior. **A build can be cut for community testing from here.**
 Nothing below blocks community testing (see above); this is post-release
 backlog, in priority order:
 
-1. **3-D+ and symbolic view descriptors (ADR-NP-003 etapa 3)** — extend the
-   fixed-shape rank 1/2 descriptor model to higher ranks, symbolic
-   shapes/axes/bounds, and broader stride combinations.
-2. **Symbolic and broader multi-axis slicing** — support cases beyond the
-   literal/fixed-shape recuts.
-3. **Advanced dtype and constructor parity** — structured/object/custom dtype
+1. **View escape** — track views passed to unknown calls, stored in
+   containers or returned, instead of rejecting them.
+2. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
-4. **Random and iteration depth** — probability/replacement `choice`, extra
+3. **Random and iteration depth** — probability/replacement `choice`, extra
    distributions, and advanced `nditer`.
-5. **Linear algebra breadth** — larger matrices, symbolic entries, and more
+4. **Linear algebra breadth** — larger matrices, symbolic entries, and more
    faithful `norm`/`eig`/`svd`.
 
 ---
@@ -110,9 +106,8 @@ Each roadmap item above groups several sub-efforts; sizing them 1 PR per
 item undercounts the real work. Items below with multiple named consumers or
 distinct designs are sized accordingly instead of assumed to be one PR each.
 
-1. **3-D+ / symbolic view descriptors** (~2 PRs) — extend the rank 1/2
-   fixed-shape descriptor model to higher ranks, symbolic axes/bounds/shapes,
-   and broader non-literal stride combinations.
+1. **View escape** (~1 PR) — track views through unknown calls,
+   containers and returns.
 2. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.

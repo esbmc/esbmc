@@ -2169,6 +2169,9 @@ regression/esbmc/atomic_op_fetch
 regression/esbmc/atomic_op_fetch_fail
 regression/esbmc/atomic_fetch_nand
 regression/esbmc/atomic_fetch_nand_fail
+regression/esbmc-cpp/cpp/condition_temporary
+regression/esbmc-cpp/cpp/condition_temporary_fail
+regression/esbmc-cpp/cpp/condition_temporary_legacy
 regression/esbmc/memcmp_null_operand_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
@@ -2202,3 +2205,5 @@ regression/goto-transcoder/cbmc_kani_property_class_default
 regression/goto-transcoder/cbmc_kani_property_class_fail
 regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
+regression/goto-transcoder/cbmc_kani_popcount_type
+regression/goto-transcoder/cbmc_kani_popcount_type_fail
