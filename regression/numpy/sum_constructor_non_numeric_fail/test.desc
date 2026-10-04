@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy descriptor reducers currently support rank 1 or 2 arrays

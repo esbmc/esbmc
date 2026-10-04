@@ -1395,35 +1395,98 @@ find_function_def(const nlohmann::json &module_body, const std::string &name)
 // flagged here decays to pointer-to-*whole-array* instead (see
 // register_function_argument), preserving its length/rank for the
 // SUBSCRIPT converter to recognize.
+static bool
+is_name_target(const nlohmann::json &target, const std::string &name)
+{
+  return target.is_object() && target.value("_type", "") == "Name" &&
+         target.value("id", "") == name;
+}
+
+static bool is_integer_valued(const nlohmann::json &value)
+{
+  if (!value.is_object())
+    return false;
+  if (value.value("_type", "") == "Constant")
+    return value.contains("value") && value["value"].is_number_integer();
+  static const std::set<std::string> integer_calls = {
+    "nondet_int", "int", "len"};
+  return value.value("_type", "") == "Call" &&
+         value["func"].value("_type", "") == "Name" &&
+         integer_calls.count(value["func"].value("id", "")) != 0;
+}
+
+// True when this single node binds `name` to a visibly integer value: an
+// `int` annotation (parameter or variable), an integer literal,
+// `nondet_int()`/`int()`/`len()`, or a `range` loop target.
+static bool
+statement_binds_integer(const std::string &name, const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "arg")
+    return node.value("arg", "") == name && node.contains("annotation") &&
+           node["annotation"].is_object() &&
+           node["annotation"].value("id", "") == "int";
+  if (type == "AnnAssign")
+    return is_name_target(node["target"], name) &&
+           node["annotation"].value("id", "") == "int";
+  if (type == "For")
+    return is_name_target(node["target"], name) &&
+           node["iter"].value("_type", "") == "Call" &&
+           node["iter"]["func"].value("id", "") == "range";
+  if (type != "Assign" || !node.contains("targets"))
+    return false;
+  for (const auto &target : node["targets"])
+    if (is_name_target(target, name) && is_integer_valued(node["value"]))
+      return true;
+  return false;
+}
+
+// True when anything in `node` binds `name` to an integer. Such a name
+// indexes positions, never a mask.
+static bool
+binds_integer_index(const std::string &name, const nlohmann::json &node)
+{
+  if (node.is_object() && statement_binds_integer(name, node))
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (binds_integer_index(name, child))
+      return true;
+  return false;
+}
+
+// `a[idx]` with bare names on both sides, `param_name` being one of them and
+// `idx` not visibly an integer.
+static bool is_variable_index_subscript_of(
+  const std::string &param_name,
+  const nlohmann::json &node,
+  const nlohmann::json &function)
+{
+  if (
+    node.value("_type", "") != "Subscript" || !node.contains("value") ||
+    !node.contains("slice") || node["value"].value("_type", "") != "Name" ||
+    node["slice"].value("_type", "") != "Name")
+    return false;
+  const std::string index = node["slice"].value("id", "");
+  return (node["value"].value("id", "") == param_name || index == param_name) &&
+         !binds_integer_index(index, function);
+}
+
 static bool param_used_in_variable_index_subscript(
   const std::string &param_name,
-  const nlohmann::json &node)
+  const nlohmann::json &node,
+  const nlohmann::json &function)
 {
-  if (node.is_array())
-  {
-    for (const auto &elem : node)
-      if (param_used_in_variable_index_subscript(param_name, elem))
-        return true;
+  if (!node.is_object() && !node.is_array())
     return false;
-  }
-
-  if (!node.is_object())
-    return false;
-
   if (
-    node.value("_type", "") == "Subscript" && node.contains("value") &&
-    node["value"].value("_type", "") == "Name" && node.contains("slice") &&
-    node["slice"].value("_type", "") == "Name" &&
-    (node["value"].value("id", "") == param_name ||
-     node["slice"].value("id", "") == param_name))
+    node.is_object() &&
+    is_variable_index_subscript_of(param_name, node, function))
     return true;
-
-  for (auto it = node.begin(); it != node.end(); ++it)
-  {
-    if (it.value().is_object() || it.value().is_array())
-      if (param_used_in_variable_index_subscript(param_name, it.value()))
-        return true;
-  }
+  for (const auto &child : node)
+    if (param_used_in_variable_index_subscript(param_name, child, function))
+      return true;
   return false;
 }
 
@@ -2512,8 +2575,9 @@ size_t python_converter::register_function_argument(
       const nlohmann::json *owning_function =
         find_function_def((*ast_json)["body"], id.get_function());
       used_in_variable_index_subscript =
-        owning_function != nullptr && param_used_in_variable_index_subscript(
-                                        arg_name, (*owning_function)["body"]);
+        owning_function != nullptr &&
+        param_used_in_variable_index_subscript(
+          arg_name, (*owning_function)["body"], *owning_function);
     }
 
     arg_type = used_in_variable_index_subscript
