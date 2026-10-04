@@ -820,6 +820,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
+| **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died at the end of the full-expression.** `R x{M(1)};` with `struct R { const M &m; };` destroyed the `M` right after the declaration; [class.temporary]/6 extends its lifetime to that of `x`. `assert(live == 1)` after the declaration was a false FAILED and `assert(live == 0)` a false SUCCESSFUL, for nested aggregates, arrays of aggregates and `M &&` members alike. | `convert_decl_initializer` and `destroy_unextended_temporaries`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_reference_member_lifetime{,_fail}` | — | **Fixed**: the scope-exit entries of a temporary whose address the initialiser stores in a reference member stay on the destructor stack until the variable's scope ends. C++20's parenthesised `R x(M(1))`, which does not extend, now extends too (see the entry). |
 | **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
 | **R82** | **High (false FAILED, default configuration)** — R61's residual, §15 M9 (R82); **FIXED**, same entry | **A pointer to a variable-length array scaled by a free size.** `rename_type` renamed a symbolic array size only on an expression's own array type and its first subtype, and only when the size was a bare symbol. A pointer's subtype was never renamed, so `p = a + 1` with `int (*p)[m]` scaled by `m` as an unconstrained L0 symbol, and `(*p)[2]` of a correct program was an array-bounds violation. Sizes deeper than the second level, or spelt `m + 1`, were missed the same way. | `goto_symex_statet::rename_type`, `rename_array_sizes` and `fixup_renamed_type`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/vla_pointer_stride{,_fail}` | — | **Fixed**: every non-constant array size is renamed, through array and pointer subtypes. A VLA size reassigned after its declarator is still read at its current value (#8019). |
 | **R81** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R65's open note, §15 M9 (R81); **FIXED**, same entry | **An array placement new allocated.** The frontend routed only the scalar form of `::operator new(size_t, void *)` to `get_placement_new`; `new (buf) T[n]` took the allocating `cpp_new[]` path, so its elements were built in fresh memory and `buf` was left alone. `new (buf) int[2]{1, 2}` made `p == buf` fail and `assert(((int *)buf)[1] != 2)` verify. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `cpp_new_at` and `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_placement_new{,_fail}` | — | **Fixed**: the placement address is recorded on the `cpp_new[]` side effect, evaluated once, and assigned in place of the allocation; the elements' initialisation runs as before. |
@@ -10021,6 +10022,47 @@ invariant naming the loop variable outside its scope),
 `esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
 `PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
 `accepted under KNOWNBUG`.
+
+---
+
+### M9 (R103) — 2026-10-03, the temporary a reference member keeps alive
+
+R83 left open a temporary bound to an aggregate's reference member. With
+`struct R { const M &m; };`, `{ R x{M(1)}; assert(live == 1); }` holds
+natively and was a false FAILED: `convert_decl_initializer` destroys every
+temporary of a non-reference declaration's initialiser right after the
+assignment, so `~M` ran before the assertion, and `x.m` dangled for the rest
+of the scope. [class.temporary]/6 extends such a temporary to the lifetime of
+the reference, here the lifetime of `x`. `assert(live == 0)` in the same place,
+which aborts natively, was a false SUCCESSFUL. A nested aggregate
+(`O o{{M(1)}}`), an array of aggregates (`R a[2] = {{M(2)}, {M(3)}}`), an
+`M &&` member and copy-list-initialisation (`R x = {M(1)}`) behave the same,
+from C++11 to C++20.
+
+**Fixed** in `convert_decl_initializer`: after the initialiser is lowered,
+`destroy_unextended_temporaries` collects the objects whose address it stores
+in a reference member, looking through nested structs and arrays, and leaves
+their scope-exit entries on the destructor stack. The other temporaries of the
+full-expression are destroyed as before (`P p = {M(1), get(M(2))}` destroys
+the `M(2)` at once). The kept entries were pushed before the variable's, so
+the temporary is destroyed after `x` ([class.temporary]/8), as clang 20 does;
+GCC 13 destroys it first.
+
+`aggregate_reference_member_lifetime` (SUCCESSFUL) and its `_fail` half,
+which runs `--multi-property` and pins one assertion per shape, are wrong on
+master and match clang and GCC natively. Z3 only: this build could not fetch
+Bitwuzla. The C++ suites keep their verdicts against master; the only
+failures are tests that time out under a 30 s cap on master too.
+
+Left open. C++20's parenthesised aggregate initialisation does not extend
+(`R x(M(1))` dangles, and clang warns `-Wdangling`), but it reaches goto
+conversion as the same struct expression, so it is now extended too: there
+`assert(live == 0)` after the declaration holds natively and becomes a false
+FAILED. Telling the two apart needs the frontend's
+`MaterializeTemporaryExpr::getStorageDuration()` to survive into goto
+conversion, which `#` fields do not. `auto z = R{M(3)};` is extended by GCC
+and not by clang; ESBMC now extends it. R84's lambda capture (#8116) is a
+separate path.
 
 ---
 

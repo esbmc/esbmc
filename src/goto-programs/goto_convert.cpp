@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cassert>
 #include <map>
+#include <set>
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/remove_no_op.h>
@@ -303,6 +304,37 @@ static irep_idt destructor_entry_symbol(const codet &entry)
     }
   }
   return irep_idt();
+}
+
+/// Collect the objects whose address \p init stores in a reference member,
+/// looking through nested aggregates.
+static void collect_reference_bound(
+  const exprt &init,
+  const namespacet &ns,
+  std::set<irep_idt> &objects)
+{
+  if (init.is_constant() && init.type().is_array())
+  {
+    forall_operands (it, init)
+      collect_reference_bound(*it, ns, objects);
+    return;
+  }
+
+  if (init.id() != "struct")
+    return;
+
+  const struct_typet::componentst &components =
+    to_struct_type(ns.follow(init.type())).components();
+  for (std::size_t i = 0; i < init.operands().size(); ++i)
+  {
+    const exprt &op = init.operands()[i];
+    if (
+      is_lvalue_or_rvalue_reference(components[i].type()) &&
+      op.id() == "address_of" && op.op0().is_symbol())
+      objects.insert(op.op0().identifier());
+    else
+      collect_reference_bound(op, ns, objects);
+  }
 }
 
 /// Whether a side effect sits under `?:`, `&&` or `||`, so the temporaries it
@@ -869,9 +901,29 @@ void goto_convertt::convert_decl_initializer(
     // destructor-free tail (plain DEADs of C-style temps) keeps
     // block-level scope, so both retain the old shape.
     if (!is_lvalue_or_rvalue_reference(s.get_type()))
-      destroy_full_expression_temporaries(
-        stack_size, new_code.location(), dest);
+      destroy_unextended_temporaries(
+        initializer, stack_size, new_code.location(), dest);
   }
+}
+
+/// Destroy the temporaries of a declaration's initializer \p init, except
+/// those bound to a reference member of the aggregate it initialises: they
+/// live as long as the variable ([class.temporary]/6).
+void goto_convertt::destroy_unextended_temporaries(
+  const exprt &init,
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  std::set<irep_idt> bound;
+  collect_reference_bound(init, ns, bound);
+
+  destructor_stackt &stack = targets.destructor_stack;
+  const auto others = std::stable_partition(
+    stack.begin() + stack_size, stack.end(), [&bound](const codet &entry) {
+      return bound.count(destructor_entry_symbol(entry)) != 0;
+    });
+  destroy_full_expression_temporaries(others - stack.begin(), location, dest);
 }
 
 void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
