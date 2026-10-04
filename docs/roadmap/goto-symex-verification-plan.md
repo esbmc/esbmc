@@ -814,6 +814,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R84** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — found beside R83, §15 M9 (R84); **FIXED**, same entry | **A variable initialised from a braced class prvalue was copied out of a temporary that was then destroyed.** `A a = A{1};`, `auto a = A{1};` and the closure of `auto f = [m] { ... };` reached `convert_decl_initializer` as a `temporary_object` holding the aggregate (clang's `CXXBindTemporaryExpr`), so the variable was assigned from a temporary destroyed at the end of the declaration and destroyed again at scope exit. With an aggregate that frees a pointer in its destructor, every later dereference was a false FAILED (invalidated dynamic object) and scope exit a double free; `assert(dtors == 1)` right after the declaration, which aborts natively, was a false SUCCESSFUL. | `elide_prvalue_temporary`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_prvalue_variable{,_fail}` | — | **Fixed**: a `temporary_object` with no constructor wrapping a value that is not a side effect initialises the variable directly ([dcl.init]/17.6.1). A lambda's by-copy capture of a class still has its capture-copy temporary destroyed (R83's path, open PR #8113). |
 | **R88** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R88); **FIXED**, same entry | **The `<op>_fetch` atomics did nothing, and nand was and.** `__atomic_<op>_fetch` and `__sync_<op>_and_fetch` were instantiated with an empty body that returned a nondet value and left the object unchanged: `x = 1; __atomic_add_fetch(&x, 1, 5); assert(x == 1);` was SUCCESSFUL. `__atomic_fetch_nand` and `__sync_fetch_and_nand` stored `old & val` instead of `~(old & val)`. | `fetch_op_expr`, `instantiate_read_modify_write`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/atomic_op_fetch{,_fail}`, `atomic_fetch_nand{,_fail}` | — | **Fixed**: one body serves both orders and returns the old or the stored value; nand negates. The CAS, exchange and lock builtins still listed `// TODO` are open. |
+| **R112** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R88's unreduced `va_arg` probe, §15 M9 (R112); **FIXED**, same entry | **`va_arg` on a `va_list` passed to another function read that function's arguments.** `symex_va_arg` took the variadic arguments and the cursor from the current frame. In a helper `int take(va_list ap)` there are none, so every `va_arg` read 0 and `take` of `3, 4` returned 0, not 7. If the helper was variadic itself, it read its own arguments: `mid(0, ap, 9)` returned 9 where the caller passed 3, so `assert(g(1, 3) == 9)` was SUCCESSFUL. | `goto_symext::symex_va_arg`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_arg_callee_va_list{,_fail}` | — | **Fixed**: the arguments and cursor come from the frame that declared the `va_list`, found through the value set when the operand is a pointer. A `va_list` copied into the callee's own local is open. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R87** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R64's [except.ctor] residual, §15 M9 (R87); **FIXED**, same entry | **An exception leaving a callee skipped the caller's destructors.** `convert_throw` unwinds the automatic objects of the function that throws, but `remove_exceptions` lowered a call to a may-throw callee as a bare `if (thrown) goto dispatch` after the call, so every frame the exception passed through kept its locals alive. `void f() { Guard g; thrower(); }` caught in `main` never ran `~Guard`; a buffer freed again in the handler, a double free natively, verified. | `goto_convertt::record_exception_unwind`, `src/goto-programs/goto_convert.cpp`; `wire_call`, `src/goto-programs/remove_exceptions.cpp`; `regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee{,_fail}` | — | **Fixed**: record the destructor-stack slice on each call and destroy it on the call's exceptional edge. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
@@ -10154,6 +10155,39 @@ The same battery found four more programs that pass natively and fail on
 master, not yet reduced: `__builtin_rotateleft32(0x80000001u, 1) == 3`,
 `__builtin_clrsb(-1) == 31`, a Z3 sort error on `int i = 10; i /= 3.5;`, and a
 struct passed by value and read back with `va_arg`.
+
+---
+
+### M9 (R112) — 2026-10-04, a `va_list` read in the function it was passed to
+
+R88's battery listed a struct read back with `va_arg` as failing. Reduced,
+the struct is not the problem. Each `va_arg` resolves `<fn>::va_arg<N>`
+using the current frame's name and cursor. That is correct only inside the
+function that called `va_start`. A `va_list` passed to a helper, the
+`vprintf` pattern (C11 7.16p3), was read against the helper's frame. A
+non-variadic helper has no variadic arguments, so each read gave 0:
+`take(ap)` reading `int, int` from `3, 4` returned 0. A variadic helper read
+its own arguments. With `int mid(int n, va_list outer, ...)` called as
+`mid(0, ap, 9)` from `g(1, 3)`, `va_arg(outer, int)` gave 9 where native
+execution gives 3, so `assert(g(1, 3) == 9)` was SUCCESSFUL.
+
+`va_list_frame` now finds the frame that declared the `va_list`. It matches
+the `va_list`'s level-1 record against each frame's locals. When the operand
+is a pointer, as a `va_list` parameter on x86-64 is, the records come from
+the value set, the same walk `va_list_mark_started` already did; that walk
+is now `va_list_pointee_records`, shared by both. `symex_va_arg` reads that
+frame's arguments, advances that frame's cursor and renames with its
+level 1. A shared cursor matches x86-64, where `va_list` is an array and the
+callee's reads advance the caller's position.
+
+Tests: `regression/esbmc/va_arg_callee_va_list` reads a struct and an `int`
+in a non-variadic helper and an `int` in a variadic one (FAILED on master).
+`va_arg_callee_va_list_fail` is the `mid` program above (SUCCESSFUL on
+master). Both change verdict when the fix is reverted, with Z3 as well.
+
+Not fixed: a `va_copy` into a local of the callee resolves to the callee's
+frame, so reads through the copy still give 0. When the value set gives
+records in more than one frame, the first frame found on the stack is used.
 
 ---
 

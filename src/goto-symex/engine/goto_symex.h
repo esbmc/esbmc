@@ -1402,6 +1402,10 @@ protected:
    *  variable backing it; nullopt when it cannot be pinned down to one. */
   std::optional<renaming::level2t::name_record>
   va_list_l1_record(const expr2tc &va_list_expr) const;
+  /** The l1 identity records of the local va_lists a pointer-valued
+   *  expression may point to. */
+  std::vector<renaming::level2t::name_record>
+  va_list_pointee_records(const expr2tc &va_list_expr) const;
   /** Whether the va_list denoted by this expression is known (or assumed)
    *  to have been initialised by va_start/va_copy. va_lists whose base
    *  cannot be resolved to a local variable's symbol are conservatively
@@ -1411,6 +1415,10 @@ protected:
    *  expression. No-op if the base cannot be resolved to a local
    *  variable's symbol. */
   void va_list_mark_started(const expr2tc &va_list_expr, bool started);
+  /** The frame whose variadic arguments a va_list reads: the activation that
+   *  declared it, which is a caller's when the va_list was passed down.
+   *  Falls back to the current frame when that cannot be pinned down. */
+  goto_symex_statet::framet &va_list_frame(const expr2tc &va_list_expr);
 
   /**
    *  Replace nondet func calls with nondeterminism.
