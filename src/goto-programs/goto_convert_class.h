@@ -88,7 +88,8 @@ protected:
   void generate_dynamic_size_vla(
     exprt &var,
     const locationt &loc,
-    goto_programt &dest);
+    goto_programt &dest,
+    bool allow_zero_size = false);
 
   bool has_sideeffect(const exprt &expr);
   // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
