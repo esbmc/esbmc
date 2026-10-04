@@ -389,6 +389,11 @@ protected:
   /* The single spelling of a type used as typeid identity; see #6310. */
   static std::string rtti_type_name(const clang::QualType &qtype);
   static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  exprt typeid_object(
+    const exprt &value,
+    const std::string &type_name,
+    const clang::Stmt &stmt,
+    bool dynamic);
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
