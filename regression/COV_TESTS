@@ -2133,6 +2133,8 @@ regression/esbmc/github_8102_sub
 regression/esbmc/github_8102_sub_fail
 regression/esbmc/github_8102_mul
 regression/esbmc/github_8102_mul_fail
+regression/esbmc/interval_div_span_zero
+regression/esbmc/interval_div_span_zero_fail
 regression/esbmc-cpp/cpp/github_8090_unnamed_override
 regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
