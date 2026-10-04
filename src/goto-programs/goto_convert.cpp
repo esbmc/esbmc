@@ -1800,22 +1800,71 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
   t->location = code.location();
 }
 
+/// Collect the symbols \p e reads as whole values, not through their address.
+static void collect_value_symbols(const expr2tc &e, std::set<irep_idt> &ids)
+{
+  if (is_nil_expr(e) || is_address_of2t(e))
+    return;
+  if (is_symbol2t(e))
+  {
+    ids.insert(to_symbol2t(e).thename);
+    return;
+  }
+  e->foreach_operand(
+    [&ids](const expr2tc &op) { collect_value_symbols(op, ids); });
+}
+
 void goto_convertt::remove_return_value_sideeffects(
   exprt &value,
   goto_programt &dest)
 {
-  // A class-type value may be, or be copied bitwise from, a temporary of the
-  // expression (`return A(n);`, `return H{q};`), and a temporary under `?:`,
-  // `&&` or `||` exists on one path only; their entries are dropped.
+  // A temporary under `?:`, `&&` or `||` exists on one path only; its entries
+  // are dropped.
   const typet &type = ns.follow(value.type());
-  const bool drop_temporaries = type.id() == "struct" || type.id() == "union" ||
-                                has_conditional_sideeffect(value);
+  const bool is_class = type.id() == "struct" || type.id() == "union";
+  const bool conditional = has_conditional_sideeffect(value);
   const std::size_t stack_size = targets.destructor_stack.size();
   goto_programt sideeffects;
   remove_sideeffects(value, sideeffects);
-  dest.destructive_append(sideeffects);
-  if (drop_temporaries)
+  if (conditional)
     targets.destructor_stack.resize(stack_size);
+  else if (is_class)
+    drop_returned_temporaries(value, sideeffects, stack_size);
+  dest.destructive_append(sideeffects);
+}
+
+/// A class-type return value may be, or be copied bitwise from, a temporary of
+/// the expression (`return A(n);`, `return H{q};`): drop the entries pushed
+/// since \p from for every temporary read as a whole value, and leave the
+/// others to be destroyed with the locals.
+void goto_convertt::drop_returned_temporaries(
+  const exprt &value,
+  const goto_programt &sideeffects,
+  std::size_t from)
+{
+  std::set<irep_idt> returned;
+  expr2tc value2;
+  migrate_expr(value, value2);
+  collect_value_symbols(value2, returned);
+  for (const auto &i : sideeffects.instructions)
+  {
+    if (i.is_assign())
+      collect_value_symbols(to_code_assign2t(i.code).source, returned);
+    else if (i.is_function_call())
+      for (const expr2tc &arg : to_code_function_call2t(i.code).operands)
+        collect_value_symbols(arg, returned);
+  }
+
+  destructor_stackt &stack = targets.destructor_stack;
+  stack.erase(
+    std::remove_if(
+      stack.begin() + from,
+      stack.end(),
+      [&returned](const codet &entry) {
+        const irep_idt id = destructor_entry_symbol(entry);
+        return id.empty() || returned.count(id) != 0;
+      }),
+    stack.end());
 }
 
 void goto_convertt::convert_return(
