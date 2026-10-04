@@ -1478,7 +1478,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt tmp;
     if (cxxte.getSubExpr())
     {
-      if (get_expr(*cxxte.getSubExpr(), tmp))
+      if (get_expr(elided_copy_source(*cxxte.getSubExpr()), tmp))
         return true;
 
       new_expr.move_to_operands(tmp);

@@ -2153,6 +2153,8 @@ regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
+regression/esbmc-cpp/cpp/cxx14_elided_copy_throw
+regression/esbmc-cpp/cpp/cxx14_elided_copy_throw_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
