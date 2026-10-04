@@ -2140,10 +2140,11 @@ regression/esbmc/mem_intrinsics_multibyte_array
 regression/esbmc/mem_intrinsics_struct_array_be
 regression/esbmc/calloc_force_malloc_success
 regression/esbmc/calloc_force_malloc_success_sv_comp_fail
-regression/esbmc-cpp/cpp/aggregate_element_temporary
-regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place_fail
 regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
+regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
 regression/esbmc-cpp/cpp/shared_ptr_member_copy
 regression/esbmc/union_struct_member_bound
 regression/esbmc/union_struct_member_bound_fail
@@ -2153,6 +2154,9 @@ regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
+regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
+regression/esbmc-cpp/cpp/aggregate_element_temporary
+regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
@@ -2174,6 +2178,10 @@ regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
+regression/esbmc-cpp/cpp/braced_list_member_init
+regression/esbmc-cpp/cpp/braced_list_member_init_fail
+regression/esbmc-cpp/cpp/braced_list_temporary
+regression/esbmc-cpp/cpp/braced_list_temporary_fail
 regression/esbmc/fam_false_2
 regression/esbmc/fam_true_4
 regression/goto-transcoder/cbmc_kani_property_class
