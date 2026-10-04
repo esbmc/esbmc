@@ -618,16 +618,21 @@ std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
   if (arg.value("_type", "") != "Name")
     return std::nullopt;
 
-  const std::string arg_id =
-    resolve_name_symbol_id(arg["id"].get<std::string>());
-  if (arg_id.empty())
-    return std::nullopt;
+  const std::string arg_name = arg["id"].get<std::string>();
+  if (std::optional<exprt> length = symbolic_numpy_view_length(arg_name))
+    return typecast_exprt(*length, long_long_int_type());
 
-  const auto it = numpy_pointer_view_info_.find(arg_id);
-  if (it == numpy_pointer_view_info_.end())
-    return std::nullopt;
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      tracked_numpy_shape_from_name(arg_name))
+    return from_integer(shape->front(), long_long_int_type());
 
-  return from_integer(it->second.length, long_long_int_type());
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      numpy_shape_from_indexed_decl(arg_name))
+    return from_integer(shape->front(), long_long_int_type());
+
+  return std::nullopt;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
