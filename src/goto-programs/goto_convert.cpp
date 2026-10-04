@@ -305,6 +305,51 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
+/// The object a constructor call builds: the symbol its `this` argument points
+/// to. Empty for any other call.
+static irep_idt constructed_symbol(const expr2tc &code, const namespacet &ns)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (
+    !is_symbol2t(call.function) || call.operands.empty() ||
+    is_nil_expr(call.operands[0]) || !is_address_of2t(call.operands[0]))
+    return irep_idt();
+  const symbolt *callee = ns.lookup(to_symbol2t(call.function).thename);
+  const expr2tc &obj = to_address_of2t(call.operands[0]).ptr_obj;
+  if (
+    !callee || !callee->get_type().is_code() ||
+    to_code_type(callee->get_type()).return_type().id() != "constructor" ||
+    !is_symbol2t(obj))
+    return irep_idt();
+  return to_symbol2t(obj).thename;
+}
+
+/// Attach to \p call the cleanup an exception leaving it runs: the automatic
+/// objects constructed since the nearest enclosing try, newest first
+/// ([except.ctor]/1), as convert_throw unwinds for a throw in this function.
+/// remove_exceptions emits it on the call's exceptional edge. The object a
+/// constructor call builds is left out: it was never constructed.
+void goto_convertt::record_exception_unwind(goto_programt::instructiont &call)
+{
+  const destructor_stackt &stack = targets.destructor_stack;
+  const irep_idt constructed = constructed_symbol(call.code, ns);
+  irept unwind;
+  bool has_destructor = false;
+  for (std::size_t i = stack.size(); i > targets.throw_stack_size; --i)
+  {
+    const codet &entry = stack[i - 1];
+    if (!constructed.empty() && destructor_entry_symbol(entry) == constructed)
+      continue;
+    const irep_idt &statement = entry.get_statement();
+    if (statement != "dead" && statement != "function_call")
+      return;
+    has_destructor |= statement == "function_call";
+    unwind.get_sub().push_back(entry);
+  }
+  if (has_destructor)
+    call.location.add("#exception_unwind").swap(unwind);
+}
+
 /// Whether a side effect sits under `?:`, `&&` or `||`, so the temporaries it
 /// creates exist on one path only.
 static bool
@@ -778,6 +823,23 @@ void goto_convertt::convert_dynamic_static_init(
   skip->make_goto(end, flag2);
 }
 
+/// A braced aggregate or a lambda's closure of the declared class initialises
+/// the variable itself ([dcl.init]/17.6.1): the temporary clang binds it to
+/// never exists, and copying out of it destroyed the value twice.
+static void elide_prvalue_temporary(exprt &initializer)
+{
+  if (
+    initializer.id() == "sideeffect" &&
+    initializer.statement() == "temporary_object" &&
+    static_cast<const exprt &>(initializer.initializer()).is_nil() &&
+    initializer.operands().size() == 1 &&
+    initializer.op0().id() != "sideeffect")
+  {
+    exprt value = initializer.op0();
+    initializer.swap(value);
+  }
+}
+
 /// Lower the initializer of a declaration into @p dest. Kept out of
 /// convert_decl so that neither exceeds the complexity gate.
 void goto_convertt::convert_decl_initializer(
@@ -787,6 +849,8 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
+  elide_prvalue_temporary(initializer);
+
   // A temporary_object initializer carrying a constructor (C++ `T t;` or
   // `T t = T(...)`) constructs the object in place: retarget the
   // constructor's new_object to `var` and emit it directly, instead of

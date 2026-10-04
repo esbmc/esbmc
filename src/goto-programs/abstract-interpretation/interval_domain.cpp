@@ -215,9 +215,8 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
 template <>
 interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
-  interval_domaint::integer_intervalt>(const symbol2t sym) const
+  interval_domaint::integer_intervalt>(const type2tc &t) const
 {
-  auto t = sym.type;
   interval_domaint::integer_intervalt result;
   if (is_unsignedbv_type(t))
   {
@@ -242,7 +241,7 @@ interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
 template <>
 interval_domaint::real_intervalt
 interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
-  const symbol2t) const
+  const type2tc &) const
 {
   // TODO: Support this
   interval_domaint::real_intervalt t;
@@ -252,11 +251,40 @@ interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
 
 template <>
 wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
-  const symbol2t sym) const
+  const type2tc &t) const
 {
   // Wrapped intervals are modular by definition
-  wrapped_interval t(sym.type);
-  return t;
+  return wrapped_interval(t);
+}
+
+template <class Interval>
+Interval
+interval_domaint::wrap_to_type(const Interval &i, const type2tc &) const
+{
+  return i;
+}
+
+template <>
+interval_domaint::integer_intervalt interval_domaint::wrap_to_type(
+  const integer_intervalt &i,
+  const type2tc &t) const
+{
+  if (!is_bv_type(t) || !i.lower || !i.upper)
+    return integer_intervalt();
+
+  // Shift both bounds by the multiple of 2^width that brings the lower bound
+  // into range; if the upper bound then leaves it, the image is not an
+  // interval.
+  const BigInt lower = binary2integer(
+    integer2binary(i.get_lower(), t->get_width()), is_signedbv_type(t));
+  const BigInt upper = i.get_upper() + (lower - i.get_lower());
+  if (!generate_modular_interval<integer_intervalt>(t).contains(upper))
+    return integer_intervalt();
+
+  integer_intervalt result;
+  result.set_lower(lower);
+  result.set_upper(upper);
+  return result;
 }
 
 template <class T>
@@ -272,7 +300,7 @@ void interval_domaint::apply_assignment(
   auto b = get_interval<T>(rhs);
   if (enable_modular_intervals)
   {
-    auto a = generate_modular_interval<T>(sym);
+    auto a = generate_modular_interval<T>(sym.type);
     b.intersect_with(a);
   }
 
@@ -395,7 +423,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
     break;
 
   case expr2t::neg_id:
-    result = -get_interval<T>(to_neg2t(e).value);
+    result = wrap_to_type(-get_interval<T>(to_neg2t(e).value), e->type);
     break;
 
   case expr2t::not_id:
@@ -529,6 +557,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
       else if (is_modulus2t(e))
         result = lhs % rhs;
+
+      result = wrap_to_type(result, e->type);
     }
     break;
 
@@ -819,7 +849,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
   // Although this is expected (when modular intervals are off)
   // We still need to deal with the out-of-bounds when generating
   // the expressions, as 256 would be converted to 0.
-  T type_interval = generate_modular_interval<T>(src);
+  T type_interval = generate_modular_interval<T>(src.type);
   interval.intersect_with(type_interval);
 
   if (interval.is_top())
