@@ -220,6 +220,80 @@ void goto_loopst::collect_lhs_symbols(
     out.modified.insert(expr);
 }
 
+void goto_loopst::merge_summary(
+  const function_summaryt &from,
+  function_summaryt &out)
+{
+  out.modified.insert(from.modified.begin(), from.modified.end());
+  out.unmodified.insert(from.unmodified.begin(), from.unmodified.end());
+  out.modifies_pointer_array |= from.modifies_pointer_array;
+  out.writes_through_pointer |= from.writes_through_pointer;
+  out.pointer_write_unresolvable |= from.pointer_write_unresolvable;
+}
+
+/// The caller havocs what a call's pointer arguments point to, which covers a
+/// write through a parameter the callee never reassigns, and nothing else: not
+/// a global pointer, nor a pointer loaded through the parameter.
+static bool is_unassigned_parameter(
+  expr2tc ptr,
+  const std::vector<irep_idt> &params,
+  const loopst::loop_varst &modified)
+{
+  while (!is_nil_expr(ptr) && is_typecast2t(ptr))
+    ptr = to_typecast2t(ptr).from;
+  return !is_nil_expr(ptr) && is_symbol2t(ptr) &&
+         std::find(params.begin(), params.end(), to_symbol2t(ptr).thename) !=
+           params.end() &&
+         !modified.count(ptr);
+}
+
+void goto_loopst::note_pointer_write(
+  const expr2tc &target,
+  function_summaryt &local,
+  std::vector<expr2tc> &written_ptrs)
+{
+  if (!writes_through_pointer(target))
+    return;
+  local.writes_through_pointer = true;
+  written_ptrs.push_back(extract_queried_pointer(target));
+}
+
+bool goto_loopst::summarise_call(
+  const code_function_call2t &call,
+  std::vector<irep_idt> &in_progress,
+  function_summaryt &local,
+  std::vector<expr2tc> &written_ptrs)
+{
+  if (is_dereference2t(call.function))
+  {
+    local.writes_through_pointer = true;
+    local.pointer_write_unresolvable = true;
+    return true;
+  }
+
+  note_pointer_write(call.ret, local, written_ptrs);
+  collect_loop_symbols(call.ret, local.modified);
+
+  const irep_idt &callee = to_symbol2t(call.function).thename;
+  // Cycle cut: matches the legacy "do nothing on recursion" behaviour. The
+  // result is incomplete so it is not cached — the missing recursive
+  // contributions are call-site dependent.
+  if (
+    std::find(in_progress.begin(), in_progress.end(), callee) !=
+    in_progress.end())
+    return false;
+
+  function_summaryt callee_summary;
+  const bool complete =
+    compute_function_summary(callee, in_progress, callee_summary);
+  if (callee_summary.writes_through_pointer)
+    for (const expr2tc &arg : call.operands)
+      if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+        written_ptrs.push_back(arg);
+  merge_summary(callee_summary, local);
+  return complete;
+}
+
 bool goto_loopst::compute_function_summary(
   const irep_idt &fname,
   std::vector<irep_idt> &in_progress,
@@ -228,13 +302,7 @@ bool goto_loopst::compute_function_summary(
   auto cached = function_summary_cache.find(fname);
   if (cached != function_summary_cache.end())
   {
-    // Union the cached summary into out.
-    out.modified.insert(
-      cached->second.modified.begin(), cached->second.modified.end());
-    out.unmodified.insert(
-      cached->second.unmodified.begin(), cached->second.unmodified.end());
-    out.modifies_pointer_array |= cached->second.modifies_pointer_array;
-    out.writes_through_pointer |= cached->second.writes_through_pointer;
+    merge_summary(cached->second, out);
     return true;
   }
 
@@ -253,37 +321,23 @@ bool goto_loopst::compute_function_summary(
   in_progress.push_back(fname);
   bool complete = true;
   function_summaryt local;
+  std::vector<expr2tc> written_ptrs;
 
   for (const auto &instr : it->second.body.instructions)
   {
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;
-      local.writes_through_pointer |= writes_through_pointer(target);
+      note_pointer_write(target, local, written_ptrs);
       collect_lhs_symbols(target, local);
     }
     else if (instr.is_function_call())
     {
-      const code_function_call2t &call = to_code_function_call2t(instr.code);
-      if (is_dereference2t(call.function))
-        continue;
-
-      local.writes_through_pointer |= writes_through_pointer(call.ret);
-      collect_loop_symbols(call.ret, local.modified);
-
-      const irep_idt &callee = to_symbol2t(call.function).thename;
-      if (
-        std::find(in_progress.begin(), in_progress.end(), callee) !=
-        in_progress.end())
-      {
-        // Cycle cut: matches the legacy "do nothing on recursion" behaviour.
-        // Mark the result incomplete so we don't cache this summary — the
-        // missing recursive contributions are call-site dependent.
-        complete = false;
-        continue;
-      }
-
-      if (!compute_function_summary(callee, in_progress, local))
+      if (!summarise_call(
+            to_code_function_call2t(instr.code),
+            in_progress,
+            local,
+            written_ptrs))
         complete = false;
     }
     else if (instr.is_goto() || instr.is_assert() || instr.is_assume())
@@ -294,11 +348,15 @@ bool goto_loopst::compute_function_summary(
 
   in_progress.pop_back();
 
+  const std::vector<irep_idt> &params =
+    to_code_type(it->second.type).argument_names;
+  local.pointer_write_unresolvable |= !std::all_of(
+    written_ptrs.begin(), written_ptrs.end(), [&](const expr2tc &ptr) {
+      return is_unassigned_parameter(ptr, params, local.modified);
+    });
+
   // Fold local into out regardless of completeness.
-  out.modified.insert(local.modified.begin(), local.modified.end());
-  out.unmodified.insert(local.unmodified.begin(), local.unmodified.end());
-  out.modifies_pointer_array |= local.modifies_pointer_array;
-  out.writes_through_pointer |= local.writes_through_pointer;
+  merge_summary(local, out);
 
   if (complete)
     function_summary_cache[fname] = std::move(local);
@@ -318,6 +376,30 @@ record_callee_pointer_writes(loopst &loop, const code_function_call2t &call)
   for (const expr2tc &arg : call.operands)
     if (!is_nil_expr(arg) && is_pointer_type(arg->type))
       loop.add_pointer_array_write_ptr(arg);
+}
+
+void goto_loopst::apply_callee_summary(
+  loopst &loop,
+  const function_summaryt &summary,
+  const code_function_call2t &call)
+{
+  for (const auto &v : summary.modified)
+    loop.add_modified_var_to_loop(v);
+  for (const auto &v : summary.unmodified)
+    loop.add_unmodified_var_to_loop(v);
+  if (summary.writes_through_pointer)
+    record_callee_pointer_writes(loop, call);
+  if (summary.pointer_write_unresolvable)
+    loop.set_pointer_array_write_unresolvable();
+  if (summary.modifies_pointer_array)
+  {
+    loop.set_modifies_pointer_array();
+    // The write happens inside the callee, so the written pointer (a
+    // callee parameter) is not in scope at the caller's loop head and
+    // cannot be resolved there. Fall back to Phase 1: disable the
+    // inductive step. See issue #5230.
+    loop.set_pointer_array_write_unresolvable();
+  }
 }
 
 void goto_loopst::get_modified_variables(
@@ -365,21 +447,7 @@ void goto_loopst::get_modified_variables(
     // instead of re-walking the helper from scratch.
     function_summaryt summary;
     compute_function_summary(identifier, function_names, summary);
-    for (const auto &v : summary.modified)
-      loop->add_modified_var_to_loop(v);
-    for (const auto &v : summary.unmodified)
-      loop->add_unmodified_var_to_loop(v);
-    if (summary.writes_through_pointer)
-      record_callee_pointer_writes(*loop, function_call);
-    if (summary.modifies_pointer_array)
-    {
-      loop->set_modifies_pointer_array();
-      // The write happens inside the callee, so the written pointer (a
-      // callee parameter) is not in scope at the caller's loop head and
-      // cannot be resolved there. Fall back to Phase 1: disable the
-      // inductive step. See issue #5230.
-      loop->set_pointer_array_write_unresolvable();
-    }
+    apply_callee_summary(*loop, summary, function_call);
   }
   else if (
     instruction->is_goto() || instruction->is_assert() ||
