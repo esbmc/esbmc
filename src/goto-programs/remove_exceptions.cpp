@@ -1911,17 +1911,54 @@ private:
   }
 
   /// After a call that may throw, branch to the enclosing dispatch / epilogue
-  /// if the callee left an exception in flight.
+  /// if the callee left an exception in flight, first destroying the caller's
+  /// automatic objects goto_convertt::record_exception_unwind attached to the
+  /// call. `thrown` is cleared while they run, so their destructors are not
+  /// cut short by their own propagation guards or noexcept checks.
   void wire_call(
     goto_programt &body,
     goto_programt::targett call,
     goto_programt::targett dest)
   {
-    auto g = body.insert(std::next(call));
-    g->make_goto(dest, thrown);
-    g->location = call->location;
-    g->location.property("skipped");
-    g->function = call->function;
+    const auto after = std::next(call);
+    const irept unwind = call->location.find("#exception_unwind");
+    call->location.remove("#exception_unwind");
+    auto add = [&]() {
+      auto t = body.insert(after);
+      t->location = call->location;
+      t->function = call->function;
+      return t;
+    };
+
+    if (unwind.get_sub().empty())
+    {
+      auto g = add();
+      g->make_goto(dest, thrown);
+      g->location.property("skipped");
+      return;
+    }
+
+    auto skip = add();
+    skip->make_goto(after, not2tc(thrown));
+    skip->location.property("skipped");
+    auto clear = add();
+    clear->make_assignment();
+    clear->code = code_assign2tc(thrown, gen_false_expr());
+    for (const irept &entry : unwind.get_sub())
+    {
+      expr2tc code;
+      migrate_expr(static_cast<const exprt &>(entry), code);
+      auto t = add();
+      if (is_code_dead2t(code))
+        t->make_dead();
+      else
+        t->make_function_call(code);
+      t->code = code;
+    }
+    auto set = add();
+    set->make_assignment();
+    set->code = code_assign2tc(thrown, gen_true_expr());
+    add()->make_goto(dest);
   }
 };
 } // namespace
