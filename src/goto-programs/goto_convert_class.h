@@ -293,6 +293,7 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  void record_exception_unwind(goto_programt::instructiont &call);
 
   //
   // Try-catch conversion
