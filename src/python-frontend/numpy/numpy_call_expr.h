@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <utility>
@@ -122,6 +123,12 @@ private:
   std::optional<exprt> handle_ravel_pointer_view_attempt();
   exprt handle_axis_permutation_view_call(const std::string &function);
 
+  exprt return_retyped_or_temp(exprt value);
+
+  exprt build_default_axis_transpose_expr(
+    const exprt &source_expr,
+    const std::string &error_message);
+
   // numpy.transpose()'s parameter-shaped fast path: when `t` (the single-
   // pointer-unwrapped type of `arg`) isn't a fully nested 2-D array -- most
   // commonly a 2-D parameter, whose C-ABI row-pointer decay
@@ -168,6 +175,28 @@ private:
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);
+  std::vector<std::size_t>
+  resolve_reshape_shape(std::optional<std::size_t> total) const;
+  std::optional<exprt> try_build_reshape_pointer_view();
+  std::optional<exprt> reshape_strided_view(
+    python_list &list,
+    const python_list::strided_view_desc &strided,
+    const nlohmann::json &arg,
+    bool as_view) const;
+  static bool
+  axes_are_symbolic(const std::vector<python_list::strided_axis> &axes);
+  bool describe_view_operand(
+    const nlohmann::json &arg,
+    python_list &list,
+    std::optional<python_list::strided_view_desc> &source);
+  exprt emit_strided_result(
+    python_list &list,
+    const python_list::strided_view_desc &source,
+    const std::vector<python_list::strided_axis> &axes,
+    bool readonly);
+  std::optional<exprt> try_build_view_flatten_copy();
+  std::optional<exprt> try_build_axis_permutation_view();
+  std::optional<exprt> try_build_shape_only_view();
   std::optional<exprt> try_materialize_descriptor_copy_call();
   std::optional<exprt>
   try_materialize_descriptor_array_call(nlohmann::json &array_arg);

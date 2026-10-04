@@ -3062,7 +3062,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = popcount2tc(theval);
+    // popcount2t is always int; a CBMC binary types the count itself (Kani
+    // emits u32), so keep that type for whatever the count is assigned to.
+    new_expr_ref =
+      coerce_to_type(popcount2tc(theval), migrate_type(expr.type()));
     return;
   }
 
