@@ -314,12 +314,6 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       first_loop);
   }
 
-  // Note: we intentionally do NOT call interval_domain_state->assume() here.
-  // The interval domain is a single shared instance (not forked per branch).
-  // Assuming the fall-through constraint would contaminate the taken path when
-  // it is explored later, causing unsound pruning.  The domain is still updated
-  // by process_instruction, which is sufficient for tracking loop counters.
-
   symex_witness_branching(
     old_guard,
     new_guard,
@@ -436,6 +430,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   record_parked_path(new_state_pc, std::prev(merge_state_list.end()));
 
   snapshot_interval_domain(merge_state_list.back());
+  assume_loop_continues(instruction, old_guard, forward, new_guard_true);
 
   // adjust guards
   if (new_guard_true)
@@ -590,6 +585,27 @@ void goto_symext::snapshot_interval_domain(statet::merge_statet &merge_state)
   // its next write.
   merge_state.interval_snapshot = interval_domain_state->intervals;
   interval_domain_state->copied = false;
+}
+
+void goto_symext::assume_loop_continues(
+  const goto_programt::instructiont &instruction,
+  const expr2tc &guard,
+  bool forward,
+  bool always_jumps)
+{
+  // The parked path resumes from its own snapshot, so the continuing path may
+  // take its branch condition. Without it a counter's bound only survives
+  // arithmetic that ignores wrap-around (#8102).
+  if (
+    always_jumps || !interval_domain_state ||
+    !options.get_bool_option("interval-symex-guard") ||
+    instruction.loop_number == 0)
+    return;
+
+  expr2tc stays = guard;
+  if (forward)
+    make_not(stays);
+  interval_domain_state->assume(stays);
 }
 
 void goto_symext::merge_interval_domain(const statet::merge_statet &merge_state)

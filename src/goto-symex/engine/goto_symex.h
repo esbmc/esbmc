@@ -434,6 +434,15 @@ protected:
    *  merge_interval_domain can join it back in (#8047). */
   void snapshot_interval_domain(statet::merge_statet &merge_state);
 
+  /** Narrow the online interval domain by the condition under which a loop
+   *  GOTO's continuing path proceeds; nothing when the GOTO always jumps,
+   *  since that path is dead. Call after snapshot_interval_domain. */
+  void assume_loop_continues(
+    const goto_programt::instructiont &instruction,
+    const expr2tc &guard,
+    bool forward,
+    bool always_jumps);
+
   /** Join a parked path's interval domain into the shared one; a path parked
    *  without a snapshot sends the domain to top. */
   void merge_interval_domain(const statet::merge_statet &merge_state);
