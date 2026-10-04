@@ -2127,6 +2127,12 @@ regression/python/github_8100_alias
 regression/python/github_8100_alias_fail
 regression/python/list_eq_nested_comprehension
 regression/python/list_eq_nested_comprehension_fail
+regression/esbmc/github_8102
+regression/esbmc/github_8102_fail
+regression/esbmc/github_8102_sub
+regression/esbmc/github_8102_sub_fail
+regression/esbmc/github_8102_mul
+regression/esbmc/github_8102_mul_fail
 regression/esbmc-cpp/cpp/github_8090_unnamed_override
 regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
@@ -2146,6 +2152,8 @@ regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
 regression/esbmc-cpp/cpp/shared_ptr_member_copy
+regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional
+regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional_fail
 regression/esbmc/union_struct_member_bound
 regression/esbmc/union_struct_member_bound_fail
 regression/esbmc-cpp/cpp/static_local_array_dynamic_init
@@ -2154,6 +2162,12 @@ regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
+regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee
+regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee_fail
+regression/esbmc/atomic_op_fetch
+regression/esbmc/atomic_op_fetch_fail
+regression/esbmc/atomic_fetch_nand
+regression/esbmc/atomic_fetch_nand_fail
 regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
 regression/esbmc-cpp/cpp/aggregate_element_temporary
 regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
@@ -2176,6 +2190,10 @@ regression/esbmc/github_8103
 regression/esbmc/github_8103_fail
 regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
+regression/esbmc/github_8096
+regression/esbmc/github_8096_fail
+regression/esbmc/github_8096_int_min
+regression/esbmc/github_8096_int_min_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc-cpp/cpp/braced_list_member_init
@@ -2187,3 +2205,5 @@ regression/esbmc/fam_true_4
 regression/goto-transcoder/cbmc_kani_property_class
 regression/goto-transcoder/cbmc_kani_property_class_default
 regression/goto-transcoder/cbmc_kani_property_class_fail
+regression/goto-transcoder/cbmc_object_size_jump_target
+regression/goto-transcoder/cbmc_object_size_jump_target_fail
