@@ -291,9 +291,6 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # sibling schedules share a solver context (issue #6831, #7043); do not add
     # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
-    # Unlike --max-context-bound, a truncated schedule space still reports
-    # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
-    command_line += "--context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
@@ -345,13 +342,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     exit(1)
 
   # Add strategy
-  if concurrency: # Concurrency only works with incremental
-    # A violation needing few context switches can sit deep in unbounded DFS
-    # order, where the task times out with no answer at all (issue #6831, #6947).
-    # One bounded round first costs a median 0.02s and can only report a
-    # violation -- it never claims a proof, so --incremental-bmc still owns
-    # every other verdict.
-    command_line += "--falsify-context-bound 1 --incremental-bmc "
+  if concurrency:
+    # Deepens the context bound from 1 and reports TRUE only once a round
+    # covered every interleaving; a fixed --context-bound 3 reported TRUE on
+    # triangular-*-2, whose bug needs ~2*NUM switches. Excludes --incremental-bmc.
+    command_line += "--incremental-context-bound "
   elif prop == Property.overflow: # Overflow only works with incremental
     command_line += "--incremental-bmc "
   elif strat == "fixed":

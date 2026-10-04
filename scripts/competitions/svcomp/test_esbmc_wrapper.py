@@ -3,6 +3,7 @@
 
 import importlib.util
 import os
+import tempfile
 import unittest
 
 _spec = importlib.util.spec_from_file_location(
@@ -112,6 +113,29 @@ class ParseResultTest(unittest.TestCase):
             self.verdict("** 0 of 3 properties failed, 3 passed\n"
                          "VERIFICATION SUCCESSFUL\n", wrapper.Property.reach),
             "TRUE")
+
+    def test_exhausted_context_bound_is_unknown(self):
+        self.assertEqual(
+            self.verdict("Reached --max-context-bound (20) with the schedule "
+                         "space still truncated\nVERIFICATION UNKNOWN\n",
+                         wrapper.Property.reach),
+            "Unknown")
+
+
+class ConcurrencyCommandLine(unittest.TestCase):
+
+    def test_deepens_the_context_bound_instead_of_fixing_it(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".c") as f:
+            f.write("int main() { pthread_create(0, 0, 0, 0); }\n")
+            f.flush()
+            for prop in (wrapper.Property.reach, wrapper.Property.overflow,
+                         wrapper.Property.memory, wrapper.Property.datarace):
+                args = wrapper.get_command_line(
+                    "kinduction", prop, 32, f.name, False, "", False).split()
+                self.assertIn("--incremental-context-bound", args)
+                for rejected in ("--context-bound", "--incremental-bmc",
+                                 "--falsify-context-bound"):
+                    self.assertNotIn(rejected, args)
 
 
 if __name__ == "__main__":
