@@ -1262,25 +1262,26 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
       count.copy_to_operands(byte_size, elem_size);
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+      exprt prev("-", size_type());
+      prev.copy_to_operands(index, from_integer(1, size_type()));
 
-      // *(p + i). As in the scalar arm the destructor is retargeted at the
-      // pointee, since a virtually-bound destructor reads the vtable pointer
-      // out of that dereference.
+      // *(p + i - 1), from the last element down: [expr.delete]/6 destroys
+      // the elements in decreasing order of address. As in the scalar arm the
+      // destructor is retargeted at the pointee, since a virtually-bound
+      // destructor reads the vtable pointer out of that dereference.
       exprt element_addr("+", base.type());
-      element_addr.copy_to_operands(base, index);
+      element_addr.copy_to_operands(base, prev);
       exprt element("dereference", ns.follow(leaf));
       element.copy_to_operands(element_addr);
 
       codet tmp_code = to_code(destructor);
       replace_new_object(element, tmp_code);
 
-      exprt next("+", size_type());
-      next.copy_to_operands(index, from_integer(1, size_type()));
-
       code_fort loop;
-      loop.init() = code_assignt(index, from_integer(0, size_type()));
-      loop.cond() = binary_relation_exprt(index, "<", count);
-      loop.iter() = code_assignt(index, next);
+      loop.init() = code_assignt(index, count);
+      loop.cond() =
+        binary_relation_exprt(index, "notequal", from_integer(0, size_type()));
+      loop.iter() = code_assignt(index, prev);
       loop.body() = tmp_code;
       loop.location() = code.location();
 
