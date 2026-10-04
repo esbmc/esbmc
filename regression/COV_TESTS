@@ -2161,6 +2161,8 @@ regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
+regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee
+regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee_fail
 regression/esbmc/atomic_op_fetch
 regression/esbmc/atomic_op_fetch_fail
 regression/esbmc/atomic_fetch_nand
