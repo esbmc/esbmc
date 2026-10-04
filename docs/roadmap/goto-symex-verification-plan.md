@@ -814,6 +814,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R84** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — found beside R83, §15 M9 (R84); **FIXED**, same entry | **A variable initialised from a braced class prvalue was copied out of a temporary that was then destroyed.** `A a = A{1};`, `auto a = A{1};` and the closure of `auto f = [m] { ... };` reached `convert_decl_initializer` as a `temporary_object` holding the aggregate (clang's `CXXBindTemporaryExpr`), so the variable was assigned from a temporary destroyed at the end of the declaration and destroyed again at scope exit. With an aggregate that frees a pointer in its destructor, every later dereference was a false FAILED (invalidated dynamic object) and scope exit a double free; `assert(dtors == 1)` right after the declaration, which aborts natively, was a false SUCCESSFUL. | `elide_prvalue_temporary`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_prvalue_variable{,_fail}` | — | **Fixed**: a `temporary_object` with no constructor wrapping a value that is not a side effect initialises the variable directly ([dcl.init]/17.6.1). A lambda's by-copy capture of a class still has its capture-copy temporary destroyed (R83's path, open PR #8113). |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
+| **R105** | **High (false SUCCESSFUL and false FAILED, default configuration, C)** — found probing the `$vector-cmp$` residual of §15 M9 (R65), §15 M9 (R105); **FIXED**, same entry | **A compound literal was initialised where its declaration was hoisted, not where it is evaluated.** The C frontend pushed the literal's declaration, initialiser included, into the enclosing block ahead of the statement being converted. In an unbraced loop body that runs once, before the loop; in an unbraced `if` body it runs whether or not the branch is taken; before a `case` label it is unreachable and is dropped, so the literal reads nondet. `for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;` left `hit` at 0. | `CompoundLiteralExprClass` in `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/compound_literal_per_evaluation{,_fail}` | — | **Fixed**: the declaration stays in the enclosing block, which is the literal's lifetime (C17 6.5.2.5p5), and the literal becomes `(cl = init, cl)`, so it is initialised each time it is evaluated. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
@@ -10021,6 +10022,43 @@ invariant naming the loop variable outside its scope),
 `esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
 `PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
 `accepted under KNOWNBUG`.
+
+---
+
+### M9 (R105) — 2026-10-02, a compound literal initialised before its statement
+
+Probing R65's note that the C frontend's `$vector-cmp$` binding declares its
+temporary in `current_block` found the same placement, with its initialiser,
+in compound literals. The declaration is pushed into the enclosing block
+before the statement that contains the literal, so the literal is initialised
+there and not where it is evaluated (C17 6.5.2.5p5). Three shapes go wrong:
+
+- In an unbraced loop body the literal is built once, before the loop.
+  `int i = 5, hit = 0; for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;
+  assert(hit == 0);` is **SUCCESSFUL** on master and fails natively. C17
+  6.5.2.5p16's own example, a literal under a `goto` label, never terminates.
+- In an unbraced `if` body the initialiser runs whether or not the branch is
+  taken, side effects included.
+- Before a `case` label the declaration is unreachable and goto-convert drops
+  it, so `case 0: return (struct P){5}.x;` returns a nondet value.
+
+**Fixed** by keeping only the declaration in the enclosing block, which is the
+literal's lifetime, and lowering the literal to `(cl = init, cl)`, an lvalue
+once side effects are removed, so `&(struct s){...}` and array decay are
+unchanged. `compound_literal_per_evaluation` (the loop, `if` and `case`
+shapes) is FAILED on master and `compound_literal_per_evaluation_fail` is
+SUCCESSFUL on master; both match native execution with the fix. This build had
+Z3 only, so both were run under Z3. `github_4715_irep2_native_body_decl_nil_loc_01`
+pinned the initialiser's empty location; the assignment now carries the
+literal's location and the pattern is updated. The 201 other regression tests
+whose C source contains a compound literal pass.
+
+Not fixed: a local whose declaration a jump skips keeps the caller frame's L1
+name, because a new frame copies its caller's `level1` and only `symex_decl`
+assigns a fresh instance. `switch (k) { int y; case 0: ... }` in a recursive
+function is a false FAILED on master and here: the inner call overwrites the
+outer `y`. A compound literal under a `case` label now has the right value but
+shares its object the same way, as does the `$vector-cmp$` temporary.
 
 ---
 
