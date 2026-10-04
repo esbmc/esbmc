@@ -778,6 +778,23 @@ void goto_convertt::convert_dynamic_static_init(
   skip->make_goto(end, flag2);
 }
 
+/// A braced aggregate or a lambda's closure of the declared class initialises
+/// the variable itself ([dcl.init]/17.6.1): the temporary clang binds it to
+/// never exists, and copying out of it destroyed the value twice.
+static void elide_prvalue_temporary(exprt &initializer)
+{
+  if (
+    initializer.id() == "sideeffect" &&
+    initializer.statement() == "temporary_object" &&
+    static_cast<const exprt &>(initializer.initializer()).is_nil() &&
+    initializer.operands().size() == 1 &&
+    initializer.op0().id() != "sideeffect")
+  {
+    exprt value = initializer.op0();
+    initializer.swap(value);
+  }
+}
+
 /// Lower the initializer of a declaration into @p dest. Kept out of
 /// convert_decl so that neither exceeds the complexity gate.
 void goto_convertt::convert_decl_initializer(
@@ -787,6 +804,8 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
+  elide_prvalue_temporary(initializer);
+
   // A temporary_object initializer carrying a constructor (C++ `T t;` or
   // `T t = T(...)`) constructs the object in place: retarget the
   // constructor's new_object to `var` and emit it directly, instead of
