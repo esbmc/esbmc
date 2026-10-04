@@ -2133,6 +2133,8 @@ regression/esbmc/github_8102_sub
 regression/esbmc/github_8102_sub_fail
 regression/esbmc/github_8102_mul
 regression/esbmc/github_8102_mul_fail
+regression/esbmc/interval_div_span_zero
+regression/esbmc/interval_div_span_zero_fail
 regression/esbmc-cpp/cpp/github_8090_unnamed_override
 regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
@@ -2173,6 +2175,12 @@ regression/esbmc-cpp/cpp/condition_temporary_legacy
 regression/esbmc-cpp/cpp/switch_condition_temporary
 regression/esbmc-cpp/cpp/switch_condition_temporary_fail
 regression/esbmc-cpp/cpp/switch_condition_temporary_legacy
+regression/esbmc-cpp/cpp/cxx14_elided_copy_throw
+regression/esbmc-cpp/cpp/cxx14_elided_copy_throw_fail
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place_fail
+regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
+regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
@@ -2205,3 +2213,5 @@ regression/goto-transcoder/cbmc_kani_property_class_default
 regression/goto-transcoder/cbmc_kani_property_class_fail
 regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
+regression/goto-transcoder/cbmc_kani_popcount_type
+regression/goto-transcoder/cbmc_kani_popcount_type_fail
