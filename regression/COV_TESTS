@@ -2155,6 +2155,10 @@ regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
+regression/esbmc/atomic_op_fetch
+regression/esbmc/atomic_op_fetch_fail
+regression/esbmc/atomic_fetch_nand
+regression/esbmc/atomic_fetch_nand_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
