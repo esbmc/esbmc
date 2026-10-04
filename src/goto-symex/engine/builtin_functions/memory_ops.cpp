@@ -439,9 +439,18 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   if (is_pointer_type(src) || is_pointer_type(dst))
     return expr2tc();
 
-  // TODO: Not sure how to deal with different types
   if (src->type != dst->type)
+  {
+    // A copy of the whole object is a bitcast. The C byte loop would rebuild
+    // a float a byte at a time, and an intermediate NaN loses its bits:
+    // floating-point theory has a single NaN.
+    const unsigned width = num_of_bytes * 8;
+    if (
+      !src_offset && !dst_offset && src->type->get_width() == width &&
+      dst->type->get_width() == width)
+      return bitcast2tc(dst->type, src);
     return expr2tc();
+  }
 
   expr2tc src_mask = gen_zero(src->type);
   expr2tc dst_mask = gen_zero(dst->type);
