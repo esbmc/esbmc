@@ -1148,7 +1148,7 @@ enum target_flags
  *    c  |  *  |  *  | <none>                                         |
  *    *  |  c  |  *  | <none>                                         |
  *  -----+-----+-----+------------------------------------------------+---------
- *    *  |  A  |  *  | <unsupported>: "Can't construct rvalue ref..." |
+ *    *  |  A  |  *  | construct_array_ref                            | rec
  *    *  |  V  |  *  | construct_vector_ref                           | rec
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  s  |  c  | construct_from_const_offset                    | st
