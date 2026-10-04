@@ -1680,8 +1680,11 @@ std::optional<exprt> python_list::build_scalar_pointer_view(
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
   converter_.numpy_result_is_view_ = true;
-  python_converter::numpy_scalar_pointer_view_infot info{
-    length, stride, readonly, {length}};
+  python_converter::numpy_scalar_pointer_view_infot info;
+  info.length = length;
+  info.stride = stride;
+  info.readonly = readonly;
+  info.shape = {length};
   converter_.numpy_pointer_view_info_[lhs_id] = info;
   if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
     converter_.numpy_pointer_view_info_[lhs_symbol->id.as_string()] = info;
@@ -2476,8 +2479,11 @@ std::optional<exprt> python_list::build_contiguous_shaped_view(
   converter_.update_symbol(*converter_.current_lhs);
   converter_.numpy_result_is_view_ = true;
 
-  python_converter::numpy_scalar_pointer_view_infot info{
-    shape.front(), 1, readonly, shape};
+  python_converter::numpy_scalar_pointer_view_infot info;
+  info.length = shape.front();
+  info.stride = 1;
+  info.readonly = readonly;
+  info.shape = shape;
   converter_.numpy_pointer_view_info_[lhs_id] = info;
   converter_.numpy_param_shapes_[lhs_id] = shape;
   if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
