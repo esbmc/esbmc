@@ -2698,7 +2698,9 @@ bool function_call_expr::receiver_is_tracked_numpy_view(
 
   const std::string root_id = converter_.resolve_name_symbol_id(
     call_["func"]["value"]["id"].get<std::string>());
-  return !root_id.empty() && converter_.is_tracked_numpy_view_id(root_id);
+  return !root_id.empty() &&
+         (converter_.is_tracked_numpy_view_id(root_id) ||
+          converter_.numpy_pointer_view_info_.count(root_id) != 0);
 }
 
 // pop()/copy()/clear() are each shared between list and dict; disambiguate
@@ -4551,6 +4553,14 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     (func_name != "any" && func_name != "all") ||
     call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
     return std::nullopt;
+
+  const nlohmann::json &reduced_operand =
+    call_["args"].empty() ? call_["func"]["value"] : call_["args"][0];
+  if (
+    std::optional<exprt> runtime_result =
+      python_list(converter_, call_)
+        .try_reduce_symbolic_view(func_name, reduced_operand))
+    return runtime_result;
 
   std::optional<any_all_receiver> receiver =
     resolve_any_all_receiver(func_name);
