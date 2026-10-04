@@ -817,6 +817,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
+| **R86** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R69's residual, §15 M9 (R86); **FIXED**, same entry | **A class conditional's branches kept their elidable copies.** Before C++17 clang wraps each branch of `b ? C(1) : C(2)` in an elidable copy of a bound temporary. `get_conditional_class_prvalue` built the result in place but converted each copy, so the copy constructor ran and the branch's source was destroyed as well. | `get_conditional_class_prvalue`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional{,_fail}` | — | **Fixed**: each branch is converted from the elided copy's source, the C++17 form. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
@@ -10021,6 +10022,36 @@ invariant naming the loop variable outside its scope),
 `esbmc-unix2/11_scull` and `csmith/csmith04` (header conflicts). A
 `PARSING ERROR` line in a KNOWNBUG run deserves the same suspicion as
 `accepted under KNOWNBUG`.
+
+---
+
+### M9 (R86) — 2026-10-02, the elided copies in a conditional's branches
+
+R69 left an elidable copy in a ternary operand converted. Before C++17,
+`C c = b ? C(1) : C(2);` is an elidable copy of the conditional, which R69
+elides, around a conditional whose branches are each an elidable copy of a
+bound `C(1)` or `C(2)`. `get_conditional_class_prvalue`, which builds a class
+conditional's result in place, converted those copies, so the copy constructor
+ran and the branch's source was destroyed too. Under `--std c++14` the program
+above ends with two constructions and two destructions where the native one has
+one of each: an assertion of the native counts is FAILED on master, and
+`assert(dtors == 2)` is SUCCESSFUL while the program aborts natively. C++17 was
+already right.
+
+**Fixed** by converting each branch from the copy's source, peeled as R69's
+`peel_elided_copy` does under the branch's `CXXBindTemporaryExpr`. A local, a
+member read of the conditional, a `return` of it, a nested conditional, a
+`const C &` bound to it and an lvalue branch match the native program in C++11,
+14 and 17. `cxx14_elided_copy_conditional{,_fail}`, pinned to `--std c++14`,
+are wrong on master, both halves, under Z3 (the default when Bitwuzla is not
+built).
+
+Residuals, wrong on master too. A conditional passed by value
+(`get(b ? C(1) : C(2))`) keeps a surplus copy before C++17, as `get(C(1))` does:
+the elidable copy into a parameter is not peeled. A branch that calls a
+function returning the class (`b ? make(1) : C(2)`) reports an invalid free in
+every mode, C++17 included; before this change C++14 reported a wrong count
+instead.
 
 ---
 
