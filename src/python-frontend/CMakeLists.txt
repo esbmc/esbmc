@@ -45,6 +45,7 @@ add_library(pythonfrontend STATIC
             python-list/list_construction.cpp
             python-list/list_mutation.cpp
             python-list/list_access.cpp
+            python-list/list_strided_consumers.cpp
             python-list/list_query.cpp
             python-list/list_string_ops.cpp
             python-list/list_comprehension.cpp
@@ -68,7 +69,7 @@ add_library(pythonfrontend STATIC
             function_call/expr.cpp
             function_call/str_conv.cpp
             numpy/numpy_call_expr.cpp
-            numpy/ndarray_descriptor.cpp
+            numpy/ndarray_shape.cpp
             function_call/builder.cpp
             string/string_builder.cpp
             string/string_handler.cpp
