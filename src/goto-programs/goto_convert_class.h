@@ -3,6 +3,7 @@
 
 #include <goto-programs/goto_program.h>
 #include <list>
+#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
@@ -162,6 +163,7 @@ protected:
     const exprt &offset,
     const exprt &init,
     const locationt &location,
+    const exprt &built,
     code_blockt &out);
 
   bool cpp_new_init_list(
@@ -169,7 +171,17 @@ protected:
     const exprt &rhs,
     const exprt &init,
     const exprt &elem_count,
+    const exprt &built,
+    code_blockt &out);
+
+  void convert_cpp_new_elements(
+    const exprt &base,
+    const exprt &built,
+    const codet &construction,
     goto_programt &dest);
+
+  bool user_code_throws();
+  std::optional<bool> user_code_throws_cache;
 
   //
   // function calls
