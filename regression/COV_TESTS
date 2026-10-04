@@ -2127,6 +2127,12 @@ regression/python/github_8100_alias
 regression/python/github_8100_alias_fail
 regression/python/list_eq_nested_comprehension
 regression/python/list_eq_nested_comprehension_fail
+regression/esbmc/github_8102
+regression/esbmc/github_8102_fail
+regression/esbmc/github_8102_sub
+regression/esbmc/github_8102_sub_fail
+regression/esbmc/github_8102_mul
+regression/esbmc/github_8102_mul_fail
 regression/esbmc-cpp/cpp/github_8090_unnamed_override
 regression/esbmc-cpp/cpp/github_8090_unnamed_override_fail
 regression/esbmc/github_8083
@@ -2178,6 +2184,10 @@ regression/esbmc/github_8103
 regression/esbmc/github_8103_fail
 regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
+regression/esbmc/github_8096
+regression/esbmc/github_8096_fail
+regression/esbmc/github_8096_int_min
+regression/esbmc/github_8096_int_min_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc/fam_false_2
