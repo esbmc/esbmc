@@ -376,12 +376,14 @@ private:
    *  @param guard A guard expression representing the execution conditions
    *         under which the dereference occurs; violations are only triggered
    *         when the guard holds.
+   *  @param what The points-to target being dereferenced.
    */
   void check_pointer_alignment(
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &what);
 
   /** Construct an expression representing the pointer's offset, in bits, from
    *  the base of the containing object. This is used for alignment checking
