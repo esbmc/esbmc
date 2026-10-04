@@ -277,6 +277,9 @@ protected:
     std::size_t stack_size,
     const locationt &,
     goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,

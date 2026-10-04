@@ -3268,6 +3268,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_vector_type(t).subtype();
 
         gen_typecast(ns, init, elem_type);
+        // Unlike a braced list, this does not extend the lifetime of a
+        // temporary bound to a reference member ([class.temporary]/6);
+        // the cast keeps goto_convert from treating it as extended.
+        if (
+          init.id() == "address_of" && is_lvalue_or_rvalue_reference(elem_type))
+          init = typecast_exprt(init, elem_type);
         inits.operands().at(i) = init;
       }
     }
