@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_property_class_fail.goto
+--binary --function _RNvCsk2hZmYKK1yi_4fail7harness --ignore-property-class reachability_check --ignore-property-class cover
+assertion failed: x < 255
+^VERIFICATION FAILED$
