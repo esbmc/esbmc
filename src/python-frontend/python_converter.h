@@ -727,9 +727,27 @@ private:
   try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
 
   std::optional<std::vector<std::size_t>>
+  tracked_numpy_shape_from_name(const std::string &name) const;
+
+  std::optional<std::vector<std::size_t>>
+  numpy_shape_from_indexed_decl(const std::string &name) const;
+
+  exprt numpy_shape_attr_expr(
+    const std::vector<std::size_t> &shape,
+    const std::string &attr_name);
+
+  std::optional<std::vector<std::size_t>>
   get_numpy_constructor_shape(const nlohmann::json &node) const;
 
   std::optional<exprt> try_get_numpy_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  std::optional<exprt>
+  try_get_numpy_shape_subscript(const nlohmann::json &element) const;
+
+  std::optional<exprt> try_get_numpy_tracked_value_shape_attr(
     const exprt &base_expr,
     const nlohmann::json &base_node,
     const std::string &attr_name);
@@ -1629,17 +1647,6 @@ private:
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
 
-  bool record_numpy_transpose_view(
-    const exprt &lhs,
-    const nlohmann::json &view_node);
-
-  bool
-  record_numpy_reshape_view(const exprt &lhs, const nlohmann::json &view_node);
-
-  bool record_numpy_shape_stride_view(
-    const exprt &lhs,
-    const nlohmann::json &rhs_node);
-
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
   void reject_nonconstant_numpy_view_write(const nlohmann::json &target) const;
@@ -1652,12 +1659,36 @@ private:
     const nlohmann::json &arg,
     const std::string &unsupported_rank_error);
 
+  std::optional<std::vector<std::size_t>>
+  get_empty_numpy_literal_slice_shape(const nlohmann::json &arg) const;
+
   std::optional<exprt> build_numpy_descriptor_materialized_list(
     const nlohmann::json &arg,
     bool nested);
 
-  std::optional<exprt>
-  build_numpy_descriptor_materialized_array(const nlohmann::json &arg);
+  /// Set when a view-shaped call (transpose, ravel, ...) was lowered to an
+  /// independent copy rather than a view; consumed by the assignment binding.
+  bool numpy_result_is_fresh_copy_ = false;
+  /// Set when a numpy call registered the assignment target as a view.
+  bool numpy_result_is_view_ = false;
+
+  /// `a[...]` with a slice axis over a numpy parameter.
+  bool is_numpy_param_slice(const nlohmann::json &subscript) const;
+
+  /// `element` copied into a named temporary (or itself without a block).
+  exprt hoist_numpy_element(const exprt &element);
+
+  /// Named temporary holding `elems` (row-major) as an array of `shape`.
+  exprt materialize_numpy_elements(
+    const nlohmann::json &location_node,
+    const std::vector<std::size_t> &shape,
+    const std::vector<exprt> &elems,
+    const typet &elem_type);
+
+  /// `reshape_to`, when given, lays the same elements out in that shape.
+  std::optional<exprt> build_numpy_descriptor_materialized_array(
+    const nlohmann::json &arg,
+    const std::vector<std::size_t> *reshape_to = nullptr);
 
   std::optional<std::vector<std::size_t>>
   get_numpy_nditer_logical_shape(const std::string &root_id) const;
@@ -1666,8 +1697,6 @@ private:
   get_numpy_descriptor_element_type(const std::string &root_id) const;
 
   bool is_numpy_readonly_view_arg(const nlohmann::json &arg) const;
-
-  bool has_numpy_transpose_view_of(const std::string &source_id) const;
 
   void clear_numpy_view_copy(const exprt &lhs);
 
@@ -1715,52 +1744,21 @@ private:
   /// semantics leave the old array object -- and anything still viewing it
   /// -- untouched; without this, a view's raw pointer would keep aliasing
   /// the same storage and silently start observing the new value instead.
+  std::vector<std::string> numpy_views_of(const std::string &rebound_id) const;
+
+  bool keep_numpy_result_view(const std::string &lhs_id);
+  bool is_readonly_numpy_view_expr(const nlohmann::json &node) const;
+
+  void record_numpy_constructor_binding(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
   void detach_numpy_pointer_views_of(
     const std::string &rebound_id,
     const locationt &location,
     codet &target_block);
-
-  void clear_numpy_transpose_views_of(const std::string &source_id);
-
-  void mirror_numpy_transpose_assignment(
-    const nlohmann::json &target,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void mirror_numpy_transpose_assignment_from_targets(
-    const nlohmann::json &ast_node,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void mirror_numpy_reshape_assignment(
-    const nlohmann::json &target,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void emit_numpy_transpose_mirror_assignment(
-    const std::string &symbol_id,
-    const std::vector<long long> &cell_indices,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void emit_numpy_view_cell_assignment(
-    const std::string &symbol_id,
-    const std::vector<long long> &cell_indices,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block);
-
-  void mirror_numpy_source_write_to_views(
-    const std::string &source_id,
-    const std::vector<long long> &source_indices,
-    const exprt &rhs,
-    const locationt &location,
-    codet &target_block,
-    const std::string &skip_view_id = "");
 
   bool should_rebuild_cached_numpy_row_subscript_rhs(
     const nlohmann::json &rhs_node) const;
@@ -2286,6 +2284,8 @@ private:
   // and evaluate a side-effecting divisor an extra time).
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
+  // Set while probe_expr() evaluates a node only to inspect its result.
+  bool in_scratch_probe_ = false;
   // A clause is a specification, not code: converting one must not plant a
   // statement into the enclosing block. The guard did, so annotating a file
   // changed its verification result with contracts switched off, and a `//` in
@@ -2330,27 +2330,89 @@ private:
     std::size_t length;
     long long stride;
     bool readonly;
+    std::vector<std::size_t> shape;
+    std::string source_id;
+    // Per-axis element strides of an N-D view over a scalar pointer; empty
+    // for a contiguous view (typed pointer to rows) or a legacy 1-D view.
+    std::vector<long long> strides;
+    // Runtime extents and strides, as the ids of the signed 64-bit temporaries
+    // holding them ("" for an axis whose value is a constant). Parallel to
+    // shape/strides, whose entries are placeholders for a runtime axis.
+    std::vector<std::string> shape_symbols;
+    std::vector<std::string> stride_symbols;
+    bool is_symbolic() const
+    {
+      for (const std::string &id : shape_symbols)
+        if (!id.empty())
+          return true;
+      for (const std::string &id : stride_symbols)
+        if (!id.empty())
+          return true;
+      return false;
+    }
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
-  struct numpy_transpose_view_infot
+  const numpy_scalar_pointer_view_infot *
+  find_numpy_pointer_view_info(const std::string &name) const;
+  // Runtime length of the named view when its extent is not a constant.
+  std::optional<exprt>
+  symbolic_numpy_view_length(const std::string &name) const;
+  // Axis `axis` extent / stride of a view as signed 64-bit expressions.
+  exprt numpy_view_extent(
+    const numpy_scalar_pointer_view_infot &info,
+    std::size_t axis) const;
+  exprt numpy_view_stride(
+    const numpy_scalar_pointer_view_infot &info,
+    std::size_t axis) const;
+  // Consumers that need a constant length/stride reject a symbolic view.
+  static void
+  reject_symbolic_numpy_view(const numpy_scalar_pointer_view_infot &info);
+
+  /// One axis of an N-D copy loop: signed 64-bit extent and stride.
+  struct strided_copy_axis
   {
-    std::string source_id;
-    std::size_t rank;
-    bool swaps_axes;
+    exprt extent;
+    exprt stride;
   };
-  std::unordered_map<std::string, numpy_transpose_view_infot>
-    numpy_transpose_view_info_;
-  struct numpy_reshape_view_infot
-  {
-    std::string source_id;
-    std::vector<std::size_t> source_shape;
-    std::vector<std::size_t> view_shape;
-    bool readonly = false;
-    bool broadcast = false;
-  };
-  std::unordered_map<std::string, numpy_reshape_view_infot>
-    numpy_reshape_view_info_;
+
+  /// Appends `dst[i0]..[ik] = src[offset + sum(ik * stride_k)]` over every
+  /// index, as nested loops, to `block`. `dst` has one array level per axis,
+  /// `src` is a scalar pointer, `offset` a size_type element count.
+  void emit_strided_copy(
+    codet &block,
+    const exprt &dst,
+    const exprt &src,
+    const exprt &offset,
+    const std::vector<strided_copy_axis> &axes,
+    const locationt &location);
+
+  /// Detach for a view with a runtime extent or stride: copies what the view
+  /// sees into a fresh dense snapshot with loops and repoints the view at
+  /// it. Returns the snapshot's id.
+  std::string snapshot_symbolic_numpy_view(
+    const exprt &old_ptr,
+    numpy_scalar_pointer_view_infot &info,
+    const locationt &location,
+    codet &target_block);
+  /// Detach for a constant-shape view: copies what it sees into a dense
+  /// snapshot and repoints it there. Returns the snapshot's id.
+  std::vector<exprt> read_strided_view_elements(
+    const exprt &base,
+    const std::vector<long long> &strides,
+    const std::vector<std::size_t> &shape);
+  std::vector<exprt> read_contiguous_view_elements(
+    exprt base,
+    std::size_t count,
+    long long stride,
+    const std::vector<std::size_t> &shape);
+  std::string snapshot_constant_numpy_view(
+    const symbolt &view_symbol,
+    numpy_scalar_pointer_view_infot &info,
+    const locationt &location,
+    codet &target_block);
+  /// Names bound to a read-only numpy view that is not a pointer view.
+  std::unordered_set<std::string> numpy_readonly_arrays_;
   /// Namespace of each operational model loaded this run, in load order.
   std::vector<std::string> model_namespaces_;
   // A 2-D+ numpy array parameter's full logical shape, keyed by the
