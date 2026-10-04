@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -143,6 +144,95 @@ is_enum_class(const std::string &class_name, const nlohmann::json &ast_json)
         return true;
     }
   return false;
+}
+
+// An integer literal, possibly negated (`3`, `-3`).
+inline bool is_literal_int_node(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return true;
+
+  return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+         node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+         node["operand"].value("_type", "") == "Constant" &&
+         node["operand"].contains("value") &&
+         node["operand"]["value"].is_number_integer();
+}
+
+inline std::optional<long long> literal_int_value(const nlohmann::json &node)
+{
+  if (!is_literal_int_node(node))
+    return std::nullopt;
+
+  if (node.value("_type", "") == "Constant")
+    return node["value"].get<long long>();
+
+  return -node["operand"]["value"].get<long long>();
+}
+
+// The literal step of a Slice node (1 when omitted); nullopt when it is not
+// a literal or is zero.
+inline std::optional<long long> literal_slice_step(const nlohmann::json &slice)
+{
+  if (!slice.contains("step") || slice["step"].is_null())
+    return 1;
+
+  std::optional<long long> step = literal_int_value(slice["step"]);
+  if (!step || *step == 0)
+    return std::nullopt;
+  return step;
+}
+
+// One literal bound of a Slice node, resolved with Python's rules against an
+// axis of `axis_len` elements; nullopt when the bound is not a literal.
+inline std::optional<long long> literal_slice_bound(
+  const nlohmann::json &slice,
+  const char *name,
+  const long long axis_len,
+  const long long step)
+{
+  const bool lower = std::string(name) == "lower";
+  if (!slice.contains(name) || slice[name].is_null())
+  {
+    if (step > 0)
+      return lower ? 0 : axis_len;
+    return lower ? axis_len - 1 : -1;
+  }
+
+  std::optional<long long> value = literal_int_value(slice[name]);
+  if (!value)
+    return std::nullopt;
+
+  const long long resolved = *value < 0 ? *value + axis_len : *value;
+  if (step > 0)
+    return std::max(0LL, std::min(resolved, axis_len));
+  return std::max(-1LL, std::min(resolved, axis_len - 1));
+}
+
+// Number of elements a Slice with literal bounds and step selects from an
+// axis of `dim` elements; nullopt when any of them is not a literal.
+inline std::optional<std::size_t>
+literal_slice_length(const std::size_t dim, const nlohmann::json &slice)
+{
+  const std::optional<long long> step = literal_slice_step(slice);
+  if (!step)
+    return std::nullopt;
+
+  const long long axis_len = static_cast<long long>(dim);
+  const std::optional<long long> start =
+    literal_slice_bound(slice, "lower", axis_len, *step);
+  const std::optional<long long> stop =
+    literal_slice_bound(slice, "upper", axis_len, *step);
+  if (!start || !stop)
+    return std::nullopt;
+
+  const long long span = *step > 0 ? *stop - *start : *start - *stop;
+  const long long stride = *step > 0 ? *step : -*step;
+  return span <= 0 ? 0 : static_cast<std::size_t>((span - 1) / stride + 1);
 }
 
 } // namespace python_frontend
