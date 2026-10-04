@@ -84,6 +84,25 @@ static bool is_fetch_then_op_builtin(const irep_idt &identifier)
      "c:@F@__c11_atomic_fetch_xor"});
 }
 
+/* The same operations, returning the value stored rather than the old one. */
+static bool is_op_then_fetch_builtin(const irep_idt &identifier)
+{
+  return has_any_prefix(
+    identifier,
+    {"c:@F@__sync_add_and_fetch",
+     "c:@F@__sync_sub_and_fetch",
+     "c:@F@__sync_or_and_fetch",
+     "c:@F@__sync_and_and_fetch",
+     "c:@F@__sync_xor_and_fetch",
+     "c:@F@__sync_nand_and_fetch",
+     "c:@F@__atomic_add_fetch",
+     "c:@F@__atomic_sub_fetch",
+     "c:@F@__atomic_and_fetch",
+     "c:@F@__atomic_xor_fetch",
+     "c:@F@__atomic_or_fetch",
+     "c:@F@__atomic_nand_fetch"});
+}
+
 /* bool __atomic_test_and_set(void *, int) and void __atomic_clear(bool *, int):
  * the only two that name the byte they write instead of taking it. */
 static bool is_atomic_flag_builtin(const irep_idt &identifier)
@@ -673,12 +692,15 @@ static void instantiate_carry_builtin(
   block.operands().push_back(ret);
 }
 
-/* The arithmetic a `fetch_and_<op>` / `fetch_<op>` name selects. The __sync,
- * __atomic and __c11_atomic families spell the same set of operations, and a
- * name may carry a width suffix, hence the prefix match. The table is uniform
- * over the three families, so it also names __c11_atomic_fetch_nand, which the
- * caller's guard does not admit and clang_c_convert rejects earlier. */
-static exprt fetch_op_expr(const irep_idt &identifier, const typet &type)
+/* The value a `fetch_and_<op>` / `fetch_<op>` / `<op>_fetch` name stores at
+ * *ptr, given its old value. The __sync, __atomic and __c11_atomic families
+ * spell the same set of operations, and a name may carry a width suffix,
+ * hence the prefix match. nand is ~(old & val), as GCC has defined it since
+ * 4.4. The table is uniform over the families, so it also names
+ * __c11_atomic_fetch_nand, which the caller's guard does not admit and
+ * clang_c_convert rejects earlier. */
+static exprt
+fetch_op_expr(const irep_idt &identifier, const exprt &old, const exprt &val)
 {
   static const struct
   {
@@ -694,22 +716,80 @@ static exprt fetch_op_expr(const irep_idt &identifier, const typet &type)
     {"nand", "bitand", nullptr}};
 
   const std::string &id = identifier.as_string();
+  const typet &type = old.type();
   for (const auto &entry : ops)
   {
     const std::string op = entry.op;
+    const std::string spellings[] = {
+      "c:@F@__sync_fetch_and_" + op,
+      "c:@F@__atomic_fetch_" + op,
+      "c:@F@__c11_atomic_fetch_" + op,
+      "c:@F@__sync_" + op + "_and_fetch",
+      "c:@F@__atomic_" + op + "_fetch"};
     if (
-      !has_prefix(id, "c:@F@__sync_fetch_and_" + op) &&
-      !has_prefix(id, "c:@F@__atomic_fetch_" + op) &&
-      !has_prefix(id, "c:@F@__c11_atomic_fetch_" + op))
+      std::none_of(
+        std::begin(spellings),
+        std::end(spellings),
+        [&id](const std::string &name) { return has_prefix(id, name); }))
       continue;
 
-    if (entry.float_expr_id && type.is_floatbv())
-      return exprt(entry.float_expr_id, type);
+    const bool is_float = entry.float_expr_id && type.is_floatbv();
+    exprt result(is_float ? entry.float_expr_id : entry.expr_id, type);
+    result.copy_to_operands(old, val);
+    if (op != "nand")
+      return result;
 
-    return exprt(entry.expr_id, type);
+    exprt negated("bitnot", type);
+    negated.move_to_operands(result);
+    return negated;
   }
 
   return exprt();
+}
+
+/* old = *ptr; *ptr = old <op> val; return old, or the value stored for an
+ * <op>_fetch name. */
+static void instantiate_read_modify_write(
+  const irep_idt &identifier,
+  const irep_idt &identifier_with_type,
+  const code_typet &code_type,
+  const locationt &new_loc,
+  code_blockt &block,
+  contextt &context)
+{
+  const typet &type = code_type.return_type();
+  const exprt &result =
+    symbol_expr(result_symbol(identifier_with_type, type, context));
+  block.operands().push_back(code_declt(result));
+
+  const code_typet::argumentt &arg0 = code_type.arguments()[0];
+  const code_typet::argumentt &arg1 = code_type.arguments()[1];
+  const dereference_exprt ptr_deref(
+    symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+  const exprt new_value = fetch_op_expr(
+    identifier, ptr_deref, symbol_exprt(arg1.cmt_identifier(), arg1.type()));
+
+  code_assignt assign_result(result, ptr_deref);
+  code_assignt assign_ptr(ptr_deref, new_value);
+  if (is_op_then_fetch_builtin(identifier))
+  {
+    assign_result.rhs() = new_value;
+    assign_ptr.rhs() = result;
+  }
+  assign_result.location() = new_loc;
+  assign_ptr.location() = new_loc;
+  block.operands().push_back(assign_result);
+  block.operands().push_back(assign_ptr);
+
+  side_effect_expr_function_callt atomic_end;
+  atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+  convert_expression_to_code(atomic_end);
+  block.operands().push_back(atomic_end);
+
+  code_returnt ret;
+  ret.return_value() = result;
+  ret.location() = new_loc;
+  block.operands().push_back(ret);
 }
 
 code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
@@ -745,57 +825,10 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   new_loc.set_function(function_symbol.name());
 
   if (
-    has_prefix(identifier.as_string(), "c:@F@__sync_add_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_sub_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_or_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_and_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_xor_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_nand_and_fetch"))
-  {
-    // TODO
-  }
-  else if (is_fetch_then_op_builtin(identifier))
-  {
-    const typet &type = code_type.return_type();
-
-    const exprt &initial =
-      symbol_expr(result_symbol(identifier_with_type, type, context));
-
-    code_declt decl(initial);
-    block.operands().push_back(decl);
-
-    code_typet::argumentt arg0 = code_type.arguments()[0];
-    code_assignt assign(
-      initial,
-      dereference_exprt(
-        symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type()));
-    assign.location() = new_loc;
-    block.operands().push_back(assign);
-
-    exprt new_expr = fetch_op_expr(identifier, type);
-
-    dereference_exprt arg0_deref(
-      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
-
-    code_typet::argumentt arg1 = code_type.arguments()[1];
-    new_expr.copy_to_operands(
-      arg0_deref, symbol_exprt(arg1.cmt_identifier(), arg1.type()));
-
-    code_assignt assign1(arg0_deref, new_expr);
-    assign1.location() = new_loc;
-    block.operands().push_back(assign1);
-
-    // atomic scope end
-    side_effect_expr_function_callt atomic_end;
-    atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
-    convert_expression_to_code(atomic_end);
-    block.operands().push_back(atomic_end);
-
-    code_returnt ret;
-    ret.return_value() = initial;
-    ret.location() = new_loc;
-    block.operands().push_back(ret);
-  }
+    is_fetch_then_op_builtin(identifier) ||
+    is_op_then_fetch_builtin(identifier))
+    instantiate_read_modify_write(
+      identifier, identifier_with_type, code_type, new_loc, block, context);
   else if (is_overflow_builtin(identifier))
     instantiate_overflow_builtin(identifier, code_type, new_loc, block);
   else if (is_carry_builtin(identifier))
@@ -1120,16 +1153,6 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     ret.return_value() = result;
     ret.location() = new_loc;
     block.operands().push_back(ret);
-  }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__atomic_add_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_sub_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_xor_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_or_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_nand_fetch"))
-  {
-    // TODO
   }
 
   return block;
