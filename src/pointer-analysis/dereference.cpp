@@ -1625,6 +1625,9 @@ void dereferencet::construct_vector_ref(
   value = constant_vector2tc(type, std::move(lanes));
 }
 
+/// The most elements construct_array_ref builds one by one.
+static constexpr unsigned max_array_ref_elements = 4096;
+
 void dereferencet::construct_array_ref(
   expr2tc &value,
   const expr2tc &offset,
@@ -1665,10 +1668,22 @@ void dereferencet::construct_array_ref(
   // assemble them. Each recursive call re-dispatches on the source shape, so
   // this transparently handles array, struct, scalar-reinterpret and union
   // sources, and nests for multidimensional arrays.
-  const expr2tc source = value;
-  const BigInt count = to_constant_int2t(arr_type.array_size).value;
-  const BigInt elem_bits = type_byte_size_bits(arr_type.subtype, &ns);
+  auto refuse = [&](const char *why) {
+    dereference_failure("Bad dereference", why, guard);
+    value = make_failed_symbol(type);
+  };
 
+  // A constant_array cannot be assigned through, so a store here would vanish.
+  if (is_write(mode))
+    return refuse("Cannot write a whole array value element by element");
+
+  const BigInt count = to_constant_int2t(arr_type.array_size).value;
+  // Every element becomes its own read; a large array would exhaust memory.
+  if (count > max_array_ref_elements)
+    return refuse("Array too large to construct element by element");
+
+  const BigInt elem_bits = type_byte_size_bits(arr_type.subtype, &ns);
+  const expr2tc source = value;
   std::vector<expr2tc> elements;
   elements.reserve(count.to_uint64());
   for (BigInt i = 0; i < count; i += 1)
