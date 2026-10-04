@@ -160,6 +160,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-cprover-additions",
      NULL,
      "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
+    {"ignore-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Skip the assertions a CBMC goto-binary tags with this property class "
+     "(repeatable), e.g. Kani's reachability_check and cover"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
