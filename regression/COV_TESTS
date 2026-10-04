@@ -2145,6 +2145,14 @@ regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
 regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
 regression/esbmc-cpp/cpp/shared_ptr_member_copy
+regression/esbmc/union_struct_member_bound
+regression/esbmc/union_struct_member_bound_fail
+regression/esbmc-cpp/cpp/static_local_array_dynamic_init
+regression/esbmc-cpp/cpp/static_local_array_dynamic_init_fail
+regression/esbmc-cpp/cpp/static_local_array_filler
+regression/esbmc-cpp/cpp/static_local_array_filler_fail
+regression/esbmc-cpp/cpp/aggregate_prvalue_variable
+regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
 regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee
 regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee_fail
 regression/esbmc/github_8096
@@ -2170,3 +2178,6 @@ regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc/fam_false_2
 regression/esbmc/fam_true_4
+regression/goto-transcoder/cbmc_kani_property_class
+regression/goto-transcoder/cbmc_kani_property_class_default
+regression/goto-transcoder/cbmc_kani_property_class_fail
