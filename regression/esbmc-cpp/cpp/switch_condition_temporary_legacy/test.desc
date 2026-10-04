@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--no-irep2-native-body
+^VERIFICATION SUCCESSFUL$

@@ -70,6 +70,13 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
+  /// The operands of a short-circuit operator keep block scope.
+  void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
+  bool in_short_circuit = false;
+
   // Recursively flatten a (possibly nested) &&/|| contract clause
   // (__ESBMC_requires / __ESBMC_ensures), hoisting side effects (e.g.
   // __ESBMC_old()) only at the leaves so no conjunct is dropped (#6298).
@@ -88,6 +95,7 @@ protected:
   // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
   // sideeffect2t node, mirroring the legacy exprt overload above.
   bool has_sideeffect(const expr2tc &expr);
+  bool has_short_circuit_sideeffect(const exprt &expr);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
