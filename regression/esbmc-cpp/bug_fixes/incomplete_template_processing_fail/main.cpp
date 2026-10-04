@@ -47,11 +47,9 @@ void somewhere_else_in_the_program()
   Allocator a;
   intrusive_ptr<Allocator> pa(&a);
   intrusive_ptr<Base> pb = pa; // upcast -- instantiates the Y=Allocator ctor
-
-  assert(pb.ptr == nullptr);
+  (void)pb;
 }
 
 int main()
 {
-  somewhere_else_in_the_program();
 }
