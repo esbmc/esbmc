@@ -133,14 +133,19 @@ protected:
     const std::vector<expr2tc> &invariants,
     const goto_programt &side_effects);
 
+  static type2tc havoc_pointee_type(const expr2tc &ptr, const namespacet &ns);
+
+  /// False when a pointee the loop writes is out of the havoc's reach, which
+  /// leaves the loop to the unwinder.
+  bool pointees_havocable(const loopst &loop) const;
+
   // Insert HAVOC and ASSUME at \p loop_head, which must be the loop head's own
   // instruction, so that everything the guard evaluates runs after the havoc
   // (inserts side_effects between the HAVOC block and the ASSUME).
   // side_effects is non-const: if frame rule is active, old_snapshot assigns
   // are patched in-place so insert_inductive_step_and_termination (called
   // after this) sees the patched version too.
-  /// Havoc the objects the loop writes through a pointer. See the definition
-  /// for why a large aggregate pointee is left alone (issue #7502).
+  /// Havoc the objects the loop writes through a pointer.
   void havoc_pointees(
     const loopst &loop,
     const locationt &loc,
