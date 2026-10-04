@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_popcount_type.goto
+--binary --function _RNvCs4T9Yg8Wk64F_3pop7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$
