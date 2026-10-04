@@ -2145,6 +2145,8 @@ regression/esbmc-cpp/cpp/aggregate_element_temporary_fail
 regression/esbmc-cpp/cpp/aggregate_init_temp_double_destroy
 regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy
 regression/esbmc-cpp/cpp/shared_ptr_member_copy
+regression/esbmc-cpp/cpp/aggregate_prvalue_variable
+regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
