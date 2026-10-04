@@ -814,6 +814,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R84** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — found beside R83, §15 M9 (R84); **FIXED**, same entry | **A variable initialised from a braced class prvalue was copied out of a temporary that was then destroyed.** `A a = A{1};`, `auto a = A{1};` and the closure of `auto f = [m] { ... };` reached `convert_decl_initializer` as a `temporary_object` holding the aggregate (clang's `CXXBindTemporaryExpr`), so the variable was assigned from a temporary destroyed at the end of the declaration and destroyed again at scope exit. With an aggregate that frees a pointer in its destructor, every later dereference was a false FAILED (invalidated dynamic object) and scope exit a double free; `assert(dtors == 1)` right after the declaration, which aborts natively, was a false SUCCESSFUL. | `elide_prvalue_temporary`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_prvalue_variable{,_fail}` | — | **Fixed**: a `temporary_object` with no constructor wrapping a value that is not a side effect initialises the variable directly ([dcl.init]/17.6.1). A lambda's by-copy capture of a class still has its capture-copy temporary destroyed (R83's path, open PR #8113). |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
+| **R90** | **High (false SUCCESSFUL, default configuration)** — found probing the symex memory builtins' pointer checks after R77, §15 M9 (R90); **FIXED**, same entry | **`memcmp` never checked its operands for NULL.** `memcmp_resolve_operand` dereferences in INTERNAL mode, which drops a NULL target without a claim, so an operand that is `a` or NULL resolved to `a` alone and the fast path compared `a`. `memset`, `memcpy`, `memmove` and `memchr` add a NULL claim after resolving; `memcmp` did not. `p = c ? a : NULL; memcmp(p, b, 4)` verified, and segfaults natively. | `claim_nonnull_operand` and `intrinsic_memcmp`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/memcmp_null_operand{,_fail}` | — | **Fixed**: claim each operand non-NULL unless `n` is zero, matching `__memcmp_impl`, which reads nothing for `n == 0`. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
@@ -10051,6 +10052,42 @@ terminate on master, both halves, under Z3.
 
 Not fixed: the sibling reads above, and a nondet bound in any of these shapes,
 which is R28's symbolic-bound question.
+
+---
+
+### M9 (R90) — 2026-10-02, the NULL operand memcmp never checked
+
+The symex `memcmp` resolves each operand with `memcmp_resolve_operand`, which
+dereferences in INTERNAL mode. That mode returns a NULL target silently and
+leaves the check to the caller. `memset`, `memcpy`, `memmove` and `memchr`
+claim the pointer non-NULL after resolving; `memcmp` did not. An operand whose
+value set is `{a, NULL}` resolved to `a` alone, the comparison read `a`, and
+
+```c
+char *p = a;
+if (nondet_int())
+  p = 0;
+return memcmp(p, b, 4); /* master: VERIFICATION SUCCESSFUL */
+```
+
+verified, where the native program segfaults on the NULL path. A call whose
+operand is NULL on every path resolves to nothing, falls back to
+`__memcmp_impl`, and was already caught.
+
+**Fixed** by claiming each operand non-NULL unless `n` is zero. The exemption
+follows `__memcmp_impl`, whose loop reads nothing for `n == 0`, and
+`memchr`'s fast path; C2y (N3322) makes a NULL operand with zero length well
+defined. `memcmp_null_operand_fail` changes verdict against master;
+`memcmp_null_operand` passes a NULL operand only when `n` is zero and fails if
+the exemption is dropped, so it pins the boundary rather than a master
+verdict. Both agree under Z3, the only solver this run could build: Bitwuzla's
+CaDiCaL download was refused by the network policy. The 37 other regression
+tests whose sources call `memcmp` keep their verdicts; `github_1009_success`
+needs eight minutes and runs `--no-pointer-check`, under which the new claims
+are not generated.
+
+Not examined: INTERNAL mode drops an invalid non-NULL target the same way, and
+whether one reaches these builtins without a check is open.
 
 ---
 
