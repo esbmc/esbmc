@@ -643,7 +643,8 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
 void goto_convertt::generate_dynamic_size_vla(
   exprt &var,
   const locationt &loc,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool allow_zero_size)
 {
   assert(var.type().is_array());
 
@@ -692,14 +693,20 @@ void goto_convertt::generate_dynamic_size_vla(
   assert_not(ovfl_cast_id, size);
 
   // Zero-size and negative-size VLAs are undefined behaviour (C11 §6.7.6.2p1).
+  // Python arrays may be empty (e.g. a slice with symbolic bounds), so only
+  // negative sizes are rejected there.
   if (!disable_check)
   {
     expr2tc dim2;
     migrate_expr(dim_expr, dim2);
     goto_programt::targett gt_tgt = dest.add_instruction(ASSERT);
-    gt_tgt->guard = greaterthan2tc(dim2, gen_zero(dim2->type));
+    gt_tgt->guard = allow_zero_size
+                      ? greaterthanequal2tc(dim2, gen_zero(dim2->type))
+                      : greaterthan2tc(dim2, gen_zero(dim2->type));
     gt_tgt->location = loc;
-    gt_tgt->location.comment("VLA array dimension must be greater than zero");
+    gt_tgt->location.comment(
+      allow_zero_size ? "VLA array dimension must not be negative"
+                      : "VLA array dimension must be greater than zero");
   }
 
   // First, if it's a multidimensional vla, the size will be the
@@ -934,7 +941,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   copy(new_code, DECL, dest);
 
   if (is_vla)
-    generate_dynamic_size_vla(var, new_code.location(), dest);
+    generate_dynamic_size_vla(
+      var, new_code.location(), dest, s->mode == "Python");
 
   if (!initializer.is_nil())
     convert_decl_initializer(var, initializer, new_code, *s, dest);
