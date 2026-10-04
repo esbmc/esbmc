@@ -1683,6 +1683,12 @@ void dereferencet::construct_array_ref(
     return refuse("Array too large to construct element by element");
 
   const BigInt elem_bits = type_byte_size_bits(arr_type.subtype, &ns);
+  // Element i sits i * elem_bits past the array, so on top of the array's
+  // alignment only the largest power of two dividing elem_bits is guaranteed.
+  const uint64_t stride = elem_bits.to_uint64();
+  const unsigned long elem_alignment =
+    std::min<unsigned long>(alignment, stride & -stride);
+
   const expr2tc source = value;
   std::vector<expr2tc> elements;
   elements.reserve(count.to_uint64());
@@ -1694,8 +1700,10 @@ void dereferencet::construct_array_ref(
 
     expr2tc element = source;
     build_reference_rec(
-      element, elem_offset, arr_type.subtype, guard, mode, alignment);
-    elements.push_back(element);
+      element, elem_offset, arr_type.subtype, guard, mode, elem_alignment);
+    // As for a vector lane: an element that cannot be built is a free value.
+    elements.push_back(
+      is_nil_expr(element) ? make_failed_symbol(arr_type.subtype) : element);
   }
 
   value = constant_array2tc(type, std::move(elements));
