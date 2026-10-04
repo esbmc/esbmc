@@ -557,6 +557,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
       else if (is_modulus2t(e))
         result = lhs % rhs;
+
+      result = wrap_to_type(result, e->type);
     }
     break;
 
