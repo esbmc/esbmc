@@ -64,6 +64,18 @@ static expr2tc update_object_byte(
       index2tc(arr->subtype, object, index), offset % size, byte, big_endian));
 }
 
+static bool target_is_big_endian()
+{
+  return config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+}
+
+/* The shift, in bytes, that moves the low byte of a value into the place of
+ * the @p n bytes at byte @p offset of a scalar of @p type. */
+static size_t byte_shift(const type2tc &type, size_t offset, size_t n)
+{
+  return target_is_big_endian() ? type->get_width() / 8 - offset - n : offset;
+}
+
 // Computes the equivalent object value when considering a memset operation on
 // it
 static inline expr2tc gen_byte_expression_byte_update(
@@ -103,7 +115,7 @@ static inline expr2tc gen_byte_expression_byte_update(
       result,
       add2tc(off->type, off, increment),
       value_downcast,
-      false);
+      target_is_big_endian());
   }
 
   if (found_constant)
@@ -204,7 +216,7 @@ static inline expr2tc gen_byte_expression(
   }
 
   // Do the rest of the offset!
-  for (unsigned i = 0; i < offset; i++)
+  for (size_t i = 0; i < byte_shift(type, offset, num_of_bytes); i++)
   {
     result = shl2tc(type, result, eight);
     mask = shl2tc(type, mask, eight);
@@ -286,8 +298,7 @@ static inline expr2tc gen_value_by_byte(
       }
       else
       {
-        uint64_t bytes_to_write =
-          bytes_left < base_size ? bytes_left : base_size;
+        uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
         data.datatype_members[i] = gen_value_by_byte(
           to_array_type(type).subtype,
           local_member,
@@ -296,8 +307,7 @@ static inline expr2tc gen_value_by_byte(
           offset_left);
         if (!data.datatype_members[i])
           return expr2tc();
-        bytes_left =
-          bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
+        bytes_left -= bytes_to_write;
         offset_left = 0;
       }
     }
@@ -348,7 +358,8 @@ static inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < current_member_size);
-        uint64_t bytes_to_write = std::min(bytes_left, current_member_size);
+        uint64_t bytes_to_write =
+          std::min(bytes_left, current_member_size - offset_left);
         data.datatype_members[i] = gen_value_by_byte(
           current_member_type,
           local_member,
@@ -359,9 +370,7 @@ static inline expr2tc gen_value_by_byte(
         if (!data.datatype_members[i])
           return expr2tc();
 
-        bytes_left = bytes_left < current_member_size
-                       ? 0
-                       : bytes_left - (current_member_size - offset_left);
+        bytes_left -= bytes_to_write;
         offset_left = 0;
       }
     }
@@ -458,23 +467,23 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
       dst_mask = bitor2tc(dst->type, dst_mask, one);
     }
 
-  for (unsigned i = 0; i < dst_offset; i++)
+  const size_t dst_shift = byte_shift(dst->type, dst_offset, num_of_bytes);
+  const size_t src_shift = byte_shift(src->type, src_offset, num_of_bytes);
+  for (size_t i = 0; i < dst_shift; i++)
     dst_mask = shl2tc(dst->type, dst_mask, eight);
 
   dst_mask = bitnot2tc(dst->type, dst_mask);
   dst_mask = bitand2tc(dst->type, dst, dst_mask);
 
-  for (unsigned i = 0; i < src_offset; i++)
+  for (size_t i = 0; i < src_shift; i++)
     src_mask = shl2tc(dst->type, src_mask, eight);
 
   src_mask = bitand2tc(dst->type, src, src_mask);
 
-  // When dst_offset > src_offset
-  for (unsigned i = src_offset; i < dst_offset; i++)
+  for (size_t i = src_shift; i < dst_shift; i++)
     src_mask = shl2tc(dst->type, src_mask, eight);
 
-  // When dst_offsett < src_offset
-  for (unsigned i = dst_offset; i < src_offset; i++)
+  for (size_t i = dst_shift; i < src_shift; i++)
     src_mask = lshr2tc(dst->type, src_mask, eight);
 
   expr2tc result = bitor2tc(dst->type, dst_mask, src_mask);
