@@ -1335,6 +1335,50 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
   expr = symbol_expr(new_symbol);
 }
 
+bool goto_convertt::has_short_circuit_sideeffect(const exprt &expr)
+{
+  if (
+    (expr.is_and() || expr.is_or() || expr.id() == "if") &&
+    has_sideeffect(expr))
+    return true;
+
+  forall_operands (it, expr)
+    if (has_short_circuit_sideeffect(*it))
+      return true;
+
+  return false;
+}
+
+void goto_convertt::remove_condition_sideeffects(
+  exprt &cond,
+  goto_programt &dest)
+{
+  const locationt location = cond.find_location();
+  const bool short_circuit =
+    in_short_circuit || has_short_circuit_sideeffect(cond);
+  const std::size_t stack_size = targets.destructor_stack.size();
+  remove_sideeffects(cond, dest);
+
+  destructor_stackt &stack = targets.destructor_stack;
+  if (
+    short_circuit ||
+    std::none_of(stack.begin() + stack_size, stack.end(), [](const codet &d) {
+      return d.get_statement() == "function_call";
+    }))
+    return;
+
+  // The temporaries may be read by the condition, so its value is taken
+  // before they are destroyed; the copy keeps block scope.
+  const std::size_t temporaries_size = stack.size();
+  make_temp_symbol(cond, dest);
+  const destructor_stackt cond_entries(
+    stack.begin() + temporaries_size, stack.end());
+  stack.resize(temporaries_size);
+  unwind_destructor_stack(location, stack_size, dest);
+  stack.resize(stack_size);
+  stack.insert(stack.end(), cond_entries.begin(), cond_entries.end());
+}
+
 bool goto_convertt::has_sideeffect(const exprt &expr)
 {
   forall_operands (it, expr)

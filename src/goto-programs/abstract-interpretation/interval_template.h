@@ -389,10 +389,11 @@ public:
 
     interval_templatet<T> result;
 
-    // Let's (not) deal with infinities first and division by 0.
+    // A divisor range containing 0 also contains the divisors giving the
+    // largest quotients (±1, or arbitrarily small reals), not just its ends.
     if (
-      !lhs.lower || !rhs.lower || !lhs.upper || !rhs.upper || *rhs.lower == 0 ||
-      *rhs.upper == 0)
+      !lhs.lower || !rhs.lower || !lhs.upper || !rhs.upper ||
+      rhs.contains(T(0)))
       return result;
 
     // Initialize with a0 * b0
