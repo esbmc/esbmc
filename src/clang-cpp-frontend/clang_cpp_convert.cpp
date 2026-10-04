@@ -3823,9 +3823,10 @@ bool clang_cpp_convertert::get_conditional_class_prvalue(
 // different program: two allocations from a pool allocator that alias
 // are modelled as distinct objects, hiding real bugs (github #6494).
 // Record the resolved function for goto-conversion to call instead.
-// Only the plain (size) form is routed -- the aligned and user-placement
-// forms take further arguments this lowering does not supply, and an
-// allocation function without a body in this TU has nothing to call.
+// The plain (size) form and the user-placement forms are routed, the latter
+// with their placement arguments ([expr.new]/16); the aligned forms take an
+// alignment this lowering does not supply, and an allocation function without
+// a body in this TU has nothing to call.
 bool clang_cpp_convertert::get_new_storage(
   const clang::CXXNewExpr &ne,
   exprt &new_expr)
@@ -3841,14 +3842,25 @@ bool clang_cpp_convertert::get_new_storage(
   }
 
   if (
-    !op_new || !op_new->isDefined() || op_new->getNumParams() != 1 ||
-    ne.getNumPlacementArgs() != 0)
+    !op_new || !op_new->isDefined() || ne.passAlignment() ||
+    op_new->getNumParams() != 1 + ne.getNumPlacementArgs())
     return false;
 
   exprt alloc_function;
   if (get_decl_ref(*op_new, alloc_function))
     return true;
   new_expr.add("alloc_function") = alloc_function;
+
+  exprt alloc_arguments("arguments");
+  for (const clang::Expr *arg : ne.placement_arguments())
+  {
+    exprt a;
+    if (get_expr(*arg, a))
+      return true;
+    alloc_arguments.move_to_operands(a);
+  }
+  if (alloc_arguments.has_operands())
+    new_expr.add("alloc_arguments") = alloc_arguments;
   return false;
 }
 
