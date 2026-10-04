@@ -1459,7 +1459,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt cond = tmp;
   goto_programt sideeffects;
 
-  remove_sideeffects(cond, sideeffects);
+  remove_condition_sideeffects(cond, sideeffects);
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1610,7 +1610,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   exprt cond = code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(cond, sideeffects);
+  remove_condition_sideeffects(cond, sideeffects);
 
   //    do P while(c);
   //--------------------
@@ -2165,6 +2165,8 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     new_if1.op0() = code.cond().op1();
     new_if0.location() = location;
     new_if1.location() = location;
+    new_if0.set("#short_circuit", true);
+    new_if1.set("#short_circuit", true);
     new_if1.op1() = code.then_case();
     new_if0.op1() = new_if1;
     return convert_ifthenelse(to_code(new_if0), dest);
@@ -2190,7 +2192,10 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
       options.get_bool_option("condition-coverage-claims-rm")) ||
     options.get_bool_option("goto-instrumented"))
   {
-    remove_sideeffects(tmp_guard, dest);
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = code.get_bool("#short_circuit");
+    remove_condition_sideeffects(tmp_guard, dest);
+    in_short_circuit = outer_short_circuit;
   }
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
@@ -2287,8 +2292,11 @@ void goto_convertt::generate_conditional_branch(
     std::list<exprt> op;
     collect_operands(guard, guard.id(), op);
 
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(gen_not(*it), target_false, location, dest);
+    in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_true = dest.add_instruction();
     t_true->make_goto(target_true);
@@ -2309,8 +2317,11 @@ void goto_convertt::generate_conditional_branch(
     std::list<exprt> op;
     collect_operands(guard, guard.id(), op);
 
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(*it, target_true, location, dest);
+    in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
@@ -2321,7 +2332,7 @@ void goto_convertt::generate_conditional_branch(
   }
 
   exprt cond = guard;
-  remove_sideeffects(cond, dest);
+  remove_condition_sideeffects(cond, dest);
 
   goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);
