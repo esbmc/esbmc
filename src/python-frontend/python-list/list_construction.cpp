@@ -218,7 +218,10 @@ exprt python_list::build_list_from_exprs(const std::vector<exprt> &elems)
     // the element type-id from its type, and copies it into the list storage.
     exprt push_call = build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(push_call);
-    elem_types().record(list_id, std::string(), elem.type());
+    elem_types().record(
+      list_id,
+      elem.is_symbol() ? elem.identifier().as_string() : "",
+      elem.type());
   }
 
   return build_symbol(list_symbol);
