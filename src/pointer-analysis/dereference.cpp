@@ -825,7 +825,8 @@ void dereferencet::check_pointer_alignment(
   modet mode,
   const type2tc &type,
   const expr2tc &deref_expr,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &what)
 {
   // Caller has already declared the access is known-unaligned (e.g.
   // member of a __attribute__((packed)) struct accessed through a
@@ -852,6 +853,17 @@ void dereferencet::check_pointer_alignment(
   // Only check alignment for whole-byte-sized accesses (skip bit-fields)
   if (access_size_bits % 8 != 0)
     return;
+
+  /* A packed object's base is free, so its offset alone decides nothing: the
+   * object-aware checks in build_reference_to() claim the whole address. */
+  if (is_object_descriptor2t(what) && is_scalar_type(type))
+  {
+    const expr2tc &object = to_object_descriptor2t(what).object;
+    if (
+      !is_null_object2t(get_base_object(object)) &&
+      object_base_alignment(object) * 8 < access_size_bits)
+      return;
+  }
 
   expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
   simplify(ptr_offset_bits);
@@ -889,7 +901,7 @@ expr2tc dereferencet::build_reference_to(
   pointer_guard = gen_false_expr();
 
   // Perform alignment checking for applicable access patterns
-  check_pointer_alignment(mode, type, deref_expr, guard);
+  check_pointer_alignment(mode, type, deref_expr, guard, what);
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
@@ -1457,6 +1469,16 @@ void dereferencet::construct_from_array(
   // accesses the indexed structure and resolves nested fields.
   if (is_structure_type(arr_subtype))
   {
+    /* Neither bounds_check() nor the member walk claims alignment, and
+     * check_pointer_alignment() assumed an aligned base, which an array of
+     * packed structs does not have (#7707). */
+    if (!mode.unaligned && is_scalar_type(type))
+    {
+      const BigInt access_bits = type_byte_size_bits(type);
+      if (object_base_alignment(value) * 8 < access_bits)
+        check_alignment(access_bits, offset, guard, value);
+    }
+
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
     return;
