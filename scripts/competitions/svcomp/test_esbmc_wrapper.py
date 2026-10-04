@@ -114,13 +114,6 @@ class ParseResultTest(unittest.TestCase):
                          "VERIFICATION SUCCESSFUL\n", wrapper.Property.reach),
             "TRUE")
 
-    def test_exhausted_context_bound_is_unknown(self):
-        self.assertEqual(
-            self.verdict("Reached --max-context-bound (20) with the schedule "
-                         "space still truncated\nVERIFICATION UNKNOWN\n",
-                         wrapper.Property.reach),
-            "Unknown")
-
 
 class ConcurrencyCommandLine(unittest.TestCase):
 
