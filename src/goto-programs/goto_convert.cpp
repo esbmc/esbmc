@@ -337,6 +337,51 @@ static void collect_reference_bound(
   }
 }
 
+/// The object a constructor call builds: the symbol its `this` argument points
+/// to. Empty for any other call.
+static irep_idt constructed_symbol(const expr2tc &code, const namespacet &ns)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (
+    !is_symbol2t(call.function) || call.operands.empty() ||
+    is_nil_expr(call.operands[0]) || !is_address_of2t(call.operands[0]))
+    return irep_idt();
+  const symbolt *callee = ns.lookup(to_symbol2t(call.function).thename);
+  const expr2tc &obj = to_address_of2t(call.operands[0]).ptr_obj;
+  if (
+    !callee || !callee->get_type().is_code() ||
+    to_code_type(callee->get_type()).return_type().id() != "constructor" ||
+    !is_symbol2t(obj))
+    return irep_idt();
+  return to_symbol2t(obj).thename;
+}
+
+/// Attach to \p call the cleanup an exception leaving it runs: the automatic
+/// objects constructed since the nearest enclosing try, newest first
+/// ([except.ctor]/1), as convert_throw unwinds for a throw in this function.
+/// remove_exceptions emits it on the call's exceptional edge. The object a
+/// constructor call builds is left out: it was never constructed.
+void goto_convertt::record_exception_unwind(goto_programt::instructiont &call)
+{
+  const destructor_stackt &stack = targets.destructor_stack;
+  const irep_idt constructed = constructed_symbol(call.code, ns);
+  irept unwind;
+  bool has_destructor = false;
+  for (std::size_t i = stack.size(); i > targets.throw_stack_size; --i)
+  {
+    const codet &entry = stack[i - 1];
+    if (!constructed.empty() && destructor_entry_symbol(entry) == constructed)
+      continue;
+    const irep_idt &statement = entry.get_statement();
+    if (statement != "dead" && statement != "function_call")
+      return;
+    has_destructor |= statement == "function_call";
+    unwind.get_sub().push_back(entry);
+  }
+  if (has_destructor)
+    call.location.add("#exception_unwind").swap(unwind);
+}
+
 /// Whether a side effect sits under `?:`, `&&` or `||`, so the temporaries it
 /// creates exist on one path only.
 static bool
