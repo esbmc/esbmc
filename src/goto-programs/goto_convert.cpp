@@ -745,6 +745,59 @@ void goto_convertt::generate_dynamic_size_vla(
   t_s_s->location = loc;
 }
 
+static const exprt *find_constructor_call(const exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.get_bool("constructor"))
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+    if (
+      const exprt *c =
+        find_constructor_call(static_cast<const exprt &>(e.initializer())))
+      return c;
+
+  forall_operands (it, e)
+    if (const exprt *c = find_constructor_call(*it))
+      return c;
+
+  return nullptr;
+}
+
+/// The frontend gives an array of a class one constructor call; every element
+/// is constructed by it, in increasing index order ([dcl.init]/7).
+void goto_convertt::construct_array_elements(
+  const exprt &base,
+  const typet &type,
+  const side_effect_expr_function_callt &ctor,
+  goto_programt &dest)
+{
+  const typet &elem = ns.follow(type.subtype());
+  BigInt count;
+  if (to_integer(to_array_type(type).size(), count))
+  {
+    log_error("cannot determine array size for static ctor init");
+    abort();
+  }
+
+  for (BigInt i = 0; i < count; i = i + 1)
+  {
+    index_exprt element(base, from_integer(i, index_type()), type.subtype());
+    if (elem.is_array())
+      construct_array_elements(element, elem, ctor, dest);
+    else
+    {
+      code_function_callt call;
+      call.location() = ctor.location();
+      call.function() = ctor.function();
+      call.arguments() = ctor.arguments();
+      call.arguments()[0] = address_of_exprt(element);
+      convert_function_call(call, dest);
+    }
+  }
+}
+
 /// A C++ function-local static with a dynamic initializer is initialized the
 /// first time control passes its declaration, and concurrent callers wait for
 /// it ([stmt.dcl]/3): `atomic { if (!guard) { init; guard = 1; } }`. The guard
@@ -766,8 +819,21 @@ void goto_convertt::convert_dynamic_static_init(
 
   const exprt var = decl.op0();
   exprt initializer = decl.op1();
-  codet new_code(decl);
-  convert_decl_initializer(var, initializer, new_code, s, dest);
+  const exprt *ctor =
+    initializer.id() == "sideeffect" && ns.follow(var.type()).is_array()
+      ? find_constructor_call(initializer)
+      : nullptr;
+  if (ctor)
+    construct_array_elements(
+      var,
+      ns.follow(var.type()),
+      to_side_effect_expr_function_call(*ctor),
+      dest);
+  else
+  {
+    codet new_code(decl);
+    convert_decl_initializer(var, initializer, new_code, s, dest);
+  }
 
   code_assignt set(flag, true_exprt());
   set.location() = decl.location();
