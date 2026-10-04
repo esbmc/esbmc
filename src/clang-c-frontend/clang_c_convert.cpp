@@ -2706,6 +2706,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     typet type;
     clang::QualType qtype = function_call.getCallReturnType(*ASTContext);
+    // Sema types a custom-typechecked builtin's call itself: on an unsigned
+    // char, __sync_fetch_and_add calls the char-returning _1 variant.
+    if (
+      const unsigned id = function_call.getBuiltinCallee();
+      id && ASTContext->BuiltinInfo.hasCustomTypechecking(id))
+      qtype = function_call.getType();
     if (get_type(qtype, type))
       return true;
 
