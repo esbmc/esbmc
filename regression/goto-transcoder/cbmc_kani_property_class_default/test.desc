@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_property_class_default.goto
+--binary --function _RNvCsoRd8AjMCxu_4pass7harness
+^VERIFICATION FAILED$
