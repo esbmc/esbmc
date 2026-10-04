@@ -247,8 +247,8 @@ behaviour and wraps ET negative so that Q drops back to ff.
 ```
 
 Q rises with IN. The scan on which IN falls starts the interval and counts as
-no elapsed time, as in MATIEC's TOF, so Q holds through that scan and for PT
-scans after it (through that scan alone when `PT = 0`). The idle rule is what
+no elapsed time, as in MATIEC's TOF, so Q holds for max(PT, 1) scans counting
+that scan: through the falling scan alone when `PT ≤ 1`. The idle rule is what
 keeps a TOF from reporting an expired interval at power-up: with Q initialised
 to ff and ET to 0, a timer that has never been enabled stays off, rather than
 reading ET = 0 as "just dropped".

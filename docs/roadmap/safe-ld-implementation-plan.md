@@ -256,7 +256,7 @@ following the SOS state-transition rules:
 | Reset coil `--( R )--` | `code_ifthenelset(pf, code_assignt(var, false_exprt()))` |
 | Rising-edge contact `--[P]--` | `and_exprt(pf_in, and_exprt(var, not_exprt(prev)))`, with `prev` latched in the scan epilogue |
 | TON timer *(fixed-tick model)* | `code_ifthenelset(IN && prev, ET := ET+1, ET := 0)`; `code_assignt(Q, IN && prev && ET >= PT)`; `prev := IN` — fires `PT` scan ticks after the scan `IN` rises (one tick when `PT` is 0), as MATIEC's TON |
-| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q && !prev, {ET := ET+1; Q := ET < PT}))`; `prev := IN` — holds `Q` through the scan `IN` drops and `PT` ticks after it, and stays off until first enabled |
+| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q && !prev, {ET := ET+1; Q := ET < PT}))`; `prev := IN` — holds `Q` for max(`PT`, 1) scans counting the one `IN` drops, and stays off until first enabled |
 | CTU counter *(per-scan step)* | `code_ifthenelset` on rising edge → increment `CV`; `code_assignt` of `Q = (CV >= PV)` |
 
 The full step functions, and the rules for graphical-network resolution and

@@ -262,6 +262,14 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   return blk;
 }
 
+// A textual block may omit instanceName; its Q variable still names it, so
+// unnamed blocks do not share one previous-input shadow.
+static const std::string &
+shadow_key(const std::string &instance, const std::string &q)
+{
+  return instance.empty() ? q : instance;
+}
+
 // TimerStep: synchronous fixed-tick model (§3.3) — one scan advances ET by one
 // tick, so PT is a dimensionless scan count. IEC 61131-3 §2.5.2.3.
 //
@@ -297,11 +305,8 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   auto q_while_pending =
     code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
 
-  // A textual block may omit instanceName; its Q variable still names it.
-  const std::string &instance =
-    n.timer_instance.empty() ? n.timer_Q : n.timer_instance;
-  symbol_exprt in_prev =
-    declare_bool_shadow(ld_name("__timer_prev_" + instance));
+  symbol_exprt in_prev = declare_bool_shadow(
+    ld_name("__timer_prev_" + shadow_key(n.timer_instance, n.timer_Q)));
   exprt in_held = and_exprt(in_val, in_prev);
 
   code_blockt blk;
@@ -378,6 +383,8 @@ codet ld_converter::translate_counter(const LdIRNode &n)
   exprt zero = gen_zero(int32_t_());
   symbol_exprt cv = var_expr(n.ctr_CV);
   symbol_exprt q = var_expr(n.ctr_Q);
+  const std::string prev_id =
+    ld_name("__ctr_prev_" + shadow_key(n.ctr_instance, n.ctr_Q));
   const exprt pv =
     n.ctr_PV.empty()
       ? zero
@@ -386,8 +393,7 @@ codet ld_converter::translate_counter(const LdIRNode &n)
   if (n.ctr_kind == FBKind::CTU)
   {
     symbol_exprt cu = var_expr(n.ctr_CU);
-    symbol_exprt cu_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    symbol_exprt cu_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cu_step;
     cu_step.cond() = and_exprt(
@@ -413,8 +419,7 @@ codet ld_converter::translate_counter(const LdIRNode &n)
   {
     symbol_exprt cd = var_expr(n.ctr_CD);
     exprt neg_one = from_integer(BigInt(-1), int32_t_());
-    symbol_exprt cd_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    symbol_exprt cd_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cd_step;
     cd_step.cond() = and_exprt(
