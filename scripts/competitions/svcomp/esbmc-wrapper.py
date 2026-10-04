@@ -291,6 +291,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # sibling schedules share a solver context (issue #6831, #7043); do not add
     # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
+    # Unlike --max-context-bound, a truncated schedule space still reports
+    # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
+    command_line += "--context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
