@@ -2153,6 +2153,10 @@ regression/esbmc-cpp/cpp/static_local_array_filler
 regression/esbmc-cpp/cpp/static_local_array_filler_fail
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable
 regression/esbmc-cpp/cpp/aggregate_prvalue_variable_fail
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place
+regression/esbmc-cpp/cpp/aggregate_init_member_in_place_fail
+regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
+regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
