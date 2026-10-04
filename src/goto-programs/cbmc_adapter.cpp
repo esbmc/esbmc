@@ -321,7 +321,7 @@ void fix_expression(irept &irep)
           mk_binary("lshr", optype, smeared, mk_bv_const(optype, shift)));
 
       irept popcount("popcount");
-      popcount.add("type") = restype; // migrate forces int32; kept well-formed
+      popcount.add("type") = restype;
       popcount.get_sub().push_back(smeared);
 
       irep.id("-");
@@ -410,7 +410,7 @@ void fix_expression(irept &irep)
       mk_unary("bitnot", optype, operand),
       mk_binary("-", optype, operand, mk_bv_const(optype, 1)));
     irept popcount("popcount");
-    popcount.add("type") = restype; // migrate forces int32; kept well-formed
+    popcount.add("type") = restype;
     popcount.get_sub().push_back(ctz_arg);
 
     // ctz(x) + 1, then guard the zero input: (x == 0) ? 0 : ctz(x) + 1.
