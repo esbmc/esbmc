@@ -2201,3 +2201,5 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/loop-invariants/wide_pointee_write
 regression/loop-invariants/wide_pointee_write_fail
+regression/loop-invariants/vla_pointee_write
+regression/loop-invariants/vla_pointee_write_fail
