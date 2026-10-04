@@ -816,6 +816,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R84** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — found beside R83, §15 M9 (R84); **FIXED**, same entry | **A variable initialised from a braced class prvalue was copied out of a temporary that was then destroyed.** `A a = A{1};`, `auto a = A{1};` and the closure of `auto f = [m] { ... };` reached `convert_decl_initializer` as a `temporary_object` holding the aggregate (clang's `CXXBindTemporaryExpr`), so the variable was assigned from a temporary destroyed at the end of the declaration and destroyed again at scope exit. With an aggregate that frees a pointer in its destructor, every later dereference was a false FAILED (invalidated dynamic object) and scope exit a double free; `assert(dtors == 1)` right after the declaration, which aborts natively, was a false SUCCESSFUL. | `elide_prvalue_temporary`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_prvalue_variable{,_fail}` | — | **Fixed**: a `temporary_object` with no constructor wrapping a value that is not a side effect initialises the variable directly ([dcl.init]/17.6.1). A lambda's by-copy capture of a class still has its capture-copy temporary destroyed (R83's path, open PR #8113). |
 | **R88** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R88); **FIXED**, same entry | **The `<op>_fetch` atomics did nothing, and nand was and.** `__atomic_<op>_fetch` and `__sync_<op>_and_fetch` were instantiated with an empty body that returned a nondet value and left the object unchanged: `x = 1; __atomic_add_fetch(&x, 1, 5); assert(x == 1);` was SUCCESSFUL. `__atomic_fetch_nand` and `__sync_fetch_and_nand` stored `old & val` instead of `~(old & val)`. | `fetch_op_expr`, `instantiate_read_modify_write`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/atomic_op_fetch{,_fail}`, `atomic_fetch_nand{,_fail}` | — | **Fixed**: one body serves both orders and returns the old or the stored value; nand negates. The CAS, exchange and lock builtins still listed `// TODO` are open. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
+| **R87** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R64's [except.ctor] residual, §15 M9 (R87); **FIXED**, same entry | **An exception leaving a callee skipped the caller's destructors.** `convert_throw` unwinds the automatic objects of the function that throws, but `remove_exceptions` lowered a call to a may-throw callee as a bare `if (thrown) goto dispatch` after the call, so every frame the exception passed through kept its locals alive. `void f() { Guard g; thrower(); }` caught in `main` never ran `~Guard`; a buffer freed again in the handler, a double free natively, verified. | `goto_convertt::record_exception_unwind`, `src/goto-programs/goto_convert.cpp`; `wire_call`, `src/goto-programs/remove_exceptions.cpp`; `regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee{,_fail}` | — | **Fixed**: record the destructor-stack slice on each call and destroy it on the call's exceptional edge. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
@@ -10086,6 +10087,39 @@ Not fixed: the sibling reads above, and a nondet bound in any of these shapes,
 which is R28's symbolic-bound question.
 
 ---
+
+### M9 (R87) — 2026-10-02, the frames an exception passed through
+
+R64's note lists members constructed before a throwing initializer as never
+destroyed. Probing that found a wider gap. `convert_throw` runs the
+destructors of the throwing function's locals before its `THROW`, but a call
+to a callee that may throw was lowered by `remove_exceptions` to a bare
+`if (thrown) goto dispatch` after the call. The caller's own locals were
+skipped on that edge, in every frame between the throw and its handler. A
+program that counts destructors was a false FAILED; one whose destructor frees
+a buffer that the handler frees again, a double free natively, verified.
+
+**Fixed** by attaching to each call, at conversion time, the destructor-stack
+slice down to the nearest enclosing try (the same slice `convert_throw`
+unwinds), and emitting it in `wire_call` on the exceptional edge: `thrown` is
+cleared while the destructors run, so their own propagation guards and
+noexcept checks do not fire, and set again before the branch. The object a
+constructor call builds is left out, since it was never constructed: a
+temporary's scope-exit entries are pushed before its constructor runs.
+Programs without exceptions are unaffected; the slice is a location comment
+until `remove_exceptions` reads it.
+
+`throw_dtor_unwind_callee` checks the order across two frames and that a
+throwing temporary is not destroyed; `throw_dtor_unwind_callee_fail` is the
+double free. Master is wrong on both halves; with the constructor exclusion
+removed, the first fails on its second assertion. The `try_catch`,
+`destructors`, `bug_fixes` and `esbmc-cpp/cpp` suites keep their verdicts.
+
+Not fixed, unchanged from R64: members and bases constructed before a
+constructor throws are not destroyed ([except.ctor]/3); they are not on the
+constructor's destructor stack. Also unchanged, for a throw and a call alike:
+an exception a try does not catch skips the locals between that try and the
+next enclosing one, or the function's start.
 
 ### M9 (R95) — 2026-10-03, the elided copy of a by-value argument
 
