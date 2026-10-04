@@ -795,6 +795,27 @@ static void elide_prvalue_temporary(exprt &initializer)
   }
 }
 
+/// A comma's left operands are discarded-value expressions and its right
+/// operand is its result ([expr.comma]/1), so that operand initialises the
+/// variable: a class prvalue there is the variable, not a copied temporary.
+void goto_convertt::discard_comma_operands(
+  exprt &initializer,
+  goto_programt &dest)
+{
+  while (initializer.id() == "comma")
+  {
+    exprt::operandst &operands = initializer.operands();
+    for (auto it = operands.begin(); std::next(it) != operands.end(); ++it)
+    {
+      code_expressiont discarded(*it);
+      discarded.location() = it->location();
+      convert(discarded, dest);
+    }
+    exprt result = operands.back();
+    initializer.swap(result);
+  }
+}
+
 /// Lower the initializer of a declaration into @p dest. Kept out of
 /// convert_decl so that neither exceeds the complexity gate.
 void goto_convertt::convert_decl_initializer(
@@ -804,6 +825,7 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
+  discard_comma_operands(initializer, dest);
   elide_prvalue_temporary(initializer);
 
   // A temporary_object initializer carrying a constructor (C++ `T t;` or
