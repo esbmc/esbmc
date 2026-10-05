@@ -10,6 +10,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
@@ -2038,148 +2039,371 @@ exprt clang_cpp_convertert::base_dtor_this(
   return this_expr;
 }
 
+const symbolt *
+clang_cpp_convertert::nontrivial_destructor(const clang::CXXRecordDecl *rec)
+{
+  const clang::CXXDestructorDecl *d = rec ? rec->getDestructor() : nullptr;
+  if (!d || d->isTrivial())
+    return nullptr;
+  std::string name, id;
+  get_decl_name(*d, name, id);
+  return ns.lookup(irep_idt(id));
+}
+
+static code_function_callt destructor_call(const symbolt &sym, exprt arg)
+{
+  exprt fn("symbol", sym.get_type());
+  fn.identifier(sym.id);
+  code_function_callt call;
+  call.function() = fn;
+  call.arguments().push_back(std::move(arg));
+  return call;
+}
+
+const clang_cpp_convertert::this_mapt::mapped_type &
+clang_cpp_convertert::method_this(const clang::CXXMethodDecl &md) const
+{
+  auto it = this_map.find(reinterpret_cast<std::size_t>(md.getFirstDecl()));
+  assert(
+    it != this_map.end() &&
+    "method reached body synthesis without a registered `this`");
+  return it->second;
+}
+
+bool clang_cpp_convertert::member_destructor(
+  const clang::FieldDecl &field,
+  const exprt &deref,
+  code_blockt &calls)
+{
+  clang::QualType qt = field.getType();
+
+  // An array member of class type has each element destroyed; peel the
+  // (possibly nested) array dimensions to reach the element record type,
+  // since QualType::getAsCXXRecordDecl returns null for array types.
+  clang::QualType elem_qt = qt;
+  while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
+    elem_qt = at->getElementType();
+
+  const symbolt *sym = nontrivial_destructor(elem_qt->getAsCXXRecordDecl());
+  if (!sym)
+    return false;
+
+  typet field_type;
+  if (get_type(qt, field_type))
+    return true;
+
+  std::string field_name, field_id;
+  get_decl_name(field, field_name, field_id);
+
+  // C++ [class.dtor]/9: array elements are destroyed in reverse index
+  // order.  Emit one destructor call per element, recursing into nested
+  // arrays so every leaf element is destroyed.
+  std::function<bool(const exprt &)> destroy = [&](const exprt &obj) -> bool {
+    if (!ns.follow(obj.type()).is_array())
+    {
+      calls.copy_to_operands(destructor_call(*sym, address_of_exprt(obj)));
+      return false;
+    }
+    const array_typet &arr_type = to_array_type(ns.follow(obj.type()));
+    BigInt count;
+    if (to_integer(arr_type.size(), count))
+    {
+      log_error("cannot determine array size for member dtor chain");
+      return true;
+    }
+    for (BigInt i = count - 1; i >= 0; --i)
+      if (
+        destroy(
+          index_exprt(obj, from_integer(i, index_type()), arr_type.subtype())))
+        return true;
+    return false;
+  };
+  return destroy(member_exprt(deref, field_name, field_type));
+}
+
+code_function_callt clang_cpp_convertert::base_destructor(
+  const symbolt &sym,
+  const clang::CXXRecordDecl &base,
+  const clang::CXXMethodDecl &md)
+{
+  const auto &[this_id, this_ptr_type] = method_this(md);
+  exprt deref =
+    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
+  exprt this_expr = base_dtor_this(base, deref, this_id, this_ptr_type);
+  gen_typecast(
+    ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
+  return destructor_call(sym, std::move(this_expr));
+}
+
+bool clang_cpp_convertert::subobject_destructors(
+  const clang::CXXMethodDecl &md,
+  std::vector<subobject_destructort> &out)
+{
+  const clang::CXXRecordDecl *parent = md.getParent();
+  if (!parent || !parent->hasDefinition())
+    return false;
+
+  const auto &[this_id, this_ptr_type] = method_this(md);
+  exprt deref =
+    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
+
+  std::vector<const clang::CXXRecordDecl *> bases;
+  for (const clang::CXXBaseSpecifier &base : parent->bases())
+    if (!base.isVirtual())
+      bases.push_back(base.getType()->getAsCXXRecordDecl());
+
+  // Members, then direct non-virtual bases, each in reverse declaration order
+  // (C++ [class.dtor]/9).
+  llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
+  for (const clang::FieldDecl *field : llvm::reverse(fields))
+  {
+    subobject_destructort d{bases.size() + field->getFieldIndex(), {}};
+    if (member_destructor(*field, deref, d.calls))
+      return true;
+    if (d.calls.has_operands())
+      out.push_back(std::move(d));
+  }
+
+  for (std::size_t i = bases.size(); i-- > 0;)
+    if (const symbolt *sym = nontrivial_destructor(bases[i]))
+    {
+      subobject_destructort d{i, {}};
+      d.calls.copy_to_operands(base_destructor(*sym, *bases[i], md));
+      out.push_back(std::move(d));
+    }
+
+  return false;
+}
+
+/// The position in construction order of the subobject \p init builds, as
+/// subobject_destructors numbers them; \p bases are the direct non-virtual
+/// bases in declaration order.
+static std::size_t construction_position(
+  const clang::CXXCtorInitializer &init,
+  const std::vector<const clang::Type *> &bases)
+{
+  if (init.isBaseInitializer())
+  {
+    const clang::Type *t =
+      init.getBaseClass()->getCanonicalTypeUnqualified().getTypePtr();
+    return std::find(bases.begin(), bases.end(), t) - bases.begin();
+  }
+  const clang::FieldDecl *field =
+    init.isIndirectMemberInitializer()
+      ? llvm::cast<clang::FieldDecl>(init.getIndirectMember()->chain().front())
+      : init.getMember();
+  return bases.size() + field->getFieldIndex();
+}
+
+namespace
+{
+/// Finds user code that can throw or catch: a throw, a try, or a dynamic_cast
+/// to a reference, which throws std::bad_cast. The operational models are
+/// system headers; an exception they throw is observable only where user
+/// code catches it.
+class exception_findert : public clang::RecursiveASTVisitor<exception_findert>
+{
+public:
+  explicit exception_findert(const clang::SourceManager &sm) : sm(sm)
+  {
+  }
+
+  bool found = false;
+
+  bool VisitCXXThrowExpr(clang::CXXThrowExpr *e)
+  {
+    return !in_user_code(e);
+  }
+
+  bool VisitCXXTryStmt(clang::CXXTryStmt *s)
+  {
+    return !in_user_code(s);
+  }
+
+  bool VisitCXXDynamicCastExpr(clang::CXXDynamicCastExpr *e)
+  {
+    return !(e->getTypeAsWritten()->isReferenceType() && in_user_code(e));
+  }
+
+private:
+  const clang::SourceManager &sm;
+
+  bool in_user_code(const clang::Stmt *s)
+  {
+    found = !sm.isInSystemHeader(s->getBeginLoc());
+    return found;
+  }
+};
+} // namespace
+
+bool clang_cpp_convertert::user_code_uses_exceptions()
+{
+  if (!uses_exceptions)
+  {
+    exception_findert finder(ASTContext->getSourceManager());
+    finder.TraverseDecl(ASTContext->getTranslationUnitDecl());
+    uses_exceptions = finder.found;
+  }
+  return *uses_exceptions;
+}
+
+static bool cannot_throw(const clang::CXXConstructorDecl &cd)
+{
+  const auto *fpt =
+    llvm::dyn_cast<const clang::FunctionProtoType>(cd.getType().getTypePtr());
+  return fpt &&
+         !clang::isUnresolvedExceptionSpec(fpt->getExceptionSpecType()) &&
+         fpt->canThrow() == clang::CT_Cannot;
+}
+
+/// catch (...) { <destroy each built subobject, newest first> }
+static code_blockt destroy_built_subobjects(
+  const exprt &built,
+  const std::vector<clang_cpp_convertert::subobject_destructort> &dtors)
+{
+  code_blockt handler;
+  handler.type().set("ellipsis", 1);
+  handler.set("exception_id", "ellipsis");
+  handler.copy_to_operands(code_skipt());
+  for (const auto &d : dtors)
+  {
+    code_ifthenelset destroy;
+    destroy.cond() =
+      binary_relation_exprt(built, ">", from_integer(d.position, built.type()));
+    destroy.then_case() = d.calls;
+    handler.move_to_operands(destroy);
+  }
+  return handler;
+}
+
+bool clang_cpp_convertert::unwind_constructed_subobjects(
+  const clang::CXXConstructorDecl &cd,
+  const std::vector<std::size_t> &starts,
+  code_blockt &body)
+{
+  if (
+    cd.isDelegatingConstructor() || cannot_throw(cd) ||
+    !user_code_uses_exceptions())
+    return false;
+
+  std::vector<subobject_destructort> dtors;
+  if (subobject_destructors(cd, dtors))
+    return true;
+  if (dtors.empty())
+    return false;
+
+  const clang::CXXRecordDecl &parent = *cd.getParent();
+  std::vector<const clang::Type *> bases;
+  for (const clang::CXXBaseSpecifier &base : parent.bases())
+    if (!base.isVirtual())
+      bases.push_back(
+        base.getType()->getCanonicalTypeUnqualified().getTypePtr());
+
+  // The subobjects before `built` in construction order are complete.
+  const locationt &location = body.location();
+  symbolt built_sym;
+  get_default_symbol(
+    built_sym,
+    get_modulename_from_path(location.file().as_string()),
+    size_type(),
+    "subobjects_built$",
+    method_this(cd).first + "_subobjects_built$",
+    location);
+  built_sym.lvalue = true;
+  const exprt built = symbol_expr(*context.move_symbol_to_context(built_sym));
+
+  auto progress = [&](std::size_t n) {
+    code_assignt assign(built, from_integer(n, built.type()));
+    assign.set("#construction_progress", true);
+    return assign;
+  };
+
+  // Mark the start of each base and member initializer, then of the body. A
+  // virtual base is not numbered, and is not destroyed here.
+  exprt::operandst &ops = body.operands();
+  const std::size_t fields =
+    std::distance(parent.field_begin(), parent.field_end());
+  ops.insert(ops.begin() + starts.back(), progress(bases.size() + fields));
+  std::size_t i = starts.size() - 1;
+  for (auto it = cd.init_rbegin(); it != cd.init_rend(); ++it)
+  {
+    const std::size_t start = starts[--i];
+    if (!(*it)->isBaseInitializer() || !(*it)->isBaseVirtual())
+      ops.insert(
+        ops.begin() + start, progress(construction_position(**it, bases)));
+  }
+
+  code_blockt handler = destroy_built_subobjects(built, dtors);
+  exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+  convert_expression_to_code(rethrow);
+  handler.move_to_operands(rethrow);
+
+  codet guarded("cpp-catch");
+  guarded.set("#subobject_unwind", true);
+  guarded.location() = location;
+  guarded.copy_to_operands(body, handler);
+
+  code_blockt wrapped;
+  wrapped.location() = location;
+  code_declt decl(built);
+  decl.operands().push_back(from_integer(0, built.type()));
+  wrapped.move_to_operands(decl, guarded);
+  body.swap(wrapped);
+  return false;
+}
+
+bool clang_cpp_convertert::insert_constructor_initializers(
+  const clang::CXXConstructorDecl &cd,
+  exprt::operandst &initializers,
+  std::vector<std::size_t> starts,
+  const symbolt *array_init_sym,
+  code_blockt &body)
+{
+  for (exprt &initializer : initializers)
+    convert_expression_to_code(initializer);
+
+  // Insert initializers at the beginning of the body
+  body.operands().insert(
+    body.operands().begin(), initializers.begin(), initializers.end());
+  starts.push_back(initializers.size());
+  if (array_init_sym)
+  {
+    /* Need to declare the temp symbol for array initialization if it has
+     * been used. */
+    code_declt init_decl(symbol_expr(*array_init_sym));
+    body.operands().insert(body.operands().begin(), init_decl);
+    for (std::size_t &start : starts)
+      ++start;
+  }
+
+  return unwind_constructed_subobjects(cd, starts, body);
+}
+
 bool clang_cpp_convertert::build_destructor_chain(
   const clang::CXXDestructorDecl &dd,
   code_blockt &body)
 {
+  std::vector<subobject_destructort> dtors;
+  if (subobject_destructors(dd, dtors))
+    return true;
+  for (subobject_destructort &d : dtors)
+    for (exprt &call : d.calls.operands())
+      body.move_to_operands(call);
+
+  // Virtual base subobjects, reverse declaration order.
+  // ESBMC does not model the Itanium D1/D2 destructor split, so virtual bases
+  // are called unconditionally. Diamond hierarchies with non-trivial virtual-
+  // base destructors are not yet supported (nontrivial_destructor skips
+  // trivial ones, so structural-only diamond tests are safe).
   const clang::CXXRecordDecl *parent = dd.getParent();
   if (!parent || !parent->hasDefinition())
     return false;
-
-  std::size_t this_addr = reinterpret_cast<std::size_t>(dd.getFirstDecl());
-  auto this_it = this_map.find(this_addr);
-  assert(
-    this_it != this_map.end() &&
-    "destructor reached body synthesis without a registered `this`");
-
-  const irep_idt &this_id = this_it->second.first;
-  const typet &this_ptr_type = this_it->second.second;
-  exprt deref =
-    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
-
-  // Trivial destructors are no-ops; skip symbol table lookup for them.
-  auto lookup_dtor = [&](const clang::CXXDestructorDecl *d) -> const symbolt * {
-    if (!d || d->isTrivial())
-      return nullptr;
-    std::string name, id;
-    get_decl_name(*d, name, id);
-    return ns.lookup(irep_idt(id));
-  };
-
-  // Build and append a destructor call to `body`.
-  auto emit_dtor_call = [&](const symbolt &sym, exprt arg) {
-    exprt fn("symbol", sym.get_type());
-    fn.identifier(sym.id);
-    code_function_callt call;
-    call.function() = fn;
-    call.arguments().push_back(std::move(arg));
-    body.operands().push_back(std::move(call));
-  };
-
-  // Cast `this` to the base's expected pointer type and emit the call.
-  auto emit_base_dtor =
-    [&](const symbolt &sym, const clang::CXXRecordDecl *rec) {
-      exprt this_expr = base_dtor_this(*rec, deref, this_id, this_ptr_type);
-      gen_typecast(
-        ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
-      emit_dtor_call(sym, std::move(this_expr));
-    };
-
-  // 1. Member subobjects, reverse declaration order (C++ [class.dtor]/9).
-  llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
-  for (const clang::FieldDecl *field : llvm::reverse(fields))
-  {
-    clang::QualType qt = field->getType();
-
-    // An array member of class type has each element destroyed; peel the
-    // (possibly nested) array dimensions to reach the element record type,
-    // since QualType::getAsCXXRecordDecl returns null for array types.
-    clang::QualType elem_qt = qt;
-    while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
-      elem_qt = at->getElementType();
-
-    const clang::CXXRecordDecl *rec = elem_qt->getAsCXXRecordDecl();
-    if (!rec)
-      continue;
-    const symbolt *sym = lookup_dtor(rec->getDestructor());
-    if (!sym)
-      continue;
-
-    typet field_type;
-    if (get_type(qt, field_type))
-      return true;
-
-    std::string field_name, field_id;
-    get_decl_name(*field, field_name, field_id);
-    exprt member = member_exprt(deref, field_name, field_type);
-
-    if (qt->isArrayType())
-    {
-      // C++ [class.dtor]/9: array elements are destroyed in reverse index
-      // order.  Emit one destructor call per element, recursing into nested
-      // arrays so every leaf element is destroyed.
-      std::function<bool(const exprt &)> destroy_elements =
-        [&](const exprt &arr) -> bool {
-        const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
-        BigInt count;
-        if (to_integer(arr_type.size(), count))
-        {
-          log_error("cannot determine array size for member dtor chain");
-          return true;
-        }
-
-        const typet &elem_type = arr_type.subtype();
-        for (BigInt i = 0; i < count; ++i)
-        {
-          index_exprt element(
-            arr, from_integer(count - 1 - i, index_type()), elem_type);
-          if (ns.follow(elem_type).is_array())
-          {
-            if (destroy_elements(element))
-              return true;
-          }
-          else
-            emit_dtor_call(*sym, address_of_exprt(element));
-        }
-        return false;
-      };
-      if (destroy_elements(member))
-        return true;
-    }
-    else
-      emit_dtor_call(*sym, address_of_exprt(member));
-  }
-
-  // 2. Direct non-virtual base subobjects, reverse declaration order.
-  for (const clang::CXXBaseSpecifier &base : llvm::reverse(parent->bases()))
-  {
-    if (base.isVirtual())
-      continue;
-    const clang::CXXRecordDecl *rec = base.getType()->getAsCXXRecordDecl();
-    if (!rec)
-      continue;
-    const symbolt *sym = lookup_dtor(rec->getDestructor());
-    if (!sym)
-      continue;
-    emit_base_dtor(*sym, rec);
-  }
-
-  // 3. Virtual base subobjects, reverse declaration order.
-  // ESBMC does not model the Itanium D1/D2 destructor split, so virtual bases
-  // are called unconditionally. Diamond hierarchies with non-trivial virtual-
-  // base destructors are not yet supported (lookup_dtor skips trivial ones,
-  // so structural-only diamond tests are safe).
   for (const clang::CXXBaseSpecifier &vbase : llvm::reverse(parent->vbases()))
   {
     const clang::CXXRecordDecl *rec = vbase.getType()->getAsCXXRecordDecl();
-    if (!rec)
-      continue;
-    const symbolt *sym = lookup_dtor(rec->getDestructor());
-    if (!sym)
-      continue;
-    emit_base_dtor(*sym, rec);
+    if (const symbolt *sym = nontrivial_destructor(rec))
+      body.copy_to_operands(base_destructor(*sym, *rec, dd));
   }
-
   return false;
 }
 
@@ -2418,8 +2642,11 @@ bool clang_cpp_convertert::get_function_body(
     // Parse the initializers, if any
 
     // `init` type is clang::CXXCtorInitializer
+    // Where each initializer's code starts in `initializers`.
+    std::vector<std::size_t> starts;
     for (auto init : cxxcd.inits())
     {
+      starts.push_back(initializers.size());
       exprt initializer;
 
       if (init->isDelegatingInitializer())
@@ -2710,19 +2937,10 @@ bool clang_cpp_convertert::get_function_body(
       }
     }
 
-    for (exprt &initializer : initializers)
-      convert_expression_to_code(initializer);
-
-    // Insert initializers at the beginning of the body
-    body.operands().insert(
-      body.operands().begin(), initializers.begin(), initializers.end());
-    if (array_init_sym)
-    {
-      /* Need to declare the temp symbol for array initialization if it has
-       * been used. */
-      code_declt init_decl(symbol_expr(*array_init_sym));
-      body.operands().insert(body.operands().begin(), init_decl);
-    }
+    if (
+      insert_constructor_initializers(
+        cxxcd, initializers, starts, array_init_sym, body))
+      return true;
   }
 
   // if it's a destructor, append the implicit chain of member-subobject
