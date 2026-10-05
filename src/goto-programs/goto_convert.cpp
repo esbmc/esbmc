@@ -688,7 +688,8 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
 void goto_convertt::generate_dynamic_size_vla(
   exprt &var,
   const locationt &loc,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool allow_zero_size)
 {
   assert(var.type().is_array());
 
@@ -737,14 +738,20 @@ void goto_convertt::generate_dynamic_size_vla(
   assert_not(ovfl_cast_id, size);
 
   // Zero-size and negative-size VLAs are undefined behaviour (C11 §6.7.6.2p1).
+  // Python arrays may be empty (e.g. a slice with symbolic bounds), so only
+  // negative sizes are rejected there.
   if (!disable_check)
   {
     expr2tc dim2;
     migrate_expr(dim_expr, dim2);
     goto_programt::targett gt_tgt = dest.add_instruction(ASSERT);
-    gt_tgt->guard = greaterthan2tc(dim2, gen_zero(dim2->type));
+    gt_tgt->guard = allow_zero_size
+                      ? greaterthanequal2tc(dim2, gen_zero(dim2->type))
+                      : greaterthan2tc(dim2, gen_zero(dim2->type));
     gt_tgt->location = loc;
-    gt_tgt->location.comment("VLA array dimension must be greater than zero");
+    gt_tgt->location.comment(
+      allow_zero_size ? "VLA array dimension must not be negative"
+                      : "VLA array dimension must be greater than zero");
   }
 
   // First, if it's a multidimensional vla, the size will be the
@@ -823,6 +830,91 @@ void goto_convertt::convert_dynamic_static_init(
   skip->make_goto(end, flag2);
 }
 
+/// Construct @p object from @p initializer directly when it is a class
+/// temporary: a constructor call retargeted at @p object, or a call returning
+/// by value made with @p object as its lhs. Constructing the temporary and
+/// copying it would leave it with its own scope-exit destructor, a second
+/// destructor for what is semantically one object (github #2306). Returns
+/// false, emitting nothing, for any other initializer.
+bool goto_convertt::construct_in_place(
+  const exprt &object,
+  const exprt &initializer,
+  goto_programt &dest)
+{
+  if (
+    initializer.id() != "sideeffect" ||
+    initializer.statement() != "temporary_object")
+    return false;
+
+  const exprt &ctor = static_cast<const exprt &>(initializer.initializer());
+  if (ctor.is_not_nil())
+  {
+    exprt code = ctor;
+    replace_new_object(object, code);
+    convert(to_code(code), dest);
+    return true;
+  }
+
+  if (
+    initializer.operands().size() != 1 ||
+    initializer.op0().id() != "sideeffect" ||
+    initializer.op0().statement() != "function_call")
+    return false;
+
+  const exprt &call_expr = initializer.op0();
+  code_function_callt call;
+  call.location() = call_expr.location();
+  call.lhs() = object;
+  call.function() = call_expr.op0();
+  call.arguments() = call_expr.op1().operands();
+  convert_function_call(call, dest);
+  return true;
+}
+
+/// Remove the side effects of @p initializer, the value of @p object. A class
+/// element of a braced list is a subobject of @p object and is initialised in
+/// place ([dcl.init.aggr]/4, [dcl.init]/17.6.1).
+void goto_convertt::remove_initializer_sideeffects(
+  const exprt &object,
+  exprt &initializer,
+  goto_programt &dest)
+{
+  if (!has_sideeffect(initializer))
+    return;
+
+  const typet &type = ns.follow(initializer.type());
+  const bool is_list =
+    (initializer.id() == "struct" || initializer.id() == "array" ||
+     initializer.id() == "constant") &&
+    (type.is_array() ||
+     (type.is_struct() && to_struct_type(type).components().size() ==
+                            initializer.operands().size()));
+  if (!is_list)
+  {
+    remove_sideeffects(initializer, dest);
+    return;
+  }
+
+  for (std::size_t i = 0; i < initializer.operands().size(); ++i)
+  {
+    exprt element;
+    if (type.is_array())
+      element =
+        index_exprt(object, from_integer(i, index_type()), type.subtype());
+    else
+    {
+      const auto &c = to_struct_type(type).components()[i];
+      element = member_exprt(object, c.name(), c.type());
+    }
+
+    exprt &op = initializer.operands()[i];
+    if (construct_in_place(element, op, dest))
+      op = element;
+    else
+      remove_initializer_sideeffects(element, op, dest);
+  }
+}
+
 /// A braced aggregate or a lambda's closure of the declared class initialises
 /// the variable itself ([dcl.init]/17.6.1): the temporary clang binds it to
 /// never exists, and copying out of it destroyed the value twice.
@@ -851,55 +943,19 @@ void goto_convertt::convert_decl_initializer(
 {
   elide_prvalue_temporary(initializer);
 
-  // A temporary_object initializer carrying a constructor (C++ `T t;` or
-  // `T t = T(...)`) constructs the object in place: retarget the
-  // constructor's new_object to `var` and emit it directly, instead of
-  // constructing a separate temporary and copying it. The copy path would
-  // leave that temporary with its own scope-exit destructor -- a spurious
-  // second destructor for what is semantically a single object.
-  if (
-    initializer.id() == "sideeffect" &&
-    initializer.statement() == "temporary_object" &&
-    static_cast<const exprt &>(initializer.initializer()).is_not_nil())
-  {
-    exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
-    replace_new_object(var, ctor_code);
-    convert(to_code(ctor_code), dest);
-  }
-  else if (
-    initializer.id() == "sideeffect" &&
-    initializer.statement() == "temporary_object" &&
-    initializer.operands().size() == 1 &&
-    initializer.op0().id() == "sideeffect" &&
-    initializer.op0().statement() == "function_call")
-  {
-    // A temporary_object wrapping a plain (non-constructor) function call
-    // (C++ `T t = f(...);` where f returns T by value): call it with `var`
-    // as the lhs directly instead of routing the result through a fresh
-    // return_value$ temporary. The generic path below would give that
-    // temporary its own scope-exit destructor for what is semantically the
-    // same object as `var` (github #2306). `var`'s own destructor is
-    // scheduled below via targets.destructor_stack regardless of which
-    // branch above ran; if that destructor appears to not fire for a
-    // function ending in an explicit `return <expr>;`, look at
-    // convert_return's handling of its local unwind program instead of
-    // here -- that path is a separate, pre-existing gap.
-    const exprt &call_expr = initializer.op0();
-    code_function_callt call;
-    call.location() = call_expr.location();
-    call.lhs() = var;
-    call.function() = call_expr.op0();
-    call.arguments() = call_expr.op1().operands();
-    convert_function_call(call, dest);
-  }
-  else
+  // `T t;`, `T t = T(...)` and `T t = f(...)` construct `t` itself.
+  // convert_decl schedules `t`'s destructor either way; if it appears to not
+  // fire for a function ending in an explicit `return <expr>;`, look at
+  // convert_return's handling of its local unwind program instead of here --
+  // that path is a separate, pre-existing gap.
+  if (!construct_in_place(var, initializer, dest))
   {
     std::size_t stack_size = targets.destructor_stack.size();
 
     goto_programt sideeffects;
     // the side effect is not just removed. Actually, it's converted and
     // removed.
-    remove_sideeffects(initializer, sideeffects);
+    remove_initializer_sideeffects(var, initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
     code_assignt assign(var, initializer);
@@ -979,7 +1035,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   copy(new_code, DECL, dest);
 
   if (is_vla)
-    generate_dynamic_size_vla(var, new_code.location(), dest);
+    generate_dynamic_size_vla(
+      var, new_code.location(), dest, s->mode == "Python");
 
   if (!initializer.is_nil())
     convert_decl_initializer(var, initializer, new_code, *s, dest);
@@ -1504,7 +1561,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt cond = tmp;
   goto_programt sideeffects;
 
-  remove_sideeffects(cond, sideeffects);
+  remove_condition_sideeffects(cond, sideeffects);
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1655,7 +1712,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   exprt cond = code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(cond, sideeffects);
+  remove_condition_sideeffects(cond, sideeffects);
 
   //    do P while(c);
   //--------------------
@@ -2210,6 +2267,8 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     new_if1.op0() = code.cond().op1();
     new_if0.location() = location;
     new_if1.location() = location;
+    new_if0.set("#short_circuit", true);
+    new_if1.set("#short_circuit", true);
     new_if1.op1() = code.then_case();
     new_if0.op1() = new_if1;
     return convert_ifthenelse(to_code(new_if0), dest);
@@ -2235,7 +2294,10 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
       options.get_bool_option("condition-coverage-claims-rm")) ||
     options.get_bool_option("goto-instrumented"))
   {
-    remove_sideeffects(tmp_guard, dest);
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = code.get_bool("#short_circuit");
+    remove_condition_sideeffects(tmp_guard, dest);
+    in_short_circuit = outer_short_circuit;
   }
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
@@ -2332,8 +2394,11 @@ void goto_convertt::generate_conditional_branch(
     std::list<exprt> op;
     collect_operands(guard, guard.id(), op);
 
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(gen_not(*it), target_false, location, dest);
+    in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_true = dest.add_instruction();
     t_true->make_goto(target_true);
@@ -2354,8 +2419,11 @@ void goto_convertt::generate_conditional_branch(
     std::list<exprt> op;
     collect_operands(guard, guard.id(), op);
 
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(*it, target_true, location, dest);
+    in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
@@ -2366,7 +2434,7 @@ void goto_convertt::generate_conditional_branch(
   }
 
   exprt cond = guard;
-  remove_sideeffects(cond, dest);
+  remove_condition_sideeffects(cond, dest);
 
   goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);
