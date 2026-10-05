@@ -586,6 +586,14 @@ exprt python_converter::handle_none_comparison(
     // Check if the non-None side is a different type
     const exprt &non_none = lhs_is_none ? rhs : lhs;
 
+    // If the non-none side is an Optional struct, check its is_none field
+    // directly
+    if (type_utils::is_optional_struct(non_none.type()))
+    {
+      exprt flag = member_exprt(non_none, "is_none", bool_type());
+      return is_eq ? flag : not_exprt(flag);
+    }
+
     // If comparing with a constant integer, string, or other non-None constant
     // exclude pointer to array (strings), as they could be Optional[str]
     // parameters

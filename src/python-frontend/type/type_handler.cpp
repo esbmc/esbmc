@@ -1100,6 +1100,9 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       }
       else
         t = empty_typet();
+
+      t = wrap_in_optional_if_primitive(t);
+
       // Phase 4.3 (Part IV §5): build the pointer type IREP2-internal and lower
       // at the seam. The pointee arrives as a legacy typet, so migrate it in.
       return lower_to_seam(pointer_type2tc(migrate_type(t)));
@@ -1584,6 +1587,13 @@ typet type_handler::build_optional_type(const typet &base_type) const
   typet padded = optional_type;
   add_padding(padded, converter_.ns);
   return padded;
+}
+
+typet type_handler::wrap_in_optional_if_primitive(const typet &t) const
+{
+  if (type_utils::is_integer_type(t) || t.is_floatbv() || t.is_bool())
+    return build_optional_type(t);
+  return t;
 }
 
 bool type_handler::class_derives_from(

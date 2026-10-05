@@ -713,13 +713,20 @@ static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
     rhs = typecast_exprt(rhs, lhs_type);
     return true;
   }
+
+  // Lower None to nondet to prevent invalid typecasts to primitive types
+  // (#8132).
   if (
     rhs_type == none_type() &&
-    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type) || lhs_type.is_bool()))
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type) ||
+     lhs_type.is_bool()))
   {
-    rhs = gen_zero(lhs_type);
+    auto loc = rhs.location();
+    rhs = side_effect_expr_nondett(lhs_type);
+    rhs.location() = loc;
     return true;
   }
+
   return false;
 }
 
