@@ -252,6 +252,13 @@ protected:
   /// True iff `pts[to]` grew.
   bool add_copy_edge(node_id from, node_id to);
 
+  /// A node pointing to the heap object allocated at \p loc.
+  node_id allocation(const type2tc &type, unsigned loc);
+
+  /// Functions each call of which allocates an object of its own, so a call
+  /// to one is an allocation site rather than a binding of its return value.
+  std::unordered_set<irep_idt, irep_id_hash> allocators;
+
   /// A node whose points-to set is `{TOP}`.  Used as the source of a STORE to
   /// express "an unmodelled callee may write anything through this pointer".
   node_id top_source();
