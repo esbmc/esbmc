@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc
+^ERROR: TypeError: storing a numpy view in a container by append or item assignment \(a list comprehension included\) is not supported

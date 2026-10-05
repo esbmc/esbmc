@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.ravel\(\) of a view with a run-time stride is not supported
