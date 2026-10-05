@@ -262,12 +262,24 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   return blk;
 }
 
+// A textual block may omit instanceName; its Q variable still names it, so
+// unnamed blocks do not share one previous-input shadow.
+static const std::string &
+shadow_key(const std::string &instance, const std::string &q)
+{
+  return instance.empty() ? q : instance;
+}
+
 // TimerStep: synchronous fixed-tick model (§3.3) — one scan advances ET by one
 // tick, so PT is a dimensionless scan count. IEC 61131-3 §2.5.2.3.
 //
 //   TON: ET counts while IN holds; Q rises once ET reaches PT.
 //   TOF: Q follows IN up, then holds for PT scans after IN drops.
 //   TP:  a rising IN starts a PT-scan pulse that ignores IN until it expires.
+//
+// As in MATIEC (lib/timer.txt), the scan on which IN starts the interval (TON
+// rising, TOF falling) counts as no elapsed time, so Q does not change on that
+// scan even when PT is 0 (#8178).
 //
 // Every timer starts with Q false: at power-up the timer has not run, so the
 // elapsed count must not be read as an already-expired interval.
@@ -293,17 +305,22 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   auto q_while_pending =
     code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
 
+  symbol_exprt in_prev = declare_bool_shadow(
+    ld_name("__timer_prev_" + shadow_key(n.timer_instance, n.timer_Q)));
+  exprt in_held = and_exprt(in_val, in_prev);
+
   code_blockt blk;
 
   if (n.timer_kind == FBKind::TON)
   {
     code_ifthenelset et_step;
-    et_step.cond() = in_val;
+    et_step.cond() = in_held;
     et_step.then_case() = advance_et;
     et_step.else_case() = code_assignt(et_sym, zero);
     blk.copy_to_operands(et_step);
     blk.copy_to_operands(code_assignt(
-      q_sym, and_exprt(in_val, binary_relation_exprt(et_sym, ">=", pt_sym))));
+      q_sym, and_exprt(in_held, binary_relation_exprt(et_sym, ">=", pt_sym))));
+    blk.copy_to_operands(code_assignt(in_prev, in_val));
     return blk;
   }
 
@@ -324,19 +341,17 @@ codet ld_converter::translate_timer(const LdIRNode &n)
     step.then_case() = energise;
 
     code_ifthenelset hold;
-    hold.cond() = q_val;
+    hold.cond() = and_exprt(q_val, not_exprt(in_prev));
     hold.then_case() = countdown;
     step.else_case() = hold;
 
     blk.copy_to_operands(step);
+    blk.copy_to_operands(code_assignt(in_prev, in_val));
     return blk;
   }
 
   // TP: retriggerable only once the pulse has expired, so the pulse start is
   // gated on a rising edge of IN rather than on its level.
-  symbol_exprt in_prev =
-    declare_bool_shadow(ld_name("__timer_prev_" + n.timer_instance));
-
   code_blockt start;
   start.copy_to_operands(code_assignt(et_sym, zero));
   start.copy_to_operands(code_assignt(q_sym, true_exprt()));
@@ -368,6 +383,8 @@ codet ld_converter::translate_counter(const LdIRNode &n)
   exprt zero = gen_zero(int32_t_());
   symbol_exprt cv = var_expr(n.ctr_CV);
   symbol_exprt q = var_expr(n.ctr_Q);
+  const std::string prev_id =
+    ld_name("__ctr_prev_" + shadow_key(n.ctr_instance, n.ctr_Q));
   const exprt pv =
     n.ctr_PV.empty()
       ? zero
@@ -376,8 +393,7 @@ codet ld_converter::translate_counter(const LdIRNode &n)
   if (n.ctr_kind == FBKind::CTU)
   {
     symbol_exprt cu = var_expr(n.ctr_CU);
-    symbol_exprt cu_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    symbol_exprt cu_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cu_step;
     cu_step.cond() = and_exprt(
@@ -403,8 +419,7 @@ codet ld_converter::translate_counter(const LdIRNode &n)
   {
     symbol_exprt cd = var_expr(n.ctr_CD);
     exprt neg_one = from_integer(BigInt(-1), int32_t_());
-    symbol_exprt cd_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    symbol_exprt cd_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cd_step;
     cd_step.cond() = and_exprt(

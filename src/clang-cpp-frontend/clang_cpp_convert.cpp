@@ -950,7 +950,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : member_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -1011,7 +1011,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (auto it = begin; it != args.end(); ++it)
     {
       exprt single_arg;
-      if (get_expr(**it, single_arg))
+      if (get_expr(elided_copy_source(**it), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -1478,7 +1478,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt tmp;
     if (cxxte.getSubExpr())
     {
-      if (get_expr(*cxxte.getSubExpr(), tmp))
+      if (get_expr(elided_copy_source(*cxxte.getSubExpr()), tmp))
         return true;
 
       new_expr.move_to_operands(tmp);
@@ -1945,7 +1945,7 @@ bool clang_cpp_convertert::get_constructor_call(
   for (const clang::Expr *arg : constructor_call.arguments())
   {
     exprt single_arg;
-    if (get_expr(*arg, single_arg))
+    if (get_expr(elided_copy_source(*arg), single_arg))
       return true;
 
     call.arguments().push_back(single_arg);
@@ -2294,17 +2294,19 @@ static const clang::Expr &member_result_object(const clang::Expr &init)
   return *e;
 }
 
-/* The copy clang marks elidable before C++17, of a variable's initializer or
- * a returned value, is elided: the object is initialised from the copy's
- * source, as C++17 requires ([dcl.init]/17.6.1, [stmt.return]), and what
- * remains is the C++17 form. Converting the copy built a second object and
- * destroyed it. */
+/* The copy clang marks elidable before C++17, of a variable's initializer,
+ * a returned value or a by-value argument, is elided: the object is
+ * initialised from the copy's source, as C++17 requires ([dcl.init]/17.6.1,
+ * [stmt.return], [expr.call]/7), and what remains is the C++17 form.
+ * Converting the copy built a second object and destroyed it. */
 const clang::Expr &
 clang_cpp_convertert::elided_copy_source(const clang::Expr &init)
 {
   const clang::Expr *e = &init;
   if (const auto *ewc = llvm::dyn_cast<clang::ExprWithCleanups>(e))
     e = ewc->getSubExpr();
+  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
+    e = bind->getSubExpr();
   const clang::Expr *source = peel_elided_copy(e);
   return source ? *source : init;
 }
