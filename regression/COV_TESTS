@@ -2174,6 +2174,7 @@ regression/esbmc/atomic_fetch_nand_fail
 regression/esbmc-cpp/cpp/condition_temporary
 regression/esbmc-cpp/cpp/condition_temporary_fail
 regression/esbmc-cpp/cpp/condition_temporary_legacy
+regression/esbmc-cpp/cpp/new_multidim_value_init
 regression/esbmc/sync_swap_builtins
 regression/esbmc/sync_swap_builtins_fail
 regression/esbmc/sync_lock_release_race_fail
