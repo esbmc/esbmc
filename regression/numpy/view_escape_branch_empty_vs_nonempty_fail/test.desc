@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc
+^ERROR: TypeError: binding a numpy view name to views with a different shape, strides or storage on different paths is not supported
