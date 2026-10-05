@@ -2218,3 +2218,7 @@ regression/goto-transcoder/cbmc_kani_array_value_fail
 regression/goto-transcoder/cbmc_kani_array_write
 regression/goto-transcoder/cbmc_kani_array_write_fail
 regression/goto-transcoder/cbmc_kani_array_too_large_fail
+regression/esbmc/deref_union_array_read
+regression/esbmc/deref_union_array_read_fail
+regression/esbmc/deref_union_array_write
+regression/esbmc/deref_union_array_write_fail
