@@ -12,6 +12,7 @@
 #include <catch2/catch.hpp>
 
 #include "../testing-utils/goto_factory.h"
+#include <goto-programs/mark_decl_as_non_det.h>
 #include <pointer-analysis/andersen.h>
 #include <irep2/irep2_utils.h>
 
@@ -291,6 +292,71 @@ TEST_CASE(
 
   REQUIRE(
     targets_of(andersen, functions, "main", "n") == std::set<std::string>{"*"});
+}
+
+TEST_CASE(
+  "andersen frontend keeps memory behind an unconstrained pointer inert",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    void ext(int **);
+    int x;
+    int main(void)
+    {
+      int **p;
+      int **r;
+      *p = &x;
+      ext(r);
+      int *q = *r;
+      int *s = *p;
+      return 0;
+    }
+  )";
+
+  program prog =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+  goto_functionst &functions = prog.functions;
+  mark_decl_as_non_det(prog.context).run(functions);
+  andersent andersen;
+  andersen(functions);
+
+  const std::set<std::string> nondet{andersent::nondet_object_name};
+  REQUIRE(targets_of(andersen, functions, "main", "q") == nondet);
+  REQUIRE(targets_of(andersen, functions, "main", "s") == nondet);
+}
+
+TEST_CASE(
+  "andersen frontend stores through the objects beside the nondet sentinel",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int nd(void);
+    int x;
+    int *cell;
+    int main(void)
+    {
+      int c = nd();
+      int **uninit;
+      int **p = c ? &cell : uninit;
+      *p = &x;
+      int *q = cell;
+      int *r = *p;
+      return 0;
+    }
+  )";
+
+  program prog =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+  goto_functionst &functions = prog.functions;
+  mark_decl_as_non_det(prog.context).run(functions);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"x"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") ==
+    std::set<std::string>{"x", andersent::nondet_object_name});
 }
 
 TEST_CASE(
