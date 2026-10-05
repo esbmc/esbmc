@@ -713,6 +713,13 @@ static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
     rhs = typecast_exprt(rhs, lhs_type);
     return true;
   }
+  if (
+    rhs_type == none_type() &&
+    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type) || lhs_type.is_bool()))
+  {
+    rhs = gen_zero(lhs_type);
+    return true;
+  }
   return false;
 }
 
