@@ -604,6 +604,7 @@ __ESBMC_HIDE:;
   if (!denied)
     __ESBMC_mutex_release(mutex);
   __ESBMC_atomic_end();
+  __ESBMC_yield(); // a waiter may acquire before this thread runs on (#8189)
   return denied ? EPERM : 0;
 }
 
@@ -617,6 +618,7 @@ __ESBMC_HIDE:;
   if (!denied)
     __ESBMC_mutex_release(mutex);
   __ESBMC_atomic_end();
+  __ESBMC_yield(); // a waiter may acquire before this thread runs on (#8189)
   return denied ? EPERM : 0;
 }
 
@@ -676,6 +678,7 @@ __ESBMC_HIDE:;
     __ESBMC_mutex_waiters(*mutex) = 0;
   }
   __ESBMC_atomic_end();
+  __ESBMC_yield(); // a waiter may acquire before this thread runs on (#8189)
   return denied ? EPERM : 0;
 }
 
@@ -843,6 +846,7 @@ __ESBMC_HIDE:;
     __ESBMC_rwlock_waiters(lock) = 0;
   }
   __ESBMC_atomic_end();
+  __ESBMC_yield(); // a waiter may acquire before this thread runs on (#8189)
   return 0;
 }
 
@@ -1051,6 +1055,7 @@ __ESBMC_HIDE:;
   __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
   __ESBMC_spin_waiters(lock) = 0;
   __ESBMC_atomic_end();
+  __ESBMC_yield(); // a waiter may acquire before this thread runs on (#8189)
   return 0;
 }
 

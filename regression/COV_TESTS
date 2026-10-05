@@ -2222,3 +2222,14 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc-unix/race_unlock_then_join
+regression/esbmc-unix/race_unlock_then_join_fail
+regression/esbmc-unix/race_unlock_then_return
+regression/esbmc-unix/race_unlock_then_return_fail
+regression/esbmc-unix/race_unlock_then_return_deadlock_check_fail
+regression/esbmc-unix/race_unlock_then_return_lock_order_fail
+regression/esbmc-unix/race_rwlock_unlock_then_return_fail
+regression/esbmc-unix/race_spin_unlock_then_return_fail
+regression/esbmc-unix/race_rwlock_unlock_then_return
+regression/esbmc-unix/race_spin_unlock_then_return
+regression/esbmc-unix/race_c11_mtx_unlock_then_join_fail
