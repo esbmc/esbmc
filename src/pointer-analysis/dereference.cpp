@@ -1254,10 +1254,8 @@ void dereferencet::build_reference_rec(
     return;
   }
 
-  // Reading a whole array value through a pointer. C forbids array-typed
-  // rvalues (arrays decay to pointers), but languages where arrays are
-  // first-class values (e.g. Rust `let a: [u8; N] = *ptr;`) reach here via a
-  // CBMC goto-binary. Build the array element by element from the source.
+  // A whole array value read through a pointer: a Rust `let a: [u8; N] = *p;`
+  // in a CBMC goto-binary, or a C union whose first member is an array.
   if (is_array_type(type))
   {
     construct_array_ref(value, offset, type, guard, mode, alignment);
@@ -1639,17 +1637,11 @@ void dereferencet::construct_array_ref(
 {
   const array_type2t &arr_type = to_array_type(type);
 
-  // A dereference target array always has a concrete size; a flexible/infinite
-  // array member can't be loaded as a whole value.
-  if (!arr_type.array_size || !is_constant_int2t(arr_type.array_size))
-  {
-    dereference_failure(
-      "Bad dereference",
-      "Cannot construct reference to array of non-constant size",
-      guard);
-    value = make_failed_symbol(type);
-    return;
-  }
+  // No input reaches here with a flexible or variable-length target: a union
+  // with a flexible array member is read without building that member.
+  assert(
+    !is_nil_expr(arr_type.array_size) &&
+    is_constant_int2t(arr_type.array_size));
 
   // Fast path: loading the whole object at offset 0 with a matching layout,
   // which is the common case (e.g. a Rust `[u8; N]` value load). Avoids

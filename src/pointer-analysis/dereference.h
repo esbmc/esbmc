@@ -619,7 +619,7 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode,
-    unsigned long alignment = 0);
+    unsigned long alignment);
   class quantifier_scopet;
 
   /** Variables bound by quantifiers enclosing the expression currently being
