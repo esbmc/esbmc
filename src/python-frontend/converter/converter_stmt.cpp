@@ -2625,33 +2625,6 @@ bool python_converter::is_numpy_readonly_view_arg(
   return false;
 }
 
-void python_converter::reject_unknown_numpy_view_call(
-  const nlohmann::json &node)
-{
-  if (
-    !node.is_object() || node.value("_type", "") != "Call" ||
-    !node.contains("func") || !node["func"].is_object() ||
-    !node.contains("args") || !node["args"].is_array())
-    return;
-
-  if (node["func"].value("_type", "") != "Name")
-    return;
-
-  const std::string func_name = node["func"].value("id", "");
-  if (
-    func_name == "len" || func_name == "bool" || func_name == "int" ||
-    func_name == "float")
-    return;
-
-  for (const auto &arg : node["args"])
-  {
-    if (contains_tracked_numpy_view_name(arg))
-      throw std::runtime_error(
-        "TypeError: passing a copied numpy view to an unknown function is not "
-        "supported");
-  }
-}
-
 void python_converter::reject_numpy_view_identity_query(
   const nlohmann::json &node)
 {
@@ -5523,8 +5496,18 @@ bool python_converter::try_tagged_var_assign(
 }
 
 nlohmann::json
-python_converter::rewrite_assign_rhs_node(const nlohmann::json &ast_node) const
+python_converter::rewrite_assign_rhs_node(const nlohmann::json &ast_node)
 {
+  if (ast_node.contains("value"))
+    if (
+      std::optional<nlohmann::json> folded =
+        fold_numpy_view_call(ast_node["value"]))
+    {
+      nlohmann::json folded_assign = ast_node;
+      folded_assign["value"] = std::move(*folded);
+      return rewrite_assign_rhs_node(folded_assign);
+    }
+
   nlohmann::json effective_ast_node = ast_node;
   if (
     ast_node.contains("value") && ast_node["value"].is_object() &&
@@ -5735,7 +5718,7 @@ void python_converter::get_var_assign(
   if (ast_node.contains("value") && ast_node["value"].is_object())
   {
     reject_numpy_view_identity_query(ast_node["value"]);
-    reject_unknown_numpy_view_call(ast_node["value"]);
+    track_numpy_view_call_escape(ast_node["value"]);
   }
 
   // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
@@ -8265,6 +8248,7 @@ exprt python_converter::get_block(
   // Iterate over block statements
   for (auto &element : ast_block)
   {
+    reject_escaped_numpy_view_use(element);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)
@@ -8503,7 +8487,7 @@ exprt python_converter::get_block(
       // Function calls are handled here
       reject_numpy_view_identity_query(element["value"]);
       reject_numpy_view_mutating_method_call(element["value"]);
-      reject_unknown_numpy_view_call(element["value"]);
+      track_numpy_view_call_escape(element["value"]);
 
       exprt empty;
       exprt expr = get_expr(element["value"]);

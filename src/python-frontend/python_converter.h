@@ -673,6 +673,9 @@ private:
   bool is_program_file(const std::string &file) const;
 
   exprt get_function_call(const nlohmann::json &ast_block);
+  /// A Call expression: folded into the caller when it passes a numpy view
+  /// to a simple function, converted as a call otherwise.
+  exprt get_call_expr(const nlohmann::json &element);
 
   /// Lowers len(obj) when obj is a class instance -- dispatching to its
   /// __len__, or raising TypeError as CPython does when it defines none.
@@ -1524,7 +1527,24 @@ private:
 
   void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
 
-  void reject_unknown_numpy_view_call(const nlohmann::json &node);
+  /// The storage a view ultimately reads: its source, through any chain of
+  /// views, with storage aliases resolved.
+  std::string numpy_view_storage_root(const std::string &id) const;
+  bool is_numpy_storage_escaped(const nlohmann::json &name) const;
+  bool is_closed_return_expression(
+    const nlohmann::json &value,
+    const nlohmann::json &params) const;
+  /// The return expression of a simple function called with a numpy view,
+  /// with the call's arguments substituted; nullopt when it cannot be folded.
+  std::optional<nlohmann::json>
+  fold_numpy_view_call(const nlohmann::json &call);
+  /// Records the storage of every view passed to a call that is not folded.
+  void track_numpy_view_call_escape(const nlohmann::json &call);
+  void reject_escaped_numpy_view_read(const nlohmann::json &node) const;
+  void reject_escaped_numpy_view_write(const nlohmann::json &target) const;
+  /// Rejects value reads and writes of storage that escaped to an unknown
+  /// call; shape queries stay allowed.
+  void reject_escaped_numpy_view_use(const nlohmann::json &statement) const;
 
   void reject_numpy_view_identity_query(const nlohmann::json &node);
 
@@ -1774,7 +1794,7 @@ private:
   // or else defers to rewrite_numpy_method_call_node for any other numpy
   // method-call RHS. Split out to keep get_var_assign's own decision count
   // from growing as more special-cased RHS rewrites land there.
-  nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node) const;
+  nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node);
 
   // Classifies a Call node as a numpy method call: (is_a_method_call,
   // method_name, method_base, is_a_supported_copy_method,
@@ -2411,6 +2431,8 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  /// Storage roots passed to a call the frontend could not fold.
+  std::unordered_set<std::string> numpy_escaped_storage_;
   /// Names bound to a read-only numpy view that is not a pointer view.
   std::unordered_set<std::string> numpy_readonly_arrays_;
   /// Namespace of each operational model loaded this run, in load order.
