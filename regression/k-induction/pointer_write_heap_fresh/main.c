@@ -1,3 +1,5 @@
+// KNOWNBUG: the inductive step no longer skips objects a run-once loop
+// allocates, which was unsound (pointer_write_heap_fresh_kept_fail).
 // The loop writes, through a pointer it moves, objects that make allocates
 // on every iteration. run executes once and only the loop calls make, so no
 // such object exists before the loop and the inductive step needs no havoc

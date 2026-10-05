@@ -1,5 +1,6 @@
 #include <goto-programs/goto_k_induction.h>
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
@@ -569,17 +570,8 @@ struct targetst
   bool nondet = false;
 };
 
-/// Allocation sites, by location number, whose objects the inductive step
-/// never holds when it havocs (see loop_shapest).
-using sitest = std::unordered_set<unsigned>;
-
-/// An object from a site in \p fresh counts as nondet: symex resolves a
-/// pointer to it, which only a havoc can produce, to an invalid object.
-targetst targets_of(
-  andersent &points_to,
-  const loopst &loop,
-  const sitest &fresh,
-  const expr2tc &ptr)
+targetst
+targets_of(andersent &points_to, const loopst &loop, const expr2tc &ptr)
 {
   value_setst::valuest values;
   points_to.get_values(loop.get_original_loop_head(), ptr, values);
@@ -595,15 +587,7 @@ targetst targets_of(
     else if (is_symbol2t(object) && check_var_name(object))
       t.named.insert(object);
     else if (is_dynamic_object2t(object))
-    {
-      const expr2tc &site = to_dynamic_object2t(object).instance;
-      if (
-        is_constant_int2t(site) &&
-        fresh.count(to_constant_int2t(site).value.to_uint64()))
-        t.nondet = true;
-      else
-        t.heap = true;
-    }
+      t.heap = true;
     else
       t.anything = true;
   }
@@ -627,8 +611,7 @@ void for_each_subexpr(
   e->foreach_operand([&f](const expr2tc &op) { for_each_subexpr(op, f); });
 }
 
-/// Whether \p code allocates: Andersen gives each such instruction one heap
-/// node, keyed by its location number.
+/// Whether \p code allocates.
 bool allocates(const expr2tc &code)
 {
   bool found = false;
@@ -670,30 +653,24 @@ bool carries_address(const type2tc &type)
   return is_symbol_type(type);
 }
 
-/// Where the program's loops, direct calls and allocations are, and from that
-/// the allocation sites whose objects a loop may write without the inductive
-/// step havocing them. Symex disables the step on a call through a function
-/// pointer, on recursion and on a thread, so only direct calls run a
-/// function. A loop then runs at most once when no other loop of its function
-/// encloses or overlaps it and its function has a single call site, outside
-/// every loop of a function that also runs at most once. A site that runs
-/// only inside such a loop created nothing before it, and an earlier
-/// iteration's object is reachable only through storage the loop writes. The
-/// step havocs that storage into pointers symex resolves to an invalid object:
-/// reads through them are free and writes are dropped, as for an object that
-/// does not exist yet.
+/// Where the program's loops and direct calls are, and so which instructions
+/// may run inside a loop. Symex disables the step on a call through a
+/// function pointer, on recursion and on a thread, so only direct calls run a
+/// function.
 class loop_shapest
 {
 public:
   explicit loop_shapest(const goto_functionst &goto_functions);
 
-  /// The sites of \p loop, in \p function, or none when it may run twice.
-  /// Call it before any loop of \p function is transformed.
-  sitest fresh_sites(const irep_idt &function, const loopst &loop) const;
-
   /// Whether the instruction at \p location of \p function may run inside
   /// some loop: one of its own function, or one that calls it.
   bool in_loop(const irep_idt &function, unsigned location) const;
+
+  /// Whether it is inside a loop of \p function itself.
+  bool in_own_loop(const irep_idt &function, unsigned location) const
+  {
+    return shapes.at(function).in_loop(location);
+  }
 
 private:
   /// Location numbers from a loop head to its back edge.
@@ -708,13 +685,11 @@ private:
     }
   };
 
-  /// A body's loops, direct calls and allocations, by location number, which
-  /// follows program order.
+  /// A body's loops and direct calls, by location number.
   struct shapet
   {
     std::vector<ranget> loops;
     std::vector<std::pair<unsigned, irep_idt>> calls;
-    std::vector<unsigned> allocations;
 
     bool in_loop(unsigned location) const
     {
@@ -728,25 +703,13 @@ private:
   using functionst = std::unordered_set<irep_idt, irep_id_hash>;
 
   functionst reached_from(std::vector<irep_idt> functions) const;
-  bool runs_once(irep_idt function) const;
-  bool alone(const irep_idt &function, const ranget &loop) const;
-  functionst
-  only_called_from(const irep_idt &function, const ranget &loop) const;
 
-  const irep_idt root;
   std::unordered_map<irep_idt, shapet, irep_id_hash> shapes;
   /// The functions some loop may call.
   functionst called_in_loop;
-  /// Each function's direct call sites, as the caller and location.
-  std::unordered_map<
-    irep_idt,
-    std::vector<std::pair<irep_idt, unsigned>>,
-    irep_id_hash>
-    callers;
 };
 
 loop_shapest::loop_shapest(const goto_functionst &goto_functions)
-  : root(goto_functions.main_id())
 {
   forall_goto_functions (it, goto_functions)
   {
@@ -767,10 +730,7 @@ loop_shapest::loop_shapest(const goto_functionst &goto_functions)
         const irep_idt &callee =
           to_symbol2t(to_code_function_call2t(instr.code).function).thename;
         shape.calls.emplace_back(loc, callee);
-        callers[callee].emplace_back(it->first, loc);
       }
-      if (allocates(instr.code))
-        shape.allocations.push_back(loc);
     }
   }
 
@@ -806,90 +766,6 @@ bool loop_shapest::in_loop(const irep_idt &function, unsigned location) const
          shapes.at(function).in_loop(location);
 }
 
-bool loop_shapest::runs_once(irep_idt function) const
-{
-  functionst seen;
-  while (function != root)
-  {
-    const auto it = callers.find(function);
-    if (
-      it == callers.end() || it->second.size() != 1 ||
-      !seen.insert(function).second)
-      return false;
-    const auto &[caller, location] = it->second.front();
-    if (shapes.at(caller).in_loop(location))
-      return false;
-    function = caller;
-  }
-  return true;
-}
-
-/// Whether every other loop of \p function lies inside \p loop or apart from
-/// it, so that leaving \p loop never leads back into it.
-bool loop_shapest::alone(const irep_idt &function, const ranget &loop) const
-{
-  const auto &loops = shapes.at(function).loops;
-  return std::all_of(loops.begin(), loops.end(), [&loop](const ranget &l) {
-    return (loop.contains(l.head) && loop.contains(l.back)) ||
-           l.back < loop.head || loop.back < l.head;
-  });
-}
-
-/// The functions that run only from calls in \p loop: everything it may
-/// reach, less any function called from elsewhere, until nothing more drops.
-loop_shapest::functionst loop_shapest::only_called_from(
-  const irep_idt &function,
-  const ranget &loop) const
-{
-  std::vector<irep_idt> called;
-  for (const auto &[location, callee] : shapes.at(function).calls)
-    if (loop.contains(location))
-      called.push_back(callee);
-  functionst local = reached_from(std::move(called));
-
-  const auto called_locally = [&](const std::pair<irep_idt, unsigned> &site) {
-    return site.first == function ? loop.contains(site.second)
-                                  : local.count(site.first) != 0;
-  };
-  for (bool dropped = true; dropped;)
-  {
-    dropped = false;
-    for (auto it = local.begin(); it != local.end();)
-    {
-      const auto &sites = callers.at(*it);
-      if (std::all_of(sites.begin(), sites.end(), called_locally))
-        ++it;
-      else
-      {
-        it = local.erase(it);
-        dropped = true;
-      }
-    }
-  }
-  return local;
-}
-
-sitest
-loop_shapest::fresh_sites(const irep_idt &function, const loopst &loop) const
-{
-  const ranget range{
-    loop.get_original_loop_head()->location_number,
-    loop.get_original_loop_exit()->location_number};
-  if (!alone(function, range) || !runs_once(function))
-    return {};
-
-  sitest sites;
-  for (unsigned l : shapes.at(function).allocations)
-    if (range.contains(l))
-      sites.insert(l);
-  for (const irep_idt &f : only_called_from(function, range))
-  {
-    const auto &allocations = shapes.at(f).allocations;
-    sites.insert(allocations.begin(), allocations.end());
-  }
-  return sites;
-}
-
 /// What a pointer the loop writes through is computed from: the pointers in
 /// scope at the loop head that it is an offset of, and the named objects whose
 /// address it takes.
@@ -897,27 +773,66 @@ struct rootst
 {
   loopst::loop_varst pointers;
   loopst::loop_varst objects;
+  /// Whether it is, in part, an object allocated in the iteration.
+  bool allocated = false;
+
+  bool empty() const
+  {
+    return pointers.empty() && objects.empty() && !allocated;
+  }
+
+  void merge(const rootst &other)
+  {
+    pointers.insert(other.pointers.begin(), other.pointers.end());
+    objects.insert(other.objects.begin(), other.objects.end());
+    allocated |= other.allocated;
+  }
+};
+
+/// A loop's body, by location number, and the variables the inductive step's
+/// havoc of which nothing reads: every path from the head or an unconditional
+/// jump into the body assigns them whole before reading them, no loop nested
+/// in the body assigns them, and nothing outside the body reads them. None in
+/// a loop a conditional jump enters, which gets no havoc. Those hold what the
+/// body assigned them, provided a call writes no variable whose address is not
+/// taken.
+struct iterationt
+{
+  unsigned head = 0;
+  unsigned back = 0;
+  std::unordered_set<irep_idt, irep_id_hash> reassigned;
+
+  bool contains(unsigned location) const
+  {
+    return head <= location && location <= back;
+  }
 };
 
 /// Traces a value back through the locals, parameters and results of called
 /// functions, which every call starts afresh, to what the loop head holds. A
-/// global or a local of the loop's function that no loop assigns and whose
-/// address nothing takes is never havoced and keeps one value throughout the
-/// loop, so every object a write derived from it reaches is one it points to
-/// at the head. An object allocated on the way was allocated in the same
-/// iteration, which the step executes, so it needs no havoc.
+/// global that no loop assigns, or a local of the loop's function that none
+/// of its loops assigns, whose address nothing takes is never havoced and
+/// keeps one value throughout the loop, so every object a write derived from
+/// it reaches is one it points to at the head. A local the loop reassigns
+/// before every read is traced through its assignments in the body. An object
+/// allocated on the way was allocated in the same iteration, which the step
+/// executes, so it needs no havoc.
 class derivationst
 {
 public:
+  /// \p unsettled: the variables some loop of their function assigns without
+  /// reassigning them before every read (see iterationt).
   derivationst(
     const goto_functionst &goto_functions,
-    const loop_shapest &shapes);
+    const loop_shapest &shapes,
+    std::unordered_set<irep_idt, irep_id_hash> unsettled);
 
   /// Adds to \p out what \p value, written in a loop of \p function, derives
-  /// from. Returns false when part of it is loaded from memory.
+  /// from. Returns false when the trace cannot bound it.
   bool roots(
     const irep_idt &function,
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+    const iterationt &iteration,
     const expr2tc &value,
     rootst &out) const;
 
@@ -944,27 +859,76 @@ private:
   {
     expr2tc value;
     irep_idt callee;
+    unsigned location;
   };
+
+  struct tracedt
+  {
+    rootst roots;
+    bool traced;
+  };
+  using memot = std::unordered_map<irep_idt, tracedt, irep_id_hash>;
 
   struct queryt
   {
     const irep_idt &function;
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken;
+    const iterationt &iteration;
     rootst &out;
-    std::unordered_set<irep_idt, irep_id_hash> visiting;
+    /// Both by whether the trace left the iteration.
+    std::array<std::unordered_set<irep_idt, irep_id_hash>, 2> &visiting;
+    std::array<memot, 2> &memo;
+    /// Short-circuits on a symbol still being traced, after which what the
+    /// symbols on the way computed is partial and not memoised.
+    unsigned &cycles;
+    /// Steps left before the trace gives up and rejects, which a cycle
+    /// through many symbols, defeating the memo, would otherwise make
+    /// exponential.
+    std::size_t &budget;
+    /// Whether the trace has left the iteration for what the loop's function
+    /// computed before the loop.
+    bool outside;
+
+    queryt sub(rootst &roots, bool leaves = false) const
+    {
+      return {
+        function,
+        address_taken,
+        iteration,
+        roots,
+        visiting,
+        memo,
+        cycles,
+        budget,
+        outside || leaves};
+    }
   };
 
-  void define(const expr2tc &lhs, const deft &def, bool in_loop);
+  void
+  define(const expr2tc &lhs, const deft &def, bool in_loop, bool in_own_loop);
   void record(
     const goto_functionst &goto_functions,
     const irep_idt &function,
     const instructiont &instr,
-    bool in_loop);
+    bool in_loop,
+    bool in_own_loop);
 
   bool trace(queryt &q, const expr2tc &value) const;
   bool trace_address(queryt &q, expr2tc object) const;
   bool trace_symbol(queryt &q, const expr2tc &symbol) const;
   bool trace_def(queryt &q, const deft &def) const;
+  /// Whether an address may flow into \p value, of a type that holds none.
+  bool may_hold_address(
+    const queryt &q,
+    const expr2tc &value,
+    std::unordered_set<irep_idt, irep_id_hash> &seen) const;
+  /// Traces what \p name holds with \p trace, once per query, leaving the
+  /// iteration if \p leaves.
+  bool trace_once(
+    queryt &q,
+    const irep_idt &name,
+    bool leaves,
+    const std::function<bool(queryt &)> &trace) const;
 
   std::unordered_map<irep_idt, std::vector<deft>, irep_id_hash> defs;
   /// What each function returns.
@@ -972,16 +936,26 @@ private:
   /// The function each local and parameter belongs to.
   std::unordered_map<irep_idt, irep_idt, irep_id_hash> owner;
   std::unordered_set<irep_idt, irep_id_hash> looped;
+  /// Assigned inside a loop of its own function, which a caller's loop cannot
+  /// do to a local: every call declares it afresh.
+  std::unordered_set<irep_idt, irep_id_hash> looped_here;
+  std::unordered_set<irep_idt, irep_id_hash> unsettled;
 };
 
-void derivationst::define(const expr2tc &lhs, const deft &def, bool in_loop)
+void derivationst::define(
+  const expr2tc &lhs,
+  const deft &def,
+  bool in_loop,
+  bool in_own_loop)
 {
   if (is_nil_expr(lhs))
     return;
   if (is_if2t(lhs))
   {
-    define(to_if2t(lhs).true_value, {}, in_loop);
-    define(to_if2t(lhs).false_value, {}, in_loop);
+    define(
+      to_if2t(lhs).true_value, {{}, {}, def.location}, in_loop, in_own_loop);
+    define(
+      to_if2t(lhs).false_value, {{}, {}, def.location}, in_loop, in_own_loop);
     return;
   }
 
@@ -991,29 +965,37 @@ void derivationst::define(const expr2tc &lhs, const deft &def, bool in_loop)
   if (!is_symbol2t(symbol))
     return;
   const irep_idt &name = to_symbol2t(symbol).thename;
-  defs[name].push_back(symbol == lhs ? def : deft{});
+  defs[name].push_back(symbol == lhs ? def : deft{{}, {}, def.location});
   if (in_loop)
     looped.insert(name);
+  if (in_own_loop)
+    looped_here.insert(name);
 }
 
 void derivationst::record(
   const goto_functionst &goto_functions,
   const irep_idt &function,
   const instructiont &instr,
-  bool in_loop)
+  bool in_loop,
+  bool in_own_loop)
 {
   if (instr.is_decl())
   {
     const code_decl2t &decl = to_code_decl2t(instr.code);
     owner.emplace(decl.value, function);
     if (!is_nil_expr(decl.init))
-      define(symbol2tc(decl.type, decl.value), {decl.init, {}}, in_loop);
+      define(
+        symbol2tc(decl.type, decl.value),
+        {decl.init, {}, instr.location_number},
+        in_loop,
+        in_own_loop);
   }
   else if (instr.is_assign())
     define(
       to_code_assign2t(instr.code).target,
-      {to_code_assign2t(instr.code).source, {}},
-      in_loop);
+      {to_code_assign2t(instr.code).source, {}, instr.location_number},
+      in_loop,
+      in_own_loop);
   else if (instr.is_return())
     returns[function].push_back(to_code_return2t(instr.code).operand);
   else if (instr.is_function_call())
@@ -1021,7 +1003,8 @@ void derivationst::record(
     const code_function_call2t &call = to_code_function_call2t(instr.code);
     const irep_idt name =
       is_symbol2t(call.function) ? to_symbol2t(call.function).thename : "";
-    define(call.ret, {expr2tc(), name}, in_loop);
+    define(
+      call.ret, {expr2tc(), name, instr.location_number}, in_loop, in_own_loop);
     const auto callee = goto_functions.function_map.find(name);
     if (
       callee == goto_functions.function_map.end() ||
@@ -1029,13 +1012,15 @@ void derivationst::record(
       return;
     const auto &names = to_code_type(callee->second.type).argument_names;
     for (size_t i = 0; i < std::min(names.size(), call.operands.size()); ++i)
-      defs[names[i]].push_back({call.operands[i], {}});
+      defs[names[i]].push_back({call.operands[i], {}, instr.location_number});
   }
 }
 
 derivationst::derivationst(
   const goto_functionst &goto_functions,
-  const loop_shapest &shapes)
+  const loop_shapest &shapes,
+  std::unordered_set<irep_idt, irep_id_hash> unsettled)
+  : unsettled(std::move(unsettled))
 {
   forall_goto_functions (it, goto_functions)
   {
@@ -1049,17 +1034,32 @@ derivationst::derivationst(
         goto_functions,
         it->first,
         instr,
-        shapes.in_loop(it->first, instr.location_number));
+        shapes.in_loop(it->first, instr.location_number),
+        shapes.in_own_loop(it->first, instr.location_number));
   }
 }
 
 bool derivationst::roots(
   const irep_idt &function,
   const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
+  const iterationt &iteration,
   const expr2tc &value,
   rootst &out) const
 {
-  queryt q{function, address_taken, out, {}};
+  std::array<std::unordered_set<irep_idt, irep_id_hash>, 2> visiting;
+  std::array<memot, 2> memo;
+  unsigned cycles = 0;
+  std::size_t budget = 100000;
+  queryt q{
+    function,
+    address_taken,
+    iteration,
+    out,
+    visiting,
+    memo,
+    cycles,
+    budget,
+    false};
   return trace(q, value);
 }
 
@@ -1084,13 +1084,22 @@ bool computes_from_operands(const expr2tc &e)
 
 bool derivationst::trace(queryt &q, const expr2tc &value) const
 {
+  if (q.budget == 0)
+    return false;
+  --q.budget;
   if (is_nil_expr(value))
     return true;
   // An array used as a pointer stands for itself.
   if (is_array_type(value->type))
     return trace_address(q, value);
-  if (!carries_address(value->type) || is_constant_int2t(value))
+  if (is_constant_int2t(value))
     return true;
+  if (!carries_address(value->type))
+  {
+    // Symex still finds the object of an address an integer truncates.
+    std::unordered_set<irep_idt, irep_id_hash> seen;
+    return !may_hold_address(q, value, seen);
+  }
   if (is_symbol2t(value))
     return trace_symbol(q, value);
   if (is_typecast2t(value))
@@ -1098,16 +1107,39 @@ bool derivationst::trace(queryt &q, const expr2tc &value) const
   if (is_address_of2t(value))
     return trace_address(q, to_address_of2t(value).ptr_obj);
   if (is_sideeffect2t(value))
-    // An unconstrained pointer reaches no object symex resolves.
-    return to_sideeffect2t(value).kind == sideeffect2t::allockind::nondet ||
-           allocates(value);
+  {
+    // An unconstrained pointer reaches no object symex resolves. An object
+    // allocated before the loop is one the step has to havoc.
+    if (!allocates(value))
+      return to_sideeffect2t(value).kind == sideeffect2t::allockind::nondet;
+    if (q.outside)
+      return false;
+    q.out.allocated = true;
+    return true;
+  }
   if (!computes_from_operands(value))
     return false;
 
+  // Only an offset added to one address, or taken from it, keeps to that
+  // address's object: the simplifier folds A + (B - A) to B
+  // (add2t::do_simplify).
   bool traced = true;
-  value->foreach_operand(
-    [&](const expr2tc &op) { traced = traced && trace(q, op); });
-  return traced;
+  size_t operand = 0;
+  size_t carriers = 0;
+  value->foreach_operand([&](const expr2tc &op) {
+    rootst roots;
+    queryt sub = q.sub(roots);
+    traced = traced && trace(sub, op);
+    if (!roots.empty())
+    {
+      ++carriers;
+      traced = traced && (is_if2t(value) || is_add2t(value) ||
+                          (is_sub2t(value) && operand == 0));
+    }
+    q.out.merge(roots);
+    ++operand;
+  });
+  return traced && (is_if2t(value) || carriers <= 1);
 }
 
 /// Traces the address of \p object, or of part of it.
@@ -1135,25 +1167,125 @@ bool derivationst::trace_symbol(queryt &q, const expr2tc &symbol) const
     return false;
 
   const auto own = owner.find(name);
-  if (own == owner.end() || own->second == q.function)
+  const bool global = own == owner.end();
+  const bool here = !global && own->second == q.function;
+  const bool moves = (global ? looped : looped_here).count(name) != 0;
+  if (global || here)
   {
-    if (
-      !check_var_name(symbol) || looped.count(name) ||
-      !(is_pointer_type(symbol) || is_bv_type(symbol)))
+    if (!check_var_name(symbol))
       return false;
-    q.out.pointers.insert(symbol);
-    return true;
+    // An integer is no address of its own: what it was computed from is.
+    if (!moves && is_pointer_type(symbol))
+    {
+      q.out.pointers.insert(symbol);
+      return true;
+    }
+    if (global || (moves && !q.iteration.reassigned.count(name)))
+      return false;
   }
+  // The step havocs a callee's local at its loop's head, which the
+  // assignments below do not show, unless nothing reads that havoc.
+  else if (moves && unsettled.count(name))
+    return false;
 
-  // A callee's local: what every assignment to it computes. One never
+  // What every assignment to it computes; for one the body reassigns, every
+  // assignment in the body, and for one of the loop's function that no loop
+  // assigns, what the function computed before the loop. A local never
   // assigned holds no address symex resolves.
-  if (!q.visiting.insert(name).second)
-    return true;
+  const bool in_body = here && moves;
   const auto it = defs.find(name);
   return it == defs.end() ||
-         std::all_of(it->second.begin(), it->second.end(), [&](const deft &d) {
-           return trace_def(q, d);
+         trace_once(q, name, here && !moves, [&](queryt &sub) {
+           return std::all_of(
+             it->second.begin(), it->second.end(), [&](const deft &d) {
+               return (in_body && !q.iteration.contains(d.location)) ||
+                      trace_def(sub, d);
+             });
          });
+}
+
+bool derivationst::trace_once(
+  queryt &q,
+  const irep_idt &name,
+  bool leaves,
+  const std::function<bool(queryt &)> &trace) const
+{
+  const bool outside = q.outside || leaves;
+  memot &memo = q.memo[outside];
+  if (const auto m = memo.find(name); m != memo.end())
+  {
+    q.out.merge(m->second.roots);
+    return m->second.traced;
+  }
+  if (!q.visiting[outside].insert(name).second)
+  {
+    ++q.cycles;
+    return true;
+  }
+  const unsigned cycles = q.cycles;
+  rootst roots;
+  queryt sub = q.sub(roots, leaves);
+  const bool traced = trace(sub);
+  q.visiting[outside].erase(name);
+  if (q.cycles == cycles)
+    memo.emplace(name, tracedt{roots, traced});
+  q.out.merge(roots);
+  return traced;
+}
+
+bool derivationst::may_hold_address(
+  const queryt &q,
+  const expr2tc &value,
+  std::unordered_set<irep_idt, irep_id_hash> &seen) const
+{
+  if (q.budget == 0)
+    return true;
+  --q.budget;
+  if (is_nil_expr(value) || is_constant_int2t(value))
+    return false;
+  if (
+    (is_pointer_type(value->type) &&
+     !is_code_type(to_pointer_type(value->type).subtype)) ||
+    is_array_type(value->type) || is_address_of2t(value) ||
+    is_dereference2t(value))
+    return true;
+  // A bool is 0 or 1, never an address.
+  if (is_bool_type(value->type))
+    return false;
+  if (is_sideeffect2t(value))
+    return to_sideeffect2t(value).kind != sideeffect2t::allockind::nondet;
+  const auto holds = [&](const deft &d) {
+    if (!is_nil_expr(d.value))
+      return may_hold_address(q, d.value, seen);
+    if (d.callee.empty())
+      return true;
+    const auto it = returns.find(d.callee);
+    if (it == returns.end())
+      return has_prefix(d.callee.as_string(), "c:@F@__ESBMC") ||
+             has_prefix(d.callee.as_string(), "c:@F@__builtin");
+    if (!seen.insert(d.callee).second)
+      return false;
+    return std::any_of(
+      it->second.begin(), it->second.end(), [&](const expr2tc &v) {
+        return may_hold_address(q, v, seen);
+      });
+  };
+  if (is_symbol2t(value))
+  {
+    const irep_idt &name = to_symbol2t(value).thename;
+    if (q.address_taken.count(name))
+      return true;
+    if (!seen.insert(name).second)
+      return false;
+    const auto it = defs.find(name);
+    return it != defs.end() &&
+           std::any_of(it->second.begin(), it->second.end(), holds);
+  }
+  bool holds_one = false;
+  value->foreach_operand([&](const expr2tc &op) {
+    holds_one = holds_one || may_hold_address(q, op, seen);
+  });
+  return holds_one;
 }
 
 bool derivationst::trace_def(queryt &q, const deft &def) const
@@ -1167,24 +1299,21 @@ bool derivationst::trace_def(queryt &q, const deft &def) const
   if (it == returns.end())
     return !has_prefix(def.callee.as_string(), "c:@F@__ESBMC") &&
            !has_prefix(def.callee.as_string(), "c:@F@__builtin");
-  if (!q.visiting.insert(def.callee).second)
-    return true;
-  return std::all_of(
-    it->second.begin(), it->second.end(), [&](const expr2tc &value) {
-      return trace(q, value);
-    });
+  return trace_once(q, def.callee, false, [&](queryt &sub) {
+    return std::all_of(
+      it->second.begin(), it->second.end(), [&](const expr2tc &value) {
+        return trace(sub, value);
+      });
+  });
 }
 
 /// What the storage \p lvalue designates may hold. A pointee `*p` has no node
 /// of its own: it holds what the objects p points to hold.
-targetst held_by(
-  andersent &points_to,
-  const loopst &loop,
-  const sitest &fresh,
-  const expr2tc &lvalue)
+targetst
+held_by(andersent &points_to, const loopst &loop, const expr2tc &lvalue)
 {
   if (!is_dereference2t(lvalue))
-    return targets_of(points_to, loop, fresh, lvalue);
+    return targets_of(points_to, loop, lvalue);
 
   value_setst::valuest objects;
   points_to.get_values(
@@ -1198,7 +1327,7 @@ targetst held_by(
       held.anything = true;
     else if (!andersent::is_nondet_object(object))
     {
-      const targetst t = targets_of(points_to, loop, fresh, object);
+      const targetst t = targets_of(points_to, loop, object);
       held.named.insert(t.named.begin(), t.named.end());
       held.heap |= t.heap;
       held.anything |= t.anything;
@@ -1206,6 +1335,153 @@ targetst held_by(
     }
   }
   return held;
+}
+
+/// What \p instr reads, and the variable it assigns whole, if any. A DEAD
+/// reads nothing.
+void reads_and_assigns(
+  const instructiont &instr,
+  std::vector<irep_idt> &reads,
+  irep_idt &assigned)
+{
+  const auto read = [&reads](const expr2tc &e) {
+    for_each_subexpr(e, [&reads](const expr2tc &sub) {
+      if (is_symbol2t(sub))
+        reads.push_back(to_symbol2t(sub).thename);
+    });
+  };
+  expr2tc target;
+  if (instr.is_assign())
+  {
+    target = to_code_assign2t(instr.code).target;
+    read(to_code_assign2t(instr.code).source);
+  }
+  else if (instr.is_function_call())
+  {
+    const code_function_call2t &call = to_code_function_call2t(instr.code);
+    target = call.ret;
+    read(call.function);
+    for (const expr2tc &op : call.operands)
+      read(op);
+  }
+  else if (instr.is_decl())
+  {
+    assigned = to_code_decl2t(instr.code).value;
+    read(to_code_decl2t(instr.code).init);
+  }
+  else if (instr.type != DEAD)
+    read(instr.code);
+  read(instr.guard);
+
+  if (!is_nil_expr(target) && is_symbol2t(target))
+    assigned = to_symbol2t(target).thename;
+  else
+    read(target);
+}
+
+/// See iterationt. Call it before any loop of \p function is transformed.
+iterationt iteration_of(const goto_functiont &function, const loopst &loop)
+{
+  iterationt iteration;
+  iteration.head = loop.get_original_loop_head()->location_number;
+  iteration.back = loop.get_original_loop_exit()->location_number;
+
+  std::vector<goto_programt::const_targett> body;
+  std::unordered_map<const instructiont *, size_t> index;
+  for (goto_programt::const_targett it = loop.get_original_loop_head();; ++it)
+  {
+    index.emplace(&*it, body.size());
+    body.push_back(it);
+    if (it == loop.get_original_loop_exit())
+      break;
+  }
+
+  // A jump into the body starts an iteration too, havoced only when it is
+  // unconditional (see collect_entry_jumps). Nothing a loop reads past its
+  // exit may be counted: the step can leave the loop right after the havoc.
+  std::vector<size_t> work{0};
+  std::unordered_set<irep_idt, irep_id_hash> excluded;
+  for (const auto &instr : function.body.instructions)
+  {
+    if (index.count(&instr))
+      continue;
+    for (const auto &t : instr.targets)
+      if (const auto f = index.find(&*t); f != index.end() && f->second != 0)
+      {
+        if (!is_true(instr.guard))
+          return iteration;
+        work.push_back(f->second);
+      }
+    std::vector<irep_idt> reads;
+    irep_idt assigned;
+    reads_and_assigns(instr, reads, assigned);
+    excluded.insert(reads.begin(), reads.end());
+  }
+
+  std::vector<std::vector<irep_idt>> reads(body.size());
+  std::vector<irep_idt> assigned(body.size());
+  std::unordered_map<irep_idt, size_t, irep_id_hash> vars;
+  for (size_t i = 0; i < body.size(); ++i)
+  {
+    reads_and_assigns(*body[i], reads[i], assigned[i]);
+    if (!assigned[i].empty())
+      vars.emplace(assigned[i], vars.size());
+  }
+
+  // A loop nested in the body havocs what it assigns at its own head.
+  for (size_t i = 0; i < body.size(); ++i)
+    for (const auto &t : body[i]->targets)
+      if (
+        const auto f = index.find(&*t);
+        f != index.end() && f->second != 0 && f->second <= i)
+        for (size_t j = f->second; j <= i; ++j)
+          if (!assigned[j].empty())
+            excluded.insert(assigned[j]);
+
+  // Must-assigned since an entry, over the iteration: the back edge to the
+  // head and every edge out of the loop end it.
+  std::vector<std::vector<bool>> in(
+    body.size(), std::vector<bool>(vars.size(), true));
+  for (size_t entry : work)
+    in[entry].assign(vars.size(), false);
+  while (!work.empty())
+  {
+    const size_t i = work.back();
+    work.pop_back();
+    std::vector<bool> out = in[i];
+    if (!assigned[i].empty())
+      out[vars.at(assigned[i])] = true;
+
+    std::vector<size_t> next;
+    const instructiont &instr = *body[i];
+    for (const auto &t : instr.targets)
+      if (const auto f = index.find(&*t); f != index.end() && f->second != 0)
+        next.push_back(f->second);
+    if (!(instr.is_goto() && is_true(instr.guard)) && i + 1 < body.size())
+      next.push_back(i + 1);
+
+    for (size_t n : next)
+    {
+      bool changed = false;
+      for (size_t v = 0; v < out.size(); ++v)
+        if (in[n][v] && !out[v])
+        {
+          in[n][v] = false;
+          changed = true;
+        }
+      if (changed)
+        work.push_back(n);
+    }
+  }
+
+  for (const auto &var : vars)
+    if (!excluded.count(var.first))
+      iteration.reassigned.insert(var.first);
+  for (size_t i = 0; i < body.size(); ++i)
+    for (const irep_idt &name : reads[i])
+      if (const auto v = vars.find(name); v != vars.end() && !in[i][v->second])
+        iteration.reassigned.erase(name);
+  return iteration;
 }
 
 /// A loop, and what its pointer writes are resolved with.
@@ -1218,8 +1494,8 @@ struct loop_writest
   /// Whether symex drops a write through a pointer it cannot resolve, which
   /// tracing a pointer to what it derives from relies on.
   bool drops_unresolved;
-  const sitest &fresh;
   const std::unordered_set<irep_idt, irep_id_hash> &address_taken;
+  const iterationt &iteration;
 };
 
 /// What the inductive step havocs to cover a loop's writes through pointers.
@@ -1239,11 +1515,11 @@ struct covert
 /// the points-to sets give it or, failing those, what it derives from.
 bool cover_write(const loop_writest &w, const expr2tc &ptr, covert &cover)
 {
-  const targetst t = targets_of(w.points_to, w.loop, w.fresh, ptr);
+  const targetst t = targets_of(w.points_to, w.loop, ptr);
   rootst roots;
   const bool derived =
     w.drops_unresolved &&
-    w.derivations.roots(w.function, w.address_taken, ptr, roots);
+    w.derivations.roots(w.function, w.address_taken, w.iteration, ptr, roots);
   // An unconstrained pointer writes no named object: symex sends such a write
   // to an invalid object. An empty set is different — no constraint reached
   // the pointer, so the analysis knows nothing about it.
@@ -1282,8 +1558,8 @@ bool havocs_stored_pointer(const loop_writest &w, const covert &cover)
 {
   return std::any_of(
     cover.through.begin(), cover.through.end(), [&](const expr2tc &ptr) {
-      const targetst held = held_by(
-        w.points_to, w.loop, w.fresh, dereference2tc(get_empty_type(), ptr));
+      const targetst held =
+        held_by(w.points_to, w.loop, dereference2tc(get_empty_type(), ptr));
       return std::any_of(
         held.named.begin(), held.named.end(), [&](const expr2tc &object) {
           return cover.loaded.count(object) != 0;
@@ -1301,7 +1577,7 @@ loopst::loop_varst clobbered_by_pointees(const loop_writest &w, covert &cover)
   for (const expr2tc &pointee : w.loop.get_written_pointees())
   {
     const targetst t =
-      targets_of(w.points_to, w.loop, w.fresh, to_dereference2t(pointee).value);
+      targets_of(w.points_to, w.loop, to_dereference2t(pointee).value);
     clobbered.insert(t.named.begin(), t.named.end());
     cover.anything |= t.anything;
   }
@@ -1426,7 +1702,7 @@ bool pin_havoced_pointers(const loop_writest &w, pinst &pins)
       is_symbol2t(var) &&
       w.derivations.local_elsewhere(to_symbol2t(var).thename, w.function))
       continue;
-    const targetst t = held_by(w.points_to, w.loop, w.fresh, var);
+    const targetst t = held_by(w.points_to, w.loop, var);
     if (t.named.empty() || t.heap || t.anything)
       continue;
     if (!pin(var, t, pins))
@@ -1542,6 +1818,39 @@ bool havoc_loop(
   return covered;
 }
 
+/// The locals and parameters some loop of their function havocs in the
+/// inductive step and may read the havoc of.
+std::unordered_set<irep_idt, irep_id_hash>
+unsettled_by_loops(goto_functionst &goto_functions)
+{
+  std::unordered_set<irep_idt, irep_id_hash> unsettled;
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available)
+      continue;
+    // A callee's local the loop havocs is declared afresh by every call.
+    std::unordered_set<irep_idt, irep_id_hash> locals;
+    if (is_code_type(it->second.type))
+      for (const irep_idt &arg : to_code_type(it->second.type).argument_names)
+        locals.insert(arg);
+    for (const instructiont &instr : it->second.body.instructions)
+      if (instr.is_decl())
+        locals.insert(to_code_decl2t(instr.code).value);
+
+    goto_loopst loops(it->first, goto_functions, it->second);
+    for (const loopst &loop : loops.get_loops())
+    {
+      const iterationt iteration = iteration_of(it->second, loop);
+      for (const expr2tc &var : loop.get_modified_loop_vars())
+        if (
+          is_symbol2t(var) && locals.count(to_symbol2t(var).thename) &&
+          !iteration.reassigned.count(to_symbol2t(var).thename))
+          unsettled.insert(to_symbol2t(var).thename);
+    }
+  }
+  return unsettled;
+}
+
 bool goto_k_induction(
   goto_functionst &goto_functions,
   const namespacet &,
@@ -1558,16 +1867,20 @@ bool goto_k_induction(
   const auto reachable = reachable_functions(goto_functions);
   const auto address_taken = address_taken_symbols(goto_functions);
   const loop_shapest shapes(goto_functions);
-  const derivationst derivations(goto_functions, shapes);
 
-  // Fresh objects, and the callee locals derivationst finds never assigned,
-  // need no havoc only while symex drops a write through a pointer it cannot
-  // resolve: a pointer check claims that pointer valid, and the step assumes
-  // the claims of its early iterations. A leak check would also miss the
-  // objects that earlier iterations allocated.
+  // Objects allocated in the iteration, and the callee locals derivationst
+  // finds never assigned, need no havoc only while symex drops a write through
+  // a pointer it cannot resolve: a pointer check claims that pointer valid, and
+  // the step assumes the claims of its early iterations. A leak check would
+  // also miss the objects that earlier iterations allocated.
   const bool drops_unresolved =
     config.options.get_bool_option("no-pointer-check") &&
     !config.options.get_bool_option("memory-leak-check");
+  const derivationst derivations(
+    goto_functions,
+    shapes,
+    drops_unresolved ? unsettled_by_loops(goto_functions)
+                     : std::unordered_set<irep_idt, irep_id_hash>());
 
   // A reachable __VERIFIER_nondet_memory call havocs a caller object the
   // inductive step cannot generalise, so its unsoundness is independent of any
@@ -1586,11 +1899,11 @@ bool goto_k_induction(
     const bool decides =
       !it->second.body.hide && reachable.count(it->first) != 0;
     goto_loopst loops(it->first, goto_functions, it->second);
-    std::vector<sitest> fresh;
+    std::vector<iterationt> iterations;
     for (const loopst &loop : loops.get_loops())
-      fresh.push_back(
-        drops_unresolved ? shapes.fresh_sites(it->first, loop) : sitest());
-    auto sites = fresh.cbegin();
+      iterations.push_back(
+        drops_unresolved ? iteration_of(it->second, loop) : iterationt());
+    auto iteration = iterations.cbegin();
     for (auto &loop : loops.get_loops())
       if (
         !havoc_loop(
@@ -1601,8 +1914,8 @@ bool goto_k_induction(
            points_to,
            derivations,
            drops_unresolved,
-           *sites++,
-           address_taken},
+           address_taken,
+           *iteration++},
           continue_past_failed_assertions) &&
         decides)
         disable_inductive_step = true;

@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --k-induction --max-k-step 12 --no-pointer-check --no-bounds-check --force-malloc-success
 ^VERIFICATION SUCCESSFUL$
