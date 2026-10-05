@@ -415,13 +415,13 @@ python_converter::fold_numpy_view_call(const nlohmann::json &call)
   // Fold only where a view is involved: one passed in, or one returned (a
   // subscript that reads a single element returns no view).
   nlohmann::json folded = substitute_call_arguments(*value, call);
+  // A subscript of a numpy call (`np.array(...)[0]`, a local array inlined)
+  // is a view of that fresh array.
   std::vector<nlohmann::json> indices;
-  const bool indexes_a_name = is_name(*subscript_chain(folded, indices));
-  bool returns_view = is_numpy_view_copy_expr(folded);
-  if (indices.empty())
-    returns_view = is_numpy_view_value(folded);
-  else if (indexes_a_name)
-    returns_view = numpy_subscript_yields_view(folded);
+  const nlohmann::json *root = subscript_chain(folded, indices);
+  const bool returns_view = indices.empty() || is_name(*root)
+                              ? is_numpy_view_value(folded)
+                              : is_numpy_module_call(*root);
   if (!contains_tracked_numpy_view_name(call["args"]) && !returns_view)
     return std::nullopt;
   return folded;
@@ -501,10 +501,7 @@ void python_converter::reject_multi_path_numpy_view_return(
     return;
   for (const nlohmann::json &value : values)
   {
-    const nlohmann::json returned = substitute_call_arguments(value, call);
-    if (
-      is_numpy_view_copy_expr(returned) ||
-      contains_tracked_numpy_view_name(returned))
+    if (is_numpy_view_value(substitute_call_arguments(value, call)))
       throw std::runtime_error(multi_path_return_error);
   }
 }
@@ -943,6 +940,16 @@ bool python_converter::holds_numpy_view(const nlohmann::json &node) const
   return false;
 }
 
+// `np.<function>(...)` through an imported numpy alias.
+bool python_converter::is_numpy_module_call(const nlohmann::json &node) const
+{
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node["func"].value("_type", "") == "Attribute" &&
+         is_name(node["func"]["value"]) &&
+         is_imported_numpy_module_alias(
+           *ast_json, node["func"]["value"]["id"].get<std::string>());
+}
+
 // True when `node` is a numpy view: one held by name or produced by a
 // subscript, or a view function (`.T`, `broadcast_to`, ...) over a numpy
 // array. An ordinary Python subscript or attribute is not.
@@ -1122,8 +1129,15 @@ bool python_converter::is_numpy_view_syntax(
   }
   if (type == "Attribute" && value.value("attr", "") == "T")
     return is_numpy_storage_syntax(value["value"], scope, depth + 1);
+  // `np.transpose(a)` or `a.transpose()`: the array is the first argument
+  // or the receiver.
   if (type == "Call" && is_numpy_view_copy_call_node(value))
-    return true;
+    return is_numpy_storage_syntax(
+      is_numpy_module_call(value) && !value["args"].empty()
+        ? value["args"][0]
+        : value["func"]["value"],
+      scope,
+      depth + 1);
   if (type != "Subscript")
     return false;
 
@@ -1150,12 +1164,7 @@ bool python_converter::is_numpy_storage_syntax(
   // Only a constructor with literal arguments: a run-time shape is rejected
   // where the parameter is typed, which a skipped definition would bypass.
   const bool numpy_call =
-    bound.value("_type", "") == "Call" &&
-    bound["func"].value("_type", "") == "Attribute" &&
-    is_name(bound["func"]["value"]) &&
-    is_imported_numpy_module_alias(
-      *ast_json, bound["func"]["value"]["id"].get<std::string>()) &&
-    !contains_name(bound["args"]);
+    is_numpy_module_call(bound) && !contains_name(bound["args"]);
   return numpy_call || is_numpy_view_syntax(bound, scope, depth + 1);
 }
 
