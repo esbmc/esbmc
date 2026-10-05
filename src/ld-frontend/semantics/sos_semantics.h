@@ -24,8 +24,10 @@ enum class SosRule
 
   // Timer rules (fixed-tick model). Every timer starts with Q false: at
   // power-up it has not run, so ET must not read as an expired interval.
-  TON_Step, // [TON] if IN then ET++ else ET:=0; Q := IN and ET >= PT
-  TOF_Step, // [TOF] if IN then {ET:=0; Q:=T} elif Q then {ET++; Q := ET < PT}
+  TON_Step, // [TON] if IN and IN_prev then ET++ else ET:=0;
+            //       Q := IN and IN_prev and ET >= PT
+  TOF_Step, // [TOF] if IN then {ET:=0; Q:=T}
+            //       elif Q and not IN_prev then {ET++; Q := ET < PT}
   TP_Step,  // [TP]  if Q then {ET++; Q := ET < PT}
             //       elif rising IN then {ET:=0; Q:=T}
 
