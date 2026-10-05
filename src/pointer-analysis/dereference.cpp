@@ -1245,22 +1245,10 @@ void dereferencet::build_reference_rec(
     return;
   }
 
-  /* A vector destination is a value, not an array of lanes to be indexed:
-   * construct_vector_ref answers it whole or lane by lane, so it needs no row
-   * in the table below (#7907). */
-  if (is_vector_type(type))
-  {
-    construct_vector_ref(value, offset, type, guard, mode, alignment);
+  /* A vector or array destination is a value, built whole or element by
+   * element, so it needs no row in the table below (#7907). */
+  if (construct_value_ref(value, offset, type, guard, mode, alignment))
     return;
-  }
-
-  // A whole array value read through a pointer: a Rust `let a: [u8; N] = *p;`
-  // in a CBMC goto-binary, or a C union whose first member is an array.
-  if (is_array_type(type))
-  {
-    construct_array_ref(value, offset, type, guard, mode, alignment);
-    return;
-  }
 
   flags |= dst_flag_of(type);
   flags |= src_flag_of(value);
@@ -1565,6 +1553,26 @@ void dereferencet::construct_from_array(
       extract_bits_from_byte_array(
         value, offset_bits, type_byte_size_bits(type).to_uint64()));
   }
+}
+
+/* Vectors (#7907) and arrays are built as values. An array destination is a
+ * whole array read through a pointer: a Rust `let a: [u8; N] = *p;` in a CBMC
+ * goto-binary, or a C union whose first member is an array. */
+bool dereferencet::construct_value_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  if (is_vector_type(type))
+    construct_vector_ref(value, offset, type, guard, mode, alignment);
+  else if (is_array_type(type))
+    construct_array_ref(value, offset, type, guard, mode, alignment);
+  else
+    return false;
+  return true;
 }
 
 /* Unlike an array, a vector is a value, read and written whole. Unless the
