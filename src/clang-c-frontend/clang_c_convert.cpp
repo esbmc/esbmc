@@ -2716,7 +2716,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : function_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -2792,11 +2792,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       /* The underlying storage is automatic here, i.e., local. In order for
        * it to be recognized as being local in ESBMC, it requires a declaration,
-       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
-      code_declt decl(new_expr);
-      decl.operands().push_back(initializer);
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one.
+       * It goes before the enclosing statement, which may be a loop or a
+       * labelled statement, so the object is initialised where the literal is
+       * evaluated, each time it is (C17 6.5.2.5p5). */
+      current_block->operands().push_back(code_declt(new_expr));
 
-      current_block->operands().push_back(decl);
+      side_effect_exprt assign("assign", t);
+      assign.copy_to_operands(new_expr, initializer);
+      exprt comma("comma", t);
+      comma.copy_to_operands(assign, new_expr);
+      new_expr = comma;
     }
     else
     {
