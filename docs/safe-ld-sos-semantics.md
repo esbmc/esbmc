@@ -202,7 +202,7 @@ milliseconds. When the program declares no task, τ = 1 ms. Rounding is upward
 so that a preset shorter than one scan still takes one scan to expire.
 
 This makes time progression concrete and deterministic: a TON with preset N
-fires after exactly N scans, so timer-dependent properties have a known
+fires N scans after the scan its enable rises (one scan after when N = 0), so timer-dependent properties have a known
 induction depth and no `__ESBMC_assume` over Δt is needed. What it does not
 model is scan-period jitter — see §8.
 
@@ -212,19 +212,21 @@ enable pin and `PT`, `ET`, `Q` its preset, elapsed count and output.
 ### 5.2 TON — on-delay
 
 ```
-    IN = tt, σ(ET) < σ(PT)              IN = tt, σ(ET) ≥ σ(PT)
-  ─────────────────────────────    ─────────────────────────────  [TON]
-   σ' = σ[ET ↦ σ(ET)+1]             σ' = σ
+ IN = tt, π(IN) = tt, σ(ET) < σ(PT)    IN = tt, π(IN) = tt, σ(ET) ≥ σ(PT)
+ ──────────────────────────────────    ──────────────────────────────────  [TON]
+   σ' = σ[ET ↦ σ(ET)+1]                  σ' = σ
 
-                    IN = ff
-              ────────────────────────────  [TON-RESET]
-               σ' = σ[ET ↦ 0], σ'' = σ'[Q ↦ ff]
+            IN = ff  or  π(IN) = ff
+      ────────────────────────────────  [TON-RESET]
+       σ' = σ[ET ↦ 0], σ'' = σ'[Q ↦ ff]
 
-              σ'' = σ'[Q ↦ (σ'(ET) ≥ σ(PT))]   (IN = tt)
+              σ'' = σ'[Q ↦ (σ'(ET) ≥ σ(PT))]   (IN = tt, π(IN) = tt)
 ```
 
-Equivalently `Q := IN ∧ ET ≥ PT`. Conjoining `IN` matters at `PT = 0`, where
-a TON must follow its enable directly rather than latch on.
+Equivalently `Q := IN ∧ π(IN) ∧ ET ≥ PT`. The scan on which IN rises starts
+the interval and counts as no elapsed time, as in MATIEC's TON
+(`lib/timer.txt`), so Q stays ff on that scan even at `PT = 0`; with
+`PT = 0`, Q rises on the next scan.
 
 ET is bounded above by PT (IEC 61131-3 §2.5.2.3.2 gives ET the range 0..PT), so
 the count stops once the interval is up. An unbounded ET would rise on every
@@ -234,17 +236,19 @@ behaviour and wraps ET negative so that Q drops back to ff.
 ### 5.3 TOF — off-delay
 
 ```
-        IN = tt                          IN = ff, σ(Q) = tt
+        IN = tt                     IN = ff, π(IN) = ff, σ(Q) = tt
   ────────────────────────────    ──────────────────────────────────  [TOF]
    σ' = σ[ET ↦ 0][Q ↦ tt]          σ' = σ[ET ↦ σ(ET)+1]
                                    σ'' = σ'[Q ↦ (σ'(ET) < σ(PT))]
 
-                        IN = ff, σ(Q) = ff
+          IN = ff, π(IN) = tt          or          IN = ff, σ(Q) = ff
                   ────────────────────────────  [TOF-IDLE]
                             σ' = σ
 ```
 
-Q rises with IN and holds for PT scans after IN drops. The idle rule is what
+Q rises with IN. The scan on which IN falls starts the interval and counts as
+no elapsed time, as in MATIEC's TOF, so Q holds for max(PT, 1) scans counting
+that scan: through the falling scan alone when `PT ≤ 1`. The idle rule is what
 keeps a TOF from reporting an expired interval at power-up: with Q initialised
 to ff and ET to 0, a timer that has never been enabled stays off, rather than
 reading ET = 0 as "just dropped".
@@ -259,8 +263,8 @@ reading ET = 0 as "just dropped".
 ```
 
 and σ' = σ otherwise. A pulse runs for PT scans from a rising IN and ignores
-IN until it expires; the block keeps its own previous-IN entry in π, so a TP
-is retriggerable only after its pulse has completed.
+IN until it expires; like TON and TOF, the block keeps its own previous-IN
+entry in π, so a TP is retriggerable only after its pulse has completed.
 
 ### 5.5 CTU / CTD — counters
 
@@ -361,7 +365,8 @@ value on entry to the network.
 The translation `ld_converter` performs is a rule-by-rule refinement of the
 above. With R ⊆ Σ × S the relation of §3.7 — (σ, s) ∈ R iff σ(v) = s(`ld::v`)
 for every LD variable v, extended to π through the shadow symbols
-`ld::__edge_prev_v`, each rule maps to:
+`ld::__edge_prev_v`, `ld::__timer_prev_<instance>` and
+`ld::__ctr_prev_<instance>`, each rule maps to:
 
 | Rule | GOTO IR |
 |---|---|
