@@ -322,6 +322,27 @@ python_converter::fold_numpy_view_call(const nlohmann::json &call)
   return folded;
 }
 
+// `alias = view`: the alias is the same pointer, so it carries the same
+// shape, strides, source and read-only state.
+bool python_converter::bind_numpy_pointer_view_alias(
+  const exprt &lhs,
+  const std::string &lhs_id,
+  const std::string &rhs_id)
+{
+  const auto view = numpy_pointer_view_info_.find(rhs_id);
+  if (view == numpy_pointer_view_info_.end())
+    return false;
+  const numpy_scalar_pointer_view_infot info = view->second;
+  clear_numpy_view_copy(lhs);
+  clear_numpy_array_storage_aliases_for(lhs_id);
+  numpy_param_shapes_.erase(lhs_id);
+  numpy_pointer_view_info_[lhs_id] = info;
+  if (const symbolt *symbol = symbol_table_.find_symbol(lhs_id))
+    numpy_pointer_view_info_[symbol->id.as_string()] = info;
+  numpy_array_symbols_.insert(lhs_id);
+  return true;
+}
+
 void python_converter::get_folded_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -636,6 +657,17 @@ const nlohmann::json &python_converter::resolve_numpy_view_containers(
   if (target && find_numpy_view_container(statement["value"]))
     return statement;
   rewritten = rewrite_numpy_view_container_reads(statement);
+  // The annotation pre-pass typed `x: T = box[0]` from the container, not
+  // from the view the element really is.
+  if (
+    target && statement.value("_type", "") == "AnnAssign" &&
+    rewritten["value"] != statement["value"])
+  {
+    rewritten["_type"] = "Assign";
+    rewritten["targets"] = nlohmann::json::array({rewritten["target"]});
+    rewritten.erase("target");
+    rewritten.erase("annotation");
+  }
   return rewritten;
 }
 

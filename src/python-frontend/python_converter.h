@@ -1551,6 +1551,10 @@ private:
   void reject_or_defer_numpy_view_return(
     const nlohmann::json &ast_node,
     codet &target_block);
+  bool bind_numpy_pointer_view_alias(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const std::string &rhs_id);
   void reject_multi_path_numpy_view_return(const nlohmann::json &call);
   /// Records the storage of every view passed to a call that is not folded.
   void track_numpy_view_call_escape(const nlohmann::json &call);

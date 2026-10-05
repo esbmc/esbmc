@@ -3651,6 +3651,8 @@ bool python_converter::update_numpy_array_binding_from_name(
     return true;
   }
 
+  if (bind_numpy_pointer_view_alias(lhs, lhs_id, rhs_id))
+    return true;
   if (numpy_array_symbols_.count(rhs_id) == 0)
     return false;
 
