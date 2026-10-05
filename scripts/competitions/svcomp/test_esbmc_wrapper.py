@@ -303,5 +303,43 @@ class PythonPropertyFileTest(unittest.TestCase):
             wrapper.python_property("CHECK( init(main()), ! uncaught(OSError))\n"))
 
 
+class PythonModulePathTest(unittest.TestCase):
+    """A task in python/<project>/ imports _sv_verifier from python/.
+
+    CPython resolves an import against the script's own directory, so the task
+    fails there too unless PYTHONPATH carries the parent; sv-benchmarks' own
+    check-syntax.py sets it for that reason. ESBMC follows CPython, so the
+    wrapper supplies the search path.
+    """
+
+    def setUp(self):
+        self.saved = os.environ.get("PYTHONPATH")
+
+    def tearDown(self):
+        if self.saved is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = self.saved
+
+    def test_task_directory_and_its_parent_are_both_reachable(self):
+        os.environ.pop("PYTHONPATH", None)
+        wrapper.add_python_module_path("/sv-benchmarks/python/vllm/vllm_cdiv.py")
+        self.assertEqual(
+            os.environ["PYTHONPATH"].split(os.pathsep),
+            ["/sv-benchmarks/python/vllm", "/sv-benchmarks/python"])
+
+    def test_an_existing_pythonpath_is_kept(self):
+        os.environ["PYTHONPATH"] = "/already/here"
+        wrapper.add_python_module_path("/sv-benchmarks/python/vllm/vllm_cdiv.py")
+        self.assertEqual(
+            os.environ["PYTHONPATH"].split(os.pathsep)[-1], "/already/here")
+
+    def test_a_relative_benchmark_path_is_made_absolute(self):
+        os.environ.pop("PYTHONPATH", None)
+        wrapper.add_python_module_path("boto3_all_not_none.py")
+        for entry in os.environ["PYTHONPATH"].split(os.pathsep):
+            self.assertTrue(os.path.isabs(entry), entry)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -193,6 +193,22 @@ def classify_python_violation(violated, prop):
   return Result.unknown
 
 
+def add_python_module_path(benchmark):
+  """Put sv-benchmarks' _sv_verifier module within the task's import reach.
+
+  A Python task sits in python/<project>/ and imports _sv_verifier, which sits
+  one level up in python/. CPython resolves an import against the script's own
+  directory and fails the same way, which is why sv-benchmarks' check-syntax.py
+  sets PYTHONPATH; ESBMC follows CPython here, so the search path is supplied
+  rather than the resolution changed.
+  """
+  task_dir = os.path.dirname(os.path.abspath(benchmark))
+  paths = [task_dir, os.path.dirname(task_dir)]
+  if os.environ.get("PYTHONPATH"):
+    paths.append(os.environ["PYTHONPATH"])
+  os.environ["PYTHONPATH"] = os.pathsep.join(paths)
+
+
 def python_property(property_file_content):
   """The Python track property this file states, or None for any other file."""
   names = set(re.findall(r"!\s*uncaught\(\s*(\w+)\s*\)", property_file_content))
@@ -517,6 +533,9 @@ if __name__ == "__main__":
   if not category_property:
     print("Unsupported Property")
     exit(1)
+
+  if category_property in PYTHON_EXCEPTION_FAMILIES:
+    add_python_module_path(benchmark)
 
   result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 
