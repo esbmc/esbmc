@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <unordered_map>
 
 // NumPy views that leave direct local use (ADR-NP-003): a call to a simple
 // function is folded into the caller, where the view's metadata is known;
@@ -176,6 +177,30 @@ bool contains_call(const nlohmann::json &node)
   return false;
 }
 
+using module_aliasest = std::unordered_map<std::string, std::string>;
+
+// Calls that may have a side effect: anything but a function of an imported
+// module (`np.transpose(a)`), which only computes a value.
+std::size_t count_effectful_calls(
+  const nlohmann::json &node,
+  const module_aliasest &modules)
+{
+  if (!node.is_object() && !node.is_array())
+    return 0;
+  std::size_t count = 0;
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    const bool module_function =
+      func.value("_type", "") == "Attribute" && is_name(func["value"]) &&
+      modules.count(func["value"]["id"].get<std::string>()) != 0;
+    count = module_function ? 0 : 1;
+  }
+  for (const auto &child : node)
+    count += count_effectful_calls(child, modules);
+  return count;
+}
+
 // Replaces each local alias of a straight-line body by the expression it
 // was bound to.
 struct alias_inliner
@@ -200,13 +225,26 @@ struct alias_inliner
     return copy;
   }
 
-  // An alias used twice would evaluate its calls twice.
-  bool duplicates_a_call() const
+  // Inlining must run every call exactly once and in its original order: an
+  // alias used twice would repeat its calls, an unused one would drop them
+  // (and the exception they may raise), and an alias holding a call with side
+  // effects would move it past any other such call in `result`.
+  bool changes_evaluation(
+    const nlohmann::json &result,
+    const module_aliasest &modules) const
   {
-    for (const auto &[name, count] : uses)
-      if (count > 1 && contains_call(aliases.at(name)))
+    bool moves_an_effect = false;
+    for (const auto &[name, value] : aliases)
+    {
+      const auto used = uses.find(name);
+      if (!contains_call(value))
+        continue;
+      if (used == uses.end() || used->second != 1)
         return true;
-    return false;
+      moves_an_effect =
+        moves_an_effect || count_effectful_calls(value, modules);
+    }
+    return moves_an_effect && count_effectful_calls(result, modules) > 1;
   }
 };
 
@@ -225,9 +263,10 @@ const nlohmann::json *alias_target(const nlohmann::json &stmt)
 
 // The return expression of a straight-line body -- local aliases followed by
 // one `return` -- with each alias inlined; nullopt for any other body, or
-// when inlining would evaluate a call more than once.
-std::optional<nlohmann::json>
-straight_line_return_value(const nlohmann::json &body)
+// when inlining would change which calls run or their order.
+std::optional<nlohmann::json> straight_line_return_value(
+  const nlohmann::json &body,
+  const module_aliasest &modules)
 {
   alias_inliner inliner;
   for (const auto &stmt : body)
@@ -237,12 +276,13 @@ straight_line_return_value(const nlohmann::json &body)
       !stmt["value"].is_null())
     {
       nlohmann::json value = inliner.inlined(stmt["value"]);
-      if (inliner.duplicates_a_call())
+      if (inliner.changes_evaluation(value, modules))
         return std::nullopt;
       return value;
     }
+    // A name bound twice would lose what it was first bound to.
     const nlohmann::json *target = alias_target(stmt);
-    if (!target)
+    if (!target || inliner.aliases.count((*target)["id"].get<std::string>()))
       return std::nullopt;
     inliner.aliases[(*target)["id"].get<std::string>()] =
       inliner.inlined(stmt["value"]);
@@ -349,7 +389,7 @@ python_converter::simple_call_return_value(const nlohmann::json &call) const
   for (const auto &arg : call["args"])
     if (!is_name(arg) && arg.value("_type", "") != "Constant")
       return std::nullopt;
-  return straight_line_return_value(func_node["body"]);
+  return straight_line_return_value(func_node["body"], imported_modules);
 }
 
 std::optional<nlohmann::json>
@@ -431,7 +471,9 @@ void python_converter::reject_or_defer_numpy_view_return(
 {
   const nlohmann::json func_node = json_utils::find_function_by_path(
     *ast_json, json_utils::split_function_path(current_func_name_));
-  if (func_node.empty() || !straight_line_return_value(func_node["body"]))
+  if (
+    func_node.empty() ||
+    !straight_line_return_value(func_node["body"], imported_modules))
     throw std::runtime_error(returned_view_error);
 
   // A folded call never runs this body and any other call is rejected where
@@ -1124,7 +1166,7 @@ bool python_converter::is_fold_only_numpy_function(
   const nlohmann::json &function_node) const
 {
   const std::optional<nlohmann::json> returned =
-    straight_line_return_value(function_node["body"]);
+    straight_line_return_value(function_node["body"], imported_modules);
   if (!current_func_name_.empty() || !returned)
     return false;
   // A function that returns a view of its argument folds for any array.
