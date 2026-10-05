@@ -102,6 +102,9 @@ public:
   /// The object an unconstrained pointer points at: symbolic execution
   /// resolves a dereference of one to an invalid object, so a consumer can
   /// skip it, while an empty set still means "nothing constrained this".
+  /// It is inert, as that invalid object is: a store into it is dropped and a
+  /// load from it yields another unconstrained pointer. Sound relative to
+  /// symex's memory model, not to C's.
   static constexpr const char *nondet_object_name = "andersen::nondet";
 
   /// True iff \p object is that sentinel.

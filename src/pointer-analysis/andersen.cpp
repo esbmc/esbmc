@@ -249,6 +249,10 @@ void andersent::solve()
     if (!pts[n].empty())
       enqueue(n);
 
+  // The nondet sentinel is inert; see nondet_object_name.
+  const node_id *found = find_node(nondet_object_expr());
+  const node_id nondet = found ? *found : TOP;
+
   while (!worklist.empty())
   {
     const node_id n = worklist.back();
@@ -267,7 +271,12 @@ void andersent::solve()
         enqueue(p);
 
       for (node_id o : targets)
-        if (o != TOP && add_copy_edge(o, p))
+        if (o == nondet)
+        {
+          if (pts[p].insert(o).second)
+            enqueue(p);
+        }
+        else if (o != TOP && add_copy_edge(o, p))
           enqueue(p);
     }
 
@@ -279,7 +288,7 @@ void andersent::solve()
         enqueue(TOP);
 
       for (node_id o : targets)
-        if (o != TOP && add_copy_edge(q, o))
+        if (o != TOP && o != nondet && add_copy_edge(q, o))
           enqueue(o);
     }
 
