@@ -49,7 +49,8 @@ reachability_treet::reachability_treet(
   target_template = std::move(target);
 
   readonly_global_opt =
-    options.get_bool_option("cswitch-skip-readonly-globals");
+    options.get_bool_option("cswitch-skip-readonly-globals") &&
+    !options.get_bool_option("no-cswitch-reduction");
   scan_program_writes();
 }
 

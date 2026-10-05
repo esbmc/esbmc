@@ -46,6 +46,7 @@ execution_statet::execution_statet(
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
   legacy_guard = options.get_bool_option("legacy-guard");
+  no_cswitch_reduction = options.get_bool_option("no-cswitch-reduction");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -157,6 +158,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
   legacy_guard = ex.legacy_guard;
+  no_cswitch_reduction = ex.no_cswitch_reduction;
   stack_limit = ex.stack_limit;
   no_return_value_opt = ex.no_return_value_opt;
 
@@ -894,6 +896,13 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
+    // __ESBMC_rounding_mode is excluded by the context-switch point
+    // reduction; --no-cswitch-reduction keeps it.
+    auto is_internal_name = [this](const std::string &n) {
+      return is_esbmc_internal_symbol(n) &&
+             !(no_cswitch_reduction && n == "c:@__ESBMC_rounding_mode");
+    };
+
     // Resolve pointer parameters/locals BEFORE applying the internal-name
     // filter. The pointer variable itself may live in pthread_lib (e.g. the
     // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
@@ -922,7 +931,7 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
-          if (is_esbmc_internal_symbol(n))
+          if (is_internal_name(n))
             continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
@@ -935,7 +944,7 @@ void execution_statet::get_expr_globals(
 
     // Drop the pointer symbol itself if it is an internal pthread_lib name,
     // unless we've resolved it to a user global above.
-    if (is_esbmc_internal_symbol(name) && !point_to_global)
+    if (is_internal_name(name) && !point_to_global)
       return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
@@ -1167,6 +1176,10 @@ bool execution_statet::has_cswitch_point_occured() const
 
   if (cswitch_forced)
     return true;
+
+  if (no_cswitch_reduction)
+    return !thread_last_reads[active_thread].empty() ||
+           !thread_last_writes[active_thread].empty();
 
   // Accesses to pthread synchronisation objects (mutex, condition variable,
   // rwlock, barrier, spinlock) and to the join variables read by

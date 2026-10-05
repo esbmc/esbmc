@@ -567,6 +567,8 @@ public:
   /** Use the old context-switch guard and unviable-interleaving handling
    *  (--legacy-guard). */
   bool legacy_guard;
+  /** Disable the context-switch point reduction (--no-cswitch-reduction). */
+  bool no_cswitch_reduction;
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */

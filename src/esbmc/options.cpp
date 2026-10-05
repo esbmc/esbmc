@@ -433,6 +433,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"legacy-guard",
      NULL,
      "use the old context-switch guard and unviable-interleaving handling"},
+    {"no-cswitch-reduction",
+     NULL,
+     "disable the context-switch point reduction: switch on every access to "
+     "__ESBMC_rounding_mode, pthread sync objects and join variables, and "
+     "ignore --cswitch-skip-readonly-globals"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "skip context switches on globals that are never written anywhere "
