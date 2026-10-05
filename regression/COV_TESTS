@@ -2211,6 +2211,9 @@ regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc/fam_false_2
 regression/esbmc/fam_true_4
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind_fail
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind_thread
 regression/goto-transcoder/cbmc_kani_property_class
 regression/goto-transcoder/cbmc_kani_property_class_default
 regression/goto-transcoder/cbmc_kani_property_class_fail
