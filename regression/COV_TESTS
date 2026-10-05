@@ -2222,3 +2222,5 @@ regression/esbmc/deref_union_array_read
 regression/esbmc/deref_union_array_read_fail
 regression/esbmc/deref_union_array_write
 regression/esbmc/deref_union_array_write_fail
+regression/function_contract/github_4219_old_in_forall_ptr_to_array
+regression/function_contract/github_4219_old_in_forall_ptr_to_array_fail

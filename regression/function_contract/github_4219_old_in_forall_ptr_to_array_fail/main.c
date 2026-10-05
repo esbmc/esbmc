@@ -1,5 +1,5 @@
-// `int (*r)[N]` names a whole array, so __ESBMC_old((*r)[j]) snapshots *r and
-// reads the snapshot back as an array value through the pointer.
+// As github_4219_old_in_forall_ptr_to_array, but the body adds 2, which the
+// ensures clause rejects.
 #define N 4
 #define BOUND 100
 
@@ -14,7 +14,7 @@ void bump(int (*r)[N])
   __ESBMC_assigns(*r);
 
   for (unsigned i = 0; i < N; i++)
-    (*r)[i] = (*r)[i] + 1;
+    (*r)[i] = (*r)[i] + 2;
 }
 
 int main(void)
