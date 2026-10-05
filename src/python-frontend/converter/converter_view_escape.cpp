@@ -54,6 +54,11 @@ const char *const unfolded_call_error =
 const char *const inline_runtime_slice_error =
   "TypeError: an N-D numpy slice with run-time bounds must be assigned to a "
   "name";
+const char *const view_rebind_error =
+  "TypeError: rebinding a numpy view name to another view is not supported";
+const char *const view_path_conflict_error =
+  "TypeError: binding a numpy view name to views with a different shape, "
+  "strides or storage on different paths is not supported";
 const char *const escaped_read_error =
   "TypeError: reading a numpy view after it escaped to an unknown call is "
   "not supported";
@@ -1131,4 +1136,41 @@ void python_converter::get_unfolded_function_definition(
     return;
   }
   get_function_definition(function_node);
+}
+
+// A view name bound again to a view the existing entry does not describe:
+// on a conditional path the two would have to be merged, which one entry
+// cannot represent.
+void python_converter::reject_numpy_view_rebind() const
+{
+  throw std::runtime_error(
+    block_nesting_ == function_body_depth_ + 1 ? view_rebind_error
+                                               : view_path_conflict_error);
+}
+
+bool python_converter::accepts_numpy_view_binding(
+  const std::string &lhs_id,
+  const numpy_scalar_pointer_view_infot &candidate,
+  const typet &view_ptr_type,
+  const exprt &source) const
+{
+  const auto bound = numpy_pointer_view_info_.find(lhs_id);
+  if (bound == numpy_pointer_view_info_.end())
+    return true;
+  const numpy_scalar_pointer_view_infot &current = bound->second;
+  const symbolt *symbol = symbol_table_.find_symbol(lhs_id);
+  const bool same_layout =
+    symbol && symbol->get_type() == view_ptr_type && !current.is_symbolic() &&
+    current.length == candidate.length && current.stride == candidate.stride &&
+    current.readonly == candidate.readonly &&
+    current.shape == candidate.shape && current.strides == candidate.strides;
+  const bool same_storage =
+    source.is_symbol() &&
+    numpy_view_storage_root(source.identifier().as_string()) ==
+      numpy_view_storage_root(lhs_id);
+  if (same_layout && same_storage)
+    return true;
+  if (block_nesting_ != function_body_depth_ + 1)
+    throw std::runtime_error(view_path_conflict_error);
+  return false;
 }

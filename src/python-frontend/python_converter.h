@@ -2456,6 +2456,16 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  void reject_numpy_view_rebind() const;
+  /// Whether the assignment target may be registered as a view described by
+  /// `candidate`: it is not a view yet, or it already is one with the same
+  /// layout over the same storage. A different view on a conditional path
+  /// is rejected.
+  bool accepts_numpy_view_binding(
+    const std::string &lhs_id,
+    const numpy_scalar_pointer_view_infot &candidate,
+    const typet &view_ptr_type,
+    const exprt &source) const;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(
