@@ -1,0 +1,4 @@
+CORE
+timer.ld
+--ld-props props.yaml --unwind 2 --no-unwinding-assertions --function ref_entry --secondary-entry-point ref.c
+^VERIFICATION SUCCESSFUL$

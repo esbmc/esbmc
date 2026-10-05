@@ -19,6 +19,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"class",
      boost::program_options::value<std::string>()->value_name("cname"),
      "Set the class/namespace name where the function is inside"},
+    {"secondary-entry-point",
+     NULL,
+     "When two input files from different language modules each build an "
+     "__ESBMC_main, keep the second one's wrapper instead of erroring, "
+     "available as __ESBMC_secondary_main for a tool to target directly"},
     {"claim",
      boost::program_options::value<std::vector<int>>()->value_name("nr"),
      "Only check specific claims"},

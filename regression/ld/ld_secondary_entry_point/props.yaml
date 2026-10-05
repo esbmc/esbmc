@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Q1 || !IN1"
+    description: "Q1 follows IN1 directly"
