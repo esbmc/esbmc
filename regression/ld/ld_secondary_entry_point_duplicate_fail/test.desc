@@ -1,0 +1,5 @@
+CORE
+timer.ld
+--ld-props props.yaml --unwind 2 --no-unwinding-assertions --secondary-entry-point main.c main.cpp
+^ERROR: __ESBMC_secondary_main already defined$
+^ERROR: CONVERSION ERROR$
