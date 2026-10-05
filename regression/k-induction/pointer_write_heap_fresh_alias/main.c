@@ -1,3 +1,5 @@
+// KNOWNBUG: the inductive step no longer skips objects a run-once loop
+// allocates, which was unsound (pointer_write_heap_fresh_kept_fail).
 // p holds &x or an object the loop allocates. The inductive step havocs x,
 // pins p to x or an unresolved address, and proves y, which no write
 // reaches.
