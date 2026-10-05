@@ -341,5 +341,69 @@ class PythonModulePathTest(unittest.TestCase):
             self.assertTrue(os.path.isabs(entry), entry)
 
 
+class FallThroughTest(unittest.TestCase):
+    """What a violation that decides nothing for the property under check does.
+
+    These pin behaviour the chain in parse_result had only implicitly: a
+    violated property that says nothing about the property being checked falls
+    through to the SUCCESSFUL test, so an output carrying both verdicts is
+    read as TRUE. Characterisation tests, so a refactoring cannot move it.
+    """
+
+    def verdict(self, output, prop):
+        return wrapper.get_result_string(wrapper.parse_result(output, prop))
+
+    LEAKLESS_FAILURE = """
+Violated property:
+  file main.c line 7 column 3 function main
+  dereference failure: invalid pointer
+
+** Results:
+main.c, function main
+  FAILED       [main.deref.1]  line 7  dereference failure: invalid pointer
+
+VERIFICATION FAILED
+"""
+
+    def test_memcleanup_without_a_leak_is_inconclusive(self):
+        self.assertEqual(
+            self.verdict(self.LEAKLESS_FAILURE, wrapper.Property.memcleanup),
+            "Unknown")
+
+    def test_a_run_carrying_both_verdicts_falls_through_to_true(self):
+        self.assertEqual(
+            self.verdict(self.LEAKLESS_FAILURE + "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.memcleanup),
+            "TRUE")
+
+    def test_reach_on_the_unreachability_intrinsic_is_inconclusive(self):
+        output = """
+Violated property:
+  file main.c line 7 column 3 function main
+  reachability: unreachable code reached
+
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 7  reachability: unreachable code reached
+
+VERIFICATION FAILED
+"""
+        self.assertEqual(self.verdict(output, wrapper.Property.reach), "Unknown")
+
+    def test_memory_on_a_comment_no_rule_matches_is_inconclusive(self):
+        output = """
+Violated property:
+  file main.c line 7 column 3 function main
+  unwinding assertion loop 3 is not what this tests
+
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 7  some comment no rule names
+
+VERIFICATION FAILED
+"""
+        self.assertEqual(self.verdict(output, wrapper.Property.memory), "Unknown")
+
+
 if __name__ == "__main__":
     unittest.main()

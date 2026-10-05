@@ -220,6 +220,39 @@ def python_property(property_file_content):
   return None
 
 
+def classify_violation(violated, prop):
+  """What a violated property implies for the property under check, or None.
+
+  None means this violation decides nothing here, which parse_result reads as
+  "keep looking" -- a run that also printed SUCCESSFUL is then read as true.
+  """
+  if "unwinding assertion loop" in violated:
+    return Result.err_unwinding_assertion
+
+  if prop in PYTHON_EXCEPTION_FAMILIES:
+    return classify_python_violation(violated, prop)
+
+  if prop == Property.memcleanup:
+    return Result.fail_memcleanup if MEMORY_LEAK in violated else None
+
+  if prop == Property.termination:
+    return Result.fail_termination
+
+  if prop == Property.memory:
+    return classify_memory_violation(violated)
+
+  if prop == Property.overflow:
+    return Result.fail_overflow
+
+  if prop == Property.reach:
+    return None if UNREACHABILITY_INTRINSIC in violated else Result.fail_reach
+
+  if prop == Property.datarace:
+    return Result.fail_race
+
+  return None
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -237,39 +270,10 @@ def parse_result(the_output, prop):
   if "Chosen solver doesn\'t support floating-point numbers" in the_output:
     return Result.force_fp_mode
 
-  memory_leak = MEMORY_LEAK
-  unreachability_intrinsic = UNREACHABILITY_INTRINSIC
-
   if "VERIFICATION FAILED" in the_output:
-    violated = violated_property_text(the_output)
-
-    if "unwinding assertion loop" in violated:
-      return Result.err_unwinding_assertion
-
-    if prop in PYTHON_EXCEPTION_FAMILIES:
-      return classify_python_violation(violated, prop)
-
-    if prop == Property.memcleanup:
-      if memory_leak in violated:
-        return Result.fail_memcleanup
-
-    if prop == Property.termination:
-      return Result.fail_termination
-
-    if prop == Property.memory:
-      memory_result = classify_memory_violation(violated)
-      if memory_result is not None:
-        return memory_result
-
-    if prop == Property.overflow:
-      return Result.fail_overflow
-
-    if prop == Property.reach:
-      if unreachability_intrinsic not in violated:
-        return Result.fail_reach
-
-    if prop == Property.datarace:
-      return Result.fail_race
+    decided = classify_violation(violated_property_text(the_output), prop)
+    if decided is not None:
+      return decided
 
   if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
