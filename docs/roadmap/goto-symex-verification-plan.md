@@ -823,6 +823,7 @@ this document** — each is a prioritised target for the cited harness.
 
 
 | **R86** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R79's open note (PR #8108), §15 M9 (R86); **FIXED**, same entry | **A temporary in one arm of a conditional was destroyed whichever arm ran.** Lowering `c ? a : b` scheduled the destructor of every temporary materialized in either arm for the end of the full-expression, unconditionally. `int x = c ? P(6).v : 0;` ran `~P` on an object never constructed when `c` was false; so did the right operand of `&&` and `||`, which are lowered as conditionals. A destructor count read afterwards was wrong in both directions. | `goto_convertt::remove_sideeffects` (the `if` arm) and `guard_arm_destructors`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/conditional_arm_temporary{,_fail}` | — | **Fixed**: save the condition in a fresh flag before either arm runs and guard each arm's destructors by it. |
+| **R105** | **High (false SUCCESSFUL and false FAILED, default configuration, C)** — found probing the `$vector-cmp$` residual of §15 M9 (R65), §15 M9 (R105); **FIXED**, same entry | **A compound literal was initialised where its declaration was hoisted, not where it is evaluated.** The C frontend pushed the literal's declaration, initialiser included, into the enclosing block ahead of the statement being converted. In an unbraced loop body that runs once, before the loop; in an unbraced `if` body it runs whether or not the branch is taken; before a `case` label it is unreachable and is dropped, so the literal reads nondet. `for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;` left `hit` at 0. | `CompoundLiteralExprClass` in `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/compound_literal_per_evaluation{,_fail}` | — | **Fixed**: the declaration stays in the enclosing block, which is the literal's lifetime (C17 6.5.2.5p5), and the literal becomes `(cl = init, cl)`, so it is initialised each time it is evaluated. |
 | **R89** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8122's open note, §15 M9 (R89); **FIXED**, same entry | **Five atomic builtins had no body.** `instantiate_gcc_polymorphic_builtin` opened the atomic section for `__sync_bool_compare_and_swap`, `__sync_val_compare_and_swap`, `__sync_lock_test_and_set`, `__sync_lock_release` and the generic `__atomic_exchange`, then emitted nothing: the object kept its value, the result was nondet, and the atomic section was never closed, so the calling thread could not be preempted again. The two compare-and-swap names also had each other's return type. | `instantiate_gcc_polymorphic_builtin`, `instantiate_sync_compare_and_swap` and `is_gcc_polymorphic_builtin`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/sync_swap_builtins{,_fail}`, `sync_lock_release_race_fail` | — | **Fixed**: give each its GCC semantics inside the atomic section and close it; `bool` for the bool variant, the object's type for the val variant. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
@@ -10088,6 +10089,41 @@ the elidable copy into a parameter is not peeled. A branch that calls a
 function returning the class (`b ? make(1) : C(2)`) reports an invalid free in
 every mode, C++17 included; before this change C++14 reported a wrong count
 instead.
+
+### M9 (R105) — 2026-10-02, a compound literal initialised before its statement
+
+Probing R65's note that the C frontend's `$vector-cmp$` binding declares its
+temporary in `current_block` found the same placement, with its initialiser,
+in compound literals. The declaration is pushed into the enclosing block
+before the statement that contains the literal, so the literal is initialised
+there and not where it is evaluated (C17 6.5.2.5p5). Three shapes go wrong:
+
+- In an unbraced loop body the literal is built once, before the loop.
+  `int i = 5, hit = 0; for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;
+  assert(hit == 0);` is **SUCCESSFUL** on master and fails natively. C17
+  6.5.2.5p16's own example, a literal under a `goto` label, never terminates.
+- In an unbraced `if` body the initialiser runs whether or not the branch is
+  taken, side effects included.
+- Before a `case` label the declaration is unreachable and goto-convert drops
+  it, so `case 0: return (struct P){5}.x;` returns a nondet value.
+
+**Fixed** by keeping only the declaration in the enclosing block, which is the
+literal's lifetime, and lowering the literal to `(cl = init, cl)`, an lvalue
+once side effects are removed, so `&(struct s){...}` and array decay are
+unchanged. `compound_literal_per_evaluation` (the loop, `if` and `case`
+shapes) is FAILED on master and `compound_literal_per_evaluation_fail` is
+SUCCESSFUL on master; both match native execution with the fix. This build had
+Z3 only, so both were run under Z3. `github_4715_irep2_native_body_decl_nil_loc_01`
+pinned the initialiser's empty location; the assignment now carries the
+literal's location and the pattern is updated. The 201 other regression tests
+whose C source contains a compound literal pass.
+
+Not fixed: a local whose declaration a jump skips keeps the caller frame's L1
+name, because a new frame copies its caller's `level1` and only `symex_decl`
+assigns a fresh instance. `switch (k) { int y; case 0: ... }` in a recursive
+function is a false FAILED on master and here: the inner call overwrites the
+outer `y`. A compound literal under a `case` label now has the right value but
+shares its object the same way, as does the `$vector-cmp$` temporary.
 
 ---
 
