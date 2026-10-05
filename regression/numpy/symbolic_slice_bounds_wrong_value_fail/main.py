@@ -1,0 +1,9 @@
+import numpy as np
+
+start = nondet_int()
+stop = nondet_int()
+__ESBMC_assume(start == 1)
+__ESBMC_assume(stop == 3)
+a = np.array([10, 20, 30, 40])
+s = a[start:stop]
+assert len(s) == 3
