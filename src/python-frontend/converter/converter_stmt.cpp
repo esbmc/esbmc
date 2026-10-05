@@ -8245,7 +8245,7 @@ exprt python_converter::get_block(
     nlohmann::json rewritten_element;
     const nlohmann::json &element =
       resolve_numpy_view_containers(raw_element, rewritten_element);
-    reject_escaped_numpy_view_use(element);
+    check_numpy_view_statement(element);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)
@@ -8286,7 +8286,7 @@ exprt python_converter::get_block(
       // saved state is empty, so this matches the previous behaviour.
       std::vector<std::string> saved_globals = global_declarations;
       std::vector<std::string> saved_loads = local_loads;
-      get_function_definition(element);
+      get_unfolded_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
 

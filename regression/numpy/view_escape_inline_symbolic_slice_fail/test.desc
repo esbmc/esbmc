@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 --incremental-bmc
 ^ERROR: TypeError: an N-D numpy slice with run-time bounds must be assigned to a name

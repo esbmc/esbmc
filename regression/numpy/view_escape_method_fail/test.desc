@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 --incremental-bmc
 ^ERROR: TypeError: passing a numpy view to a method is not supported

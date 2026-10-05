@@ -1556,6 +1556,29 @@ private:
     const std::string &lhs_id,
     const std::string &rhs_id);
   void reject_multi_path_numpy_view_return(const nlohmann::json &call);
+  bool numpy_subscript_yields_view(const nlohmann::json &node) const;
+  bool holds_numpy_view(const nlohmann::json &node) const;
+  void reject_numpy_view_comprehension(const nlohmann::json &node) const;
+  /// The per-statement numpy view checks: comprehensions over views and uses
+  /// of storage that escaped.
+  void check_numpy_view_statement(const nlohmann::json &statement) const;
+  void reject_unfoldable_numpy_view_call(const nlohmann::json &call);
+  void reject_numpy_view_argument_use(const nlohmann::json &call);
+  void reject_numpy_view_method_call(const nlohmann::json &func) const;
+  void reject_numpy_view_callee(const nlohmann::json &call);
+  void reject_inline_runtime_numpy_slice(const nlohmann::json &call) const;
+  void reject_numpy_view_container_store(const nlohmann::json &ast_node);
+  bool is_numpy_view_syntax(
+    const nlohmann::json &value,
+    const std::string &scope,
+    std::size_t depth) const;
+  bool is_numpy_storage_syntax(
+    const nlohmann::json &value,
+    const std::string &scope,
+    std::size_t depth) const;
+  bool is_fold_only_numpy_function(const nlohmann::json &function_node) const;
+  /// Converts a function definition unless every call to it is folded.
+  void get_unfolded_function_definition(const nlohmann::json &function_node);
   /// Records the storage of every view passed to a call that is not folded.
   void track_numpy_view_call_escape(const nlohmann::json &call);
   void reject_escaped_numpy_view_read(const nlohmann::json &node) const;
@@ -2480,6 +2503,9 @@ private:
   /// Simple functions whose body returns a numpy view name: sound only
   /// through a folded call.
   std::unordered_set<std::string> numpy_view_return_functions_;
+  /// Simple functions whose body was not converted because every call
+  /// passes a numpy view and is folded.
+  std::unordered_set<std::string> numpy_fold_only_functions_;
   /// Storage roots passed to a call the frontend could not fold.
   std::unordered_set<std::string> numpy_escaped_storage_;
   /// Names bound to a read-only numpy view that is not a pointer view.

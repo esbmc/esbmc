@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 --incremental-bmc
 ^ERROR: TypeError: numpy views in a comprehension or generator are not supported
