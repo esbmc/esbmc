@@ -5496,18 +5496,8 @@ bool python_converter::try_tagged_var_assign(
 }
 
 nlohmann::json
-python_converter::rewrite_assign_rhs_node(const nlohmann::json &ast_node)
+python_converter::rewrite_assign_rhs_node(const nlohmann::json &ast_node) const
 {
-  if (ast_node.contains("value"))
-    if (
-      std::optional<nlohmann::json> folded =
-        fold_numpy_view_call(ast_node["value"]))
-    {
-      nlohmann::json folded_assign = ast_node;
-      folded_assign["value"] = std::move(*folded);
-      return rewrite_assign_rhs_node(folded_assign);
-    }
-
   nlohmann::json effective_ast_node = ast_node;
   if (
     ast_node.contains("value") && ast_node["value"].is_object() &&
@@ -7924,8 +7914,10 @@ void python_converter::get_return_statements(
   if (
     is_user_defined_function && returns_name &&
     contains_tracked_numpy_view_name(ast_node["value"]))
-    throw std::runtime_error(
-      "TypeError: returning a copied numpy view is not supported");
+  {
+    reject_or_defer_numpy_view_return(ast_node, target_block);
+    return;
+  }
   const locationt return_location = get_location_from_decl(ast_node);
   const std::string return_file = return_location.get_file().as_string();
   if (
@@ -7956,8 +7948,8 @@ void python_converter::get_return_statements(
       }
       if (root_is_tracked_numpy || root_is_numpy_param)
       {
-        throw std::runtime_error(
-          "TypeError: returning a copied numpy view is not supported");
+        reject_or_defer_numpy_view_return(ast_node, target_block);
+        return;
       }
     }
   }
@@ -8256,7 +8248,7 @@ exprt python_converter::get_block(
     case StatementType::VARIABLE_ASSIGN:
     {
       // Add an assignment to the block
-      get_var_assign(element, block);
+      get_folded_var_assign(element, block);
       break;
     }
     case StatementType::IF_STATEMENT:

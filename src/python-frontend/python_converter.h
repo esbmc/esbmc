@@ -1534,10 +1534,24 @@ private:
   bool is_closed_return_expression(
     const nlohmann::json &value,
     const nlohmann::json &params) const;
-  /// The return expression of a simple function called with a numpy view,
-  /// with the call's arguments substituted; nullopt when it cannot be folded.
+  std::optional<nlohmann::json>
+  simple_call_return_value(const nlohmann::json &call) const;
+  /// The return expression of a simple function that receives or returns a
+  /// numpy view, with the call's arguments substituted; nullopt when it
+  /// cannot be folded.
   std::optional<nlohmann::json>
   fold_numpy_view_call(const nlohmann::json &call);
+  /// An assignment whose value is a foldable call is converted as the
+  /// assignment of the folded expression.
+  void
+  get_folded_var_assign(const nlohmann::json &ast_node, codet &target_block);
+  /// A `return` of a numpy view name: rejected, unless the function is simple
+  /// enough for every supported call to be folded, in which case the body
+  /// only fails if it is reached.
+  void reject_or_defer_numpy_view_return(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  void reject_multi_path_numpy_view_return(const nlohmann::json &call);
   /// Records the storage of every view passed to a call that is not folded.
   void track_numpy_view_call_escape(const nlohmann::json &call);
   void reject_escaped_numpy_view_read(const nlohmann::json &node) const;
@@ -1794,7 +1808,7 @@ private:
   // or else defers to rewrite_numpy_method_call_node for any other numpy
   // method-call RHS. Split out to keep get_var_assign's own decision count
   // from growing as more special-cased RHS rewrites land there.
-  nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node);
+  nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node) const;
 
   // Classifies a Call node as a numpy method call: (is_a_method_call,
   // method_name, method_base, is_a_supported_copy_method,
@@ -2431,6 +2445,9 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  /// Simple functions whose body returns a numpy view name: sound only
+  /// through a folded call.
+  std::unordered_set<std::string> numpy_view_return_functions_;
   /// Storage roots passed to a call the frontend could not fold.
   std::unordered_set<std::string> numpy_escaped_storage_;
   /// Names bound to a read-only numpy view that is not a pointer view.

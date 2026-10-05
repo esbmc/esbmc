@@ -2,4 +2,4 @@ CORE
 main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
-line +12 +assertion
+line +13 +assertion

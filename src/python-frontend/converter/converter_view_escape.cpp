@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 
 #include <functional>
+#include <map>
 #include <set>
 #include <stdexcept>
 
@@ -15,6 +16,11 @@ namespace
 const char *const view_use_error =
   "TypeError: passing a numpy view to a function that is not a single return "
   "expression over its parameters is not supported";
+const char *const returned_view_error =
+  "TypeError: returning a copied numpy view is not supported";
+const char *const multi_path_return_error =
+  "TypeError: returning numpy views from more than one path is not "
+  "supported";
 const char *const escaped_read_error =
   "TypeError: reading a numpy view after it escaped to an unknown call is "
   "not supported";
@@ -87,6 +93,109 @@ bool is_nested_block_key(const std::string &key)
     "body", "orelse", "finalbody", "handlers"};
   return keys.count(key) != 0;
 }
+
+bool contains_call(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  for (const auto &child : node)
+    if (contains_call(child))
+      return true;
+  return false;
+}
+
+// Replaces each local alias of a straight-line body by the expression it
+// was bound to.
+struct alias_inliner
+{
+  std::map<std::string, nlohmann::json> aliases;
+  std::map<std::string, std::size_t> uses;
+
+  nlohmann::json inlined(const nlohmann::json &node)
+  {
+    if (is_name(node))
+    {
+      const auto alias = aliases.find(node["id"].get<std::string>());
+      if (alias == aliases.end())
+        return node;
+      ++uses[alias->first];
+      return alias->second;
+    }
+    nlohmann::json copy = node;
+    if (node.is_object() || node.is_array())
+      for (auto it = copy.begin(); it != copy.end(); ++it)
+        *it = inlined(*it);
+    return copy;
+  }
+
+  // An alias used twice would evaluate its calls twice.
+  bool duplicates_a_call() const
+  {
+    for (const auto &[name, count] : uses)
+      if (count > 1 && contains_call(aliases.at(name)))
+        return true;
+    return false;
+  }
+};
+
+// The bare name a local alias statement binds, or nullptr. The annotation
+// pre-pass turns an inferred `x = e` into `x: T = e`.
+const nlohmann::json *alias_target(const nlohmann::json &stmt)
+{
+  const std::string type = stmt.value("_type", "");
+  const nlohmann::json *target = nullptr;
+  if (type == "Assign" && stmt["targets"].size() == 1)
+    target = &stmt["targets"][0];
+  else if (type == "AnnAssign" && !stmt["value"].is_null())
+    target = &stmt["target"];
+  return target && is_name(*target) ? target : nullptr;
+}
+
+// The return expression of a straight-line body -- local aliases followed by
+// one `return` -- with each alias inlined; nullopt for any other body, or
+// when inlining would evaluate a call more than once.
+std::optional<nlohmann::json>
+straight_line_return_value(const nlohmann::json &body)
+{
+  alias_inliner inliner;
+  for (const auto &stmt : body)
+  {
+    if (
+      stmt.value("_type", "") == "Return" && stmt.contains("value") &&
+      !stmt["value"].is_null())
+    {
+      nlohmann::json value = inliner.inlined(stmt["value"]);
+      if (inliner.duplicates_a_call())
+        return std::nullopt;
+      return value;
+    }
+    const nlohmann::json *target = alias_target(stmt);
+    if (!target)
+      return std::nullopt;
+    inliner.aliases[(*target)["id"].get<std::string>()] =
+      inliner.inlined(stmt["value"]);
+  }
+  return std::nullopt;
+}
+
+// Every `return` value under `node`, through nested blocks but not nested
+// definitions.
+void collect_return_values(
+  const nlohmann::json &node,
+  std::vector<nlohmann::json> &values)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
+    return;
+  if (type == "Return" && node.contains("value") && !node["value"].is_null())
+    values.push_back(node["value"]);
+  for (const auto &child : node)
+    collect_return_values(child, values);
+}
 } // namespace
 
 std::string
@@ -152,16 +261,37 @@ bool python_converter::is_closed_return_expression(
   return closed;
 }
 
+// The value a call to a simple function returns, over the callee's own
+// parameter names.
+std::optional<nlohmann::json>
+python_converter::simple_call_return_value(const nlohmann::json &call) const
+{
+  if (std::optional<nlohmann::json> value = select_return_value_for_call(call))
+    return value;
+
+  const nlohmann::json func_node = json_utils::try_find_function(
+    (*ast_json)["body"], call["func"]["id"].get<std::string>());
+  if (
+    func_node.empty() ||
+    call.value("keywords", nlohmann::json::array()).size() ||
+    func_node["args"]["args"].size() != call["args"].size())
+    return std::nullopt;
+  for (const auto &arg : call["args"])
+    if (!is_name(arg) && arg.value("_type", "") != "Constant")
+      return std::nullopt;
+  return straight_line_return_value(func_node["body"]);
+}
+
 std::optional<nlohmann::json>
 python_converter::fold_numpy_view_call(const nlohmann::json &call)
 {
-  if (!is_named_call(call) || !contains_tracked_numpy_view_name(call["args"]))
+  if (!is_named_call(call))
     return std::nullopt;
   const std::string func_name = call["func"]["id"].get<std::string>();
   if (is_value_builtin(func_name))
     return std::nullopt;
 
-  std::optional<nlohmann::json> value = select_return_value_for_call(call);
+  const std::optional<nlohmann::json> value = simple_call_return_value(call);
   if (!value)
     return std::nullopt;
   const nlohmann::json func_node =
@@ -171,14 +301,82 @@ python_converter::fold_numpy_view_call(const nlohmann::json &call)
     references_name(*value, func_name) ||
     !is_closed_return_expression(*value, func_node["args"]["args"]))
     return std::nullopt;
-  return substitute_call_arguments(*value, call);
+
+  // Fold only where a view is involved: one passed in, or one returned.
+  nlohmann::json folded = substitute_call_arguments(*value, call);
+  if (
+    !contains_tracked_numpy_view_name(call["args"]) &&
+    !is_numpy_view_copy_expr(folded))
+    return std::nullopt;
+  return folded;
+}
+
+void python_converter::get_folded_var_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  std::optional<nlohmann::json> folded =
+    ast_node.contains("value") ? fold_numpy_view_call(ast_node["value"])
+                               : std::nullopt;
+  if (!folded)
+    return get_var_assign(ast_node, target_block);
+  nlohmann::json folded_assign = ast_node;
+  folded_assign["value"] = std::move(*folded);
+  get_var_assign(folded_assign, target_block);
+}
+
+void python_converter::reject_or_defer_numpy_view_return(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json func_node = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (func_node.empty() || !straight_line_return_value(func_node["body"]))
+    throw std::runtime_error(returned_view_error);
+
+  // A folded call never runs this body and any other call is rejected where
+  // it is converted; a path that reaches the body anyway fails here.
+  numpy_view_return_functions_.insert(func_node["name"].get<std::string>());
+  code_assertt unsupported(gen_boolean(false));
+  unsupported.location() = get_location_from_decl(ast_node);
+  unsupported.location().user_provided(true);
+  unsupported.location().comment(
+    "returning a numpy view outside a folded call is not supported");
+  target_block.copy_to_operands(unsupported);
+}
+
+// A call that was not folded although its callee returns a view from one of
+// several paths: the caller cannot tell which metadata the result carries.
+void python_converter::reject_multi_path_numpy_view_return(
+  const nlohmann::json &call)
+{
+  const nlohmann::json func_node = json_utils::try_find_function(
+    (*ast_json)["body"], call["func"]["id"].get<std::string>());
+  std::vector<nlohmann::json> values;
+  if (!func_node.empty())
+    collect_return_values(func_node["body"], values);
+  if (values.size() < 2)
+    return;
+  for (const nlohmann::json &value : values)
+  {
+    const nlohmann::json returned = substitute_call_arguments(value, call);
+    if (
+      is_numpy_view_copy_expr(returned) ||
+      contains_tracked_numpy_view_name(returned))
+      throw std::runtime_error(multi_path_return_error);
+  }
 }
 
 void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
 {
-  if (!is_named_call(call) || !contains_tracked_numpy_view_name(call["args"]))
+  if (!is_named_call(call))
     return;
   const std::string func_name = call["func"]["id"].get<std::string>();
+  if (numpy_view_return_functions_.count(func_name) != 0)
+    throw std::runtime_error(returned_view_error);
+  reject_multi_path_numpy_view_return(call);
+  if (!contains_tracked_numpy_view_name(call["args"]))
+    return;
   if (is_value_builtin(func_name) || fold_numpy_view_call(call))
     return;
 
