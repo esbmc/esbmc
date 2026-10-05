@@ -316,6 +316,9 @@ public:
    */
   void execute_guard();
 
+  /** Old execute_guard, selected by --legacy-guard. */
+  void execute_legacy_guard(expr2tc &guard_expr);
+
   /**
    *  Attempt to explore a thread.
    *  Checks the current DFS state to see whether this thread has already been
@@ -561,6 +564,9 @@ public:
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
   bool interleaving_unviable;
+  /** Use the old context-switch guard and unviable-interleaving handling
+   *  (--legacy-guard). */
+  bool legacy_guard;
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */

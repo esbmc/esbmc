@@ -427,6 +427,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "do not not merge gotos when restoring the last paths after a "
      "context-switch"},
     {"no-por", NULL, "do not do partial order reduction"},
+    {"legacy-guard",
+     NULL,
+     "use the old context-switch guard and unviable-interleaving handling"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "skip context switches on globals that are never written anywhere "

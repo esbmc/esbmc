@@ -45,6 +45,7 @@ execution_statet::execution_statet(
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
+  legacy_guard = options.get_bool_option("legacy-guard");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -155,6 +156,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   symex_trace = ex.symex_trace;
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
+  legacy_guard = ex.legacy_guard;
   stack_limit = ex.stack_limit;
   no_return_value_opt = ex.no_return_value_opt;
 
@@ -204,11 +206,9 @@ void execution_statet::symex_step(reachability_treet &art)
   merge_gotos();
 
   // If current state guard is false, it shouldn't perform further context switch.
-  if (
-    !state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
-    interleaving_unviable = false;
-  else
-    interleaving_unviable = true;
+  if (!legacy_guard)
+    interleaving_unviable =
+      state.guard.is_false() && is_cur_state_guard_false(state.guard.as_expr());
 
   // Don't convert if it's a inductive instruction and we are running the base
   // case or forward condition
@@ -681,6 +681,12 @@ void execution_statet::execute_guard()
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
+  if (legacy_guard)
+  {
+    execute_legacy_guard(guard_expr);
+    return;
+  }
+
   // Check if the `pre_goto_guard` condition is false.
   if (pre_goto_guard.is_false())
   {
@@ -730,6 +736,36 @@ void execution_statet::execute_guard()
   if (active_thread != last_active_thread)
     target->assumption(
       guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+}
+
+void execution_statet::execute_legacy_guard(expr2tc &guard_expr)
+{
+  // Old behaviour: the switch assumption is skipped when the parent guard is
+  // false, and unviability is judged on the thread switched to.
+  expr2tc parent_guard;
+  if (!pre_goto_guard.is_true())
+    parent_guard = pre_goto_guard.as_expr();
+  else
+    parent_guard = threads_state[last_active_thread].guard.as_expr();
+
+  if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
+  {
+    cur_state->guard.make_false();
+    return;
+  }
+
+  state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
+  state_level2->rename(parent_guard);
+  do_simplify(parent_guard);
+
+  if (active_thread != last_active_thread)
+    target->assumption(
+      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+
+  if (
+    last_active_thread != active_thread &&
+    is_cur_state_guard_false(threads_state[active_thread].guard.as_expr()))
+    interleaving_unviable = true;
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
