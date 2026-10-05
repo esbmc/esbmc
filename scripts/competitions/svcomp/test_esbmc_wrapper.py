@@ -76,6 +76,107 @@ Violated property:
 VERIFICATION FAILED
 """
 
+# Python track outputs, captured from ESBMC 8.5.0 runs over programs built on
+# sv-benchmarks' python/_sv_verifier.py nondet module.
+
+PY_ZERODIVISION = """
+Violated property:
+  file p_zerodiv.py line 5 column 12 function main
+  uncaught exception: ZeroDivisionError
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 16)
+
+** Results:
+p_zerodiv.py
+  NOT CHECKED  [global.assertion.1]       line 0  uncaught exception
+  NOT CHECKED  [global.assertion.2]       line 0  uncaught exception: IndexError
+  NOT CHECKED  [global.assertion.3]       line 0  uncaught exception: ValueError
+p_zerodiv.py, function main
+  NOT CHECKED  [main.division-by-zero.1]  line 5  division by zero
+  FAILED       [main.assertion.1]         line 5  uncaught exception: ZeroDivisionError
+
+** 1 of 5 properties failed, 4 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_INDEXERROR = """
+Violated property:
+  file p_index.py line 6 column 12 function main
+  uncaught exception: IndexError
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 14)
+
+** Results:
+p_index.py, function main
+  FAILED       [main.assertion.1]  line 6  uncaught exception: IndexError
+
+** 1 of 4 properties failed, 3 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_TYPEERROR = """
+Violated property:
+  file p_type.py line 5 column 8 function main
+  uncaught exception: TypeError
+
+** Results:
+p_type.py, function main
+  FAILED       [main.assertion.1]  line 5  uncaught exception: TypeError
+
+** 1 of 5 properties failed, 4 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_ASSERTION = """
+Violated property:
+  file p_assert2.py line 5 column 4 function main
+  assertion x != 3
+  x != 3
+
+** Results:
+p_assert2.py, function main
+  FAILED       [main.assertion.1]  line 5  assertion x != 3
+
+** 1 of 1 properties failed
+
+VERIFICATION FAILED
+"""
+
+# ValueError is in no property of the Python track, so no run that escapes one
+# says anything about any of the four properties.
+PY_VALUEERROR = """
+Violated property:
+  file p_raise_value.py line 6 column 8 function main
+  uncaught exception: ValueError
+
+** Results:
+p_raise_value.py, function main
+  FAILED       [main.assertion.1]  line 6  uncaught exception: ValueError
+
+** 1 of 4 properties failed, 3 not checked
+
+VERIFICATION FAILED
+"""
+
+# ESBMC's own list model failing internally on a correct program: the comment
+# carries no exception type, exactly like `raise AssertionError(msg)` does.
+# Reporting this as an assertion violation is the -16 answer of esbmc #7628's
+# sibling on bm_fannkuch_det.py.
+PY_MODEL_FAILURE = """
+Violated property:
+  file list.c line 108 column 3 function __ESBMC_list_size
+  TypeError: object of this type has no len()
+
+** Results:
+list.c, function __ESBMC_list_size
+  FAILED       [__ESBMC_list_size.assertion.1]  line 108  TypeError: object of this type has no len()
+
+** 1 of 3 properties failed, 2 not checked
+
+VERIFICATION FAILED
+"""
+
 
 class ParseResultTest(unittest.TestCase):
     def verdict(self, output, prop):
@@ -112,6 +213,94 @@ class ParseResultTest(unittest.TestCase):
             self.verdict("** 0 of 3 properties failed, 3 passed\n"
                          "VERIFICATION SUCCESSFUL\n", wrapper.Property.reach),
             "TRUE")
+
+
+class PythonPropertyTest(unittest.TestCase):
+    """The Python track scores one exception family per property file.
+
+    One ESBMC run checks every family at once, so the family a run falsified
+    has to be read off the violated-property comment. Crediting a violation to
+    the wrong family is a wrong answer, worth -16.
+    """
+
+    def verdict(self, output, prop):
+        return wrapper.get_result_string(wrapper.parse_result(output, prop))
+
+    def test_zerodivision_falsifies_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_arithmetic), "FALSE")
+
+    def test_zerodivision_says_nothing_about_data_lookup(self):
+        self.assertEqual(
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_datalookup), "Unknown")
+
+    def test_zerodivision_says_nothing_about_assertion_safety(self):
+        self.assertEqual(
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_assertion), "Unknown")
+
+    def test_indexerror_falsifies_data_lookup(self):
+        self.assertEqual(
+            self.verdict(PY_INDEXERROR, wrapper.Property.py_datalookup), "FALSE")
+
+    def test_typeerror_falsifies_dynamic_typing(self):
+        self.assertEqual(
+            self.verdict(PY_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+
+    def test_typeerror_says_nothing_about_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_TYPEERROR, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_assert_falsifies_assertion_safety(self):
+        self.assertEqual(
+            self.verdict(PY_ASSERTION, wrapper.Property.py_assertion), "FALSE")
+
+    def test_assert_says_nothing_about_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_ASSERTION, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_valueerror_falsifies_no_python_property(self):
+        for prop in (wrapper.Property.py_assertion, wrapper.Property.py_arithmetic,
+                     wrapper.Property.py_datalookup, wrapper.Property.py_dyntyping):
+            self.assertEqual(self.verdict(PY_VALUEERROR, prop), "Unknown")
+
+    def test_internal_model_failure_is_not_an_assertion_violation(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_FAILURE, wrapper.Property.py_assertion), "Unknown")
+
+    def test_successful_python_run_is_true(self):
+        self.assertEqual(
+            self.verdict("** 0 of 7 properties failed, 7 passed\n"
+                         "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.py_arithmetic), "TRUE")
+
+
+class PythonPropertyFileTest(unittest.TestCase):
+    """python/properties/*.prp in sv-benchmarks, verbatim."""
+
+    def test_each_property_file_is_recognised(self):
+        cases = (
+            ("CHECK( init(main()), ! uncaught(AssertionError))\n",
+             wrapper.Property.py_assertion),
+            ("CHECK( init(main()), ! uncaught(ZeroDivisionError))\n"
+             "CHECK( init(main()), ! uncaught(FloatingPointError))\n",
+             wrapper.Property.py_arithmetic),
+            ("CHECK( init(main()), ! uncaught(KeyError))\n"
+             "CHECK( init(main()), ! uncaught(IndexError))\n",
+             wrapper.Property.py_datalookup),
+            ("CHECK( init(main()), ! uncaught(TypeError))\n"
+             "CHECK( init(main()), ! uncaught(AttributeError))\n",
+             wrapper.Property.py_dyntyping),
+        )
+        for content, expected in cases:
+            self.assertEqual(wrapper.python_property(content), expected)
+
+    def test_a_c_property_file_is_not_a_python_property(self):
+        self.assertIsNone(
+            wrapper.python_property("CHECK( init(main()), LTL(G ! overflow) )\n"))
+
+    def test_an_unknown_exception_family_is_not_matched(self):
+        self.assertIsNone(
+            wrapper.python_property("CHECK( init(main()), ! uncaught(OSError))\n"))
 
 
 if __name__ == "__main__":

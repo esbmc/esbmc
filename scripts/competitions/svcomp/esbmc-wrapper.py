@@ -30,6 +30,7 @@ class Result:
   fail_memcleanup = 12
   fail_termination = 13
   fail_race = 14
+  fail_python = 15
 
   @staticmethod
   def is_fail(res):
@@ -68,6 +69,21 @@ class Property:
   termination = 4
   memcleanup = 5
   datarace = 6
+  py_assertion = 7
+  py_arithmetic = 8
+  py_datalookup = 9
+  py_dyntyping = 10
+
+# sv-benchmarks' python/properties/*.prp each state that one family of runtime
+# exceptions does not escape main(). ESBMC has no per-family scoping on the
+# Python side -- one run checks them all -- so which family a run falsified is
+# read off the violated-property comment instead of assumed from the flags.
+PYTHON_EXCEPTION_FAMILIES = {
+  Property.py_assertion: ("AssertionError",),
+  Property.py_arithmetic: ("ZeroDivisionError", "FloatingPointError"),
+  Property.py_datalookup: ("KeyError", "IndexError"),
+  Property.py_dyntyping: ("TypeError", "AttributeError"),
+}
 
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
@@ -154,6 +170,40 @@ def classify_memory_violation(violated):
   return None
 
 
+UNCAUGHT_EXCEPTION = re.compile(r"uncaught exception: (\w+)")
+
+# A plain `assert` lowers to a property whose comment reads "assertion <expr>",
+# and that is the only AssertionError the Python frontend labels as such: a
+# `raise AssertionError(msg)` reaches the table as the bare message, which
+# nothing distinguishes from an operational model failing internally. Matching
+# the bare form too would turn such a failure into a wrong answer on a correct
+# program, so it is deliberately left inconclusive: 0 beats -16.
+ASSERTION_ROW = re.compile(r"\]\s+line\s+\d+\s+assertion\b")
+
+
+def classify_python_violation(violated, prop):
+  """Does this violation belong to the exception family the property asks about?"""
+  family = PYTHON_EXCEPTION_FAMILIES[prop]
+  if any(name in family for name in UNCAUGHT_EXCEPTION.findall(violated)):
+    return Result.fail_python
+
+  if prop == Property.py_assertion and ASSERTION_ROW.search(violated):
+    return Result.fail_python
+
+  return Result.unknown
+
+
+def python_property(property_file_content):
+  """The Python track property this file states, or None for any other file."""
+  names = set(re.findall(r"!\s*uncaught\(\s*(\w+)\s*\)", property_file_content))
+  if not names:
+    return None
+  for prop, family in PYTHON_EXCEPTION_FAMILIES.items():
+    if names <= set(family):
+      return prop
+  return None
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -179,6 +229,9 @@ def parse_result(the_output, prop):
 
     if "unwinding assertion loop" in violated:
       return Result.err_unwinding_assertion
+
+    if prop in PYTHON_EXCEPTION_FAMILIES:
+      return classify_python_violation(violated, prop)
 
     if prop == Property.memcleanup:
       if memory_leak in violated:
@@ -232,6 +285,13 @@ def get_result_string(the_result):
   if the_result == Result.fail_race:
     return "FALSE_DATARACE"
 
+  if the_result == Result.fail_python:
+    # BenchExec maps a bare FALSE to false(unreach-call), and a task
+    # definition whose expected verdict carries no subproperty accepts any
+    # result starting with "false" (benchexec result.get_result_category), so
+    # the Python properties need no new result string.
+    return "FALSE"
+
   if the_result == Result.success:
     return "TRUE"
 
@@ -271,7 +331,26 @@ def check_if_benchmark_contains_pthread(benchmark):
         return True
   return False
 
+def strategy_flags(strat):
+  if strat in ("fixed", "kinduction"):
+    return "--k-induction --max-inductive-step 3 "
+  if strat == "falsi":
+    return "--falsification "
+  if strat == "incr":
+    return "--incremental-bmc "
+  print("Unknown strategy")
+  exit(1)
+
+
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
+  if prop in PYTHON_EXCEPTION_FAMILIES:
+    # A Python task is a whole program whose only specification is that an
+    # exception family does not escape, so none of the C defaults in dargs
+    # apply. --no-div-by-zero-check in particular would switch off the very
+    # check the arithmetic property asks about. The track has no witness
+    # format yet, so no witness is written.
+    return esbmc_path + "--sv-comp " + benchmark + " " + strategy_flags(strat)
+
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -354,17 +433,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     command_line += "--falsify-context-bound 1 --incremental-bmc "
   elif prop == Property.overflow: # Overflow only works with incremental
     command_line += "--incremental-bmc "
-  elif strat == "fixed":
-    command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "kinduction":
-    command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "falsi":
-    command_line += "--falsification "
-  elif strat == "incr":
-    command_line += "--incremental-bmc "
   else:
-    print("Unknown strategy")
-    exit(1)
+    command_line += strategy_flags(strat)
 
   return command_line
 
@@ -442,6 +512,9 @@ if __name__ == "__main__":
   elif "CHECK( init(main()), LTL(G ! data-race) )" in property_file_content:
     category_property = Property.datarace
   else:
+    category_property = python_property(property_file_content)
+
+  if not category_property:
     print("Unsupported Property")
     exit(1)
 
