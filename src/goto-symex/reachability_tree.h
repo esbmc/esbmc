@@ -378,6 +378,8 @@ protected:
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;
+  /** Use the old thread scheduling order (--legacy-schedule). */
+  bool legacy_schedule;
   /** Are we using the --schedule scheduling method? */
   bool schedule;
   /** Are we using the --smt-during-symex method? */

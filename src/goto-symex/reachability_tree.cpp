@@ -41,6 +41,7 @@ reachability_treet::reachability_treet(
   state_hashing = options.get_bool_option("state-hashing");
   directed_interleavings = options.get_bool_option("direct-interleavings");
   interactive_ileaves = options.get_bool_option("interactive-ileaves");
+  legacy_schedule = options.get_bool_option("legacy-schedule");
   schedule = options.get_bool_option("schedule");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   por = !options.get_bool_option("no-por");
@@ -452,8 +453,9 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 
   signed int tid = 0, user_tid = 0;
 
-  // Get thread ID from user if interactive mode is enabled
-  tid = get_cur_state().active_thread + 1;
+  // The old schedule scans upwards from thread 0; the new one starts just
+  // above the active thread. Interactive mode overrides either.
+  tid = legacy_schedule ? 0 : get_cur_state().active_thread + 1;
   if (interactive_ileaves)
   {
     tid = get_ileave_direction_from_user();
@@ -468,7 +470,7 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
   }
 
   // If no thread was found, search in the reverse direction
-  if (tid == (int)ex_state.threads_state.size())
+  if (!legacy_schedule && tid == (int)ex_state.threads_state.size())
   {
     for (tid = get_cur_state().active_thread; tid >= 0; --tid)
     {

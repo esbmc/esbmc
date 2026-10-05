@@ -427,6 +427,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "do not not merge gotos when restoring the last paths after a "
      "context-switch"},
     {"no-por", NULL, "do not do partial order reduction"},
+    {"legacy-schedule",
+     NULL,
+     "use the old thread scheduling order: lowest eligible thread id first"},
     {"legacy-guard",
      NULL,
      "use the old context-switch guard and unviable-interleaving handling"},
