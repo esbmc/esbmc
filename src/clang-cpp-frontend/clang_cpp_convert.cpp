@@ -2294,12 +2294,12 @@ static const clang::Expr &member_result_object(const clang::Expr &init)
   return *e;
 }
 
-/* The copies clang marks elidable before C++17, of a variable's initializer
- * or a returned value, are elided: the object is initialised from the
- * innermost copy's source, as C++17 requires ([dcl.init]/17.6.1,
- * [stmt.return]), and what remains is the C++17 form. Converting a copy built
- * a second object and destroyed it. A copy's source can wrap another copy, as
- * in `C(C(1))`. */
+/* The copies clang marks elidable before C++17, of a variable's initializer,
+ * a returned value or a by-value argument, are elided: the object is
+ * initialised from the innermost copy's source, as C++17 requires
+ * ([dcl.init]/17.6.1, [stmt.return], [expr.call]/7), and what remains is the
+ * C++17 form. Converting a copy built a second object and destroyed it. A
+ * copy's source can wrap another copy, as in `C(C(1))`. */
 const clang::Expr &
 clang_cpp_convertert::elided_copy_source(const clang::Expr &init)
 {
@@ -2312,21 +2312,6 @@ clang_cpp_convertert::elided_copy_source(const clang::Expr &init)
       e = peel_initializer_wrapper(e);
   }
   return *source;
-/* The copy clang marks elidable before C++17, of a variable's initializer,
- * a returned value or a by-value argument, is elided: the object is
- * initialised from the copy's source, as C++17 requires ([dcl.init]/17.6.1,
- * [stmt.return], [expr.call]/7), and what remains is the C++17 form.
- * Converting the copy built a second object and destroyed it. */
-const clang::Expr &
-clang_cpp_convertert::elided_copy_source(const clang::Expr &init)
-{
-  const clang::Expr *e = &init;
-  if (const auto *ewc = llvm::dyn_cast<clang::ExprWithCleanups>(e))
-    e = ewc->getSubExpr();
-  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
-    e = bind->getSubExpr();
-  const clang::Expr *source = peel_elided_copy(e);
-  return source ? *source : init;
 }
 
 bool clang_cpp_convertert::get_member_initializer(
