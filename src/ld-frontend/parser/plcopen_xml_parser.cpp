@@ -12,6 +12,7 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
+#include <optional>
 #include <set>
 
 // -----------------------------------------------------------------------
@@ -100,6 +101,21 @@ CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
 }
 
 static FBKind fb_kind_of(const std::string &s);
+static void check_known_pin(
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance,
+  const std::string &pin);
+static void check_known_pins(
+  const pugi::xml_node &block,
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance);
+static void check_known_pin_if_std(
+  const std::optional<FBKind> &kind,
+  const std::string &type_name,
+  const std::string &instance,
+  const std::string &pin);
 static bool
 literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out);
 
@@ -238,6 +254,7 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
     const std::string fb_type = text_or_attr(n, "typeName", "typeName");
     FBKind kind = fb_kind_from_string(fb_type);
     const std::string inst = text_or_attr(n, "instanceName", "instanceName");
+    check_known_pins(n, kind, fb_type, inst);
 
     auto get_var = [&](const char *port) -> std::string {
       for (auto var : n.children("variable"))
@@ -477,6 +494,97 @@ static FBKind fb_kind_of(const std::string &s)
   return it->second;
 }
 
+// fb_kind_of without the throw, for a caller for which an unrecognised type
+// name is a legitimate case (a user-defined FB) rather than a parse error.
+static std::optional<FBKind> fb_kind_of_std(const std::string &s)
+{
+  try
+  {
+    return fb_kind_of(s);
+  }
+  catch (const LdParseError &)
+  {
+    return std::nullopt;
+  }
+}
+
+// The formalParameter names each block kind declares (IEC 61131-3 §2.5.2.3's
+// standard FBs, plus CODESYS's LD/LOAD alias for CTD). A wire whose
+// formalParameter is not in this set is otherwise never read (#8178's
+// REVISION_PLAN item 7 "known formalParameters" condition), so it is
+// rejected here rather than silently dropped.
+//
+// EN/ENO (the EN/ENO extension IEC 61131-3 §2.5.1.2 allows on any FB call)
+// are accepted on every kind but not modelled: a wired EN does not gate
+// execution and ENO is never set, same as before this check existed. Listing
+// them avoids rejecting a legitimate program over an unrelated typo; the gap
+// is unmodelled EN/ENO semantics, not an unrecognised pin.
+static const std::unordered_map<FBKind, std::set<std::string>> &
+known_pins_table()
+{
+  static const std::unordered_map<FBKind, std::set<std::string>> table = {
+    {FBKind::TON, {"EN", "ENO", "IN", "PT", "Q", "ET"}},
+    {FBKind::TOF, {"EN", "ENO", "IN", "PT", "Q", "ET"}},
+    {FBKind::TP, {"EN", "ENO", "IN", "PT", "Q", "ET"}},
+    {FBKind::CTU, {"EN", "ENO", "CU", "R", "PV", "Q", "CV"}},
+    {FBKind::CTD, {"EN", "ENO", "CD", "LD", "LOAD", "PV", "Q", "CV"}},
+    {FBKind::ADD, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::SUB, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::MUL, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::DIV, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::MOVE, {"EN", "ENO", "IN1", "OUT"}},
+  };
+  return table;
+}
+
+// Rejects a formalParameter this block kind does not declare, so a
+// misspelled or vendor-specific pin name is diagnosed rather than silently
+// never read.
+static void check_known_pin(
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance,
+  const std::string &pin)
+{
+  const auto &table = known_pins_table();
+  // A missing entry means this FBKind has no row above, not that no pin
+  // name is valid; skip rather than treat every pin on it as unrecognised.
+  auto row = table.find(kind);
+  if (row == table.end() || row->second.count(pin))
+    return;
+  throw UnsupportedConstructError(
+    type_name + " " + instance + " pin " + pin, 2);
+}
+
+// Validates every formalParameter a textual block's <variable> children
+// name, out of line so the branches this adds do not inflate its much
+// larger callers' own cyclomatic complexity.
+static void check_known_pins(
+  const pugi::xml_node &block,
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance)
+{
+  for (auto var : block.children("variable"))
+  {
+    const std::string formal = var.attribute("formalParameter").as_string();
+    if (!formal.empty())
+      check_known_pin(kind, type_name, instance, formal);
+  }
+}
+
+// As check_known_pin, for a graphical block whose FBKind may be absent (a
+// user-defined FB, which this validation does not cover); a no-op then.
+static void check_known_pin_if_std(
+  const std::optional<FBKind> &kind,
+  const std::string &type_name,
+  const std::string &instance,
+  const std::string &pin)
+{
+  if (kind && !pin.empty())
+    check_known_pin(*kind, type_name, instance, pin);
+}
+
 static std::string trim(const std::string &text)
 {
   const auto first = text.find_first_not_of(" \t\r\n");
@@ -646,12 +754,17 @@ static bool parse_graphical_ld(
     {
       g.type_name = child.attribute("typeName").as_string("");
       g.instance_name = child.attribute("instanceName").as_string("");
+      // A user-defined FB's type name is not in FBKind; its std_kind is
+      // empty and check_known_pin skips it, since its pins are validated
+      // from its own interface via the ST body translator, not this table.
+      std::optional<FBKind> std_kind = fb_kind_of_std(g.type_name);
       // Record each input pin's source so data pins (PT, PV) can be resolved
       // without turning them into power-flow edges.
       for (auto pin : child.child("inputVariables").children("variable"))
       {
         const std::string formal =
           pin.attribute("formalParameter").as_string("");
+        check_known_pin_if_std(std_kind, g.type_name, g.instance_name, formal);
         auto conn = pin.select_node(".//connection").node();
         const int src = conn.attribute("refLocalId").as_int(-1);
         if (!formal.empty() && src >= 0)
