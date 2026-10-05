@@ -1,8 +1,8 @@
 # ESBMC-PLC Structural Operational Semantics for IEC 61131-3 Ladder Diagram
 
 **Status:** DRAFT (WP1 / T1.2)
-**Version:** 0.1
-**Date:** 2026-07-24
+**Version:** 0.2
+**Date:** 2026-10-05
 
 This document gives a Structural Operational Semantics (SOS) for the Tier-1
 subset of IEC 61131-3 Ladder Diagram that ESBMC-PLC verifies. It is the
@@ -62,6 +62,45 @@ Three judgement forms are used.
 Power flow is threaded left to right along a rung: an element's *input* power
 flow is written `p` and its output `p'`.
 
+### 1.4 Grammar of the supported subset
+
+A program P is a sequence of networks (§6). A **textual** network is already
+a sequence of rungs, each a sequence of elements:
+
+> rung ::= element*
+> element ::= contact | coil | fb_step
+
+A **graphical** network is a connection graph G = (N, E): N is the set of
+contacts, coils, blocks and the left power rail; E is the set of power-flow
+wires (§6.2). G is not required to be series-parallel. A rung-equivalent
+sequence is derived from G by the power-flow computation of §6.2, which
+accepts any directed acyclic G with every sink reachable from the rail,
+including **bridge networks** (two parallel branches tied together by a
+cross-connection, so the graph is not reducible to nested series/parallel
+contact groups). The grammar therefore does not restrict G to series-parallel
+form; §6.4 states the well-formedness conditions G must satisfy instead, and
+gives the argument that checking them terminates.
+
+A graph that is *not* acyclic (a wire cycle, where power flow into a node
+depends, through some path, on that node's own output) is outside the
+grammar: it is rejected at parse time (§6.4) rather than given a semantics.
+Feedback expressed through a **variable** (a coil in one network and a
+contact on the same variable in a later network, or a later rung of the same
+network) is in the grammar: §6.3's sequential evaluation already handles it,
+since a contact reads whatever the store holds when its rung runs.
+
+contact ::= `--[ ]--` v | `--[/]--` v | `--[P]--` v | `--[N]--` v
+coil    ::= `--( )--` v | `--(S)--` v | `--(R)--` v
+fb_step ::= TON(IN, PT, Q, ET) | TOF(IN, PT, Q, ET) | TP(IN, PT, Q, ET)
+          | CTU(CU, R, PV, Q, CV) | CTD(CD, LD, PV, Q, CV)
+          | ARITH(op, IN1, IN2, OUT)
+
+v ranges over declared program variables (§1.1, §2). An element outside this
+grammar (an unrecognised block `typeName`, a data pin wired to something
+other than a variable or a literal, or a body language other than LD) is
+diagnosed with `UnsupportedConstructError` and excluded from the semantics
+(§8).
+
 ---
 
 ## 2. Type rules
@@ -116,6 +155,11 @@ The execution model is a **single periodic task**. Programs declaring
 interrupt tasks or multiple tasks are rejected with
 `UnsupportedConstruct(InterruptTask, tier=2)` and are outside this semantics.
 
+The read-inputs/execute/write-outputs structure of one scan cycle is
+[IEC 61131-3 §TBD: confirm the clause stating the PLC cyclic execution
+model]. The implementation collapses the write-outputs phase into the coil
+rules directly, which §8 already records as a deliberate restriction.
+
 ### 3.2 Rung rule
 
 A rung is a sequence of elements e₁ … e_m evaluated left to right, starting
@@ -129,6 +173,10 @@ from the left power rail, which always supplies power:
 
 Contacts contribute to p and leave σ unchanged; coils and FB steps consume p
 and update σ.
+
+Left-to-right, rail-first evaluation of a rung's elements is
+[IEC 61131-3 §TBD: confirm the clause giving LD's execution order within a
+rung].
 
 ---
 
@@ -149,6 +197,9 @@ be the input power flow.
    ⟨--[/]-- v, …⟩ ⇓ p              ⟨--[/]-- v, …⟩ ⇓ ff
 ```
 
+Normally-open and normally-closed contact semantics are
+[IEC 61131-3 §TBD: confirm the clause defining `--[ ]--` / `--[/]--`].
+
 ### 4.2 Transition-sensing contacts
 
 A transition is sensed on the *operand*, against the edge store; the
@@ -166,6 +217,9 @@ scan, an edge contact conducts for exactly one scan per transition, and two
 contacts sensing the same operand agree unless a coil writes the operand
 between them. Beremiz instead gives each edge contact its own `R_TRIG`/`F_TRIG`
 instance; the two coincide for operands no coil writes, such as inputs.
+Applying the contact's own negation after the edge test (so `--[/P]--` is the
+Boolean negation of `--[P]--`, not an edge test on `¬v`) is
+[IEC 61131-3 §TBD: confirm against §2.5.1.1, open item 1 of §10].
 
 ### 4.3 Coils
 
@@ -184,6 +238,20 @@ instance; the two coincide for operands no coil writes, such as inputs.
 
 A coil writes σ directly, so a later contact on the same variable, in the same
 rung or a later one, reads the value just written (§6.3).
+
+Output-coil, set-coil and reset-coil semantics are
+[IEC 61131-3 §TBD: confirm the clause defining `--( )--` / `--(S)--` /
+`--(R)--`]. Where one scan drives both a set coil and a reset coil on the
+same variable with both conditions true, this semantics gives the result
+whichever coil's rung the sequential order (§6.3) evaluates last: [SET] and
+[RESET] are stated independently with no priority between them, so the
+outcome is decided entirely by rung order, not by a reset-dominant or
+set-dominant rule. Whether IEC 61131-3 states a dominance rule for this case
+, as it does for the CTU/CTD reset input (§5.5), is
+[IEC 61131-3 §TBD: confirm]. `warn_set_and_reset` (#8080) flags exactly this
+configuration (unconditionally, no flag needed) without changing the
+verdict, which is the right response if no dominance rule applies and the
+wrong one if IEC 61131-3 states that one does.
 
 ---
 
@@ -228,10 +296,12 @@ the interval and counts as no elapsed time, as in MATIEC's TON
 (`lib/timer.txt`), so Q stays ff on that scan even at `PT = 0`; with
 `PT = 0`, Q rises on the next scan.
 
-ET is bounded above by PT (IEC 61131-3 §2.5.2.3.2 gives ET the range 0..PT), so
-the count stops once the interval is up. An unbounded ET would rise on every
-scan IN holds and eventually overflow its machine width, which is undefined
-behaviour and wraps ET negative so that Q drops back to ff.
+ET is bounded above by PT, so the count stops once the interval is up
+[IEC 61131-3 §TBD: confirm, open item 7 of §10; an earlier draft of this
+document cited §2.5.2.3.2 for the 0..PT range without that citation having
+been checked against the standard's text]. An unbounded ET would rise on
+every scan IN holds and eventually overflow its machine width, which is
+undefined behaviour and wraps ET negative so that Q drops back to ff.
 
 ### 5.3 TOF — off-delay
 
@@ -282,9 +352,13 @@ entry in π, so a TP is retriggerable only after its pulse has completed.
 
 Counters are edge-triggered on their count pin, using a per-instance entry in
 the edge store. The reset arm applies after the count arm, so a scan in which
-both fire leaves CV at 0. CTU stops at the preset and CTD at 0, as the bodies
-of MATIEC's `CTU` and `CTD` (`lib/counter.txt`) do. An unwired PV reads 0, the
-INT default, so a CTU without one never counts.
+both fire leaves CV at 0; whether IEC 61131-3 instead specifies reset as
+dominant over counting in the same scan is
+[IEC 61131-3 §TBD: confirm, open item 2 of §10]. CTU stops at the preset and
+CTD at 0, as the bodies of MATIEC's `CTU` and `CTD` (`lib/counter.txt`) do;
+whether IEC 61131-3 instead bounds CV by the type's range rather than by PV/0
+is [IEC 61131-3 §TBD: confirm, open item 4 of §10]. An unwired PV reads 0,
+the INT default, so a CTU without one never counts.
 
 ### 5.6 Arithmetic blocks
 
@@ -356,7 +430,66 @@ END_IF;
 
 so a button press sets the variable and the reset clears it in the same scan.
 The semantics reproduces that behaviour rather than reading a variable at its
-value on entry to the network.
+value on entry to the network. Whether IEC 61131-3 instead specifies an
+entry-value rule for a variable both read and written within one network is
+[IEC 61131-3 §TBD: confirm against §4.1.3 / Ed. 3 §8.1.5, open item 3 of
+§10; this reference toolchain's behaviour is reproduced here regardless, and
+any departure from the normative text is recorded, not corrected, since the
+semantics' purpose is to match what ESBMC-PLC actually verifies against].
+
+### 6.4 Graphical well-formedness
+
+A graphical network G (§6.2) must satisfy three conditions before §6.2's
+power-flow computation is defined on it. All three are checked by
+`PlcopenXmlParser::parse_network` (`ensure_pf`, `emit_sink`); each violation
+is diagnosed and the program is rejected rather than given a semantics.
+
+1. **Acyclic power flow.** The directed graph of power-flow edges (§6.2) must
+   contain no cycle: no node's power flow may depend, through any chain of
+   predecessors, on its own output. This excludes a wire cycle (a block or
+   contact wired, directly or transitively, from its own power-flow output)
+   while leaving **feedback through a variable** unrestricted: a coil in one
+   network read by a contact in a later network, or a later rung of the same
+   network, is not a wire cycle, since the read goes through σ, not through a
+   graph edge, and §6.3's sequential evaluation already gives it a semantics.
+   This is the acyclic/legal-feedback distinction M31 asks the paper to state.
+
+2. **Every sink is driven.** Each coil, block enable pin, and FB-consumed
+   output must have at least one live predecessor (`live_preds`, filtered by
+   §6.2's `rail_reaches`). A sink with none would hold its initial value for
+   every scan, so any property over it would be vacuously true; this is
+   excluded by construction rather than left as a latent vacuity risk.
+
+3. **Recognised element and pin names.** A node tag outside the grammar's
+   `contact | coil | block` (§1.4), or a block `typeName` the converter does
+   not implement, is diagnosed with `UnsupportedConstructError` before power
+   flow is computed from it.
+
+   The plan (`REVISION_PLAN.md` item 7) also names a fourth condition, "known
+   `formalParameter`s": that a block's wired pin names (e.g. a `TON`'s `IN`,
+   `PT`, `Q`, `ET`) are checked against the pins that block type declares, and
+   an unrecognised pin name is rejected. **This is not implemented.** The
+   converter looks up each expected pin by name (`get_var("IN")`,
+   `resolve_data_pin(block_id, "PT", ...)`, `ir/ld_ir_builder.cpp:47-50`); a
+   wire whose `formalParameter` attribute does not match any pin the lookup
+   asks for is silently never read, rather than causing a diagnostic. A
+   program with a misspelled or vendor-specific pin name on an otherwise
+   recognised block type is accepted and verified over a model that ignores
+   that wire. Closing this needs a small change (a known-pin-name set per
+   block type, checked when the block's `<variable>` children are visited)
+   and a regression test (an unrecognised pin name, expected to be rejected);
+   until it lands, condition 3 should be read as covering only the element
+   and block-type level, not individual pins.
+
+**Termination.** `ensure_pf` is depth-first search over G with an
+"in-progress" set keyed by node id: a node already in that set when recursion
+reaches it again is reported as a cycle (condition 1) rather than recursed
+into, and a node already fully emitted (`pf_emitted`) is not recursed into
+again. Every node is therefore visited at most once by a completed call and
+at most once more while in progress, so the recursion depth is bounded by
+|N| and the total work is O(|N| + |E|): on an acyclic G the search always
+terminates, and on a cyclic G it terminates by raising the diagnostic at the
+first back-edge found, rather than by stack exhaustion.
 
 ---
 
@@ -448,9 +581,11 @@ to raise in it:
 
 1. §4.2 applies contact polarity after the edge test. IEC's operator ordering
    for a negated edge contact should be confirmed against §2.5.1.1.
-2. §5.5 orders the counter's reset arm after its count arm. IEC 61131-3
-   defines CTU with reset dominant; confirm the intended order when both fire
-   in one scan.
+2. §5.5 orders the counter's reset arm after its count arm. Whether
+   IEC 61131-3 specifies reset as dominant over counting within the same
+   scan, and if so against which clause, is open and unconfirmed; no clause
+   number is given here since none has been checked against the standard's
+   text.
 3. §6.3 follows the sequential evaluation of Beremiz/MATIEC. IEC 61131-3
    §4.1.3 (Ed. 3 §8.1.5) states an entry-value rule for feedback paths within a
    network; confirm whether it applies to LD coils and contacts on the same
@@ -460,3 +595,22 @@ to raise in it:
    (the type bounds); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The two
    agree on Q in every reachable state and differ only in CV beyond the preset
    or below 0, so the choice changes only verdicts that read CV.
+5. Every `[IEC 61131-3 §TBD: ...]` marker inline in §§3.1, 3.2, 4.1, 4.2, 4.3,
+   5.2, 5.5, 6.3 (added alongside items 1 to 4 above, WS1, October 2026)
+   needs a clause number from the actual standard text. This session had no
+   verified copy
+   of IEC 61131-3 and could not source normative clause numbers from web
+   search, which returns only secondary descriptions of PLC behaviour, not
+   the standard's text; filling these in needs a copy of the standard.
+6. §6.4 condition 3 ("known `formalParameter`s") is not implemented: an
+   unrecognised pin name on an otherwise recognised block type is silently
+   ignored rather than rejected (`get_var`, `ir/ld_ir_builder.cpp:47-50`).
+   This is a code gap, not a semantics gap; §6.4 records it so the paper
+   does not claim a check that does not exist. WS0-style fix: a known-pin
+   set per block type and a regression test, filed as a candidate fix
+   before WS1's M1 review rather than during it.
+7. §5.2 bounds a TON's ET above by PT. An earlier draft of this document
+   cited IEC 61131-3 §2.5.2.3.2 for the 0..PT range; that citation predates
+   this session's inline-marker pass and was not independently checked
+   against the standard, so it is now an open item rather than a settled
+   fact, alongside items 2 and 4's citations in the same §2.5.2.3 family.
