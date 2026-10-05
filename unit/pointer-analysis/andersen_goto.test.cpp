@@ -360,6 +360,77 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "andersen frontend gives each call of an allocator its own object",
+  "[andersen][goto]")
+{
+  // wrap is malloc behind two calls, as kzalloc is behind kmalloc and
+  // ldv_malloc: every call returns an object of its own.
+  std::string src = R"(
+    #include <stdlib.h>
+    int x;
+    void *alloc(unsigned long n)
+    {
+      if (n == 0)
+        return 0;
+      void *r = malloc(n);
+      return r;
+    }
+    void *wrap(unsigned long n) { return alloc(n); }
+    int main(void)
+    {
+      int **p = wrap(8);
+      int **q = wrap(8);
+      *p = &x;
+      int *r = *q;
+      int *s = *p;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(targets_of(andersen, functions, "main", "r").empty());
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") == std::set<std::string>{"x"});
+}
+
+TEST_CASE(
+  "andersen frontend shares the object an allocator also keeps",
+  "[andersen][goto]")
+{
+  // keep stores what it allocates in g, so its calls may return the object g
+  // holds: they cannot be told apart.
+  std::string src = R"(
+    #include <stdlib.h>
+    int x;
+    void *g;
+    void *keep(unsigned long n)
+    {
+      void *r = malloc(n);
+      g = r;
+      return r;
+    }
+    int main(void)
+    {
+      int **p = keep(8);
+      int **q = keep(8);
+      *p = &x;
+      int *r = *q;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"x"});
+}
+
+TEST_CASE(
   "andersen frontend widens what an OTHER statement writes through",
   "[andersen][goto]")
 {

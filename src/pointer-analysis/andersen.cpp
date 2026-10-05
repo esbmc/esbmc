@@ -118,6 +118,215 @@ expr2tc return_symbol(const irep_idt &fn)
 {
   return symbol2tc(pointer_type2(), "andersen::return::" + fn.as_string());
 }
+
+using namest = std::unordered_set<irep_idt, irep_id_hash>;
+
+/// Whether \p e passes on the value of a symbol in \p names, rather than
+/// only comparing it.
+bool passes_on(const expr2tc &e, const namest &names)
+{
+  if (is_nil_expr(e) || is_bool_type(e->type))
+    return false;
+  if (is_symbol2t(e))
+    return names.count(to_symbol2t(e).thename) != 0;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || passes_on(op, names); });
+  return found;
+}
+
+namest locals_of(const goto_functiont &function)
+{
+  namest locals;
+  if (is_code_type(function.type))
+    for (const irep_idt &arg : to_code_type(function.type).argument_names)
+      locals.insert(arg);
+  forall_goto_program_instructions (it, function.body)
+    if (it->is_decl())
+      locals.insert(to_code_decl2t(it->code).value);
+  return locals;
+}
+
+/// Whether \p function lets the values of \p tracked reach nothing but its
+/// own locals, comparisons, the callees that do the same, and, if
+/// \p returns, its result.
+bool keeps(
+  const goto_functionst &goto_functions,
+  const irep_idt &function,
+  namest tracked,
+  bool returns,
+  namest &visiting)
+{
+  const auto it = goto_functions.function_map.find(function);
+  if (
+    it == goto_functions.function_map.end() || !it->second.body_available ||
+    !visiting.insert(function).second)
+    return false;
+  const goto_functiont &f = it->second;
+  const namest locals = locals_of(f);
+
+  bool kept = true;
+  for (bool grew = true; grew && kept;)
+  {
+    grew = false;
+    forall_goto_program_instructions (i, f.body)
+    {
+      if (i->is_assign())
+      {
+        const code_assign2t &assign = to_code_assign2t(i->code);
+        // Overwriting a whole local passes nothing on.
+        if (!is_symbol2t(assign.target) && passes_on(assign.target, tracked))
+          kept = false;
+        else if (passes_on(assign.source, tracked))
+        {
+          if (
+            !is_symbol2t(assign.target) ||
+            !locals.count(to_symbol2t(assign.target).thename))
+            kept = false;
+          else
+            grew |= tracked.insert(to_symbol2t(assign.target).thename).second;
+        }
+      }
+      else if (i->is_return())
+        kept &=
+          returns || !passes_on(to_code_return2t(i->code).operand, tracked);
+      else if (i->is_function_call())
+      {
+        const code_function_call2t &call = to_code_function_call2t(i->code);
+        if (
+          (!is_nil_expr(call.ret) && !is_symbol2t(call.ret) &&
+           passes_on(call.ret, tracked)) ||
+          passes_on(call.function, tracked))
+          kept = false;
+        for (std::size_t n = 0; kept && n < call.operands.size(); ++n)
+        {
+          if (!passes_on(call.operands[n], tracked))
+            continue;
+          const auto callee = goto_functions.function_map.find(
+            is_symbol2t(call.function) ? to_symbol2t(call.function).thename
+                                       : irep_idt());
+          const auto &names =
+            callee == goto_functions.function_map.end() ||
+                !is_code_type(callee->second.type)
+              ? std::vector<irep_idt>()
+              : to_code_type(callee->second.type).argument_names;
+          kept =
+            n < names.size() && !names[n].empty() &&
+            keeps(goto_functions, callee->first, {names[n]}, false, visiting);
+        }
+      }
+      else if (!i->is_decl() && i->type != DEAD)
+        kept &= !passes_on(i->code, tracked);
+      kept &= !passes_on(i->guard, tracked);
+    }
+  }
+  visiting.erase(function);
+  return kept;
+}
+
+/// Whether \p e, stripped of casts, is NULL, an unconstrained value or an
+/// object it allocates afresh.
+bool fresh_value(const expr2tc &e)
+{
+  const expr2tc v = strip_casts(e);
+  if (
+    is_null_object2t(v) ||
+    (is_symbol2t(v) && to_symbol2t(v).thename == "NULL") ||
+    (is_constant_int2t(v) && to_constant_int2t(v).value.is_zero()))
+    return true;
+  if (!is_sideeffect2t(v))
+    return false;
+  switch (to_sideeffect2t(v).kind)
+  {
+  case sideeffect2t::allockind::malloc:
+  case sideeffect2t::allockind::alloca:
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
+  case sideeffect2t::allockind::nondet:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/// The functions each call of which returns NULL or an object of its own:
+/// they return only locals holding what they allocate, or what another such
+/// function returns, and let it reach nothing else (see keeps). Nothing in the
+/// call sets the object's contents, so each call can be its own allocation.
+namest find_allocators(const goto_functionst &goto_functions)
+{
+  namest allocators;
+  for (bool grew = true; grew;)
+  {
+    grew = false;
+    forall_goto_functions (it, goto_functions)
+    {
+      const goto_functiont &f = it->second;
+      if (
+        allocators.count(it->first) || !f.body_available ||
+        !is_code_type(f.type) ||
+        !is_pointer_type(to_code_type(f.type).ret_type))
+        continue;
+
+      // The locals every whole assignment of which is fresh.
+      namest fresh;
+      forall_goto_program_instructions (i, f.body)
+        if (i->is_decl())
+          fresh.insert(to_code_decl2t(i->code).value);
+      for (bool shrank = true; shrank;)
+      {
+        shrank = false;
+        forall_goto_program_instructions (i, f.body)
+        {
+          expr2tc target;
+          bool ok = false;
+          if (i->is_assign())
+          {
+            target = to_code_assign2t(i->code).target;
+            const expr2tc source =
+              strip_casts(to_code_assign2t(i->code).source);
+            ok =
+              fresh_value(source) ||
+              (is_symbol2t(source) && fresh.count(to_symbol2t(source).thename));
+          }
+          else if (i->is_function_call())
+          {
+            const code_function_call2t &call = to_code_function_call2t(i->code);
+            target = call.ret;
+            ok = is_symbol2t(call.function) &&
+                 allocators.count(to_symbol2t(call.function).thename);
+          }
+          if (
+            !ok && !is_nil_expr(target) && is_symbol2t(target) &&
+            fresh.erase(to_symbol2t(target).thename))
+            shrank = true;
+        }
+      }
+
+      bool returns_fresh = true;
+      bool allocates = false;
+      forall_goto_program_instructions (i, f.body)
+        if (i->is_return())
+        {
+          const expr2tc v = strip_casts(to_code_return2t(i->code).operand);
+          const bool local =
+            is_symbol2t(v) && fresh.count(to_symbol2t(v).thename);
+          returns_fresh &= local || fresh_value(v);
+          allocates |= local;
+        }
+
+      namest visiting;
+      if (
+        returns_fresh && allocates &&
+        keeps(goto_functions, it->first, fresh, true, visiting))
+      {
+        allocators.insert(it->first);
+        grew = true;
+      }
+    }
+  }
+  return allocators;
+}
 } // namespace
 
 andersent::andersent()
@@ -327,6 +536,16 @@ andersent::node_id andersent::return_node(const irep_idt &fn)
   return get_node(return_symbol(fn));
 }
 
+andersent::node_id andersent::allocation(const type2tc &type, unsigned loc)
+{
+  const node_id t = fresh_node();
+  add_constraint(
+    constraint_kindt::ADDRESS_OF,
+    t,
+    get_node(dynamic_object2tc(type, gen_ulong(loc), false, false)));
+  return t;
+}
+
 andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
 {
   const expr2tc r = strip_casts(rhs);
@@ -365,15 +584,10 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     {
       // One node per allocation site, so every object a loop allocates shares
       // a single abstraction.  Keyed like value_sett's dynamic objects.
-      const type2tc &objtype = is_pointer_type(side.type)
-                                 ? to_pointer_type(side.type).subtype
-                                 : side.alloctype;
-      const node_id t = fresh_node();
-      add_constraint(
-        constraint_kindt::ADDRESS_OF,
-        t,
-        get_node(dynamic_object2tc(objtype, gen_ulong(loc), false, false)));
-      return t;
+      return allocation(
+        is_pointer_type(side.type) ? to_pointer_type(side.type).subtype
+                                   : side.alloctype,
+        loc);
     }
 
     case sideeffect2t::allockind::nondet:
@@ -585,7 +799,12 @@ void andersent::bind_call(
   if (!unbound.empty())
     widen_call(expr2tc(), unbound, loc);
 
-  if (!is_nil_expr(ret) && may_hold_address(ret->type))
+  if (is_nil_expr(ret) || !may_hold_address(ret->type))
+    return;
+  if (allocators.count(callee_name))
+    assign_node(
+      ret, allocation(to_pointer_type(ftype.ret_type).subtype, loc), loc);
+  else
     handle_assign(ret, return_symbol(callee_name), loc);
 }
 
@@ -742,6 +961,7 @@ void andersent::collect_constraints(const goto_functionst &goto_functions)
 
 void andersent::operator()(const goto_functionst &goto_functions)
 {
+  allocators = find_allocators(goto_functions);
   collect_constraints(goto_functions);
   solve();
 
