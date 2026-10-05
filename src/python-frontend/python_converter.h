@@ -1558,6 +1558,7 @@ private:
   void reject_multi_path_numpy_view_return(const nlohmann::json &call);
   bool numpy_subscript_yields_view(const nlohmann::json &node) const;
   bool holds_numpy_view(const nlohmann::json &node) const;
+  bool is_numpy_view_value(const nlohmann::json &node) const;
   void reject_numpy_view_comprehension(const nlohmann::json &node) const;
   /// The per-statement numpy view checks: comprehensions over views and uses
   /// of storage that escaped.

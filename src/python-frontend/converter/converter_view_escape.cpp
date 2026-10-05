@@ -377,9 +377,11 @@ python_converter::fold_numpy_view_call(const nlohmann::json &call)
   nlohmann::json folded = substitute_call_arguments(*value, call);
   std::vector<nlohmann::json> indices;
   const bool indexes_a_name = is_name(*subscript_chain(folded, indices));
-  const bool returns_view =
-    is_numpy_view_copy_expr(folded) &&
-    (indices.empty() || !indexes_a_name || numpy_subscript_yields_view(folded));
+  bool returns_view = is_numpy_view_copy_expr(folded);
+  if (indices.empty())
+    returns_view = is_numpy_view_value(folded);
+  else if (indexes_a_name)
+    returns_view = numpy_subscript_yields_view(folded);
   if (!contains_tracked_numpy_view_name(call["args"]) && !returns_view)
     return std::nullopt;
   return folded;
@@ -775,12 +777,10 @@ bool python_converter::try_bind_numpy_view_container(
   container.is_dict = value["_type"] == "Dict";
   const nlohmann::json &elements =
     container.is_dict ? value["values"] : value["elts"];
-  const bool holds_view =
-    contains_tracked_numpy_view_name(value) ||
-    std::any_of(elements.begin(), elements.end(), [this](const auto &element) {
-      return is_numpy_view_copy_expr(element);
-    });
-  if (!holds_view)
+  if (!std::any_of(
+        elements.begin(), elements.end(), [this](const auto &element) {
+          return is_numpy_view_value(element);
+        }))
     return false;
   if (block_nesting_ != function_body_depth_ + 1)
     throw std::runtime_error(container_branch_error);
@@ -851,14 +851,24 @@ bool python_converter::numpy_subscript_yields_view(
     resolve_name_symbol_id((*root)["id"].get<std::string>());
   if (id.empty())
     return false;
-  if (numpy_pointer_view_info_.count(id) != 0 || is_tracked_numpy_view_id(id))
-    return true;
-  if (numpy_array_symbols_.count(id) == 0)
-    return false;
-  const std::optional<std::vector<std::size_t>> shape =
-    get_numpy_nditer_logical_shape(id);
-  return shape && (std::any_of(indices.begin(), indices.end(), is_slice) ||
-                   indices.size() < shape->size());
+  if (std::any_of(indices.begin(), indices.end(), is_slice))
+    return numpy_array_symbols_.count(id) != 0 ||
+           numpy_pointer_view_info_.count(id) != 0 ||
+           is_tracked_numpy_view_id(id);
+
+  // Indices only: a view is left when fewer axes are indexed than exist.
+  std::optional<std::size_t> rank;
+  const auto view = numpy_pointer_view_info_.find(id);
+  if (view != numpy_pointer_view_info_.end())
+    rank = view->second.shape.empty() ? 1 : view->second.shape.size();
+  else if (numpy_array_symbols_.count(id) != 0)
+  {
+    const std::optional<std::vector<std::size_t>> shape =
+      get_numpy_nditer_logical_shape(id);
+    if (shape)
+      rank = shape->size();
+  }
+  return rank ? indices.size() < *rank : is_tracked_numpy_view_id(id);
 }
 
 // True when `node` evaluates to a numpy view: a name bound to one, or a
@@ -881,12 +891,30 @@ bool python_converter::holds_numpy_view(const nlohmann::json &node) const
            (numpy_pointer_view_info_.count(id) != 0 ||
             is_tracked_numpy_view_id(id));
   }
-  if (node.is_object() && numpy_subscript_yields_view(node))
-    return true;
+  // A subscript is judged as a whole: `a[0][0]` of a 2-D array is a scalar
+  // although its inner `a[0]` is a view.
+  if (node.is_object() && node.value("_type", "") == "Subscript")
+    return numpy_subscript_yields_view(node);
   for (const auto &child : node)
     if (holds_numpy_view(child))
       return true;
   return false;
+}
+
+// True when `node` is a numpy view: one held by name or produced by a
+// subscript, or a view function (`.T`, `broadcast_to`, ...) over a numpy
+// array. An ordinary Python subscript or attribute is not.
+bool python_converter::is_numpy_view_value(const nlohmann::json &node) const
+{
+  if (holds_numpy_view(node))
+    return true;
+  if (!is_numpy_view_copy_expr(node) || node.value("_type", "") == "Subscript")
+    return false;
+  const std::string root = root_name_from_numpy_view_copy_expr(node);
+  const std::string id =
+    root.empty() ? std::string() : resolve_name_symbol_id(root);
+  return !id.empty() && (numpy_array_symbols_.count(id) != 0 ||
+                         numpy_pointer_view_info_.count(id) != 0);
 }
 
 // A comprehension or generator builds its elements one by one into a plain
