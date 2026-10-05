@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  assertion x == 0 \|\| y == 0 \|\| l == 3 \|\| m == 3 \|\| a == 4 \|\| r == 0$
