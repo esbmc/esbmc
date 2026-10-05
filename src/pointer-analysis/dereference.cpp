@@ -1656,7 +1656,9 @@ void dereferencet::construct_array_ref(
   // unrolling into N element reads.
   if (is_constant_int2t(offset) && to_constant_int2t(offset).value == 0)
   {
-    if (base_type_eq(value->type, type, ns))
+    // Not base_type_eq: it ignores array sizes, so a [4] read of a [8] object
+    // would come back whole.
+    if (dereference_type_compare(value, type))
       return;
     if (is_scalar_type(value) && value->type->get_width() == type->get_width())
     {
