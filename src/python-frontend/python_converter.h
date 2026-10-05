@@ -2445,6 +2445,34 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  /// A local list/tuple/dict literal holding numpy views: each element is
+  /// bound to its own hidden view variable, so the view metadata follows the
+  /// element. Keyed by scope and name.
+  struct numpy_view_containert
+  {
+    std::vector<std::string> elements;
+    std::map<std::string, std::size_t> keys;
+    bool is_dict = false;
+  };
+  std::unordered_map<std::string, numpy_view_containert> numpy_view_containers_;
+  std::size_t numpy_view_container_count_ = 0;
+  const numpy_view_containert *
+  find_numpy_view_container(const nlohmann::json &node) const;
+  std::string numpy_view_container_element(
+    const numpy_view_containert &container,
+    const nlohmann::json &slice) const;
+  std::optional<nlohmann::json>
+  resolve_numpy_view_container_use(const nlohmann::json &node) const;
+  /// Replaces each literal-index read of a view container by the element's
+  /// own variable; rejects any other use of the container.
+  nlohmann::json
+  rewrite_numpy_view_container_reads(const nlohmann::json &node) const;
+  const nlohmann::json &resolve_numpy_view_containers(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten) const;
+  bool try_bind_numpy_view_container(
+    const nlohmann::json &ast_node,
+    codet &target_block);
   /// Simple functions whose body returns a numpy view name: sound only
   /// through a folded call.
   std::unordered_set<std::string> numpy_view_return_functions_;

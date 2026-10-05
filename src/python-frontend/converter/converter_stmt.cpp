@@ -8238,8 +8238,11 @@ exprt python_converter::get_block(
   current_block = &block;
 
   // Iterate over block statements
-  for (auto &element : ast_block)
+  for (auto &raw_element : ast_block)
   {
+    nlohmann::json rewritten_element;
+    const nlohmann::json &element =
+      resolve_numpy_view_containers(raw_element, rewritten_element);
     reject_escaped_numpy_view_use(element);
     StatementType type = python_frontend::get_statement_type(element);
 

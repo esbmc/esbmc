@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <set>
@@ -21,6 +22,16 @@ const char *const returned_view_error =
 const char *const multi_path_return_error =
   "TypeError: returning numpy views from more than one path is not "
   "supported";
+const char *const container_index_error =
+  "TypeError: a container holding numpy views supports only literal index "
+  "access";
+const char *const container_mutation_error =
+  "TypeError: mutating a container that holds numpy views is not supported";
+const char *const container_nested_error =
+  "TypeError: storing a numpy view in a nested container is not supported";
+const char *const container_branch_error =
+  "TypeError: binding a container of numpy views inside a branch or loop is "
+  "not supported";
 const char *const escaped_read_error =
   "TypeError: reading a numpy view after it escaped to an unknown call is "
   "not supported";
@@ -315,6 +326,8 @@ void python_converter::get_folded_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  if (try_bind_numpy_view_container(ast_node, target_block))
+    return;
   std::optional<nlohmann::json> folded =
     ast_node.contains("value") ? fold_numpy_view_call(ast_node["value"])
                                : std::nullopt;
@@ -457,4 +470,235 @@ void python_converter::reject_escaped_numpy_view_use(
       it.key() != "targets" && it.key() != "target" &&
       !is_nested_block_key(it.key()))
       reject_escaped_numpy_view_read(it.value());
+}
+
+namespace
+{
+bool is_container_literal(const nlohmann::json &node)
+{
+  static const std::set<std::string> kinds = {"List", "Tuple", "Dict", "Set"};
+  return node.is_object() && kinds.count(node.value("_type", "")) != 0;
+}
+
+// The literal a container is indexed with, as a lookup key; nullopt for a
+// run-time index.
+std::optional<std::string> literal_container_key(const nlohmann::json &slice)
+{
+  if (
+    slice.is_object() && slice.value("_type", "") == "Constant" &&
+    slice.contains("value") &&
+    (slice["value"].is_number_integer() || slice["value"].is_string()))
+    return slice["value"].dump();
+  if (
+    slice.is_object() && slice.value("_type", "") == "UnaryOp" &&
+    slice["op"].value("_type", "") == "USub" &&
+    slice["operand"].value("_type", "") == "Constant" &&
+    slice["operand"]["value"].is_number_integer())
+    return std::to_string(-slice["operand"]["value"].get<long long>());
+  return std::nullopt;
+}
+
+bool is_container_mutator(const std::string &method)
+{
+  static const std::set<std::string> mutators = {
+    "append",
+    "extend",
+    "insert",
+    "remove",
+    "pop",
+    "clear",
+    "sort",
+    "reverse",
+    "update",
+    "setdefault",
+    "popitem"};
+  return mutators.count(method) != 0;
+}
+
+bool is_store_context(const nlohmann::json &node)
+{
+  const std::string ctx =
+    node.contains("ctx") ? node["ctx"].value("_type", "") : "";
+  return ctx == "Store" || ctx == "Del";
+}
+
+nlohmann::json named_like(const nlohmann::json &node, const std::string &name)
+{
+  nlohmann::json result = node;
+  for (const char *key : {"value", "slice", "attr", "targets", "target"})
+    result.erase(key);
+  result["_type"] = "Name";
+  result["id"] = name;
+  result["ctx"] = {{"_type", "Load"}};
+  return result;
+}
+} // namespace
+
+const python_converter::numpy_view_containert *
+python_converter::find_numpy_view_container(const nlohmann::json &node) const
+{
+  if (!is_name(node))
+    return nullptr;
+  const auto it = numpy_view_containers_.find(
+    current_func_name_ + "@" + node["id"].get<std::string>());
+  return it == numpy_view_containers_.end() ? nullptr : &it->second;
+}
+
+// The hidden view variable `container[slice]` denotes.
+std::string python_converter::numpy_view_container_element(
+  const numpy_view_containert &container,
+  const nlohmann::json &slice) const
+{
+  const std::optional<std::string> key = literal_container_key(slice);
+  if (!key)
+    throw std::runtime_error(container_index_error);
+  if (container.is_dict)
+  {
+    const auto element = container.keys.find(*key);
+    if (element == container.keys.end())
+      throw std::runtime_error("KeyError: " + *key);
+    return container.elements[element->second];
+  }
+  if (
+    slice.value("_type", "") != "UnaryOp" &&
+    !slice["value"].is_number_integer())
+    throw std::runtime_error(container_index_error);
+  const long long size = static_cast<long long>(container.elements.size());
+  long long index = std::stoll(*key);
+  if (index < 0)
+    index += size;
+  if (index < 0 || index >= size)
+    throw std::runtime_error("IndexError: list index out of range");
+  return container.elements[static_cast<std::size_t>(index)];
+}
+
+// The replacement for a node that uses a view container directly: the
+// element's variable for a literal-index read, an error for anything else;
+// nullopt when the node is not such a use.
+std::optional<nlohmann::json>
+python_converter::resolve_numpy_view_container_use(
+  const nlohmann::json &node) const
+{
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+  {
+    if (find_numpy_view_container(node) && !is_store_context(node))
+      throw std::runtime_error(container_index_error);
+    return std::nullopt;
+  }
+  if (
+    (type != "Subscript" && type != "Attribute") ||
+    !find_numpy_view_container(node["value"]))
+    return std::nullopt;
+  if (type == "Attribute")
+    throw std::runtime_error(
+      is_container_mutator(node.value("attr", "")) ? container_mutation_error
+                                                   : container_index_error);
+  if (is_store_context(node))
+    throw std::runtime_error(container_mutation_error);
+  return named_like(
+    node,
+    numpy_view_container_element(
+      *find_numpy_view_container(node["value"]), node["slice"]));
+}
+
+nlohmann::json python_converter::rewrite_numpy_view_container_reads(
+  const nlohmann::json &node) const
+{
+  if (!node.is_object() && !node.is_array())
+    return node;
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "FunctionDef" || type == "ClassDef")
+      return node;
+    if (
+      std::optional<nlohmann::json> element =
+        resolve_numpy_view_container_use(node))
+      return *element;
+  }
+
+  nlohmann::json result = node;
+  for (auto it = result.begin(); it != result.end(); ++it)
+    if (!node.is_object() || !is_nested_block_key(it.key()))
+      *it = rewrite_numpy_view_container_reads(*it);
+  return result;
+}
+
+const nlohmann::json &python_converter::resolve_numpy_view_containers(
+  const nlohmann::json &statement,
+  nlohmann::json &rewritten) const
+{
+  if (numpy_view_containers_.empty())
+    return statement;
+  // `alias = box` is a binding, handled where the assignment is converted.
+  const nlohmann::json *target = alias_target(statement);
+  if (target && find_numpy_view_container(statement["value"]))
+    return statement;
+  rewritten = rewrite_numpy_view_container_reads(statement);
+  return rewritten;
+}
+
+bool python_converter::try_bind_numpy_view_container(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json *target = alias_target(ast_node);
+  if (!target)
+    return false;
+  const std::string key =
+    current_func_name_ + "@" + (*target)["id"].get<std::string>();
+  const nlohmann::json &value = ast_node["value"];
+
+  if (const numpy_view_containert *aliased = find_numpy_view_container(value))
+  {
+    numpy_view_containers_[key] = numpy_view_containert(*aliased);
+    return true;
+  }
+  numpy_view_containers_.erase(key);
+  if (!is_container_literal(value) || value["_type"] == "Set")
+    return false;
+
+  numpy_view_containert container;
+  container.is_dict = value["_type"] == "Dict";
+  const nlohmann::json &elements =
+    container.is_dict ? value["values"] : value["elts"];
+  const bool holds_view =
+    contains_tracked_numpy_view_name(value) ||
+    std::any_of(elements.begin(), elements.end(), [this](const auto &element) {
+      return is_numpy_view_copy_expr(element);
+    });
+  if (!holds_view)
+    return false;
+  if (block_nesting_ != function_body_depth_ + 1)
+    throw std::runtime_error(container_branch_error);
+  const std::string prefix = (*target)["id"].get<std::string>() + "$view$" +
+                             std::to_string(numpy_view_container_count_++) +
+                             "$";
+  for (std::size_t i = 0; i < elements.size(); ++i)
+  {
+    if (is_container_literal(elements[i]))
+      throw std::runtime_error(container_nested_error);
+    if (container.is_dict)
+    {
+      const std::optional<std::string> element_key =
+        literal_container_key(value["keys"][i]);
+      if (!element_key)
+        throw std::runtime_error(container_index_error);
+      container.keys[*element_key] = i;
+    }
+    const std::string element_name = prefix + std::to_string(i);
+    nlohmann::json element_target = named_like(*target, element_name);
+    element_target["ctx"] = {{"_type", "Store"}};
+    nlohmann::json binding = ast_node;
+    binding.erase("target");
+    binding.erase("annotation");
+    binding["_type"] = "Assign";
+    binding["targets"] = nlohmann::json::array({element_target});
+    binding["value"] = elements[i];
+    get_folded_var_assign(binding, target_block);
+    container.elements.push_back(element_name);
+  }
+  numpy_view_containers_[key] = std::move(container);
+  return true;
 }
