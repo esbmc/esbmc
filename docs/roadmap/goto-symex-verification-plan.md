@@ -820,6 +820,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R87** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R64's [except.ctor] residual, §15 M9 (R87); **FIXED**, same entry | **An exception leaving a callee skipped the caller's destructors.** `convert_throw` unwinds the automatic objects of the function that throws, but `remove_exceptions` lowered a call to a may-throw callee as a bare `if (thrown) goto dispatch` after the call, so every frame the exception passed through kept its locals alive. `void f() { Guard g; thrower(); }` caught in `main` never ran `~Guard`; a buffer freed again in the handler, a double free natively, verified. | `goto_convertt::record_exception_unwind`, `src/goto-programs/goto_convert.cpp`; `wire_call`, `src/goto-programs/remove_exceptions.cpp`; `regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee{,_fail}` | — | **Fixed**: record the destructor-stack slice on each call and destroy it on the call's exceptional edge. |
 
 | **R89** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R82's open note (PR #8110), §15 M9 (R89); **FIXED** outside short-circuit operands, same entry | **A temporary in a statement's condition outlived it.** `if (C(true).ok())`, `while (C(n < 2).ok())`, and the conditions of `for` and `do`/`while` ran `~C` at the end of the enclosing block rather than at the end of the condition ([class.temporary]/4). A loop condition built its temporary on every iteration and destroyed one. `assert(dtors == 1)` inside the `if` was FAILED, `assert(dtors < 3)` after the loop SUCCESSFUL. | `generate_conditional_branch`, `convert_ifthenelse`, `convert_for` and `convert_dowhile`, `src/goto-programs/goto_convert.cpp`; the `for` and `do`/`while` arms of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/condition_temporary{,_fail,_legacy}` | — | **Fixed**: `remove_condition_sideeffects` copies the condition into a temporary and destroys the condition's temporaries before the branch. Operands of `&&`, `\|\|` and `?:` keep block scope. |
+| **R94** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R89's sibling (PR #8125), §15 M9 (R94); **FIXED**, same entry | **A temporary in a `switch` condition outlived it.** `convert_switch` lowered the value with `remove_sideeffects`, so `switch (T(1).v)` ran `~T` at the end of the enclosing block, or at a `return` from a case, rather than before the case label ([class.temporary]/4). `k = dtors;` under `case 1:` stored 0, so `assert(k == 0)` was SUCCESSFUL and `assert(k == 1)` FAILED. | `convert_switch`, `src/goto-programs/goto_convert.cpp`; the switch arm of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/switch_condition_temporary{,_fail,_legacy}` | — | **Fixed**: the switch value is lowered through R89's `remove_condition_sideeffects`. |
 
 
 | **R105** | **High (false SUCCESSFUL and false FAILED, default configuration, C)** — found probing the `$vector-cmp$` residual of §15 M9 (R65), §15 M9 (R105); **FIXED**, same entry | **A compound literal was initialised where its declaration was hoisted, not where it is evaluated.** The C frontend pushed the literal's declaration, initialiser included, into the enclosing block ahead of the statement being converted. In an unbraced loop body that runs once, before the loop; in an unbraced `if` body it runs whether or not the branch is taken; before a `case` label it is unreachable and is dropped, so the literal reads nondet. `for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;` left `hit` at 0. | `CompoundLiteralExprClass` in `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/compound_literal_per_evaluation{,_fail}` | — | **Fixed**: the declaration stays in the enclosing block, which is the literal's lifetime (C17 6.5.2.5p5), and the literal becomes `(cl = init, cl)`, so it is initialised each time it is evaluated. |
@@ -10679,6 +10680,28 @@ pin the constructor and destructor counts and `use_count()` alongside R83's
 tests. A list assigned to an existing object (`a = W{M(5)};`) and one in a
 mem-initializer (`V() : w{M(5)} {}`) still go through R83's path; both
 balance their destructors.
+
+---
+
+### M9 (R94) — 2026-10-03, the temporaries of a switch condition
+
+R89 destroys the temporaries of an `if`, `while`, `for` or `do`/`while`
+condition before the branch, but not those of a `switch`, whose condition is a
+full-expression too ([class.temporary]/4). Both lowerings of `switch` took the
+value through `remove_sideeffects`, which left the destructor on the block's
+stack: `switch (T(1).v) { case 1: k = dtors; }` stored 0, and a case that
+returned ran `~T` only on the way out. `assert(k == 0)` was SUCCESSFUL and
+`assert(k == 1)` FAILED; natively the first aborts and the second holds.
+
+**Fixed** by lowering the switch value through `remove_condition_sideeffects`
+on the native and legacy paths. A value that pushes no destructor, which
+includes all of C, converts as before. `switch_condition_temporary{,_fail}`
+change verdict against master and against R89 alone, under Bitwuzla and Z3;
+reverting the native arm fails them, and reverting the legacy one fails
+`switch_condition_temporary_legacy` (`--no-irep2-native-body`).
+
+Not fixed: R89's carve-out for `&&`, `||` and `?:` operands applies to a switch
+value too.
 
 ---
 
