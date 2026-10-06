@@ -2275,5 +2275,7 @@ regression/esbmc/deref_union_array_write
 regression/esbmc/deref_union_array_write_fail
 regression/function_contract/github_4219_old_in_forall_ptr_to_array
 regression/function_contract/github_4219_old_in_forall_ptr_to_array_fail
+regression/goto-transcoder/cbmc_static_init_function
+regression/goto-transcoder/cbmc_static_init_function_fail
 regression/goto-transcoder/cbmc_vector
 regression/goto-transcoder/cbmc_vector_fail
