@@ -839,6 +839,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
 | **R102** | **High (false FAILED, default configuration, C++)** — R83's residual, §15 M9 (R102); **renumbered from R83** on merging master, which uses that number for the destructor count; this branch's commit titles predate the renumbering; **FIXED**, same entry | **A braced list built each class element in a temporary and copied it in.** With R83 the destructors balance, but `W a{1, M(5)}` still constructed `M(5)` in a `tmp$` object and copied it bitwise into `a.m`, so the constructor's `this` was not the element: with `built = this` in `M`'s constructors, `assert(built == &a.m)` was FAILED, as it was for `W b{3, t}`, `M arr[2] = {M(6), M(7)}` and a nested list. | `construct_in_place`, `remove_initializer_sideeffects`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_init_member_in_place{,_fail}`, `aggregate_init_named_double_destroy_fail`, `shared_ptr_member_copy_fail` | — | **Fixed** for a declaration's initialiser: each class element is constructed in the object itself. |
 | **R83** | **Medium–High (no verdict, default configuration)** — found probing R69's residuals, §15 M9 (R83); **FIXED**, same entry | **`delete[]` of a class with a destructor never terminates.** `E *p = new E[3]; delete[] p;` unwinds the destructor loop forever under default flags. `delete[]` does not carry the element count, so `convert_cpp_delete` bounds the loop by `DYNAMIC_SIZE(p) / sizeof(E)` (#6584). Symex lowers a heap object's `DYNAMIC_SIZE` to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, which it cannot read back, so the bound never becomes constant; #7464's value-set resolution skips heap objects. #6584's own tests run under `--incremental-bmc` for this reason. | `convert_cpp_delete`, `goto_convert.cpp`; `resolve_dynamic_size_by_value_set`, `symex_valid_object.cpp`; `track_new_pointer`, `memory_alloc.cpp`; `regression/esbmc-cpp/cpp/delete_array_dtor_bound{,_fail}` | H-C2 | **Fixed**: `track_new_pointer` records each heap object's renamed size, and `DYNAMIC_SIZE(p)` resolves to it when the value set names that one object. |
+| **R102** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8128's open note, §15 M9 (R102); **FIXED**, same entry | **A local whose declaration a jump skips named another activation's object.** A new frame copied its caller's L1 renaming, and only `symex_decl` gave a local a fresh instance. After a jump past the declaration (`switch (k) { int y; case 0: ... }`, or `goto` over `int y;`), `y` kept the caller's instance in a recursive call, or the level1-global name when no activation had declared it, so an inner call overwrote the outer `y`. Its lifetime starts on entry to its block (C11 6.2.4p6). | `symex_function_call_code`, `symex_function.cpp`; `symex_decl`, `symex_other.cpp`; `regression/esbmc/switch_skipped_decl_recursion{,_fail}` | H-C2 | **Fixed**: a new frame gives each local and parameter of its function a fresh L1 instance, and the frame's first `DECL` of it keeps that instance. |
 | **R82** | **High (false FAILED, default configuration)** — R61's residual, §15 M9 (R82); **FIXED**, same entry | **A pointer to a variable-length array scaled by a free size.** `rename_type` renamed a symbolic array size only on an expression's own array type and its first subtype, and only when the size was a bare symbol. A pointer's subtype was never renamed, so `p = a + 1` with `int (*p)[m]` scaled by `m` as an unconstrained L0 symbol, and `(*p)[2]` of a correct program was an array-bounds violation. Sizes deeper than the second level, or spelt `m + 1`, were missed the same way. | `goto_symex_statet::rename_type`, `rename_array_sizes` and `fixup_renamed_type`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/vla_pointer_stride{,_fail}` | — | **Fixed**: every non-constant array size is renamed, through array and pointer subtypes. A VLA size reassigned after its declarator is still read at its current value (#8019). |
 | **R81** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R65's open note, §15 M9 (R81); **FIXED**, same entry | **An array placement new allocated.** The frontend routed only the scalar form of `::operator new(size_t, void *)` to `get_placement_new`; `new (buf) T[n]` took the allocating `cpp_new[]` path, so its elements were built in fresh memory and `buf` was left alone. `new (buf) int[2]{1, 2}` made `p == buf` fail and `assert(((int *)buf)[1] != 2)` verify. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `cpp_new_at` and `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/array_placement_new{,_fail}` | — | **Fixed**: the placement address is recorded on the `cpp_new[]` side effect, evaluated once, and assigned in place of the allocation; the elements' initialisation runs as before. |
 | **R74** | **High (a crash, default configuration)** — R60's residual, §15 M9 (R74); **FIXED**, same entry | **A vector operation with one constant operand broadcast the other vector whole.** `distribute_vector_operation`'s mixed case treats the operand that is not a constant vector as a scalar and pairs it with every lane, so `{1,2,3,4} + b` for a vector `b` built lane by lane became `{1 + b, 2 + b, ...}`, a 32-bit lane added to a 128-bit vector, and the SMT layer aborted in `mk_bvadd`. | `distribute_vector_operation`, `src/irep2/irep2_utils.h`; `unit/util/simplify2t.test.cpp`, `regression/esbmc/vector_op_nonconstant_lane{,_fail}` | — | **Fixed**: a vector operand contributes its matching lane. |
@@ -10358,6 +10359,37 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R102) — 2026-10-03, the declaration a jump skipped
+
+PR #8128 noted that a local whose declaration a jump skips keeps the caller
+frame's L1 name. A new frame copies its caller's `level1`, and only
+`symex_decl` gave a local its own instance. In
+`void f(int k) { switch (k) { int y; case 0: case 1: y = k; ... } }`, every
+call jumps past `int y;`, and clang's `DECL` is removed as unreachable, so `y`
+was never renamed: every activation read and wrote the level1-global `y`, and
+`f(1)` called from `f(0)` overwrote the caller's. `assert(y == k)` after the
+inner call was FAILED, and `assert(y == 1)` SUCCESSFUL, the opposite of the
+native program. With a `goto` over `int y;` in the inner call alone, `y` named
+the caller's instance instead, with the same result. A local's lifetime starts on entry to its block
+(C11 6.2.4p6), not at its declaration.
+
+**Fixed.** `symex_function_call_code` gives each local of the callee a fresh
+L1 instance when it pushes the frame: the parameters and `DECL`s
+(`get_local_identifiers`), and the targets of `DEAD`, which survive when the
+`DECL` does not. `symex_decl` keeps that instance on the frame's first
+declaration of the local and takes a new one only when the frame has declared
+it already, as on a loop's next iteration, so existing L1 names do not move
+(`github_666-id` pins one through `--no-slice-id`). A skipped local's address
+taken and returned is now reported as an expired variable at the dereference;
+master gave SUCCESSFUL.
+
+`switch_skipped_decl_recursion` is FAILED on master and
+`switch_skipped_decl_recursion_fail` SUCCESSFUL; both take the native verdict
+with the fix, under the default solver and `--z3` (Z3 only in this build;
+master was built with #8143's clang 18 guard). `regression/esbmc`,
+`esbmc-cpp/cpp`, `esbmc-cpp11`, `k-induction`, `cbmc` and `esbmc-unix`, under
+`ESBMC_REGRESS_TIMEOUT_MAX=30`, fail the same tests on both binaries (33, 21
+and 14 local timeouts and environment failures).
 ### M9 (R103) — 2026-10-03, the temporary a reference member kept alive
 
 R83 left open a temporary bound to an aggregate's reference member. With
