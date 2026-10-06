@@ -2223,6 +2223,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc-cpp/cpp/cxx14_elided_copy_nested
+regression/esbmc-cpp/cpp/cxx14_elided_copy_nested_fail
 regression/goto-transcoder/cbmc_deref_array
 regression/goto-transcoder/cbmc_kani_array_value
 regression/goto-transcoder/cbmc_kani_array_value_fail
