@@ -2237,6 +2237,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc/vla_pointer_to_pointer
+regression/esbmc/vla_pointer_to_pointer_fail
 regression/esbmc/va_list_own_cursor
 regression/esbmc/va_list_own_cursor_fail
 regression/esbmc/big_endian_memset
