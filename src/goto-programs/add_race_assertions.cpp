@@ -662,6 +662,17 @@ static void store_call_result_via_local(
   t->location = original.location;
 }
 
+static goto_programt::instructiont
+yield_instruction(contextt &context, const locationt &location)
+{
+  goto_programt::instructiont yield(FUNCTION_CALL);
+  code_function_callt call;
+  call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+  migrate_expr(call, yield.code);
+  yield.location = location;
+  return yield;
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
@@ -817,13 +828,7 @@ void add_race_assertions(
 
       {
         goto_programt::targett t = goto_program.insert(i_it);
-        t->type = FUNCTION_CALL;
-        code_function_callt call;
-        call.function() =
-          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-
-        migrate_expr(call, t->code);
-        t->location = original_instruction.location;
+        *t = yield_instruction(context, original_instruction.location);
         i_it = ++t;
       }
 
@@ -886,13 +891,7 @@ void add_race_assertions(
       if (races_only)
       {
         goto_programt::targett t = goto_program.insert(i_it);
-        t->type = FUNCTION_CALL;
-        code_function_callt call;
-        call.function() =
-          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-
-        migrate_expr(call, t->code);
-        t->location = original_instruction.location;
+        *t = yield_instruction(context, original_instruction.location);
         i_it = ++t;
       }
 
@@ -937,12 +936,7 @@ void add_race_assertions(
         goto_programt::targett after = i_it;
         ++after;
         goto_programt::targett t = goto_program.insert(after);
-        t->type = FUNCTION_CALL;
-        code_function_callt call;
-        call.function() =
-          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
-        migrate_expr(call, t->code);
-        t->location = instruction.location;
+        *t = yield_instruction(context, instruction.location);
         i_it = t; // loop's ++ advances past the inserted yield
 
         // Reset the write flags of shared writes performed inside this atomic
@@ -990,6 +984,42 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
   goto_program.update();
 }
 
+/// A release lets another thread acquire before the releasing one runs on. The
+/// switch point at the end of each release exists only under race checking,
+/// where a race may need exactly that order and no shared access follows to
+/// provide one (#8189). Placing it in the callee covers calls through a
+/// pointer.
+static void
+yield_after_lock_releases(contextt &context, goto_functionst &goto_functions)
+{
+  for (const char *release :
+       {"c:@F@pthread_mutex_unlock_noassert",
+        "c:@F@pthread_mutex_unlock_nocheck",
+        "c:@F@pthread_mutex_unlock_check",
+        "c:@F@pthread_rwlock_unlock",
+        "c:@F@pthread_spin_unlock"})
+  {
+    auto f_it = goto_functions.function_map.find(release);
+    if (
+      f_it == goto_functions.function_map.end() || !f_it->second.body_available)
+      continue;
+    // RETURN leaves the function, so the yield goes before each one.
+    goto_programt &body = f_it->second.body;
+    std::vector<goto_programt::targett> exits;
+    Forall_goto_program_instructions (i_it, body)
+      if (i_it->is_return())
+        exits.push_back(i_it);
+    if (exits.empty())
+      exits.push_back(std::prev(body.instructions.end()));
+    for (goto_programt::targett exit : exits)
+    {
+      goto_programt::instructiont yield =
+        yield_instruction(context, exit->location);
+      body.insert_swap(exit, yield);
+    }
+  }
+}
+
 void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
@@ -1024,6 +1054,8 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
         shared_locals,
         always_atomic.count(f_it->first) > 0,
         tmp_sym);
+
+  yield_after_lock_releases(context, goto_functions);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

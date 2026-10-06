@@ -2276,3 +2276,6 @@ regression/esbmc/deref_union_array_write
 regression/esbmc/deref_union_array_write_fail
 regression/function_contract/github_4219_old_in_forall_ptr_to_array
 regression/function_contract/github_4219_old_in_forall_ptr_to_array_fail
+regression/esbmc-unix/race_unlock_pointer_then_join_fail
+regression/esbmc-cpp/cpp/race_std_mutex_unlock_then_join
+regression/esbmc-cpp/cpp/race_std_mutex_unlock_then_join_fail
