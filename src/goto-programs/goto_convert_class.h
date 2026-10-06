@@ -70,8 +70,9 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
-  /// Lowers the condition of an if, loop or for statement, a full-expression
-  /// whose temporaries are destroyed before the branch ([class.temporary]/4).
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
   /// The operands of a short-circuit operator keep block scope.
   void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
   bool in_short_circuit = false;
@@ -225,6 +226,14 @@ protected:
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  bool construct_in_place(
+    const exprt &object,
+    const exprt &initializer,
+    goto_programt &dest);
+  void remove_initializer_sideeffects(
+    const exprt &object,
+    exprt &initializer,
+    goto_programt &dest);
   void convert_dynamic_static_init(
     const codet &decl,
     const symbolt &s,
@@ -255,10 +264,6 @@ protected:
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
   void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
-  void drop_returned_temporaries(
-    const exprt &value,
-    const goto_programt &sideeffects,
-    std::size_t from);
   void convert_continue(const code_continuet &code, goto_programt &dest);
   void convert_ifthenelse(const codet &code, goto_programt &dest);
   void convert_init(const codet &code, goto_programt &dest);
@@ -289,6 +294,9 @@ protected:
     std::size_t stack_size,
     const locationt &,
     goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,
@@ -298,6 +306,15 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// A destructor call on the destructor stack, possibly guarded by
+  /// guard_arm_destructors; the other entries are DEADs.
+  static bool is_destructor_entry(const codet &entry);
+  void guard_arm_destructors(
+    exprt &cond,
+    std::size_t true_size,
+    std::size_t false_size,
+    const locationt &location,
+    goto_programt &dest);
   void record_exception_unwind(goto_programt::instructiont &call);
 
   //
