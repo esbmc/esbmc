@@ -833,6 +833,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R114** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R114); **FIXED**, same entry | **Every va_list in a frame shared one cursor.** `symex_va_arg` read the frame's `va_cursor` whichever va_list it was given, and `va_start` and `va_copy` only marked a list started. A `va_copy` taken before the first `va_arg`, a second `va_start` on the same list, and a second list started in the same frame each read the argument after the one native code reads: `va_start(ap, n); va_copy(aq, ap); a = va_arg(ap, int); b = va_arg(aq, int);` gave `b` the second argument. | `goto_symext::symex_va_arg`, `va_list_mark_started`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_list_own_cursor{,_fail}` | **H-A7** | **Fixed**: `va_started` keeps each started local va_list's own cursor; `va_start` sets it, `va_copy` copies it, `va_arg` reads and advances it. A list whose cursor is unknown (a parameter, or copied from one) still reads the frame's. A `va_arg` under a nondet branch is still counted on both paths. |
 | **R108** | **Medium (false FAILED, default configuration, C and C++)** — open PRs #8122's and #8166's notes, §15 M9 (R108); **FIXED**, same entry | **`__builtin_clrsb` had no model.** `__builtin_clrsb`, `clrsbl` and `clrsbll` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_clrsb(-1) == 31)` was FAILED; the program passes natively. | `build_bit_scan` and `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `bit_scan_builtin`, `src/util/lang/c_builtins.h`; `goto_checkt::clz_zero_check`; `regression/esbmc/builtin_clrsb{,_fail}` | — | **Fixed**: clrsb joins the `clz`/`ctz`/`ffs` encoding as `clz(x ^ (x >> (W - 1))) - 1`, which gives `W - 1` at 0 and -1; `--clz-zero-check` does not claim its operand non-zero. |
 | **R106** | **High (false SUCCESSFUL and false FAILED, default configuration)** — the KNOWNBUG `github_7707-array`, §15 M9 (R106) | **An array of packed structs got no alignment claim on its base, and a packed object got one on its offset alone.** `build_reference_to` sends an array to `bounds_check`, which claims no alignment, and `construct_from_array` walks into a struct element without one, so `*(uint64_t *)&arr[1].b` was SUCCESSFUL although the array's base is free. `check_pointer_alignment` claims the offset before the object is known, assuming an aligned base, so with `b` at offset 1 and `(uintptr_t)p % 8 == 0` assumed the load was FAILED. | `dereferencet::construct_from_array`, `check_pointer_alignment`, `src/pointer-analysis/dereference.cpp` | — | **Fixed**: an access into an array of structs whose base alignment is below the access width is claimed on the whole address, and the offset-only pre-check skips such objects, leaving the claim to the object-aware sites. |
 | **R101** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R90's open note, §15 M9 (R101); **FIXED**, same entry | **The symex memory builtins dropped an invalid target.** `memset`, `memcpy`, `memmove`, `memcmp` and `memchr` resolve their pointers with an INTERNAL dereference, which skips an unknown or invalid value-set entry without a claim. A pointer that held `(char *)0x1000` or `a` resolved to `a` alone: `memset(p, 0, 4)` verified, where `p[0]` reports an invalid pointer. `memchr(p, c, 0)` left its result unassigned on the dropped path, so `memchr(p, 3, 0) == NULL` failed. | `claim_valid_operand`, `memcpy_finish`, `intrinsic_memcmp`, `intrinsic_memchr` and `intrinsic_memset`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_invalid_pointer{,_fail}` | — | **Fixed**: when an operand's value set holds an unknown or invalid entry, claim `n == 0 \|\| !INVALID_POINTER(p)`, as a READ dereference would; `memchr` assigns NULL before the per-target results. |
@@ -10397,6 +10398,38 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R114) — 2026-10-04, the cursor every va_list shared
+
+A probe battery of ten deterministic C programs, run natively and through
+ESBMC, found `va_copy` reading the wrong argument. `symex_va_arg` takes the
+next argument from the frame's `va_cursor`, whichever va_list it is given;
+`va_start` and `va_copy` only recorded that a list was started. So every
+va_list in a frame advanced one shared cursor. Native execution and ESBMC
+disagree on three shapes, all with `int` arguments `3, 4` (or `5, 6`):
+`va_copy(aq, ap)` before the first `va_arg`, then one `va_arg` from each,
+gives `3` and `3` natively and `3` and `4` here; `va_start`, `va_arg`,
+`va_end`, `va_start`, `va_arg` gives `3` twice natively and `3` then `4` here;
+two lists started in one frame give `5` and `5` natively and `5` and `6` here.
+An assertion of the native value is a false FAILED, and an assertion of
+ESBMC's is a false SUCCESSFUL.
+
+**Fixed** by keeping, beside each started local va_list in `va_started`, the
+index it reads next. `va_start` sets it to the frame's `va_index`, `va_copy`
+copies it from the source, and `va_arg` reads and advances it. The frame's
+`va_cursor` still advances on every `va_arg`, since `symex_printf`'s va_list
+recovery treats any movement as consumption. A list with no known cursor (a
+`va_list` parameter, or one copied from a parameter) reads the frame's cursor
+as before; `github_5873_va_start_present_pass` caught a first version that gave
+such a copy the helper frame's cursor. `va_list_own_cursor` (SUCCESSFUL) and
+`va_list_own_cursor_fail` (FAILED on all three shapes) are FAILED and
+SUCCESSFUL on master. The 60 other regression tests that use `<stdarg.h>` or a
+`v*printf` keep their verdicts (Z3; Bitwuzla was not built).
+
+Not fixed: the cursors are symex-time state, not SSA, so a `va_arg` under a
+nondet branch advances them on both paths. With `c` nondet,
+`if (c) a = va_arg(ap, int); b = va_arg(ap, int);` reads the second argument
+into `b` when `c` is 0, as it did on master. Open PR #8174 changes the same
+function so a `va_list` passed to a callee reads the caller's arguments.
 ### M9 (R91) — 2026-10-02, the byte order of `memset` and `memcpy`, and a memset that spans two elements
 
 R76 gave the big-endian layout one rule at every site that builds or takes
