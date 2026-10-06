@@ -1160,7 +1160,7 @@ enum target_flags
  *    c  |  *  |  *  | <none>                                         |
  *    *  |  c  |  *  | <none>                                         |
  *  -----+-----+-----+------------------------------------------------+---------
- *    *  |  A  |  *  | <unsupported>: "Can't construct rvalue ref..." |
+ *    *  |  A  |  *  | construct_array_ref                            | rec
  *    *  |  V  |  *  | construct_vector_ref                           | rec
  *  -----+-----+-----+------------------------------------------------+---------
  *    s  |  s  |  c  | construct_from_const_offset                    | st
@@ -1203,13 +1203,6 @@ static int dst_flag_of(const type2tc &type)
     return flag_dst_union;
   if (is_scalar_type(type))
     return flag_dst_scalar;
-  if (is_array_type(type))
-  {
-    log_error(
-      "Can't construct rvalue reference to array type during dereference\n"
-      "(It isn't allowed by C anyway)\n");
-    abort();
-  }
   log_error("Unrecognized dest type during dereference\n{}", *type);
   abort();
 }
@@ -1264,14 +1257,10 @@ void dereferencet::build_reference_rec(
     return;
   }
 
-  /* A vector destination is a value, not an array of lanes to be indexed:
-   * construct_vector_ref answers it whole or lane by lane, so it needs no row
-   * in the table below (#7907). */
-  if (is_vector_type(type))
-  {
-    construct_vector_ref(value, offset, type, guard, mode, alignment);
+  /* A vector or array destination is a value, built whole or element by
+   * element, so it needs no row in the table below (#7907). */
+  if (construct_value_ref(value, offset, type, guard, mode, alignment))
     return;
-  }
 
   flags |= dst_flag_of(type);
   flags |= src_flag_of(value);
@@ -1588,6 +1577,26 @@ void dereferencet::construct_from_array(
   }
 }
 
+/* Vectors (#7907) and arrays are built as values. An array destination is a
+ * whole array read through a pointer: a Rust `let a: [u8; N] = *p;` in a CBMC
+ * goto-binary, or a C union whose first member is an array. */
+bool dereferencet::construct_value_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  if (is_vector_type(type))
+    construct_vector_ref(value, offset, type, guard, mode, alignment);
+  else if (is_array_type(type))
+    construct_array_ref(value, offset, type, guard, mode, alignment);
+  else
+    return false;
+  return true;
+}
+
 /* Unlike an array, a vector is a value, read and written whole. Unless the
  * object already is one of this type, each lane is a scalar access at its own
  * offset, so every object shape the scalar paths handle is handled here, and a
@@ -1642,6 +1651,83 @@ void dereferencet::construct_vector_ref(
   }
 
   value = constant_vector2tc(type, std::move(lanes));
+}
+
+/// The most elements construct_array_ref builds one by one. A 2^18-element
+/// read takes about 20 s and 400 MB, growing linearly.
+static constexpr unsigned max_array_ref_elements = 1u << 20;
+
+void dereferencet::construct_array_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  const array_type2t &arr_type = to_array_type(type);
+
+  // No input reaches here with a flexible or variable-length target: a union
+  // with a flexible array member is read without building that member.
+  assert(
+    !is_nil_expr(arr_type.array_size) &&
+    is_constant_int2t(arr_type.array_size));
+
+  // Fast path: loading the whole object at offset 0 with a matching layout,
+  // which is the common case (e.g. a Rust `[u8; N]` value load). Avoids
+  // unrolling into N element reads.
+  if (is_constant_int2t(offset) && to_constant_int2t(offset).value == 0)
+  {
+    // Not base_type_eq: it ignores array sizes, so a [4] read of a [8] object
+    // would come back whole.
+    if (dereference_type_compare(value, type))
+      return;
+    if (is_scalar_type(value) && value->type->get_width() == type->get_width())
+    {
+      value = bitcast2tc(type, value);
+      return;
+    }
+  }
+
+  // General path: read each element from the source at its own offset and
+  // assemble them. Each recursive call re-dispatches on the source shape, so
+  // this transparently handles array, struct, scalar-reinterpret and union
+  // sources, and nests for multidimensional arrays.
+  const BigInt count = to_constant_int2t(arr_type.array_size).value;
+  // Every element becomes its own read; past the bound memory runs out first.
+  if (count > max_array_ref_elements)
+  {
+    dereference_failure(
+      "Bad dereference",
+      "Array too large to construct element by element",
+      guard);
+    value = make_failed_symbol(type);
+    return;
+  }
+
+  const BigInt elem_bits = type_byte_size_bits(arr_type.subtype, &ns);
+  // Element i sits i * elem_bits past the array, so on top of the array's
+  // alignment only the largest power of two dividing elem_bits is guaranteed.
+  const uint64_t stride = elem_bits.to_uint64();
+  const unsigned long elem_alignment =
+    std::min<unsigned long>(alignment, stride & -stride);
+
+  const expr2tc source = value;
+  std::vector<expr2tc> elements;
+  elements.reserve(count.to_uint64());
+  for (BigInt i = 0; i < count; i += 1)
+  {
+    expr2tc elem_offset = add2tc(
+      offset->type, offset, constant_int2tc(offset->type, i * elem_bits));
+    simplify(elem_offset);
+
+    expr2tc element = source;
+    build_reference_rec(
+      element, elem_offset, arr_type.subtype, guard, mode, elem_alignment);
+    elements.push_back(element);
+  }
+
+  value = constant_array2tc(type, std::move(elements));
 }
 
 void dereferencet::construct_from_const_offset(
