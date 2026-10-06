@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-vla-size-check --no-bounds-check
+^VERIFICATION SUCCESSFUL$

@@ -2288,3 +2288,7 @@ regression/goto-transcoder/cbmc_static_init_function
 regression/goto-transcoder/cbmc_static_init_function_fail
 regression/goto-transcoder/cbmc_vector
 regression/goto-transcoder/cbmc_vector_fail
+regression/esbmc/memspace_first_page
+regression/esbmc/memspace_first_page_fail
+regression/esbmc/memspace_first_page_vla_band
+regression/esbmc/memspace_first_page_vla_band_fail
