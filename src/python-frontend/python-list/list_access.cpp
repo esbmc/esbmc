@@ -1644,17 +1644,11 @@ const symbolt &python_list::get_str_slice_sym()
 // Callers have already validated eligibility; this function only
 // assembles the result.
 //
-// Declines (returns std::nullopt, falling back to whichever copy path the
-// caller's own caller uses) if current_lhs's symbol id is *already*
-// registered: the map is a single, frontend-only table with no per-branch
-// state, so `if c: b = np.ravel(a)` else `b = np.ravel(x)` would otherwise
-// have the textually-later branch's {length, stride} silently overwrite
-// the other's and apply to both control-flow paths regardless of which one
-// actually ran. This is conservative even for a plain, unconditional
-// re-assignment of the same name to a second pointer-view-eligible RHS
-// (which is unambiguous at runtime and could in principle re-register
-// safely) -- there is no cheap way here to distinguish that case from the
-// unsafe branch-merge one, so both fall back to an independent copy.
+// The map is a single, frontend-only table with no per-branch state, so a
+// name that is already a view can only be bound again to a view with the same
+// layout over the same storage (accepts_numpy_view_binding): the pointer then
+// takes either value at run time while one entry describes both. Any other
+// rebind declines (std::nullopt) or, on a conditional path, is rejected.
 std::optional<exprt> python_list::build_scalar_pointer_view(
   const exprt &array,
   const typet &elem_type,
@@ -1664,10 +1658,16 @@ std::optional<exprt> python_list::build_scalar_pointer_view(
   bool readonly)
 {
   const std::string lhs_id = converter_.current_lhs->identifier().as_string();
-  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
+  const typet view_ptr_type = pointer_typet(elem_type);
+  python_converter::numpy_scalar_pointer_view_infot info;
+  info.length = length;
+  info.stride = stride;
+  info.readonly = readonly;
+  info.shape = {length};
+  if (!converter_.accepts_numpy_view_binding(
+        lhs_id, info, view_ptr_type, array))
     return std::nullopt;
 
-  const typet view_ptr_type = pointer_typet(elem_type);
   // Pointer arithmetic, not build_index(array, offset, elem_type): an
   // empty view whose offset lands exactly at the source's element count
   // computes a one-past-the-end address, legal to form but not to
@@ -1680,11 +1680,6 @@ std::optional<exprt> python_list::build_scalar_pointer_view(
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
   converter_.numpy_result_is_view_ = true;
-  python_converter::numpy_scalar_pointer_view_infot info;
-  info.length = length;
-  info.stride = stride;
-  info.readonly = readonly;
-  info.shape = {length};
   converter_.numpy_pointer_view_info_[lhs_id] = info;
   if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))
     converter_.numpy_pointer_view_info_[lhs_symbol->id.as_string()] = info;
@@ -2458,15 +2453,20 @@ std::optional<exprt> python_list::build_contiguous_shaped_view(
       array, source->elem_type, offset, shape.front(), 1, readonly);
 
   const std::string lhs_id = converter_.current_lhs->identifier().as_string();
-  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
-    return std::nullopt;
-
   const namespacet ns(converter_.symbol_table());
   typet row_type = source->elem_type;
   for (auto dim = shape.rbegin(); dim != shape.rend() - 1; ++dim)
     row_type = converter_.type_handler_.build_array(row_type, *dim);
 
   const typet view_ptr_type = pointer_typet(row_type);
+  python_converter::numpy_scalar_pointer_view_infot info;
+  info.length = shape.front();
+  info.stride = 1;
+  info.readonly = readonly;
+  info.shape = shape;
+  if (!converter_.accepts_numpy_view_binding(
+        lhs_id, info, view_ptr_type, array))
+    return std::nullopt;
   exprt scalar_base =
     scalar_storage_pointer(array, pointer_typet(source->elem_type));
   exprt view_ptr = build_typecast(
@@ -2479,11 +2479,6 @@ std::optional<exprt> python_list::build_contiguous_shaped_view(
   converter_.update_symbol(*converter_.current_lhs);
   converter_.numpy_result_is_view_ = true;
 
-  python_converter::numpy_scalar_pointer_view_infot info;
-  info.length = shape.front();
-  info.stride = 1;
-  info.readonly = readonly;
-  info.shape = shape;
   converter_.numpy_pointer_view_info_[lhs_id] = info;
   converter_.numpy_param_shapes_[lhs_id] = shape;
   if (symbolt *lhs_symbol = converter_.find_symbol(lhs_id))

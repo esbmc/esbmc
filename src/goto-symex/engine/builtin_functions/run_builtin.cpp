@@ -39,10 +39,10 @@ ends_with(std::string const &value, std::string const &ending)
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-/// Value of a __builtin_clz*/ctz*/ffs* call. One encoding covers every
+/// Value of a __builtin_clz*/ctz*/ffs*/clrsb* call. One encoding covers every
 /// spelling: the operand type fixes the bit width, and the directions differ
 /// only in which way the smear shifts. Zero is undefined for every form but the
-/// two-argument clzg/ctzg and ffs; the optional UB assertion is added in
+/// two-argument clzg/ctzg, ffs and clrsb; the optional UB assertion is added in
 /// goto-check (--clz-zero-check), with the other UB checks. See #4606, #6925,
 /// #183.
 static expr2tc
@@ -51,14 +51,20 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
   const expr2tc &arg = func_call.operands[0];
   const type2tc &t = arg->type;
   const unsigned width = t->get_width();
-  const bool leading = end == bit_scan_endt::leading;
+  const bool leading =
+    end == bit_scan_endt::leading || end == bit_scan_endt::redundant_sign;
 
   // clz(x) = width - popcount(x with every bit below the most-significant set
   // bit smeared down); ctz mirrors it, smearing up from the least-significant
   // set bit. Reusing the popcount irep means a constant argument folds to a
   // constant (popcount has a simplifier), while a symbolic argument is handled
   // exactly by the backend's popcount encoding.
+  // clrsb(x) is clz(x ^ (x >> (width - 1))) - 1: the xor clears every
+  // leading copy of the sign bit, and a zero result gives width - 1.
   expr2tc smeared = arg;
+  if (end == bit_scan_endt::redundant_sign)
+    smeared =
+      bitxor2tc(t, arg, ashr2tc(t, arg, constant_int2tc(t, BigInt(width - 1))));
   for (unsigned shift = 1; shift < width; shift <<= 1)
   {
     expr2tc offset = constant_int2tc(t, shift);
@@ -72,6 +78,10 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
     get_int32_type(),
     constant_int2tc(get_int32_type(), width),
     popcount2tc(smeared));
+
+  if (end == bit_scan_endt::redundant_sign)
+    count = sub2tc(
+      get_int32_type(), count, constant_int2tc(get_int32_type(), BigInt(1)));
 
   // ffs counts the same trailing zeros but reports a one-based index, and is
   // defined at zero as 0 rather than left undefined there (POSIX).
