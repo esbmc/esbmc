@@ -1126,13 +1126,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handle symbolic (non-constant) range arguments
-   * @param converter The python converter instance
-   * @param range_args The range arguments from the AST
-   * @param element The AST element for location tracking
-   * @return Expression representing the symbolic range list
-   */
-  /**
    * @brief Set symbolic size on a list structure
    * @param converter The python converter instance
    * @param list_expr The list expression to modify
@@ -1145,6 +1138,19 @@ private:
     const exprt &size_expr,
     const nlohmann::json &element);
 
+  /**
+   * @brief Handle symbolic (non-constant) range arguments
+   * @param converter The python converter instance
+   * @param range_args The range arguments from the AST
+   * @param element The AST element for location tracking
+   * @param materialise_elements Write each element, which a `list(range(...))`
+   *        needs because its elements are read. A bare `range(...)` passes
+   *        false and keeps the size-only list it has always produced: its
+   *        elements are read by `x in range(...)` but materialising them
+   *        costs unwinding that `len(range(n))` cannot afford under a fixed
+   *        `--unwind`.
+   * @return Expression representing the symbolic range list
+   */
   static exprt handle_symbolic_range(
     python_converter &converter,
     const nlohmann::json &range_args,

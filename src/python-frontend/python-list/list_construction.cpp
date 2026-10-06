@@ -467,12 +467,19 @@ exprt python_list::handle_symbolic_range(
       elem_type,
       &start);
 
-  // A bare `range(...)` is consumed by len() or by a for-iterable, neither of
-  // which reads the backing list. Recording the size keeps len() exact and
-  // costs no unwinding, which materialising the elements would.
-  exprt list_expr = builder.get();
-  set_list_symbolic_size(converter, list_expr, count, element);
-  return list_expr;
+  // A bare `range(...)` keeps exactly what it did before. Recording a size
+  // without contents is not an option: `x in range(a, b)` reads them, and
+  // leaving them unwritten turns `0 not in range(1, 10)` into a false alarm.
+  // Materialising is not an option either, because `len(range(n))` under a
+  // fixed --unwind cannot afford the loop. Each half needs its own change,
+  // so this path is out of scope here.
+  if (!has_start)
+  {
+    exprt list_expr = builder.get();
+    set_list_symbolic_size(converter, list_expr, stop, element);
+    return list_expr;
+  }
+  return builder.get();
 }
 
 exprt python_list::build_concrete_range(
