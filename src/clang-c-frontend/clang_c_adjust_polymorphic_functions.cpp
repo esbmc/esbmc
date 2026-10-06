@@ -288,7 +288,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
 
     const typet &base_type = to_pointer_type(ptr_arg.type()).subtype();
     typet sync_return_type = base_type;
-    if (has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
+    if (has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
       sync_return_type = bool_type();
 
     code_typet t{
@@ -499,6 +499,56 @@ static void convert_expression_to_code(exprt &expr)
   code.move_to_operands(expr);
 
   expr.swap(code);
+}
+
+/* __sync_bool_compare_and_swap(ptr, old, new) and
+ * __sync_val_compare_and_swap(ptr, old, new): store new if *ptr == old, and
+ * return whether it did or the value *ptr held before. */
+static void instantiate_sync_compare_and_swap(
+  const irep_idt &identifier,
+  const irep_idt &identifier_with_type,
+  const code_typet &code_type,
+  const locationt &new_loc,
+  code_blockt &block,
+  contextt &context)
+{
+  const exprt &result = symbol_expr(
+    result_symbol(identifier_with_type, code_type.return_type(), context));
+  block.operands().push_back(code_declt(result));
+
+  const code_typet::argumentt &arg0 = code_type.arguments()[0];
+  const code_typet::argumentt &arg1 = code_type.arguments()[1];
+  const code_typet::argumentt &arg2 = code_type.arguments()[2];
+  const exprt ptr_deref = dereference_exprt(
+    symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+
+  exprt matches("=", bool_type());
+  matches.copy_to_operands(
+    ptr_deref, symbol_exprt(arg1.cmt_identifier(), arg1.type()));
+
+  const bool returns_bool =
+    has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap");
+  code_assignt assign_result(result, returns_bool ? matches : ptr_deref);
+  assign_result.location() = new_loc;
+  block.operands().push_back(assign_result);
+
+  code_assignt assign_ptr(
+    ptr_deref, symbol_exprt(arg2.cmt_identifier(), arg2.type()));
+  assign_ptr.location() = new_loc;
+  code_ifthenelset swap;
+  swap.cond() = matches;
+  swap.then_case() = assign_ptr;
+  block.operands().push_back(swap);
+
+  side_effect_expr_function_callt atomic_end;
+  atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+  convert_expression_to_code(atomic_end);
+  block.operands().push_back(atomic_end);
+
+  code_returnt ret;
+  ret.return_value() = result;
+  ret.location() = new_loc;
+  block.operands().push_back(ret);
 }
 
 /* The exact result of `a <op> b`, stored truncated to the result type, plus a
@@ -794,22 +844,24 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   else if (is_carry_builtin(identifier))
     instantiate_carry_builtin(identifier, code_type, new_loc, block);
   else if (
-    has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
-  {
-    // TODO
-  }
-  else if (
+    has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
-  {
-    // TODO
-  }
+    instantiate_sync_compare_and_swap(
+      identifier, identifier_with_type, code_type, new_loc, block, context);
   else if (has_prefix(identifier.as_string(), "c:@F@__sync_lock_release"))
   {
-    // TODO
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
-  {
-    // TODO
+    code_typet::argumentt arg0 = code_type.arguments()[0];
+    dereference_exprt arg0_deref(
+      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+    code_assignt assign_clear(
+      arg0_deref, gen_zero(to_pointer_type(arg0.type()).subtype()));
+    assign_clear.location() = new_loc;
+    block.operands().push_back(assign_clear);
+
+    side_effect_expr_function_callt atomic_end;
+    atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+    convert_expression_to_code(atomic_end);
+    block.operands().push_back(atomic_end);
   }
   else if (is_atomic_flag_builtin(identifier))
   {
@@ -916,7 +968,8 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_exchange"))
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_exchange") ||
+    has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
   {
     // This atomic builtin follows GCC's __atomic built-in functions
     // specification. See
@@ -996,7 +1049,39 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange"))
   {
-    // TODO
+    // *ptr is read before the store, as ret may alias val or ptr.
+    code_typet::argumentt arg0 = code_type.arguments()[0];
+    code_typet::argumentt arg1 = code_type.arguments()[1];
+    code_typet::argumentt arg2 = code_type.arguments()[2];
+    dereference_exprt ptr_deref(
+      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+
+    const exprt &old = symbol_expr(result_symbol(
+      identifier_with_type, to_pointer_type(arg0.type()).subtype(), context));
+    block.operands().push_back(code_declt(old));
+
+    code_assignt assign_old(old, ptr_deref);
+    assign_old.location() = new_loc;
+    block.operands().push_back(assign_old);
+
+    code_assignt assign_new(
+      ptr_deref,
+      dereference_exprt(
+        symbol_exprt(arg1.cmt_identifier(), arg1.type()), arg1.type()));
+    assign_new.location() = new_loc;
+    block.operands().push_back(assign_new);
+
+    code_assignt assign_ret(
+      dereference_exprt(
+        symbol_exprt(arg2.cmt_identifier(), arg2.type()), arg2.type()),
+      old);
+    assign_ret.location() = new_loc;
+    block.operands().push_back(assign_ret);
+
+    side_effect_expr_function_callt atomic_end;
+    atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+    convert_expression_to_code(atomic_end);
+    block.operands().push_back(atomic_end);
   }
   else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange_n") ||
