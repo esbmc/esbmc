@@ -2223,6 +2223,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc-cpp/cpp/user_placement_new
+regression/esbmc-cpp/cpp/user_placement_new_fail
 regression/esbmc/builtin_clrsb
 regression/esbmc/builtin_clrsb_fail
 regression/esbmc/github_7707-array
