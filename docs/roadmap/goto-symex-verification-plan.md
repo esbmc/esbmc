@@ -823,6 +823,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R94** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R89's sibling (PR #8125), §15 M9 (R94); **FIXED**, same entry | **A temporary in a `switch` condition outlived it.** `convert_switch` lowered the value with `remove_sideeffects`, so `switch (T(1).v)` ran `~T` at the end of the enclosing block, or at a `return` from a case, rather than before the case label ([class.temporary]/4). `k = dtors;` under `case 1:` stored 0, so `assert(k == 0)` was SUCCESSFUL and `assert(k == 1)` FAILED. | `convert_switch`, `src/goto-programs/goto_convert.cpp`; the switch arm of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/switch_condition_temporary{,_fail,_legacy}` | — | **Fixed**: the switch value is lowered through R89's `remove_condition_sideeffects`. |
 
 
+| **R91** | **High (false SUCCESSFUL and false FAILED, `--big-endian`; also the default configuration)** — found probing R76's byte order at the memory intrinsics, §15 M9 (R91); **FIXED**, same entry | **A constant-length `memset` or `memcpy` on a scalar placed its bytes little-endian.** `gen_byte_expression` and `gen_byte_memcpy` build the new value with shifts, putting byte `k` of the range at bit `8k` whatever the byte order. Under `--big-endian`, `memset(&x, 0xff, 1)` on an `unsigned` made `x == 0xff`, which verified, and `memcpy(&x, &y, 1)` copied `y`'s low byte. The pointer arm wrote through a little-endian `byte_update`. R76 did not reach these sites because they never build a `byte_extract` or `byte_update`. Separately, on any target, a `memset` starting inside an element or member handed it more bytes than were left in it and dropped them from the next: `memset((char *)a + 3, 0x11, 2)` over `unsigned a[2]` left `a[1] == 0`. | `byte_shift`, `gen_byte_expression`, `gen_byte_expression_byte_update` and `gen_byte_memcpy`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `gen_value_by_byte`; `regression/esbmc/big_endian_memset{,_fail}`, `big_endian_memcpy{,_fail}`, `memset_offset_span{,_fail}` | — | **Fixed**: on a big-endian target a range of `n` bytes at byte `k` of a `w`-byte scalar is shifted by `w - k - n` bytes instead of `k`, and the pointer arm passes the target's byte order to `byte_update`; `gen_value_by_byte` gives an element or member at most the bytes after the offset and carries the rest to the next. |
 | **R105** | **High (false SUCCESSFUL and false FAILED, default configuration, C)** — found probing the `$vector-cmp$` residual of §15 M9 (R65), §15 M9 (R105); **FIXED**, same entry | **A compound literal was initialised where its declaration was hoisted, not where it is evaluated.** The C frontend pushed the literal's declaration, initialiser included, into the enclosing block ahead of the statement being converted. In an unbraced loop body that runs once, before the loop; in an unbraced `if` body it runs whether or not the branch is taken; before a `case` label it is unreachable and is dropped, so the literal reads nondet. `for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;` left `hit` at 0. | `CompoundLiteralExprClass` in `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/compound_literal_per_evaluation{,_fail}` | — | **Fixed**: the declaration stays in the enclosing block, which is the literal's lifetime (C17 6.5.2.5p5), and the literal becomes `(cl = init, cl)`, so it is initialised each time it is evaluated. |
 | **R89** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8122's open note, §15 M9 (R89); **FIXED**, same entry | **Five atomic builtins had no body.** `instantiate_gcc_polymorphic_builtin` opened the atomic section for `__sync_bool_compare_and_swap`, `__sync_val_compare_and_swap`, `__sync_lock_test_and_set`, `__sync_lock_release` and the generic `__atomic_exchange`, then emitted nothing: the object kept its value, the result was nondet, and the atomic section was never closed, so the calling thread could not be preempted again. The two compare-and-swap names also had each other's return type. | `instantiate_gcc_polymorphic_builtin`, `instantiate_sync_compare_and_swap` and `is_gcc_polymorphic_builtin`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/sync_swap_builtins{,_fail}`, `sync_lock_release_race_fail` | — | **Fixed**: give each its GCC semantics inside the atomic section and close it; `bool` for the bool variant, the object's type for the val variant. |
 | **R78** | **High (wrong program verified, `--big-endian`/`--little-endian`)** — R76's open note, §15 M9 (R78); **FIXED**, same entry | **An endianness option did not reach the preprocessor.** `--big-endian` and `--little-endian` replace the target's byte order in `config.ansi_c.endianess`, but clang is given the target triple and predefines that triple's `__BYTE_ORDER__` and `__LITTLE_ENDIAN__`/`__BIG_ENDIAN__`. A program that selects its layout or its expectations by those macros compiled the variant for the other byte order. | `configt::ansi_ct::endianess_overrides_target`, `src/util/config/config.cpp`; `clang_c_languaget::build_compiler_args`; `regression/esbmc/big_endian_byte_order_macros{,_fail}` | — | **Fixed**: when the option contradicts the target, redefine the three macros on the clang command line. |
@@ -10396,6 +10397,47 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R91) — 2026-10-02, the byte order of `memset` and `memcpy`, and a memset that spans two elements
+
+R76 gave the big-endian layout one rule at every site that builds or takes
+apart an object's bits through `byte_extract`, `byte_update` or the flattener.
+Symex's constant-length `memset` and `memcpy` do neither for a scalar: they
+build the result with shifts and masks in `gen_byte_expression` and
+`gen_byte_memcpy`, which put byte `k` of the range at bit `8k`. That is the
+little-endian layout. Under `--big-endian`:
+
+- `unsigned x = 0; memset(&x, 0xff, 1);` gave `x == 0xff`, so
+  `assert(x == 0xff)` was **SUCCESSFUL** and `assert(x == 0xff000000)` FAILED.
+  Arrays and structs reach the same code once per scalar element, so
+  `memset(a, 0x11, 3)` over `unsigned short a[2]` set `a[1]`'s low byte.
+- `memcpy(&x, &y, 1)` between two `unsigned` copied `y`'s low byte into `x`'s.
+- A partial `memset` of a pointer wrote through a `byte_update` built with
+  `big_endian` false.
+
+A store through `unsigned char *` and a symbolic-length call, which runs the C
+model byte by byte, were already right.
+
+Code review of the first version found a second defect, in the walk above
+these functions and on every target. `gen_value_by_byte` gave an array element
+or struct member entered at byte `k` up to its whole size, not the size less
+`k`, and charged the next element only for what was left after that. With
+`unsigned a[2]`, `memset((char *)a + 3, 0x11, 2)` wrote one byte into `a[0]`
+and none into `a[1]`, so `assert(a[1] == 0)` was **SUCCESSFUL** in the default
+configuration while the native program aborts. Little-endian shifts dropped the
+excess bytes off the top; the big-endian shift underflowed and symex never
+finished.
+
+**Fixed** by shifting a range of `n` bytes at byte `k` of a `w`-byte scalar by
+`w - k - n` bytes on a big-endian target, in both functions, and passing the
+target's byte order to the pointer arm's `byte_update`; and by giving an
+element or member at most the bytes after the offset, charging the next one
+for exactly what was written. `big_endian_memset{,_fail}`,
+`big_endian_memcpy{,_fail}` and `memset_offset_span{,_fail}` (default flags)
+change verdict against master, each half under Bitwuzla and Z3. Reverting the
+memset shift, the memcpy shift, the pointer flag or the span bookkeeping alone
+fails the matching tests. The 213 other non-CHERI regression tests that
+call `memset`, `memcpy` or `memmove` or set a byte order keep their verdicts
+otherwise.
 ### M9 (R98) — 2026-10-03, a user-placement new that allocated
 
 R81 left open that a non-reserved placement form still allocates. With
