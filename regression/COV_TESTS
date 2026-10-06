@@ -2174,6 +2174,7 @@ regression/esbmc/atomic_fetch_nand_fail
 regression/esbmc-cpp/cpp/condition_temporary
 regression/esbmc-cpp/cpp/condition_temporary_fail
 regression/esbmc-cpp/cpp/condition_temporary_legacy
+regression/esbmc-cpp/cpp/new_multidim_value_init
 regression/esbmc/sync_swap_builtins
 regression/esbmc/sync_swap_builtins_fail
 regression/esbmc/sync_lock_release_race_fail
@@ -2210,6 +2211,9 @@ regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc/fam_false_2
 regression/esbmc/fam_true_4
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind_fail
+regression/esbmc-cpp/try_catch/ctor_subobject_unwind_thread
 regression/goto-transcoder/cbmc_kani_property_class
 regression/goto-transcoder/cbmc_kani_property_class_default
 regression/goto-transcoder/cbmc_kani_property_class_fail
@@ -2221,3 +2225,15 @@ regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
 regression/esbmc-cpp/cpp/cxx14_elided_copy_nested
 regression/esbmc-cpp/cpp/cxx14_elided_copy_nested_fail
+regression/goto-transcoder/cbmc_deref_array
+regression/goto-transcoder/cbmc_kani_array_value
+regression/goto-transcoder/cbmc_kani_array_value_fail
+regression/goto-transcoder/cbmc_kani_array_write
+regression/goto-transcoder/cbmc_kani_array_write_fail
+regression/goto-transcoder/cbmc_kani_array_too_large_fail
+regression/esbmc/deref_union_array_read
+regression/esbmc/deref_union_array_read_fail
+regression/esbmc/deref_union_array_write
+regression/esbmc/deref_union_array_write_fail
+regression/function_contract/github_4219_old_in_forall_ptr_to_array
+regression/function_contract/github_4219_old_in_forall_ptr_to_array_fail
