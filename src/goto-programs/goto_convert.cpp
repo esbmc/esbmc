@@ -305,6 +305,38 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
+/// The objects \p value is a bitwise copy of: the symbols it names and,
+/// transitively, those \p sideeffects assigns into them or into their parts
+/// (`H{C(1)}` lowers to `tmp$2 = { .c=tmp$1 }`).
+static std::set<irep_idt>
+value_sources(const exprt &value, const goto_programt &sideeffects)
+{
+  expr2tc value2;
+  migrate_expr(value, value2);
+  std::unordered_set<expr2tc, irep2_hash> symbols;
+  get_symbols(value2, symbols);
+  std::set<irep_idt> sources;
+  for (const expr2tc &sym : symbols)
+    sources.insert(to_symbol2t(sym).thename);
+
+  for (auto it = sideeffects.instructions.rbegin();
+       it != sideeffects.instructions.rend();
+       ++it)
+  {
+    if (!it->is_assign())
+      continue;
+    const code_assign2t &assign = to_code_assign2t(it->code);
+    const expr2tc &target = get_base_object(assign.target);
+    if (!is_symbol2t(target) || !sources.count(to_symbol2t(target).thename))
+      continue;
+    symbols.clear();
+    get_symbols(assign.source, symbols);
+    for (const expr2tc &sym : symbols)
+      sources.insert(to_symbol2t(sym).thename);
+  }
+  return sources;
+}
+
 /// The object a constructor call builds: the symbol its `this` argument points
 /// to. Empty for any other call.
 static irep_idt constructed_symbol(const expr2tc &code, const namespacet &ns)
@@ -1947,18 +1979,38 @@ void goto_convertt::remove_return_value_sideeffects(
   exprt &value,
   goto_programt &dest)
 {
-  // A class-type value may be, or be copied bitwise from, a temporary of the
-  // expression (`return A(n);`, `return H{q};`), and a temporary under `?:`,
-  // `&&` or `||` exists on one path only; their entries are dropped.
+  // A temporary under `?:`, `&&` or `||` exists on one path only, so every
+  // entry is dropped; a conditional inside a temporary's initializer escapes
+  // has_conditional_sideeffect, so a class-type value that branches drops them
+  // too. Otherwise a class-type value drops the entries of its sources, the
+  // temporaries it is copied bitwise from (`return A(n);`, `return H{q};`).
   const typet &type = ns.follow(value.type());
-  const bool drop_temporaries = type.id() == "struct" || type.id() == "union" ||
-                                has_conditional_sideeffect(value);
-  const std::size_t stack_size = targets.destructor_stack.size();
+  const bool is_class = type.id() == "struct" || type.id() == "union";
+  const bool conditional = has_conditional_sideeffect(value);
+  destructor_stackt &stack = targets.destructor_stack;
+  const std::size_t stack_size = stack.size();
   goto_programt sideeffects;
   remove_sideeffects(value, sideeffects);
+  const bool branches = std::any_of(
+    sideeffects.instructions.begin(),
+    sideeffects.instructions.end(),
+    [](const goto_programt::instructiont &i) { return i.is_goto(); });
+  if (conditional || (is_class && branches))
+    stack.resize(stack_size);
+  else if (is_class)
+  {
+    const std::set<irep_idt> sources = value_sources(value, sideeffects);
+    stack.erase(
+      std::remove_if(
+        stack.begin() + stack_size,
+        stack.end(),
+        [&sources](const codet &entry) {
+          const irep_idt id = destructor_entry_symbol(entry);
+          return id.empty() || sources.count(id);
+        }),
+      stack.end());
+  }
   dest.destructive_append(sideeffects);
-  if (drop_temporaries)
-    targets.destructor_stack.resize(stack_size);
 }
 
 void goto_convertt::convert_return(
