@@ -10759,6 +10759,27 @@ tests. A list assigned to an existing object (`a = W{M(5)};`) and one in a
 mem-initializer (`V() : w{M(5)} {}`) still go through R83's path; both
 balance their destructors.
 
+### M9 (R92) — 2026-10-02, the copy inside the elided copy
+
+R69's residuals include an elidable copy below the root of an initializer. In
+`C c = C(C(1));` under `--std c++14` clang wraps the inner `C(1)` in an
+elidable copy, binds the result, casts it to `C`, and copies that again, also
+elidably; it elides both. `elided_copy_source` peeled only the outer copy, so
+ESBMC ran the copy constructor once and destroyed two objects.
+`{ C c = C(C(1)); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts
+natively; `return C(C(x));` and three levels behaved the same.
+
+**Fixed** by peeling repeatedly: from a copy's source, `peel_initializer_wrapper`
+looks through the bound temporary, parentheses and the functional cast, and a
+further elidable copy is peeled too. What is converted is the innermost copy's
+source, the form `C c = C(1);` already had. A copy from a named object is not
+elidable and still runs. `cxx14_elided_copy_nested{,_fail}`, pinned to
+`--std c++14`, are wrong on master, both halves, under Z3; they were not run
+under Bitwuzla. The 296 tests pinned to a standard before C++17 keep their
+verdicts otherwise.
+
+Still open from R69's list: an elidable copy of an init-list element or a
+by-value argument, a catch-by-value parameter, and NRVO `return local;`.
 ### M9 (R90) — 2026-10-02, the NULL operand memcmp never checked
 
 The symex `memcmp` resolves each operand with `memcmp_resolve_operand`, which
