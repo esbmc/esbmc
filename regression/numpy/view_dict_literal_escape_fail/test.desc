@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: storing a copied numpy view in a container is not supported
+^VERIFICATION FAILED$
+line +7 +assertion
