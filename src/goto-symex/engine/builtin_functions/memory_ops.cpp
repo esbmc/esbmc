@@ -729,6 +729,30 @@ static void offset_simplifier(expr2tc &e)
   simplify(e);
 }
 
+void goto_symext::claim_valid_operand(
+  const expr2tc &ptr,
+  const expr2tc &n,
+  const std::string &func)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  expr2tc l1_ptr = ptr;
+  cur_state->top().level1.rename(l1_ptr);
+  value_setst::valuest targets;
+  cur_state->value_set.get_value_set(l1_ptr, targets);
+  if (std::none_of(targets.begin(), targets.end(), [](const expr2tc &t) {
+        return is_unknown2t(t) || is_invalid2t(t);
+      }))
+    return;
+
+  expr2tc check =
+    or2tc(equality2tc(n, gen_zero(n->type)), not2tc(invalid_pointer2tc(ptr)));
+  replace_dynamic_allocation(check);
+  cur_state->guard.guard_expr(check);
+  claim(check, "dereference failure: invalid pointer on " + func);
+}
+
 // Shared core for memcpy and memmove. The optimised path computes the new
 // destination value from the *current* (pre-assignment) bytes of both objects
 // and then assigns it, so overlapping regions are handled correctly — i.e. it
@@ -737,8 +761,12 @@ static void offset_simplifier(expr2tc &e)
 void goto_symext::memcpy_finish(
   const code_function_call2t &func_call,
   const expr2tc &dst_arg,
-  const expr2tc &src_arg)
+  const expr2tc &src_arg,
+  const expr2tc &n_arg)
 {
+  claim_valid_operand(dst_arg, n_arg, "DST");
+  claim_valid_operand(src_arg, n_arg, "SRC");
+
   if (!options.get_bool_option("no-pointer-check"))
   {
     expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
@@ -866,7 +894,7 @@ void goto_symext::intrinsic_memcpy_impl(
       bump_call(func_call, bump_name);
       return;
     }
-    memcpy_finish(func_call, dst_arg, src_arg);
+    memcpy_finish(func_call, dst_arg, src_arg, n_arg);
     return;
   }
 
@@ -1059,7 +1087,7 @@ void goto_symext::intrinsic_memcpy_impl(
         code_assign2tc(item.object, new_object), false, assignment_guard);
     }
   }
-  memcpy_finish(func_call, dst_arg, src_arg);
+  memcpy_finish(func_call, dst_arg, src_arg, n_arg);
 }
 
 void goto_symext::intrinsic_memcpy(
@@ -1251,6 +1279,9 @@ void goto_symext::intrinsic_memcmp(
       "dereference failure: memcmp length exceeds object bounds");
   }
 
+  claim_valid_operand(s1_arg, n_arg, "memcmp");
+  claim_valid_operand(s2_arg, n_arg, "memcmp");
+
   // Build the lexicographic result as a nested ite over the byte reads, from
   // the last byte backwards so the first differing byte dominates:
   //   res = ite(active[0] && b1[0] != b2[0], (int)b1[0] - (int)b2[0],
@@ -1369,6 +1400,10 @@ void goto_symext::intrinsic_memchr(
   const type2tc ret_type = ret_ref->type;
   const expr2tc null_result = symbol2tc(ret_type, "NULL");
 
+  // The result on a target the resolution dropped, an invalid or NULL buf,
+  // which only n == 0 leaves without a failed claim.
+  symex_assign(code_assign2tc(ret_ref, null_result), false, cur_state->guard);
+
   // Byte value to search for: (unsigned char)ch.
   const expr2tc ch_byte = typecast2tc(get_uint_type(8), ch_arg);
 
@@ -1463,6 +1498,7 @@ void goto_symext::intrinsic_memchr(
     ex_state.cur_state->guard.guard_expr(null_check);
     claim(null_check, " dereference failure: NULL pointer on memchr");
   }
+  claim_valid_operand(buf_arg, n_arg, "memchr");
 }
 
 /**
@@ -1680,6 +1716,7 @@ void goto_symext::intrinsic_memset(
     // 4. Assign the new object
     symex_assign(code_assign2tc(item.object, new_object), false, guard);
   }
+  claim_valid_operand(arg0, arg2, "memset");
   // Lastly, let's add a NULL ptr check
   if (!options.get_bool_option("no-pointer-check"))
   {
