@@ -70,8 +70,9 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
-  /// Lowers the condition of an if, loop or for statement, a full-expression
-  /// whose temporaries are destroyed before the branch ([class.temporary]/4).
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
   /// The operands of a short-circuit operator keep block scope.
   void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
   bool in_short_circuit = false;
@@ -293,6 +294,9 @@ protected:
     std::size_t stack_size,
     const locationt &,
     goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,
