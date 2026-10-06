@@ -513,6 +513,24 @@ bool goto_symext::symex_uninterpreted_function(
   return true;
 }
 
+// A local lives from entry to its block (C11 6.2.4p6), and a jump past its
+// declaration must not leave it naming the caller's instance or a global.
+// Its DECL may be gone as unreachable, as in `switch (k) { int y; ... }`.
+static void give_locals_fresh_instances(
+  const goto_functiont &goto_function,
+  goto_symex_statet &state,
+  goto_symex_statet::framet &frame)
+{
+  std::set<irep_idt> locals;
+  get_local_identifiers(goto_function, locals);
+  for (const auto &instruction : goto_function.body.instructions)
+    if (instruction.type == DEAD)
+      locals.insert(to_code_dead2t(instruction.code).value);
+  for (const irep_idt &id : locals)
+    frame.level1.rename(
+      symbol2tc(get_empty_type(), id), ++state.variable_instance_nums[id]);
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
@@ -656,6 +674,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   // copy L1 renaming from previous frame
   frame.level1 = cur_state->previous_frame().level1;
   frame.level1.thread_id = cur_state->source.thread_nr;
+
+  give_locals_fresh_instances(goto_function, *cur_state, frame);
 
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
