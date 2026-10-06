@@ -306,6 +306,15 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// A destructor call on the destructor stack, possibly guarded by
+  /// guard_arm_destructors; the other entries are DEADs.
+  static bool is_destructor_entry(const codet &entry);
+  void guard_arm_destructors(
+    exprt &cond,
+    std::size_t true_size,
+    std::size_t false_size,
+    const locationt &location,
+    goto_programt &dest);
   void record_exception_unwind(goto_programt::instructiont &call);
 
   //
