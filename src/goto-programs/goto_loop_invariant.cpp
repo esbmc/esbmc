@@ -262,13 +262,15 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // A write through a dereference has no named symbol for the havoc to cover,
   // so resolve the pointer to the objects it may reference and havoc those
   // instead. Where that abstains -- an unresolvable pointer, an unknown or heap
-  // pointee, a callee reached through a function pointer -- the loop would be
-  // symex'd from its concrete pre-loop state, the invariant discharged against
-  // one concrete iteration and the claims after the loop dropped unsolved
-  // (issue #7478). Leave the loop for the unwinder rather than report a proof
-  // we did not make. The base case above is checked against the concrete
-  // pre-loop state and needs no havoc, so it still stands.
-  if (loop.writes_through_pointer() && loop.pointer_array_write_unresolvable())
+  // pointee, one too wide to havoc, a callee reached through a function
+  // pointer -- the loop would be symex'd from its concrete pre-loop state, the
+  // invariant discharged against one concrete iteration and the claims after
+  // the loop dropped unsolved (issue #7478). Leave the loop for the unwinder
+  // rather than report a proof we did not make. The base case above is checked
+  // against the concrete pre-loop state and needs no havoc, so it still stands.
+  if (
+    loop.writes_through_pointer() &&
+    (loop.pointer_array_write_unresolvable() || !pointees_havocable(loop)))
   {
     log_warning(
       "loop invariant at {} not checked beyond its base case: the loop writes "
@@ -628,17 +630,48 @@ void goto_loop_invariantt::insert_assert_before_loop(
   goto_function.body.insert_swap(loop_head, dest);
 }
 
+/// The type of `*ptr` when the havoc can cover it, nil otherwise: a pointee
+/// with no static width (a VLA, an infinite array, an unresolved type) has no
+/// nondet value to build, and a large aggregate costs more to encode than the
+/// loop it replaces -- the 1024-element `poly` of quantified_array_invariant
+/// goes from under a second to minutes (issue #7502).
+type2tc goto_loop_invariantt::havoc_pointee_type(
+  const expr2tc &ptr,
+  const namespacet &ns)
+{
+  if (!is_pointer_type(ptr->type))
+    return type2tc();
+
+  const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
+  if (is_empty_type(pointee) || is_code_type(pointee))
+    return type2tc();
+
+  try
+  {
+    if (pointee->get_width() > kMaxHavocPointeeBits)
+      return type2tc();
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return type2tc();
+  }
+  return pointee;
+}
+
+bool goto_loop_invariantt::pointees_havocable(const loopst &loop) const
+{
+  const namespacet ns(context);
+  const auto &ptrs = loop.get_pointer_array_write_ptrs();
+  return std::all_of(ptrs.begin(), ptrs.end(), [&ns](const expr2tc &ptr) {
+    return !is_nil_type(havoc_pointee_type(ptr, ns));
+  });
+}
+
 /// Storage a loop writes through a pointer has no named symbol, so havoc the
 /// pointed-to object through the pointer itself and let symex resolve it
 /// against its own value set. Without this the pointee keeps its pre-loop value
 /// across the abstract iteration and a claim about it after the loop is decided
 /// on state the loop overwrote (issue #7478).
-///
-/// A pointee is havoc'd as one nondet value, which for a large aggregate costs
-/// more to encode than the loop it replaces: the 1024-element `poly` of
-/// quantified_array_invariant goes from under a second to nine minutes, against
-/// eight seconds at 256 elements. Cover what is cheap and leave the rest to
-/// issue #7502 rather than trade a proof for a timeout.
 void goto_loop_invariantt::havoc_pointees(
   const loopst &loop,
   const locationt &loc,
@@ -648,28 +681,7 @@ void goto_loop_invariantt::havoc_pointees(
 
   for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
   {
-    if (!is_pointer_type(ptr->type))
-      continue;
-
-    const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
-    if (is_empty_type(pointee) || is_code_type(pointee))
-      continue;
-
-    // get_width() throws on a VLA or an infinite array, and on a type the
-    // namespace could not resolve. A pointee with no static width has no
-    // nondet value to build either, so it is out of reach here.
-    unsigned width;
-    try
-    {
-      width = pointee->get_width();
-    }
-    catch (const array_type2t::array_size_excp &)
-    {
-      continue;
-    }
-    if (width > kMaxHavocPointeeBits)
-      continue;
-
+    const type2tc pointee = havoc_pointee_type(ptr, ns);
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
     t->location = loc;
