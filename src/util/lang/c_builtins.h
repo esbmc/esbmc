@@ -3,7 +3,7 @@
 #include <string_view>
 #include <util/base/prefix.h>
 
-/// Which bit of the operand a __builtin_clz*/ctz*/ffs* call reports.
+/// Which bit of the operand a __builtin_clz*/ctz*/ffs*/clrsb* call reports.
 enum class bit_scan_endt
 {
   none,
@@ -11,7 +11,10 @@ enum class bit_scan_endt
   trailing,
   /// ffs: the one-based index of the least-significant set bit, and 0 for a
   /// zero operand -- defined there, unlike the other two.
-  first_set
+  first_set,
+  /// clrsb: the leading bits equal to the sign bit, less the sign bit itself;
+  /// defined for every operand.
+  redundant_sign
 };
 
 /// Recognise the __builtin_clz*/__builtin_ctz* family from a symbol name such
@@ -32,22 +35,28 @@ inline bit_scan_endt bit_scan_builtin(std::string_view symname)
   symname.remove_prefix(prefix.size());
 
   bit_scan_endt end = bit_scan_endt::none;
+  std::size_t stem = 3;
   if (has_prefix(symname, "clz"))
     end = bit_scan_endt::leading;
   else if (has_prefix(symname, "ctz"))
     end = bit_scan_endt::trailing;
   else if (has_prefix(symname, "ffs"))
     end = bit_scan_endt::first_set;
+  else if (has_prefix(symname, "clrsb"))
+  {
+    end = bit_scan_endt::redundant_sign;
+    stem = 5;
+  }
   else
     return bit_scan_endt::none;
-  symname.remove_prefix(3);
+  symname.remove_prefix(stem);
 
   for (const std::string_view width : {"", "l", "ll"})
     if (symname == width)
       return end;
 
   // Only clz/ctz have the 16-bit and type-generic spellings.
-  if (end == bit_scan_endt::first_set)
+  if (end != bit_scan_endt::leading && end != bit_scan_endt::trailing)
     return bit_scan_endt::none;
 
   for (const std::string_view width : {"s", "g"})
