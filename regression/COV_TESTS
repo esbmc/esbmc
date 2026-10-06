@@ -386,7 +386,7 @@ regression/numpy/arange_zero_step_fail
 regression/numpy/argsort_reassigned_array_fail
 regression/numpy/array_dtype_nonliteral_fail
 regression/numpy/array_param_3d_fail
-regression/numpy/array_param_row_read_fail
+regression/numpy/array_param_row_read_success
 regression/numpy/astype_unsupported_dtype_fail
 regression/numpy/bool_mask_param_conflict_fail
 regression/numpy/bool_mask_reassigned_success
@@ -478,7 +478,7 @@ regression/numpy/unique_return_counts_fail
 regression/numpy/unique_values_success
 regression/numpy/unsupported_3d_array_fail
 regression/numpy/view_escape_attribute_fail
-regression/numpy/view_escape_return_fail
+regression/numpy/view_escape_return_local_array_success
 regression/numpy/view_function_broadcast_to_write_fail
 regression/numpy/view_function_expand_dims_readonly_success
 regression/numpy/view_function_invalid_axis_edge
@@ -1663,7 +1663,7 @@ regression/python/github_7081_map
 regression/python-contracts/clause_call_fail
 regression/numpy/symbolic_shape_inconsistent_rank_fail
 regression/python/github_3593
-regression/numpy/view_escape_function_call_fail
+regression/numpy/view_escape_function_call_success
 regression/python/github_3701_14
 regression/python/builtin_all_complex
 regression/python/github_3056_2_fail
