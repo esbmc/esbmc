@@ -831,6 +831,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R108** | **Medium (false FAILED, default configuration, C and C++)** — open PRs #8122's and #8166's notes, §15 M9 (R108); **FIXED**, same entry | **`__builtin_clrsb` had no model.** `__builtin_clrsb`, `clrsbl` and `clrsbll` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_clrsb(-1) == 31)` was FAILED; the program passes natively. | `build_bit_scan` and `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `bit_scan_builtin`, `src/util/lang/c_builtins.h`; `goto_checkt::clz_zero_check`; `regression/esbmc/builtin_clrsb{,_fail}` | — | **Fixed**: clrsb joins the `clz`/`ctz`/`ffs` encoding as `clz(x ^ (x >> (W - 1))) - 1`, which gives `W - 1` at 0 and -1; `--clz-zero-check` does not claim its operand non-zero. |
 | **R106** | **High (false SUCCESSFUL and false FAILED, default configuration)** — the KNOWNBUG `github_7707-array`, §15 M9 (R106) | **An array of packed structs got no alignment claim on its base, and a packed object got one on its offset alone.** `build_reference_to` sends an array to `bounds_check`, which claims no alignment, and `construct_from_array` walks into a struct element without one, so `*(uint64_t *)&arr[1].b` was SUCCESSFUL although the array's base is free. `check_pointer_alignment` claims the offset before the object is known, assuming an aligned base, so with `b` at offset 1 and `(uintptr_t)p % 8 == 0` assumed the load was FAILED. | `dereferencet::construct_from_array`, `check_pointer_alignment`, `src/pointer-analysis/dereference.cpp` | — | **Fixed**: an access into an array of structs whose base alignment is below the access width is claimed on the whole address, and the offset-only pre-check skips such objects, leaving the claim to the object-aware sites. |
 | **R101** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R90's open note, §15 M9 (R101); **FIXED**, same entry | **The symex memory builtins dropped an invalid target.** `memset`, `memcpy`, `memmove`, `memcmp` and `memchr` resolve their pointers with an INTERNAL dereference, which skips an unknown or invalid value-set entry without a claim. A pointer that held `(char *)0x1000` or `a` resolved to `a` alone: `memset(p, 0, 4)` verified, where `p[0]` reports an invalid pointer. `memchr(p, c, 0)` left its result unassigned on the dropped path, so `memchr(p, 3, 0) == NULL` failed. | `claim_valid_operand`, `memcpy_finish`, `intrinsic_memcmp`, `intrinsic_memchr` and `intrinsic_memset`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_invalid_pointer{,_fail}` | — | **Fixed**: when an operand's value set holds an unknown or invalid entry, claim `n == 0 \|\| !INVALID_POINTER(p)`, as a READ dereference would; `memchr` assigns NULL before the per-target results. |
 | **R107** | **High (false SUCCESSFUL and false FAILED, `--loop-invariant-check`)** — found reading `havoc_pointees` while working R97's loop-invariant residual, §15 M9 (R107); **FIXED**, same entry | **A pointee too wide to havoc kept its pre-loop value past the invariant.** `havoc_pointees` skipped a written pointee wider than 1024 bits, or one with no static width, but the inductive step still ran, so `p->a[0] = 5` in a loop over `struct { int a[64]; } *p` left `a[0]` at 0 after the loop, and a pointer to a VLA was skipped alike. | `goto_loop_invariantt::havoc_pointees`, `src/goto-programs/goto_loop_invariant.cpp`; `regression/loop-invariants/{wide,vla}_pointee_write{,_fail}` | — | **Fixed**: such a pointee leaves the loop to the unwinder after the base case, as an unresolvable pointer already does. A cheap havoc of a wide pointee stays open (#7502). |
@@ -10393,6 +10394,33 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R108) — 2026-10-04, the redundant sign bits `clrsb` counted
+
+Open PRs #8122 and #8166 list `__builtin_clrsb(-1) == 31` among programs that
+pass natively and fail on master. GCC's `__builtin_clrsb`, `clrsbl` and
+`clrsbll` return the number of bits after the sign bit that equal it, so -1 and
+0 give 31 and 1 and -2 give 30. None had a model: the call stayed bodyless
+(`no body for function __builtin_clrsb`), its result was nondet, and every
+assertion about it was FAILED.
+
+**Fixed** in the `clz`/`ctz`/`ffs` lowering: `bit_scan_builtin` recognises the
+three spellings, and `build_bit_scan` smears `x ^ (x >> (W - 1))` down, which
+clears every leading copy of the sign bit, and subtracts one from the leading
+zero count. A zero xor gives `W - 1`, so the operand needs no special case.
+`--clz-zero-check` claims the operand non-zero only for `clz` and `ctz`, since
+`clrsb` is defined at 0.
+
+`builtin_clrsb` checks a symbolic operand against a loop reference, constants
+at both ends of the range, and the `long` and `long long` widths, under
+`--clz-zero-check`; it is FAILED on master and SUCCESSFUL here, and with the
+`clz_zero_check` change reverted it fails on the zero claim.
+`builtin_clrsb_fail` runs under `--multi-property` and pins that
+`clrsb(-2) == 30` holds and `clrsb(-2) == 31` fails; master fails both. Z3
+only, the default in this build.
+
+Not fixed: `int i = 10; i /= 3.5;` and a struct read back with `va_arg`, the
+rest of #8122's list. `__builtin_elementwise_add_sat` reaches symex bodyless
+too, and a call crashes it (SIGSEGV) on an `int` operand as on a vector.
 ### M9 (R101) — 2026-10-03, the invalid target the memory builtins dropped
 
 R90's entry left open whether INTERNAL mode drops an invalid non-NULL target
