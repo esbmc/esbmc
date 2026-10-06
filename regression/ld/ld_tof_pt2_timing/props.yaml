@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "(Q1 && (H1 || H2 || H3)) || (!Q1 && !(H1 || H2 || H3))"
+    description: "Q holds for two scans, counting the scan IN falls"
