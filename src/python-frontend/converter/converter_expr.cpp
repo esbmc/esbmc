@@ -2694,7 +2694,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Lambda")
       expr = get_lambda_expr(element);
     else
-      expr = get_function_call(element);
+      expr = get_call_expr(element);
     break;
   }
   // Ternary operator
