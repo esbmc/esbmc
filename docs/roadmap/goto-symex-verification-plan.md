@@ -873,6 +873,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
 | **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
+| **R110** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R88's residual, §15 M9 (R110); **FIXED**, same entry | **A `__sync_*` call on an unsigned char or short returned a signed value.** Clang rewrites `__sync_fetch_and_add(&c, 1)` to the sized `__sync_fetch_and_add_1`, declared `char (volatile char *, char, ...)`, and gives the call the type `unsigned char`. The converter typed the call from the callee's declared return type, so the result went through a `char` temporary: with `c = 200`, `int k = __sync_fetch_and_add(&c, 1); assert(k < 128);` was SUCCESSFUL. | `CallExprClass`, `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/sync_unsigned_result{,_fail}` | — | **Fixed**: a call to a builtin with custom type checking takes the call's type. |
 | **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died with the full-expression.** `convert_decl_initializer` destroys every temporary of a non-reference declaration's initializer after the assignment, so `R x{M(1)};` ran `~M` before the next statement, although [class.temporary]/6 extends the temporary to the lifetime of `x`. A C++20 parenthesised `R y(M(1))` is not extended and lowers to the same GOTO. | `goto_convertt::convert_decl_initializer`, `goto_convert.cpp`; `CXXParenListInitExprClass`, `clang_c_convert.cpp` | — | **Fixed**: the entries of a temporary whose address is an operand of the declared aggregate, at any nesting depth, stay on the destructor stack until scope exit; the parenthesised form casts that address so it is not matched. |
 
 ---
@@ -10985,6 +10986,33 @@ reverting the native arm fails them, and reverting the legacy one fails
 
 Not fixed: R89's carve-out for `&&`, `||` and `?:` operands applies to a switch
 value too.
+
+---
+
+### M9 (R110) — 2026-10-04, the signed temporary behind an unsigned `__sync`
+
+R88 left a `__sync_*` call on `unsigned char` or `unsigned short` returning
+through a temporary typed from the sized builtin's signed declaration. Clang's
+Sema rewrites `__sync_fetch_and_add(&c, 1)` to call `__sync_fetch_and_add_1`,
+declared `char (volatile char *, char, ...)`, and gives the `CallExpr` the type
+`unsigned char`. The converter typed every call with `getCallReturnType`, which
+reads the callee's declaration, so the side effect was `char` while the
+instantiated builtin returned `unsigned char`. With `c = 200`,
+`int k = __sync_fetch_and_add(&c, 1);` gave `k == -56`: `assert(k < 128)` was
+SUCCESSFUL and `assert(k == 200)` FAILED; natively the first aborts and the
+second holds. `__sync_add_and_fetch` on `unsigned short` did the same.
+
+The `CallExpr` arm now takes `getType()` for a builtin with custom type
+checking, the set whose call type Sema computes rather than declares.
+`getCallReturnType` stays for everything else, where it keeps a reference
+return.
+
+`regression/esbmc/sync_unsigned_result` (fetch-then-add on `unsigned char`,
+add-then-fetch on `unsigned short`) is FAILED on master and SUCCESSFUL here;
+`sync_unsigned_result_fail` (`assert(k < 128)`) is SUCCESSFUL on master and
+FAILED here. The 272 other regression tests whose sources call a `__sync`,
+`__atomic`, `__c11_atomic` or `__builtin_` name or include `<stdatomic.h>` or
+`<atomic>` keep their verdicts (Z3; Bitwuzla was not built).
 
 ---
 

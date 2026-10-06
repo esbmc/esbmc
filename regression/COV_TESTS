@@ -2237,6 +2237,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc/sync_unsigned_result
+regression/esbmc/sync_unsigned_result_fail
 regression/esbmc-cpp/cpp/return_class_temporary_destroyed
 regression/esbmc-cpp/cpp/return_class_temporary_destroyed_fail
 regression/esbmc/vla_pointer_to_pointer
