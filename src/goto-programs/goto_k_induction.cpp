@@ -827,12 +827,17 @@ public:
     const loop_shapest &shapes,
     std::unordered_set<irep_idt, irep_id_hash> unsettled);
 
+  /// Whether an integer variable or load may hold no address, by the
+  /// points-to sets.
+  using addresslesst = std::function<bool(const expr2tc &)>;
+
   /// Adds to \p out what \p value, written in a loop of \p function, derives
   /// from. Returns false when the trace cannot bound it.
   bool roots(
     const irep_idt &function,
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
     const iterationt &iteration,
+    const addresslesst &addressless,
     const expr2tc &value,
     rootst &out) const;
 
@@ -874,6 +879,7 @@ private:
     const irep_idt &function;
     const std::unordered_set<irep_idt, irep_id_hash> &address_taken;
     const iterationt &iteration;
+    const addresslesst &addressless;
     rootst &out;
     /// Both by whether the trace left the iteration.
     std::array<std::unordered_set<irep_idt, irep_id_hash>, 2> &visiting;
@@ -895,6 +901,7 @@ private:
         function,
         address_taken,
         iteration,
+        addressless,
         roots,
         visiting,
         memo,
@@ -1043,6 +1050,7 @@ bool derivationst::roots(
   const irep_idt &function,
   const std::unordered_set<irep_idt, irep_id_hash> &address_taken,
   const iterationt &iteration,
+  const addresslesst &addressless,
   const expr2tc &value,
   rootst &out) const
 {
@@ -1054,6 +1062,7 @@ bool derivationst::roots(
     function,
     address_taken,
     iteration,
+    addressless,
     out,
     visiting,
     memo,
@@ -1093,6 +1102,9 @@ bool derivationst::trace(queryt &q, const expr2tc &value) const
   if (is_array_type(value->type))
     return trace_address(q, value);
   if (is_constant_int2t(value))
+    return true;
+  // An integer that holds no address is an offset, whatever its value.
+  if (is_bv_type(value->type) && q.addressless(value))
     return true;
   if (!carries_address(value->type))
   {
@@ -1243,6 +1255,8 @@ bool derivationst::may_hold_address(
   --q.budget;
   if (is_nil_expr(value) || is_constant_int2t(value))
     return false;
+  if (is_bv_type(value->type) && q.addressless(value))
+    return false;
   if (
     (is_pointer_type(value->type) &&
      !is_code_type(to_pointer_type(value->type).subtype)) ||
@@ -1335,6 +1349,21 @@ held_by(andersent &points_to, const loopst &loop, const expr2tc &lvalue)
     }
   }
   return held;
+}
+
+/// Whether the variable or load \p value holds no address in any run: the
+/// points-to sets give it none but the object an unconstrained pointer
+/// reaches, whose address symex never resolves. An empty set counts, so this
+/// relies on Andersen seeing every way symex writes memory.
+bool holds_no_address(
+  andersent &points_to,
+  const loopst &loop,
+  const expr2tc &value)
+{
+  if (!is_symbol2t(value) && !is_dereference2t(value))
+    return false;
+  const targetst t = held_by(points_to, loop, value);
+  return t.named.empty() && !t.heap && !t.anything;
 }
 
 /// What \p instr reads, and the variable it assigns whole, if any. A DEAD
@@ -1517,9 +1546,16 @@ bool cover_write(const loop_writest &w, const expr2tc &ptr, covert &cover)
 {
   const targetst t = targets_of(w.points_to, w.loop, ptr);
   rootst roots;
-  const bool derived =
-    w.drops_unresolved &&
-    w.derivations.roots(w.function, w.address_taken, w.iteration, ptr, roots);
+  const bool derived = w.drops_unresolved &&
+                       w.derivations.roots(
+                         w.function,
+                         w.address_taken,
+                         w.iteration,
+                         [&w](const expr2tc &value) {
+                           return holds_no_address(w.points_to, w.loop, value);
+                         },
+                         ptr,
+                         roots);
   // An unconstrained pointer writes no named object: symex sends such a write
   // to an invalid object. An empty set is different — no constraint reached
   // the pointer, so the analysis knows nothing about it.
