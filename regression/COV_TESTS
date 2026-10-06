@@ -2175,6 +2175,7 @@ regression/esbmc/atomic_fetch_nand_fail
 regression/esbmc-cpp/cpp/condition_temporary
 regression/esbmc-cpp/cpp/condition_temporary_fail
 regression/esbmc-cpp/cpp/condition_temporary_legacy
+regression/esbmc/memcmp_null_operand_fail
 regression/esbmc-cpp/cpp/conditional_arm_temporary
 regression/esbmc-cpp/cpp/conditional_arm_temporary_fail
 regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail

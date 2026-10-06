@@ -753,6 +753,12 @@ protected:
     uint64_t &avail_bytes,
     bool rename_object = true);
 
+  /** Claims @p ptr is not NULL unless @p n is zero. */
+  void claim_nonnull_operand(
+    const expr2tc &ptr,
+    const expr2tc &n,
+    const std::string &func);
+
   /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
    *  is built from the current src/dst bytes before assigning, so overlapping
    *  regions are correct); only the C fallback differs. */

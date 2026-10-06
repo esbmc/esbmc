@@ -823,6 +823,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R94** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R89's sibling (PR #8125), §15 M9 (R94); **FIXED**, same entry | **A temporary in a `switch` condition outlived it.** `convert_switch` lowered the value with `remove_sideeffects`, so `switch (T(1).v)` ran `~T` at the end of the enclosing block, or at a `return` from a case, rather than before the case label ([class.temporary]/4). `k = dtors;` under `case 1:` stored 0, so `assert(k == 0)` was SUCCESSFUL and `assert(k == 1)` FAILED. | `convert_switch`, `src/goto-programs/goto_convert.cpp`; the switch arm of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/switch_condition_temporary{,_fail,_legacy}` | — | **Fixed**: the switch value is lowered through R89's `remove_condition_sideeffects`. |
 
 
+| **R90** | **High (false SUCCESSFUL, default configuration)** — found probing the symex memory builtins' pointer checks after R77, §15 M9 (R90); **FIXED**, same entry | **`memcmp` never checked its operands for NULL.** `memcmp_resolve_operand` dereferences in INTERNAL mode, which drops a NULL target without a claim, so an operand that is `a` or NULL resolved to `a` alone and the fast path compared `a`. `memset`, `memcpy`, `memmove` and `memchr` add a NULL claim after resolving; `memcmp` did not. `p = c ? a : NULL; memcmp(p, b, 4)` verified, and segfaults natively. | `claim_nonnull_operand` and `intrinsic_memcmp`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/memcmp_null_operand{,_fail}` | — | **Fixed**: claim each operand non-NULL unless `n` is zero, matching `__memcmp_impl`, which reads nothing for `n == 0`. |
 | **R86** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R79's open note (PR #8108), §15 M9 (R86); **FIXED**, same entry | **A temporary in one arm of a conditional was destroyed whichever arm ran.** Lowering `c ? a : b` scheduled the destructor of every temporary materialized in either arm for the end of the full-expression, unconditionally. `int x = c ? P(6).v : 0;` ran `~P` on an object never constructed when `c` was false; so did the right operand of `&&` and `||`, which are lowered as conditionals. A destructor count read afterwards was wrong in both directions. | `goto_convertt::remove_sideeffects` (the `if` arm) and `guard_arm_destructors`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/conditional_arm_temporary{,_fail}` | — | **Fixed**: save the condition in a fresh flag before either arm runs and guard each arm's destructors by it. |
 | **R91** | **High (false SUCCESSFUL and false FAILED, `--big-endian`; also the default configuration)** — found probing R76's byte order at the memory intrinsics, §15 M9 (R91); **FIXED**, same entry | **A constant-length `memset` or `memcpy` on a scalar placed its bytes little-endian.** `gen_byte_expression` and `gen_byte_memcpy` build the new value with shifts, putting byte `k` of the range at bit `8k` whatever the byte order. Under `--big-endian`, `memset(&x, 0xff, 1)` on an `unsigned` made `x == 0xff`, which verified, and `memcpy(&x, &y, 1)` copied `y`'s low byte. The pointer arm wrote through a little-endian `byte_update`. R76 did not reach these sites because they never build a `byte_extract` or `byte_update`. Separately, on any target, a `memset` starting inside an element or member handed it more bytes than were left in it and dropped them from the next: `memset((char *)a + 3, 0x11, 2)` over `unsigned a[2]` left `a[1] == 0`. | `byte_shift`, `gen_byte_expression`, `gen_byte_expression_byte_update` and `gen_byte_memcpy`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `gen_value_by_byte`; `regression/esbmc/big_endian_memset{,_fail}`, `big_endian_memcpy{,_fail}`, `memset_offset_span{,_fail}` | — | **Fixed**: on a big-endian target a range of `n` bytes at byte `k` of a `w`-byte scalar is shifted by `w - k - n` bytes instead of `k`, and the pointer arm passes the target's byte order to `byte_update`; `gen_value_by_byte` gives an element or member at most the bytes after the offset and carries the rest to the next. |
 | **R105** | **High (false SUCCESSFUL and false FAILED, default configuration, C)** — found probing the `$vector-cmp$` residual of §15 M9 (R65), §15 M9 (R105); **FIXED**, same entry | **A compound literal was initialised where its declaration was hoisted, not where it is evaluated.** The C frontend pushed the literal's declaration, initialiser included, into the enclosing block ahead of the statement being converted. In an unbraced loop body that runs once, before the loop; in an unbraced `if` body it runs whether or not the branch is taken; before a `case` label it is unreachable and is dropped, so the literal reads nondet. `for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;` left `hit` at 0. | `CompoundLiteralExprClass` in `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/compound_literal_per_evaluation{,_fail}` | — | **Fixed**: the declaration stays in the enclosing block, which is the literal's lifetime (C17 6.5.2.5p5), and the literal becomes `(cl = init, cl)`, so it is initialised each time it is evaluated. |
@@ -10757,6 +10758,40 @@ pin the constructor and destructor counts and `use_count()` alongside R83's
 tests. A list assigned to an existing object (`a = W{M(5)};`) and one in a
 mem-initializer (`V() : w{M(5)} {}`) still go through R83's path; both
 balance their destructors.
+
+### M9 (R90) — 2026-10-02, the NULL operand memcmp never checked
+
+The symex `memcmp` resolves each operand with `memcmp_resolve_operand`, which
+dereferences in INTERNAL mode. That mode returns a NULL target silently and
+leaves the check to the caller. `memset`, `memcpy`, `memmove` and `memchr`
+claim the pointer non-NULL after resolving; `memcmp` did not. An operand whose
+value set is `{a, NULL}` resolved to `a` alone, the comparison read `a`, and
+
+```c
+char *p = a;
+if (nondet_int())
+  p = 0;
+return memcmp(p, b, 4); /* master: VERIFICATION SUCCESSFUL */
+```
+
+verified, where the native program segfaults on the NULL path. A call whose
+operand is NULL on every path resolves to nothing, falls back to
+`__memcmp_impl`, and was already caught.
+
+**Fixed** by claiming each operand non-NULL unless `n` is zero. The exemption
+follows `__memcmp_impl`, whose loop reads nothing for `n == 0`, and
+`memchr`'s fast path; C2y (N3322) makes a NULL operand with zero length well
+defined. `memcmp_null_operand_fail` changes verdict against master;
+`memcmp_null_operand` passes a NULL operand only when `n` is zero and fails if
+the exemption is dropped, so it pins the boundary rather than a master
+verdict. Both agree under Z3, the only solver this run could build: Bitwuzla's
+CaDiCaL download was refused by the network policy. The 37 other regression
+tests whose sources call `memcmp` keep their verdicts; `github_1009_success`
+needs eight minutes and runs `--no-pointer-check`, under which the new claims
+are not generated.
+
+Not examined: INTERNAL mode drops an invalid non-NULL target the same way, and
+whether one reaches these builtins without a check is open.
 
 ---
 

@@ -1178,6 +1178,23 @@ bool goto_symext::memcmp_resolve_operand(
   return true;
 }
 
+// Resolving an operand drops a NULL target, so claim it separately. Only a
+// call that reads bytes needs a valid pointer, as in the C model's loop.
+void goto_symext::claim_nonnull_operand(
+  const expr2tc &ptr,
+  const expr2tc &n,
+  const std::string &func)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  expr2tc null_sym = symbol2tc(ptr->type, "NULL");
+  expr2tc check = or2tc(
+    equality2tc(n, gen_zero(n->type)), not2tc(same_object2tc(ptr, null_sym)));
+  cur_state->guard.guard_expr(check);
+  claim(check, "dereference failure: NULL pointer on " + func);
+}
+
 void goto_symext::intrinsic_memcmp(
   reachability_treet &art,
   const code_function_call2t &func_call)
@@ -1281,6 +1298,8 @@ void goto_symext::intrinsic_memcmp(
 
   claim_valid_operand(s1_arg, n_arg, "memcmp");
   claim_valid_operand(s2_arg, n_arg, "memcmp");
+  claim_nonnull_operand(s1_arg, n_arg, "memcmp");
+  claim_nonnull_operand(s2_arg, n_arg, "memcmp");
 
   // Build the lexicographic result as a nested ite over the byte reads, from
   // the last byte backwards so the first differing byte dominates:
