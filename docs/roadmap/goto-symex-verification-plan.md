@@ -831,6 +831,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R101** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R90's open note, §15 M9 (R101); **FIXED**, same entry | **The symex memory builtins dropped an invalid target.** `memset`, `memcpy`, `memmove`, `memcmp` and `memchr` resolve their pointers with an INTERNAL dereference, which skips an unknown or invalid value-set entry without a claim. A pointer that held `(char *)0x1000` or `a` resolved to `a` alone: `memset(p, 0, 4)` verified, where `p[0]` reports an invalid pointer. `memchr(p, c, 0)` left its result unassigned on the dropped path, so `memchr(p, 3, 0) == NULL` failed. | `claim_valid_operand`, `memcpy_finish`, `intrinsic_memcmp`, `intrinsic_memchr` and `intrinsic_memset`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_invalid_pointer{,_fail}` | — | **Fixed**: when an operand's value set holds an unknown or invalid entry, claim `n == 0 \|\| !INVALID_POINTER(p)`, as a READ dereference would; `memchr` assigns NULL before the per-target results. |
 | **R107** | **High (false SUCCESSFUL and false FAILED, `--loop-invariant-check`)** — found reading `havoc_pointees` while working R97's loop-invariant residual, §15 M9 (R107); **FIXED**, same entry | **A pointee too wide to havoc kept its pre-loop value past the invariant.** `havoc_pointees` skipped a written pointee wider than 1024 bits, or one with no static width, but the inductive step still ran, so `p->a[0] = 5` in a loop over `struct { int a[64]; } *p` left `a[0]` at 0 after the loop, and a pointer to a VLA was skipped alike. | `goto_loop_invariantt::havoc_pointees`, `src/goto-programs/goto_loop_invariant.cpp`; `regression/loop-invariants/{wide,vla}_pointee_write{,_fail}` | — | **Fixed**: such a pointee leaves the loop to the unwinder after the base case, as an unresolvable pointer already does. A cheap havoc of a wide pointee stays open (#7502). |
 | **R97** | **High (a crash, default configuration)** — found building master against LLVM 18, §15 M9 (R97); **FIXED**, same entry | **`__atomic_test_and_set` and `__atomic_clear` through a `void *` aborted.** The body `clang_c_adjust` generates for them dereferenced the pointer argument at its own pointee type and stored `gen_zero` of it, so a `void *` operand gave a store of nil to a `void` object and goto conversion crashed. Clang before 20 passes every call's pointer as `volatile void *`, so there both builtins crashed on any operand; clang 20 and later pass the operand's own type, and only a `void *` variable crashed. Separately, `clang_c_convert.cpp` named `AtomicExpr::AO__atomic_test_and_set` and `AO__atomic_clear`, which clang 18 and 19 do not define, so master did not compile against the minimum LLVM `CMakeLists.txt` declares. | the `is_atomic_flag_builtin` arm of `clang_c_adjust::instantiate_gcc_polymorphic_builtin`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `atomic_has_value_operand` and `get_atomic_expr`, `clang_c_convert.cpp`; `regression/esbmc/atomic_flag_void_pointer{,_fail}`, `github_7642{,_fail}` | — | **Fixed**: a `void` pointee is read and written as `unsigned char`, the byte GCC's documentation names, and the two enumerators are compiled only for clang 20 and later. |
 | **R92** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R69's residual, §15 M9 (R92); **FIXED**, same entry | **Only the outermost elided copy was elided.** In `C c = C(C(1));` and `return C(C(x));` clang marks each copy elidable and elides all of them; `elided_copy_source` peeled one, so ESBMC ran the inner copy constructor and destroyed a second object. `{ C c = C(C(1)); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_nested{,_fail}` | — | **Fixed**: keep peeling through the bound temporary and the functional cast to the innermost elided copy's source. |
@@ -10359,6 +10360,42 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R101) — 2026-10-03, the invalid target the memory builtins dropped
+
+R90's entry left open whether INTERNAL mode drops an invalid non-NULL target
+the way it drops NULL. It does, in all five symex memory builtins.
+`deref_invalid_ptr` returns without a claim in INTERNAL mode, so a pointer
+whose value set is `{a, invalid}` resolves to `a` alone, and the fast paths
+modelled only `a`:
+
+```c
+char *p = (char *)0x1000;
+if (nondet_int())
+  p = a;
+memset(p, 0, 4); /* master: VERIFICATION SUCCESSFUL */
+```
+
+`p[0]` in the same program fails with "invalid pointer", and so does
+`memset` when `p` can only be `0x1000`: nothing resolves and the call falls
+back to `__memset_impl`. `memcmp`, `memchr`, a constant-length `memcpy` and a
+symbolic-length one behave the same. A freed heap object is not affected,
+because `valid_check` claims it whatever the mode. A NULL-or-object pointer
+fails only through the separate NULL claims (and R90's for `memcmp`), which is
+why an uninitialised pointer did not show this.
+
+`memchr` had a second symptom on the same paths: it assigns its result per
+resolved target, so on the dropped one the result was unconstrained, and
+`memchr(p, 3, 0) == NULL` was a false FAILED.
+
+**Fixed** by claiming, for each operand whose value set holds an unknown or
+invalid entry, `n == 0 || !INVALID_POINTER(p)`, the claim a READ dereference
+makes, gated on `n` as the C models' loops read nothing for `n == 0`.
+`memchr` assigns NULL under the path guard before the per-target results.
+`mem_intrinsics_invalid_pointer_fail` pins all five claims and is SUCCESSFUL
+on master; `mem_intrinsics_invalid_pointer` is FAILED on master through the
+`memchr` result, and fails again if the `n == 0` exemption is dropped. Both
+agree under Z3, the only solver this run built. The 243 other regression
+tests whose sources call these functions keep their verdicts.
 ### M9 (R102) — 2026-10-03, the declaration a jump skipped
 
 PR #8128 noted that a local whose declaration a jump skips keeps the caller
