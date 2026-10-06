@@ -1310,7 +1310,10 @@ void goto_convertt::convert_assign(
   }
   else
   {
-    remove_sideeffects(rhs, dest);
+    if (lhs.get_bool("#member_init"))
+      remove_initializer_sideeffects(lhs, rhs, dest);
+    else
+      remove_sideeffects(rhs, dest);
 
     // to_code() asserts on the expression id, so test that rather than the
     // type: a dereferenced function pointer is code-*typed* but is not a

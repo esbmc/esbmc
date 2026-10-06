@@ -842,6 +842,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R92** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R69's residual, §15 M9 (R92); **FIXED**, same entry | **Only the outermost elided copy was elided.** In `C c = C(C(1));` and `return C(C(x));` clang marks each copy elidable and elides all of them; `elided_copy_source` peeled one, so ESBMC ran the inner copy constructor and destroyed a second object. `{ C c = C(C(1)); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_nested{,_fail}` | — | **Fixed**: keep peeling through the bound temporary and the functional cast to the innermost elided copy's source. |
 | **R86** | **Medium (false FAILED, default configuration, C++)** — R73's residual, §15 M9 (R86); **FIXED**, same entry | **A value-initialised `new T[n][m]` was not zeroed.** `cpp_new_zero_fill` skipped an array element type, because symex rejects a dereference that yields an array, so `new S[2][3]()` for `struct S { int a = 1; int b; }` left `b` nondet and `assert(p[1][2].b == 0)` was FAILED while the native program passes ([dcl.init]/9). | `goto_convertt::cpp_new_zero_fill`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/cpp/new_multidim_value_init{,_fail}` | — | **Fixed**: the fill steps over n * m leaves through a pointer to the leaf type, as the constructor loop does. The failing half is FAILED on master too, since a nondet member covers every value the fill could store. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
+| **R99** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R102's open note, §15 M9 (R99); **FIXED**, same entry | **A braced list in a mem-initializer or a class temporary still built each class element twice.** `V() : w{M(5)} {}` and `a = W{M(5)};` constructed `M(5)` in a `tmp$`, copied it into the element and destroyed the `tmp$`, so the element's destructor ran once more than its constructor. | `remove_sideeffects`, `remove_temporary_object`, `src/goto-programs/goto_sideeffects.cpp`; `convert_assign`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/braced_list_member_init{,_fail}`, `braced_list_temporary{,_fail}` | — | **Fixed** in C++17. In C++14, a class element of a list bound to a reference still keeps the elidable copy's temporary to the end of the block (R69's nested-copy residual). |
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
 | **R98** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R81's open note, §15 M9 (R98); **FIXED**, same entry | **A user-placement new allocated.** `get_new_storage` routed a program's own `operator new` to goto-conversion only when it took the size alone, so `new (pool) T` and `new (pool) T[n]` with a user-declared `operator new(size_t, Pool &)` became a fresh built-in allocation and the function never ran. A pool that hands out its buffer verified `(unsigned char *)p == pool.buf` as FAILED, and a pool that hands out one slot twice verified as SUCCESSFUL. | `get_new_storage` in `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `adjust_new` in `src/clang-cpp-frontend/clang_cpp_adjust_expr.cpp`; `do_cpp_new` in `src/goto-programs/builtin_functions.cpp`; `migrate_cpp_new` and `back_sideeffect_cpp_new` in `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/user_placement_new{,_fail}` | — | **Fixed**: an allocation function whose parameters are the size and the placement arguments is called with them. |
 | **R102** | **High (false FAILED, default configuration, C++)** — R83's residual, §15 M9 (R102); **renumbered from R83** on merging master, which uses that number for the destructor count; this branch's commit titles predate the renumbering; **FIXED**, same entry | **A braced list built each class element in a temporary and copied it in.** With R83 the destructors balance, but `W a{1, M(5)}` still constructed `M(5)` in a `tmp$` object and copied it bitwise into `a.m`, so the constructor's `this` was not the element: with `built = this` in `M`'s constructors, `assert(built == &a.m)` was FAILED, as it was for `W b{3, t}`, `M arr[2] = {M(6), M(7)}` and a nested list. | `construct_in_place`, `remove_initializer_sideeffects`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_init_member_in_place{,_fail}`, `aggregate_init_named_double_destroy_fail`, `shared_ptr_member_copy_fail` | — | **Fixed** for a declaration's initialiser: each class element is constructed in the object itself. |
@@ -10758,6 +10759,42 @@ balance their destructors.
 
 ---
 
+### M9 (R99) — 2026-10-03, the list R102 left in two places
+
+R102 constructed a declaration's braced list in place and left two shapes that
+still destroyed a class element twice: a list in a mem-initializer
+(`V() : w{M(5)} {}`) and a class temporary built from a list
+(`a = W{M(5)};`, `f(W{M(6)})`). After `{ V v; }` or the assignment,
+`assert(live == 1)` was FAILED, where the native program (`g++ -std=c++17`)
+passes, and `assert(live == 0)` was SUCCESSFUL, where it aborts.
+
+Both reached `remove_sideeffects`, which removes an expression's operands
+first. A mem-initializer is an `assign` side effect with a `#member_init` lhs,
+and a temporary is a `temporary_object` with the list as its operand; by the
+time either was lowered, each element was already a `tmp$` with its own
+destructor. **Fixed** by lowering both before their operands: the
+mem-initializer goes to `convert_assign`, which hands a `#member_init` rhs to
+R102's `remove_initializer_sideeffects` with the member as the object, and
+`remove_temporary_object` does the same for its list with the temporary as
+the object. Arrays and nested lists come through the same walk.
+
+`braced_list_member_init` (a struct member, an array member and a nested
+list) and `braced_list_temporary` (two assignments and a by-reference
+argument) are FAILED on master; `braced_list_member_init_fail` and
+`braced_list_temporary_fail` are SUCCESSFUL there. Each pair changes verdict
+when its half of the change is reverted, under Z3 (the default solver of this
+build). All four pin `--std c++17`: before C++17 the element may be copied from
+the temporary, and with the `_fail` tests' implicit copy constructor the count
+is then 0 natively too.
+
+Not fixed: in C++14, `const W &r = W{M(8)};` still destroys the copied-from
+`M(8)` at block exit rather than at the end of the declaration, so
+`assert(live == 1)` there is FAILED. That is R69's nested elidable copy.
+
+R64's note that mem-initializer temporaries die at the end of the constructor
+no longer reproduces on master: since #8110, `P() : a(get(C(1))) {}` destroys
+`C(1)` before the next initializer, for a member, a base and a default member
+initializer.
 ### M9 (R94) — 2026-10-03, the temporaries of a switch condition
 
 R89 destroys the temporaries of an `if`, `while`, `for` or `do`/`while`
