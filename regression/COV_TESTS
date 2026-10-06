@@ -2223,6 +2223,10 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/loop-invariants/wide_pointee_write
+regression/loop-invariants/wide_pointee_write_fail
+regression/loop-invariants/vla_pointee_write
+regression/loop-invariants/vla_pointee_write_fail
 regression/esbmc/atomic_flag_void_pointer
 regression/esbmc/atomic_flag_void_pointer_fail
 regression/esbmc-cpp/cpp/cxx14_elided_copy_nested
