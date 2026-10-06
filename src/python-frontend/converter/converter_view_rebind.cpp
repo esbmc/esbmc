@@ -80,6 +80,12 @@ void python_converter::detach_numpy_pointer_views_of(
                          info->second.source_id)]
         .push_back(view_id);
   }
+  // A snapshot declared in a nested scope expires with it, and a rebind on
+  // one path leaves the views' static metadata wrong on the other.
+  if (!views_by_storage.empty() && block_nesting_ != function_body_depth_ + 1)
+    throw std::runtime_error(
+      "TypeError: rebinding a numpy array inside a branch or loop while "
+      "views of it are alive is not supported");
   for (const auto &[storage_id, view_ids] : views_by_storage)
   {
     if (view_ids.size() == 1)
