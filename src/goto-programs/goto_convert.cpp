@@ -1310,7 +1310,10 @@ void goto_convertt::convert_assign(
   }
   else
   {
-    remove_sideeffects(rhs, dest);
+    if (lhs.get_bool("#member_init"))
+      remove_initializer_sideeffects(lhs, rhs, dest);
+    else
+      remove_sideeffects(rhs, dest);
 
     // to_code() asserts on the expression id, so test that rather than the
     // type: a dereferenced function pointer is code-*typed* but is not a
@@ -1864,7 +1867,7 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
   exprt argument = code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(argument, sideeffects);
+  remove_condition_sideeffects(argument, sideeffects);
 
   // save break/default/cases targets
   break_switch_targetst old_targets(targets);
@@ -2497,10 +2500,7 @@ bool goto_convertt::destroy_full_expression_temporaries(
 {
   const destructor_stackt &stack = targets.destructor_stack;
   if (
-    std::none_of(
-      stack.begin() + stack_size, stack.end(), [](const codet &entry) {
-        return entry.get_statement() == "function_call";
-      }))
+    std::none_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
     return false;
 
   unwind_destructor_stack(location, stack_size, dest);

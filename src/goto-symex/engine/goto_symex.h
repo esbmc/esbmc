@@ -1423,9 +1423,17 @@ protected:
    *  assumed started. */
   bool va_list_is_started(const expr2tc &va_list_expr) const;
   /** Record the started-by-va_start state of the va_list denoted by this
-   *  expression. No-op if the base cannot be resolved to a local
-   *  variable's symbol. */
-  void va_list_mark_started(const expr2tc &va_list_expr, bool started);
+   *  expression, and the va_arg index it reads next, if known. No-op if the
+   *  base cannot be resolved to a local variable's symbol. */
+  void va_list_mark_started(
+    const expr2tc &va_list_expr,
+    bool started,
+    std::optional<unsigned> cursor);
+  /** The va_arg index a started local va_list reads next; nullptr when it is
+   *  not known, and the frame's cursor applies. */
+  unsigned *va_list_cursor(const expr2tc &va_list_expr);
+  /** va_copy: start dst as src is, reading where src reads next. */
+  void va_list_copy(const expr2tc &dst, const expr2tc &src);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1581,15 +1589,17 @@ protected:
     const type2tc &ret_type);
 
   /** Level-1 identities (base name, activation, thread) of va_list objects
-   *  initialised by va_start, or by va_copy from a started source. Keyed on
+   *  initialised by va_start, or by va_copy from a started source, with the
+   *  va_arg index each reads next where it is known. Keyed on
    *  the l1 renaming so the same object is recognised across frames (a
    *  va_list reached through a pointer dereferences to the owning
    *  activation's l1 name) and across recursion or loop re-declaration (each
    *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
    *  Insertion ignores the path guard, over-approximating towards "started",
    *  so a conditional va_start can never yield a false positive. */
-  std::unordered_set<
+  std::unordered_map<
     renaming::level2t::name_record,
+    std::optional<unsigned>,
     renaming::level2t::name_rec_hash>
     va_started;
 

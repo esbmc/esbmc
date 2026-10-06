@@ -70,8 +70,9 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
-  /// Lowers the condition of an if, loop or for statement, a full-expression
-  /// whose temporaries are destroyed before the branch ([class.temporary]/4).
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
   /// The operands of a short-circuit operator keep block scope.
   void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
   bool in_short_circuit = false;
@@ -305,6 +306,15 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// A destructor call on the destructor stack, possibly guarded by
+  /// guard_arm_destructors; the other entries are DEADs.
+  static bool is_destructor_entry(const codet &entry);
+  void guard_arm_destructors(
+    exprt &cond,
+    std::size_t true_size,
+    std::size_t false_size,
+    const locationt &location,
+    goto_programt &dest);
   void record_exception_unwind(goto_programt::instructiont &call);
 
   //
