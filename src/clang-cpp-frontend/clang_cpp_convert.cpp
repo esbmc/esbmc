@@ -2518,21 +2518,24 @@ static const clang::Expr &member_result_object(const clang::Expr &init)
   return *e;
 }
 
-/* The copy clang marks elidable before C++17, of a variable's initializer,
- * a returned value or a by-value argument, is elided: the object is
- * initialised from the copy's source, as C++17 requires ([dcl.init]/17.6.1,
- * [stmt.return], [expr.call]/7), and what remains is the C++17 form.
- * Converting the copy built a second object and destroyed it. */
+/* The copies clang marks elidable before C++17, of a variable's initializer,
+ * a returned value or a by-value argument, are elided: the object is
+ * initialised from the innermost copy's source, as C++17 requires
+ * ([dcl.init]/17.6.1, [stmt.return], [expr.call]/7), and what remains is the
+ * C++17 form. Converting a copy built a second object and destroyed it. A
+ * copy's source can wrap another copy, as in `C(C(1))`. */
 const clang::Expr &
 clang_cpp_convertert::elided_copy_source(const clang::Expr &init)
 {
-  const clang::Expr *e = &init;
-  if (const auto *ewc = llvm::dyn_cast<clang::ExprWithCleanups>(e))
-    e = ewc->getSubExpr();
-  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
-    e = bind->getSubExpr();
-  const clang::Expr *source = peel_elided_copy(e);
-  return source ? *source : init;
+  const clang::Expr *source = &init;
+  for (const clang::Expr *e = &init; e;)
+  {
+    if (const clang::Expr *copied = peel_elided_copy(e))
+      source = e = copied;
+    else
+      e = peel_initializer_wrapper(e);
+  }
+  return *source;
 }
 
 bool clang_cpp_convertert::get_member_initializer(
@@ -4054,9 +4057,10 @@ bool clang_cpp_convertert::get_conditional_class_prvalue(
 // different program: two allocations from a pool allocator that alias
 // are modelled as distinct objects, hiding real bugs (github #6494).
 // Record the resolved function for goto-conversion to call instead.
-// Only the plain (size) form is routed -- the aligned and user-placement
-// forms take further arguments this lowering does not supply, and an
-// allocation function without a body in this TU has nothing to call.
+// The plain (size) form and the user-placement forms are routed, the latter
+// with their placement arguments ([expr.new]/16); the aligned forms take an
+// alignment this lowering does not supply, and an allocation function without
+// a body in this TU has nothing to call.
 bool clang_cpp_convertert::get_new_storage(
   const clang::CXXNewExpr &ne,
   exprt &new_expr)
@@ -4072,14 +4076,25 @@ bool clang_cpp_convertert::get_new_storage(
   }
 
   if (
-    !op_new || !op_new->isDefined() || op_new->getNumParams() != 1 ||
-    ne.getNumPlacementArgs() != 0)
+    !op_new || !op_new->isDefined() || ne.passAlignment() ||
+    op_new->getNumParams() != 1 + ne.getNumPlacementArgs())
     return false;
 
   exprt alloc_function;
   if (get_decl_ref(*op_new, alloc_function))
     return true;
   new_expr.add("alloc_function") = alloc_function;
+
+  exprt alloc_arguments("arguments");
+  for (const clang::Expr *arg : ne.placement_arguments())
+  {
+    exprt a;
+    if (get_expr(*arg, a))
+      return true;
+    alloc_arguments.move_to_operands(a);
+  }
+  if (alloc_arguments.has_operands())
+    new_expr.add("alloc_arguments") = alloc_arguments;
   return false;
 }
 
