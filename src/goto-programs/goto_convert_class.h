@@ -225,6 +225,14 @@ protected:
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  bool construct_in_place(
+    const exprt &object,
+    const exprt &initializer,
+    goto_programt &dest);
+  void remove_initializer_sideeffects(
+    const exprt &object,
+    exprt &initializer,
+    goto_programt &dest);
   void convert_dynamic_static_init(
     const codet &decl,
     const symbolt &s,
@@ -285,6 +293,9 @@ protected:
     std::size_t stack_size,
     const locationt &,
     goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,

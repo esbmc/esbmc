@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: writing to a numpy view after it escaped to an unknown call is not supported
