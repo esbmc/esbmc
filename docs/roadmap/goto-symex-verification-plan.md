@@ -831,6 +831,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R106** | **High (false SUCCESSFUL and false FAILED, default configuration)** — the KNOWNBUG `github_7707-array`, §15 M9 (R106) | **An array of packed structs got no alignment claim on its base, and a packed object got one on its offset alone.** `build_reference_to` sends an array to `bounds_check`, which claims no alignment, and `construct_from_array` walks into a struct element without one, so `*(uint64_t *)&arr[1].b` was SUCCESSFUL although the array's base is free. `check_pointer_alignment` claims the offset before the object is known, assuming an aligned base, so with `b` at offset 1 and `(uintptr_t)p % 8 == 0` assumed the load was FAILED. | `dereferencet::construct_from_array`, `check_pointer_alignment`, `src/pointer-analysis/dereference.cpp` | — | **Fixed**: an access into an array of structs whose base alignment is below the access width is claimed on the whole address, and the offset-only pre-check skips such objects, leaving the claim to the object-aware sites. |
 | **R101** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R90's open note, §15 M9 (R101); **FIXED**, same entry | **The symex memory builtins dropped an invalid target.** `memset`, `memcpy`, `memmove`, `memcmp` and `memchr` resolve their pointers with an INTERNAL dereference, which skips an unknown or invalid value-set entry without a claim. A pointer that held `(char *)0x1000` or `a` resolved to `a` alone: `memset(p, 0, 4)` verified, where `p[0]` reports an invalid pointer. `memchr(p, c, 0)` left its result unassigned on the dropped path, so `memchr(p, 3, 0) == NULL` failed. | `claim_valid_operand`, `memcpy_finish`, `intrinsic_memcmp`, `intrinsic_memchr` and `intrinsic_memset`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_invalid_pointer{,_fail}` | — | **Fixed**: when an operand's value set holds an unknown or invalid entry, claim `n == 0 \|\| !INVALID_POINTER(p)`, as a READ dereference would; `memchr` assigns NULL before the per-target results. |
 | **R107** | **High (false SUCCESSFUL and false FAILED, `--loop-invariant-check`)** — found reading `havoc_pointees` while working R97's loop-invariant residual, §15 M9 (R107); **FIXED**, same entry | **A pointee too wide to havoc kept its pre-loop value past the invariant.** `havoc_pointees` skipped a written pointee wider than 1024 bits, or one with no static width, but the inductive step still ran, so `p->a[0] = 5` in a loop over `struct { int a[64]; } *p` left `a[0]` at 0 after the loop, and a pointer to a VLA was skipped alike. | `goto_loop_invariantt::havoc_pointees`, `src/goto-programs/goto_loop_invariant.cpp`; `regression/loop-invariants/{wide,vla}_pointee_write{,_fail}` | — | **Fixed**: such a pointee leaves the loop to the unwinder after the base case, as an unresolvable pointer already does. A cheap havoc of a wide pointee stays open (#7502). |
 | **R97** | **High (a crash, default configuration)** — found building master against LLVM 18, §15 M9 (R97); **FIXED**, same entry | **`__atomic_test_and_set` and `__atomic_clear` through a `void *` aborted.** The body `clang_c_adjust` generates for them dereferenced the pointer argument at its own pointee type and stored `gen_zero` of it, so a `void *` operand gave a store of nil to a `void` object and goto conversion crashed. Clang before 20 passes every call's pointer as `volatile void *`, so there both builtins crashed on any operand; clang 20 and later pass the operand's own type, and only a `void *` variable crashed. Separately, `clang_c_convert.cpp` named `AtomicExpr::AO__atomic_test_and_set` and `AO__atomic_clear`, which clang 18 and 19 do not define, so master did not compile against the minimum LLVM `CMakeLists.txt` declares. | the `is_atomic_flag_builtin` arm of `clang_c_adjust::instantiate_gcc_polymorphic_builtin`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `atomic_has_value_operand` and `get_atomic_expr`, `clang_c_convert.cpp`; `regression/esbmc/atomic_flag_void_pointer{,_fail}`, `github_7642{,_fail}` | — | **Fixed**: a `void` pointee is read and written as `unsigned char`, the byte GCC's documentation names, and the two enumerators are compiled only for clang 20 and later. |
@@ -10234,6 +10235,38 @@ terminate on master, both halves, under Z3.
 
 Not fixed: the sibling reads above, and a nondet bound in any of these shapes,
 which is R28's symbolic-bound question.
+
+### M9 (R106) — 2026-10-04, packed structs in an array, and an aligned odd offset
+
+The KNOWNBUG `github_7707-array` was live: `uint64_t *p = (uint64_t *)&arr[1].b;
+*p` over `struct __attribute__((packed)) S arr[4]` was SUCCESSFUL, where the
+same load from a single `struct S` is FAILED (`github_7707`). #7707 made
+`check_alignment` add the object's base for an object that declines alignment,
+but only `check_data_obj_access` passes it the object. An array goes to
+`bounds_check`, which claims no alignment, and `construct_from_array` walks
+into a struct element without one. The only claim left was
+`check_pointer_alignment`'s, made before the object is known and on the offset
+alone. Offset 24 is a multiple of 8, so it passed.
+
+That pre-check is also wrong the other way. With `b` at offset 1 and the
+program assuming `((uintptr_t)p & 7) == 0`, the load is aligned and C11
+6.3.2.3p7 is met, but offset 1 failed the claim, for a single packed struct
+and for an array of them.
+
+**Fixed** at both sites. `construct_from_array` claims a scalar access into
+an array of structs on the whole address when the array's base alignment is
+below the access width, so a normal array gets no second claim.
+`check_pointer_alignment` now takes the points-to target and skips such an
+object, leaving the claim to `check_data_obj_access` or `construct_from_array`.
+`github_7707-array` is CORE and FAILED, and is SUCCESSFUL with the array claim
+reverted. `github_7707-array-aligned` and `github_7707-offset-aligned` are
+FAILED on master. Both are SUCCESSFUL with the fix and pin the `PASSED`
+alignment claim, so the first fails with either half reverted and the second
+with the pre-check change reverted. All three agree under Z3. `regression/esbmc`,
+`cbmc` and `esbmc-cpp/cpp` keep master's verdicts otherwise.
+
+Not fixed: a vector access into a packed object keeps the offset-only claim,
+since `check_data_obj_access` checks scalars only.
 
 ---
 
