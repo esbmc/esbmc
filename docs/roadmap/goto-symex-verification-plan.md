@@ -829,7 +829,11 @@ this document** — each is a prioritised target for the cited harness.
 | **R77** | **High (a crash, default configuration)** — found by code review of R76's fix (PR #8084), §15 M9 (R77); **FIXED**, same entry | **`memcmp`, `memchr` and a symbolic-length `memcpy` byte-addressed a whole array.** `memcmp_resolve_operand` accepts any fixed-size array as byte-extractable, and the callers built `byte_extract` and `byte_update` on it directly. `convert_byte_extract` asserts its source is not an array; only arrays of single bytes survived, because the simplifier rewrites those into element reads. `memcmp(b, &words[1], 4)` over an `unsigned` array aborted. | `object_byte` and `update_object_byte`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/mem_intrinsics_multibyte_array{,_fail}`, `mem_intrinsics_struct_array_be{,_fail}` | — | **Fixed**: index any array other than one of byte-wide integers down to the element holding the byte, reading through `index2t` and writing through `with2t`. Sound under `--big-endian` only with R76, whose struct layout the struct-element bytes read. |
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
 | **R86** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R69's residual, §15 M9 (R86); **FIXED**, same entry | **A class conditional's branches kept their elidable copies.** Before C++17 clang wraps each branch of `b ? C(1) : C(2)` in an elidable copy of a bound temporary. `get_conditional_class_prvalue` built the result in place but converted each copy, so the copy constructor ran and the branch's source was destroyed as well. | `get_conditional_class_prvalue`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional{,_fail}` | — | **Fixed**: each branch is converted from the elided copy's source, the C++17 form. |
+
+| **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R92** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R69's residual, §15 M9 (R92); **FIXED**, same entry | **Only the outermost elided copy was elided.** In `C c = C(C(1));` and `return C(C(x));` clang marks each copy elidable and elides all of them; `elided_copy_source` peeled one, so ESBMC ran the inner copy constructor and destroyed a second object. `{ C c = C(C(1)); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts natively. | `elided_copy_source`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_nested{,_fail}` | — | **Fixed**: keep peeling through the bound temporary and the functional cast to the innermost elided copy's source. |
+| **R86** | **Medium (false FAILED, default configuration, C++)** — R73's residual, §15 M9 (R86); **FIXED**, same entry | **A value-initialised `new T[n][m]` was not zeroed.** `cpp_new_zero_fill` skipped an array element type, because symex rejects a dereference that yields an array, so `new S[2][3]()` for `struct S { int a = 1; int b; }` left `b` nondet and `assert(p[1][2].b == 0)` was FAILED while the native program passes ([dcl.init]/9). | `goto_convertt::cpp_new_zero_fill`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/cpp/new_multidim_value_init{,_fail}` | — | **Fixed**: the fill steps over n * m leaves through a pointer to the leaf type, as the constructor loop does. The failing half is FAILED on master too, since a nondet member covers every value the fill could store. |
 | **R76** | **High (false SUCCESSFUL, `--big-endian`)** — R75's open note, §15 M9 (R76); **FIXED**, same entry | **Big-endian aggregates were flattened little-endian.** `flatten_to_bitvector` put element and member 0 in the low bits whatever the byte order, while `byte_extract`/`byte_update` read byte address 0 from the most significant bits on a big-endian target. `union { short a[4]; short b[4]; }` stored to `a[1]` read back at `b[2]`, so `assert(u.b[1] != 5)` verified; a member shorter than its union read the low bits instead of address 0; a byte read at a symbolic offset into a struct of 16-bit members got each member's bytes swapped. #4108 compensated for the layout in `dereferencet`, for byte-sized members only. | `flatten_to_bitvector`, `convert_bitcast_to_struct`, the array arm of `convert_bitcast` and `flattened_in_struct`, `src/solvers/smt/smt_bitcast.cpp`; `constant_union2t`, `with2t` on a union, `convert_member` and the union case of `get_by_ast`, `smt_solver.cpp`; the struct byte path in `src/pointer-analysis/dereference.cpp`; `regression/esbmc/big_endian_{union_array_lane,union_short_member,struct_byte_access}{,_fail}`, `big_endian_union_trace_fail`, `github_571_{1,2,3}`, `github_571_1_fail` | — | **Fixed**: on a big-endian target the lowest address sits in the most significant bits everywhere a bit-vector stands for an object, and #4108's compensation is removed. `regression/cheri-128`, all `--big-endian`, needs a CHERI build and was not run. |
 | **R83** | **High (false FAILED, default configuration)** — R64's residual, the KNOWNBUG `aggregate_init_temp_double_destroy`, §15 M9 (R83); **FIXED**, same entry | **An aggregate destroyed the temporary that initialised its element as well as the element.** `W a{M(5)}`, `W a{t}`, `W a{make()}` and `M arr[2] = {M(1), M(2)}` lowered each element to a temporary with its own scope-exit destructor, copied it into the aggregate, and destroyed it, then destroyed the element again with the aggregate: one destructor per element too many. `H a{std::make_shared<int>(1)}` released the control block twice and freed the shared object under a live owner. | `remove_sideeffects` and `drop_destructor`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/aggregate_element_temporary{,_fail}`, `aggregate_init_{temp,named}_double_destroy`, `shared_ptr_member_copy` | — | **Fixed**: a temporary that is a struct or array initialiser's element keeps its DEAD and loses its destructor; the aggregate's destructor destroys it once. |
 | **R102** | **High (false FAILED, default configuration, C++)** — R83's residual, §15 M9 (R102); **renumbered from R83** on merging master, which uses that number for the destructor count; this branch's commit titles predate the renumbering; **FIXED**, same entry | **A braced list built each class element in a temporary and copied it in.** With R83 the destructors balance, but `W a{1, M(5)}` still constructed `M(5)` in a `tmp$` object and copied it bitwise into `a.m`, so the constructor's `this` was not the element: with `built = this` in `M`'s constructors, `assert(built == &a.m)` was FAILED, as it was for `W b{3, t}`, `M arr[2] = {M(6), M(7)}` and a nested list. | `construct_in_place`, `remove_initializer_sideeffects`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_init_member_in_place{,_fail}`, `aggregate_init_named_double_destroy_fail`, `shared_ptr_member_copy_fail` | — | **Fixed** for a declaration's initialiser: each class element is constructed in the object itself. |
@@ -9548,7 +9552,7 @@ FAILED on the destructor count.
 
 Not fixed: value-initialising such an array (`new S[2][3]()`) still skips the
 zero fill for an array element type, so members no constructor writes stay
-nondet, as on master; R69 (#8069) rewrites that lowering.
+nondet, as on master; R69 (#8069) rewrites that lowering. Fixed as R86.
 
 ### M9 (R69) — 2026-09-28, R64's residual: elided copies before C++17
 
@@ -9821,6 +9825,32 @@ the end of the full-expression. Both are false FAILED on master and here.
 
 ---
 
+### M9 (R86) — 2026-10-02, the zero fill R73 left out
+
+R73 noted that value-initialising an array new whose element type is itself an
+array skipped the zero fill. `cpp_new_initializer` called `cpp_new_zero_fill`
+only for a non-array element, since the fill dereferenced `lhs + i` at the
+element type and symex rejects a dereference that yields an array. So
+`new S[2][3]()` for `struct S { int a = 1; int b; int *q; }` ran the
+default member initialisers and left `b` and `q` nondet:
+`assert(p[1][2].b == 0)` was FAILED, and the native program passes
+([dcl.init]/9: such an `S` is zero-initialised before its constructor runs). A
+polymorphic element, `new D[2][2]()` with `D : B` and a member no initialiser
+writes, read that member back nondet through a virtual call the same way.
+`new int[2][3]()` was already right.
+
+**Fixed** by filling n * m leaves through a pointer to the leaf type, as the
+constructor loop already does, with `array_leaves` giving the leaf and the
+stride. `new_multidim_value_init` is FAILED on master and SUCCESSFUL with the
+change, under Bitwuzla and Z3. `new_multidim_value_init_fail`, whose assertion
+fails natively, is FAILED on both: master's nondet member covers every value
+the fill could store, so no failing half can change verdict here. It pins that
+the fill does not overwrite the default member initialiser. The 1275 tests in
+`esbmc-cpp/cpp` keep their verdicts; six fail on this host with master's binary
+too.
+
+---
+
 ### M9 (R81) — 2026-10-01, an array placement new that allocated
 
 R65 left an array placement new open. It is wider than a side-effecting
@@ -10090,6 +10120,52 @@ function returning the class (`b ? make(1) : C(2)`) reports an invalid free in
 every mode, C++17 included; before this change C++14 reported a wrong count
 instead.
 
+### M9 (R93) — 2026-10-03, the members a throwing constructor left behind
+
+R69 recorded that a throw from the second listed constructor does not destroy
+the first. Probing it found the general rule missing: when an exception leaves
+a constructor, [except.ctor]/3 destroys each base and member whose
+initialization has completed, in reverse order of construction, and ESBMC
+destroyed none of them. With `P() : a(1), b(0)` and a `C(0)` that throws,
+`~C` never ran for `a`. A program that counts destructors was a false FAILED,
+and `assert(dtors == 0)` after the handler, which aborts natively, was
+SUCCESSFUL. A throw from the constructor's body, or from a member after a base
+with a destructor, went the same way. The same note's array shapes
+(`C a[2] = {C(1), C(2)}`, `P p = {C(1), C(2)}`) and a callee's throw past a
+local are open PR #8121's; with it they verify, while `new C[2]{C(1), C(2)}`
+does not.
+
+**Fixed** in the C++ frontend. A constructor that may throw, of a class with a
+base or member whose destructor is non-trivial, keeps a local counter of the
+subobjects built so far, set before each initializer and before the body, and
+runs both in a try block. Its catch-all handler destroys each subobject the
+counter has passed, newest first, and rethrows. `build_destructor_chain` and
+the handler take the destructor calls from one place, `subobject_destructors`.
+The vptr assignments still follow the base constructor calls, now inside the
+try block. A constructor declared `noexcept` is left as it was, and so is
+every constructor of a translation unit whose own code, outside the system
+headers that hold the operational models, has no `throw`, no `try` and no
+`dynamic_cast` to a reference. Such a program is converted exactly as on
+master: the handler's catch and rethrow would otherwise send it through
+exception lowering, which declines a thread start routine that is also called
+directly, and would slow every program that includes `<map>` or `<string>`
+(`map_upper_lower_bound_bug` grew from 5688 to 6020 assignments). Each
+translation unit that converts the constructor shares one counter symbol, as
+`ifstream_get_line_1` requires.
+
+`ctor_subobject_unwind` (members, a body throw over a base and a member, and a
+constructor that completes) is FAILED on master and SUCCESSFUL now;
+`ctor_subobject_unwind_fail` is SUCCESSFUL on master and FAILED on the
+property it pins. `ctor_subobject_unwind_thread`, a concurrent program with
+no throw, verifies on master and stays SUCCESSFUL only because of that
+gate. All three were checked with Z3.
+
+Left open: a delegating constructor whose body throws does not run the
+object's destructor; virtual bases are not destroyed; an array member whose
+third element's constructor throws is not destroyed element by element. A
+constructor in a translation unit whose own code neither throws nor catches is
+left as on master, even when an exception from an operational model or from
+another translation unit passes through it.
 ### M9 (R105) — 2026-10-02, a compound literal initialised before its statement
 
 Probing R65's note that the C frontend's `$vector-cmp$` binding declares its
@@ -10280,6 +10356,27 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R92) — 2026-10-02, the copy inside the elided copy
+
+R69's residuals include an elidable copy below the root of an initializer. In
+`C c = C(C(1));` under `--std c++14` clang wraps the inner `C(1)` in an
+elidable copy, binds the result, casts it to `C`, and copies that again, also
+elidably; it elides both. `elided_copy_source` peeled only the outer copy, so
+ESBMC ran the copy constructor once and destroyed two objects.
+`{ C c = C(C(1)); } assert(dtors == 2);` was SUCCESSFUL, and the program aborts
+natively; `return C(C(x));` and three levels behaved the same.
+
+**Fixed** by peeling repeatedly: from a copy's source, `peel_initializer_wrapper`
+looks through the bound temporary, parentheses and the functional cast, and a
+further elidable copy is peeled too. What is converted is the innermost copy's
+source, the form `C c = C(1);` already had. A copy from a named object is not
+elidable and still runs. `cxx14_elided_copy_nested{,_fail}`, pinned to
+`--std c++14`, are wrong on master, both halves, under Z3, and each fails with
+the fix reverted; they were not run under Bitwuzla. The other 281 tests ctest
+runs with `--std` before C++17 pass, and `esbmc-cpp/cpp` keeps its verdicts.
+
+Still open from R69's list: an elidable copy of an init-list element or a
+by-value argument, a catch-by-value parameter, and NRVO `return local;`.
 ### M9 (R89) — 2026-10-02, the atomic builtins with empty bodies
 
 PR #8122's entry lists five builtins with empty bodies.

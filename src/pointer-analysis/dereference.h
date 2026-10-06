@@ -606,7 +606,22 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /// Builds a vector or array destination; false for any other type.
+  bool construct_value_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
   void construct_vector_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
+  void construct_array_ref(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,

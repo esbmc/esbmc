@@ -621,48 +621,6 @@ static exprt *find_cpp_new_constructor(exprt &e)
   return nullptr;
 }
 
-// Zero the elements a value-initialising `new T[n]()` just allocated:
-//
-//   for (size_type i = 0; i < n; ++i)
-//     *(lhs + i) = <zero of T>;
-//
-// An assignment loop rather than a memset call: n need not be a compile-time
-// constant, and __ESBMC_memset falls back to a library body that is only linked
-// when the program itself calls memset.
-void goto_convertt::cpp_new_zero_fill(
-  const exprt &lhs,
-  const exprt &rhs,
-  const exprt &elem_count,
-  goto_programt &dest)
-{
-  const typet &subtype = ns.follow(rhs.type().subtype());
-
-  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
-
-  // Pointer arithmetic on lhs, for the reason spelled out at the element
-  // constructor loop below: &lhs[i] does not survive symex.
-  plus_exprt element_addr(lhs, index);
-  element_addr.type() = lhs.type();
-
-  exprt element("dereference", subtype);
-  element.copy_to_operands(element_addr);
-
-  code_assignt body(element, gen_zero(subtype));
-  body.location() = rhs.find_location();
-
-  plus_exprt next(index, from_integer(1, size_type()));
-  next.type() = size_type();
-
-  code_fort loop;
-  loop.init() = code_assignt(index, from_integer(0, size_type()));
-  loop.cond() = binary_relation_exprt(index, "<", elem_count);
-  loop.iter() = code_assignt(index, next);
-  loop.body() = body;
-  loop.location() = rhs.find_location();
-
-  convert(loop, dest);
-}
-
 // The non-array type at the bottom of `type`, and how many of it one `type`
 // holds. False if an array level has no constant size.
 static bool
@@ -683,6 +641,63 @@ array_leaves(const namespacet &ns, const typet &type, typet &leaf, BigInt &n)
     return false;
   n *= size;
   return true;
+}
+
+// Zero the elements a value-initialising `new T[n]()` just allocated:
+//
+//   for (size_type i = 0; i < n; ++i)
+//     *(lhs + i) = <zero of T>;
+//
+// An assignment loop rather than a memset call: n need not be a compile-time
+// constant, and __ESBMC_memset falls back to a library body that is only linked
+// when the program itself calls memset.
+void goto_convertt::cpp_new_zero_fill(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  // `new T[n][m]()` zeroes n * m leaves through a pointer to the leaf type,
+  // since symex rejects a dereference that yields an array.
+  typet leaf;
+  BigInt stride;
+  if (!array_leaves(ns, rhs.type().subtype(), leaf, stride))
+    return;
+  const typet &subtype = ns.follow(leaf);
+
+  exprt base = lhs;
+  exprt count = elem_count;
+  if (ns.follow(rhs.type().subtype()).is_array())
+  {
+    base = typecast_exprt(lhs, pointer_typet(leaf));
+    count = mult_exprt(elem_count, from_integer(stride, size_type()));
+    count.type() = size_type();
+  }
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+  // Pointer arithmetic on lhs, for the reason spelled out at the element
+  // constructor loop below: &lhs[i] does not survive symex.
+  plus_exprt element_addr(base, index);
+  element_addr.type() = base.type();
+
+  exprt element("dereference", subtype);
+  element.copy_to_operands(element_addr);
+
+  code_assignt body(element, gen_zero(subtype));
+  body.location() = rhs.find_location();
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort loop;
+  loop.init() = code_assignt(index, from_integer(0, size_type()));
+  loop.cond() = binary_relation_exprt(index, "<", count);
+  loop.iter() = code_assignt(index, next);
+  loop.body() = body;
+  loop.location() = rhs.find_location();
+
+  convert(loop, dest);
 }
 
 // A list's elements; a string literal's are its characters and the zeros
@@ -918,12 +933,7 @@ void goto_convertt::cpp_new_initializer(
       // every element the constructor -- if any -- does not write itself
       // ([expr.new]/24, github #6588). The frontend flags exactly those forms,
       // so plain `new T[n]` keeps its indeterminate elements.
-      // An array element type (`new T[n][m]()`) is skipped here: symex rejects
-      // a dereference yielding an array, and cpp_new_init_list zeroes it leaf
-      // by leaf.
-      if (
-        rhs.get_bool("zero_initialized") &&
-        !ns.follow(rhs.type().subtype()).is_array())
+      if (rhs.get_bool("zero_initialized"))
         cpp_new_zero_fill(lhs, rhs, elem_count, dest);
 
       // Construct every element: what the scalar arm below does once, done for
