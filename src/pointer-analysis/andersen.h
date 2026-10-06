@@ -259,6 +259,12 @@ protected:
   /// to one is an allocation site rather than a binding of its return value.
   std::unordered_set<irep_idt, irep_id_hash> allocators;
 
+  /// Whether each function bound so far reads its variadic arguments.
+  std::unordered_map<irep_idt, bool, irep_id_hash> reads_varargs;
+
+  /// A node pointing to the nondet sentinel: an unconstrained value.
+  node_id unconstrained();
+
   /// A node whose points-to set is `{TOP}`.  Used as the source of a STORE to
   /// express "an unmodelled callee may write anything through this pointer".
   node_id top_source();

@@ -212,12 +212,11 @@ TEST_CASE("andersen frontend binds arguments and returns", "[andersen][goto]")
 }
 
 TEST_CASE(
-  "andersen frontend widens an unmodelled callee to TOP",
+  "andersen frontend treats a callee without a body as symex does",
   "[andersen][goto]")
 {
-  // The soundness case: nothing in the program says what ext() returns or what
-  // it does through the pointer it is handed.  Both must widen to TOP rather
-  // than stay empty, or a consumer would wrongly conclude "nothing aliases".
+  // Symex gives ext() a fresh result, whose dereference reaches no named
+  // object, and lets it write through none of its arguments.
   std::string src = R"(
     int a;
     int *ext(int **out);
@@ -235,9 +234,125 @@ TEST_CASE(
   andersen(functions);
 
   REQUIRE(
+    targets_of(andersen, functions, "main", "e") ==
+    std::set<std::string>{andersent::nondet_object_name});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+}
+
+TEST_CASE("andersen frontend widens an intrinsic to TOP", "[andersen][goto]")
+{
+  // Symex runs __ESBMC_ functions itself, whatever their body, and those may
+  // write through their arguments.
+  std::string src = R"(
+    int a;
+    int *__ESBMC_ext(int **out);
+    int main(void)
+    {
+      int *p = &a;
+      int **r = &p;
+      int *e = __ESBMC_ext(r);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
     targets_of(andersen, functions, "main", "e") == std::set<std::string>{"*"});
-  // ext() may write through r, so p may now point anywhere too.
   REQUIRE(targets_of(andersen, functions, "main", "p").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend widens variadic arguments only for va_arg",
+  "[andersen][goto]")
+{
+  // Symex reads an argument past the signature only through a va_arg in the
+  // callee's own frame.
+  std::string src = R"(
+    #include <stdarg.h>
+    int a, b;
+    int ignores(int n, ...)
+    {
+      return n;
+    }
+    int reads(int n, ...)
+    {
+      va_list ap;
+      va_start(ap, n);
+      int **pp = va_arg(ap, int **);
+      va_end(ap);
+      return 0;
+    }
+    int main(void)
+    {
+      int *p = &a;
+      int *q = &b;
+      ignores(1, &p);
+      reads(1, &q);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+  REQUIRE(targets_of(andersen, functions, "main", "q").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend copies the old object into realloc's",
+  "[andersen][goto]")
+{
+  // Symex copies the old contents into the new object and, on failure,
+  // returns the old pointer.
+  std::string src = R"(
+    #include <stdlib.h>
+    int a;
+    int main(void)
+    {
+      int **p = malloc(sizeof(int *));
+      *p = &a;
+      int **q = realloc(p, sizeof(int *));
+      int *r = *q;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend gives an integer constant no object",
+  "[andersen][goto]")
+{
+  // Symex resolves a non-zero integer used as a pointer to an invalid object,
+  // as it does an unconstrained pointer.
+  std::string src = R"(
+    int main(void)
+    {
+      int *c = (int *)0x1000;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "c") ==
+    std::set<std::string>{andersent::nondet_object_name});
 }
 
 TEST_CASE(
@@ -268,30 +383,6 @@ TEST_CASE(
   // The laundering must not cost precision on the pointer itself.
   REQUIRE(
     targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
-}
-
-TEST_CASE(
-  "andersen frontend widens a nondet pointer to TOP",
-  "[andersen][goto]")
-{
-  // A call to a bodyless function is lowered to a nondet side effect: the
-  // resulting pointer is an unconstrained value symbolic execution may equate
-  // with the address of any object, so an empty set would under-approximate.
-  std::string src = R"(
-    int *ext(void);
-    int main(void)
-    {
-      int *n = ext();
-      return 0;
-    }
-  )";
-
-  goto_functionst functions = compile(src);
-  andersent andersen;
-  andersen(functions);
-
-  REQUIRE(
-    targets_of(andersen, functions, "main", "n") == std::set<std::string>{"*"});
 }
 
 TEST_CASE(

@@ -1,6 +1,7 @@
 #include <pointer-analysis/andersen.h>
 
 #include <irep2/irep2_utils.h>
+#include <util/base/prefix.h>
 #include <util/lang/c_types.h>
 
 namespace
@@ -90,6 +91,21 @@ bool may_hold_address(const type2tc &t)
   return false;
 }
 
+/// Whether \p e reads a variadic argument.
+bool mentions_va_arg(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (
+    is_sideeffect2t(e) &&
+    to_sideeffect2t(e).kind == sideeffect2t::allockind::va_arg)
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || mentions_va_arg(op); });
+  return found;
+}
+
 /// Whether \p e or any operand of it is a pointer: a value this model cannot
 /// track (a float, say) may still hide the address one of them holds.
 bool mentions_pointer(const expr2tc &e)
@@ -112,6 +128,28 @@ expr2tc top_source_expr()
 expr2tc nondet_object_expr()
 {
   return symbol2tc(pointer_type2(), andersent::nondet_object_name);
+}
+
+/// Whether \p function reads an argument passed beyond its signature.
+bool mentions_va_arg(const goto_functiont &function)
+{
+  bool found = false;
+  forall_goto_program_instructions (i, function.body)
+    for (const expr2tc &e : {i->code, i->guard})
+      found = found || mentions_va_arg(e);
+  return found;
+}
+
+/// Whether symex runs \p function itself, whatever its body: an intrinsic, a
+/// builtin or an input function, any of which may write through its arguments.
+/// Keep in step with goto_symext::symex_step's FUNCTION_CALL case.
+bool symex_runs(const irep_idt &function)
+{
+  const std::string &name = function.as_string();
+  return has_prefix(name, "c:@F@__ESBMC") ||
+         has_prefix(name, "c:@F@__CPROVER") ||
+         has_prefix(name, "c:@F@__builtin") || name == "c:@F@scanf" ||
+         name == "c:@F@sscanf" || name == "c:@F@fscanf";
 }
 
 expr2tc return_symbol(const irep_idt &fn)
@@ -584,10 +622,24 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     {
       // One node per allocation site, so every object a loop allocates shares
       // a single abstraction.  Keyed like value_sett's dynamic objects.
-      return allocation(
+      const node_id t = allocation(
         is_pointer_type(side.type) ? to_pointer_type(side.type).subtype
                                    : side.alloctype,
         loc);
+      if (
+        side.kind != sideeffect2t::allockind::realloc ||
+        is_nil_expr(side.operand))
+        return t;
+      // realloc copies the old object into the new one, and on failure
+      // returns the old pointer (goto_symext::symex_realloc).
+      const node_id old = eval_rhs(side.operand, loc);
+      const node_id contents = fresh_node();
+      add_constraint(constraint_kindt::LOAD, contents, old);
+      add_constraint(constraint_kindt::STORE, t, contents);
+      const node_id result = fresh_node();
+      add_constraint(constraint_kindt::COPY, result, t);
+      add_constraint(constraint_kindt::COPY, result, old);
+      return result;
     }
 
     case sideeffect2t::allockind::nondet:
@@ -597,10 +649,7 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
       // object, never a named one, even under an assumption equating it with
       // an address. It points at a sentinel rather than nothing, so a
       // consumer can tell it apart from a set no constraint ever reached.
-      const node_id t = fresh_node();
-      add_constraint(
-        constraint_kindt::ADDRESS_OF, t, get_node(nondet_object_expr()));
-      return t;
+      return unconstrained();
     }
 
     default:
@@ -630,13 +679,15 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
       return eval_rhs(rhs_op, loc);
   }
 
-  // NULL names no object, so an empty set is exact.  A *non-zero* integer
-  // turned into a pointer is an int->ptr cast that may name anything, so it
-  // deliberately falls through to TOP below.
+  // NULL names no object, so an empty set is exact. Symex resolves any other
+  // integer constant used as a pointer to an invalid object
+  // (value_sett::get_value_set_rec), just as it does an unconstrained one.
   if (
     is_null_object2t(r) ||
     (is_constant_int2t(r) && to_constant_int2t(r).value.is_zero()))
     return fresh_node();
+  if (is_constant_int2t(r))
+    return unconstrained();
 
   // A nameable l-value read as a value: its own node already holds its targets.
   if (
@@ -646,8 +697,8 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
 
   // An integer carries the addresses it is computed from: `(long)p + 44`
   // still points into p's object. A constant operand is an offset and carries
-  // none; a constant on its own is a fabricated address, left to TOP below.
-  if ((is_bv_type(r->type) || is_bool_type(r->type)) && !is_constant_int2t(r))
+  // none.
+  if (is_bv_type(r->type) || is_bool_type(r->type))
   {
     std::vector<node_id> carried;
     r->foreach_operand([this, &carried, loc](const expr2tc &op) {
@@ -680,6 +731,14 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
   // empty would be an unsound under-approximation; TOP is the safe answer.
   const node_id t = fresh_node();
   points_to_top(t);
+  return t;
+}
+
+andersent::node_id andersent::unconstrained()
+{
+  const node_id t = fresh_node();
+  add_constraint(
+    constraint_kindt::ADDRESS_OF, t, get_node(nondet_object_expr()));
   return t;
 }
 
@@ -771,7 +830,14 @@ void andersent::bind_call(
   // Arguments no formal can be bound to: a nameless parameter, or one passed
   // beyond the signature (varargs, mismatched prototype) and read back out
   // with va_arg.  They reach the callee by a route this frontend cannot see.
-  std::vector<expr2tc> unbound(arguments.begin() + argc, arguments.end());
+  // Symex reads the latter only through a va_arg in the callee's own frame
+  // (goto_symext::symex_va_arg).
+  std::vector<expr2tc> unbound;
+  const auto reads = reads_varargs.try_emplace(callee_name, false);
+  if (reads.second)
+    reads.first->second = mentions_va_arg(callee);
+  if (reads.first->second)
+    unbound.assign(arguments.begin() + argc, arguments.end());
 
   for (std::size_t i = 0; i < argc; ++i)
   {
@@ -819,8 +885,13 @@ void andersent::handle_function_call(
     auto it = goto_functions.function_map.find(callee_name);
     if (it != goto_functions.function_map.end() && it->second.body_available)
       bind_call(callee_name, it->second, call.ret, call.operands, loc);
-    else
-      widen_call(call.ret, call.operands, loc); // bodyless / intrinsic
+    else if (symex_runs(callee_name))
+      widen_call(call.ret, call.operands, loc);
+    // Symex gives a call to any other function without a body a fresh
+    // result and writes through none of its arguments
+    // (goto_symext::symex_function_call_code).
+    else if (!is_nil_expr(call.ret) && may_hold_address(call.ret->type))
+      assign_node(call.ret, unconstrained(), loc);
     return;
   }
 
