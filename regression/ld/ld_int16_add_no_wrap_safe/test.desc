@@ -1,0 +1,4 @@
+CORE
+add.ld
+--ld-props props.yaml --unwind 3 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
