@@ -2500,10 +2500,7 @@ bool goto_convertt::destroy_full_expression_temporaries(
 {
   const destructor_stackt &stack = targets.destructor_stack;
   if (
-    std::none_of(
-      stack.begin() + stack_size, stack.end(), [](const codet &entry) {
-        return entry.get_statement() == "function_call";
-      }))
+    std::none_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
     return false;
 
   unwind_destructor_stack(location, stack_size, dest);

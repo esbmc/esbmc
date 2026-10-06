@@ -823,6 +823,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R94** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R89's sibling (PR #8125), §15 M9 (R94); **FIXED**, same entry | **A temporary in a `switch` condition outlived it.** `convert_switch` lowered the value with `remove_sideeffects`, so `switch (T(1).v)` ran `~T` at the end of the enclosing block, or at a `return` from a case, rather than before the case label ([class.temporary]/4). `k = dtors;` under `case 1:` stored 0, so `assert(k == 0)` was SUCCESSFUL and `assert(k == 1)` FAILED. | `convert_switch`, `src/goto-programs/goto_convert.cpp`; the switch arm of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/switch_condition_temporary{,_fail,_legacy}` | — | **Fixed**: the switch value is lowered through R89's `remove_condition_sideeffects`. |
 
 
+| **R86** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R79's open note (PR #8108), §15 M9 (R86); **FIXED**, same entry | **A temporary in one arm of a conditional was destroyed whichever arm ran.** Lowering `c ? a : b` scheduled the destructor of every temporary materialized in either arm for the end of the full-expression, unconditionally. `int x = c ? P(6).v : 0;` ran `~P` on an object never constructed when `c` was false; so did the right operand of `&&` and `||`, which are lowered as conditionals. A destructor count read afterwards was wrong in both directions. | `goto_convertt::remove_sideeffects` (the `if` arm) and `guard_arm_destructors`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/conditional_arm_temporary{,_fail}` | — | **Fixed**: save the condition in a fresh flag before either arm runs and guard each arm's destructors by it. |
 | **R91** | **High (false SUCCESSFUL and false FAILED, `--big-endian`; also the default configuration)** — found probing R76's byte order at the memory intrinsics, §15 M9 (R91); **FIXED**, same entry | **A constant-length `memset` or `memcpy` on a scalar placed its bytes little-endian.** `gen_byte_expression` and `gen_byte_memcpy` build the new value with shifts, putting byte `k` of the range at bit `8k` whatever the byte order. Under `--big-endian`, `memset(&x, 0xff, 1)` on an `unsigned` made `x == 0xff`, which verified, and `memcpy(&x, &y, 1)` copied `y`'s low byte. The pointer arm wrote through a little-endian `byte_update`. R76 did not reach these sites because they never build a `byte_extract` or `byte_update`. Separately, on any target, a `memset` starting inside an element or member handed it more bytes than were left in it and dropped them from the next: `memset((char *)a + 3, 0x11, 2)` over `unsigned a[2]` left `a[1] == 0`. | `byte_shift`, `gen_byte_expression`, `gen_byte_expression_byte_update` and `gen_byte_memcpy`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `gen_value_by_byte`; `regression/esbmc/big_endian_memset{,_fail}`, `big_endian_memcpy{,_fail}`, `memset_offset_span{,_fail}` | — | **Fixed**: on a big-endian target a range of `n` bytes at byte `k` of a `w`-byte scalar is shifted by `w - k - n` bytes instead of `k`, and the pointer arm passes the target's byte order to `byte_update`; `gen_value_by_byte` gives an element or member at most the bytes after the offset and carries the rest to the next. |
 | **R105** | **High (false SUCCESSFUL and false FAILED, default configuration, C)** — found probing the `$vector-cmp$` residual of §15 M9 (R65), §15 M9 (R105); **FIXED**, same entry | **A compound literal was initialised where its declaration was hoisted, not where it is evaluated.** The C frontend pushed the literal's declaration, initialiser included, into the enclosing block ahead of the statement being converted. In an unbraced loop body that runs once, before the loop; in an unbraced `if` body it runs whether or not the branch is taken; before a `case` label it is unreachable and is dropped, so the literal reads nondet. `for (i = 0; i < 3; i++) hit += (int[]){i}[0] == 2;` left `hit` at 0. | `CompoundLiteralExprClass` in `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/compound_literal_per_evaluation{,_fail}` | — | **Fixed**: the declaration stays in the enclosing block, which is the literal's lifetime (C17 6.5.2.5p5), and the literal becomes `(cl = init, cl)`, so it is initialised each time it is evaluated. |
 | **R89** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8122's open note, §15 M9 (R89); **FIXED**, same entry | **Five atomic builtins had no body.** `instantiate_gcc_polymorphic_builtin` opened the atomic section for `__sync_bool_compare_and_swap`, `__sync_val_compare_and_swap`, `__sync_lock_test_and_set`, `__sync_lock_release` and the generic `__atomic_exchange`, then emitted nothing: the object kept its value, the result was nondet, and the atomic section was never closed, so the calling thread could not be preempted again. The two compare-and-swap names also had each other's return type. | `instantiate_gcc_polymorphic_builtin`, `instantiate_sync_compare_and_swap` and `is_gcc_polymorphic_builtin`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/sync_swap_builtins{,_fail}`, `sync_lock_release_race_fail` | — | **Fixed**: give each its GCC semantics inside the atomic section and close it; `bool` for the bool variant, the object's type for the val variant. |
@@ -10759,6 +10760,45 @@ balance their destructors.
 
 ---
 
+### M9 (R86) — 2026-10-02, the temporary of the arm that did not run
+
+R79's entry (PR #8108) noted that a declaration's initialiser destroys a
+temporary from a conditional arm that never ran: `int x = c ? *P(6).p : 0;`
+with `c` false calls `~P` on an object no constructor touched. Lowering
+`c ? a : b` turns each arm's temporaries into a declaration inside that arm's
+branch, but their destructors go on the destructor stack, which is unwound
+at the end of the full-expression or the block outside the branch. Natively
+a temporary is destroyed only if its arm was evaluated ([expr.cond]/1,
+[class.temporary]/4). The right operand of `&&` and `||` is lowered through
+the same arm, so `bool b = c && P(5).v == 5;` had the same defect. With a
+destructor that counts, `assert(dtors == 1)` after `c ? P(1).v : 0` with a
+nondet `c` is SUCCESSFUL on master; with one that deletes a member pointer,
+master reports `invalid pointer freed` on a program that frees nothing.
+
+**Fixed** by saving the condition in a fresh `bool` before either arm runs and
+wrapping each destructor an arm pushed in `if (flag)` or `if (!flag)`. The
+flag is needed because an arm can change what the condition reads
+(`d ? (d = false, P(4).v) : 0`); its `DEAD` is placed below the arm's entries
+so it outlives them. Nested conditionals nest the guards. The two sites that
+destroy a full-expression's temporaries early test for a destructor entry;
+they now accept a guarded one too, so the guarded destructors still run right
+after the declaration rather than at block exit. Nothing changes when no arm
+pushes a destructor, so C programs are untouched.
+
+`conditional_arm_temporary` covers one arm, both arms, an arm that writes the
+condition, and `&&`, with a nondet `c`; it matches the native program
+(`g++ -fsanitize=address,undefined`) for `c` true and false and is FAILED on
+master. `conditional_arm_temporary_fail` asserts the count the false arm does
+not produce and is SUCCESSFUL on master. Reading the live condition instead of
+the flag makes the first FAILED again. Both were run under Z3 only: Bitwuzla
+could not be fetched for this build. Of the 5,698 tests under
+`regression/esbmc` and `regression/esbmc-cpp`, `--goto-functions-only` differs
+from master on nine besides the new pair, all C++ through `&&` over library
+temporaries (`map_find_end_neq`, `github_7797_flat_*`, ...); each keeps its
+verdict.
+
+Left open: R79's other notes (a temporary in a class-type return value, a
+temporary in one arm of a conditional in a `return`) are unchanged here.
 ### M9 (R99) — 2026-10-03, the list R102 left in two places
 
 R102 constructed a declaration's braced list in place and left two shapes that
