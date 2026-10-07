@@ -171,6 +171,20 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
     expr.size(new_size);
   }
 
+  if (expr.find("alloc_arguments").is_not_nil())
+  {
+    const code_typet::argumentst &params =
+      to_code_type(
+        static_cast<const exprt &>(expr.find("alloc_function")).type())
+        .arguments();
+    exprt &args = static_cast<exprt &>(expr.add("alloc_arguments"));
+    for (std::size_t i = 0; i < args.operands().size(); ++i)
+    {
+      adjust_expr(args.operands()[i]);
+      gen_typecast(ns, args.operands()[i], params[i + 1].type());
+    }
+  }
+
   // Note: the cpp_new allocation size flows via size_irep() (the array count)
   // and the allocated type via type().subtype(); the old "sizeof" named-sub
   // (a c_sizeof fold tagged with the legacy sizeof-type attribute) was never
