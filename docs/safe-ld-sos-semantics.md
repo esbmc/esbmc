@@ -539,6 +539,64 @@ at most once more while in progress, so the recursion depth is bounded by
 terminates, and on a cyclic G it terminates by raising the diagnostic at the
 first back-edge found, rather than by stack exhaustion.
 
+### 6.5 Interface classification (the I/O rule)
+
+The semantics distinguishes the variables the environment may change between
+scans from the ones only the program writes. The set H of the first kind is
+read freely at the start of every scan (`read_inputs`, §3.1). The classifier
+(`classify_address`, the section handling in `PlcopenXmlParser::parse`, and
+`build_scan_body`) assigns each declared variable to a tier, first match
+winning:
+
+| Tier | Test | Effect in the model |
+|---|---|---|
+| 1. Interface section | `inputVars` | in H |
+| | `outputVars` | program-owned |
+| | `inOutVars`, `externalVars` | in H (*shared*), unless `--ld-closed-world` |
+| 2. Address | `%I` | in H |
+| | `%Q` | program-owned |
+| | `%M` | in H (*shared*), unless `--ld-closed-world` |
+| 3. Usage | read by a contact and written by no coil | in H |
+| | written by a coil and read by no contact | program-owned |
+| | both, or neither | program-owned (internal state) |
+
+With `--ld-closed-world` the shared variables start from an arbitrary value
+and are afterwards written only by the program. Several tasks, program
+instances or programs are rejected (§3.1), so no second writer inside the
+file exists to be missed. A coil on an input is rejected by the type checker
+(§2).
+
+**Safe direction.** Let H' ⊇ H. The scan relation that reads H' freely
+contains every execution of the one that reads H freely: at the start of a
+scan, choose for each variable of H' its current value. Everything after the
+read is the same. This holds for any variable, written by the program or not.
+Hence adding variables to H only adds behaviors: a SAFE verdict stays valid,
+and a VIOLATION may be spurious. Two consequences the classifier accepts: a
+variable that is only read but initialised to a constant (tier 3) is treated
+as free, which can produce a violation the constant would have excluded; and a
+counter value or timer output read by a contact but written by no coil is
+treated as free, which loses its continuity between scans.
+
+**Unsafe direction.** A SAFE verdict is valid for an environment E only if H
+contains every variable E can change between two scans. A variable the program
+writes and something else also writes (a program-level `VAR_IN_OUT`, a global
+or external variable, `%M` memory written by an HMI; a `globalVars` section is not classified as shared) is not in H if it were
+classified by tier 3, and an execution in which the other writer interferes
+would be missing. The classifier closes this with tier 1 and tier 2 (shared
+variables are sampled), and `--ld-closed-world` makes the opposite assumption
+explicit. What it cannot see is a writer the file does not declare: a variable
+declared as local, with no address, that another program or the runtime writes.
+The verdict assumes the declared interface is complete, and so does every
+statement of the theorem (`ws1/translation_theorem.md`, Corollary 3).
+
+The unsafe direction is covered by the regression pair added with esbmc#8065:
+a program that writes a variable it also declares externally writable, verdict
+unsound before the change and sampled after it.
+
+**Open.** The counts per tier for the evaluation corpora are not reported:
+the tool does not print them. They need a counter in the classifier or a
+script over the parser's output (WS4).
+
 ---
 
 ## 7. Correspondence with the GOTO IR
