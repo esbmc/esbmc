@@ -677,6 +677,34 @@ and before the next `read_inputs`. Properties may name:
 - `<instance>__<pin>` for a function-block pin synthesised by the graphical
   resolver (§6.2), e.g. `TOF0__Q`.
 
+### 9.1 Monitors and verdicts
+
+A property is compiled to a monitor appended after the last rung of the scan loop, so it observes the state σ_{n+1} of [SCAN] before the next `read_inputs`. With e a Boolean expression over declared variables and σ the observed store (`property_encoder.cpp`):
+
+| Kind | Monitor | A counterexample is |
+|---|---|---|
+| `invariant(e)` | assert e | a scan boundary where e is false |
+| `absence(e)` | assert ¬e | a scan boundary where e is true |
+| `mutual_exclusion(x₁…xₙ)` | assert ¬(x₁ ∧ … ∧ xₙ) | a boundary where all n are true |
+| `reachability(e)` | if e then assert false | a witness: a boundary where e is true |
+| `response(t, r, k)` | counter c: if t ∧ ¬r then c := c+1 else c := 0; assert c ≤ k | a run of more than k consecutive boundaries with t true and r false |
+
+Two readings differ from the names. For n ≥ 3 the exclusion monitor forbids all n variables being true together, which is weaker than "at most one"; it equals pairwise exclusion only for n = 2. The response monitor counts a *consecutive* run, so a trigger that drops before the response (or is true for fewer than k scans) never fires it; it is not "whenever t holds, r follows within k scans". Both are recorded here because a SAFE verdict for them says less than the property's name suggests.
+
+**Verdicts.** The verifier returns one of four outcomes for a program and a property set:
+
+- **SAFE** (k-induction): the monitor holds in every scan boundary reachable from the initial store under every input sequence the model admits (§3.1, §6.5), proved by induction. It is a statement about the model, so it is only as strong as the hypotheses of `ws1/translation_theorem.md` (Corollary 3) and the departures listed in §10.
+- **VIOLATION**: a finite scan trace, as a sequence of input values, reaching a boundary where the monitor fails (for `reachability`, where its condition holds). A violation is genuine for the model and spurious for the system only if an input in the trace is one the environment cannot produce (§6.5, safe direction).
+- **UNKNOWN**: the solver timed out or the induction did not close. Bounded model checking that finds nothing up to the unwind bound is UNKNOWN, **not** SAFE, except for the properties that the bound covers by construction.
+- **REFUSED**: the front end rejects the program (`UnsupportedConstruct`, a type error, a cycle); no verdict, and not a SAFE.
+
+**Vacuity (M23).** A SAFE verdict can hold because what the property guards against never occurs. Two checks apply.
+
+1. *Interface*: a variable named by the property is never assigned in the scan loop (the suite's ingestion gate fails such a run).
+2. *Antecedent reachability* (`ws1/vacuity.py`): from the property derive the conditions that must be reachable for it to constrain anything, and ask whether each is. For `a → b` or `¬a ∨ b` the condition is a; for `¬(a ∧ b)`, `¬a ∨ ¬b` and `mutual_exclusion` each variable on its own; for `response` the trigger. Each condition is checked as a `reachability` property under k-induction. A property with a condition proved unreachable is *vacuous*; with an unknown one, *possibly vacuous*. A SAFE verdict on a vacuous property is reported as such, not counted as evidence.
+
+Result on the suite (October 7, 2026, `ws1/vacuity_results_2026-10-07.md`): of 208 checked properties, 205 are non-vacuous, two are vacuous and one possibly vacuous; 144 properties are of other shapes (126 reachability, 16 termination, 2 reachable) and are not checked, 19 are refused, and 3 use an operator the script does not read.
+
 ---
 
 ## 10. Open items for M1
