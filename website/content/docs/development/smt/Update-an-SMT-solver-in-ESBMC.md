@@ -87,7 +87,6 @@ ninja -C build
   change, not a flaky test:
   ```sh
   cd build && ctest -j$(nproc) -L regression --timeout 120
-  rm -rf /tmp/esbmc-headers-*   # clean per-test temp dirs
   ```
 
 ## Notes & pitfalls
