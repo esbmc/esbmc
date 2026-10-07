@@ -501,16 +501,12 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 
 /// A C++ function-local static whose initializer is not a constant runs it
 /// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
-/// hoisted into static_lifetime_init. An array built by one constructor call,
-/// which only static_lifetime_init expands per element, keeps the hoisted
-/// form, and so does the IREP2 adjuster, which drops the declaration's marker.
+/// hoisted into static_lifetime_init. The IREP2 adjuster, which drops the
+/// declaration's marker, keeps the hoisted form.
 bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
 {
   return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
-         vd.hasInit() &&
-         !(vd.getType()->isArrayType() && llvm::isa<clang::CXXConstructExpr>(
-                                            vd.getInit()->IgnoreImplicit())) &&
-         !vd.hasConstantInitialization() &&
+         vd.hasInit() && !vd.hasConstantInitialization() &&
          !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
 }
 

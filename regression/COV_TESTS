@@ -2239,6 +2239,10 @@ regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
 regression/esbmc/builtin_rotate
 regression/esbmc/builtin_rotate_fail
+regression/esbmc/memcpy_int_to_float
+regression/esbmc/memcpy_int_to_float_fail
+regression/esbmc-cpp/cpp/static_local_class_array
+regression/esbmc-cpp/cpp/static_local_class_array_fail
 regression/esbmc/builtin_abs
 regression/esbmc/builtin_abs_fail
 regression/loop-invariants/callee_global_pointer
