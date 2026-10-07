@@ -78,6 +78,9 @@ static bool move_main_or_secondary(contextt &context, symbolt &symbol)
     log_error("__ESBMC_secondary_main already defined");
     return true;
   }
+  log_warning(
+    "secondary entry point kept as __ESBMC_secondary_main: properties "
+    "reachable only from it are not checked unless a tool targets it");
   return false;
 }
 
