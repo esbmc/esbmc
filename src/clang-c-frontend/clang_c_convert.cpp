@@ -2706,6 +2706,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     typet type;
     clang::QualType qtype = function_call.getCallReturnType(*ASTContext);
+    // Sema types a custom-typechecked builtin's call itself: on an unsigned
+    // char, __sync_fetch_and_add calls the char-returning _1 variant.
+    if (
+      const unsigned id = function_call.getBuiltinCallee();
+      id && ASTContext->BuiltinInfo.hasCustomTypechecking(id))
+      qtype = function_call.getType();
     if (get_type(qtype, type))
       return true;
 
@@ -2716,7 +2722,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : function_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -2792,11 +2798,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       /* The underlying storage is automatic here, i.e., local. In order for
        * it to be recognized as being local in ESBMC, it requires a declaration,
-       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
-      code_declt decl(new_expr);
-      decl.operands().push_back(initializer);
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one.
+       * It goes before the enclosing statement, which may be a loop or a
+       * labelled statement, so the object is initialised where the literal is
+       * evaluated, each time it is (C17 6.5.2.5p5). */
+      current_block->operands().push_back(code_declt(new_expr));
 
-      current_block->operands().push_back(decl);
+      side_effect_exprt assign("assign", t);
+      assign.copy_to_operands(new_expr, initializer);
+      exprt comma("comma", t);
+      comma.copy_to_operands(assign, new_expr);
+      new_expr = comma;
     }
     else
     {
@@ -3268,6 +3280,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_vector_type(t).subtype();
 
         gen_typecast(ns, init, elem_type);
+        // Unlike a braced list, this does not extend the lifetime of a
+        // temporary bound to a reference member ([class.temporary]/6);
+        // the cast keeps goto_convert from treating it as extended.
+        if (
+          init.id() == "address_of" && is_lvalue_or_rvalue_reference(elem_type))
+          init = typecast_exprt(init, elem_type);
         inits.operands().at(i) = init;
       }
     }
@@ -4959,8 +4977,10 @@ static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
   {
   case clang::AtomicExpr::AO__c11_atomic_load:
   case clang::AtomicExpr::AO__atomic_load_n:
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
   case clang::AtomicExpr::AO__atomic_clear:
+#endif
     return false;
   default:
     return true;
@@ -5108,6 +5128,7 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
     name = "__atomic_test_and_set";
     break;
@@ -5115,6 +5136,7 @@ bool clang_c_convertert::get_atomic_expr(
   case clang::AtomicExpr::AO__atomic_clear:
     name = "__atomic_clear";
     break;
+#endif
 
   default:
     log_error("Unknown Atomic expression");
