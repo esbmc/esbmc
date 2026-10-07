@@ -4,6 +4,7 @@
 
 #include <util/lang/c_types.h>
 
+#include <cassert>
 #include <map>
 #include <stdexcept>
 
@@ -19,12 +20,10 @@ void python_converter::share_numpy_storage_snapshot(
 {
   const namespacet ns(symbol_table_);
   const symbolt *source = symbol_table_.find_symbol(storage_id);
-  const typet source_type = source ? ns.follow(source->get_type()) : typet();
-  if (
-    !source_type.is_array() || !to_array_type(source_type).size().is_constant())
-    throw std::runtime_error(
-      "TypeError: sibling numpy views of a rebound source need a fixed-size "
-      "array to share a snapshot");
+  assert(source);
+  const typet source_type = ns.follow(source->get_type());
+  assert(
+    source_type.is_array() && to_array_type(source_type).size().is_constant());
 
   typet scalar_type = source_type;
   while (scalar_type.is_array())
