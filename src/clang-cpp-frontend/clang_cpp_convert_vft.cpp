@@ -802,11 +802,9 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
 
     if (context.move(vt_symb_var))
     {
-      log_error(
-        "Failed to add vtable variable symbol {} for class {}",
-        vt_symb_var.id,
-        class_id);
-      abort();
+      // Symbol has already been processed further up
+      // in the call stack. Skip to unprocessed symbols
+      continue;
     }
 
     // Record (vptr-class V → concrete class D) so build_dynamic_cast can
