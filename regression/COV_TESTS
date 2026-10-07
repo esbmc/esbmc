@@ -2288,3 +2288,7 @@ regression/goto-transcoder/cbmc_static_init_function
 regression/goto-transcoder/cbmc_static_init_function_fail
 regression/goto-transcoder/cbmc_vector
 regression/goto-transcoder/cbmc_vector_fail
+regression/esbmc/github_8204
+regression/esbmc/github_8204_fail
+regression/esbmc/github_8204_u32
+regression/esbmc/github_8204_u32_fail
