@@ -31,7 +31,11 @@ add_subdirectory(solvers)
 add_subdirectory(clang-cpp-frontend)
 add_subdirectory(goto-symex)
 add_subdirectory(transition-system)
-add_subdirectory(llm)
+
+if(ENABLE_LLM)
+  add_subdirectory(llm)
+endif()
+
 add_subdirectory(esbmc)
 
 add_subdirectory(goto2c)
@@ -40,9 +44,13 @@ add_subdirectory(goto2c)
 foreach(esbmc_target
     util_esbmc irep2 bigint langapi filesystem string_pool usr_utils cache
     gotoprograms gotoalgorithms abstract-interpretation
-    pointeranalysis symex solvers smt clibs goto2c esbmc-driver llm
+    pointeranalysis symex solvers smt clibs goto2c esbmc-driver
     clangcfrontend clangcppfrontend)
   esbmc_add_alias(${esbmc_target})
 endforeach()
+
+if(ENABLE_LLM)
+  esbmc_add_alias(llm)
+endif()
 
 set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
