@@ -1528,7 +1528,8 @@ census (§11) and the whole-suite sweeps developed patches against default flags
 and the arm never appeared. It is the one residue that a *better sample* would
 never have found — only reading the legacy function does.
 
-There is a second reason to be careful here, already recorded in `CLAUDE.md`:
+There is a second reason to be careful here, recorded in
+`docs/agents/subagents/esbmc-verifier.md` ("Reachability checks"):
 ESBMC reports `VERIFICATION SUCCESSFUL` **silently** when the label is absent
 from the GOTO program, which is indistinguishable from "label unreachable." That
 shows up in the mutant table below.
@@ -1553,8 +1554,9 @@ to be tested**. `user_provided` needed a second test, because none of the 162
 M2's A/B also shows the arm is genuinely exercised, which is the reachability
 evidence M1 cannot supply. Worth recording from the same run: under M2 the A/B
 diverges on `01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`,
-because that test's label is not the one it names — `CLAUDE.md`'s
-silent-SUCCESSFUL trap, visible here as a test that cannot discriminate anything
+because that test's label is not the one it names — the
+silent-SUCCESSFUL trap above, visible here as a test that cannot discriminate
+anything
 about this arm.
 
 Worth noting from the same run: under M2 the A/B diverges on
@@ -2013,7 +2015,8 @@ defects found by reading rather than probing.
 
 The gap between "no corpus input reaches it" and "no input can" is the whole of
 what is left, and closing it is a different kind of work: a reachability
-argument per site, of the kind `CLAUDE.md`'s Mode C prescribes, not another
+argument per site, of the kind the `esbmc-verifier` agent's Mode C
+(`docs/agents/subagents/esbmc-verifier.md`) prescribes, not another
 sweep. Two of the five (`break`/`continue` outside a loop) are ill-formed input
 and should simply be asserted rather than handled; the other three are defensive
 guards whose comments already say so.
@@ -2118,7 +2121,8 @@ the compiler's sense — they are unreachable *in any run that produces a result
 
 The right end-state for all three is the legacy diagnostic, not a fallback: the
 native arm should abort with the same message rather than route to a converter
-that will. That is a deletion, so per `CLAUDE.md` it needs its own C-Dead proof
+that will. That is a deletion, so per the `esbmc-verifier` agent
+(`docs/agents/subagents/esbmc-verifier.md`) it needs its own C-Dead proof
 and its own PR; recorded here rather than done in passing.
 
 ### 31.2 The nil `for` condition has no producer
