@@ -835,6 +835,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R109** | **Medium (false FAILED, default configuration, C and C++)** — found probing builtins, §15 M9 (R109); **FIXED**, same entry | **`__builtin_abs`, `__builtin_labs` and `__builtin_llabs` had no model.** `is_abs_builtin_name` matched `abs`, `labs`, `llabs` and every spelling of `fabs`, but not the integer builtins, so their calls stayed bodyless (`no body for function __builtin_abs`), returned a nondet value, and `assert(__builtin_abs(-3) == 3)` was FAILED; the program passes natively. | `is_abs_builtin_name`, `src/clang-c-frontend/builtin_names.cpp`; `regression/esbmc/builtin_abs{,_fail}` | — | **Fixed**: the three names lower to the `abs` node as `abs` does, in both adjust passes. |
 | **R105** | **High (false SUCCESSFUL, `--loop-invariant-check`)** — found reading the loop summary behind R97's C++ residual, §15 M9 (R105); **FIXED**, same entry | **A callee's write through a pointer it was not handed escaped the loop invariant's havoc.** A loop that calls a function writing through a pointer havocs only what the call's pointer arguments point to. A callee that writes through a global pointer, or calls through a function pointer, left the written object at its pre-loop value, so `assert(x == 0)` after ten calls of `*gp = 1` was SUCCESSFUL. | `goto_loopst::compute_function_summary`, `summarise_call`, `goto_loops.cpp` | `regression/loop-invariants/callee_global_pointer{,_fail}`, `callee_function_pointer{,_fail}` | **Fixed**: a callee write counts as covered only through a parameter the callee never reassigns, and a call through a function pointer is never covered; otherwise the invariant is checked at its base case and the loop is left to the unwinder. |
 | **R114** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R114); **FIXED**, same entry | **Every va_list in a frame shared one cursor.** `symex_va_arg` read the frame's `va_cursor` whichever va_list it was given, and `va_start` and `va_copy` only marked a list started. A `va_copy` taken before the first `va_arg`, a second `va_start` on the same list, and a second list started in the same frame each read the argument after the one native code reads: `va_start(ap, n); va_copy(aq, ap); a = va_arg(ap, int); b = va_arg(aq, int);` gave `b` the second argument. | `goto_symext::symex_va_arg`, `va_list_mark_started`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_list_own_cursor{,_fail}` | **H-A7** | **Fixed**: `va_started` keeps each started local va_list's own cursor; `va_start` sets it, `va_copy` copies it, `va_arg` reads and advances it. A list whose cursor is unknown (a parameter, or copied from one) still reads the frame's. A `va_arg` under a nondet branch is still counted on both paths. |
 | **R108** | **Medium (false FAILED, default configuration, C and C++)** — open PRs #8122's and #8166's notes, §15 M9 (R108); **FIXED**, same entry | **`__builtin_clrsb` had no model.** `__builtin_clrsb`, `clrsbl` and `clrsbll` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_clrsb(-1) == 31)` was FAILED; the program passes natively. | `build_bit_scan` and `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `bit_scan_builtin`, `src/util/lang/c_builtins.h`; `goto_checkt::clz_zero_check`; `regression/esbmc/builtin_clrsb{,_fail}` | — | **Fixed**: clrsb joins the `clz`/`ctz`/`ffs` encoding as `clz(x ^ (x >> (W - 1))) - 1`, which gives `W - 1` at 0 and -1; `--clz-zero-check` does not claim its operand non-zero. |
@@ -11078,6 +11079,29 @@ add-then-fetch on `unsigned short`) is FAILED on master and SUCCESSFUL here;
 FAILED here. The 272 other regression tests whose sources call a `__sync`,
 `__atomic`, `__c11_atomic` or `__builtin_` name or include `<stdatomic.h>` or
 `<atomic>` keep their verdicts (Z3; Bitwuzla was not built).
+
+---
+
+### M9 (R109) — 2026-10-04, the integer abs builtins
+
+Probing clang's builtins against native runs, `__builtin_abs(-3) == 3`,
+`__builtin_labs(-3l) == 3` and `__builtin_llabs(-3ll) == 3` were FAILED on
+master. `is_abs_builtin_name` decides which calls both adjust passes lower to
+the `abs` node; it listed `abs`, `labs`, `imaxabs`, `llabs` and every spelling
+of `fabs`, but not the `__builtin_` forms of the integer ones. Those calls
+stayed bodyless and returned a nondet value.
+
+**Fixed** by adding the three names to `is_abs_builtin_name`, so they take the
+same lowering as `abs`. clang has no `__builtin_imaxabs`. `builtin_abs` checks
+constants in each width and a symbolic argument, and is FAILED on master and
+SUCCESSFUL here. `builtin_abs_fail` runs under `--multi-property` and pins that
+the `__builtin_abs` assertion holds and a wrong `__builtin_labs` one fails;
+master fails both. Z3 only, the default in this build.
+
+Not fixed, each with a nondet result on master: `__builtin_bitreverse{8,16,32,64}`,
+`__builtin_copysign` and `__builtin_fmax`. Also open: `abs(INT_MIN)` under
+`--overflow-check` is SUCCESSFUL, although C11 7.22.6.1p2 leaves it undefined;
+the `abs` node gets no overflow claim.
 
 ---
 
