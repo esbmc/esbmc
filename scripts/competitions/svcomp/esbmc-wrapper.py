@@ -435,10 +435,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     command_line += "--no-abnormal-memory-leak "
     # many benchmarks assume malloc(0) == NULL and alloca(0) == NULL
     command_line += "--malloc-zero-is-null "
-    strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
-    strat = "incr"
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
     if concurrency:
