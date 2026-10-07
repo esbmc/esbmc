@@ -31,6 +31,7 @@ add_subdirectory(solvers)
 add_subdirectory(clang-cpp-frontend)
 add_subdirectory(goto-symex)
 add_subdirectory(transition-system)
+add_subdirectory(llm)
 add_subdirectory(esbmc)
 
 add_subdirectory(goto2c)
@@ -39,7 +40,7 @@ add_subdirectory(goto2c)
 foreach(esbmc_target
     util_esbmc irep2 bigint langapi filesystem string_pool usr_utils cache
     gotoprograms gotoalgorithms abstract-interpretation
-    pointeranalysis symex solvers smt clibs goto2c esbmc-driver
+    pointeranalysis symex solvers smt clibs goto2c esbmc-driver llm
     clangcfrontend clangcppfrontend)
   esbmc_add_alias(${esbmc_target})
 endforeach()
