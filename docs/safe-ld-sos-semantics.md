@@ -593,9 +593,16 @@ The unsafe direction is covered by the regression pair added with esbmc#8065:
 a program that writes a variable it also declares externally writable, verdict
 unsound before the change and sampled after it.
 
-**Open.** The counts per tier for the evaluation corpora are not reported:
-the tool does not print them. They need a counter in the classifier or a
-script over the parser's output (WS4).
+**Counts.** `ws1/io_tiers.py` classifies every declared variable of the 225
+readable LD variants of the benchmark suite (graphical, and the textual
+dialect after the suite's converter), taking the free reads from the GOTO scan
+loop and the section and address from the XML. Of 1,157 variables, 648 (56.0%)
+are free through their interface section, none through an address (no variable
+in the corpus has a `%I`, `%Q` or `%M` address), 8 (0.7%) through the usage
+rule, 436 (37.7%) are program-owned outputs and 65 (5.6%) program-owned
+internal state. The usage rule, whose over-approximation is the one this
+section's safe direction discusses, therefore touches under 1% of the
+variables.
 
 ---
 
