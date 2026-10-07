@@ -369,7 +369,18 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # apply. --no-div-by-zero-check in particular would switch off the very
     # check the arithmetic property asks about. The track has no witness
     # format yet, so no witness is written.
-    return esbmc_path + "--sv-comp " + benchmark + " " + strategy_flags(strat)
+    #
+    # --unlimited-k-steps removes the k=50 ceiling on the base case, so a
+    # task whose violation or whose completeness proof needs a loop or
+    # recursion depth past 50 is reached rather than answered UNKNOWN
+    # (--unwind does not raise that bound). --k-step 2 advances k by two per
+    # round, which halves the shallow solver rounds before a deep bound is
+    # reached and is a measurable speedup on these tasks with no verdict
+    # change. They go here, not in strategy_flags, because the C path
+    # already carries --unlimited-k-steps in dargs.
+    return (
+      esbmc_path + "--sv-comp " + benchmark + " "
+      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps ")
 
   command_line = esbmc_path + dargs
 
