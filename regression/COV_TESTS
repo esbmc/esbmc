@@ -2241,6 +2241,10 @@ regression/esbmc-cpp/cpp/decl_argument_temporary
 regression/esbmc-cpp/cpp/decl_argument_temporary_fail
 regression/esbmc-cpp/cpp/typeid_static_storage
 regression/esbmc-cpp/cpp/typeid_static_storage_fail
+regression/loop-invariants/callee_global_pointer
+regression/loop-invariants/callee_global_pointer_fail
+regression/loop-invariants/callee_function_pointer
+regression/loop-invariants/callee_function_pointer_fail
 regression/esbmc-cpp/cpp/delete_array_reverse_order
 regression/esbmc-cpp/cpp/delete_array_reverse_order_fail
 regression/esbmc/sync_unsigned_result
