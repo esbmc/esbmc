@@ -29,7 +29,7 @@ cd "$REPO"
 [ -d "$BASE" ]  || { echo "error: baseline dir not found: $BASE" >&2; exit 2; }
 
 work="$(mktemp -d)"
-trap 'rm -rf "$work"; irep2_cleanup_tmp' EXIT
+trap 'rm -rf "$work"' EXIT
 
 differing=0; checked=0; missing=0
 
