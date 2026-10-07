@@ -69,18 +69,19 @@ void goto_symext::symex_decl(const expr2tc &code)
   // Generate dummy symbol as a vehicle for renaming.
   expr2tc l1_sym = symbol2tc(get_empty_type(), identifier);
 
-  // increase the frame if we have seen this declaration before
+  // Keep the instance the frame gave this local on entry, unless the frame
+  // has declared it already
   statet::framet &frame = cur_state->top();
-  do
+  frame.level1.get_ident_name(l1_sym);
+  if (
+    to_symbol2t(l1_sym).rlevel != symbol_renaming_level::level1 ||
+    frame.declaration_history.count(
+      renaming::level2t::name_record(to_symbol2t(l1_sym))))
   {
     unsigned &index = cur_state->variable_instance_nums[identifier];
     frame.level1.rename(l1_sym, ++index);
-    to_symbol2t(l1_sym).level1_num = index;
-  } while (frame.declaration_history.count(
-    renaming::level2t::name_record(to_symbol2t(l1_sym))));
-
-  // Rename it to the new name
-  cur_state->top().level1.get_ident_name(l1_sym);
+    frame.level1.get_ident_name(l1_sym);
+  }
 
   // And record it
   renaming::level2t::name_record l(to_symbol2t(l1_sym));

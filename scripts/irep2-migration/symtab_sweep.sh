@@ -54,5 +54,4 @@ for corpus in "$@"; do
   done < <(find "$corpus" -name test.desc | sort)
 done
 
-irep2_cleanup_tmp
 echo "--- $same same, $diff_count differing, $skipped skipped ---"

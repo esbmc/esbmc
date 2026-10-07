@@ -57,9 +57,9 @@ Gone since it was written: the `github_2174` false alarm (§129.5) and the
 vector address-of difference (§133.3). One-argument `main` still aborts on the
 default path (`clang_c_main.cpp`, §112.2), out of scope here.
 
-References to "CLAUDE.md's C-Dead sub-mode" (§103.2, §105.2, §136.5, §137.6)
-mean the `esbmc-verifier` agent's dead-code mode; CLAUDE.md does not use that
-name.
+References to the "C-Dead sub-mode" (§103.2, §105.2, §136.5, §137.6) mean
+the `esbmc-verifier` agent's dead-code mode
+(`docs/agents/subagents/esbmc-verifier.md`).
 
 ## 1. Census
 
@@ -3506,7 +3506,7 @@ frontend**. Its vector branch may not be; the arm explicitly handles a
 vector-of-float and returns before attaching a rounding mode.
 
 That makes it a candidate for the dead-code process rather than for porting:
-`CLAUDE.md`'s C-Dead sub-mode, with the vector case checked separately. Recorded
+the `esbmc-verifier` agent's C-Dead sub-mode, with the vector case checked separately. Recorded
 here rather than acted on, because deleting a legacy arm needs its own proof and
 is not this scope's business.
 
@@ -3696,7 +3696,7 @@ A first version kept `log_warning` for the level2 case -- a name carrying `#`
 but no delimiters is genuinely malformed. It was dropped because that is a
 **new branch whose reachability cannot be shown**: the names come from ESBMC's
 own renaming, which always emits delimiters, and no C input reaches it.
-`CLAUDE.md`'s dead-code rule is that an added branch must be proven reachable or
+The `esbmc-verifier` agent's dead-code rule is that an added branch must be proven reachable or
 removed, and an unprovable guard is worth less than the simpler code. If a
 malformed level2 name is ever produced, the guard can come back with the input
 that produces it.
@@ -3950,7 +3950,7 @@ this that does not depend on corpus coverage.
 
 ### 105.2 What was shipped instead of a deletion
 
-Not a deletion. `CLAUDE.md`'s C-Dead sub-mode wants the removed branch shown
+Not a deletion. The `esbmc-verifier` agent's C-Dead sub-mode wants the removed branch shown
 unreachable, and §29.4 is explicit that "no corpus input reaches it" is an honest
 negative rather than a proof — the vector half *is* reachable, so the arm cannot
 go as a unit.
