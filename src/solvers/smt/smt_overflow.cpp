@@ -50,17 +50,17 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
     if (is_signed)
     {
-      // Convert to be an addition
-      expr2tc negop2 = neg2tc(opers.side_2->type, opers.side_2);
-      expr2tc anadd = add2tc(opers.side_1->type, opers.side_1, negop2);
-      expr2tc add_overflows = overflow2tc(anadd);
-
-      // Corner case: subtracting MIN_INT from many things overflows. The result
-      // should always be positive.
-      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
-      expr2tc is_min_int = equality2tc(min_int, opers.side_2);
-      return convert_ast(or2tc(add_overflows, is_min_int));
+      // a - b overflows exactly when the operands differ in sign and the
+      // result takes the sign of b. a >= 0 (not a > 0) keeps 0 - MIN_INT,
+      // which is 2^(w-1), flagged; a < 0 keeps a - MIN_INT unflagged.
+      expr2tc res = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+      expr2tc pos_minus_neg = and2tc(
+        greaterthanequal2tc(opers.side_1, zero),
+        and2tc(lessthan2tc(opers.side_2, zero), lessthan2tc(res, zero)));
+      expr2tc neg_minus_pos = and2tc(
+        lessthan2tc(opers.side_1, zero),
+        and2tc(greaterthan2tc(opers.side_2, zero), greaterthan2tc(res, zero)));
+      return convert_ast(or2tc(pos_minus_neg, neg_minus_pos));
     }
 
     // Just ensure the result is <= the first operand.
