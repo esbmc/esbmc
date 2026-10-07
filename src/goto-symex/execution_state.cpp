@@ -742,8 +742,10 @@ void execution_statet::execute_guard()
 
 void execution_statet::execute_legacy_guard(expr2tc &guard_expr)
 {
-  // Old behaviour: the switch assumption is skipped when the parent guard is
-  // false, and unviability is judged on the thread switched to.
+  // execute_guard as of July 2022: the switch assumption is skipped when the
+  // parent guard is false, every call (switch or not) assumes the fresh guard
+  // symbol implies the parent guard, and unviability is judged on the thread
+  // switched to.
   expr2tc parent_guard;
   if (!pre_goto_guard.is_true())
     parent_guard = pre_goto_guard.as_expr();
@@ -760,9 +762,9 @@ void execution_statet::execute_legacy_guard(expr2tc &guard_expr)
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
 
-  if (active_thread != last_active_thread)
-    target->assumption(
-      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+  expr2tc assumpt = implies2tc(guard_expr, parent_guard);
+  target->assumption(
+    guardt().as_expr(), assumpt, get_active_state().source, first_loop);
 
   if (
     last_active_thread != active_thread &&
