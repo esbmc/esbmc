@@ -166,8 +166,8 @@ interrupt tasks or multiple tasks are rejected with
 `UnsupportedConstruct(InterruptTask, tier=2)` and are outside this semantics.
 
 The read-inputs/execute/write-outputs structure of one scan cycle is
-[IEC 61131-3 §TBD: confirm the clause stating the PLC cyclic execution
-model]. The implementation collapses the write-outputs phase into the coil
+implementation-defined: IEC 61131-3 Ed. 3 §6.8.2 defines periodic task
+scheduling (rule b) but not the input and output phases of a scan. The implementation collapses the write-outputs phase into the coil
 rules directly, which §8 already records as a deliberate restriction.
 
 ### 3.2 Rung rule
@@ -195,8 +195,9 @@ or counter reads IN, CU, CD, R and LD from variables, not from p; power
 reaches them only through a coil that writes the variable.
 
 Left-to-right, rail-first evaluation of a rung's elements is
-[IEC 61131-3 §TBD: confirm the clause giving LD's execution order within a
-rung].
+consistent with IEC 61131-3 Ed. 3 §8.1.5.1 (an element is evaluated only after
+the states of its inputs are) and §8.2.7 (networks are evaluated top to
+bottom).
 
 ---
 
@@ -218,7 +219,7 @@ be the input power flow.
 ```
 
 Normally-open and normally-closed contact semantics are
-[IEC 61131-3 §TBD: confirm the clause defining `--[ ]--` / `--[/]--`].
+IEC 61131-3 Ed. 3 §8.2.4, Table 75 rows 1 and 2.
 
 ### 4.2 Transition-sensing contacts
 
@@ -238,8 +239,13 @@ contacts sensing the same operand agree unless a coil writes the operand
 between them. Beremiz instead gives each edge contact its own `R_TRIG`/`F_TRIG`
 instance; the two coincide for operands no coil writes, such as inputs.
 Applying the contact's own negation after the edge test (so `--[/P]--` is the
-Boolean negation of `--[P]--`, not an edge test on `¬v`) is
-[IEC 61131-3 §TBD: confirm against §2.5.1.1, open item 1 of §10].
+Boolean negation of `--[P]--`, not an edge test on `¬v`) is an extension:
+IEC 61131-3 Ed. 3 §8.2.4, Table 75 defines only positive and negative
+transition-sensing contacts (rows 3 and 4). The standard also senses a
+transition from one evaluation of the element itself to the next (as its
+R_TRIG body does, §6.6.3.5.3), where this semantics latches at the end of the
+scan; the two differ if a later coil writes the sensed variable in the same
+scan (departure 1, §10).
 
 ### 4.3 Coils
 
@@ -260,18 +266,17 @@ A coil writes σ directly, so a later contact on the same variable, in the same
 rung or a later one, reads the value just written (§6.3).
 
 Output-coil, set-coil and reset-coil semantics are
-[IEC 61131-3 §TBD: confirm the clause defining `--( )--` / `--(S)--` /
-`--(R)--`]. Where one scan drives both a set coil and a reset coil on the
+IEC 61131-3 Ed. 3 §8.2.5, Table 76 rows 1 to 4. Where one scan drives both a set coil and a reset coil on the
 same variable with both conditions true, this semantics gives the result
 whichever coil's rung the sequential order (§6.3) evaluates last: [SET] and
 [RESET] are stated independently with no priority between them, so the
 outcome is decided entirely by rung order, not by a reset-dominant or
 set-dominant rule. Whether IEC 61131-3 states a dominance rule for this case
-, as it does for the CTU/CTD reset input (§5.5), is
-[IEC 61131-3 §TBD: confirm]. `warn_set_and_reset` (#8080) flags exactly this
+, as it does for the CTU/CTD reset input (§5.5), answered no:
+IEC 61131-3 Ed. 3 §8.2.5 gives no dominance rule for coils (dominance appears
+only in the SR and RS function blocks, §6.6.3.5.2, Table 43). `warn_set_and_reset` (#8080) flags exactly this
 configuration (unconditionally, no flag needed) without changing the
-verdict, which is the right response if no dominance rule applies and the
-wrong one if IEC 61131-3 states that one does.
+verdict, which is the right response, since no dominance rule applies.
 
 ---
 
@@ -322,9 +327,7 @@ the interval and counts as no elapsed time, as in MATIEC's TON
 `PT = 0`, Q rises on the next scan.
 
 ET is bounded above by PT, so the count stops once the interval is up
-[IEC 61131-3 §TBD: confirm, open item 7 of §10; an earlier draft of this
-document cited §2.5.2.3.2 for the 0..PT range without that citation having
-been checked against the standard's text]. An unbounded ET would rise on
+(IEC 61131-3 Ed. 3 §6.6.3.5.5, Figure 15: the timing diagrams hold ET at PT). An unbounded ET would rise on
 every scan IN holds and eventually overflow its machine width, which is
 undefined behaviour and wraps ET negative so that Q drops back to ff.
 
@@ -390,12 +393,13 @@ an INT counter value; a load stores PV into CV by the rule of §5.6.
 
 Counters are edge-triggered on their count pin, using a per-instance entry in
 the edge store. The reset arm applies after the count arm, so a scan in which
-both fire leaves CV at 0; whether IEC 61131-3 instead specifies reset as
-dominant over counting in the same scan is
-[IEC 61131-3 §TBD: confirm, open item 2 of §10]. CTU stops at the preset and
+both fire leaves CV at 0; IEC 61131-3 Ed. 3 §6.6.3.5.4 (Table 45, row 1a) specifies reset as
+dominant over counting in the same scan, which agrees, and the load input of a
+CTD dominates counting in the same way (row 2a). CTU stops at the preset and
 CTD at 0, as the bodies of MATIEC's `CTU` and `CTD` (`lib/counter.txt`) do;
-whether IEC 61131-3 instead bounds CV by the type's range rather than by PV/0
-is [IEC 61131-3 §TBD: confirm, open item 4 of §10]. An unwired PV reads 0,
+IEC 61131-3 Ed. 3 §6.6.3.5.4 bounds CV by the variables PVmax and PVmin, whose
+values it leaves Implementer specific (the note after Table 45), so PV and 0
+are an Implementer's choice. An unwired PV reads 0,
 the INT default, so a CTU without one never counts.
 
 ### 5.6 Arithmetic blocks
@@ -474,12 +478,12 @@ END_IF;
 
 so a button press sets the variable and the reset clears it in the same scan.
 The semantics reproduces that behaviour rather than reading a variable at its
-value on entry to the network. Whether IEC 61131-3 instead specifies an
-entry-value rule for a variable both read and written within one network is
-[IEC 61131-3 §TBD: confirm against §4.1.3 / Ed. 3 §8.1.5, open item 3 of
-§10; this reference toolchain's behaviour is reproduced here regardless, and
-any departure from the normative text is recorded, not corrected, since the
-semantics' purpose is to match what ESBMC-PLC actually verifies against].
+value on entry to the network. IEC 61131-3 Ed. 3 §8.1.5.2
+(rules c and d) requires a feedback variable to be initialized and says that,
+once the element that outputs it has run, its new value is used until the
+element runs again, which agrees with reading the live store. A departure from
+the normative text is recorded, not corrected, since the semantics' purpose is
+to match what ESBMC-PLC verifies against (departures 2 and 3, §10).
 
 ### 6.4 Graphical well-formedness
 
@@ -621,7 +625,35 @@ and before the next `read_inputs`. Properties may name:
 
 The M1 gate requires two independent reviewers to validate this specification
 against IEC 61131-3 §2. That review has not yet been carried out. Known gaps
-to raise in it:
+to raise in it.
+
+Status, October 7, 2026: items 1 to 5 and 7 below were checked against
+IEC 61131-3:2013 (Edition 3.0); the clause numbers in this document are that
+edition's, and `ws1/iec_citation_worksheet.md` lists each with its wording.
+Results: item 1, the standard defines no negated edge contact (Table 75);
+item 2, reset dominates counting (§6.6.3.5.4, Table 45); item 3, §8.1.5.2
+agrees with the live store for feedback variables; item 4, PVmax and PVmin are
+Implementer specific; item 5, done; item 7, ET is held at PT (Figure 15).
+Departures from the normative text, kept because the semantics matches the
+reference toolchain:
+
+1. An edge contact compares against the end-of-scan latch; the standard
+   compares against the value at the element's previous evaluation (§8.2.4,
+   Table 75 rows 3 and 4). Beremiz emits an R_TRIG per edge contact, which
+   follows the standard, so the two differ if a later coil writes the sensed
+   variable in the same scan. Not yet probed with translation validation.
+2. A coil takes the rung's contacts evaluated in the store at the coil (§3.2).
+   Read literally, §8.2.5 passes the left link's evaluated state to the right
+   link, so a coil after a reset of the variable a contact read would still
+   see ON. Beremiz and MATIEC re-evaluate at the coil, as ESBMC does
+   (`ws1/spikes/a1_graphical`, translation validation UNSAT).
+3. REAL and LREAL are both modeled as a double; the standard gives REAL 32 bits
+   (Table 10, footnote e) and MATIEC's `IEC_REAL` is a float.
+4. An arithmetic result outside the range of its type is an error in the
+   standard (§6.6.2.5.8, §7.3.2); MATIEC's C wraps. The semantics reports it
+   as a checked property (`--signed-overflow-check`), which matches the standard.
+
+Known gaps:
 
 1. §4.2 applies contact polarity after the edge test. IEC's operator ordering
    for a negated edge contact should be confirmed against §2.5.1.1.
@@ -639,13 +671,9 @@ to raise in it:
    (the type bounds); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The two
    agree on Q in every reachable state and differ only in CV beyond the preset
    or below 0, so the choice changes only verdicts that read CV.
-5. Every `[IEC 61131-3 §TBD: ...]` marker inline in §§3.1, 3.2, 4.1, 4.2, 4.3,
-   5.2, 5.5, 6.3 (added alongside items 1 to 4 above, WS1, October 2026)
-   needs a clause number from the actual standard text. This session had no
-   verified copy
-   of IEC 61131-3 and could not source normative clause numbers from web
-   search, which returns only secondary descriptions of PLC behaviour, not
-   the standard's text; filling these in needs a copy of the standard.
+5. Every inline clause marker now carries a clause number from IEC 61131-3
+   Ed. 3 (October 7, 2026); no `§TBD` remains. The M1 reviewers still check
+   them against the standard.
 6. §6.4 condition 3 ("known `formalParameter`s") is not implemented: an
    unrecognised pin name on an otherwise recognised block type is silently
    ignored rather than rejected (`get_var`, `ir/ld_ir_builder.cpp:47-50`).
