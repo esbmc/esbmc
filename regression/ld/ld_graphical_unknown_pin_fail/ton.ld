@@ -2,7 +2,7 @@
 <project xmlns="http://www.plcopen.org/xml/tc6_0200">
   <fileHeader companyName="SAFE-LD" productName="Probe" productVersion="1" creationDateTime="2026-09-28T00:00:00" />
   <contentHeader name="probe" />
-  <!-- #8178: PT is wired, but misspelled as PTT; the pin is never read. -->
+  <!-- PT is wired, but misspelled as PTT; the pin is never read. -->
   <types><dataTypes /><pous><pou name="main" pouType="program">
     <interface>
       <inputVars><variable name="a"><type><BOOL /></type></variable><variable name="n"><type><INT /></type></variable></inputVars>

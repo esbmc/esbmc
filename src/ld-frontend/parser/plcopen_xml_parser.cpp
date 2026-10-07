@@ -101,21 +101,11 @@ CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
 }
 
 static FBKind fb_kind_of(const std::string &s);
-static void check_known_pin(
-  FBKind kind,
-  const std::string &type_name,
-  const std::string &instance,
-  const std::string &pin);
 static void check_known_pins(
   const pugi::xml_node &block,
   FBKind kind,
   const std::string &type_name,
   const std::string &instance);
-static void check_known_pin_if_std(
-  const std::optional<FBKind> &kind,
-  const std::string &type_name,
-  const std::string &instance,
-  const std::string &pin);
 static bool
 literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out);
 
@@ -510,8 +500,7 @@ static std::optional<FBKind> fb_kind_of_std(const std::string &s)
 
 // The formalParameter names each block kind declares (IEC 61131-3 §2.5.2.3's
 // standard FBs, plus CODESYS's LD/LOAD alias for CTD). A wire whose
-// formalParameter is not in this set is otherwise never read (#8178's
-// REVISION_PLAN item 7 "known formalParameters" condition), so it is
+// formalParameter is not in this set is otherwise never read, so it is
 // rejected here rather than silently dropped.
 //
 // EN/ENO (the EN/ENO extension IEC 61131-3 §2.5.1.2 allows on any FB call)
@@ -546,11 +535,7 @@ static void check_known_pin(
   const std::string &instance,
   const std::string &pin)
 {
-  const auto &table = known_pins_table();
-  // A missing entry means this FBKind has no row above, not that no pin
-  // name is valid; skip rather than treat every pin on it as unrecognised.
-  auto row = table.find(kind);
-  if (row == table.end() || row->second.count(pin))
+  if (known_pins_table().at(kind).count(pin))
     return;
   throw UnsupportedConstructError(
     type_name + " " + instance + " pin " + pin, 2);
