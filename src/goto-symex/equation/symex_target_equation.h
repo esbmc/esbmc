@@ -189,10 +189,12 @@ public:
     // for visibility
     bool hidden;
 
+    bool uninitialized_assignment;
+
     // for bidirectional search
     unsigned loop_number;
 
-    SSA_stept() : ignore(false), hidden(false)
+    SSA_stept() : ignore(false), hidden(false), uninitialized_assignment(false)
     {
     }
 
@@ -220,6 +222,7 @@ public:
         cond_expr(o.cond_expr),
         ignore(o.ignore),
         hidden(o.hidden),
+        uninitialized_assignment(o.uninitialized_assignment),
         loop_number(o.loop_number)
     {
     }

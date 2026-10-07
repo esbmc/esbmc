@@ -221,6 +221,9 @@ void symex_target_equationt::assignment(
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = symex_targett::ASSIGNMENT;
   SSA_step.source = source;
+  SSA_step.uninitialized_assignment =
+    source.uninitialized_assignment ||
+    (source.is_set && source.pc->uninitialized_assignment);
   if (!stack_trace.empty())
     SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;

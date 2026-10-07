@@ -41,6 +41,7 @@ bool mark_decl_as_non_det::runOnFunction(
       insert_pos++;
       auto t = F.second.body.instructions.insert(insert_pos, ASSIGN);
       t->location = it->location;
+      t->uninitialized_assignment = show_uninitialized;
       t->code = new_value;
       t->function = it->function;
     }

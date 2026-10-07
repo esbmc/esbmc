@@ -181,6 +181,10 @@ public:
     // rather than an interface.
     bool loop_invariant_havoc;
 
+    /// Assignments originating from this instruction introduce an
+    /// uninitialized value.
+    bool uninitialized_assignment;
+
     // Set by convert_switch: decimal strings of all case constants whose
     // target is this GOTO, used by witness waypoint matching.  Contains more
     // than one entry when multiple case labels fall through to the same body.
@@ -204,6 +208,7 @@ public:
       inductive_assertion = false;
       flipped_guard = false;
       loop_invariant_havoc = false;
+      uninitialized_assignment = false;
     }
 
     inline void make_goto()
@@ -384,6 +389,7 @@ public:
         inductive_assertion(false),
         flipped_guard(false),
         loop_invariant_havoc(false),
+        uninitialized_assignment(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -399,6 +405,7 @@ public:
         inductive_assertion(false),
         flipped_guard(false),
         loop_invariant_havoc(false),
+        uninitialized_assignment(false),
         location_number(0),
         loop_number(unsigned(0)),
         pragma_unroll_count(0),
@@ -426,6 +433,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
         loop_invariant_havoc(other.loop_invariant_havoc),
+        uninitialized_assignment(other.uninitialized_assignment),
         switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -458,6 +466,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
         loop_invariant_havoc(other.loop_invariant_havoc),
+        uninitialized_assignment(other.uninitialized_assignment),
         switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
@@ -497,6 +506,7 @@ public:
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
       std::swap(loop_invariant_havoc, instruction.loop_invariant_havoc);
+      std::swap(uninitialized_assignment, instruction.uninitialized_assignment);
       instruction.switch_case_ids.swap(switch_case_ids);
       // Swap location_number too — same copy-assign-through-swap
       // reasoning as for labels.

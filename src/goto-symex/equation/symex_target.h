@@ -33,15 +33,23 @@ public:
     goto_programt::const_targett pc;
     const goto_programt *prog;
     bool is_set;
+    bool uninitialized_assignment;
 
-    sourcet() : thread_nr(0), prog(nullptr), is_set(false)
+    sourcet()
+      : thread_nr(0),
+        prog(nullptr),
+        is_set(false),
+        uninitialized_assignment(false)
     {
     }
 
     sourcet(goto_programt::const_targett _pc, const goto_programt *_prog)
-      : thread_nr(0), pc(_pc), prog(_prog), is_set(true)
+      : thread_nr(0),
+        pc(_pc),
+        prog(_prog),
+        is_set(true),
+        uninitialized_assignment(false)
     {
-      is_set = true;
     }
   };
 

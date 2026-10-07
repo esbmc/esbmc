@@ -56,6 +56,8 @@ public:
   // this transition done by given thread number
   unsigned thread_nr;
 
+  bool uninitialized_assignment;
+
   // for assume, assert, goto
   bool guard;
 
@@ -84,7 +86,8 @@ public:
   void output(const class namespacet &ns, std::ostream &out) const;
   void dump() const;
 
-  goto_trace_stept() : step_nr(0), thread_nr(0), guard(false)
+  goto_trace_stept()
+    : step_nr(0), thread_nr(0), uninitialized_assignment(false), guard(false)
   {
   }
 };
@@ -166,7 +169,8 @@ void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &identifier,
-  const expr2tc &value);
+  const expr2tc &value,
+  bool uninitialized = false);
 
 void generate_html_report(
   const std::string_view uuid,

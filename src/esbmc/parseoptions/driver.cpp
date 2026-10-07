@@ -430,7 +430,8 @@ int esbmc_parseoptionst::doit()
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
-      std::make_unique<mark_decl_as_non_det>(context));
+      std::make_unique<mark_decl_as_non_det>(
+        context, cmdline.isset("show-uninitialized")));
 
     if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
     {

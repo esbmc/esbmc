@@ -1,0 +1,9 @@
+CORE
+main.c
+--incremental-bmc --show-uninitialized
+^  initialized = .* \(uninitialized\)$
+(?s)^  counter = [^\n]*\n.*^  counter = [^\n]*$
+^  reset = .* \(uninitialized\)$
+(?s)^  reset_counter = [^\n]*\n.*^  reset_counter = [^\n]*$
+(?s)\A(?!.*^  explicit_nondet = [^\n]*\(uninitialized\)$).*\Z
+^VERIFICATION FAILED$

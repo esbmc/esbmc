@@ -1,0 +1,275 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tabularx}
+
+\definecolor{codegray}{RGB}{248,248,248}
+\lstset{
+  basicstyle=\small\ttfamily,
+  backgroundcolor=\color{codegray},
+  frame=single,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\title{Displaying Uninitialized Value Flows in ESBMC Counterexamples}
+\author{ESBMC}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Overview}
+
+ESBMC normally slices assignments that do not affect the violated property.
+This keeps the verification formula and counterexample small, but it can hide
+program state that is useful during counterexample replay.  For example, the
+following assignments do not affect the failing assertion:
+
+\begin{lstlisting}[language=C]
+unsigned initialized;
+unsigned counter = initialized;
+counter++;
+\end{lstlisting}
+
+The \texttt{--show-uninitialized} option retains the complete value flow that
+starts from an uninitialized local variable.  The counterexample shows the
+concrete value selected for the uninitialized variable, the copy into
+\texttt{counter}, and the subsequent increment.  The option is disabled by
+default, so existing counterexamples and slicing behaviour remain unchanged.
+
+\section{Example}
+
+Save the following program as \texttt{example.c}:
+
+\begin{lstlisting}[language=C]
+int main(void)
+{
+  unsigned initialized;
+  unsigned counter = initialized;
+  counter++;
+
+  unsigned reset = 0;
+  __ESBMC_init_object(&reset);
+  unsigned reset_counter = reset;
+  reset_counter++;
+
+  __ESBMC_assert(0, "expected failure");
+  return 0;
+}
+\end{lstlisting}
+
+This example contains two uninitialized-value sources:
+
+\begin{itemize}
+  \item \texttt{initialized} is declared without an initializer.
+  \item \texttt{\_\_ESBMC\_init\_object(\&reset)} replaces the value of
+        \texttt{reset} with an unconstrained value.
+\end{itemize}
+
+Assignments derived from either source are retained even though they do not
+affect the final assertion.
+
+\section{Command}
+
+Run ESBMC with the new option:
+
+\begin{lstlisting}[language=bash]
+esbmc example.c --incremental-bmc --show-uninitialized
+\end{lstlisting}
+
+When running ESBMC directly from a build tree, use:
+
+\begin{lstlisting}[language=bash]
+./build/src/esbmc/esbmc example.c \
+  --incremental-bmc --show-uninitialized
+\end{lstlisting}
+
+No additional slicing option, including \texttt{--slice-assumes}, is needed.
+
+\section{Counterexample Output}
+
+A representative counterexample is shown below.  The exact concrete value is
+solver-dependent; in this run, the solver selected zero for both unconstrained
+values.
+
+\begin{lstlisting}
+[Counterexample]
+
+State 1 file example.c line 3 function main thread 0
+----------------------------------------------------
+  initialized = 0 (00000000 00000000 00000000 00000000) (uninitialized)
+
+State 2 file example.c line 4 function main thread 0
+----------------------------------------------------
+  counter = 0 (00000000 00000000 00000000 00000000)
+
+State 3 file example.c line 5 function main thread 0
+----------------------------------------------------
+  counter = 1 (00000000 00000000 00000000 00000001)
+
+State 4 file example.c line 8 function main thread 0
+----------------------------------------------------
+  reset = 0 (00000000 00000000 00000000 00000000) (uninitialized)
+
+State 5 file example.c line 9 function main thread 0
+----------------------------------------------------
+  reset_counter = 0 (00000000 00000000 00000000 00000000)
+
+State 6 file example.c line 10 function main thread 0
+----------------------------------------------------
+  reset_counter = 1 (00000000 00000000 00000000 00000001)
+
+State 7 file example.c line 12 function main thread 0
+----------------------------------------------------
+Violated property:
+  expected failure
+  0
+
+VERIFICATION FAILED
+\end{lstlisting}
+
+Only the assignments that introduce unconstrained values carry the
+\texttt{(uninitialized)} marker.  Derived variables such as \texttt{counter}
+and \texttt{reset\_counter} are initialized variables, so they are displayed
+without the marker.  Their assignments remain visible because their values
+depend on an uninitialized source.
+
+\section{Validated Object Types}
+
+The \texttt{\_\_ESBMC\_init\_object} counterexample support has been tested
+with scalar and aggregate C objects.  Table~\ref{tab:init-object-support}
+summarizes the observed results.
+
+\begin{table}[ht]
+\centering
+\begin{tabularx}{\textwidth}{|l|X|l|}
+\hline
+Object type & Example & Status \\
+\hline
+Integer variable & \texttt{int value} & Supported \\
+\hline
+Array & \texttt{int values[3]} & Supported \\
+\hline
+Structure & \texttt{struct pair} & Supported \\
+\hline
+Array of structures & \texttt{struct item values[2]} & Supported \\
+\hline
+Nested object & Structure containing another structure or an array &
+Supported with Boolector; partially concretized with Z3 \\
+\hline
+Mixed field types & Structure containing \texttt{int}, \texttt{double}, and
+\texttt{char} & Supported \\
+\hline
+\end{tabularx}
+\caption{Validated \texttt{\_\_ESBMC\_init\_object} object types.}
+\label{tab:init-object-support}
+\end{table}
+
+Both array call forms were tested:
+
+\begin{lstlisting}[language=C]
+__ESBMC_init_object(values);
+__ESBMC_init_object(&values);
+\end{lstlisting}
+
+In both cases, the array is displayed as an uninitialized-value source and
+reads derived from its elements remain in the counterexample.
+
+\subsection{Validation Example}
+
+The following small structure demonstrates the feature:
+
+\begin{lstlisting}[language=C]
+struct data
+{
+  char tag;
+  int count;
+};
+
+int main(void)
+{
+  struct data value = {0, 0};
+  __ESBMC_init_object(&value);
+  __ESBMC_assume(value.tag == 'A');
+  __ESBMC_assume(value.count == 3);
+  __ESBMC_assert(0, "expected failure");
+}
+\end{lstlisting}
+
+Run it with:
+
+\begin{lstlisting}[language=bash]
+esbmc example.c --incremental-bmc --show-uninitialized
+\end{lstlisting}
+
+The counterexample contains the complete object value:
+
+\begin{lstlisting}
+[Counterexample]
+
+State 1 file example.c function main thread 0
+----------------------------------------------------
+  value = { .tag=65, .count=3 } (uninitialized)
+
+VERIFICATION FAILED
+\end{lstlisting}
+
+The decimal value 65 is the character code for \texttt{'A'}.
+
+\section{What Is Considered Uninitialized}
+
+A local declaration without an initializer is an uninitialized source:
+
+\begin{lstlisting}[language=C]
+int value;
+\end{lstlisting}
+
+An explicit call to \texttt{\_\_ESBMC\_init\_object} is also an uninitialized
+source:
+
+\begin{lstlisting}[language=C]
+int value = 0;
+__ESBMC_init_object(&value);
+\end{lstlisting}
+
+An explicitly initialized nondeterministic variable is \emph{not} classified
+as uninitialized:
+
+\begin{lstlisting}[language=C]
+int value = nondet_int();
+\end{lstlisting}
+
+The last assignment may still appear when it is relevant to a violated
+property, but it will not carry the \texttt{(uninitialized)} marker and does
+not become a root for this value-flow display feature.
+
+\section{Behaviour Without the Option}
+
+Running the same example without \texttt{--show-uninitialized}:
+
+\begin{lstlisting}[language=bash]
+esbmc example.c --incremental-bmc
+\end{lstlisting}
+
+uses the normal slicing rules.  Since the assignments to \texttt{initialized},
+\texttt{counter}, \texttt{reset}, and \texttt{reset\_counter} do not affect the
+failed assertion, they are omitted from the counterexample.  The output still
+ends with:
+
+\begin{lstlisting}
+Violated property:
+  expected failure
+  0
+
+VERIFICATION FAILED
+\end{lstlisting}
+
+\end{document}

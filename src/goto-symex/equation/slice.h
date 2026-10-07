@@ -101,7 +101,8 @@ public:
     : slice_assumes(options.get_bool_option("slice-assumes")),
       slice_nondet(
         !options.get_bool_option("generate-testcase") &&
-        !options.get_bool_option("generate-ctest-testcase"))
+        !options.get_bool_option("generate-ctest-testcase")),
+      show_uninitialized(options.get_bool_option("show-uninitialized"))
   {
   }
 
@@ -125,8 +126,13 @@ public:
     index_reads.clear();
     array_disqualified.clear();
     scanned_cache.clear();
+    uninitialized_values.clear();
+    uninitialized_cache.clear();
 
     fine_timet algorithm_start = current_time();
+    if (show_uninitialized)
+      collect_uninitialized_values(eq);
+
     for (auto &step : boost::adaptors::reverse(eq))
     {
       if (step.ignore)
@@ -179,6 +185,14 @@ protected:
   const bool slice_assumes;
   /// Whether we should slice nondet symbols
   const bool slice_nondet;
+  const bool show_uninitialized;
+
+  std::unordered_set<std::string> uninitialized_values;
+  std::unordered_map<const expr2t *, bool> uninitialized_cache;
+
+  void collect_uninitialized_values(symex_target_equationt::SSA_stepst &steps);
+
+  bool depends_on_uninitialized(const expr2tc &expr);
 
   /**
    * Collect every symbol of \expr into #depends (mutating "reverse-taint"

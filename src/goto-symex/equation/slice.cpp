@@ -7,6 +7,78 @@ static bool no_slice(const symbol2t &sym)
          config.no_slice_ids.count(sym.get_symbol_name());
 }
 
+bool symex_slicet::depends_on_uninitialized(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  // SSA definitions precede their uses, so a cached result cannot become
+  // stale as uninitialized_values grows during the forward scan.
+  if (auto cached = uninitialized_cache.find(expr.get());
+      cached != uninitialized_cache.end())
+    return cached->second;
+
+  struct framet
+  {
+    expr2tc expr;
+    bool children_done;
+  };
+
+  std::unordered_set<const expr2t *> active;
+  std::vector<framet> worklist{{expr, false}};
+  while (!worklist.empty())
+  {
+    framet frame = std::move(worklist.back());
+    worklist.pop_back();
+    const expr2tc &current = frame.expr;
+
+    if (is_nil_expr(current) || uninitialized_cache.count(current.get()))
+      continue;
+
+    if (frame.children_done)
+    {
+      bool dependent =
+        is_symbol2t(current) &&
+        uninitialized_values.count(to_symbol2t(current).get_symbol_name());
+      current->foreach_operand([this, &dependent](const expr2tc &operand) {
+        if (!is_nil_expr(operand))
+          dependent |= uninitialized_cache.at(operand.get());
+        return dependent;
+      });
+      active.erase(current.get());
+      uninitialized_cache.emplace(current.get(), dependent);
+      continue;
+    }
+
+    if (!active.insert(current.get()).second)
+      continue;
+
+    worklist.push_back({current, true});
+    current->foreach_operand([this, &worklist](const expr2tc &operand) {
+      if (!is_nil_expr(operand) && !uninitialized_cache.count(operand.get()))
+        worklist.push_back({operand, false});
+    });
+  }
+
+  return uninitialized_cache.at(expr.get());
+}
+
+void symex_slicet::collect_uninitialized_values(
+  symex_target_equationt::SSA_stepst &steps)
+{
+  for (auto &step : steps)
+  {
+    if (step.ignore || !step.is_assignment())
+      continue;
+
+    assert(is_symbol2t(step.lhs));
+    if (
+      step.uninitialized_assignment || depends_on_uninitialized(step.rhs) ||
+      depends_on_uninitialized(step.guard))
+      uninitialized_values.insert(to_symbol2t(step.lhs).get_symbol_name());
+  }
+}
+
 void symex_slicet::collect_dependencies(const expr2tc &expr)
 {
   // Explicit worklist (not recursion): guard and-chains are left-leaning and
@@ -213,6 +285,15 @@ void symex_slicet::run_on_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
+
+  if (uninitialized_values.count(to_symbol2t(SSA_step.lhs).get_symbol_name()))
+  {
+    scan_array_uses(SSA_step.guard);
+    scan_array_uses(SSA_step.rhs);
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.rhs);
+    return;
+  }
 
   // An array write `arr_n = arr_m with [const_i := v]` whose lhs is tracked is
   // still kept as a step, but the *store* is dropped (rewritten to the identity

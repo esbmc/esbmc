@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc
+(?s)\A(?!.*^  (initialized|counter) =)(?!.*\(uninitialized\)).*\Z
+^VERIFICATION FAILED$

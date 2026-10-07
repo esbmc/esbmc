@@ -314,6 +314,8 @@ void build_goto_trace(
     goto_trace_stept goto_trace_step;
 
     goto_trace_step.thread_nr = SSA_step.source.thread_nr;
+    goto_trace_step.uninitialized_assignment =
+      SSA_step.uninitialized_assignment;
     goto_trace_step.pc = SSA_step.source.pc;
     goto_trace_step.comment = id2string(SSA_step.comment);
     goto_trace_step.original_lhs = SSA_step.original_lhs;

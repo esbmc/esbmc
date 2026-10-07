@@ -111,7 +111,8 @@ void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
   const expr2tc &lhs,
-  const expr2tc &value)
+  const expr2tc &value,
+  bool uninitialized)
 {
   out << "  " << from_expr(ns, "", lhs);
   if (is_nil_expr(value))
@@ -155,9 +156,11 @@ void counterexample_value(
         out << ")";
       }
     }
-
-    out << "\n";
   }
+
+  if (uninitialized)
+    out << " (uninitialized)";
+  out << "\n";
 }
 
 void show_goto_trace_gui(
@@ -761,7 +764,8 @@ void show_goto_trace(
           show_state_header(
             out, step, step.pc->location, step.step_nr, simplify_trace);
         }
-        counterexample_value(out, ns, step.lhs, step.value);
+        counterexample_value(
+          out, ns, step.lhs, step.value, step.uninitialized_assignment);
       }
       break;
 
