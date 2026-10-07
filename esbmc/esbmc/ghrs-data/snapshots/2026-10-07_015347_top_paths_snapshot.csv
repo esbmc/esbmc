@@ -1,0 +1,11 @@
+url_path,views_total,views_unique
+/esbmc/esbmc,468,179
+/esbmc/esbmc/pulls,438,23
+/esbmc/esbmc/actions,164,5
+/esbmc/esbmc/actions/workflows/dispatch-benchexec.yml,158,3
+/esbmc/esbmc/issues,96,25
+/esbmc/esbmc/commits/master,46,8
+/esbmc/esbmc/releases,32,23
+/esbmc/esbmc/releases/tag/v8.5,23,20
+/esbmc/esbmc/pull/7926,21,1
+/esbmc/esbmc/pull/8188,20,2
