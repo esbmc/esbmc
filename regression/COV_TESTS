@@ -2237,6 +2237,10 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/loop-invariants/callee_global_pointer
+regression/loop-invariants/callee_global_pointer_fail
+regression/loop-invariants/callee_function_pointer
+regression/loop-invariants/callee_function_pointer_fail
 regression/esbmc-cpp/cpp/delete_array_reverse_order
 regression/esbmc-cpp/cpp/delete_array_reverse_order_fail
 regression/esbmc/sync_unsigned_result
