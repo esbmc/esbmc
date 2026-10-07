@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: rebinding a numpy array inside a branch or loop while views of it are alive is not supported$

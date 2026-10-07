@@ -50,6 +50,9 @@ protected:
     /// True iff the callee writes through a dereference.
     /// See loopst::set_writes_through_pointer and issue #7478.
     bool writes_through_pointer = false;
+    /// True iff the callee may write through a pointer it was not handed, so
+    /// havocing the pointees of the call's arguments misses the write.
+    bool pointer_write_unresolvable = false;
   };
   std::unordered_map<irep_idt, function_summaryt, irep_id_hash>
     function_summary_cache;
@@ -72,6 +75,27 @@ protected:
     const irep_idt &fname,
     std::vector<irep_idt> &in_progress,
     function_summaryt &out);
+
+  static void
+  merge_summary(const function_summaryt &from, function_summaryt &out);
+
+  static void note_pointer_write(
+    const expr2tc &target,
+    function_summaryt &local,
+    std::vector<expr2tc> &written_ptrs);
+
+  /// Fold a call inside a callee into that callee's summary. Returns false
+  /// when the summary is incomplete, as compute_function_summary does.
+  bool summarise_call(
+    const code_function_call2t &call,
+    std::vector<irep_idt> &in_progress,
+    function_summaryt &local,
+    std::vector<expr2tc> &written_ptrs);
+
+  static void apply_callee_summary(
+    loopst &loop,
+    const function_summaryt &summary,
+    const code_function_call2t &call);
 
   /// Collect the leaf symbols of `expr` into `out`, applying check_var_name.
   void collect_loop_symbols(const expr2tc &expr, loopst::loop_varst &out) const;

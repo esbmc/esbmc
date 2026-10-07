@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <initializer_list>
 #include <map>
@@ -55,14 +56,16 @@ VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
     {"BOOL", VarKind::BOOL},
     {"INT", VarKind::INT},
     {"DINT", VarKind::DINT},
-    {"UINT", VarKind::INT},
-    {"SINT", VarKind::INT},
-    {"LINT", VarKind::DINT},
-    {"WORD", VarKind::INT},
     {"TIME", VarKind::TIME},
     {"REAL", VarKind::REAL},
     {"LREAL", VarKind::REAL},
   };
+  // No unsigned, 8-bit or 64-bit kind exists; a 32-bit stand-in would miss
+  // their wrap.
+  static const std::unordered_set<std::string> unmodeled = {
+    "UINT", "SINT", "LINT", "WORD"};
+  if (unmodeled.count(s))
+    throw UnsupportedConstructError("type " + s, 2);
   auto it = table.find(s);
   if (it == table.end())
     return VarKind::BOOL; // default; type checker will flag unsupported types
@@ -1026,11 +1029,11 @@ static bool parse_graphical_ld(
       e.timer_fb.kind = kind;
       e.timer_fb.instance_name = inst_name(block_id);
       e.timer_fb.IN_var = enable_var;
-      e.timer_fb.PT_var = resolve_data_pin(block_id, "PT", VarKind::INT);
+      e.timer_fb.PT_var = resolve_data_pin(block_id, "PT", VarKind::TIME);
       e.timer_fb.Q_var =
         synth_var(pin_name(block_id, "Q"), VarKind::BOOL, true, 0);
       e.timer_fb.ET_var =
-        synth_var(pin_name(block_id, "ET"), VarKind::INT, true, 0);
+        synth_var(pin_name(block_id, "ET"), VarKind::TIME, true, 0);
       e.timer_fb.loc = loc;
     }
     else
@@ -1512,7 +1515,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       pugi::xml_node tnode = v.child("type");
       pugi::xml_node first = tnode.first_child();
       if (!first)
-        return VarKind::INT; // numeric default for an untyped FB variable
+        return VarKind::DINT; // numeric default for an untyped FB variable
       std::string tag = first.name();
       std::string type_str =
         (tag == "derived") ? first.attribute("name").as_string() : tag;
