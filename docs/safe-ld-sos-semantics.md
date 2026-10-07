@@ -111,13 +111,20 @@ A program is well-typed when every rule below is derivable. The type checker
 | Construct | Obligation |
 |---|---|
 | contact on v | v declared; ⌊σ(v)⌋ defined, i.e. v : BOOL, INT, DINT or REAL |
+| declared type | BOOL, INT, DINT, TIME, REAL or LREAL; UINT, SINT, LINT and WORD are refused (`UnsupportedConstruct`), since no 16-bit unsigned, 8-bit or 64-bit kind is modeled |
+| initial value of an INT | within −32768 … 32767; an initial value outside it is rejected |
 | coil on v | v declared and not an input (§3.1) |
-| TON/TOF/TP | IN : BOOL; PT, ET : INT or TIME; Q : BOOL |
-| CTU/CTD | CU/CD/R : BOOL; PV, CV : INT or DINT; Q : BOOL |
-| ADD/SUB/MUL/DIV | IN1, IN2, OUT numeric and of one type |
+| TON/TOF/TP | IN : BOOL; PT, ET : INT, DINT or TIME, with ET : INT only if PT : INT; Q : BOOL |
+| CTU/CTD | CU/CD/R/LD : BOOL; PV, CV : INT or DINT; Q : BOOL |
+| ADD/SUB/MUL/DIV | IN1, IN2, OUT numeric; the operands need not have one type (§5.6) |
 
-`TIME` is represented as a tick count (§5.1), so `TIME` and `INT` share a
-representation and are interchangeable at FB pins.
+`INT` is a signed 16-bit integer, as in IEC 61131-3 and in MATIEC (`IEC_INT`
+is `int16_t`); `DINT` and `TIME` are signed 32-bit. `TIME` is represented as a
+tick count (§5.1), so `TIME` and `DINT` share a representation and are
+interchangeable at FB pins. A comparison or arithmetic step over two operands
+of one type is carried out in that type; over an INT and a DINT or TIME it is
+carried out at 32 bits, which holds both. A value stored into an INT is
+reduced modulo 2¹⁶ (§5.6).
 
 ---
 
@@ -143,6 +150,9 @@ where
   reassigned an arbitrary value of its type. Inputs are *free*: the semantics
   admits every input sequence, which is what makes a proof over this relation
   a proof over all environments.
+  Every variable the program does not own and that another task may write
+  (an externally written variable) is read the same way, unless
+  `--ld-closed-world` assumes nothing else writes it.
 - `latch(σ)` binds each edge-sensed operand v to ⌊σ(v)⌋, at the end of the
   scan and after every rung, so that all contacts sensing v within one scan
   compare against the same previous-scan sample regardless of rung order.
@@ -171,8 +181,18 @@ from the left power rail, which always supplies power:
                      ⟨e₁ … e_m, σ₁, π⟩ → σ_{m+1}
 ```
 
-Contacts contribute to p and leave σ unchanged; coils and FB steps consume p
-and update σ.
+Contacts contribute to p and leave σ unchanged; coils consume p and update σ.
+The power a coil consumes is the conjunction of the rung's earlier contacts
+**evaluated in the store σ_k current when that coil runs**, not the value p_k
+that the contacts read at their own position: a coil that follows a reset of
+a variable a contact read sees the reset. In
+`go -(S)- a`, `a -(R)- a -( )- b`, the last coil assigns b the conjunction
+evaluated after the reset of `a`, so b is ff. This is what the converter emits
+and what the reference runtime does: Beremiz to MATIEC generates
+`if (A) { A := FALSE; }; B := A;` for the graphical equivalent, and
+`--ld-tv-check` finds the two equivalent (`ws1/spikes/a1_graphical`). A timer
+or counter reads IN, CU, CD, R and LD from variables, not from p; power
+reaches them only through a coil that writes the variable.
 
 Left-to-right, rail-first evaluation of a rung's elements is
 [IEC 61131-3 §TBD: confirm the clause giving LD's execution order within a
@@ -274,6 +294,11 @@ fires N scans after the scan its enable rises (one scan after when N = 0), so ti
 induction depth and no `__ESBMC_assume` over Δt is needed. What it does not
 model is scan-period jitter — see §8.
 
+The previous-input entry π of a timer or counter belongs to the block: it is
+written when the block's own step runs, with the pin's value at that step, and
+read at the block's step in the next scan. It differs from the value at the end
+of the scan only if a later rung writes the pin.
+
 Throughout this section, `IN` denotes the Boolean projection of the block's
 enable pin and `PT`, `ET`, `Q` its preset, elapsed count and output.
 
@@ -308,13 +333,17 @@ undefined behaviour and wraps ET negative so that Q drops back to ff.
 ```
         IN = tt                     IN = ff, π(IN) = ff, σ(Q) = tt
   ────────────────────────────    ──────────────────────────────────  [TOF]
-   σ' = σ[ET ↦ 0][Q ↦ tt]          σ' = σ[ET ↦ σ(ET)+1]
+   σ' = σ[ET ↦ 0][Q ↦ tt]          σ' = σ[ET ↦ inc(σ)]
                                    σ'' = σ'[Q ↦ (σ'(ET) < σ(PT))]
 
           IN = ff, π(IN) = tt          or          IN = ff, σ(Q) = ff
                   ────────────────────────────  [TOF-IDLE]
                             σ' = σ
 ```
+
+where inc(σ) = σ(ET)+1 if σ(ET) < σ(PT) and σ(ET) otherwise: ET is bounded by
+PT, so it neither grows without bound nor overflows while IN stays ff (this
+changes ET, not Q, and only when PT ≤ 0).
 
 Q rises with IN. The scan on which IN falls starts the interval and counts as
 no elapsed time, as in MATIEC's TOF, so Q holds for max(PT, 1) scans counting
@@ -328,11 +357,11 @@ reading ET = 0 as "just dropped".
 ```
        σ(Q) = tt                     σ(Q) = ff, IN = tt, π(IN) = ff
   ──────────────────────────    ─────────────────────────────────────  [TP]
-   σ' = σ[ET ↦ σ(ET)+1]              σ' = σ[ET ↦ 0][Q ↦ tt]
+   σ' = σ[ET ↦ inc(σ)]               σ' = σ[ET ↦ 0][Q ↦ tt]
    σ'' = σ'[Q ↦ σ'(ET) < σ(PT)]
 ```
 
-and σ' = σ otherwise. A pulse runs for PT scans from a rising IN and ignores
+with inc as in §5.3, and σ' = σ otherwise. A pulse runs for PT scans from a rising IN and ignores
 IN until it expires; like TON and TOF, the block keeps its own previous-IN
 entry in π, so a TP is retriggerable only after its pulse has completed.
 
@@ -348,7 +377,16 @@ entry in π, so a TP is retriggerable only after its pulse has completed.
    σ(CD) = tt, π(CD) = ff, σ(CV) > 0
   ─────────────────────────────────────  [CTD]  σ'' = σ'[Q ↦ (σ'(CV) ≤ 0)]
    σ' = σ[CV ↦ σ(CV)−1]
+
+   LD wired, σ(LD) = tt
+  ─────────────────────  [CTD-LOAD]
+   σ' = σ[CV ↦ σ(PV)]
 ```
+
+When LD is wired, [CTD-LOAD] applies if σ(LD) = tt and the count arm
+[CTD] applies only otherwise. A comparison of CV with PV is carried out in the
+common type of the two (§2), so a DINT preset above 32767 is not narrowed to
+an INT counter value; a load stores PV into CV by the rule of §5.6.
 
 Counters are edge-triggered on their count pin, using a per-instance entry in
 the edge store. The reset arm applies after the count arm, so a scan in which
@@ -367,7 +405,13 @@ the INT default, so a CTU without one never counts.
    ⟨op, σ⟩ → σ[OUT ↦ σ(IN1) op σ(IN2)]
 ```
 
-for op ∈ {+, −, ×, ÷}; MOVE is the unary case OUT := IN1. Division by zero is
+for op ∈ {+, −, ×, ÷}; MOVE is the unary case OUT := IN1. The operation is
+carried out in the common type of IN1 and IN2 (§2) and the result is reduced
+to the type of OUT: an INT sum above 32767 wraps to a negative value, which
+is what MATIEC's C does (`--ld-tv-check` on an INT ADD, `ws1/spikes/int_width`).
+Overflow of the operation in the common type is a checked property
+(`--signed-overflow-check`), so a run that overflows is reported, not
+simulated. Division by zero is
 a checked property, not a semantic side condition: the store is undefined
 there and ESBMC reports the violation.
 
