@@ -10440,6 +10440,11 @@ temporary's member and once as itself. Master already does the same for a
 non-class return (`int f() { return H{C(8), 1}.c.v; }`): it is the aggregate
 element's double destruction, not this change. The conditional
 cases R79 named are unchanged.
+
+A temporary the value read only through a member or an element was counted as
+a source: `return H{C(7), C(8).v};` never destroyed `C(8)`. Sources are now the
+symbols read as whole objects; `return_class_temporary_member_read{,_fail}`
+pin it (PR #8152).
 ### M9 (R114) — 2026-10-04, the cursor every va_list shared
 
 A probe battery of ten deterministic C programs, run natively and through

@@ -305,6 +305,21 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
+/// The symbols \p e reads as whole objects: a member, an element or an address
+/// of one copies a part or none of it, so its temporary is still destroyed.
+static void collect_whole_reads(const expr2tc &e, std::set<irep_idt> &sources)
+{
+  if (is_nil_expr(e) || is_address_of2t(e) || is_member2t(e) || is_index2t(e))
+    return;
+  if (is_symbol2t(e))
+  {
+    sources.insert(to_symbol2t(e).thename);
+    return;
+  }
+  e->foreach_operand(
+    [&sources](const expr2tc &op) { collect_whole_reads(op, sources); });
+}
+
 /// The objects \p value is a bitwise copy of: the symbols it names and,
 /// transitively, those \p sideeffects assigns into them or into their parts
 /// (`H{C(1)}` lowers to `tmp$2 = { .c=tmp$1 }`).
@@ -313,11 +328,8 @@ value_sources(const exprt &value, const goto_programt &sideeffects)
 {
   expr2tc value2;
   migrate_expr(value, value2);
-  std::unordered_set<expr2tc, irep2_hash> symbols;
-  get_symbols(value2, symbols);
   std::set<irep_idt> sources;
-  for (const expr2tc &sym : symbols)
-    sources.insert(to_symbol2t(sym).thename);
+  collect_whole_reads(value2, sources);
 
   for (auto it = sideeffects.instructions.rbegin();
        it != sideeffects.instructions.rend();
@@ -329,10 +341,7 @@ value_sources(const exprt &value, const goto_programt &sideeffects)
     const expr2tc &target = get_base_object(assign.target);
     if (!is_symbol2t(target) || !sources.count(to_symbol2t(target).thename))
       continue;
-    symbols.clear();
-    get_symbols(assign.source, symbols);
-    for (const expr2tc &sym : symbols)
-      sources.insert(to_symbol2t(sym).thename);
+    collect_whole_reads(assign.source, sources);
   }
   return sources;
 }
