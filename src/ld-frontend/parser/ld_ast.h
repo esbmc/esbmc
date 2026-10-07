@@ -207,7 +207,7 @@ struct VarDecl
 struct FBVarDecl
 {
   std::string name;
-  VarKind kind = VarKind::INT; // numeric default for an untyped FB variable
+  VarKind kind = VarKind::DINT; // numeric default for an untyped FB variable
 };
 
 struct UserFBDef

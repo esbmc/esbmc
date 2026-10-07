@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "NonZero"
+    justification: "256 * 256 is 65536, which does not fit INT: IEC INT is 16 bits, so P wraps to 0 and NonZero is false."
