@@ -357,7 +357,8 @@ void goto_loopst::merge_summary(
   out.written_pointers.insert(
     from.written_pointers.begin(), from.written_pointers.end());
   out.unnamed_write |= from.unnamed_write;
-  out.address_taken.insert(from.address_taken.begin(), from.address_taken.end());
+  out.address_taken.insert(
+    from.address_taken.begin(), from.address_taken.end());
 }
 
 /// The caller havocs what a call's pointer arguments point to, which covers a
