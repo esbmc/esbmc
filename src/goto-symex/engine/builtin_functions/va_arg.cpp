@@ -76,15 +76,23 @@ bool goto_symext::va_list_is_started(const expr2tc &va_list_expr) const
   return !rec || va_started.count(*rec) != 0;
 }
 
+unsigned *goto_symext::va_list_cursor(const expr2tc &va_list_expr)
+{
+  auto rec = va_list_l1_record(va_list_expr);
+  auto it = rec ? va_started.find(*rec) : va_started.end();
+  return it != va_started.end() && it->second ? &*it->second : nullptr;
+}
+
 void goto_symext::va_list_mark_started(
   const expr2tc &va_list_expr,
-  bool started)
+  bool started,
+  std::optional<unsigned> cursor)
 {
   auto rec = va_list_l1_record(va_list_expr);
   if (rec)
   {
     if (started)
-      va_started.insert(*rec);
+      va_started[*rec] = cursor;
     else
       va_started.erase(*rec);
     return;
@@ -98,7 +106,7 @@ void goto_symext::va_list_mark_started(
     return;
 
   for (const auto &obj_rec : va_list_pointee_records(va_list_expr))
-    va_started.insert(obj_rec);
+    va_started[obj_rec] = cursor;
 }
 
 goto_symex_statet::framet &
@@ -112,6 +120,15 @@ goto_symext::va_list_frame(const expr2tc &va_list_expr)
       if (frame.local_variables.count(rec))
         return frame;
   return cur_state->top();
+}
+
+void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
+{
+  const unsigned *cursor = va_list_cursor(src);
+  va_list_mark_started(
+    dst,
+    va_list_is_started(src),
+    cursor ? std::optional{*cursor} : std::nullopt);
 }
 
 void goto_symext::symex_va_arg(
@@ -131,7 +148,14 @@ void goto_symext::symex_va_arg(
   goto_symex_statet::framet &frame = va_list_frame(code.operand);
   std::string base = id2string(frame.function_identifier) + "::va_arg";
 
-  irep_idt id = base + std::to_string(frame.va_cursor++);
+  /* The declaring frame's cursor counts every va_arg on its arguments, which
+   * symex_printf's va_list recovery reads. A va_list whose own cursor is known
+   * reads from that, so va_copy, a second va_start and a second va_list each
+   * read where they should. */
+  unsigned cursor = frame.va_cursor++;
+  if (unsigned *own = va_list_cursor(code.operand))
+    cursor = (*own)++;
+  irep_idt id = base + std::to_string(cursor);
 
   expr2tc va_rhs;
 
