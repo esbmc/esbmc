@@ -1,5 +1,6 @@
 #include <ld-frontend/semantics/type_checker.h>
 #include <algorithm>
+#include <cstdint>
 #include <sstream>
 
 // -----------------------------------------------------------------------
@@ -33,15 +34,32 @@ void TypeChecker::require_port(
       loc_str(loc) + ": '" + instance + "' missing required port " + port);
 }
 
+// INT is 16 bits; DINT and TIME (a tick count) are 32.
+static bool init_value_fits(const VarDecl &v)
+{
+  switch (v.kind)
+  {
+  case VarKind::INT:
+    return v.init_value >= -32768 && v.init_value <= 32767;
+  case VarKind::DINT:
+  case VarKind::TIME:
+    return v.init_value >= INT32_MIN && v.init_value <= INT32_MAX;
+  default:
+    return true;
+  }
+}
+
 void TypeChecker::build_var_type_map(const LdAst &ast)
 {
   for (const auto &v : ast.variables)
   {
-    if (
-      v.kind == VarKind::INT && (v.init_value < -32768 || v.init_value > 32767))
+    if (!init_value_fits(v))
       throw TypeCheckError(
         loc_str(v.loc) + ": initial value " + std::to_string(v.init_value) +
-        " of '" + v.name + "' is outside INT");
+        " of '" + v.name + "' is outside " +
+        (v.kind == VarKind::INT    ? "INT"
+         : v.kind == VarKind::DINT ? "DINT"
+                                   : "TIME"));
     var_types_[v.name] = v.kind;
   }
 }
