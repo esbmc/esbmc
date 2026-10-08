@@ -206,7 +206,7 @@ position: a coil that follows a reset of a variable a contact read sees the rese
 evaluated after the reset of `a`, so b is ff. This is what the converter emits
 and what the reference runtime does: Beremiz to MATIEC generates
 `if (A) { A := FALSE; }; B := A;` for the graphical equivalent, and
-`--ld-tv-check` finds the two equivalent (`ws1/spikes/a1_graphical`). A timer
+`--ld-tv-check` finds the two equivalent. A timer
 or counter reads IN, CU, CD, R and LD from variables, not from p; power
 reaches them only through a coil that writes the variable.
 
@@ -261,8 +261,8 @@ conducts for exactly one scan per transition, and two contacts sensing the same
 operand agree unless a coil writes the operand between them. Beremiz instead gives each edge
 contact consumer its own `R_TRIG`/`F_TRIG` instance, fed the operand at that
 consumer; a second sink after a reset of the operand therefore re-evaluates the
-edge, as this semantics does (`ws1/spikes/review_probes/edge_two_sinks`,
-translation validation UNSAT). The two differ only in the previous value, which
+edge, as this semantics does
+(translation validation: UNSAT). The two differ only in the previous value, which
 Beremiz keeps per instance at its own evaluation and this semantics keeps from the
 end of the scan.
 Applying the contact's own negation after the edge test (so `--[/P]--` is the
@@ -442,7 +442,7 @@ the INT default, so a CTU without one never counts.
 for op ∈ {+, −, ×, ÷}; MOVE is the unary case OUT := IN1. The operation is
 carried out in the common type of IN1 and IN2 (§2) and the result is reduced
 to the type of OUT: an INT sum above 32767 wraps to a negative value, which
-is what MATIEC's C does (`--ld-tv-check` on an INT ADD, `ws1/spikes/int_width`).
+is what MATIEC's C does (`--ld-tv-check` on an INT ADD).
 Overflow of the operation in the common type is a checked property
 (`--overflow-check`), so a run that overflows is reported, not simulated;
 storing a wider result into a narrower OUT (an INT + DINT sum into an INT)
@@ -548,7 +548,7 @@ is diagnosed and the program is rejected rather than given a semantics.
    not implement, is diagnosed with `UnsupportedConstructError` before power
    flow is computed from it.
 
-   The plan (`REVISION_PLAN.md` item 7) also names a fourth condition, "known
+   The implementation plan also names a fourth condition, "known
    `formalParameter`s": that a block's wired pin names (e.g. a `TON`'s `IN`,
    `PT`, `Q`, `ET`) are checked against the pins that block type declares, and
    an unrecognised pin name is rejected. **This is not implemented.** The
@@ -635,14 +635,14 @@ variables in H change only between scans, sampled atomically at the start of a s
 a writer that changes one during a scan (an HMI writing `%M`, a second resource, forced
 I/O) gives executions in which two contacts on one variable read different values, which
 no choice in `read_inputs` produces. The verdict assumes the declared interface is
-complete, and so does every statement of the theorem (`ws1/translation_theorem.md`,
+complete, and so does every statement of the theorem (the translation theorem,
 hypothesis H10 and Corollary 3).
 
 The unsafe direction is covered by the regression pair added with esbmc#8065:
 a program that writes a variable it also declares externally writable, verdict
 unsound before the change and sampled after it.
 
-**Counts.** `ws1/io_tiers.py` classifies every declared variable of the 225
+**Counts.** The tier script classifies every declared variable of the 225
 readable LD variants of the benchmark suite (graphical, and the textual
 dialect after the suite's converter), taking the free reads from the GOTO scan
 loop and the section and address from the XML. Of 1,157 variables, 648 (56.0%)
@@ -759,7 +759,7 @@ Two readings differ from the names. For n ≥ 3 the exclusion monitor forbids al
 
 **Verdicts.** The verifier returns one of four outcomes for a program and a property set:
 
-- **SAFE** (k-induction): the monitor holds in every scan boundary reachable from the initial store under every input sequence the model admits (§3.1, §6.5), proved by induction. It is a statement about the model, so it is only as strong as the hypotheses of `ws1/translation_theorem.md` (Corollary 3) and the departures listed in §10.
+- **SAFE** (k-induction): the monitor holds in every scan boundary reachable from the initial store under every input sequence the model admits (§3.1, §6.5), proved by induction. It is a statement about the model, so it is only as strong as the hypotheses of the translation theorem (Corollary 3) and the departures listed in §10.
 - **VIOLATION**: a finite scan trace, as a sequence of input values, reaching a boundary where the monitor fails (for `reachability`, where its condition holds). A violation is genuine for the model and spurious for the system only if an input in the trace is one the environment cannot produce (§6.5, safe direction).
 - **UNKNOWN**: the solver timed out or the induction did not close. Bounded model checking that finds nothing up to the unwind bound is UNKNOWN, **not** SAFE: the scan loop is `while (true)`, so no bound covers it. The driver prints `VERIFICATION SUCCESSFUL` for a bounded pass, which a reader must not take for SAFE.
 - **REFUSED**: the front end rejects the program (`UnsupportedConstruct`, a type error, a cycle); no verdict, and not a SAFE.
@@ -767,14 +767,14 @@ Two readings differ from the names. For n ≥ 3 the exclusion monitor forbids al
 **Vacuity (M23).** A SAFE verdict can hold because what the property guards against never occurs. Two checks apply.
 
 1. *Interface*: a variable named by the property is never assigned in the scan loop (the suite's ingestion gate fails such a run).
-2. *Antecedent reachability* (`ws1/vacuity.py`): from the property derive the conditions that must be reachable for it to constrain anything, and ask whether each is. For `a → b` or `¬a ∨ b` the condition is a; for `¬(a ∧ b)`, `¬a ∨ ¬b` and `mutual_exclusion` each variable on its own; for `response` the trigger. Each condition is checked as a `reachability` property under k-induction. A property with a condition proved unreachable is *vacuous*; with an unknown one, *possibly vacuous*. A SAFE verdict on a vacuous property is reported as such, not counted as evidence.
+2. *Antecedent reachability* (the vacuity script): from the property derive the conditions that must be reachable for it to constrain anything, and ask whether each is. For `a → b` or `¬a ∨ b` the condition is a; for `¬(a ∧ b)`, `¬a ∨ ¬b` and `mutual_exclusion` each variable on its own; for `response` the trigger. Each condition is checked as a `reachability` property under k-induction. A property with a condition proved unreachable is *vacuous*; with an unknown one, *possibly vacuous*. A SAFE verdict on a vacuous property is reported as such, not counted as evidence.
 
 Properties are evaluated at the boundaries 1, 2, ... of a run; the monitor sits inside the loop after the
 first `read_inputs`, so it never observes the power-up store, and an output declared true at power-up and
 overwritten in the first scan does not violate "output implies permissive" in the model as it would in the
 real power-up image. Antecedent reachability answers "reached" for the modeled H only (§6.5).
 
-Result on the suite (October 7, 2026, `ws1/vacuity_results_2026-10-07.md`): of 208 checked properties, 205 are non-vacuous, two are vacuous and one possibly vacuous; 144 properties are of other shapes (126 reachability, 16 termination, 2 reachable) and are not checked, 19 are refused, and 3 use an operator the script does not read.
+Result on the suite (October 7, 2026): of 208 checked properties, 205 are non-vacuous, two are vacuous and one possibly vacuous; 144 properties are of other shapes (126 reachability, 16 termination, 2 reachable) and are not checked, 19 are refused, and 3 use an operator the script does not read.
 
 ---
 
@@ -782,10 +782,8 @@ Result on the suite (October 7, 2026, `ws1/vacuity_results_2026-10-07.md`): of 2
 
 The M1 gate requires two independent human reviewers to validate this specification against IEC 61131-3.
 That review has not been carried out. On October 7, 2026 the specification was read against the
-IEC 61131-3:2013 (Edition 3.0) text by its authors, and two independent LLM reviews were run and triaged
-(`ws1/review_triage_2026-10-07.md`); their confirmed findings are corrected in this document and in
-`ws1/translation_theorem.md`. The clause numbers in this document are Edition 3's;
-`ws1/iec_citation_worksheet.md` lists each with its wording.
+IEC 61131-3:2013 (Edition 3.0) text by its authors, and two independent LLM reviews were run and triaged; their confirmed findings are corrected in this document and in
+the translation theorem. The clause numbers in this document are Edition 3's.
 
 **Status of the earlier gaps.** (1) A negated edge contact has no normative definition (Table 75): an extension.
 (2) Reset dominates counting and load dominates CTD counting (§6.6.3.5.4, Table 45). (3) §8.1.5.2 agrees with the live
@@ -799,11 +797,10 @@ unrecognised pin name on a recognised block type is ignored. (7) ET is held at P
 1. An edge contact compares against the end-of-scan latch (`π_e`); the standard compares against the value at the
    element's previous evaluation (§8.2.4, Table 75 rows 3 and 4), and Beremiz keeps that value in an `R_TRIG`
    instance per consumer. The two differ only when a later coil writes the sensed variable in the same scan
-   (esbmc/esbmc#8211; `ws1/spikes/edge_prev`, MATIEC `hit` = 0, 1, 0, 0 against ESBMC never).
+   (esbmc/esbmc#8211; MATIEC `hit` = 0, 1, 0, 0 against ESBMC never).
 2. A coil takes the rung's contacts evaluated in the store at the coil (§3.2). Read literally, §8.2.5 passes the left
    link's evaluated state to the right link, so a coil after a reset of the variable a contact read would still see ON.
-   Beremiz and MATIEC re-evaluate at the coil, as ESBMC does (`ws1/spikes/a1_graphical`; for edge contacts,
-   `ws1/spikes/review_probes/edge_two_sinks`; translation validation UNSAT).
+   Beremiz and MATIEC re-evaluate at the coil, as ESBMC does (translation validation UNSAT, also for edge contacts).
 3. REAL and LREAL are both modeled as a double; the standard gives REAL 32 bits (Table 10, footnote e) and MATIEC's
    `IEC_REAL` is a float (esbmc/esbmc#8212).
 4. An arithmetic result outside the range of its type is an error in the standard (§6.6.2.5.8, §7.3.2); MATIEC's C
@@ -811,7 +808,7 @@ unrecognised pin name on a recognised block type is ignored. (7) ET is held at P
 5. The EN input and ENO output of a user function block are ignored (esbmc/esbmc#8210), and user function blocks run
    after all rungs where Beremiz calls them at their position (not probed).
 
-**Hypotheses and who enforces them.** The theorem's hypotheses H1 to H10 (`ws1/translation_theorem.md` §4) are enforced
+**Hypotheses and who enforces them.** The theorem's hypotheses H1 to H10 (the translation theorem, §4) are enforced
 by the tool only where a branch listed in §7, item 10 of that document has merged: the cycle, coil-attribute,
 unmodeled-source, type and pin-distinctness refusals. Until then they are conditions on the input.
 
