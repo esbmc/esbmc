@@ -411,6 +411,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   struct_union_typet t(c_tag);
   t.tag(name);
 
+  /* Struct not complete yet. Still need methods. */
+  t.incomplete(true);
+
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
@@ -439,9 +442,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
 
-  /* That recursion can also re-enter this very record and complete it (#2323).
-   * Completing it again would run the method pass a second time and add the
-   * vtable variable symbol twice, which aborts conversion (#7643). */
+  /* Recursive field conversion can re-enter this record and complete it.
+   * The incomplete flag is removed only after all fields and methods have
+   * been processed, so a complete type here means another invocation has
+   * already completed this type. */
   if (!holds_incomplete_record(sym->get_type()))
     return false;
 
@@ -455,6 +459,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
       sym->set_type(std::move(t));
       return true;
     }
+    // Struct is complete
+    t.remove(irept::a_incomplete);
     sym->set_type(std::move(t));
   }
 
@@ -496,16 +502,12 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 
 /// A C++ function-local static whose initializer is not a constant runs it
 /// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
-/// hoisted into static_lifetime_init. An array built by one constructor call,
-/// which only static_lifetime_init expands per element, keeps the hoisted
-/// form, and so does the IREP2 adjuster, which drops the declaration's marker.
+/// hoisted into static_lifetime_init. The IREP2 adjuster, which drops the
+/// declaration's marker, keeps the hoisted form.
 bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
 {
   return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
-         vd.hasInit() &&
-         !(vd.getType()->isArrayType() && llvm::isa<clang::CXXConstructExpr>(
-                                            vd.getInit()->IgnoreImplicit())) &&
-         !vd.hasConstantInitialization() &&
+         vd.hasInit() && !vd.hasConstantInitialization() &&
          !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
 }
 

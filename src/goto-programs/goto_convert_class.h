@@ -239,6 +239,11 @@ protected:
     const symbolt &s,
     const symbolt &guard,
     goto_programt &dest);
+  void construct_array_elements(
+    const exprt &base,
+    const typet &type,
+    const side_effect_expr_function_callt &ctor,
+    goto_programt &dest);
   void schedule_array_element_destructors(const exprt &base, const typet &type);
 
   void convert_decl_block(const codet &code, goto_programt &dest);
