@@ -192,18 +192,8 @@ bool goto_symext::run_builtin(
   // va_arg on an unstarted va_list is then flagged in symex_va_arg.
   if (symname == "c:@F@__builtin_va_start" && !func_call.operands.empty())
   {
-    const expr2tc &va_list_addr = func_call.operands[0];
-    va_list_mark_started(va_list_addr, true, cur_state->top().va_index);
-    // Where va_list is a pointer (AArch64 Darwin), point it at itself, so a
-    // copy passed to a callee still leads va_list_frame to the frame that
-    // started it, as the array va_list of x86-64 does by decaying.
-    if (is_address_of2t(va_list_addr))
-    {
-      const expr2tc &va_list = to_address_of2t(va_list_addr).ptr_obj;
-      if (is_pointer_type(va_list->type))
-        symex_assign(
-          code_assign2tc(va_list, typecast2tc(va_list->type, va_list_addr)));
-    }
+    va_list_mark_started(
+      func_call.operands[0], true, cur_state->top().va_index);
     return true;
   }
 
