@@ -4,6 +4,7 @@
 #include <util/message/format.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>
+#include <util/base/prefix.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -270,7 +271,7 @@ void smt_solver_baset::renumber_symbol_address(
     // object number, and nondeterministically pick the new value.
 
     unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(new_obj_num, new_size, t);
+    smt_astt output = init_pointer_obj(new_obj_num, new_size, t, true);
 
     // Now merge with the old value for all future address-of's
 
@@ -280,7 +281,7 @@ void smt_solver_baset::renumber_symbol_address(
   {
     // Newly bumped pointer. Still needs a new number though.
     unsigned int obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(obj_num, new_size, t);
+    smt_astt output = init_pointer_obj(obj_num, new_size, t, true);
 
     // Store in renumbered store.
     renumber_mapt::value_type v(str, output);
@@ -362,7 +363,10 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
 
-    smt_astt output = init_pointer_obj(obj_num, size, type);
+    const bool heap =
+      is_symbol2t(expr) &&
+      has_prefix(to_symbol2t(expr).thename.as_string(), "symex_dynamic::");
+    smt_astt output = init_pointer_obj(obj_num, size, type, heap);
     assert_ast(a->eq(this, output));
   }
 
@@ -376,7 +380,8 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
 smt_astt smt_solver_baset::init_pointer_obj(
   unsigned int obj_num,
   const expr2tc &size,
-  const typet *type)
+  const typet *type,
+  bool may_be_freed)
 {
   std::vector<expr2tc> membs;
   const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
@@ -476,7 +481,7 @@ smt_astt smt_solver_baset::init_pointer_obj(
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
 
-  addr_space_data.back()[obj_num] = 0; // XXX -- nothing uses this data?
+  addr_space_data.back()[obj_num] = may_be_freed;
 
   membs.clear();
   membs.push_back(start_sym);
@@ -527,37 +532,22 @@ void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 
     expr2tc e = no_overlap;
 
-    /* If a `__ESBMC_alloc` has already been seen, we use it to make the address
-     * space constraints on all objects except NULL (j == 0) and INVALID
-     * (j == 1) dependent on whether the object is still alive:
+    /* Only a heap object can be freed, so only its no-overlap constraint
+     * depends on whether it is still alive in `__ESBMC_alloc`:
      *   (__ESBMC_alloc[j] == true) => (i_end < j_start || i_start > j_end)
-     * In case the object j was free'd, it no longer restricts the addresses of
-     * the new object i.
+     * __ESBMC_alloc is never set for a stack or static object, so those stay
+     * disjoint from every other object unconditionally.
      *
      * XXXfbrausse: This is crucially relies on the fact that the current
      * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
      * is the one this new object i gets registered with.
      */
-    if (j && current_valid_objects_sym)
-    {
-      expr2tc alive =
-        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-
-      // Tong: When a dynamic object gets registered/freed in __ESBMC_alloc by
-      // symex_malloc()/symex_free(), the alloc bit "alive" is assigned to 1/0.
-      // However, in dataraces check we introduce infinite array to store the
-      // address of shared objects, and if they are not dynamically managed by
-      // symex_malloc()/symex_free(), and it's alloc bit is always 0 by default.
-      // For now, we just modify the races check.
-
-      if (options.get_bool_option("data-races-check") && cur_dynamic)
-      {
-        expr2tc dynamic = index2tc(get_bool_type(), cur_dynamic, gen_ulong(j));
-        e = implies2tc((or2tc(not2tc(dynamic), alive)), e);
-      }
-      else
-        e = implies2tc(alive, e);
-    }
+    const auto obj_j = addr_space_data.back().find(j);
+    if (
+      current_valid_objects_sym && obj_j != addr_space_data.back().end() &&
+      obj_j->second)
+      e = implies2tc(
+        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j)), e);
 
     assert_expr(e);
   }
@@ -710,8 +700,8 @@ void smt_solver_baset::init_addr_space_array()
   assert_expr(
     equality2tc(symbol2tc(pointer_struct, "INVALID"), invalid_ptr_tuple));
 
-  addr_space_data.back()[0] = 0;
-  addr_space_data.back()[1] = 0;
+  addr_space_data.back()[0] = false;
+  addr_space_data.back()[1] = false;
 }
 
 void smt_solver_baset::bump_addrspace_array(
