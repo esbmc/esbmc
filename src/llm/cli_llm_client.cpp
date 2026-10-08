@@ -1,21 +1,21 @@
 #include <llm/cli_llm_client.h>
 
-// Use boost::process v1 on macOS or when Boost >= 1.87.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#if defined(__APPLE__) || (BOOST_VERSION == 108700)
-#  include <boost/process/v1.hpp>
-namespace bp = boost::process::v1;
-#elif BOOST_VERSION >= 108800
-#  include <boost/process/v1/child.hpp>
-#  include <boost/process/v1/io.hpp>
-#  include <boost/process/v1/search_path.hpp>
-namespace bp = boost::process::v1;
+#include <boost/version.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/write.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/asio/writable_pipe.hpp>
+#if __has_include(<boost/process/v2.hpp>)
+#  include <boost/process/v2.hpp>
 #else
 #  include <boost/process.hpp>
-namespace bp = boost::process;
 #endif
-#pragma GCC diagnostic pop
+#if BOOST_VERSION < 108800
+// Boost.Process v2 is compiled into a library only from 1.88 onwards.
+#  include <boost/process/v2/src.hpp>
+#endif
 
 #include <sstream>
 
@@ -23,6 +23,9 @@ namespace bp = boost::process;
 
 namespace llm
 {
+namespace asio = boost::asio;
+namespace bp = boost::process::v2;
+
 cli_clientt::cli_clientt(configt config) : clientt(std::move(config))
 {
   if (cfg.executable.empty())
@@ -39,36 +42,60 @@ std::string cli_clientt::complete(const std::vector<message_t> &messages)
     prompt << m.role << ": " << m.content << "\n";
   prompt << "assistant: ";
 
-  bp::ipstream out;
-  bp::opstream in;
+  asio::io_context ctx;
+  asio::writable_pipe in(ctx);
+  asio::readable_pipe out(ctx);
 
-  std::vector<std::string> args = cfg.extra_args;
-  bp::child c(
-    bp::search_path(cfg.executable),
-    args,
-    bp::std_in<in, bp::std_out> out,
-    bp::std_err > bp::null);
-
-  in << prompt.str();
-  in.flush();
-  in.pipe().close();
-
-  std::string result;
-  std::string line;
-  while (std::getline(out, line))
+  const auto exe = bp::environment::find_executable(cfg.executable);
+  if (exe.empty())
   {
-    if (!result.empty())
-      result.push_back('\n');
-    result += line;
-  }
-
-  c.wait();
-  if (c.exit_code() != 0)
-  {
-    log_error("CLI LLM process exited with {}", c.exit_code());
+    log_error("CLI LLM executable '{}' not found in PATH", cfg.executable);
     abort();
   }
 
+  bp::process child(
+    ctx, exe, cfg.extra_args, bp::process_stdio{in, out, nullptr});
+
+  const std::string input = prompt.str();
+  asio::async_write(
+    in, asio::buffer(input), [&in](boost::system::error_code, std::size_t) {
+      in.close();
+    });
+
+  std::string result;
+  asio::async_read(
+    out, asio::dynamic_buffer(result), [](boost::system::error_code, size_t) {
+    });
+
+  int exit_code = 0;
+  bool timed_out = false;
+  asio::steady_timer timer(ctx, std::chrono::milliseconds(cfg.timeout_ms));
+  timer.async_wait([&](boost::system::error_code ec) {
+    if (ec)
+      return;
+    timed_out = true;
+    child.terminate();
+  });
+  child.async_wait([&](boost::system::error_code, int code) {
+    exit_code = code;
+    timer.cancel();
+  });
+
+  ctx.run();
+
+  if (timed_out)
+  {
+    log_error("CLI LLM process timed out after {} ms", cfg.timeout_ms);
+    abort();
+  }
+  if (exit_code != 0)
+  {
+    log_error("CLI LLM process exited with {}", exit_code);
+    abort();
+  }
+
+  while (!result.empty() && result.back() == '\n')
+    result.pop_back();
   return result;
 }
 

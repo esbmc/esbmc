@@ -1,7 +1,6 @@
 #include <llm/llm_client.h>
 
 #include <llm/cli_llm_client.h>
-#include <llm/openai_llm_client.h>
 
 #include <util/message/message.h>
 
@@ -30,13 +29,8 @@ std::unique_ptr<clientt> make_client(configt config)
   {
   case backendt::stub:
     return std::make_unique<stub_clientt>(std::move(config));
-  case backendt::openai:
-    return std::make_unique<openai_clientt>(std::move(config));
   case backendt::cli:
     return std::make_unique<cli_clientt>(std::move(config));
-  case backendt::selfhosted:
-    log_error("self-hosted LLM backend is not implemented");
-    abort();
   }
 
   log_error("unknown LLM backend");

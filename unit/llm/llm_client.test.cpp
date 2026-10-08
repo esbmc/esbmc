@@ -24,6 +24,17 @@ TEST_CASE("stub backend echoes fixed model and message count", "[llm]")
   REQUIRE(got == "[unit-test-model] got 2 message(s)");
 }
 
+TEST_CASE("cli backend returns the process output", "[llm]")
+{
+  llm::configt cfg;
+  cfg.backend = llm::backendt::cli;
+  cfg.executable = "cat";
+
+  auto client = llm::make_client(cfg);
+  REQUIRE(
+    client->complete({{"user", "Hello."}}) == "user: Hello.\nassistant: ");
+}
+
 TEST_CASE("factory picks backend by enum", "[llm]")
 {
   llm::configt cfg;

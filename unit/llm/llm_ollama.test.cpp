@@ -37,7 +37,7 @@ std::string expr_to_prompt(const expr2tc &expr)
 // Quantization: Q4_K_M, parameter size: 3.1B.
 TEST_CASE(
   "ollama qwen2.5-coder:3b-instruct simplifies 1+1",
-  "[llm][ollama][manual]")
+  "[.manual][llm][ollama]")
 {
   config.ansi_c.set_data_model(configt::LP64);
 

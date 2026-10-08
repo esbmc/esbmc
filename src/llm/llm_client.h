@@ -15,9 +15,7 @@ struct message_t
 enum class backendt
 {
   stub,
-  openai,
-  cli,
-  selfhosted
+  cli
 };
 
 struct configt
@@ -30,7 +28,7 @@ struct configt
   unsigned max_tokens = 1024;
   unsigned timeout_ms = 30000;
 
-  // For self-hosted and CLI backends.
+  // For the CLI backend.
   std::string executable;
   std::vector<std::string> extra_args;
 };
