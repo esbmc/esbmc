@@ -1,0 +1,5 @@
+CORE
+cbmc_kani_union_padding_fail.goto
+--binary --function _RNvCsis2nlepjVpV_14union_pad_fail7harness --ignore-property-class reachability_check --ignore-property-class cover --no-slice
+^VERIFICATION FAILED$
+assertion failed: unsafe { small.word } == 5$
