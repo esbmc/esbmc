@@ -879,6 +879,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`docs/agents/subagents/esbmc-verifier.md` bans pairing it with reachability checks, gate G2). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
+| **R111** | **High (false SUCCESSFUL, false FAILED and no verdict, default configuration)** — R88's residual, §15 M9 (R111); **FIXED**, same entry | **An integer `op=` a floating operand ran as integer arithmetic.** `remove_assignment` chose `ieee_<op>` from the assignment's type, which is E1's, so `int i; i /= 3.5;` built an integer `div2t` over two doubles and Z3 rejected the sort. `+=`, `-=` and `*=` reached the solver as `add2t`/`sub2t`/`mul2t` on doubles, which Z3's operator overloads turn into round-to-nearest `fp.add`/`fp.sub`/`fp.mul`, ignoring the program's rounding mode: under `FE_UPWARD`, `long long x = 1LL << 53; x += 1.0;` gave `2^53` instead of `2^53 + 2`. | `goto_convertt::remove_assignment`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc/compound_assign_float_rhs{,_fail}` | — | **Fixed**: the operation is floating-point when E1 or E2 is. |
 | **R110** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R88's residual, §15 M9 (R110); **FIXED**, same entry | **A `__sync_*` call on an unsigned char or short returned a signed value.** Clang rewrites `__sync_fetch_and_add(&c, 1)` to the sized `__sync_fetch_and_add_1`, declared `char (volatile char *, char, ...)`, and gives the call the type `unsigned char`. The converter typed the call from the callee's declared return type, so the result went through a `char` temporary: with `c = 200`, `int k = __sync_fetch_and_add(&c, 1); assert(k < 128);` was SUCCESSFUL. | `CallExprClass`, `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/sync_unsigned_result{,_fail}` | — | **Fixed**: a call to a builtin with custom type checking takes the call's type. |
 | **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died with the full-expression.** `convert_decl_initializer` destroys every temporary of a non-reference declaration's initializer after the assignment, so `R x{M(1)};` ran `~M` before the next statement, although [class.temporary]/6 extends the temporary to the lifetime of `x`. A C++20 parenthesised `R y(M(1))` is not extended and lowers to the same GOTO. | `goto_convertt::convert_decl_initializer`, `goto_convert.cpp`; `CXXParenListInitExprClass`, `clang_c_convert.cpp` | — | **Fixed**: the entries of a temporary whose address is an operand of the declared aggregate, at any nesting depth, stay on the destructor stack until scope exit; the parenthesised form casts that address so it is not matched. |
 
@@ -11169,6 +11170,33 @@ FAILED, and a partial copy into a floating-point object takes the same loop.
 The same battery found assertions that hold natively reported violated after
 `qsort`, `bsearch`, `snprintf`, `sprintf`, `sscanf`, `cbrt`, `ilogb` and
 `longjmp`, not yet reduced or checked against existing notes.
+
+---
+
+### M9 (R111) — 2026-10-04, the integer division of two doubles
+
+R88 listed a Z3 sort error on `int i = 10; i /= 3.5;`. C11 6.5.16.2p3 runs
+`E1 op= E2` in the type of `E1 op (E2)`, here `double`, and the C frontend
+records that computation type and casts E2 to it. `remove_assignment` then
+chose between `/` and `ieee_div` from the side effect's own type, which is
+E1's `int`, so it built an integer division over two doubles. The same choice
+made `+=`, `-=` and `*=` plain `add2t`, `sub2t` and `mul2t` on doubles. Z3's
+C++ operators turn those into `fp.add`, `fp.sub` and `fp.mul` with
+round-to-nearest, so they gave a value, but not under the program's rounding
+mode: with `fesetround(FE_UPWARD)`, `long long x = 1LL << 53; x += 1.0;`
+leaves `2^53` on master and `2^53 + 2` natively. `x = x + 1.0` was already
+right.
+
+The operation is now floating-point when E1 or E2 is.
+
+`regression/esbmc/compound_assign_float_rhs` (`d /= 2.5` over a bounded
+nondet `int`, and the upward-rounded `+=`) stops at the sort error on master
+and is SUCCESSFUL here; `compound_assign_float_rhs_fail`
+(`assert(x == (1LL << 53))`) is SUCCESSFUL on master and FAILED here, under
+the default solver and `--z3`. The 173 regression tests whose sources use a
+compound assignment and a floating type or literal, and the `floats` and
+`floats-regression` suites, keep their verdicts against master (Z3; Bitwuzla
+was not built).
 
 ---
 
