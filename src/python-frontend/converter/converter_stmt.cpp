@@ -2639,33 +2639,6 @@ bool python_converter::is_numpy_readonly_view_arg(
   return false;
 }
 
-void python_converter::reject_unknown_numpy_view_call(
-  const nlohmann::json &node)
-{
-  if (
-    !node.is_object() || node.value("_type", "") != "Call" ||
-    !node.contains("func") || !node["func"].is_object() ||
-    !node.contains("args") || !node["args"].is_array())
-    return;
-
-  if (node["func"].value("_type", "") != "Name")
-    return;
-
-  const std::string func_name = node["func"].value("id", "");
-  if (
-    func_name == "len" || func_name == "bool" || func_name == "int" ||
-    func_name == "float")
-    return;
-
-  for (const auto &arg : node["args"])
-  {
-    if (contains_tracked_numpy_view_name(arg))
-      throw std::runtime_error(
-        "TypeError: passing a copied numpy view to an unknown function is not "
-        "supported");
-  }
-}
-
 void python_converter::reject_numpy_view_identity_query(
   const nlohmann::json &node)
 {
@@ -3215,15 +3188,11 @@ void python_converter::record_numpy_view_copy(
     auto pointer_view = numpy_pointer_view_info_.find(lhs_id);
     pointer_view != numpy_pointer_view_info_.end())
   {
-    // The view builders decline a target that is already a view, so this
-    // statement's value is a copy while the entry still describes the old
-    // view's shape and strides. Inside a branch the entry may belong to the
-    // other path (view_branch_registration_conflict_knownbug), so only an
-    // unconditional rebind is rejected.
-    if (!numpy_result_is_view_ && block_nesting_ == function_body_depth_ + 1)
-      throw std::runtime_error(
-        "TypeError: rebinding a numpy view name to another view is not "
-        "supported");
+    // The view builders decline a target that is already a view unless the
+    // new view has the same layout and storage, so this statement's value is
+    // a copy while the entry still describes the old view.
+    if (!numpy_result_is_view_)
+      reject_numpy_view_rebind();
     // A pointer view aliases its source through the pointer itself, so it is
     // not a copy to mirror writes into; the source is kept to detach it when
     // the source name is rebound.
@@ -3300,39 +3269,31 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   return view_ids;
 }
 
-void python_converter::detach_numpy_pointer_views_of(
-  const std::string &rebound_id,
+void python_converter::detach_numpy_pointer_view(
+  const std::string &view_id,
   const locationt &location,
   codet &target_block)
 {
-  // numpy_view_copy_sources_ is mutated below (erase), so collect the
-  // matching keys first rather than erasing mid-iteration.
-  for (const std::string &view_id : numpy_views_of(rebound_id))
-  {
-    auto info_it = numpy_pointer_view_info_.find(view_id);
-    if (info_it == numpy_pointer_view_info_.end())
-      continue; // a plain copied view (etapa 1); already independent
+  const auto info_it = numpy_pointer_view_info_.find(view_id);
+  symbolt *view_symbol = symbol_table_.find_symbol(view_id);
+  if (info_it == numpy_pointer_view_info_.end() || !view_symbol)
+    return;
 
-    symbolt *view_symbol = symbol_table_.find_symbol(view_id);
-    if (!view_symbol)
-      continue;
+  // The view's own DECL was already emitted with pointer_typet at its
+  // creation point; retyping the symbol table entry now would desync it
+  // from that DECL. Keep the declared type and just repoint the pointer
+  // *value* at a fresh, independent snapshot instead.
+  info_it->second.source_id =
+    info_it->second.is_symbolic()
+      ? snapshot_symbolic_numpy_view(
+          symbol_expr(*view_symbol), info_it->second, location, target_block)
+      : snapshot_constant_numpy_view(
+          *view_symbol, info_it->second, location, target_block);
 
-    // The view's own DECL was already emitted with pointer_typet at its
-    // creation point; retyping the symbol table entry now would desync it
-    // from that DECL. Keep the declared type and just repoint the pointer
-    // *value* at a fresh, independent snapshot instead.
-    info_it->second.source_id =
-      info_it->second.is_symbolic()
-        ? snapshot_symbolic_numpy_view(
-            symbol_expr(*view_symbol), info_it->second, location, target_block)
-        : snapshot_constant_numpy_view(
-            *view_symbol, info_it->second, location, target_block);
-
-    // The view no longer aliases rebound_id's storage; drop the source
-    // link so a later write to the (new) rebound_id array is not held
-    // responsible for a view it can no longer affect.
-    numpy_view_copy_sources_.erase(view_id);
-  }
+  // The view no longer aliases the rebound storage; drop the source link so
+  // a later write to the (new) rebound array is not held responsible for a
+  // view it can no longer affect.
+  numpy_view_copy_sources_.erase(view_id);
 }
 
 // What a constant-shape view reads, as a shape and per-axis element strides
@@ -3692,6 +3653,8 @@ bool python_converter::update_numpy_array_binding_from_name(
     return true;
   }
 
+  if (bind_numpy_pointer_view_alias(lhs, lhs_id, rhs_id))
+    return true;
   if (numpy_array_symbols_.count(rhs_id) == 0)
     return false;
 
@@ -5749,7 +5712,7 @@ void python_converter::get_var_assign(
   if (ast_node.contains("value") && ast_node["value"].is_object())
   {
     reject_numpy_view_identity_query(ast_node["value"]);
-    reject_unknown_numpy_view_call(ast_node["value"]);
+    track_numpy_view_call_escape(ast_node["value"]);
   }
 
   // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
@@ -7955,8 +7918,10 @@ void python_converter::get_return_statements(
   if (
     is_user_defined_function && returns_name &&
     contains_tracked_numpy_view_name(ast_node["value"]))
-    throw std::runtime_error(
-      "TypeError: returning a copied numpy view is not supported");
+  {
+    reject_or_defer_numpy_view_return(ast_node, target_block);
+    return;
+  }
   const locationt return_location = get_location_from_decl(ast_node);
   const std::string return_file = return_location.get_file().as_string();
   if (
@@ -7987,8 +7952,8 @@ void python_converter::get_return_statements(
       }
       if (root_is_tracked_numpy || root_is_numpy_param)
       {
-        throw std::runtime_error(
-          "TypeError: returning a copied numpy view is not supported");
+        reject_or_defer_numpy_view_return(ast_node, target_block);
+        return;
       }
     }
   }
@@ -8277,8 +8242,12 @@ exprt python_converter::get_block(
   current_block = &block;
 
   // Iterate over block statements
-  for (auto &element : ast_block)
+  for (auto &raw_element : ast_block)
   {
+    nlohmann::json rewritten_element;
+    const nlohmann::json &element =
+      resolve_numpy_view_containers(raw_element, rewritten_element);
+    check_numpy_view_statement(element);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)
@@ -8286,7 +8255,7 @@ exprt python_converter::get_block(
     case StatementType::VARIABLE_ASSIGN:
     {
       // Add an assignment to the block
-      get_var_assign(element, block);
+      get_folded_var_assign(element, block);
       break;
     }
     case StatementType::IF_STATEMENT:
@@ -8319,7 +8288,7 @@ exprt python_converter::get_block(
       // saved state is empty, so this matches the previous behaviour.
       std::vector<std::string> saved_globals = global_declarations;
       std::vector<std::string> saved_loads = local_loads;
-      get_function_definition(element);
+      get_unfolded_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
 
@@ -8517,7 +8486,7 @@ exprt python_converter::get_block(
       // Function calls are handled here
       reject_numpy_view_identity_query(element["value"]);
       reject_numpy_view_mutating_method_call(element["value"]);
-      reject_unknown_numpy_view_call(element["value"]);
+      track_numpy_view_call_escape(element["value"]);
 
       exprt empty;
       exprt expr = get_expr(element["value"]);
