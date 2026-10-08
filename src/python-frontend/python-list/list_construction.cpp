@@ -449,6 +449,14 @@ exprt python_list::handle_symbolic_range(
   const bool has_start = range_args.size() == 2;
   exprt stop = converter.get_expr(range_args[has_start ? 1 : 0]);
   const typet elem_type = stop.type();
+
+  // The count arithmetic below needs integer operands. When type inference
+  // could not give the bound an integer type (e.g. the argument came through
+  // a function whose return type stayed unresolved, github_4525), fall back
+  // to the empty list this path produced before rather than building a
+  // malformed subtraction.
+  if (!elem_type.is_signedbv() && !elem_type.is_unsignedbv())
+    return builder.get();
   exprt start = has_start
                   ? build_typecast(converter.get_expr(range_args[0]), elem_type)
                   : gen_zero(elem_type);
