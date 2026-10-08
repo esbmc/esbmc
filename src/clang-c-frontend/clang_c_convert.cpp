@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
@@ -4223,6 +4224,24 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   log_error("{}", oss.str());
   return true;
 }
+
+/// `__builtin_copysign` and the other `__builtin_` spellings of a <math.h>
+/// function have no body; the plain name has an operational model. Those
+/// that clang_c_adjust lowers by their own spelling keep it.
+bool clang_c_convertert::is_unlowered_math_builtin(
+  const std::string &name) const
+{
+  llvm::StringRef lib_name(name);
+  if (
+    is_name_matched_builtin(name) || compare_unscore_builtin(name, "nan") ||
+    !lib_name.consume_front("__builtin_"))
+    return false;
+
+  unsigned lib_id = ASTContext->Idents.get(lib_name).getBuiltinID();
+  return lib_id && llvm::StringRef(
+                     ASTContext->BuiltinInfo.getHeaderName(lib_id)) == "math.h";
+}
+
 void clang_c_convertert::rewrite_builtin_ref(
   const clang::Decl &d,
   std::string &name,
@@ -4246,8 +4265,10 @@ void clang_c_convertert::rewrite_builtin_ref(
     unsigned builtin_id = fd->getBuiltinID();
     if (
       builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
-      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
-        builtins_to_rewrite.end())
+      (std::find(
+         builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+         builtins_to_rewrite.end() ||
+       is_unlowered_math_builtin(name)))
     {
       boost::replace_all(name, "__builtin_", "");
       boost::replace_all(id, "__builtin_", "");

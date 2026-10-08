@@ -2237,6 +2237,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc/builtin_libm_call
+regression/esbmc/builtin_libm_call_fail
 regression/esbmc/compound_assign_float_rhs
 regression/esbmc/compound_assign_float_rhs_fail
 regression/esbmc-unix/race_unlock_then_join
