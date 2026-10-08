@@ -130,6 +130,47 @@ require_plain_coil(bool negated, ContactEdge edge, const std::string &var)
       "coil (var=" + var + ") with a negated or edge attribute", 2);
 }
 
+// std::stable_sort needs a strict weak ordering. The sink order compares
+// coordinates within a tolerance, which is not transitive when rows lie less
+// than 10 apart in a chain, so the sort would be undefined. Such a layout has
+// no defined sink order and is refused.
+template <typename Less>
+static void require_total_order(const std::vector<int> &items, Less before)
+{
+  for (int a : items)
+    for (int b : items)
+      for (int c : items)
+      {
+        const bool less_chain = before(a, b) && before(b, c) && !before(a, c);
+        const bool equal_chain = !before(a, b) && !before(b, a) &&
+                                 !before(b, c) && !before(c, b) &&
+                                 (before(a, c) || before(c, a));
+        if (less_chain || equal_chain)
+          throw UnsupportedConstructError(
+            "coils in rows less than 10 units apart in a chain", 2);
+      }
+}
+
+// Appends the variables the resolver invented, refusing one that a declared
+// variable already uses.
+static void append_synthesized(
+  std::vector<VarDecl> &variables,
+  std::vector<VarDecl> &synthesized)
+{
+  std::set<std::string> declared;
+  for (const auto &v : variables)
+    declared.insert(v.name);
+  for (auto &v : synthesized)
+  {
+    if (declared.count(v.name))
+      throw UnsupportedConstructError(
+        "variable " + v.name + " clashes with a name the resolver generates",
+        2);
+    variables.push_back(std::move(v));
+  }
+  synthesized.clear();
+}
+
 static FBKind fb_kind_of(const std::string &s);
 static void check_known_pins(
   const pugi::xml_node &block,
@@ -396,6 +437,18 @@ static void require_modeled_source(const GNode &g)
   if (g.tag != "contact" && g.tag != "block" && g.tag != "Block")
     throw UnsupportedConstructError(
       g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
+}
+
+static std::vector<int>
+ids_in_document_order(const std::unordered_map<int, GNode> &nodes)
+{
+  std::vector<int> ids;
+  for (const auto &entry : nodes)
+    ids.push_back(entry.first);
+  std::sort(ids.begin(), ids.end(), [&](int a, int b) {
+    return nodes.at(a).document_order < nodes.at(b).document_order;
+  });
+  return ids;
 }
 
 static const std::string &label(const GNode &g)
@@ -875,9 +928,13 @@ static bool parse_graphical_ld(
     if (g.tag == "leftPowerRail")
       left_rails.push_back(lid);
 
+  // `nodes` is unordered, so the predecessor order and the order of the blocks
+  // no sink consumes would otherwise depend on hashing.
+  const std::vector<int> by_document = ids_in_document_order(nodes);
+
   std::map<int, std::vector<int>> preds;
-  for (auto &[lid, g] : nodes)
-    for (int succ : g.feeds)
+  for (int lid : by_document)
+    for (int succ : nodes.at(lid).feeds)
       preds[succ].push_back(lid);
 
   std::set<int> rail_reaches;
@@ -1064,12 +1121,15 @@ static bool parse_graphical_ld(
   // network into a diagnostic rather than a stack overflow.
   ensure_pf = [&](int lid) {
     const GNode &g = nodes.at(lid);
-    if (g.tag == "leftPowerRail" || !pf_emitted.insert(lid).second)
+    if (g.tag == "leftPowerRail")
       return;
-    if (!pf_in_progress.insert(lid).second)
+    if (pf_in_progress.count(lid))
       throw LdParseError(
         "graphical LD: power flow into localId " + std::to_string(lid) +
         " is cyclic");
+    if (!pf_emitted.insert(lid).second)
+      return;
+    pf_in_progress.insert(lid);
 
     for (int p : live_preds(lid))
       ensure_pf(p);
@@ -1244,10 +1304,12 @@ static bool parse_graphical_ld(
   std::sort(coils.begin(), coils.end(), [&](int a, int b) {
     return nodes.at(a).document_order < nodes.at(b).document_order;
   });
-  std::stable_sort(coils.begin(), coils.end(), [&](int a, int b) {
+  const auto coil_before = [&](int a, int b) {
     const GNode &ga = nodes.at(a), &gb = nodes.at(b);
     return std::abs(ga.y - gb.y) < 10 ? ga.x < gb.x : ga.y < gb.y;
-  });
+  };
+  require_total_order(coils, coil_before);
+  std::stable_sort(coils.begin(), coils.end(), coil_before);
 
   // Step 7: emit the coils. Evaluation is sequential, as in the ST Beremiz
   // generates for MATIEC: each coil re-reads its contacts after every earlier
@@ -1270,8 +1332,8 @@ static bool parse_graphical_ld(
   // every scan, so they are emitted even when no coil consumes them, after
   // every coil and reading the values the coils left, as Beremiz orders them.
   pf_emitted.clear();
-  for (auto &[lid, g] : nodes)
-    if (g.tag == "block" || g.tag == "Block")
+  for (int lid : by_document)
+    if (nodes.at(lid).tag == "block" || nodes.at(lid).tag == "Block")
       emit_block(lid);
 
   return true;
@@ -1610,9 +1672,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // Declare the pins and path accumulators the graphical resolver invented.
   // They are already marked as driven, so the inference below leaves them
   // alone rather than havocking them as physical inputs.
-  for (auto &v : synth_vars_)
-    ast.variables.push_back(std::move(v));
-  synth_vars_.clear();
+  append_synthesized(ast.variables, synth_vars_);
 
   // Heuristic I/O inference for graphical LD programs without hardware
   // addresses (%IX/%QX). Variables that appear only as contacts across all
