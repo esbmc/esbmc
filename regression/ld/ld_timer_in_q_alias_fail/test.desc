@@ -1,0 +1,4 @@
+CORE
+timers.ld
+--ld-props props.yaml
+^ERROR: .*'?.*IN and Q ports must be distinct variables
