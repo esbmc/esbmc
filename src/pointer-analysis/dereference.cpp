@@ -761,6 +761,55 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   return value;
 }
 
+static bool is_vla(const array_type2t &arr)
+{
+  return !is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size);
+}
+
+// Two declarators of `int (*)[n]` bind their own size symbols, yet the types
+// are compatible: an array of non-constant size is compatible with any array
+// of the same element type (C11 6.7.6.2p6).
+static bool same_type_ignoring_vla_sizes(const type2tc &a, const type2tc &b)
+{
+  if (a == b)
+    return true;
+
+  if (is_pointer_type(a) && is_pointer_type(b))
+    return same_type_ignoring_vla_sizes(
+      to_pointer_type(a).subtype, to_pointer_type(b).subtype);
+
+  if (!is_array_type(a) || !is_array_type(b))
+    return false;
+
+  const array_type2t &arr_a = to_array_type(a);
+  const array_type2t &arr_b = to_array_type(b);
+  const bool same_size = arr_a.size_is_infinite == arr_b.size_is_infinite &&
+                         arr_a.array_size == arr_b.array_size;
+  return (same_size || is_vla(arr_a) || is_vla(arr_b)) &&
+         same_type_ignoring_vla_sizes(arr_a.subtype, arr_b.subtype);
+}
+
+static bool same_pointer_ignoring_vla_sizes(const type2tc &a, const type2tc &b)
+{
+  return is_pointer_type(a) && is_pointer_type(b) &&
+         same_type_ignoring_vla_sizes(a, b);
+}
+
+// dt is a prefix of ot iff every member of dt matches the leading members of
+// ot by both type and name.
+static bool is_struct_prefix(const struct_type2t &dt, const struct_type2t &ot)
+{
+  if (ot.members.size() < dt.members.size())
+    return false;
+
+  for (size_t i = 0; i < dt.members.size(); ++i)
+    if (
+      dt.members[i] != ot.members[i] ||
+      dt.member_names[i] != ot.member_names[i])
+      return false;
+  return true;
+}
+
 bool dereferencet::dereference_type_compare(
   expr2tc &object,
   const type2tc &dereference_type) const
@@ -770,6 +819,12 @@ bool dereferencet::dereference_type_compare(
   // Test for simple equality
   if (object->type == dereference_type)
     return true;
+
+  if (same_pointer_ignoring_vla_sizes(object_type, dereference_type))
+  {
+    object = typecast2tc(dereference_type, object);
+    return true;
+  }
 
   if (
     same_function_pointer_ignoring_argument_names(
@@ -798,18 +853,7 @@ bool dereferencet::dereference_type_compare(
 
   if (is_struct_type(ot_base) && is_struct_type(dt_base))
   {
-    // Inline irep2 prefix check: dt_base is a prefix of ot_base iff every
-    // member of dt_base matches the leading members of ot_base by both
-    // type and name.
-    const struct_type2t &dt_struct = to_struct_type(dt_base);
-    const struct_type2t &ot_struct = to_struct_type(ot_base);
-    bool is_prefix = ot_struct.members.size() >= dt_struct.members.size();
-    for (size_t i = 0; is_prefix && i < dt_struct.members.size(); ++i)
-      if (
-        dt_struct.members[i] != ot_struct.members[i] ||
-        dt_struct.member_names[i] != ot_struct.member_names[i])
-        is_prefix = false;
-    if (is_prefix)
+    if (is_struct_prefix(to_struct_type(dt_base), to_struct_type(ot_base)))
     {
       object = typecast2tc(dereference_type, object);
       return true; // ok, dt is a prefix of ot
@@ -825,7 +869,8 @@ void dereferencet::check_pointer_alignment(
   modet mode,
   const type2tc &type,
   const expr2tc &deref_expr,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &what)
 {
   // Caller has already declared the access is known-unaligned (e.g.
   // member of a __attribute__((packed)) struct accessed through a
@@ -852,6 +897,17 @@ void dereferencet::check_pointer_alignment(
   // Only check alignment for whole-byte-sized accesses (skip bit-fields)
   if (access_size_bits % 8 != 0)
     return;
+
+  /* A packed object's base is free, so its offset alone decides nothing: the
+   * object-aware checks in build_reference_to() claim the whole address. */
+  if (is_object_descriptor2t(what) && is_scalar_type(type))
+  {
+    const expr2tc &object = to_object_descriptor2t(what).object;
+    if (
+      !is_null_object2t(get_base_object(object)) &&
+      object_base_alignment(object) * 8 < access_size_bits)
+      return;
+  }
 
   expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
   simplify(ptr_offset_bits);
@@ -889,7 +945,7 @@ expr2tc dereferencet::build_reference_to(
   pointer_guard = gen_false_expr();
 
   // Perform alignment checking for applicable access patterns
-  check_pointer_alignment(mode, type, deref_expr, guard);
+  check_pointer_alignment(mode, type, deref_expr, guard, what);
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
@@ -1446,6 +1502,16 @@ void dereferencet::construct_from_array(
   // accesses the indexed structure and resolves nested fields.
   if (is_structure_type(arr_subtype))
   {
+    /* Neither bounds_check() nor the member walk claims alignment, and
+     * check_pointer_alignment() assumed an aligned base, which an array of
+     * packed structs does not have (#7707). */
+    if (!mode.unaligned && is_scalar_type(type))
+    {
+      const BigInt access_bits = type_byte_size_bits(type);
+      if (object_base_alignment(value) * 8 < access_bits)
+        check_alignment(access_bits, offset, guard, value);
+    }
+
     value = index2tc(arr_subtype, value, div);
     build_reference_rec(value, mod, type, guard, mode, alignment);
     return;
