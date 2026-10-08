@@ -27,6 +27,10 @@ add_subdirectory(irep2)
 add_subdirectory(solvers)
 add_subdirectory(pointer-analysis)
 
+if(ENABLE_LLM)
+  add_subdirectory(llm)
+endif()
+
 # scripts/irep2/bars.py measures the migration bars that docs/roadmap quotes,
 # so a silent over-count there is the error reading the table cannot catch. Its
 # self-test is python, hence add_test rather than a Catch2 subdirectory (#4715).

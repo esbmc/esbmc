@@ -281,6 +281,28 @@ static void lift_old_over_bound_index(
   expr.swap(element);
 }
 
+static bool is_braced_list(const exprt &e)
+{
+  return e.id() == "struct" || e.id() == "array" || e.id() == "constant";
+}
+
+/// x=f(...), and a mem-initializer from a braced list, which initialises the
+/// member in place: convert_assign lowers both without removing the rhs first.
+static bool is_assigned_whole(const exprt &assign)
+{
+  const exprt &rhs = assign.op1();
+  return (rhs.id() == "sideeffect" && rhs.statement() == "function_call") ||
+         (assign.op0().get_bool("#member_init") && is_braced_list(rhs));
+}
+
+/// A class temporary initialised from a braced list, whose class elements
+/// remove_temporary_object constructs in place.
+static bool is_braced_temporary(const exprt &e)
+{
+  return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
+         e.operands().size() == 1 && is_braced_list(e.op0());
+}
+
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
 /// cannot be replicated by argument substitution.
 static bool has_non_call_sideeffect(const exprt &e)
@@ -1630,11 +1652,16 @@ void goto_convertt::remove_sideeffects(
 
     const locationt location = expr.location();
 
+    const std::size_t true_size = targets.destructor_stack.size();
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
 
+    const std::size_t false_size = targets.destructor_stack.size();
     goto_programt tmp_false;
     remove_sideeffects(if_expr.false_case(), tmp_false, result_is_used);
+
+    guard_arm_destructors(
+      if_expr.cond(), true_size, false_size, location, dest);
 
     if (result_is_used)
     {
@@ -1756,12 +1783,9 @@ void goto_convertt::remove_sideeffects(
 
     if (statement == "assign")
     {
-      // we do a special treatment for x=f(...)
       assert(expr.operands().size() == 2);
 
-      if (
-        expr.op1().id() == "sideeffect" &&
-        to_side_effect_expr(expr.op1()).get_statement() == "function_call")
+      if (is_assigned_whole(expr))
       {
         remove_sideeffects(expr.op0(), dest);
         exprt lhs = expr.op0();
@@ -1911,7 +1935,8 @@ void goto_convertt::remove_sideeffects(
     }
   }
 
-  remove_operand_sideeffects(expr, dest);
+  if (!is_braced_temporary(expr))
+    remove_operand_sideeffects(expr, dest);
 
   if (expr.id() == "sideeffect")
   {
@@ -2025,6 +2050,52 @@ compound_assign_operator(const irep_idt &statement, bool is_float)
     return "bitxor";
   assert(statement == "assign_bitor");
   return "bitor";
+}
+
+bool goto_convertt::is_destructor_entry(const codet &entry)
+{
+  return entry.get_statement() == "function_call" ||
+         entry.get_statement() == "ifthenelse";
+}
+
+// A temporary materialized in one arm of `c ? a : b` exists only if that arm
+// ran, yet its destructor runs at the end of the full-expression
+// ([class.temporary]/4), so guard it by the arm's condition, saved before
+// either arm can change what it reads.
+void goto_convertt::guard_arm_destructors(
+  exprt &cond,
+  std::size_t true_size,
+  std::size_t false_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  destructor_stackt &stack = targets.destructor_stack;
+  if (std::none_of(stack.begin() + true_size, stack.end(), is_destructor_entry))
+    return;
+
+  const symbolt &flag = new_tmp_symbol(bool_typet());
+  const symbol_exprt flag_expr(flag.id, flag.get_type());
+
+  code_declt decl(flag_expr);
+  decl.location() = location;
+  copy(decl, DECL, dest);
+
+  code_assignt assign(flag_expr, cond);
+  assign.location() = location;
+  copy(assign, ASSIGN, dest);
+
+  for (std::size_t i = true_size; i < stack.size(); i++)
+    if (is_destructor_entry(stack[i]))
+    {
+      code_ifthenelset guarded;
+      guarded.cond() = i < false_size ? exprt(flag_expr) : not_exprt(flag_expr);
+      guarded.then_case() = stack[i];
+      guarded.then_case().location() = location;
+      stack[i] = guarded;
+    }
+
+  stack.insert(stack.begin() + true_size, code_deadt(flag_expr));
+  cond = flag_expr;
 }
 
 void goto_convertt::remove_assignment(
@@ -2599,6 +2670,7 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 
   if (expr.operands().size() == 1)
   {
+    remove_initializer_sideeffects(symbol_expr(new_symbol), expr.op0(), dest);
     codet assignment("assign");
     assignment.reserve_operands(2);
     new_symbol.set_value(expr.op0());
