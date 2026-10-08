@@ -1,0 +1,4 @@
+CORE
+main.c
+--context-bound 1 --no-slice --data-races
+^VERIFICATION SUCCESSFUL$

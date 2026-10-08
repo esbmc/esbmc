@@ -1,0 +1,4 @@
+CORE
+main.c
+--context-bound 1 --data-races-check --smt-during-symex
+^VERIFICATION FAILED$

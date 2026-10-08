@@ -1457,6 +1457,9 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     if (sym.thename == "c:@__ESBMC_alloc")
       current_valid_objects_sym = expr;
 
+    if (sym.thename == "c:@__ESBMC_is_dynamic")
+      cur_dynamic = expr;
+
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr))
       return tuple_api->mk_tuple_symbol(
