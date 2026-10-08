@@ -1,0 +1,5 @@
+CORE
+timer.ld
+--unwind 6 --no-unwinding-assertions
+^ERROR: UnsupportedConstruct\(TON t1 pin PTT, tier=2\)$
+^ERROR: PARSING ERROR$

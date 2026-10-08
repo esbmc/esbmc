@@ -458,6 +458,8 @@ protected:
     const clang::Decl &d,
     std::string &name,
     std::string &id) const;
+
+  bool is_unlowered_math_builtin(const std::string &name) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

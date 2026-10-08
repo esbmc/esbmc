@@ -1,0 +1,4 @@
+CORE
+timer.ld
+--unwind 6 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

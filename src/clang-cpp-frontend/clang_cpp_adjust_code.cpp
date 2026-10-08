@@ -246,9 +246,9 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
     // initialisers instead, and must NOT be fanned out (that would construct
     // every element with element 0's arguments).
     // Static-storage locals (function-local statics, e.g. `static B a[2];`)
-    // are constructed by static_lifetime_init, not from the function body, so
-    // leave their declaration untouched -- expanding here would construct them
-    // a second time on every call.
+    // are constructed once, by static_lifetime_init or by goto_convert's
+    // guarded first-pass initialisation, so leave their declaration untouched
+    // -- expanding here would construct them again on every call.
     const bool is_static_local = code_decl.op0().is_symbol() && [&] {
       const symbolt *s =
         ns.lookup(to_symbol_expr(code_decl.op0()).get_identifier());

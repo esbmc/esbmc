@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-vla-size-check --no-bounds-check
+^VERIFICATION FAILED$
+^  assertion \(unsigned long( int)?\)a == 0$

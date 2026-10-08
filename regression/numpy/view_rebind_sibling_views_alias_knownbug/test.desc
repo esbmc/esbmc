@@ -1,5 +1,0 @@
-KNOWNBUG
-main.py
---incremental-bmc
-^VERIFICATION FAILED$
-line +11 +assertion

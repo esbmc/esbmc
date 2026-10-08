@@ -737,11 +737,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // Handle direct range(...) calls by converting to list
+  // Handle direct range(...) calls by converting to list. A bare range() is
+  // consumed by len() or as a for-iterable, so its backing list only needs
+  // the right size; materialising the elements would add unwinding that a
+  // task with a fixed --unwind cannot afford (regression range36-nondet).
   if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
   {
     const auto &range_args = element["args"];
-    return python_list::build_list_from_range(*this, range_args, element);
+    return python_list::build_list_from_range(
+      *this, range_args, element, /*materialise_elements=*/false);
   }
 
   // Handle direct slice(...) calls by materialising a PySliceObject value.
