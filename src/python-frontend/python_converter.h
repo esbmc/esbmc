@@ -1166,6 +1166,9 @@ private:
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+  exprt range_membership(const exprt &x, const nlohmann::json &element);
+  exprt
+  list_or_range_contains(exprt &lhs, exprt &rhs, const nlohmann::json &element);
 
   /// A PEP 604 union annotation, as the single type this
   /// monomorphic frontend has to represent it with.
