@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    justification: "ST assignment between INT and DINT variables casts to the target type (wraps on narrowing)."

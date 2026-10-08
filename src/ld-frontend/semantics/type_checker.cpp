@@ -36,7 +36,14 @@ void TypeChecker::require_port(
 void TypeChecker::build_var_type_map(const LdAst &ast)
 {
   for (const auto &v : ast.variables)
+  {
+    if (
+      v.kind == VarKind::INT && (v.init_value < -32768 || v.init_value > 32767))
+      throw TypeCheckError(
+        loc_str(v.loc) + ": initial value " + std::to_string(v.init_value) +
+        " of '" + v.name + "' is outside INT");
     var_types_[v.name] = v.kind;
+  }
 }
 
 // -----------------------------------------------------------------------
@@ -75,6 +82,11 @@ void TypeChecker::check_timer_fb(const TimerFBNode &fb)
     throw TypeCheckError(
       loc_str(fb.loc) + ": timer '" + fb.instance_name +
       "' ET port requires TIME/INT/DINT");
+
+  if (et_kind == VarKind::INT && pt_kind != VarKind::INT)
+    throw TypeCheckError(
+      loc_str(fb.loc) + ": timer '" + fb.instance_name +
+      "' ET port is narrower than PT");
 }
 
 void TypeChecker::check_counter_fb(const CounterFBNode &fb)

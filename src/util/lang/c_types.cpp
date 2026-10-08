@@ -303,12 +303,20 @@ BigInt max_object_size()
   return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
 }
 
+// Lowest address smt_memspace.cpp places an object at: the first page is
+// reserved, so a pointer made from a small integer never aliases an object.
+BigInt first_object_address()
+{
+  return 4096;
+}
+
 // Largest object smt_memspace.cpp can lay out at all: it places each object at
-// [start, start + size] over ptraddr_type2, and the sum must not wrap.
+// [start, start + size] over ptraddr_type2, start at or above
+// first_object_address(), and the sum must not wrap.
 BigInt max_layable_size()
 {
   return BigInt::power2m1(ptraddr_type2()->get_width()) -
-         config.ansi_c.max_alignment();
+         first_object_address() - config.ansi_c.max_alignment();
 }
 
 type2tc bitsize_type2()
