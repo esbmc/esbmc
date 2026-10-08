@@ -31,13 +31,25 @@ A **variable store** σ ∈ Σ is a total map from variable names to values,
 respecting the declared type of each variable (§2). We write σ[v ↦ x] for the
 store that agrees with σ everywhere except at v, where it takes the value x.
 
-One derived store is carried alongside σ:
+Two derived stores are carried alongside σ, written together as π = (π_e, π_f):
 
-- **π ∈ Π** — the *edge store*, mapping each operand sensed by a
-  transition-sensing contact to its value at the previous scan boundary.
+- **π_e** — the *edge store*, mapping each operand sensed by a
+  transition-sensing contact to its value at the previous scan boundary;
+- **π_f** — the *function-block store*, mapping each timer or counter
+  *instance* i to the value its enable pin (IN, CU or CD) had at the
+  instance's own step in the previous scan. It is read and written only by
+  the step of instance i, so two blocks fed by one variable, or a block and an
+  edge contact on the same variable, keep separate entries.
 
-A full configuration is the pair ⟨σ, π⟩. Where π is not mentioned in a rule it
-is threaded through unchanged.
+A full configuration is ⟨σ, π⟩. The rules of §5 write π(IN), π(CU) and π(CD) for
+π_f(i) of the instance whose step is being taken. Where π is not mentioned in a
+rule it is threaded through unchanged.
+
+The **initial configuration** gives every variable its declared initial value
+(zero, or ff, when none is declared) and maps every entry of π_e and π_f to ff.
+Under `--ld-closed-world` each variable that the program does not own and that
+another task may write starts instead at an arbitrary value of its type, an
+initial input choice.
 
 ### 1.2 Boolean projection
 
@@ -56,7 +68,7 @@ Three judgement forms are used.
 | Form | Reads |
 |---|---|
 | ⟨e, σ, π⟩ ⇓ b | element e evaluated in the given state yields power flow b ∈ B |
-| ⟨e, σ, π⟩ → σ' | element e transforms the store to σ' |
+| ⟨e, σ, π⟩ → ⟨σ', π_f'⟩ | element e transforms the store to σ' and the function-block store to π_f' (which differs from π_f only at the instance of e, when e is a timer or counter) |
 | ⟨P, σ, π⟩ ⟹ ⟨σ', π'⟩ | one full scan cycle of program P |
 
 Power flow is threaded left to right along a rung: an element's *input* power
@@ -114,9 +126,9 @@ A program is well-typed when every rule below is derivable. The type checker
 | declared type | BOOL, INT, DINT, TIME, REAL or LREAL; UINT, SINT, LINT and WORD are refused (`UnsupportedConstruct`), since no 16-bit unsigned, 8-bit or 64-bit kind is modeled |
 | initial value of an INT | within −32768 … 32767; an initial value outside it is rejected |
 | coil on v | v declared and not an input (§3.1) |
-| TON/TOF/TP | IN : BOOL; PT, ET : INT, DINT or TIME, with ET : INT only if PT : INT; Q : BOOL |
-| CTU/CTD | CU/CD/R/LD : BOOL; PV, CV : INT or DINT; Q : BOOL |
-| ADD/SUB/MUL/DIV | IN1, IN2, OUT numeric; the operands need not have one type (§5.6) |
+| TON/TOF/TP | IN : BOOL; PT, ET : INT, DINT or TIME, with ET : INT only if PT : INT; Q : BOOL; IN, Q distinct variables and PT, ET distinct variables |
+| CTU/CTD | CU/CD/R/LD : BOOL; PV, CV : INT or DINT, with CV : INT only if PV : INT, and PV, CV distinct variables; Q : BOOL |
+| ADD/SUB/MUL/DIV | IN1, IN2, OUT : INT or DINT; the operands need not have one type (§5.6) |
 
 `INT` is a signed 16-bit integer, as in IEC 61131-3 and in MATIEC (`IEC_INT`
 is `int16_t`); `DINT` and `TIME` are signed 32-bit. `TIME` is represented as a
@@ -137,11 +149,11 @@ R₁ … R_n (§6 explains how a graphical network is put into that form).
 One scan cycle is:
 
 ```
-                    σ₁ = read_inputs(σ)
-      ⟨R₁, σ₁, π⟩ → σ₂    …    ⟨R_n, σ_n, π⟩ → σ_{n+1}
-                    π' = latch(σ_{n+1})
-      ───────────────────────────────────────────────────────  [SCAN]
-                    ⟨P, σ, π⟩ ⟹ ⟨σ_{n+1}, π'⟩
+                         σ₁ = read_inputs(σ)
+      ⟨R₁, σ₁, π⟩ → ⟨σ₂, π_f²⟩    …    ⟨R_n, σ_n, (π_e, π_f^n)⟩ → ⟨σ_{n+1}, π_f^{n+1}⟩
+                         π_e' = latch(σ_{n+1})
+      ───────────────────────────────────────────────────────────────────  [SCAN]
+                    ⟨P, σ, π⟩ ⟹ ⟨σ_{n+1}, (π_e', π_f^{n+1})⟩
 ```
 
 where
@@ -153,13 +165,16 @@ where
   Every variable the program does not own and that another task may write
   (an externally written variable) is read the same way, unless
   `--ld-closed-world` assumes nothing else writes it.
-- `latch(σ)` binds each edge-sensed operand v to ⌊σ(v)⌋, at the end of the
-  scan and after every rung, so that all contacts sensing v within one scan
+- `latch(σ)` binds each edge-sensed operand v to ⌊σ(v)⌋, once, at the end of the
+  scan after the last rung, so that all contacts sensing v within one scan
   compare against the same previous-scan sample regardless of rung order.
 
-The scan relation is total and deterministic in σ given the input choice: for
-each scan there is exactly one σ_{n+1}. Non-determinism enters only through
-`read_inputs`.
+The scan relation is deterministic in σ given the input choice: for
+each scan there is at most one σ_{n+1}, and exactly one unless an integer
+operation overflows its type or divides by zero (§5.6), where the store is
+undefined and the verifier reports the violation instead of simulating it.
+Non-determinism enters only through `read_inputs` and, under
+`--ld-closed-world`, the initial choice.
 
 The execution model is a **single periodic task**. Programs declaring
 interrupt tasks or multiple tasks are rejected with
@@ -176,16 +191,17 @@ A rung is a sequence of elements e₁ … e_m evaluated left to right, starting
 from the left power rail, which always supplies power:
 
 ```
-   p₀ = tt      ⟨e_i, σ_i, π⟩ ⇓ p_i    ⟨e_i, σ_i, π⟩ → σ_{i+1}
-   ─────────────────────────────────────────────────────────────────  [RUNG]
-                     ⟨e₁ … e_m, σ₁, π⟩ → σ_{m+1}
+   p_k = ⋀ { cond(e_i)(σ_k, π_e) : i < k, e_i a contact }      (the empty conjunction is tt)
+   ⟨e_k, σ_k, π_f^k⟩ → ⟨σ_{k+1}, π_f^{k+1}⟩    for each element e_k, a coil consuming p_k
+   ─────────────────────────────────────────────────────────────────────────  [RUNG]
+                  ⟨e₁ … e_m, σ₁, π_f^1⟩ → ⟨σ_{m+1}, π_f^{m+1}⟩
 ```
 
-Contacts contribute to p and leave σ unchanged; coils consume p and update σ.
-The power a coil consumes is the conjunction of the rung's earlier contacts
-**evaluated in the store σ_k current when that coil runs**, not the value p_k
-that the contacts read at their own position: a coil that follows a reset of
-a variable a contact read sees the reset. In
+Here cond(e)(σ, π_e) is the contact's value of §4.1 and §4.2 (static, or edge on the operand,
+then the contact's polarity); contacts leave σ and π_f unchanged, and function blocks leave p alone and
+take their pins from σ. The power a coil consumes is the conjunction of the rung's earlier contacts
+**evaluated in the store σ_k current when that coil runs**, not the value that the contacts read at their own
+position: a coil that follows a reset of a variable a contact read sees the reset. In
 `go -(S)- a`, `a -(R)- a -( )- b`, the last coil assigns b the conjunction
 evaluated after the reset of `a`, so b is ff. This is what the converter emits
 and what the reference runtime does: Beremiz to MATIEC generates
@@ -233,11 +249,22 @@ every scan on which `--[P]--` does not.
      ⟨--[P]-- v, …⟩ ⇓ p                        ⟨--[N]-- v, …⟩ ⇓ p
 ```
 
-and ⇓ ff otherwise. Because π is updated only by `latch` at the end of the
-scan, an edge contact conducts for exactly one scan per transition, and two
-contacts sensing the same operand agree unless a coil writes the operand
-between them. Beremiz instead gives each edge contact its own `R_TRIG`/`F_TRIG`
-instance; the two coincide for operands no coil writes, such as inputs.
+and ⇓ ff otherwise; here π(v) is π_e(v). A contact with normally closed polarity
+conducts when its edge test fails:
+
+```
+   ⟨--[/P]-- v, …⟩ ⇓ p  iff  ¬(val(v) = tt ∧ π_e(v) = ff)        ⟨--[/N]-- v, …⟩ ⇓ p  iff  ¬(val(v) = ff ∧ π_e(v) = tt)
+```
+
+Because π_e is updated only by `latch` at the end of the scan, an edge contact
+conducts for exactly one scan per transition, and two contacts sensing the same
+operand agree unless a coil writes the operand between them. Beremiz instead gives each edge
+contact consumer its own `R_TRIG`/`F_TRIG` instance, fed the operand at that
+consumer; a second sink after a reset of the operand therefore re-evaluates the
+edge, as this semantics does (`ws1/spikes/review_probes/edge_two_sinks`,
+translation validation UNSAT). The two differ only in the previous value, which
+Beremiz keeps per instance at its own evaluation and this semantics keeps from the
+end of the scan.
 Applying the contact's own negation after the edge test (so `--[/P]--` is the
 Boolean negation of `--[P]--`, not an edge test on `¬v`) is an extension:
 IEC 61131-3 Ed. 3 §8.2.4, Table 75 defines only positive and negative
@@ -263,7 +290,10 @@ scan (departure 1, §10).
 ```
 
 A coil writes σ directly, so a later contact on the same variable, in the same
-rung or a later one, reads the value just written (§6.3).
+rung or a later one, reads the value just written (§6.3). On a numeric variable,
+[SET] and [RESET] store ⌈tt⌉ = 1 and ⌈ff⌉ = 0, as [COIL] does. A negated or
+transition-sensing coil (IEC 61131-3 Ed. 3 Table 76, rows 2, 8 and 9) is not
+modeled; the parser refuses it once the coil-attributes branch of the theorem document (§7 item 10) merges, and reads it as a plain coil until then (the attributes are ignored).
 
 Output-coil, set-coil and reset-coil semantics are
 IEC 61131-3 Ed. 3 §8.2.5, Table 76 rows 1 to 4. Where one scan drives both a set coil and a reset coil on the
@@ -414,9 +444,11 @@ carried out in the common type of IN1 and IN2 (§2) and the result is reduced
 to the type of OUT: an INT sum above 32767 wraps to a negative value, which
 is what MATIEC's C does (`--ld-tv-check` on an INT ADD, `ws1/spikes/int_width`).
 Overflow of the operation in the common type is a checked property
-(`--signed-overflow-check`), so a run that overflows is reported, not
-simulated. Division by zero is
-a checked property, not a semantic side condition: the store is undefined
+(`--overflow-check`), so a run that overflows is reported, not simulated;
+storing a wider result into a narrower OUT (an INT + DINT sum into an INT)
+reduces it with no assertion. Integer division truncates toward zero, as
+ESBMC's and MATIEC's do. Division by zero is a checked property
+(`--div-by-zero-check`), not a semantic side condition: the store is undefined
 there and ESBMC reports the violation.
 
 ---
@@ -453,10 +485,13 @@ from the block's output pin. A block is stepped once per scan, immediately
 before the first sink that consumes it; a block no sink consumes is stepped
 after every sink.
 
-Sinks run in the order the right power rail lists them, the order the vendor
-tool draws them. Coils the rail does not list follow in Beremiz's order
-(`PLCGenerator.SortInstances`): coils less than 10 apart vertically share a row
-and are ordered by x, other rows by y, sorted stably from document order.
+Sinks run in Beremiz's order (`PLCGenerator.SortInstances`): coils less than
+10 apart vertically share a row and are ordered by x, other rows by y, sorted
+stably from document order. The right power rail's connection list plays no part
+in it. That comparison is not transitive when coil rows lie less than 10 apart in a
+chain, and a layout where it is not a total preorder has no defined sink order, so the
+parser refuses it. The predecessors of a node, and the blocks no sink consumes,
+are taken in document order.
 
 ### 6.3 Sequential evaluation
 
@@ -533,11 +568,13 @@ is diagnosed and the program is rejected rather than given a semantics.
 "in-progress" set keyed by node id: a node already in that set when recursion
 reaches it again is reported as a cycle (condition 1) rather than recursed
 into, and a node already fully emitted (`pf_emitted`) is not recursed into
-again. Every node is therefore visited at most once by a completed call and
-at most once more while in progress, so the recursion depth is bounded by
-|N| and the total work is O(|N| + |E|): on an acyclic G the search always
-terminates, and on a cyclic G it terminates by raising the diagnostic at the
-first back-edge found, rather than by stack exhaustion.
+again. The in-progress test must come before the emitted test: an earlier version
+recorded a node as emitted first, so a revisit returned silently and the cycle
+was accepted with a stale read of the predecessor's accumulator (corrected in the
+resolver-cycle branch of the theorem document, §7 item 10; until it merges the
+condition is a hypothesis on the input). Every node is visited at most once by a
+completed call and at most once more while in progress, so the recursion depth is
+bounded by |N| and the total work is O(|N| + |E|).
 
 ### 6.5 Interface classification (the I/O rule)
 
@@ -563,15 +600,21 @@ winning:
 With `--ld-closed-world` the shared variables start from an arbitrary value
 and are afterwards written only by the program. Several tasks, program
 instances or programs are rejected (§3.1), so no second writer inside the
-file exists to be missed. A coil on an input is rejected by the type checker
-(§2).
+file exists to be missed. A coil on an input is rejected by the type checker (§2;
+enforced in the type-rules branch of the theorem document, §7 item 10, and a hypothesis on the input until it
+merges).
 
 **Safe direction.** Let H' ⊇ H. The scan relation that reads H' freely
 contains every execution of the one that reads H freely: at the start of a
 scan, choose for each variable of H' its current value. Everything after the
 read is the same. This holds for any variable, written by the program or not.
-Hence adding variables to H only adds behaviors: a SAFE verdict stays valid,
-and a VIOLATION may be spurious. Two consequences the classifier accepts: a
+Hence adding variables to H only adds behaviors: a SAFE verdict for an invariant,
+absence, exclusion or response monitor stays valid, and a VIOLATION may be spurious.
+The argument is about universal properties. Evidence that is existential, the witness
+of a `reachability` property and the "reached" answer of the antecedent-reachability
+check of §9.1, does not transfer: over-approximating H can make a state reachable that no
+real environment reaches, so such a result holds for the modeled H only, while an answer
+"proved unreachable" does transfer. Two consequences the classifier accepts: a
 variable that is only read but initialised to a constant (tier 3) is treated
 as free, which can produce a violation the constant would have excluded; and a
 counter value or timer output read by a contact but written by no coil is
@@ -585,9 +628,15 @@ classified by tier 3, and an execution in which the other writer interferes
 would be missing. The classifier closes this with tier 1 and tier 2 (shared
 variables are sampled), and `--ld-closed-world` makes the opposite assumption
 explicit. What it cannot see is a writer the file does not declare: a variable
-declared as local, with no address, that another program or the runtime writes.
-The verdict assumes the declared interface is complete, and so does every
-statement of the theorem (`ws1/translation_theorem.md`, Corollary 3).
+declared as local, with no address, or in a `globalVars` section, that another
+program, a resource or the runtime writes (the `globalVars` choice is the same one
+as for `localVars`: the program owns it). The verdict also assumes that the
+variables in H change only between scans, sampled atomically at the start of a scan:
+a writer that changes one during a scan (an HMI writing `%M`, a second resource, forced
+I/O) gives executions in which two contacts on one variable read different values, which
+no choice in `read_inputs` produces. The verdict assumes the declared interface is
+complete, and so does every statement of the theorem (`ws1/translation_theorem.md`,
+hypothesis H10 and Corollary 3).
 
 The unsafe direction is covered by the regression pair added with esbmc#8065:
 a program that writes a variable it also declares externally writable, verdict
@@ -602,7 +651,9 @@ in the corpus has a `%I`, `%Q` or `%M` address), 8 (0.7%) through the usage
 rule, 436 (37.7%) are program-owned outputs and 65 (5.6%) program-owned
 internal state. The usage rule, whose over-approximation is the one this
 section's safe direction discusses, therefore touches under 1% of the
-variables.
+variables. The corpus exercises no address-classified variable (tier 2), and the
+counts bound only the safe direction: they say how many variables were
+over-approximated, not how many real writers were missed.
 
 ---
 
@@ -652,8 +703,12 @@ time or documented as an approximation.
 - **Multi-task and interrupt-driven execution.** Rejected
   (`UnsupportedConstruct(InterruptTask, tier=2)`). [SCAN] is single-task.
 - **Wall-clock timing and jitter.** §5.1 counts scans, not seconds. A property
-  proved here is a property about scan counts; mapping to real time additionally
-  requires the scan period to be bounded, which is not modelled.
+  proved here is a property about scan counts. Mapping it to real time needs
+  the scan period to equal the declared task interval τ, or to stay within a bound on
+  both sides: a TON with PT = 15 ms and τ = 10 ms fires two scans after the enabling
+  scan in the model and fires after 15 scans on a controller scanning every 1 ms, and
+  a response bound can pass at N scans and fail at N ± 1. The verdicts cover the
+  declared τ only.
 - **WRITE_OUTPUTS as a distinct phase.** Output coils write σ directly; there
   is no separate output-image latch. This is unobservable to properties that
   are checked at the scan boundary, which is where the encoder places them.
@@ -664,10 +719,14 @@ time or documented as an approximation.
   Neither can wrap: CV stays between 0 and PV (§5.5) and ET saturates at PT.
   See the open item in §10 on which counter bound IEC intends.
 - **Non-timer, non-counter blocks on a rung path.** A path through an
-  arithmetic or unknown block is diagnosed and dropped rather than modelled,
-  so a program using one verifies over strictly less behaviour. User-defined
-  function blocks are executed from their Structured Text body instead
-  (`ir_gen/st_fb_translator.cpp`), which is outside this semantics.
+  unknown block is diagnosed and dropped rather than modelled, so a program
+  using one verifies over strictly less behaviour. A textual arithmetic block
+  runs every scan, whatever contact precedes it in the rung: the dialect has no
+  power input on a block, and EN is not modeled. User-defined function blocks
+  are executed from their Structured Text body (`ir_gen/st_fb_translator.cpp`),
+  after all rungs, which is outside this semantics; Beremiz calls them at their
+  position in the body, and their EN and ENO are ignored (esbmc/esbmc#8210). A verdict on a
+  program with a user function block is outside the proved subset.
 - **The semantics itself is not proved against the normative text.** It is
   validated by review and by fault injection. It is the assumed ground truth
   of §3.7's theorem, not a consequence of it.
@@ -702,7 +761,7 @@ Two readings differ from the names. For n ≥ 3 the exclusion monitor forbids al
 
 - **SAFE** (k-induction): the monitor holds in every scan boundary reachable from the initial store under every input sequence the model admits (§3.1, §6.5), proved by induction. It is a statement about the model, so it is only as strong as the hypotheses of `ws1/translation_theorem.md` (Corollary 3) and the departures listed in §10.
 - **VIOLATION**: a finite scan trace, as a sequence of input values, reaching a boundary where the monitor fails (for `reachability`, where its condition holds). A violation is genuine for the model and spurious for the system only if an input in the trace is one the environment cannot produce (§6.5, safe direction).
-- **UNKNOWN**: the solver timed out or the induction did not close. Bounded model checking that finds nothing up to the unwind bound is UNKNOWN, **not** SAFE, except for the properties that the bound covers by construction.
+- **UNKNOWN**: the solver timed out or the induction did not close. Bounded model checking that finds nothing up to the unwind bound is UNKNOWN, **not** SAFE: the scan loop is `while (true)`, so no bound covers it. The driver prints `VERIFICATION SUCCESSFUL` for a bounded pass, which a reader must not take for SAFE.
 - **REFUSED**: the front end rejects the program (`UnsupportedConstruct`, a type error, a cycle); no verdict, and not a SAFE.
 
 **Vacuity (M23).** A SAFE verdict can hold because what the property guards against never occurs. Two checks apply.
@@ -710,72 +769,51 @@ Two readings differ from the names. For n ≥ 3 the exclusion monitor forbids al
 1. *Interface*: a variable named by the property is never assigned in the scan loop (the suite's ingestion gate fails such a run).
 2. *Antecedent reachability* (`ws1/vacuity.py`): from the property derive the conditions that must be reachable for it to constrain anything, and ask whether each is. For `a → b` or `¬a ∨ b` the condition is a; for `¬(a ∧ b)`, `¬a ∨ ¬b` and `mutual_exclusion` each variable on its own; for `response` the trigger. Each condition is checked as a `reachability` property under k-induction. A property with a condition proved unreachable is *vacuous*; with an unknown one, *possibly vacuous*. A SAFE verdict on a vacuous property is reported as such, not counted as evidence.
 
+Properties are evaluated at the boundaries 1, 2, ... of a run; the monitor sits inside the loop after the
+first `read_inputs`, so it never observes the power-up store, and an output declared true at power-up and
+overwritten in the first scan does not violate "output implies permissive" in the model as it would in the
+real power-up image. Antecedent reachability answers "reached" for the modeled H only (§6.5).
+
 Result on the suite (October 7, 2026, `ws1/vacuity_results_2026-10-07.md`): of 208 checked properties, 205 are non-vacuous, two are vacuous and one possibly vacuous; 144 properties are of other shapes (126 reachability, 16 termination, 2 reachable) and are not checked, 19 are refused, and 3 use an operator the script does not read.
 
 ---
 
 ## 10. Open items for M1
 
-The M1 gate requires two independent reviewers to validate this specification
-against IEC 61131-3 §2. That review has not yet been carried out. Known gaps
-to raise in it.
+The M1 gate requires two independent human reviewers to validate this specification against IEC 61131-3.
+That review has not been carried out. On October 7, 2026 the specification was read against the
+IEC 61131-3:2013 (Edition 3.0) text by its authors, and two independent LLM reviews were run and triaged
+(`ws1/review_triage_2026-10-07.md`); their confirmed findings are corrected in this document and in
+`ws1/translation_theorem.md`. The clause numbers in this document are Edition 3's;
+`ws1/iec_citation_worksheet.md` lists each with its wording.
 
-Status, October 7, 2026: items 1 to 5 and 7 below were checked against
-IEC 61131-3:2013 (Edition 3.0); the clause numbers in this document are that
-edition's, and `ws1/iec_citation_worksheet.md` lists each with its wording.
-Results: item 1, the standard defines no negated edge contact (Table 75);
-item 2, reset dominates counting (§6.6.3.5.4, Table 45); item 3, §8.1.5.2
-agrees with the live store for feedback variables; item 4, PVmax and PVmin are
-Implementer specific; item 5, done; item 7, ET is held at PT (Figure 15).
-Departures from the normative text, kept because the semantics matches the
-reference toolchain:
+**Status of the earlier gaps.** (1) A negated edge contact has no normative definition (Table 75): an extension.
+(2) Reset dominates counting and load dominates CTD counting (§6.6.3.5.4, Table 45). (3) §8.1.5.2 agrees with the live
+store for feedback variables. (4) PVmax and PVmin are Implementer specific, so stopping CTU at PV and CTD at 0 is an
+Implementer's choice. (5) Every inline clause marker carries a clause number; the M1 reviewers still check them.
+(6) §6.4 condition 3 (known `formalParameter`s) is implemented by esbmc/esbmc#8186, open; until it merges an
+unrecognised pin name on a recognised block type is ignored. (7) ET is held at PT (§6.6.3.5.5, Figure 15).
 
-1. An edge contact compares against the end-of-scan latch; the standard
-   compares against the value at the element's previous evaluation (§8.2.4,
-   Table 75 rows 3 and 4). Beremiz emits an R_TRIG per edge contact, which
-   follows the standard, so the two differ if a later coil writes the sensed
-   variable in the same scan. Not yet probed with translation validation.
-2. A coil takes the rung's contacts evaluated in the store at the coil (§3.2).
-   Read literally, §8.2.5 passes the left link's evaluated state to the right
-   link, so a coil after a reset of the variable a contact read would still
-   see ON. Beremiz and MATIEC re-evaluate at the coil, as ESBMC does
-   (`ws1/spikes/a1_graphical`, translation validation UNSAT).
-3. REAL and LREAL are both modeled as a double; the standard gives REAL 32 bits
-   (Table 10, footnote e) and MATIEC's `IEC_REAL` is a float.
-4. An arithmetic result outside the range of its type is an error in the
-   standard (§6.6.2.5.8, §7.3.2); MATIEC's C wraps. The semantics reports it
-   as a checked property (`--signed-overflow-check`), which matches the standard.
+**Departures from the normative text, kept because the semantics matches the reference toolchain.**
 
-Known gaps:
+1. An edge contact compares against the end-of-scan latch (`π_e`); the standard compares against the value at the
+   element's previous evaluation (§8.2.4, Table 75 rows 3 and 4), and Beremiz keeps that value in an `R_TRIG`
+   instance per consumer. The two differ only when a later coil writes the sensed variable in the same scan
+   (esbmc/esbmc#8211; `ws1/spikes/edge_prev`, MATIEC `hit` = 0, 1, 0, 0 against ESBMC never).
+2. A coil takes the rung's contacts evaluated in the store at the coil (§3.2). Read literally, §8.2.5 passes the left
+   link's evaluated state to the right link, so a coil after a reset of the variable a contact read would still see ON.
+   Beremiz and MATIEC re-evaluate at the coil, as ESBMC does (`ws1/spikes/a1_graphical`; for edge contacts,
+   `ws1/spikes/review_probes/edge_two_sinks`; translation validation UNSAT).
+3. REAL and LREAL are both modeled as a double; the standard gives REAL 32 bits (Table 10, footnote e) and MATIEC's
+   `IEC_REAL` is a float (esbmc/esbmc#8212).
+4. An arithmetic result outside the range of its type is an error in the standard (§6.6.2.5.8, §7.3.2); MATIEC's C
+   wraps. The semantics reports it as a checked property (`--overflow-check`), which matches the standard.
+5. The EN input and ENO output of a user function block are ignored (esbmc/esbmc#8210), and user function blocks run
+   after all rungs where Beremiz calls them at their position (not probed).
 
-1. §4.2 applies contact polarity after the edge test. IEC's operator ordering
-   for a negated edge contact should be confirmed against §2.5.1.1.
-2. §5.5 orders the counter's reset arm after its count arm. Whether
-   IEC 61131-3 specifies reset as dominant over counting within the same
-   scan, and if so against which clause, is open and unconfirmed; no clause
-   number is given here since none has been checked against the standard's
-   text.
-3. §6.3 follows the sequential evaluation of Beremiz/MATIEC. IEC 61131-3
-   §4.1.3 (Ed. 3 §8.1.5) states an entry-value rule for feedback paths within a
-   network; confirm whether it applies to LD coils and contacts on the same
-   variable, and record where the reference toolchain departs from it.
-4. §5.5 stops CTU at the preset and CTD at 0, as MATIEC does. Secondary
-   sources render the normative bodies with `CV < PVmax` and `CV > PVmin`
-   (the type bounds); confirm which IEC 61131-3 §2.5.2.3.3 specifies. The two
-   agree on Q in every reachable state and differ only in CV beyond the preset
-   or below 0, so the choice changes only verdicts that read CV.
-5. Every inline clause marker now carries a clause number from IEC 61131-3
-   Ed. 3 (October 7, 2026); no `§TBD` remains. The M1 reviewers still check
-   them against the standard.
-6. §6.4 condition 3 ("known `formalParameter`s") is not implemented: an
-   unrecognised pin name on an otherwise recognised block type is silently
-   ignored rather than rejected (`get_var`, `ir/ld_ir_builder.cpp:47-50`).
-   This is a code gap, not a semantics gap; §6.4 records it so the paper
-   does not claim a check that does not exist. WS0-style fix: a known-pin
-   set per block type and a regression test, filed as a candidate fix
-   before WS1's M1 review rather than during it.
-7. §5.2 bounds a TON's ET above by PT. An earlier draft of this document
-   cited IEC 61131-3 §2.5.2.3.2 for the 0..PT range; that citation predates
-   this session's inline-marker pass and was not independently checked
-   against the standard, so it is now an open item rather than a settled
-   fact, alongside items 2 and 4's citations in the same §2.5.2.3 family.
+**Hypotheses and who enforces them.** The theorem's hypotheses H1 to H10 (`ws1/translation_theorem.md` §4) are enforced
+by the tool only where a branch listed in §7, item 10 of that document has merged: the cycle, coil-attribute,
+unmodeled-source, type and pin-distinctness refusals. Until then they are conditions on the input.
+
+**Not modeled, stated so a verdict is not over-read.** Mid-scan writers (§6.5); scan periods other than the declared
+interval (§8); a user function block (§8); the power-up store as an observed state (§9.1).
