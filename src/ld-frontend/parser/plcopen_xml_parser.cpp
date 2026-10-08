@@ -72,14 +72,28 @@ VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
   return it->second;
 }
 
+// Whether a negated="..." attribute negates. Vendors spell it "true"/"false",
+// as xs:boolean "1"/"0", or repeat the attribute name; anything else is refused
+// rather than read as "not negated".
+static bool negation_from_attribute(const std::string &s)
+{
+  if (s == "negated" || s == "true" || s == "1")
+    return true;
+  if (s.empty() || s == "false" || s == "0")
+    return false;
+  throw UnsupportedConstructError("negated=\"" + s + "\"", 2);
+}
+
 // Accepts both the element name (NormallyClosedContact) and the value of a
-// negated="..." attribute. Vendors spell the attribute "true"/"false" or
-// repeat the attribute name, so "false" must not be read as negation.
+// negated="..." attribute.
 ContactKind PlcopenXmlParser::contact_kind_from_string(const std::string &s)
 {
-  if (s == "negated" || s == "true" || s == "NormallyClosedContact")
+  if (s == "NormallyClosedContact")
     return ContactKind::NormallyClosed;
-  return ContactKind::NormallyOpen;
+  if (s == "NormallyOpenContact" || s == "contact" || s == "Contact")
+    return ContactKind::NormallyOpen;
+  return negation_from_attribute(s) ? ContactKind::NormallyClosed
+                                    : ContactKind::NormallyOpen;
 }
 
 // PLCopen writes the transition-sensing kind as edge="rising|falling"; some
@@ -90,7 +104,9 @@ static ContactEdge contact_edge_from_string(const std::string &s)
     return ContactEdge::Rising;
   if (s == "falling" || s == "negative" || s == "F" || s == "N")
     return ContactEdge::Falling;
-  return ContactEdge::None;
+  if (s.empty() || s == "none")
+    return ContactEdge::None;
+  throw UnsupportedConstructError("edge=\"" + s + "\"", 2);
 }
 
 CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
@@ -100,6 +116,16 @@ CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
   if (s == "reset" || s == "ResetCoil")
     return CoilKind::Reset;
   return CoilKind::Output;
+}
+
+// A negated or transition-sensing coil (IEC 61131-3 Table 76) is not modeled;
+// reading it as a plain coil would store the opposite value or the wrong edge.
+static void
+require_plain_coil(bool negated, ContactEdge edge, const std::string &var)
+{
+  if (negated || edge != ContactEdge::None)
+    throw UnsupportedConstructError(
+      "coil (var=" + var + ") with a negated or edge attribute", 2);
 }
 
 static FBKind fb_kind_of(const std::string &s);
@@ -233,6 +259,10 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
     else
       elem.coil.variable = text_or_attr(n, "variable", "variable");
     elem.coil.loc = elem.loc;
+    require_plain_coil(
+      negation_from_attribute(text_or_attr(n, "negated", nullptr)),
+      contact_edge_from_string(text_or_attr(n, "edge", nullptr)),
+      elem.coil.variable);
     return elem;
   }
 
@@ -630,7 +660,7 @@ static bool parse_graphical_ld(
     if (auto v = child.child("variable"))
       g.var = v.child_value();
     std::string neg_attr = child.attribute("negated").as_string("");
-    g.negated = (neg_attr == "true" || neg_attr == "negated");
+    g.negated = negation_from_attribute(neg_attr);
     g.edge = contact_edge_from_string(child.attribute("edge").as_string(""));
 
     std::string storage_attr = child.attribute("storage").as_string("");
@@ -1097,6 +1127,7 @@ static bool parse_graphical_ld(
   for (int coil : coils)
   {
     const GNode &g = nodes.at(coil);
+    require_plain_coil(g.negated, g.edge, g.var);
     pf_emitted.clear();
     CoilKind kind = CoilKind::Output;
     if (g.storage == "set")
