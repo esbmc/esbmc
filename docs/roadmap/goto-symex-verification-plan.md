@@ -836,6 +836,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R104** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — #8141's open note, §15 M9 (R104); **FIXED**, same entry | **A declaration's constructor or by-value call kept its argument temporaries to block exit.** `D d(C(6));`, `D e{C(1), C(2)};`, `D h = D(C(7));` and `D m = make(C(4));` for a destructible `D` built `d` in place, and the temporaries their arguments created were destroyed at the end of the enclosing block, not of the declaration ([class.temporary]/4). `assert(live == 0)` after the declaration was FAILED, and a pointer kept from the argument, `Q q(P(3)); *q.q` with `~P` deleting it, read freed memory natively and verified. | `convert_decl_initializer`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/decl_argument_temporary{,_fail}` | — | **Fixed**: all three initializer paths destroy the temporaries they created when the declaration ends; only the generic assignment path did. That exposed a second defect: `typeid` built its `type_info` as a temporary, so `std::type_index i(typeid(int));` (the CORE `typeindex_model`) then read a dead object, as `const std::type_info *p = &typeid(int);` already did on master. `typeid` now refers to a static object, one per type, or per site for a polymorphic operand ([expr.typeid]/1; `typeid_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/typeid_static_storage{,_fail}`). |
 | **R109** | **Medium (false FAILED, default configuration, C and C++)** — found probing builtins, §15 M9 (R109); **FIXED**, same entry | **`__builtin_abs`, `__builtin_labs` and `__builtin_llabs` had no model.** `is_abs_builtin_name` matched `abs`, `labs`, `llabs` and every spelling of `fabs`, but not the integer builtins, so their calls stayed bodyless (`no body for function __builtin_abs`), returned a nondet value, and `assert(__builtin_abs(-3) == 3)` was FAILED; the program passes natively. | `is_abs_builtin_name`, `src/clang-c-frontend/builtin_names.cpp`; `regression/esbmc/builtin_abs{,_fail}` | — | **Fixed**: the three names lower to the `abs` node as `abs` does, in both adjust passes. |
 | **R105** | **High (false SUCCESSFUL, `--loop-invariant-check`)** — found reading the loop summary behind R97's C++ residual, §15 M9 (R105); **FIXED**, same entry | **A callee's write through a pointer it was not handed escaped the loop invariant's havoc.** A loop that calls a function writing through a pointer havocs only what the call's pointer arguments point to. A callee that writes through a global pointer, or calls through a function pointer, left the written object at its pre-loop value, so `assert(x == 0)` after ten calls of `*gp = 1` was SUCCESSFUL. | `goto_loopst::compute_function_summary`, `summarise_call`, `goto_loops.cpp` | `regression/loop-invariants/callee_global_pointer{,_fail}`, `callee_function_pointer{,_fail}` | **Fixed**: a callee write counts as covered only through a parameter the callee never reassigns, and a call through a function pointer is never covered; otherwise the invariant is checked at its base case and the loop is left to the unwinder. |
 | **R114** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R114); **FIXED**, same entry | **Every va_list in a frame shared one cursor.** `symex_va_arg` read the frame's `va_cursor` whichever va_list it was given, and `va_start` and `va_copy` only marked a list started. A `va_copy` taken before the first `va_arg`, a second `va_start` on the same list, and a second list started in the same frame each read the argument after the one native code reads: `va_start(ap, n); va_copy(aq, ap); a = va_arg(ap, int); b = va_arg(aq, int);` gave `b` the second argument. | `goto_symext::symex_va_arg`, `va_list_mark_started`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_list_own_cursor{,_fail}` | **H-A7** | **Fixed**: `va_started` keeps each started local va_list's own cursor; `va_start` sets it, `va_copy` copies it, `va_arg` reads and advances it. A list whose cursor is unknown (a parameter, or copied from one) still reads the frame's. A `va_arg` under a nondet branch is still counted on both paths. |
@@ -10413,6 +10414,66 @@ operand's temporaries before the next operand runs would end their lifetime too
 early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
+
+### M9 (R104) — 2026-10-03, the arguments a declaration kept alive
+
+Open PR #8141 recorded that the argument temporary of a direct-initialised
+variable is never destroyed: `{ D d(C(6)); assert(live == 0); }` for
+`D(C)` is FAILED on master, and passes natively under g++ in every mode. The
+temporary was destroyed, but at the end of the block. `convert_decl_initializer`
+has three paths. The generic one assigns the lowered initializer and then
+destroys the full-expression's temporaries (#6075). The other two, a
+constructor run in place on the variable (`D d(C(6))`, `D e{C(1), C(2)}`,
+`D h = D(C(7))`) and a by-value call returning into it
+(`D m = make(C(4))` for a `D` with a destructor), returned without doing so.
+The same holds for a nested call (`E g(get(C(5)))`). The other direction is a
+false SUCCESSFUL: with `struct Q { int *q; Q(const P &x) : q(x.p) {} };` and
+`~P` deleting `p`, `Q q(P(3)); return *q.q;` is a heap use after free under
+ASan and verified on master.
+
+**Fixed** in `convert_decl_initializer`: the destructor-stack level is taken
+before any of the three paths, and the drain follows all of them, still
+skipped for a reference declaration ([class.temporary]/6).
+
+The fix turned the CORE `typeindex_model` FAILED: `std::type_index
+i1(typeid(int));` keeps a pointer to the `type_info`, and the frontend built
+that object as a temporary of the full-expression, which now died at the end
+of the declaration. The temporary was the defect: `typeid` refers to an object
+of static storage duration ([expr.typeid]/1), and on master
+`const std::type_info *p = &typeid(int); assert(*p == typeid(int));` already
+reported `accessed expired variable pointer`. A `typeid` whose operand is not a
+polymorphic glvalue now refers to a static `c:@__ESBMC_typeid@<type name>`
+object, one per type name, the identity `typeid` already compares by. A
+polymorphic operand's dynamic type is read from the vtable when `typeid` is
+evaluated, so each such site gets its own static object, assigned there; left
+a temporary, `std::type_index k(typeid(*b));` read a dead object once the
+declaration drained it, which code review found.
+
+`decl_argument_temporary` (five shapes, each assertion FAILED on master) and
+`decl_argument_temporary_fail` (pins `invalidated dynamic object`) change
+verdict against master and back with the `goto_convert.cpp` change reverted.
+`typeid_static_storage` (FAILED on master) and `typeid_static_storage_fail`
+(pins the assertion; master reports the expired pointer instead) do the same
+with the `typeid_object` change reverted. Z3 only: this build
+could not fetch Bitwuzla; `--z3` agrees. The `esbmc-cpp/cpp`, `destructors`,
+`try_catch`, `bug_fixes`, `cbmc`, `inheritance`, `template` and
+`polymorphism_bringup` suites keep master's verdicts apart from these four,
+under a 60 s per-test cap, as do the 52 tests matching
+`typeid|rtti|type_info|typeindex|bad_cast|dynamic_cast`.
+
+Not fixed: `return D(c);` in `make(C c)` still keeps its copy of `c` past the
+return (open PR #8151). A `catch (C c)` parameter is bound by a bitwise copy
+instead of `C`'s copy constructor, and the exception object is never
+destroyed, so `try { throw C(1); } catch (const C &) {} assert(ctors ==
+dtors);` is a false FAILED on master; that needs both changes together.
+Pre-existing, found in review: two local classes `S` in different functions
+print the same name and so share one `type_info` (`*f() != *g()` is a false
+FAILED, as it was when the names were compared); two evaluations of one
+polymorphic `typeid` site share its object, so a pointer kept from the first
+sees the second's type; and `&typeid(*p) == &typeid(D)` is false.
+`std::initializer_list<C> il = {C(1)};` and a reference member of a braced
+aggregate still lose their temporaries at the end of the declaration (the
+second is open PR #8158).
 
 ### M9 (R107) — 2026-10-04, R84's array built by one constructor call
 
