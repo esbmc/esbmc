@@ -50,7 +50,8 @@ static std::string text_or_attr(
 // PlcopenXmlParser
 // -----------------------------------------------------------------------
 
-VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
+VarKind
+PlcopenXmlParser::var_kind_from_string(const std::string &s, bool derived)
 {
   static const std::unordered_map<std::string, VarKind> table = {
     {"BOOL", VarKind::BOOL},
@@ -60,16 +61,16 @@ VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
     {"REAL", VarKind::REAL},
     {"LREAL", VarKind::REAL},
   };
-  // No unsigned, 8-bit or 64-bit kind exists; a 32-bit stand-in would miss
-  // their wrap.
-  static const std::unordered_set<std::string> unmodeled = {
-    "UINT", "SINT", "LINT", "WORD"};
-  if (unmodeled.count(s))
-    throw UnsupportedConstructError("type " + s, 2);
   auto it = table.find(s);
-  if (it == table.end())
-    return VarKind::BOOL; // default; type checker will flag unsupported types
-  return it->second;
+  if (it != table.end())
+    return it->second;
+  // A derived type names a function-block instance. Any other type the table
+  // lacks (unsigned, 8-bit or 64-bit integers, bit strings, strings, arrays,
+  // structures) has no kind; reading it as BOOL would verify a different
+  // program.
+  if (!derived)
+    throw UnsupportedConstructError("type " + s, 2);
+  return VarKind::BOOL;
 }
 
 // Whether a negated="..." attribute negates. Vendors spell it "true"/"false",
@@ -167,14 +168,16 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   // <type><BOOL/>, <INT/>, etc. or <type><derived name="MyType"/>.
   auto type_node = n.child("type");
   std::string type_str;
+  bool derived = false;
   if (auto first = type_node.first_child(); !first.empty())
   {
     std::string tag = first.name();
     type_str = (tag == "derived") ? first.attribute("name").as_string() : tag;
+    derived = tag == "derived";
   }
   if (type_str.empty())
     type_str = "BOOL";
-  v.kind = var_kind_from_string(type_str);
+  v.kind = var_kind_from_string(type_str, derived);
   v.loc = loc_from_node(n, source_file_);
 
   // <initialValue><simpleValue value="2"/></initialValue>. Without this a
@@ -377,6 +380,17 @@ struct GNode
   int document_order = 0; // index among the body's children
 };
 
+// A wire into a sink from an element the resolver does not model (a
+// continuation, a Boolean inVariable, a vendor element) would otherwise be
+// dropped as carrying no power, leaving the sink driven by fewer paths than
+// the file wires.
+static void require_modeled_source(const GNode &g)
+{
+  if (g.tag != "contact" && g.tag != "block" && g.tag != "Block")
+    throw UnsupportedConstructError(
+      g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
+}
+
 static const std::string &label(const GNode &g)
 {
   return g.type_name.empty() ? g.tag : g.type_name;
@@ -438,6 +452,19 @@ static long long parse_duration_ms(const std::string &text)
     any = true;
   }
   return any ? total : -1;
+}
+
+// The period of a task's interval attribute: IEC `T#...`, or the xs:duration
+// `PT0S` some tools write for no period. Any other spelling is refused; reading
+// it as 1 ms would shorten every timer preset.
+static long long task_interval_ms(const std::string &text)
+{
+  if (text == "PT0S")
+    return 0;
+  const long long ms = parse_duration_ms(text);
+  if (ms < 0)
+    throw UnsupportedConstructError("task interval '" + text + "'", 2);
+  return ms;
 }
 
 // Resolve an <inVariable> literal to the value the fixed-tick model expects.
@@ -777,8 +804,12 @@ static bool parse_graphical_ld(
     auto it = preds.find(lid);
     if (it != preds.end())
       for (int p : it->second)
+      {
         if (rail_reaches.count(p))
           live.push_back(p);
+        else
+          require_modeled_source(nodes.at(p));
+      }
     return live;
   };
 
@@ -1407,7 +1438,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   for (auto xpath : root.select_nodes("//task[@interval]"))
   {
     const long long ms =
-      parse_duration_ms(xpath.node().attribute("interval").as_string(""));
+      task_interval_ms(xpath.node().attribute("interval").as_string(""));
     if (ms > 0)
     {
       scan_interval_ms_ = static_cast<unsigned>(ms);
@@ -1550,7 +1581,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       std::string tag = first.name();
       std::string type_str =
         (tag == "derived") ? first.attribute("name").as_string() : tag;
-      return var_kind_from_string(type_str);
+      return var_kind_from_string(type_str, tag == "derived");
     };
     auto collect = [&](const std::string &section) {
       std::vector<FBVarDecl> out;
