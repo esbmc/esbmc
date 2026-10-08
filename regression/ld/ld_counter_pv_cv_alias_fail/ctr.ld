@@ -17,7 +17,7 @@
       </interface>
       <body>
         <LD>
-          <rung localId="1"><block typeName="CTU" instanceName="c1"><variable formalParameter="CU">Up</variable><variable formalParameter="PV">PV</variable><variable formalParameter="Q">Q</variable><variable formalParameter="CV">CV</variable></block></rung>
+          <rung localId="1"><block typeName="CTU" instanceName="c1"><variable formalParameter="CU">Up</variable><variable formalParameter="PV">CV</variable><variable formalParameter="Q">Q</variable><variable formalParameter="CV">CV</variable></block></rung>
         </LD>
       </body>
     </pou>

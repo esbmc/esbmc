@@ -22,6 +22,23 @@ TypeChecker::lookup_type(const std::string &var, const LdLocation &loc) const
   return it->second;
 }
 
+// The converter updates a block's outputs while its inputs are still read
+// (a timer writes Q before it records IN, writes ET before it compares PT, a
+// counter writes CV before it compares PV), so those pairs must be two
+// variables.
+void TypeChecker::require_distinct(
+  const std::string &instance,
+  const char *ports,
+  const std::string &a,
+  const std::string &b,
+  const LdLocation &loc) const
+{
+  if (!a.empty() && a == b)
+    throw TypeCheckError(
+      loc_str(loc) + ": '" + instance + "' " + ports +
+      " ports must be distinct variables");
+}
+
 void TypeChecker::require_port(
   const std::string &instance,
   const char *port,
@@ -43,6 +60,8 @@ void TypeChecker::build_var_type_map(const LdAst &ast)
         loc_str(v.loc) + ": initial value " + std::to_string(v.init_value) +
         " of '" + v.name + "' is outside INT");
     var_types_[v.name] = v.kind;
+    if (v.is_input)
+      inputs_.insert(v.name);
   }
 }
 
@@ -87,6 +106,9 @@ void TypeChecker::check_timer_fb(const TimerFBNode &fb)
     throw TypeCheckError(
       loc_str(fb.loc) + ": timer '" + fb.instance_name +
       "' ET port is narrower than PT");
+
+  require_distinct(fb.instance_name, "IN and Q", fb.IN_var, fb.Q_var, fb.loc);
+  require_distinct(fb.instance_name, "PT and ET", fb.PT_var, fb.ET_var, fb.loc);
 }
 
 void TypeChecker::check_counter_fb(const CounterFBNode &fb)
@@ -124,6 +146,14 @@ void TypeChecker::check_counter_fb(const CounterFBNode &fb)
   check_bool(fb.Q_var, "Q");
   check_int(fb.PV_var, "PV");
   check_int(fb.CV_var, "CV");
+
+  if (
+    !fb.PV_var.empty() && lookup_type(fb.CV_var, fb.loc) == VarKind::INT &&
+    lookup_type(fb.PV_var, fb.loc) != VarKind::INT)
+    throw TypeCheckError(
+      loc_str(fb.loc) + ": counter '" + fb.instance_name +
+      "' CV port is narrower than PV");
+  require_distinct(fb.instance_name, "PV and CV", fb.PV_var, fb.CV_var, fb.loc);
 }
 
 void TypeChecker::check_arith_fb(const ArithFBNode &fb)
@@ -165,6 +195,9 @@ void TypeChecker::check_rung_element(const RungElement &elem)
     if (elem.coil.variable.empty())
       throw TypeCheckError(loc_str(elem.loc) + ": coil has no variable");
     lookup_type(elem.coil.variable, elem.loc);
+    if (inputs_.count(elem.coil.variable))
+      throw TypeCheckError(
+        loc_str(elem.loc) + ": coil on input '" + elem.coil.variable + "'");
     break;
 
   case RungElementKind::TimerFB:
