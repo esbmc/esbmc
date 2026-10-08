@@ -2025,6 +2025,33 @@ void goto_convertt::remove_sideeffects(
   migrate_expr(legacy, expr);
 }
 
+static irep_idt
+compound_assign_operator(const irep_idt &statement, bool is_float)
+{
+  if (statement == "assign+")
+    return is_float ? "ieee_add" : "+";
+  if (statement == "assign-")
+    return is_float ? "ieee_sub" : "-";
+  if (statement == "assign*")
+    return is_float ? "ieee_mul" : "*";
+  if (statement == "assign_div")
+    return is_float ? "ieee_div" : "/";
+  if (statement == "assign_mod")
+    return "mod";
+  if (statement == "assign_shl")
+    return "shl";
+  if (statement == "assign_ashr")
+    return "ashr";
+  if (statement == "assign_lshr")
+    return "lshr";
+  if (statement == "assign_bitand")
+    return "bitand";
+  if (statement == "assign_bitxor")
+    return "bitxor";
+  assert(statement == "assign_bitor");
+  return "bitor";
+}
+
 bool goto_convertt::is_destructor_entry(const codet &entry)
 {
   return entry.get_statement() == "function_call" ||
@@ -2099,88 +2126,10 @@ void goto_convertt::remove_assignment(
       abort();
     }
 
-    exprt rhs;
-
-    if (statement == "assign+")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_add");
-      }
-      else
-      {
-        rhs.id("+");
-      }
-    }
-    else if (statement == "assign-")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_sub");
-      }
-      else
-      {
-        rhs.id("-");
-      }
-    }
-    else if (statement == "assign*")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_mul");
-      }
-      else
-      {
-        rhs.id("*");
-      }
-    }
-    else if (statement == "assign_div")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_div");
-      }
-      else
-      {
-        rhs.id("/");
-      }
-    }
-    else if (statement == "assign_mod")
-    {
-      rhs.id("mod");
-    }
-    else if (statement == "assign_shl")
-    {
-      rhs.id("shl");
-    }
-    else if (statement == "assign_ashr")
-    {
-      rhs.id("ashr");
-    }
-    else if (statement == "assign_lshr")
-    {
-      rhs.id("lshr");
-    }
-    else if (statement == "assign_bitand")
-    {
-      rhs.id("bitand");
-    }
-    else if (statement == "assign_bitxor")
-    {
-      rhs.id("bitxor");
-    }
-    else if (statement == "assign_bitor")
-    {
-      rhs.id("bitor");
-    }
-    else
-    {
-      std::ostringstream str;
-      str << statement << " not yet supported\n";
-      str << "Location: " << expr.location();
-      log_error("{}", str.str());
-      abort();
-    }
+    // The operation runs in the computation type (C11 6.5.16.2p3), which is
+    // floating-point when E2 is even if E1 is an integer: `i /= 3.5`.
+    exprt rhs(compound_assign_operator(
+      statement, expr_has_floatbv(expr) || expr_has_floatbv(expr.op1())));
 
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type() = expr.op0().type();

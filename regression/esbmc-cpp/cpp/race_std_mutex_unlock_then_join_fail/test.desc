@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++11 --data-races-check-only --no-assertions
+^VERIFICATION FAILED$
+W/W data race on c:@global

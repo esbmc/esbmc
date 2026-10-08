@@ -1352,6 +1352,28 @@ migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
   }
 }
 
+// Kani pads a union variant into `{ v: T, v_padding: <N-byte bv> }` but
+// initialises the union with the bare T: wrap it, padding left free.
+static void wrap_padded_union_member(
+  const type2tc &type,
+  const irep_idt &component,
+  std::vector<expr2tc> &members)
+{
+  if (!is_union_type(type) || members.size() != 1)
+    return;
+  const auto n = struct_union_get_component_number(type, component);
+  if (!n || !is_struct_type(to_union_type(type).members[*n]))
+    return;
+  const struct_type2t &padded = to_struct_type(to_union_type(type).members[*n]);
+  if (padded.members.empty() || padded.members[0] != members[0]->type)
+    return;
+
+  std::vector<expr2tc> fields{members[0]};
+  for (size_t i = 1; i < padded.members.size(); ++i)
+    fields.push_back(gen_nondet(padded.members[i]));
+  members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1536,6 +1558,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       members.push_back(new_ref);
     }
+
+    wrap_padded_union_member(type, expr.component_name(), members);
 
     new_expr_ref = constant_union2tc(type, expr.component_name(), members);
     return;

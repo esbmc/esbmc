@@ -837,6 +837,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
 | **R115** | **Medium (false FAILED, default configuration, C and C++)** — open PR #8122's note, §15 M9 (R115); **FIXED**, same entry | **The rotate builtins had no model.** `__builtin_rotateleft{8,16,32,64}` and `__builtin_rotateright*` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_rotateleft32(0x80000001u, 1) == 3)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`rol`/`ror` in `cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_rotate{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to two shifts and an or, with the distance and its complement taken modulo the width. |
+| **R104** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — #8141's open note, §15 M9 (R104); **FIXED**, same entry | **A declaration's constructor or by-value call kept its argument temporaries to block exit.** `D d(C(6));`, `D e{C(1), C(2)};`, `D h = D(C(7));` and `D m = make(C(4));` for a destructible `D` built `d` in place, and the temporaries their arguments created were destroyed at the end of the enclosing block, not of the declaration ([class.temporary]/4). `assert(live == 0)` after the declaration was FAILED, and a pointer kept from the argument, `Q q(P(3)); *q.q` with `~P` deleting it, read freed memory natively and verified. | `convert_decl_initializer`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/decl_argument_temporary{,_fail}` | — | **Fixed**: all three initializer paths destroy the temporaries they created when the declaration ends; only the generic assignment path did. That exposed a second defect: `typeid` built its `type_info` as a temporary, so `std::type_index i(typeid(int));` (the CORE `typeindex_model`) then read a dead object, as `const std::type_info *p = &typeid(int);` already did on master. `typeid` now refers to a static object, one per type, or per site for a polymorphic operand ([expr.typeid]/1; `typeid_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/typeid_static_storage{,_fail}`). |
 | **R109** | **Medium (false FAILED, default configuration, C and C++)** — found probing builtins, §15 M9 (R109); **FIXED**, same entry | **`__builtin_abs`, `__builtin_labs` and `__builtin_llabs` had no model.** `is_abs_builtin_name` matched `abs`, `labs`, `llabs` and every spelling of `fabs`, but not the integer builtins, so their calls stayed bodyless (`no body for function __builtin_abs`), returned a nondet value, and `assert(__builtin_abs(-3) == 3)` was FAILED; the program passes natively. | `is_abs_builtin_name`, `src/clang-c-frontend/builtin_names.cpp`; `regression/esbmc/builtin_abs{,_fail}` | — | **Fixed**: the three names lower to the `abs` node as `abs` does, in both adjust passes. |
 | **R105** | **High (false SUCCESSFUL, `--loop-invariant-check`)** — found reading the loop summary behind R97's C++ residual, §15 M9 (R105); **FIXED**, same entry | **A callee's write through a pointer it was not handed escaped the loop invariant's havoc.** A loop that calls a function writing through a pointer havocs only what the call's pointer arguments point to. A callee that writes through a global pointer, or calls through a function pointer, left the written object at its pre-loop value, so `assert(x == 0)` after ten calls of `*gp = 1` was SUCCESSFUL. | `goto_loopst::compute_function_summary`, `summarise_call`, `goto_loops.cpp` | `regression/loop-invariants/callee_global_pointer{,_fail}`, `callee_function_pointer{,_fail}` | **Fixed**: a callee write counts as covered only through a parameter the callee never reassigns, and a call through a function pointer is never covered; otherwise the invariant is checked at its base case and the loop is left to the unwinder. |
 | **R114** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R114); **FIXED**, same entry | **Every va_list in a frame shared one cursor.** `symex_va_arg` read the frame's `va_cursor` whichever va_list it was given, and `va_start` and `va_copy` only marked a list started. A `va_copy` taken before the first `va_arg`, a second `va_start` on the same list, and a second list started in the same frame each read the argument after the one native code reads: `va_start(ap, n); va_copy(aq, ap); a = va_arg(ap, int); b = va_arg(aq, int);` gave `b` the second argument. | `goto_symext::symex_va_arg`, `va_list_mark_started`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_list_own_cursor{,_fail}` | **H-A7** | **Fixed**: `va_started` keeps each started local va_list's own cursor; `va_start` sets it, `va_copy` copies it, `va_arg` reads and advances it. A list whose cursor is unknown (a parameter, or copied from one) still reads the frame's. A `va_arg` under a nondet branch is still counted on both paths. |
@@ -877,9 +878,11 @@ this document** — each is a prioritised target for the cited harness.
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
 | **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both now CORE), `ptr_rel_huge_object_force_success` (KNOWNBUG), `force_malloc_success_negative_indirect` | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual, measured and left open**, §15 M9 (R38 residual): under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously. Exempting that case by inspecting the argument's syntax was built and **refuted** — one intervening assignment (`size_t n = a; malloc(n)`) hides the typecast, the cap is assumed anyway, and a reachable `assert(0)` becomes a false SUCCESSFUL. Every other cut is worse or costs the >400 s M9 (R37) measured. The defect stays confined to allocations at or above 8 EiB |
 | **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
+| **R114** | **High (false SUCCESSFUL and false FAILED, default configuration)** — listed as open by PR #8170 (R109), found again by a native-differential probe battery, §15 M9 (R114); **FIXED**, same entry | **The `__builtin_` spelling of a `<math.h>` function had no body.** `__builtin_copysign`, `__builtin_fmax`, `__builtin_floor`, `__builtin_sqrt`, `__builtin_frexp` and the rest of the family reached symex as bodiless calls, so each returned a nondet value and wrote nothing through a pointer argument: `int e = 0; __builtin_frexp(8.0, &e); assert(e == 0);` was **SUCCESSFUL** (native: `e == 4`), and `assert(__builtin_copysign(1.0, -2.0) == -1.0)` FAILED. | `clang_c_convertert::rewrite_builtin_ref`, `src/clang-c-frontend/clang_c_convert.cpp` | `regression/esbmc/builtin_libm_call{,_fail}` | Rewrite the call to the plain name, which has an operational model. |
 | **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`docs/agents/subagents/esbmc-verifier.md` bans pairing it with reachability checks, gate G2). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
+| **R111** | **High (false SUCCESSFUL, false FAILED and no verdict, default configuration)** — R88's residual, §15 M9 (R111); **FIXED**, same entry | **An integer `op=` a floating operand ran as integer arithmetic.** `remove_assignment` chose `ieee_<op>` from the assignment's type, which is E1's, so `int i; i /= 3.5;` built an integer `div2t` over two doubles and Z3 rejected the sort. `+=`, `-=` and `*=` reached the solver as `add2t`/`sub2t`/`mul2t` on doubles, which Z3's operator overloads turn into round-to-nearest `fp.add`/`fp.sub`/`fp.mul`, ignoring the program's rounding mode: under `FE_UPWARD`, `long long x = 1LL << 53; x += 1.0;` gave `2^53` instead of `2^53 + 2`. | `goto_convertt::remove_assignment`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc/compound_assign_float_rhs{,_fail}` | — | **Fixed**: the operation is floating-point when E1 or E2 is. |
 | **R110** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R88's residual, §15 M9 (R110); **FIXED**, same entry | **A `__sync_*` call on an unsigned char or short returned a signed value.** Clang rewrites `__sync_fetch_and_add(&c, 1)` to the sized `__sync_fetch_and_add_1`, declared `char (volatile char *, char, ...)`, and gives the call the type `unsigned char`. The converter typed the call from the callee's declared return type, so the result went through a `char` temporary: with `c = 200`, `int k = __sync_fetch_and_add(&c, 1); assert(k < 128);` was SUCCESSFUL. | `CallExprClass`, `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/sync_unsigned_result{,_fail}` | — | **Fixed**: a call to a builtin with custom type checking takes the call's type. |
 | **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died with the full-expression.** `convert_decl_initializer` destroys every temporary of a non-reference declaration's initializer after the assignment, so `R x{M(1)};` ran `~M` before the next statement, although [class.temporary]/6 extends the temporary to the lifetime of `x`. A C++20 parenthesised `R y(M(1))` is not extended and lowers to the same GOTO. | `goto_convertt::convert_decl_initializer`, `goto_convert.cpp`; `CXXParenListInitExprClass`, `clang_c_convert.cpp` | — | **Fixed**: the entries of a temporary whose address is an operand of the declared aggregate, at any nesting depth, stay on the destructor stack until scope exit; the parenthesised form casts that address so it is not matched. |
 
@@ -10436,6 +10439,65 @@ in this build.
 
 Not fixed: `__builtin_clrsb(-1) == 31`, `int i = 10; i /= 3.5;` and a struct
 read back with `va_arg`, the other programs in #8122's list.
+### M9 (R104) — 2026-10-03, the arguments a declaration kept alive
+
+Open PR #8141 recorded that the argument temporary of a direct-initialised
+variable is never destroyed: `{ D d(C(6)); assert(live == 0); }` for
+`D(C)` is FAILED on master, and passes natively under g++ in every mode. The
+temporary was destroyed, but at the end of the block. `convert_decl_initializer`
+has three paths. The generic one assigns the lowered initializer and then
+destroys the full-expression's temporaries (#6075). The other two, a
+constructor run in place on the variable (`D d(C(6))`, `D e{C(1), C(2)}`,
+`D h = D(C(7))`) and a by-value call returning into it
+(`D m = make(C(4))` for a `D` with a destructor), returned without doing so.
+The same holds for a nested call (`E g(get(C(5)))`). The other direction is a
+false SUCCESSFUL: with `struct Q { int *q; Q(const P &x) : q(x.p) {} };` and
+`~P` deleting `p`, `Q q(P(3)); return *q.q;` is a heap use after free under
+ASan and verified on master.
+
+**Fixed** in `convert_decl_initializer`: the destructor-stack level is taken
+before any of the three paths, and the drain follows all of them, still
+skipped for a reference declaration ([class.temporary]/6).
+
+The fix turned the CORE `typeindex_model` FAILED: `std::type_index
+i1(typeid(int));` keeps a pointer to the `type_info`, and the frontend built
+that object as a temporary of the full-expression, which now died at the end
+of the declaration. The temporary was the defect: `typeid` refers to an object
+of static storage duration ([expr.typeid]/1), and on master
+`const std::type_info *p = &typeid(int); assert(*p == typeid(int));` already
+reported `accessed expired variable pointer`. A `typeid` whose operand is not a
+polymorphic glvalue now refers to a static `c:@__ESBMC_typeid@<type name>`
+object, one per type name, the identity `typeid` already compares by. A
+polymorphic operand's dynamic type is read from the vtable when `typeid` is
+evaluated, so each such site gets its own static object, assigned there; left
+a temporary, `std::type_index k(typeid(*b));` read a dead object once the
+declaration drained it, which code review found.
+
+`decl_argument_temporary` (five shapes, each assertion FAILED on master) and
+`decl_argument_temporary_fail` (pins `invalidated dynamic object`) change
+verdict against master and back with the `goto_convert.cpp` change reverted.
+`typeid_static_storage` (FAILED on master) and `typeid_static_storage_fail`
+(pins the assertion; master reports the expired pointer instead) do the same
+with the `typeid_object` change reverted. Z3 only: this build
+could not fetch Bitwuzla; `--z3` agrees. The `esbmc-cpp/cpp`, `destructors`,
+`try_catch`, `bug_fixes`, `cbmc`, `inheritance`, `template` and
+`polymorphism_bringup` suites keep master's verdicts apart from these four,
+under a 60 s per-test cap, as do the 52 tests matching
+`typeid|rtti|type_info|typeindex|bad_cast|dynamic_cast`.
+
+Not fixed: `return D(c);` in `make(C c)` still keeps its copy of `c` past the
+return (open PR #8151). A `catch (C c)` parameter is bound by a bitwise copy
+instead of `C`'s copy constructor, and the exception object is never
+destroyed, so `try { throw C(1); } catch (const C &) {} assert(ctors ==
+dtors);` is a false FAILED on master; that needs both changes together.
+Pre-existing, found in review: two local classes `S` in different functions
+print the same name and so share one `type_info` (`*f() != *g()` is a false
+FAILED, as it was when the names were compared); two evaluations of one
+polymorphic `typeid` site share its object, so a pointer kept from the first
+sees the second's type; and `&typeid(*p) == &typeid(D)` is false.
+`std::initializer_list<C> il = {C(1)};` and a reference member of a braced
+aggregate still lose their temporaries at the end of the declaration (the
+second is open PR #8158).
 
 ### M9 (R107) — 2026-10-04, R84's array built by one constructor call
 
@@ -11140,6 +11202,37 @@ FAILED here. The 272 other regression tests whose sources call a `__sync`,
 
 ---
 
+### M9 (R114) — 2026-10-04, the libm builtins that returned anything
+
+PR #8170 (R109) lists `__builtin_copysign` and `__builtin_fmax` as returning a
+nondet value. A battery of 134 deterministic C programs, each run natively and
+through ESBMC with its assertion negated, found `__builtin_copysign` again, and
+a follow-up probe of 30 `__builtin_` math calls found the whole family: every
+`__builtin_` spelling of a `<math.h>` function that `clang_c_adjust` does not
+lower by name (`fabs`, `isnan`, `nan`, ...) reached symex as a call with no
+body. `__builtin_floor`, `__builtin_sqrt`, `__builtin_fmod`,
+`__builtin_nearbyint`, `__builtin_fma` and the others returned a nondet value,
+so an assertion on the result FAILED, and `__builtin_frexp` and `__builtin_modf`
+never wrote their pointer argument: `int e = 0; __builtin_frexp(8.0, &e);
+assert(e == 0);` was SUCCESSFUL, while the native program aborts with `e == 4`.
+
+**Fixed** in `rewrite_builtin_ref`, which already maps `__builtin_memcpy` and
+nine other string and memory builtins to their plain name. A `__builtin_` name
+is now rewritten too when clang lists its plain name as a library builtin from
+`math.h` and the name is not one `clang_c_adjust` lowers itself; the plain name
+has an operational model under `src/c2goto/library/libm`. The C library goto
+binaries are byte-identical with and without the change, since no model calls
+such a builtin.
+
+`builtin_libm_call` (copysign, fmax and frexp) is FAILED on master and
+`builtin_libm_call_fail` (frexp's exponent) is SUCCESSFUL on master; each
+changes verdict when the change is reverted, under Z3 (Bitwuzla was not built).
+`floats`, `cstd` and the 422 other live tests whose sources include
+`<math.h>` or call a `__builtin_` keep master's verdicts under a 60 s cap.
+
+Not fixed: `__builtin_bitreverse{8,16,32,64}` still return a nondet value; they
+have no plain-named model to rewrite to. `__builtin_pow` now behaves as `pow`,
+whose model does not finish within 120 s for `pow(a, 3)` with `a` volatile.
 ### M9 (R109) — 2026-10-04, the integer abs builtins
 
 Probing clang's builtins against native runs, `__builtin_abs(-3) == 3`,
@@ -11194,6 +11287,33 @@ FAILED, and a partial copy into a floating-point object takes the same loop.
 The same battery found assertions that hold natively reported violated after
 `qsort`, `bsearch`, `snprintf`, `sprintf`, `sscanf`, `cbrt`, `ilogb` and
 `longjmp`, not yet reduced or checked against existing notes.
+
+---
+
+### M9 (R111) — 2026-10-04, the integer division of two doubles
+
+R88 listed a Z3 sort error on `int i = 10; i /= 3.5;`. C11 6.5.16.2p3 runs
+`E1 op= E2` in the type of `E1 op (E2)`, here `double`, and the C frontend
+records that computation type and casts E2 to it. `remove_assignment` then
+chose between `/` and `ieee_div` from the side effect's own type, which is
+E1's `int`, so it built an integer division over two doubles. The same choice
+made `+=`, `-=` and `*=` plain `add2t`, `sub2t` and `mul2t` on doubles. Z3's
+C++ operators turn those into `fp.add`, `fp.sub` and `fp.mul` with
+round-to-nearest, so they gave a value, but not under the program's rounding
+mode: with `fesetround(FE_UPWARD)`, `long long x = 1LL << 53; x += 1.0;`
+leaves `2^53` on master and `2^53 + 2` natively. `x = x + 1.0` was already
+right.
+
+The operation is now floating-point when E1 or E2 is.
+
+`regression/esbmc/compound_assign_float_rhs` (`d /= 2.5` over a bounded
+nondet `int`, and the upward-rounded `+=`) stops at the sort error on master
+and is SUCCESSFUL here; `compound_assign_float_rhs_fail`
+(`assert(x == (1LL << 53))`) is SUCCESSFUL on master and FAILED here, under
+the default solver and `--z3`. The 173 regression tests whose sources use a
+compound assignment and a floating type or literal, and the `floats` and
+`floats-regression` suites, keep their verdicts against master (Z3; Bitwuzla
+was not built).
 
 ---
 
