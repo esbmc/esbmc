@@ -1823,6 +1823,20 @@ private:
     const locationt &location,
     codet &target_block);
 
+  /// Detach one view into a snapshot of just what it sees.
+  void detach_numpy_pointer_view(
+    const std::string &view_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach several views of one storage into a single snapshot of that
+  /// storage, so they keep aliasing each other.
+  void share_numpy_storage_snapshot(
+    const std::string &storage_id,
+    const std::vector<std::string> &view_ids,
+    const locationt &location,
+    codet &target_block);
+
   bool should_rebuild_cached_numpy_row_subscript_rhs(
     const nlohmann::json &rhs_node) const;
 

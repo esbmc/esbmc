@@ -1,0 +1,4 @@
+CORE
+time.ld
+--ld-props props.yaml
+^ERROR: .*initial value 2592000000 of 'K' is outside TIME

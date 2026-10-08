@@ -299,7 +299,7 @@ Property kinds (WP1 taxonomy):
 
 | Kind | IEC 61508 class | GOTO IR node emitted |
 |---|---|---|
-| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(and_exprt(A, B)))` |
+| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(or_exprt(and_exprt(A, B), ...)))`, one `and_exprt` per pair |
 | `invariant` | Safety function activation | `code_assertt(expr)` |
 | `response` | Activation time | auxiliary scan-counter `symbolt` + `code_assertt` on counter bound |
 | `absence` | Safe state persistence | `code_assertt(not_exprt(expr))` |
