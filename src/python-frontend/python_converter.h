@@ -1628,6 +1628,11 @@ private:
     code_blockt &cond_prelude);
   void reject_live_numpy_view_copies_of(const nlohmann::json &args);
   void reject_unnamed_numpy_view_argument(const nlohmann::json &call) const;
+  const nlohmann::json &hoist_unnamed_numpy_view_arguments(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  std::size_t numpy_view_arg_count_ = 0;
   /// Whether every `return` of @p func_node yields one of its bound view
   /// parameters.
   bool returns_bound_numpy_view_param(const nlohmann::json &func_node) const;

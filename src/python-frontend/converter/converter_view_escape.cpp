@@ -688,6 +688,43 @@ void python_converter::reject_live_numpy_view_copies_of(
   });
 }
 
+// `x = f(a[lo:hi])` or `f(a[lo:hi])` where f binds that parameter as a view:
+// the subscript is first bound to a fresh name, as `t = a[lo:hi]; f(t)`, so
+// the callee writes through the view instead of a temporary.
+const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
+  const nlohmann::json &statement,
+  nlohmann::json &rewritten,
+  codet &target_block)
+{
+  const std::string kind = statement.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign" && kind != "Expr") ||
+    !statement.contains("value") || !is_named_call(statement["value"]))
+    return statement;
+  const nlohmann::json &call = statement["value"];
+  const std::string func_name = call["func"]["id"].get<std::string>();
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    const nlohmann::json &arg = call["args"][i];
+    if (
+      arg.value("_type", "") != "Subscript" || !is_name(arg["value"]) ||
+      numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
+      continue;
+    nlohmann::json name = arg["value"];
+    name["id"] = "$numpy_view_arg$" + std::to_string(numpy_view_arg_count_++);
+    nlohmann::json binding = statement;
+    binding["_type"] = "Assign";
+    binding["targets"] = nlohmann::json::array({name});
+    binding["targets"][0]["ctx"] = {{"_type", "Store"}};
+    binding["value"] = arg;
+    get_folded_var_assign(binding, target_block);
+    if (rewritten.is_null())
+      rewritten = statement;
+    rewritten["value"]["args"][i] = name;
+  }
+  return rewritten.is_null() ? statement : rewritten;
+}
+
 // A bound view parameter aliases its argument only when that argument is a
 // name: any other expression is evaluated into a temporary the callee would
 // write to instead. A body that is one return expression cannot write.

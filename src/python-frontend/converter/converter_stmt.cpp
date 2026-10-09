@@ -8331,9 +8331,11 @@ exprt python_converter::get_block(
   // Iterate over block statements
   for (auto &raw_element : ast_block)
   {
-    nlohmann::json rewritten_element;
-    const nlohmann::json &element =
-      resolve_numpy_view_containers(raw_element, rewritten_element);
+    nlohmann::json rewritten_element, hoisted_element;
+    const nlohmann::json &element = hoist_unnamed_numpy_view_arguments(
+      resolve_numpy_view_containers(raw_element, rewritten_element),
+      hoisted_element,
+      block);
     check_numpy_view_statement(element);
     StatementType type = python_frontend::get_statement_type(element);
 
