@@ -500,6 +500,16 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  /// The static types of the arguments a `str %` right operand supplies.
+  std::vector<typet>
+  percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
+  /// `str % args` with a literal format: an f-string when an argument is not
+  /// constant, otherwise folded to a literal.
+  exprt get_percent_format_expr(
+    const nlohmann::json &left,
+    const std::vector<nlohmann::json> &args,
+    const std::map<std::string, nlohmann::json> &mapping,
+    const std::vector<typet> &arg_types);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
