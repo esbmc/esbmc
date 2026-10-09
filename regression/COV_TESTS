@@ -2383,3 +2383,13 @@ regression/python/github_8239
 regression/python/github_8239_fail
 regression/python/github_8200_late
 regression/python/github_8200_late_fail
+regression/python/github_8256
+regression/python/github_8256_fail
+regression/python/github_8256_stub
+regression/python/github_8256_stub_fail
+regression/python/github_8256_base
+regression/python/github_8256_base_fail
+regression/python/github_8256_order
+regression/python/github_8256_rebind
+regression/python/github_8256_rebind_fail
+regression/python/github_8256_shadowed_outer
