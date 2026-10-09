@@ -2161,8 +2161,9 @@ array_type_shape_and_elem(const typet &arr_type)
     const array_typet &at = to_array_type(cur);
     if (!at.size().is_constant())
       return std::nullopt;
-    shape.push_back(static_cast<std::size_t>(
-      binary2integer(at.size().value().c_str(), false).to_int64()));
+    shape.push_back(
+      static_cast<std::size_t>(
+        binary2integer(at.size().value().c_str(), false).to_int64()));
     cur = at.subtype();
   }
   if (shape.empty())
