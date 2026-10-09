@@ -194,6 +194,72 @@ bool goto_symext::recover_va_list_args(
   return true;
 }
 
+static bool is_literal_string_start(const expr2tc &e)
+{
+  if (is_typecast2t(e))
+    return is_literal_string_start(to_typecast2t(e).from);
+  if (!is_address_of2t(e))
+    return false;
+  const expr2tc &obj = to_address_of2t(e).ptr_obj;
+  if (is_constant_string2t(obj))
+    return true;
+  return is_index2t(obj) &&
+         is_constant_string2t(to_index2t(obj).source_value) &&
+         is_constant_int2t(to_index2t(obj).index) &&
+         to_constant_int2t(to_index2t(obj).index).value.is_zero();
+}
+
+void goto_symext::symex_sprintf_store(
+  const code_printf2t &call,
+  const std::string &fmt,
+  size_t first_arg)
+{
+  const bool bounded_size = call.kind == printf_kindt::SNPRINTF;
+  if (!bounded_size && call.kind != printf_kindt::SPRINTF)
+    return;
+
+  // Only an output known byte for byte is stored; any other leaves the
+  // destination unchanged.
+  std::list<expr2tc> args;
+  for (size_t i = first_arg; i < call.operands.size(); i++)
+  {
+    expr2tc arg = call.operands[i];
+    do_simplify(arg);
+    if (!is_constant_int2t(arg) && !is_literal_string_start(arg))
+      return;
+    args.push_back(arg);
+  }
+
+  printf_formattert formatter;
+  formatter(fmt, args);
+  const std::string out = formatter.as_string();
+  if (!formatter.bounded || formatter.min_outlen != formatter.max_outlen)
+    return;
+
+  const expr2tc &dst = call.operands[0];
+  const type2tc char_type = to_pointer_type(dst->type).subtype;
+  // C11 7.21.6.5p2: snprintf writes at most n - 1 characters, then a NUL.
+  for (size_t i = 0; i <= out.size(); i++)
+  {
+    const expr2tc pos = constant_int2tc(size_type2(), BigInt(i));
+    const char c = i < out.size() ? out[i] : '\0';
+    expr2tc value = constant_int2tc(
+      char_type,
+      is_signedbv_type(char_type) ? BigInt((signed char)c)
+                                  : BigInt((unsigned char)c));
+    guard2tc guard;
+    if (bounded_size)
+    {
+      const expr2tc &n = call.operands[1];
+      guard.add(lessthan2tc(constant_int2tc(n->type, BigInt(i)), n));
+      const expr2tc next = constant_int2tc(n->type, BigInt(i + 1));
+      value = if2tc(char_type, lessthan2tc(next, n), value, gen_zero(char_type));
+    }
+    const expr2tc elem = dereference2tc(char_type, add2tc(dst->type, dst, pos));
+    symex_assign(code_assign2tc(elem, value), false, guard);
+  }
+}
+
 void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 {
   assert(is_code_printf2t(rhs));
@@ -399,6 +465,9 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   const bool va_recovered =
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
+
+  if (format_is_constant)
+    symex_sprintf_store(new_rhs, fmt.as_string(), idx);
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
