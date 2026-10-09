@@ -2107,46 +2107,120 @@ static std::string assignment_target_name(const nlohmann::json &stmt)
   return "";
 }
 
-// For a call argument that is (or aliases via a module-level assignment) a
-// subscript of a numpy array, return (source_array_name, slice_node).
-// Returns ("", null) for any other argument form.
-static std::pair<std::string, nlohmann::json> resolve_view_arg_source(
-  const nlohmann::json &arg,
-  const nlohmann::json &module_body)
+// Bindings of `name` in the scope whose statements are `node`. A nested
+// function or class is a scope of its own and counts only for its name.
+static std::size_t
+count_scope_stores(const nlohmann::json &node, const std::string &name)
 {
-  auto get_subscript_source =
-    [](const nlohmann::json &node) -> std::pair<std::string, nlohmann::json> {
-    if (
-      node.value("_type", "") == "Subscript" && node.contains("value") &&
-      node.contains("slice") && node["value"].value("_type", "") == "Name")
-      return {node["value"].value("id", ""), node["slice"]};
-    return {};
-  };
-
-  if (arg.value("_type", "") == "Subscript")
-    return get_subscript_source(arg);
-
-  if (arg.value("_type", "") != "Name")
-    return {};
-
-  const std::string name = arg.value("id", "");
-  for (const auto &stmt : module_body)
+  if (!node.is_object() && !node.is_array())
+    return 0;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (scope_kinds.count(kind) != 0)
+    return node.value("name", "") == name ? 1 : 0;
+  if (kind == "Name")
   {
-    if (assignment_target_name(stmt) != name)
-      continue;
-    const nlohmann::json *value = nullptr;
-    const std::string stype = stmt.value("_type", "");
-    if (stype == "Assign" && stmt.contains("value"))
-      value = &stmt["value"];
-    else if (
-      stype == "AnnAssign" && stmt.contains("value") &&
-      !stmt["value"].is_null())
-      value = &stmt["value"];
-    if (value)
-      return get_subscript_source(*value);
-    break;
+    const std::string ctx =
+      node.contains("ctx") ? node["ctx"].value("_type", "") : "";
+    return node.value("id", "") == name && ctx != "Load" ? 1 : 0;
   }
-  return {};
+  std::size_t stores = 0;
+  for (const auto &child : node)
+    stores += count_scope_stores(child, name);
+  return stores;
+}
+
+// Whether some scope declares `name` global or nonlocal, and so may rebind
+// it from outside the scope that owns it.
+static bool
+declared_global_or_nonlocal(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (kind == "Global" || kind == "Nonlocal")
+  {
+    for (const auto &declared : node["names"])
+      if (declared == name)
+        return true;
+    return false;
+  }
+  for (const auto &child : node)
+    if (declared_global_or_nonlocal(child, name))
+      return true;
+  return false;
+}
+
+// The function whose scope binds `name` for code in `enclosing_function`,
+// "" for the module. nullopt when that cannot be read from the AST:
+// `enclosing_function` is not a module-level function, or `name` is one of
+// its parameters.
+static std::optional<std::string> binding_function(
+  const nlohmann::json &module_body,
+  const std::string &enclosing_function,
+  const std::string &name)
+{
+  if (enclosing_function.empty())
+    return std::string();
+  const nlohmann::json *def =
+    find_function_def(module_body, enclosing_function);
+  if (def == nullptr || !def->contains("args") || !def->contains("body"))
+    return std::nullopt;
+  for (const auto &param : (*def)["args"]["args"])
+    if (param.value("arg", "") == name)
+      return std::nullopt;
+  return count_scope_stores((*def)["body"], name) != 0 ? enclosing_function
+                                                       : std::string();
+}
+
+// The value of the one statement that binds `name` in the scope of
+// `function`. nullptr when the name is bound more than once, by anything
+// other than a top-level assignment, or may be rebound from another scope:
+// the value would then depend on the path taken to the use.
+static const nlohmann::json *single_assigned_value(
+  const nlohmann::json &module_body,
+  const std::string &function,
+  const std::string &name)
+{
+  const nlohmann::json &body =
+    function.empty() ? module_body
+                     : (*find_function_def(module_body, function))["body"];
+  if (
+    count_scope_stores(body, name) != 1 ||
+    declared_global_or_nonlocal(module_body, name))
+    return nullptr;
+  for (const auto &stmt : body)
+    if (
+      assignment_target_name(stmt) == name && stmt.contains("value") &&
+      !stmt["value"].is_null())
+      return &stmt["value"];
+  return nullptr;
+}
+
+// The subscript a call argument denotes for code in `function`: the argument
+// itself, or the value of the name it is, followed through single
+// assignments. `function` becomes the scope the subscript is evaluated in.
+static const nlohmann::json *resolve_view_subscript(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  std::string &function,
+  unsigned depth = 0)
+{
+  const std::string kind = arg.value("_type", "");
+  if (kind == "Subscript")
+    return &arg;
+  if (kind != "Name" || depth > 8)
+    return nullptr;
+  const std::string name = arg.value("id", "");
+  const std::optional<std::string> scope =
+    binding_function(module_body, function, name);
+  if (!scope)
+    return nullptr;
+  function = *scope;
+  const nlohmann::json *value =
+    single_assigned_value(module_body, function, name);
+  return value == nullptr
+           ? nullptr
+           : resolve_view_subscript(*value, module_body, function, depth + 1);
 }
 
 // Returns (shape, elem_type) for a nested array type; nullopt when any
@@ -2290,26 +2364,25 @@ static bool calls_with_argument(
          call["args"].size() > param_index;
 }
 
-// Type of the literal `np.array(...)` that the module assigns to `arr_name`.
-std::optional<typet>
-python_converter::numpy_literal_array_type(const std::string &arr_name) const
+// Type of the literal `np.array(...)` bound to `arr_name` for code in
+// `function`.
+std::optional<typet> python_converter::numpy_literal_array_type(
+  const std::string &arr_name,
+  const std::string &function) const
 {
-  for (const auto &stmt : (*ast_json)["body"])
-  {
-    if (assignment_target_name(stmt) != arr_name)
-      continue;
-    if (
-      !stmt.contains("value") || stmt["value"].is_null() ||
-      !is_numpy_array_literal_call(stmt["value"]))
-      return std::nullopt;
-    return type_handler_.get_typet(stmt["value"]["args"][0]);
-  }
-  return std::nullopt;
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const std::optional<std::string> scope =
+    binding_function(module_body, function, arr_name);
+  const nlohmann::json *value =
+    scope ? single_assigned_value(module_body, *scope, arr_name) : nullptr;
+  if (value == nullptr || !is_numpy_array_literal_call(*value))
+    return std::nullopt;
+  return type_handler_.get_typet((*value)["args"][0]);
 }
 
 // Element type and layout of the view one call site passes at `param_index`:
 // a parameter of the enclosing function forwarded unchanged, or a subscript
-// of a module-level literal array.
+// of a literal array, both resolved in the scope of the call.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
 python_converter::infer_numpy_view_argument(
@@ -2334,16 +2407,22 @@ python_converter::infer_numpy_view_argument(
     return result;
   }
 
-  const auto [arr_name, slice_node] = resolve_view_arg_source(arg, module_body);
+  std::string scope = site.enclosing_function;
+  const nlohmann::json *subscript =
+    resolve_view_subscript(arg, module_body, scope);
+  if (
+    subscript == nullptr || !subscript->contains("slice") ||
+    (*subscript)["value"].value("_type", "") != "Name")
+    return std::nullopt;
   const std::optional<typet> arr_type =
-    arr_name.empty() ? std::nullopt : numpy_literal_array_type(arr_name);
+    numpy_literal_array_type((*subscript)["value"].value("id", ""), scope);
   if (!arr_type)
     return std::nullopt;
   const auto shape_elem = array_type_shape_and_elem(*arr_type);
   if (!shape_elem)
     return std::nullopt;
   const std::optional<numpy_scalar_pointer_view_infot> info =
-    view_info_from_subscript(shape_elem->first, slice_node);
+    view_info_from_subscript(shape_elem->first, (*subscript)["slice"]);
   if (!info)
     return std::nullopt;
   return std::make_pair(shape_elem->second, *info);

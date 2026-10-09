@@ -2522,8 +2522,9 @@ private:
     typet &out_elem_type,
     numpy_scalar_pointer_view_infot &out_info,
     std::set<std::string> &visiting) const;
-  std::optional<typet>
-  numpy_literal_array_type(const std::string &arr_name) const;
+  std::optional<typet> numpy_literal_array_type(
+    const std::string &arr_name,
+    const std::string &function) const;
   static std::optional<numpy_scalar_pointer_view_infot>
   slice_view_info(std::size_t length, const nlohmann::json &slice_node);
   static std::optional<numpy_scalar_pointer_view_infot> column_view_info(
