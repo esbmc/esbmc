@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc
+^ERROR: TypeError: loop over numpy view parameter with a non-constant bound is not supported$

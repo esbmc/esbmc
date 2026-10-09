@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view with a non-literal stride to a multi-statement callee is not supported$
