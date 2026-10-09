@@ -2279,7 +2279,7 @@ bool python_converter::try_infer_numpy_view_param(
         info.length = rows;
         info.stride = static_cast<long long>(cols);
         info.shape = {rows};
-        info.strides = {cols};
+        info.strides = {static_cast<long long>(cols)};
         return info;
       }
     }
