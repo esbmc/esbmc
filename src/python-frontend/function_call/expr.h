@@ -350,9 +350,9 @@ private:
 
   /*
    * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
-   * the float @p operand; returns the operand to convert.
+   * a float @p operand given without a @p base; returns the operand to convert.
    */
-  exprt guard_nonfinite_float_to_int(exprt operand) const;
+  exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
 
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating

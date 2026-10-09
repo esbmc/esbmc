@@ -560,9 +560,13 @@ void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
   arg["value"] = static_cast<int>(value);
 }
 
-exprt function_call_expr::guard_nonfinite_float_to_int(exprt operand) const
+exprt function_call_expr::guard_nonfinite_float_to_int(
+  exprt operand,
+  const exprt &base) const
 {
-  if (!converter_.can_emit_runtime_guard())
+  if (
+    !base.is_nil() || !operand.type().is_floatbv() ||
+    !converter_.can_emit_runtime_guard())
     return operand;
 
   const locationt loc = converter_.get_location_from_decl(call_);
