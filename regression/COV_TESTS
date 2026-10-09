@@ -2237,6 +2237,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc/builtin_rotate
+regression/esbmc/builtin_rotate_fail
 regression/esbmc-cpp/cpp/decl_argument_temporary
 regression/esbmc-cpp/cpp/decl_argument_temporary_fail
 regression/esbmc-cpp/cpp/typeid_static_storage
