@@ -331,6 +331,28 @@ public:
            !in_contract_clause_;
   }
 
+  // A runtime guard emitted into current_block runs once, unconditionally,
+  // ahead of the enclosing statement; that is wrong for an expression Python
+  // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool can_emit_runtime_guard() const
+  {
+    return current_block && safe_to_emit_side_effecting_statement() &&
+           !in_lazy_operand_;
+  }
+
+  // Hoists @p operand into a temporary when it carries a side effect, so a
+  // guard and its use evaluate it once.
+  exprt hoist_side_effecting_operand(
+    const exprt &operand,
+    const nlohmann::json &element,
+    const std::string &prefix);
+
+  void emit_guarded_raise(
+    const exprt &cond,
+    const std::string &exception,
+    const std::string &message,
+    const locationt &location);
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
@@ -2397,6 +2419,7 @@ private:
   // a loop invariant raised inside the loop body. C emits nothing from a
   // clause either.
   bool in_contract_clause_ = false;
+  bool in_lazy_operand_ = false;
 
   bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
