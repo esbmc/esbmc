@@ -1592,6 +1592,25 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
   {
+    // A void* operand here is a value whose type the frontend does not
+    // know, typically the result of a call through a function-valued
+    // parameter that returns a str on one path and an int on another.
+    // Casting it to the integer operand's type silently assumes the int
+    // path, so a TypeError on the other path is never emitted and the
+    // program verifies. Refuse instead: an answer here would be checked
+    // against one of the value's types only (github #8263).
+    auto is_void_ptr = [&](const exprt &e) {
+      return e.type().is_pointer() && e.type().subtype().id() == "empty";
+    };
+    if (is_void_ptr(lhs) || is_void_ptr(rhs))
+    {
+      const locationt loc = get_location_from_decl(element);
+      throw std::runtime_error(
+        "the type of an operand of '" + op + "' at line " +
+        loc.get_line().as_string() +
+        " is not known here, so the operation would be checked against one "
+        "possible type only");
+    }
     if (is_any_ptr(lhs) && is_any_ptr(rhs))
     {
       const typet int_type = type_handler_.get_typet("int", 0);
