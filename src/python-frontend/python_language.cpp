@@ -97,26 +97,10 @@ static void append_parser_flags(std::vector<std::string> &args)
       args.push_back(flag);
 }
 
-bool python_languaget::parse(const std::string &path)
+// The interpreter named by --python, else the first of python3/python on
+// $PATH.
+static fs::path find_python_executable()
 {
-  log_debug("python", "Parsing: {}", path);
-
-  fs::path script(path);
-  if (!fs::exists(script))
-    return true;
-
-  // The parser runs in a forked python3, which can only read real files.
-  register_bundled();
-  ast_output_dir = file_operations::filesystemt::get().materialize(
-    vfs_prefix, "esbmc-python-astgen-%%%%-%%%%-%%%%");
-  fs::path parser_path(ast_output_dir);
-  parser_path /= "parser/__main__.py";
-
-  // Execute Python script to generate JSON file from AST
-  std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
-  append_parser_flags(args);
-
-  // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
   fs::path python_exec_path;
   if (!python_exec.empty())
@@ -150,6 +134,29 @@ bool python_languaget::parse(const std::string &path)
       exit(1);
     }
   }
+  return python_exec_path;
+}
+
+bool python_languaget::parse(const std::string &path)
+{
+  log_debug("python", "Parsing: {}", path);
+
+  fs::path script(path);
+  if (!fs::exists(script))
+    return true;
+
+  // The parser runs in a forked python3, which can only read real files.
+  register_bundled();
+  ast_output_dir = file_operations::filesystemt::get().materialize(
+    vfs_prefix, "esbmc-python-astgen-%%%%-%%%%-%%%%");
+  fs::path parser_path(ast_output_dir);
+  parser_path /= "parser/__main__.py";
+
+  // Execute Python script to generate JSON file from AST
+  std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
+  append_parser_flags(args);
+
+  const fs::path python_exec_path = find_python_executable();
 
   // parser/__main__.py reports the version itself and exits non-zero on
   // Python 2 (issue #1967); it is kept Python-2-parseable so that it can.
