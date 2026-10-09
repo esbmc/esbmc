@@ -15,7 +15,9 @@ class ClassContextMixin:
         self._collect_class_attr_annotations(node)
         self._record_exit_suppresses_all(node)
         self._record_class_with_exit(node)
+        self._class_stack.append(node)
         self.generic_visit(node)
+        self._class_stack.pop()
 
         self.current_class_name = old_class_name
 
@@ -27,6 +29,36 @@ class ClassContextMixin:
             del self._pending_method_default_inits[inits_before:]
             return [node, *hoisted]
         return node
+
+    def _class_body_binds(self, stmt, name):
+        """Whether a statement directly in a class body binds `name` there."""
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return stmt.name == name
+        if isinstance(stmt, ast.Assign):
+            targets = stmt.targets
+        elif isinstance(stmt, ast.AugAssign) or (isinstance(stmt, ast.AnnAssign)
+                                                 and stmt.value is not None):
+            targets = [stmt.target]
+        else:
+            targets = []
+        return any(name in self._names_bound_by(n) for t in targets for n in ast.walk(t))
+
+    def class_scope_default(self, default_node, method):
+        """A method default naming an attribute its top-level class bound before
+        the method, as `Class.name`: the default is hoisted past the class, where
+        the bare name no longer resolves (#8200)."""
+        if len(self._class_stack) != 1 or not isinstance(default_node, ast.Name):
+            return default_node
+        cls = self._class_stack[0]
+        for stmt in cls.body:
+            if stmt is method:
+                break
+            if self._class_body_binds(stmt, default_node.id):
+                qualified = ast.Attribute(value=ast.Name(id=cls.name, ctx=ast.Load()),
+                                          attr=default_node.id,
+                                          ctx=ast.Load())
+                return ast.copy_location(qualified, default_node)
+        return default_node
 
     @staticmethod
     def _names_bound_by(node):
