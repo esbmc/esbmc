@@ -882,6 +882,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
 | **R114** | **High (false SUCCESSFUL and false FAILED, default configuration)** — listed as open by PR #8170 (R109), found again by a native-differential probe battery, §15 M9 (R114); **FIXED**, same entry | **The `__builtin_` spelling of a `<math.h>` function had no body.** `__builtin_copysign`, `__builtin_fmax`, `__builtin_floor`, `__builtin_sqrt`, `__builtin_frexp` and the rest of the family reached symex as bodiless calls, so each returned a nondet value and wrote nothing through a pointer argument: `int e = 0; __builtin_frexp(8.0, &e); assert(e == 0);` was **SUCCESSFUL** (native: `e == 4`), and `assert(__builtin_copysign(1.0, -2.0) == -1.0)` FAILED. | `clang_c_convertert::rewrite_builtin_ref`, `src/clang-c-frontend/clang_c_convert.cpp` | `regression/esbmc/builtin_libm_call{,_fail}` | Rewrite the call to the plain name, which has an operational model. |
 | **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
+| **R104** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found reading `symex_realloc`, §15 M9 (R104); **FIXED**, same entry | **`realloc` copied only the first object its pointer might point to.** `analyze_old_object` took `internal_deref_items.front()` and copied that object into the new allocation on every path, so when the pointer could point to `a` or `b`, the new block held the first object's contents even on the path where it pointed to the other one. | `goto_symext::analyze_old_object`, `memory_alloc.cpp` | — | **Fixed**: each object the pointer may point to is copied under the guard that it is the one pointed to. Objects of another element type than the first are not copied, and the 128-element copy cap still applies to constant counts (see the entry). |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`docs/agents/subagents/esbmc-verifier.md` bans pairing it with reachability checks, gate G2). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 | **R111** | **High (false SUCCESSFUL, false FAILED and no verdict, default configuration)** — R88's residual, §15 M9 (R111); **FIXED**, same entry | **An integer `op=` a floating operand ran as integer arithmetic.** `remove_assignment` chose `ieee_<op>` from the assignment's type, which is E1's, so `int i; i /= 3.5;` built an integer `div2t` over two doubles and Z3 rejected the sort. `+=`, `-=` and `*=` reached the solver as `add2t`/`sub2t`/`mul2t` on doubles, which Z3's operator overloads turn into round-to-nearest `fp.add`/`fp.sub`/`fp.mul`, ignoring the program's rounding mode: under `FE_UPWARD`, `long long x = 1LL << 53; x += 1.0;` gave `2^53` instead of `2^53 + 2`. | `goto_convertt::remove_assignment`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc/compound_assign_float_rhs{,_fail}` | — | **Fixed**: the operation is floating-point when E1 or E2 is. |
@@ -10450,6 +10451,31 @@ the comma, not at the end of the full-expression ([class.temporary]/4), so in
 `T x = (T(1), U(), T(2));` `U`'s constructor already sees `~T` for `T(1)`.
 
 ---
+### M9 (R104) — 2026-10-03, `realloc` of a pointer to one of several objects
+
+`symex_realloc` dereferences the old pointer in internal mode, which yields one
+item per object the pointer may point to, each with the guard under which it
+does. `analyze_old_object` used only the first item and copied it into the new
+allocation unconditionally. With `int *p = pick_b ? b : a;` and `a[0] = 1`,
+`b[0] = 2`, `realloc(p, 16)` returned a block whose first element was `b[0]`
+on both paths: `assert(q[0] == (pick_b ? 2 : 1))` is a false FAILED on master
+and `assert(pick_b || q[0] != 1)` a false SUCCESSFUL. C17 7.22.3.5p2 requires
+the contents of the object `p` points to; natively the first passes and the
+second aborts for `pick_b == 0`.
+
+**Fixed** by copying every pointed-to object, each under its item's guard. The
+new allocation keeps the first object's element type; an object of another
+element type is skipped, so the new contents stay nondet on that path, which
+can only add behaviours. `realloc_pointed_objects{,_fail}` change verdict
+against master and pass with the fix, under Z3; Bitwuzla could not be built
+in this run's container. The 67 other regression tests that call `realloc`
+and finish within 60 s keep their verdicts; the THOROUGH `realloc14`, `15`,
+`16` and `20` exceed 400 s under Z3 on both builds here.
+
+Not fixed: `copy_memory_content` copies at most `--max-symbolic-realloc-copy`
+(default 128) elements even when the count is a constant, so
+`realloc(a, 300 * sizeof(int))` of a 200-element block leaves `q[150]`
+nondet, a false FAILED for `assert(q[150] == a_150)`.
 
 ### M9 (R96) — 2026-10-03, the elements a throwing array new left behind
 
@@ -10483,6 +10509,7 @@ operational model with no `throw` or `try` in user code is not covered; and
 `delete[]` destroys elements in increasing index order where [expr.delete]/6
 requires decreasing, so `new C[2]{C(1), C(2)}` then `delete[]` leaving the
 last destroyed value 1 is a false FAILED.
+
 ### M9 (R115) — 2026-10-04, the rotate builtins
 
 Open PR #8122's entry lists programs that pass natively and fail on master,

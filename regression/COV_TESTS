@@ -2239,6 +2239,8 @@ regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
 regression/esbmc-cpp/cpp/comma_initializer_in_place
 regression/esbmc-cpp/cpp/comma_initializer_in_place_fail
+regression/esbmc/realloc_pointed_objects
+regression/esbmc/realloc_pointed_objects_fail
 regression/esbmc-cpp/try_catch/array_new_unwind
 regression/esbmc-cpp/try_catch/array_new_unwind_fail
 regression/esbmc/builtin_rotate
@@ -2347,6 +2349,10 @@ regression/goto-transcoder/cbmc_kani_dyn_vtable_fail
 regression/goto-transcoder/cbmc_missing_entry_point
 regression/esbmc/object_size_per_object
 regression/esbmc/object_size_per_object_fail
+regression/python/github_7802
+regression/python/github_7802_fail
+regression/python/github_7802_eval_order
+regression/python/github_7802_eval_order_fail
 regression/esbmc/cprover_object_size_per_object
 regression/esbmc/cprover_object_size_per_object_fail
 regression/python/github_8017
@@ -2361,6 +2367,8 @@ regression/python/github_8196
 regression/python/github_8196_fail
 regression/python/github_8225
 regression/python/github_8225_fail
+regression/python/github_8224
+regression/python/github_8224_fail
 regression/python/github_8239
 regression/python/github_8239_fail
 regression/python/github_8200_late
