@@ -11362,7 +11362,7 @@ Only the CBMC `--binary` adapter lowered them.
 **Fixed** in `run_builtin`, beside the rotate lowering: the call is the
 shift-and-mask reversal `acc = ((acc & m) << k) | ((acc >> k) & m)` for
 `k = 1, 2, 4, ...` below the width, where `m` holds the low `k` bits of every
-`2k`-bit block. A constant argument folds to a constant.
+`2k`-bit block. A C++ call takes the same path.
 
 `builtin_bitreverse` checks constants in all four widths, that reversing twice
 gives a symbolic `x` back, and that the top bit of the reversal is `x`'s low
@@ -11370,7 +11370,8 @@ bit; it is FAILED on master and SUCCESSFUL here. `builtin_bitreverse_fail`
 runs under `--multi-property` and pins that the correct `__builtin_bitreverse16`
 assertion holds and a byte-swapped one fails; master fails both. Both change
 verdict when the fix is reverted, under the default solver and `--z3` (Z3;
-Bitwuzla was not built).
+Bitwuzla was not built). The 37 other regression tests that call a rotate,
+bit-scan, popcount, parity or byte-swap builtin keep their master verdicts.
 
 Not fixed: `abs(INT_MIN)` under `--overflow-check` is still SUCCESSFUL, and
 R113's list (`qsort`, `bsearch`, `snprintf`, `sprintf`, `sscanf`, `cbrt`,
