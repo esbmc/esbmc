@@ -886,6 +886,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R111** | **High (false SUCCESSFUL, false FAILED and no verdict, default configuration)** — R88's residual, §15 M9 (R111); **FIXED**, same entry | **An integer `op=` a floating operand ran as integer arithmetic.** `remove_assignment` chose `ieee_<op>` from the assignment's type, which is E1's, so `int i; i /= 3.5;` built an integer `div2t` over two doubles and Z3 rejected the sort. `+=`, `-=` and `*=` reached the solver as `add2t`/`sub2t`/`mul2t` on doubles, which Z3's operator overloads turn into round-to-nearest `fp.add`/`fp.sub`/`fp.mul`, ignoring the program's rounding mode: under `FE_UPWARD`, `long long x = 1LL << 53; x += 1.0;` gave `2^53` instead of `2^53 + 2`. | `goto_convertt::remove_assignment`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc/compound_assign_float_rhs{,_fail}` | — | **Fixed**: the operation is floating-point when E1 or E2 is. |
 | **R110** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R88's residual, §15 M9 (R110); **FIXED**, same entry | **A `__sync_*` call on an unsigned char or short returned a signed value.** Clang rewrites `__sync_fetch_and_add(&c, 1)` to the sized `__sync_fetch_and_add_1`, declared `char (volatile char *, char, ...)`, and gives the call the type `unsigned char`. The converter typed the call from the callee's declared return type, so the result went through a `char` temporary: with `c = 200`, `int k = __sync_fetch_and_add(&c, 1); assert(k < 128);` was SUCCESSFUL. | `CallExprClass`, `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/sync_unsigned_result{,_fail}` | — | **Fixed**: a call to a builtin with custom type checking takes the call's type. |
 | **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died with the full-expression.** `convert_decl_initializer` destroys every temporary of a non-reference declaration's initializer after the assignment, so `R x{M(1)};` ran `~M` before the next statement, although [class.temporary]/6 extends the temporary to the lifetime of `x`. A C++20 parenthesised `R y(M(1))` is not extended and lowers to the same GOTO. | `goto_convertt::convert_decl_initializer`, `goto_convert.cpp`; `CXXParenListInitExprClass`, `clang_c_convert.cpp` | — | **Fixed**: the entries of a temporary whose address is an operand of the declared aggregate, at any nesting depth, stay on the destructor stack until scope exit; the parenthesised form casts that address so it is not matched. |
+| **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
 
 ---
 
@@ -11347,6 +11348,31 @@ the default solver and `--z3`. The 173 regression tests whose sources use a
 compound assignment and a floating type or literal, and the `floats` and
 `floats-regression` suites, keep their verdicts against master (Z3; Bitwuzla
 was not built).
+
+---
+
+### M9 (R119) — 2026-10-09, the cube root
+
+R113's probe battery listed `cbrt` among the calls whose results disagreed with
+native runs. `cbrt` and `cbrtf` had no operational model, so a call reached
+symex without a body and returned a nondet value: `assert(cbrt(27.0) == 3.0);`
+was FAILED on master. `__builtin_cbrt`, which R114 rewrites to `cbrt`, was the
+same.
+
+**Fixed** by adding musl's `cbrt.c` and `cbrtf.c` under
+`src/c2goto/library/libm/musl`. Its error is below 0.667 ulp, and natively it
+returns `i` for `cbrt(i * i * i)` with `-100 <= i <= 100`; glibc's `cbrt` is
+one ulp off for 88 of those, which C11 5.2.4.2.2p6 allows: the accuracy
+of `<math.h>` results is implementation-defined.
+
+`cbrt_model` checks exact cubes, a subnormal, `-0.0`, an infinity, a NaN,
+`cbrtf` and `__builtin_cbrt`; it is FAILED on master. `cbrt_model_fail` runs
+under `--multi-property` and pins that `cbrt(2.0)` lies in `(1.2599, 1.26)`
+and is not `1.25`; master fails both. Each changes verdict when the two model
+files are removed, under the default solver and `--z3`. A symbolic cube over
+`[-100, 100]` did not finish within 600 s, so the tests use constants.
+
+Not fixed: `cbrtl` still returns a nondet value.
 
 ---
 

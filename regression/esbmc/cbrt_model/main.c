@@ -11,9 +11,5 @@ int main()
   assert(isnan(cbrt(NAN)));
   assert(cbrtf(64.0f) == 4.0f);
   assert(__builtin_cbrt(1e-9) == 1e-3);
-
-  int i = nondet_int();
-  __ESBMC_assume(i >= -100 && i <= 100);
-  assert(cbrt((double)(i * i * i)) == i);
   return 0;
 }
