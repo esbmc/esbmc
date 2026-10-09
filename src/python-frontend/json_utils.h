@@ -1084,4 +1084,21 @@ imported_function_return_type(const std::string &name, const JsonType &ast_json)
   return "";
 }
 
+// Every `return` value under `node`, through nested blocks but not nested
+// definitions.
+inline void collect_return_values(
+  const nlohmann::json &node,
+  std::vector<nlohmann::json> &values)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
+    return;
+  if (type == "Return" && node.contains("value") && !node["value"].is_null())
+    values.push_back(node["value"]);
+  for (const auto &child : node)
+    collect_return_values(child, values);
+}
+
 } // namespace json_utils

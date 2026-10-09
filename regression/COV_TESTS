@@ -2338,3 +2338,7 @@ regression/esbmc/memspace_first_page_vla_band
 regression/esbmc/memspace_first_page_vla_band_fail
 regression/esbmc/object_size_per_object
 regression/esbmc/object_size_per_object_fail
+regression/python/github_7802
+regression/python/github_7802_fail
+regression/python/github_7802_eval_order
+regression/python/github_7802_eval_order_fail

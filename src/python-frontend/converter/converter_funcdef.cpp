@@ -24,6 +24,7 @@
 #include <util/irep/std_code.h>
 #include <util/expr/symbolic_types.h>
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <optional>
@@ -2281,6 +2282,116 @@ static bool is_bare_callable_annotation(const nlohmann::json &ann)
   return false;
 }
 
+/// The name a single AST node binds, or "" when it binds none.
+static std::string bound_name(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+    return node.value("name", "");
+  if (kind == "arg")
+    return node.value("arg", "");
+  if (kind == "alias")
+    return node.contains("asname") && node["asname"].is_string()
+             ? node["asname"].get<std::string>()
+             : node.value("name", "");
+  if (kind == "Name" && node.contains("ctx"))
+    return node["ctx"].value("_type", "") == "Store" ? node.value("id", "")
+                                                     : "";
+  return "";
+}
+
+/// Whether `node` binds `name` (a parameter, nested definition, import or
+/// assignment target), which would shadow the module-level function.
+static bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+      return binds_name(child, name);
+    });
+  if (!node.is_object())
+    return false;
+  if (bound_name(node) == name)
+    return true;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return binds_name(child, name);
+  });
+}
+
+/// The functions a body returns by name, through conditional expressions.
+/// Empty when any return value is something else.
+static std::vector<std::string>
+returned_function_names(const nlohmann::json &function_node)
+{
+  std::vector<nlohmann::json> values;
+  collect_return_values(function_node["body"], values);
+  std::vector<std::string> names;
+  while (!values.empty())
+  {
+    const nlohmann::json value = values.back();
+    values.pop_back();
+    const std::string kind = value.value("_type", "");
+    if (kind == "Name")
+    {
+      const std::string name = value["id"].get<std::string>();
+      if (
+        binds_name(function_node["args"], name) ||
+        binds_name(function_node["body"], name))
+        return {};
+      names.push_back(name);
+    }
+    else if (kind == "IfExp")
+    {
+      values.push_back(value["body"]);
+      values.push_back(value["orelse"]);
+    }
+    else
+      return {};
+  }
+  return names;
+}
+
+static bool same_signature(const code_typet &a, const code_typet &b)
+{
+  if (
+    a.return_type() != b.return_type() ||
+    a.arguments().size() != b.arguments().size())
+    return false;
+  for (std::size_t i = 0; i < a.arguments().size(); ++i)
+    if (a.arguments()[i].type() != b.arguments()[i].type())
+      return false;
+  return true;
+}
+
+typet python_converter::returned_function_type(
+  const nlohmann::json &function_node)
+{
+  const typet callable = type_handler_.get_typet(std::string("Callable"));
+  std::optional<code_typet> signature;
+  for (const std::string &name : returned_function_names(function_node))
+  {
+    const symbolt *fn =
+      find_symbol(symbol_id(current_python_file, "", name).to_string());
+    if (!fn || !fn->get_type().is_code())
+      return callable;
+    const code_typet &fn_type = to_code_type(fn->get_type());
+    if (!signature)
+      signature = fn_type;
+    else if (!same_signature(*signature, fn_type))
+      return callable;
+  }
+  return signature ? gen_pointer_type(*signature) : callable;
+}
+
+typet python_converter::named_return_type(
+  const std::string &name,
+  const nlohmann::json &return_node,
+  const nlohmann::json &function_node)
+{
+  if (is_bare_callable_annotation(return_node))
+    return returned_function_type(function_node);
+  return resolve_generic_return_type(name, function_node, type_handler_);
+}
+
 /// Whether the parameter takes the Any (void*) default: no annotation at all,
 /// or a bare `Callable`, which is worse than none.
 static bool parameter_defaults_to_any(const nlohmann::json &element)
@@ -3402,8 +3513,8 @@ void python_converter::get_function_definition(
     }
     else
     {
-      type.return_type() = resolve_generic_return_type(
-        return_type.get<std::string>(), function_node, type_handler_);
+      type.return_type() = named_return_type(
+        return_type.get<std::string>(), return_node, function_node);
     }
   }
   else if (return_node["_type"] == "BinOp")
