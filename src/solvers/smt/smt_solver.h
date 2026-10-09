@@ -804,10 +804,13 @@ public:
     const std::string &sym,
     const typet *type);
 
+  /** @param may_be_freed The object is heap-allocated: once freed it stops
+   *  keeping later objects off its addresses. */
   smt_astt init_pointer_obj(
     unsigned int obj_num,
     const expr2tc &size,
-    const typet *type);
+    const typet *type,
+    bool may_be_freed);
 
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
@@ -1197,19 +1200,13 @@ public:
   type2tc addr_space_type;
   /** Type of the array of address space allocation records. */
   type2tc addr_space_arr_type;
-  /** List of address space allocation sizes. A map from the object number to
-   *  the nubmer of bytes allocated. In a list to support pushing and
-   *  popping. */
-  std::list<std::map<unsigned, unsigned>> addr_space_data;
+  /** The objects given an address so far, each mapped to whether it is a heap
+   *  object that may be freed. In a list to support pushing and popping. */
+  std::list<std::map<unsigned, bool>> addr_space_data;
 
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
   expr2tc current_valid_objects_sym;
-
-  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked
-   * with.
-   */
-  expr2tc cur_dynamic;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;

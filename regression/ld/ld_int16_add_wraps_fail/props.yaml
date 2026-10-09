@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "NonZero"
+    justification: "4 * K wraps to 0 in 16 bits when K is 16384, and stays 16384 when K is 4096."

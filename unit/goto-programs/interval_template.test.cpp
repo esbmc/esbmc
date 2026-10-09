@@ -533,6 +533,14 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
       over_join.get_upper_bound(),
       over_join.is_bottom());
     REQUIRE(over_join.is_top());
+
+    // The meet is [10, 20] and [150, 190]; over_meet must keep both (#8204).
+    CAPTURE(over_meet.lower, over_meet.upper, over_meet.is_bottom());
+    REQUIRE(over_meet.contains(10));
+    REQUIRE(over_meet.contains(20));
+    REQUIRE(over_meet.contains(150));
+    REQUIRE(over_meet.contains(190));
+    REQUIRE(over_meet.is_equal(B));
   }
   SECTION("Join/Meet when A do not overlap and B overlaps meets A in one end")
   {

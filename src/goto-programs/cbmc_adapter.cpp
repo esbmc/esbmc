@@ -223,6 +223,31 @@ bool element_bytes(const irept &elem_type, std::size_t &bytes)
   return true;
 }
 
+// CBMC lays out an array and a vector alike: the element type is the sole
+// positional sub of the type, the elements those of the constant.
+bool is_array_or_vector(const irep_idt &id)
+{
+  return id == "array" || id == "vector";
+}
+
+// ESBMC reads a statement's location from "#location"; CBMC keeps it, with the
+// assertion's comment and property class, in "#source_location". An
+// instruction's own location is carried separately.
+void copy_code_location(irept &irep)
+{
+  if (irep.id() == "code" && has_sub(irep, "#source_location"))
+    irep.add("#location") = irep.find("#source_location");
+}
+
+// A call's arguments, or a statement nested in an expression -- the block of a
+// statement expression, which Kani builds vtables with -- whose operands CBMC
+// keeps as positional subs. An instruction's own code is wrapped before this.
+bool has_positional_operands(const irept &irep)
+{
+  return (irep.id() == "arguments" || irep.id() == "code") &&
+         !irep.get_sub().empty();
+}
+
 // A member access on a complex value's "real"/"imag" component; "member" is
 // in fix_expression's operand-wrap set.
 irept complex_member(const irept &op, const char *name, const irept &elem)
@@ -967,13 +992,15 @@ void fix_expression(irept &irep)
 
   // In CBMC both an expression and a type can be named "array"; "array" is an
   // umbrella expression that can also mean index.
-  const bool array_has_operand = cur == "array" && has_sub(irep, "type") &&
-                                 irep.find("type").id() == "array" &&
-                                 !irep.get_sub().empty();
+  const bool array_has_operand =
+    is_array_or_vector(cur) && has_sub(irep, "type") &&
+    irep.find("type").id() == cur && !irep.get_sub().empty();
 
-  const bool is_function_call = cur == "arguments" && !irep.get_sub().empty();
+  copy_code_location(irep);
 
-  if (expressions.count(cur) != 0 || array_has_operand || is_function_call)
+  if (
+    expressions.count(cur) != 0 || array_has_operand ||
+    has_positional_operands(irep))
   {
     irept operands;
     operands.get_sub() = irep.get_sub();
@@ -1183,7 +1210,7 @@ void fix_type(
   }
 
   if (
-    self.id() == "array" && !has_sub(self, "subtype") &&
+    is_array_or_vector(self.id()) && !has_sub(self, "subtype") &&
     !self.get_sub().empty())
   {
     irept magic = self.get_sub()[0];

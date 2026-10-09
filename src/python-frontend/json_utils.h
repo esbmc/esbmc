@@ -82,6 +82,28 @@ ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b)
 }
 
 /// True for `X = Y` between two bare names, such as `_Elem = int`.
+// True if the AST subtree contains a function-call node. Used to gate
+// constant-folding of assertion tests to expressions that actually invoke a
+// (potentially pure) function — plain symbolic asserts stay on the solver path.
+inline bool ast_contains_call(const nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    if (n.contains("_type") && n["_type"] == "Call")
+      return true;
+    for (auto it = n.begin(); it != n.end(); ++it)
+      if (ast_contains_call(it.value()))
+        return true;
+  }
+  else if (n.is_array())
+  {
+    for (const auto &e : n)
+      if (ast_contains_call(e))
+        return true;
+  }
+  return false;
+}
+
 inline bool is_name_alias(const nlohmann::json &stmt)
 {
   return stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&

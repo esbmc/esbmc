@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: this operation does not support a numpy view whose extent or stride is only known at run time$

@@ -1,0 +1,4 @@
+CORE
+rowchain.ld
+--ld-props props.yaml
+^ERROR: UnsupportedConstruct\(coils in rows less than 10 units apart in a chain, tier=2\)

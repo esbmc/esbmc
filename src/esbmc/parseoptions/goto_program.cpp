@@ -20,7 +20,12 @@
 #  include <malloc.h>
 #endif
 #include <limits>
+#include <util/base/prefix.h>
+#include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
+#include <util/irep/migrate.h>
+#include <set>
+#include <unordered_set>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -28,6 +33,7 @@
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/lift_call_expressions.h>
+#include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -194,11 +200,14 @@ bool esbmc_parseoptionst::get_goto_program(
 // loaded --binary onto the program's real entry: a CBMC goto-binary's
 // __CPROVER__start, or a user-selected --function harness. Without this,
 // __ESBMC_main would run the empty boilerplate main and report a verdict over
-// essentially no program. No-op if __ESBMC_main was not synthesised.
+// essentially no program. `init` is spliced in ahead of the call. No-op if
+// __ESBMC_main was not synthesised.
 // Returns true when `target` names no function in the program, so the caller
 // reports it instead of the inliner aborting on the dangling call.
-static bool
-retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
+static bool retarget_esbmc_main(
+  goto_functionst &goto_functions,
+  const irep_idt &target,
+  goto_programt init = {})
 {
   auto entry = goto_functions.function_map.find("__ESBMC_main");
   if (entry == goto_functions.function_map.end())
@@ -220,10 +229,74 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
     if (
       is_symbol2t(call.function) &&
       to_symbol2t(call.function).thename == "c:@F@main")
+    {
       call.function = symbol2tc(get_empty_type(), target);
+      entry->second.body.destructive_insert(it, init);
+    }
   }
 
   return false;
+}
+
+// The assignment CBMC's static_lifetime_init (src/linking/) makes for `sym`, or
+// nil when it leaves the symbol unassigned, so nondet.
+static exprt cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
+{
+  static const std::set<std::string> special = {
+    "__CPROVER_constant_infinity_uint",
+    "__CPROVER_memory",
+    "__func__",
+    "__FUNCTION__",
+    "__PRETTY_FUNCTION__",
+    "argc'",
+    "argv'",
+    "envp'",
+    "envp_size'"};
+  const std::string &id = sym.id.as_string();
+  if (
+    !sym.static_lifetime || sym.is_type || sym.is_macro ||
+    sym.get_type().is_code() || sym.get_type().is_empty() ||
+    special.count(id) || has_prefix(id, "__CPROVER_architecture_"))
+    return nil_exprt();
+
+  if (sym.get_value().is_not_nil())
+    return sym.get_value();
+
+  if (sym.is_extern)
+    return nil_exprt();
+
+  type2tc type = migrate_type(sym.get_type());
+  base_type(type, ns);
+  return migrate_expr_back(gen_zero(type, true));
+}
+
+// CBMC builds __CPROVER_initialize when it picks the entry point, so a goto
+// binary keeps its globals' initial values in the symbol table only.
+// __CPROVER__start runs that function; a --function harness skips it, so these
+// assignments stand in for it.
+static goto_programt cbmc_static_init(
+  contextt &context,
+  optionst &options,
+  const std::unordered_set<irep_idt, irep_id_hash> &preexisting)
+{
+  const namespacet ns(context);
+  code_blockt block;
+  context.foreach_operand_in_order([&](const symbolt &sym) {
+    if (preexisting.count(sym.id))
+      return;
+    const exprt value = cbmc_static_init_value(sym, ns);
+    if (value.is_nil())
+      return;
+    code_assignt assign(symbol_expr(sym), value);
+    assign.location() = sym.location;
+    block.move_to_operands(assign);
+  });
+
+  // A value can carry a side effect -- Kani builds each vtable with a statement
+  // expression -- so it is goto-converted, as __CPROVER_initialize is in CBMC.
+  goto_programt init;
+  goto_convertt(context, options).goto_convert(block, init);
+  return init;
 }
 
 // Bridge the synthesised __ESBMC_main, which wraps the boilerplate c:@F@main,
@@ -234,11 +307,20 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
 // the run cannot continue.
 static bool bridge_binary_entry_point(
   const cmdlinet &cmdline,
+  contextt &context,
+  optionst &options,
   goto_functionst &goto_functions,
-  bool cbmc_additions)
+  bool cbmc_additions,
+  const std::unordered_set<irep_idt, irep_id_hash> &preexisting)
 {
   if (cmdline.isset("function"))
-    return retarget_esbmc_main(goto_functions, cmdline.getval("function"));
+  {
+    goto_programt init;
+    if (cbmc_additions)
+      init = cbmc_static_init(context, options, preexisting);
+    return retarget_esbmc_main(
+      goto_functions, cmdline.getval("function"), init);
+  }
 
   if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
     retarget_esbmc_main(goto_functions, "__CPROVER__start");
@@ -304,10 +386,12 @@ bool esbmc_parseoptionst::create_goto_program(
           return true;
       }
 
+      std::unordered_set<irep_idt, irep_id_hash> preexisting;
+      context.foreach_operand(
+        [&preexisting](const symbolt &s) { preexisting.insert(s.id); });
+
       if (read_goto_binary(goto_functions))
         return true;
-
-      skip_property_classes(cmdline, goto_functions);
 
       // Resolve CBMC's bodyless libc externals (ceil/floor/..., strlen/strcmp/
       // strncmp) to the operational-model bodies the additions linked, before
@@ -315,13 +399,25 @@ bool esbmc_parseoptionst::create_goto_program(
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
+      if (
+        bridge_binary_entry_point(
+          cmdline,
+          context,
+          options,
+          goto_functions,
+          cbmc_additions,
+          preexisting))
+        return true;
+
       // CBMC serialises some intrinsics (object_size) as expressions that
       // migrate to calls; goto_convert never runs on a loaded binary, so
-      // nothing else lifts them out to statement level.
+      // nothing else lifts them out to statement level. After the bridge, so
+      // the static initialisers it splices into __ESBMC_main are lifted too.
       lift_call_expressions(context, goto_functions);
 
-      if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
-        return true;
+      // After the bridge, so the asserts of the spliced initialisers are
+      // filtered too.
+      skip_property_classes(cmdline, goto_functions);
 
       goto_functions.update();
     }

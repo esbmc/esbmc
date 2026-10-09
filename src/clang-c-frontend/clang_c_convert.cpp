@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
@@ -410,6 +411,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   struct_union_typet t(c_tag);
   t.tag(name);
 
+  /* Struct not complete yet. Still need methods. */
+  t.incomplete(true);
+
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
@@ -438,9 +442,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
 
-  /* That recursion can also re-enter this very record and complete it (#2323).
-   * Completing it again would run the method pass a second time and add the
-   * vtable variable symbol twice, which aborts conversion (#7643). */
+  /* Recursive field conversion can re-enter this record and complete it.
+   * The incomplete flag is removed only after all fields and methods have
+   * been processed, so a complete type here means another invocation has
+   * already completed this type. */
   if (!holds_incomplete_record(sym->get_type()))
     return false;
 
@@ -454,6 +459,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
       sym->set_type(std::move(t));
       return true;
     }
+    // Struct is complete
+    t.remove(irept::a_incomplete);
     sym->set_type(std::move(t));
   }
 
@@ -495,16 +502,12 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 
 /// A C++ function-local static whose initializer is not a constant runs it
 /// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
-/// hoisted into static_lifetime_init. An array built by one constructor call,
-/// which only static_lifetime_init expands per element, keeps the hoisted
-/// form, and so does the IREP2 adjuster, which drops the declaration's marker.
+/// hoisted into static_lifetime_init. The IREP2 adjuster, which drops the
+/// declaration's marker, keeps the hoisted form.
 bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
 {
   return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
-         vd.hasInit() &&
-         !(vd.getType()->isArrayType() && llvm::isa<clang::CXXConstructExpr>(
-                                            vd.getInit()->IgnoreImplicit())) &&
-         !vd.hasConstantInitialization() &&
+         vd.hasInit() && !vd.hasConstantInitialization() &&
          !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
 }
 
@@ -2706,6 +2709,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     typet type;
     clang::QualType qtype = function_call.getCallReturnType(*ASTContext);
+    // Sema types a custom-typechecked builtin's call itself: on an unsigned
+    // char, __sync_fetch_and_add calls the char-returning _1 variant.
+    if (
+      const unsigned id = function_call.getBuiltinCallee();
+      id && ASTContext->BuiltinInfo.hasCustomTypechecking(id))
+      qtype = function_call.getType();
     if (get_type(qtype, type))
       return true;
 
@@ -2716,7 +2725,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : function_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -2792,11 +2801,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       /* The underlying storage is automatic here, i.e., local. In order for
        * it to be recognized as being local in ESBMC, it requires a declaration,
-       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
-      code_declt decl(new_expr);
-      decl.operands().push_back(initializer);
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one.
+       * It goes before the enclosing statement, which may be a loop or a
+       * labelled statement, so the object is initialised where the literal is
+       * evaluated, each time it is (C17 6.5.2.5p5). */
+      current_block->operands().push_back(code_declt(new_expr));
 
-      current_block->operands().push_back(decl);
+      side_effect_exprt assign("assign", t);
+      assign.copy_to_operands(new_expr, initializer);
+      exprt comma("comma", t);
+      comma.copy_to_operands(assign, new_expr);
+      new_expr = comma;
     }
     else
     {
@@ -3268,6 +3283,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_vector_type(t).subtype();
 
         gen_typecast(ns, init, elem_type);
+        // Unlike a braced list, this does not extend the lifetime of a
+        // temporary bound to a reference member ([class.temporary]/6);
+        // the cast keeps goto_convert from treating it as extended.
+        if (
+          init.id() == "address_of" && is_lvalue_or_rvalue_reference(elem_type))
+          init = typecast_exprt(init, elem_type);
         inits.operands().at(i) = init;
       }
     }
@@ -4203,6 +4224,24 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   log_error("{}", oss.str());
   return true;
 }
+
+/// `__builtin_copysign` and the other `__builtin_` spellings of a <math.h>
+/// function have no body; the plain name has an operational model. Those
+/// that clang_c_adjust lowers by their own spelling keep it.
+bool clang_c_convertert::is_unlowered_math_builtin(
+  const std::string &name) const
+{
+  llvm::StringRef lib_name(name);
+  if (
+    is_name_matched_builtin(name) || compare_unscore_builtin(name, "nan") ||
+    !lib_name.consume_front("__builtin_"))
+    return false;
+
+  unsigned lib_id = ASTContext->Idents.get(lib_name).getBuiltinID();
+  return lib_id && llvm::StringRef(
+                     ASTContext->BuiltinInfo.getHeaderName(lib_id)) == "math.h";
+}
+
 void clang_c_convertert::rewrite_builtin_ref(
   const clang::Decl &d,
   std::string &name,
@@ -4226,8 +4265,10 @@ void clang_c_convertert::rewrite_builtin_ref(
     unsigned builtin_id = fd->getBuiltinID();
     if (
       builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
-      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
-        builtins_to_rewrite.end())
+      (std::find(
+         builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+         builtins_to_rewrite.end() ||
+       is_unlowered_math_builtin(name)))
     {
       boost::replace_all(name, "__builtin_", "");
       boost::replace_all(id, "__builtin_", "");
@@ -4959,8 +5000,10 @@ static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
   {
   case clang::AtomicExpr::AO__c11_atomic_load:
   case clang::AtomicExpr::AO__atomic_load_n:
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
   case clang::AtomicExpr::AO__atomic_clear:
+#endif
     return false;
   default:
     return true;
@@ -5108,6 +5151,7 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
     name = "__atomic_test_and_set";
     break;
@@ -5115,6 +5159,7 @@ bool clang_c_convertert::get_atomic_expr(
   case clang::AtomicExpr::AO__atomic_clear:
     name = "__atomic_clear";
     break;
+#endif
 
   default:
     log_error("Unknown Atomic expression");

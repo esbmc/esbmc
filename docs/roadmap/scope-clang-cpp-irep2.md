@@ -1920,7 +1920,8 @@ identically with this change stashed and reverted, so they are not its doing:
 they expect an *elaborated* type name (`uncaught exception: struct my_error`,
 `class std::out_of_range`) and this build's bundled clang 21 prints the
 unelaborated one. Those descriptors have a blank flags line, so they pin whatever
-LLVM the build used, which is the trap CLAUDE.md's *Pin the mode in every test*
+LLVM the build used, which is the trap `docs/agents/regression-tests.md`'s *Pin the mode in
+every test*
 note describes.
 
 Note also what this says about the *other* seam loss, the callee's `constructor`
