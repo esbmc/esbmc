@@ -2349,6 +2349,8 @@ regression/python/github_7802
 regression/python/github_7802_fail
 regression/python/github_7802_eval_order
 regression/python/github_7802_eval_order_fail
+regression/esbmc/cprover_object_size_per_object
+regression/esbmc/cprover_object_size_per_object_fail
 regression/python/github_8017
 regression/python/github_8017_fail
 regression/python/github_8226
@@ -2361,5 +2363,7 @@ regression/python/github_8196
 regression/python/github_8196_fail
 regression/python/github_8225
 regression/python/github_8225_fail
+regression/python/github_8239
+regression/python/github_8239_fail
 regression/python/github_8200_late
 regression/python/github_8200_late_fail

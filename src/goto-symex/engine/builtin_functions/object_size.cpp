@@ -58,6 +58,22 @@ type2tc addressed_object_type(
   // back as 1 byte and the check failed where CBMC proves it.
   return item.object->type;
 }
+
+/// The size `size_of` gives the object `ptr` addresses, chosen among the
+/// objects `items` lists by each one's value-set guard; `fallback` when it
+/// addresses none of them. An item `size_of` gives nil leaves its paths to
+/// `fallback` too.
+template <class SizeOf>
+expr2tc select_by_object(
+  const std::list<dereference_callbackt::internal_item> &items,
+  expr2tc fallback,
+  SizeOf size_of)
+{
+  for (const auto &item : items)
+    if (const expr2tc size = size_of(item); !is_nil_expr(size))
+      fallback = if2tc(size_type2(), item.guard, size, fallback);
+  return fallback;
+}
 } // namespace
 
 void goto_symext::intrinsic_builtin_object_size(
@@ -124,9 +140,8 @@ void goto_symext::intrinsic_builtin_object_size(
       !is_nil_type(address_of_object_type(ptr)))
       obj_size = total_size_of(internal_deref_items.front());
     else
-      for (const auto &item : internal_deref_items)
-        obj_size =
-          if2tc(size_type2(), item.guard, total_size_of(item), obj_size);
+      obj_size =
+        select_by_object(internal_deref_items, obj_size, total_size_of);
 
     // Type 1 or 3: the bytes remaining after the pointer's offset.
     if (consider_offset)
@@ -178,32 +193,33 @@ void goto_symext::intrinsic_get_object_size(
   // an unconstrained non-negative nondet value: any concrete length the caller
   // could have passed is covered by some assignment, matching how symex
   // already treats other unresolvable-but-legal sizes (e.g. asprintf's
-  // unbounded %s, io.cpp). The array path below is byte-for-byte unchanged, so
-  // C/C++ callers — which always pass an array object — are unaffected.
-  expr2tc obj_size;
+  // unbounded %s, io.cpp). A pointer that may address several arrays gets the
+  // count of the one it addresses on each path.
+  auto count_of =
+    [](const dereference_callbackt::internal_item &item) -> expr2tc {
+    if (!is_array_type(item.object->type))
+      return expr2tc();
+    return typecast2tc(
+      size_type2(), to_array_type(item.object->type).array_size);
+  };
 
+  // A pointer that may address several objects takes the count of the one it
+  // addresses, not of whichever the value set lists first.
+  expr2tc obj_size;
   if (
-    internal_deref_items.empty() ||
-    !is_array_type(internal_deref_items.front().object->type))
+    internal_deref_items.size() == 1 &&
+    is_array_type(internal_deref_items.front().object->type))
+    obj_size = count_of(internal_deref_items.front());
+  else
   {
     log_debug(
       "goto-symex",
-      "__ESBMC_get_object_size: object is not a resolvable array; "
-      "modelling its size as an unconstrained nondet value");
-
-    obj_size = sideeffect2tc(
-      size_type2(),
-      expr2tc(),
-      expr2tc(),
-      std::vector<expr2tc>(),
-      type2tc(),
-      sideeffect2t::allockind::nondet);
-    replace_nondet(obj_size);
-  }
-  else
-  {
-    const type2tc &obj_type = internal_deref_items.front().object->type;
-    obj_size = to_array_type(obj_type).array_size;
+      "__ESBMC_get_object_size: pointer does not resolve to one array; "
+      "modelling the count of any other object as an unconstrained nondet "
+      "value");
+    expr2tc unknown = gen_nondet(size_type2());
+    replace_nondet(unknown);
+    obj_size = select_by_object(internal_deref_items, unknown, count_of);
   }
 
   expr2tc ret_ref = func_call.ret;
