@@ -151,11 +151,12 @@ public:
       name == "BaseException" || name == "Exception" || name == "ValueError" ||
       name == "TypeError" || name == "AttributeError" || name == "IndexError" ||
       name == "KeyError" || name == "ZeroDivisionError" ||
-      name == "AssertionError" || name == "NameError" || name == "OSError" ||
-      name == "FileNotFoundError" || name == "FileExistsError" ||
-      name == "PermissionError" || name == "NotImplementedError" ||
-      name == "ImportError" || name == "ModuleNotFoundError" ||
-      name == "RuntimeError" || name == "StopIteration" || name == "EOFError");
+      name == "OverflowError" || name == "AssertionError" ||
+      name == "NameError" || name == "OSError" || name == "FileNotFoundError" ||
+      name == "FileExistsError" || name == "PermissionError" ||
+      name == "NotImplementedError" || name == "ImportError" ||
+      name == "ModuleNotFoundError" || name == "RuntimeError" ||
+      name == "StopIteration" || name == "EOFError");
   }
 
   static bool is_c_model_func(const std::string &func_name)

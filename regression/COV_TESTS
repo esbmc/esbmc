@@ -2357,3 +2357,7 @@ regression/python/github_8196
 regression/python/github_8196_fail
 regression/python/github_8225
 regression/python/github_8225_fail
+regression/python/github_8261_int_inf_fail
+regression/python/github_8261_int_nan_fail
+regression/python/github_8261_int_nonfinite
+regression/python/github_8261_int_lazy_operand

@@ -349,6 +349,12 @@ private:
   void handle_float_to_int(nlohmann::json &arg) const;
 
   /*
+   * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
+   * the float @p operand; returns the operand to convert.
+   */
+  exprt guard_nonfinite_float_to_int(exprt operand) const;
+
+  /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
    * the appropriate cast expression.
    */
