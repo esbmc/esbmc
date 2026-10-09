@@ -1,0 +1,6 @@
+CORE
+main.c
+--overflow-check --multi-property
+^VERIFICATION SUCCESSFUL$
+^\*\* 0 of 10 properties failed, 10 passed$
+PASSED\s+\[main.arithmetic-overflow.7\]\s+line 15\s+arithmetic overflow on abs
