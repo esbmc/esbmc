@@ -328,6 +328,60 @@ exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
   return unknown;
 }
 
+exprt function_call_expr::handle_check_type() const
+{
+  // `_sv_verifier.check_type(value, hint)` states that value has the type the
+  // hint describes, and raises TypeError otherwise. sv-benchmarks implements it
+  // in Python with typing.get_origin/get_args, collections.abc protocols and
+  // isinstance over a variable class, none of which the frontend models, so the
+  // call is intercepted here the way build_nondet_call() intercepts the
+  // nondet_* stubs instead of converting their bodies.
+  //
+  // The argument shape is isinstance()'s, so the match itself is delegated.
+  const exprt matches = handle_isinstance();
+
+  if (matches.is_true())
+    return gen_boolean(true);
+
+  const locationt location = converter_.get_location_from_decl(call_);
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "expected value of type " + hint_name_for_message());
+
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = location;
+
+  if (matches.is_false())
+  {
+    converter_.add_instruction(throw_code);
+    return gen_boolean(true);
+  }
+
+  // The hint holds only on some paths, so guard the raise by the match.
+  exprt negated("not", bool_typet());
+  negated.copy_to_operands(matches);
+  negated.location() = location;
+
+  code_ifthenelset guarded;
+  guarded.cond() = negated;
+  guarded.then_case() = throw_code;
+  guarded.location() = location;
+  converter_.add_instruction(guarded);
+
+  return gen_boolean(true);
+}
+
+std::string function_call_expr::hint_name_for_message() const
+{
+  const auto &hint = call_["args"][1];
+  const std::string node_type = hint.value("_type", "");
+  if (node_type == "Name")
+    return hint.value("id", "?");
+  if (node_type == "Attribute")
+    return hint.value("attr", "?");
+  return "the given hint";
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];

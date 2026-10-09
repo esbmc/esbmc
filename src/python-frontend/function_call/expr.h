@@ -128,6 +128,12 @@ private:
 
   bool is_introspection_call() const;
 
+  /**
+   * @brief True for `_sv_verifier.check_type(value, hint)`, the SV-COMP
+   * Python track's type-checking predicate (sv-benchmarks !1792).
+   */
+  bool is_check_type_call() const;
+
   /// True for a bare `hash(x)` whose argument is not bytes-typed, i.e. not
   /// the consensus spec's own `hash(data: bytes) -> Bytes32`.
   bool is_generic_hash_call() const;
@@ -278,6 +284,8 @@ private:
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
   exprt handle_isinstance() const;
+  exprt handle_check_type() const;
+  std::string hint_name_for_message() const;
 
   /// isinstance(obj, type) for a str-typed `obj` that is not a known class
   /// object: a type object and a string share the char-array model.

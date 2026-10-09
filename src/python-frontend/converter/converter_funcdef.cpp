@@ -3584,8 +3584,32 @@ void python_converter::get_function_definition(
 
   const std::string nondet_suffix = nondet_stub_suffix(func_name);
 
+  // The same problem for SV-COMP's type-checking predicate (sv-benchmarks
+  // !1792): `check_type` and the `_matches_type` it calls are written with
+  // typing.get_origin/get_args, collections.abc protocols and isinstance over
+  // a variable class, so merely importing _sv_verifier threw before any task
+  // statement ran. The predicate's meaning is supplied at the call site by
+  // function_call_expr::handle_check_type(), so the body is replaced rather
+  // than converted. `_matches_type` reports a match so that an unintercepted
+  // direct call stays sound in the "no violation" direction.
+  const bool is_spec_predicate_stub =
+    func_name == "check_type" || func_name == "_matches_type";
+
   exprt function_body;
-  if (!nondet_suffix.empty())
+  if (is_spec_predicate_stub)
+  {
+    code_blockt block;
+    if (func_name == "_matches_type")
+    {
+      type.return_type() = bool_type();
+      python_expr::set_function_type(*added_symbol, type);
+      code_returnt return_stmt;
+      return_stmt.return_value() = gen_boolean(true);
+      block.copy_to_operands(return_stmt);
+    }
+    function_body = block;
+  }
+  else if (!nondet_suffix.empty())
   {
     // The stub can be passed as a first-class value and called indirectly
     // through a function pointer (SV-COMP's `nondet_list(nondet_int)` /

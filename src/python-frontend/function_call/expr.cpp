@@ -435,6 +435,22 @@ bool function_call_expr::is_introspection_call() const
   return func_name == "isinstance" || func_name == "hasattr";
 }
 
+bool function_call_expr::is_check_type_call() const
+{
+  // Matched on the qualified call shape rather than the bare name, so a
+  // program's own two-argument check_type() is still converted normally.
+  if (!call_.contains("args") || call_["args"].size() != 2)
+    return false;
+  const auto &func = call_["func"];
+  if (!func.is_object() || func.value("_type", "") != "Attribute")
+    return false;
+  if (func.value("attr", "") != "check_type")
+    return false;
+  const auto &base = func["value"];
+  return base.is_object() && base.value("_type", "") == "Name" &&
+         base.value("id", "") == "_sv_verifier";
+}
+
 bool function_call_expr::is_generic_hash_call() const
 {
   if (
@@ -3953,6 +3969,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_nondet_call(); },
      [this]() { return build_nondet_call(); },
      "nondet functions"},
+
+    // SV-COMP Python track's type-checking predicate
+    {[this]() { return is_check_type_call(); },
+     [this]() { return handle_check_type(); },
+     "_sv_verifier.check_type()"},
 
     // Introspection functions (isinstance, hasattr)
     {[this]() { return is_introspection_call(); },
