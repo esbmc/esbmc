@@ -11371,8 +11371,9 @@ guarded by `i < n`, and the character becomes a NUL when `i + 1 < n` fails
 (C11 7.21.6.5p2). The guard also joins the state guard during each write, so
 `snprintf(NULL, 0, ...)` raises no NULL dereference. `%c` now emits its
 character, padded to the field width. The formatter ignores the `-`, `+`, ` `
-and `#` flags, so it now marks an output that used one as inexact and nothing
-is stored.
+and `#` flags and prints a placeholder for `%p`, so it now marks an output
+that used one of them, or an unknown conversion, as inexact and nothing is
+stored.
 
 `sprintf_stores_output` checks a `sprintf`, a truncating `snprintf` with its
 return value, and a `%-2d` that must not be stored as `" 7"`. It is FAILED on
