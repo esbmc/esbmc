@@ -2338,6 +2338,7 @@ regression/goto-transcoder/cbmc_kani_union_padding
 regression/goto-transcoder/cbmc_kani_union_padding_fail
 regression/esbmc/memspace_first_page
 regression/esbmc/memspace_first_page_fail
+regression/esbmc/memspace_low_address_fail
 regression/esbmc/memspace_first_page_vla_band
 regression/esbmc/memspace_first_page_vla_band_fail
 regression/goto-transcoder/cbmc_kani_dyn_vtable
