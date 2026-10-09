@@ -11380,8 +11380,9 @@ master. `sprintf_stores_output_fail` pins the bounds violation of the
 overflowing `sprintf` and is SUCCESSFUL on master. Reverting the store, the
 `%c` change, the flag check or the `snprintf` limit each flips
 `sprintf_stores_output`. The default solver is Z3 in this build (Bitwuzla was
-not built), and `--z3` gives the same verdicts. The 391 live regression tests
-whose sources mention `printf` keep their master verdicts under a 60 s cap.
+not built), and `--z3` gives the same verdicts. The other 389 live regression
+tests whose sources mention `printf` keep their master verdicts under a 60 s
+cap.
 
 Not fixed: an output that is not fully constant (a nondet integer, a `%s` of
 an array, a float) still leaves the destination unchanged, as do `vsprintf`
