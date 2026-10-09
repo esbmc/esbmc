@@ -451,6 +451,14 @@ void execution_statet::assume(const expr2tc &assumption)
     analyze_read(assumption);
 }
 
+void execution_statet::defer_assumption(const expr2tc &assumption)
+{
+  goto_symext::defer_assumption(assumption);
+
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(assumption);
+}
+
 void execution_statet::symex_printf(const expr2tc &lhs, expr2tc &code)
 {
   // A shared global passed to printf is read here and nowhere else, so without
