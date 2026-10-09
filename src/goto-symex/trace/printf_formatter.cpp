@@ -430,6 +430,7 @@ void printf_formattert::process_format(std::ostream &out)
     // runtime output. %p ignores the '0' flag; pad with spaces only.
     if (next_operand != operands.end())
       ++next_operand;
+    exact = false;
     const unsigned hex_chars = (config.ansi_c.pointer_width() + 3) / 4;
     emit(pad_int(
       "0x" + std::string(hex_chars, '0'), format_constant.min_width, false));
@@ -437,6 +438,7 @@ void printf_formattert::process_format(std::ostream &out)
   }
 
   default:
+    exact = false;
     emit(std::string(1, '%') + ch);
   }
 }
