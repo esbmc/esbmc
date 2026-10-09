@@ -575,6 +575,13 @@ protected:
    */
   bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
+  /** Convert an actual argument to its parameter's type, claiming the call
+   *  undefined when the two are incompatible. */
+  expr2tc argument_value(
+    const type2tc &arg_type,
+    const expr2tc &rhs,
+    const irep_idt &identifier);
+
   /**
    *  Join up function arguments.
    *  Assigns the value of arguments to a function to the actual argument
