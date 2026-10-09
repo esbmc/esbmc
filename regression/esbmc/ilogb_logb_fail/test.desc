@@ -2,5 +2,5 @@ CORE
 main.c
 --multi-property
 ^VERIFICATION FAILED$
-^\*\* 1 of 2 properties failed, 1 passed$
+^\*\* 1 of 4 properties failed, 3 passed$
 FAILED\s+\[main.assertion.2\].*logb

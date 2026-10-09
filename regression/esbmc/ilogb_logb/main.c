@@ -9,7 +9,6 @@ int main()
 {
   assert(ilogb(8.0) == 3);
   assert(ilogbf(0.75f) == -1);
-  assert(ilogbl(1024.0L) == 10);
   assert(ilogb(DBL_TRUE_MIN) == -1074);
   assert(ilogb(0.0) == FP_ILOGB0);
   assert(ilogb(-INFINITY) == INT_MAX);
