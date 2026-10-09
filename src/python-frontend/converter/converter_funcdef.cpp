@@ -2170,12 +2170,53 @@ array_type_shape_and_elem(const typet &arr_type)
   return std::make_pair(shape, cur);
 }
 
+// Index of the parameter of `function_name` that `arg` forwards unchanged:
+// a bare `Name` naming a parameter the function body never rebinds.
+static std::optional<std::size_t> forwarded_param_index(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  const std::string &function_name)
+{
+  const nlohmann::json *def = find_function_def(module_body, function_name);
+  if (
+    def == nullptr || arg.value("_type", "") != "Name" ||
+    !def->contains("args") || !def->contains("body"))
+    return std::nullopt;
+
+  const std::string name = arg.value("id", "");
+  std::set<std::string> loads, bound, rebound;
+  collect_scope_names((*def)["body"], loads, bound, rebound);
+  if (bound.count(name) != 0 || rebound.count(name) != 0)
+    return std::nullopt;
+
+  const nlohmann::json &params = (*def)["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      return i;
+  return std::nullopt;
+}
+
 bool python_converter::try_infer_numpy_view_param(
   const std::string &func_name,
   std::size_t param_index,
   typet &out_elem_type,
   numpy_scalar_pointer_view_infot &out_info) const
 {
+  std::set<std::string> visiting;
+  return try_infer_numpy_view_param(
+    func_name, param_index, out_elem_type, out_info, visiting);
+}
+
+// `visiting` stops the forwarding recursion on mutually recursive callees.
+bool python_converter::try_infer_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index,
+  typet &out_elem_type,
+  numpy_scalar_pointer_view_infot &out_info,
+  std::set<std::string> &visiting) const
+{
+  if (!visiting.insert(func_name + "#" + std::to_string(param_index)).second)
+    return false;
   const nlohmann::json &module_body = (*ast_json)["body"];
   std::vector<numpy_param_call_site> call_sites;
   collect_call_sites(*ast_json, "", call_sites);
@@ -2260,41 +2301,58 @@ bool python_converter::try_infer_numpy_view_param(
       continue;
 
     const nlohmann::json &arg = call["args"][param_index];
-    auto [arr_name, slice_node] = resolve_view_arg_source(arg, module_body);
-    if (arr_name.empty())
-      continue;
-
-    // Locate the source array's literal assignment in the module body.
-    std::optional<typet> arr_type;
-    for (const auto &stmt : module_body)
+    typet candidate_elem;
+    std::optional<numpy_scalar_pointer_view_infot> candidate_info;
+    if (
+      const std::optional<std::size_t> forwarded =
+        forwarded_param_index(arg, module_body, site.enclosing_function))
     {
-      if (assignment_target_name(stmt) != arr_name)
+      numpy_scalar_pointer_view_infot forwarded_info;
+      if (!try_infer_numpy_view_param(
+            site.enclosing_function,
+            *forwarded,
+            candidate_elem,
+            forwarded_info,
+            visiting))
         continue;
-      const nlohmann::json *value = nullptr;
-      const std::string stype = stmt.value("_type", "");
-      if (stype == "Assign" && stmt.contains("value"))
-        value = &stmt["value"];
-      else if (
-        stype == "AnnAssign" && stmt.contains("value") &&
-        !stmt["value"].is_null())
-        value = &stmt["value"];
-      if (value && is_numpy_array_literal_call(*value))
-        arr_type = type_handler_.get_typet((*value)["args"][0]);
-      break;
+      candidate_info = forwarded_info;
     }
-    if (!arr_type)
-      continue;
+    else
+    {
+      auto [arr_name, slice_node] = resolve_view_arg_source(arg, module_body);
+      if (arr_name.empty())
+        continue;
 
-    auto shape_elem = array_type_shape_and_elem(*arr_type);
-    if (!shape_elem)
-      continue;
+      // Locate the source array's literal assignment in the module body.
+      std::optional<typet> arr_type;
+      for (const auto &stmt : module_body)
+      {
+        if (assignment_target_name(stmt) != arr_name)
+          continue;
+        const nlohmann::json *value = nullptr;
+        const std::string stype = stmt.value("_type", "");
+        if (stype == "Assign" && stmt.contains("value"))
+          value = &stmt["value"];
+        else if (
+          stype == "AnnAssign" && stmt.contains("value") &&
+          !stmt["value"].is_null())
+          value = &stmt["value"];
+        if (value && is_numpy_array_literal_call(*value))
+          arr_type = type_handler_.get_typet((*value)["args"][0]);
+        break;
+      }
+      if (!arr_type)
+        continue;
 
-    auto candidate_info =
-      view_info_from_subscript(shape_elem->first, slice_node);
-    if (!candidate_info)
-      continue;
+      auto shape_elem = array_type_shape_and_elem(*arr_type);
+      if (!shape_elem)
+        continue;
 
-    const typet &candidate_elem = shape_elem->second;
+      candidate_info = view_info_from_subscript(shape_elem->first, slice_node);
+      if (!candidate_info)
+        continue;
+      candidate_elem = shape_elem->second;
+    }
 
     // All call sites must agree on element type, shape, and stride.
     if (found)

@@ -2491,6 +2491,12 @@ private:
     std::size_t param_index,
     typet &out_elem_type,
     numpy_scalar_pointer_view_infot &out_info) const;
+  bool try_infer_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index,
+    typet &out_elem_type,
+    numpy_scalar_pointer_view_infot &out_info,
+    std::set<std::string> &visiting) const;
   // Runtime length of the named view when its extent is not a constant.
   std::optional<exprt>
   symbolic_numpy_view_length(const std::string &name) const;
