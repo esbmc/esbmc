@@ -124,3 +124,4 @@ class PreprocessorStateMixin:
         self.exported_range_wrappers = {}
         self.module_dunder_all = None
         self._pending_method_default_inits = []
+        self._class_stack = []

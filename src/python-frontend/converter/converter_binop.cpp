@@ -786,6 +786,74 @@ exprt python_converter::handle_chained_comparisons_logic(
   return migrate_expr_back(acc);
 }
 
+/// The `range(...)` call a membership test of x can evaluate arithmetically:
+/// x an integer variable or constant, at most three positional arguments,
+/// and no call in them (they are converted again). Null otherwise.
+static const nlohmann::json *
+arithmetic_range_operand(const exprt &x, const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    element["comparators"].size() != 1 || !(x.is_symbol() || x.is_constant()) ||
+    !type_utils::is_integer_type(x.type()))
+    return nullptr;
+  const nlohmann::json &call = element["comparators"][0];
+  if (
+    call.value("_type", "") != "Call" ||
+    call["func"].value("id", "") != "range" || !call["keywords"].empty() ||
+    call["args"].empty() || call["args"].size() > 3 ||
+    json_utils::ast_contains_call(call["args"]))
+    return nullptr;
+  return &call;
+}
+
+/// `x in range(...)` as arithmetic, so the range's elements need not exist
+/// (#8199). Nil unless arithmetic_range_operand accepts the call and any step
+/// is a non-zero integer constant.
+exprt python_converter::range_membership(
+  const exprt &x,
+  const nlohmann::json &element)
+{
+  const nlohmann::json *call = arithmetic_range_operand(x, element);
+  if (!call)
+    return nil_exprt();
+
+  const nlohmann::json &args = (*call)["args"];
+  const typet &t = x.type();
+  const std::optional<long long> step =
+    args.size() == 3 ? python_frontend::literal_int_value(args[2]) : 1;
+  if (!step || *step == 0)
+    return nil_exprt();
+
+  const exprt start =
+    args.size() == 1 ? gen_zero(t) : typecast_exprt(get_expr(args[0]), t);
+  const exprt stop =
+    typecast_exprt(get_expr(args[args.size() == 1 ? 0 : 1]), t);
+  exprt in_bounds = *step > 0 ? and_exprt(
+                                  binary_relation_exprt(start, "<=", x),
+                                  binary_relation_exprt(x, "<", stop))
+                              : and_exprt(
+                                  binary_relation_exprt(stop, "<", x),
+                                  binary_relation_exprt(x, "<=", start));
+  if (*step == 1 || *step == -1)
+    return in_bounds;
+  const exprt rem = python_expr::build_mod(
+    python_expr::build_sub(x, start, t), from_integer(*step, t), t);
+  return and_exprt(in_bounds, python_expr::build_equal(rem, gen_zero(t)));
+}
+
+exprt python_converter::list_or_range_contains(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  exprt in_range = range_membership(lhs, element);
+  if (in_range.is_not_nil())
+    return in_range;
+  python_list list(*this, element);
+  return list.contains(lhs, rhs);
+}
+
 exprt python_converter::handle_membership_operator(
   exprt &lhs,
   exprt &rhs,
@@ -890,8 +958,7 @@ exprt python_converter::handle_membership_operator(
   // "item" in [list/set] or "item" not in [list/set]
   if (rhs.type() == list_type)
   {
-    python_list list(*this, element);
-    exprt contains_expr = list.contains(lhs, rhs);
+    exprt contains_expr = list_or_range_contains(lhs, rhs, element);
     if (!invert)
       return contains_expr;
     // V.3: build the "not in" negation in IREP2.
