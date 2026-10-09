@@ -1607,18 +1607,20 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     }
 
-    // --no-assertions: convert_assert removes side effects (a no-op here)
-    // and returns without emitting an ASSERT — match that exactly, an empty
-    // conversion rather than falling back.
-    if (options.get_bool_option("no-assertions"))
-      return true;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = normalise_native_code(
+    const expr2tc guard = normalise_native_code(
       a.guard, effective_location(a.location, inherited), ns);
-    t->location = a.location;
-    t->location.property("assertion");
-    t->location.user_provided(true);
+
+    // --no-assertions: convert_assert removes side effects (a no-op here)
+    // and emits no ASSERT — match that exactly.
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = guard;
+      t->location = a.location;
+      t->location.property("assertion");
+      t->location.user_provided(true);
+    }
+    assume_if_ends_path(guard, a.location, dest);
     return true;
   }
 

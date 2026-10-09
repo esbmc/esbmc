@@ -8540,6 +8540,9 @@ exprt python_converter::get_block(
 
       // Attach assertion message if present
       auto attach_assert_message = [&element](code_assertt &assert_code) {
+        // A failing assert raises AssertionError, which ends the program, so
+        // nothing after it runs on that path.
+        assert_code.location().set("ends_path", true);
         if (element.contains("msg") && !element["msg"].is_null())
         {
           std::string msg;

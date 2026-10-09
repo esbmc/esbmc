@@ -502,6 +502,8 @@ regression/python-contracts/old_local_fail
 regression/python-contracts/old_outside_clause_fail
 regression/python-contracts/unsupported_assigns_fail
 regression/python/ascii_builtin
+regression/python/assert_cuts_path
+regression/python/assert_list_cuts_path
 regression/python/bin_builtin
 regression/python/bin_subscript_symbolic
 regression/python/bool_dunder
@@ -721,6 +723,7 @@ regression/python/python_str_count_runtime_model
 regression/python/python_str_join_nondet_fallback
 regression/python/queue_join
 regression/python/queue_shared_instance_field
+regression/python/raise_assertionerror_cuts_path
 regression/python/recursive
 regression/python/recursive_join_genexp
 regression/python/return6

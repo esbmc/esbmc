@@ -278,6 +278,10 @@ protected:
   void convert_dowhile(const codet &code, goto_programt &dest);
   void convert_assume(const codet &code, goto_programt &dest);
   void convert_assert(const codet &code, goto_programt &dest);
+  void assume_if_ends_path(
+    const expr2tc &guard,
+    const locationt &location,
+    goto_programt &dest);
   void convert_switch(const codet &code, goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);

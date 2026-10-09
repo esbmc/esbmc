@@ -528,6 +528,9 @@ void goto_symext::symex_assume()
   replace_nondet(cond);
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
+  // An assume can carry an assert's condition, so lower its Python predicates
+  // as symex_assert does: no SMT rule converts them.
+  simplify_python_builtins(cond);
 
   assume(cond);
   propagate_assume_equality(cond);
