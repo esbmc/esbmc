@@ -34,7 +34,7 @@ engines:
       # getc, fgetc, getchar, read, etc.) — that is the whole point of
       # the model. Flawfinder's CWE-120/CWE-126 warnings on these files
       # are intentional and cannot be addressed by changing the signature
-      # without breaking what ESBMC verifies. See src/c2goto/CLAUDE.md.
+      # without breaking what ESBMC verifies. See src/c2goto/README.
       - 'src/c2goto/headers/**'
       - 'src/c2goto/library/**'
 

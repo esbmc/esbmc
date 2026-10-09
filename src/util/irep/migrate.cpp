@@ -1335,6 +1335,43 @@ migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
     migrate_expr(placement, place);
     args.push_back(place);
   }
+
+  // A user-placement operator new's placement arguments ride in
+  // arguments[5] onwards.
+  const exprt &alloc_args =
+    static_cast<const exprt &>(expr.find("alloc_arguments"));
+  if (alloc_args.is_not_nil())
+  {
+    args.resize(5);
+    for (const exprt &a : alloc_args.operands())
+    {
+      expr2tc arg;
+      migrate_expr(a, arg);
+      args.push_back(arg);
+    }
+  }
+}
+
+// Kani pads a union variant into `{ v: T, v_padding: <N-byte bv> }` but
+// initialises the union with the bare T: wrap it, padding left free.
+static void wrap_padded_union_member(
+  const type2tc &type,
+  const irep_idt &component,
+  std::vector<expr2tc> &members)
+{
+  if (!is_union_type(type) || members.size() != 1)
+    return;
+  const auto n = struct_union_get_component_number(type, component);
+  if (!n || !is_struct_type(to_union_type(type).members[*n]))
+    return;
+  const struct_type2t &padded = to_struct_type(to_union_type(type).members[*n]);
+  if (padded.members.empty() || padded.members[0] != members[0]->type)
+    return;
+
+  std::vector<expr2tc> fields{members[0]};
+  for (size_t i = 1; i < padded.members.size(); ++i)
+    fields.push_back(gen_nondet(padded.members[i]));
+  members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
 }
 
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
@@ -1521,6 +1558,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       members.push_back(new_ref);
     }
+
+    wrap_padded_union_member(type, expr.component_name(), members);
 
     new_expr_ref = constant_union2tc(type, expr.component_name(), members);
     return;
@@ -3627,8 +3666,9 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
   // cpp_new has no operands in source form (size lives in the size field,
   // handled below; the initializer, if any, is carried in arguments[0], a
   // replaced operator new in arguments[1], the value-initialisation marker in
-  // arguments[2], the braced list's filler in arguments[3], and an array
-  // placement new's address in arguments[4]).
+  // arguments[2], the braced list's filler in arguments[3], an array
+  // placement new's address in arguments[4], and a user-placement operator
+  // new's placement arguments from arguments[5]).
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
@@ -3639,6 +3679,13 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
     theexpr.add("array_filler") = migrate_expr_back(ref2.arguments[3]);
   if (ref2.arguments.size() > 4)
     theexpr.add("placement") = migrate_expr_back(ref2.arguments[4]);
+  if (ref2.arguments.size() > 5)
+  {
+    exprt alloc_args("arguments");
+    for (std::size_t i = 5; i < ref2.arguments.size(); ++i)
+      alloc_args.copy_to_operands(migrate_expr_back(ref2.arguments[i]));
+    theexpr.add("alloc_arguments") = alloc_args;
+  }
 }
 
 static void back_sideeffect_operands(const sideeffect2t &ref2, exprt &theexpr)

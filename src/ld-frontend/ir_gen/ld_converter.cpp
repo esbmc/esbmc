@@ -27,7 +27,7 @@ typet ld_converter::bool_t() const
   return typet("bool");
 }
 
-typet ld_converter::int32_t_() const
+typet ld_converter::dint_type() const
 {
   return int_type();
 }
@@ -41,16 +41,29 @@ typet ld_converter::type_of_kind(VarKind kind) const
   case VarKind::REAL:
     return double_type();
   case VarKind::INT:
+    return signedbv_typet(16); // IEC INT, and MATIEC's IEC_INT
   case VarKind::DINT:
   case VarKind::TIME:
     break;
   }
-  return int32_t_();
+  return dint_type();
 }
 
-exprt ld_converter::int_const(long long value) const
+exprt ld_converter::int_const(long long value, const typet &type) const
 {
-  return from_integer(BigInt(value), int32_t_());
+  return from_integer(BigInt(value), type);
+}
+
+// The type an operation between integers of types a and b is carried out in:
+// INT is 16 bits and DINT and TIME are 32, so the wider of the two.
+static typet common_int_type(const typet &a, const typet &b)
+{
+  return a == b ? a : int_type();
+}
+
+static exprt cast_to(const exprt &e, const typet &type)
+{
+  return e.type() == type ? e : static_cast<exprt>(typecast_exprt(e, type));
 }
 
 static std::string ld_name(const std::string &var)
@@ -104,7 +117,7 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
-    sym.set_value(int_const(v.init_value));
+    sym.set_value(int_const(v.init_value, sym.get_type()));
     break;
   }
 
@@ -262,12 +275,24 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   return blk;
 }
 
+// A textual block may omit instanceName; its Q variable still names it, so
+// unnamed blocks do not share one previous-input shadow.
+static const std::string &
+shadow_key(const std::string &instance, const std::string &q)
+{
+  return instance.empty() ? q : instance;
+}
+
 // TimerStep: synchronous fixed-tick model (§3.3) — one scan advances ET by one
 // tick, so PT is a dimensionless scan count. IEC 61131-3 §2.5.2.3.
 //
 //   TON: ET counts while IN holds; Q rises once ET reaches PT.
 //   TOF: Q follows IN up, then holds for PT scans after IN drops.
 //   TP:  a rising IN starts a PT-scan pulse that ignores IN until it expires.
+//
+// As in MATIEC (lib/timer.txt), the scan on which IN starts the interval (TON
+// rising, TOF falling) counts as no elapsed time, so Q does not change on that
+// scan even when PT is 0 (#8178).
 //
 // Every timer starts with Q false: at power-up the timer has not run, so the
 // elapsed count must not be read as an already-expired interval.
@@ -278,8 +303,13 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   symbol_exprt q_sym = var_expr(n.timer_Q);
   symbol_exprt in_sym = var_expr(n.timer_IN);
 
-  exprt one = gen_one(int32_t_());
-  exprt zero = gen_zero(int32_t_());
+  const typet cmp_t = common_int_type(et_sym.type(), pt_sym.type());
+  auto et_pt = [&](const char *rel) {
+    return binary_relation_exprt(
+      cast_to(et_sym, cmp_t), rel, cast_to(pt_sym, cmp_t));
+  };
+  exprt one = gen_one(et_sym.type());
+  exprt zero = gen_zero(et_sym.type());
   exprt in_val = bool_value_of(in_sym);
   exprt q_val = bool_value_of(q_sym);
 
@@ -287,23 +317,26 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   // interval is up. Without the bound ET rises every scan IN holds and
   // eventually overflows, which is UB and flips Q back to false.
   code_ifthenelset advance_et;
-  advance_et.cond() = binary_relation_exprt(et_sym, "<", pt_sym);
+  advance_et.cond() = et_pt("<");
   advance_et.then_case() =
-    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, int32_t_()));
-  auto q_while_pending =
-    code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
+    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, et_sym.type()));
+  auto q_while_pending = code_assignt(q_sym, et_pt("<"));
+
+  symbol_exprt in_prev = declare_bool_shadow(
+    ld_name("__timer_prev_" + shadow_key(n.timer_instance, n.timer_Q)));
+  exprt in_held = and_exprt(in_val, in_prev);
 
   code_blockt blk;
 
   if (n.timer_kind == FBKind::TON)
   {
     code_ifthenelset et_step;
-    et_step.cond() = in_val;
+    et_step.cond() = in_held;
     et_step.then_case() = advance_et;
     et_step.else_case() = code_assignt(et_sym, zero);
     blk.copy_to_operands(et_step);
-    blk.copy_to_operands(code_assignt(
-      q_sym, and_exprt(in_val, binary_relation_exprt(et_sym, ">=", pt_sym))));
+    blk.copy_to_operands(code_assignt(q_sym, and_exprt(in_held, et_pt(">="))));
+    blk.copy_to_operands(code_assignt(in_prev, in_val));
     return blk;
   }
 
@@ -324,19 +357,17 @@ codet ld_converter::translate_timer(const LdIRNode &n)
     step.then_case() = energise;
 
     code_ifthenelset hold;
-    hold.cond() = q_val;
+    hold.cond() = and_exprt(q_val, not_exprt(in_prev));
     hold.then_case() = countdown;
     step.else_case() = hold;
 
     blk.copy_to_operands(step);
+    blk.copy_to_operands(code_assignt(in_prev, in_val));
     return blk;
   }
 
   // TP: retriggerable only once the pulse has expired, so the pulse start is
   // gated on a rising edge of IN rather than on its level.
-  symbol_exprt in_prev =
-    declare_bool_shadow(ld_name("__timer_prev_" + n.timer_instance));
-
   code_blockt start;
   start.copy_to_operands(code_assignt(et_sym, zero));
   start.copy_to_operands(code_assignt(q_sym, true_exprt()));
@@ -364,26 +395,27 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 codet ld_converter::translate_counter(const LdIRNode &n)
 {
   code_blockt blk;
-  exprt one = gen_one(int32_t_());
-  exprt zero = gen_zero(int32_t_());
   symbol_exprt cv = var_expr(n.ctr_CV);
+  exprt one = gen_one(cv.type());
+  exprt zero = gen_zero(cv.type());
   symbol_exprt q = var_expr(n.ctr_Q);
-  const exprt pv =
-    n.ctr_PV.empty()
-      ? zero
-      : static_cast<exprt>(typecast_exprt(var_expr(n.ctr_PV), cv.type()));
+  const std::string prev_id =
+    ld_name("__ctr_prev_" + shadow_key(n.ctr_instance, n.ctr_Q));
+  const exprt pv = n.ctr_PV.empty() ? zero : exprt(var_expr(n.ctr_PV));
+  const typet cmp_t = common_int_type(cv.type(), pv.type());
+  auto cv_pv = [&](const char *rel) {
+    return binary_relation_exprt(cast_to(cv, cmp_t), rel, cast_to(pv, cmp_t));
+  };
 
   if (n.ctr_kind == FBKind::CTU)
   {
     symbol_exprt cu = var_expr(n.ctr_CU);
-    symbol_exprt cu_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    symbol_exprt cu_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cu_step;
-    cu_step.cond() = and_exprt(
-      and_exprt(cu, not_exprt(cu_prev)), binary_relation_exprt(cv, "<", pv));
+    cu_step.cond() = and_exprt(and_exprt(cu, not_exprt(cu_prev)), cv_pv("<"));
     cu_step.then_case() =
-      code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
+      code_assignt(cv, make_arith(exprt::plus, cv, one, cv.type()));
     blk.copy_to_operands(cu_step);
 
     if (!n.ctr_R.empty())
@@ -397,20 +429,19 @@ codet ld_converter::translate_counter(const LdIRNode &n)
 
     blk.copy_to_operands(code_assignt(cu_prev, cu));
 
-    blk.copy_to_operands(code_assignt(q, binary_relation_exprt(cv, ">=", pv)));
+    blk.copy_to_operands(code_assignt(q, cv_pv(">=")));
   }
   else // CTD
   {
     symbol_exprt cd = var_expr(n.ctr_CD);
-    exprt neg_one = from_integer(BigInt(-1), int32_t_());
-    symbol_exprt cd_prev =
-      declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
+    exprt neg_one = from_integer(BigInt(-1), cv.type());
+    symbol_exprt cd_prev = declare_bool_shadow(prev_id);
 
     code_ifthenelset cd_step;
     cd_step.cond() = and_exprt(
       and_exprt(cd, not_exprt(cd_prev)), binary_relation_exprt(cv, ">", zero));
     cd_step.then_case() =
-      code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
+      code_assignt(cv, make_arith(exprt::plus, cv, neg_one, cv.type()));
 
     if (n.ctr_LD.empty())
       blk.copy_to_operands(cd_step);
@@ -418,7 +449,7 @@ codet ld_converter::translate_counter(const LdIRNode &n)
     {
       code_ifthenelset load;
       load.cond() = var_expr(n.ctr_LD);
-      load.then_case() = code_assignt(cv, pv);
+      load.then_case() = code_assignt(cv, cast_to(pv, cv.type()));
       load.else_case() = cd_step;
       blk.copy_to_operands(load);
     }
@@ -435,27 +466,33 @@ codet ld_converter::translate_arith(const LdIRNode &n)
   symbol_exprt in1 = var_expr(n.arith_IN1);
   symbol_exprt out = var_expr(n.arith_OUT);
 
+  if (n.arith_kind == FBKind::MOVE)
+    return code_assignt(out, cast_to(in1, out.type()));
+
+  symbol_exprt in2 = var_expr(n.arith_IN2);
+  const typet t = common_int_type(in1.type(), in2.type());
+  const exprt a = cast_to(in1, t);
+  const exprt b = cast_to(in2, t);
+
   exprt op_expr;
   switch (n.arith_kind)
   {
   case FBKind::ADD:
-    op_expr = make_arith(exprt::plus, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::plus, a, b, t);
     break;
   case FBKind::SUB:
-    op_expr = make_arith(exprt::minus, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::minus, a, b, t);
     break;
   case FBKind::MUL:
-    op_expr = make_arith(exprt::mult, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::mult, a, b, t);
     break;
   case FBKind::DIV:
-    op_expr = make_arith(exprt::div, in1, var_expr(n.arith_IN2), int32_t_());
+    op_expr = make_arith(exprt::div, a, b, t);
     break;
-  case FBKind::MOVE:
   default:
-    op_expr = in1;
-    break;
+    throw std::runtime_error("ld_converter: not an arithmetic block");
   }
-  return code_assignt(out, op_expr);
+  return code_assignt(out, cast_to(op_expr, out.type()));
 }
 
 // The value an FB input wire carries: a declared symbol (a program variable, or
@@ -555,7 +592,7 @@ std::optional<code_blockt> ld_converter::translate_fb_body(const UserFBExec &ex)
       return symbol_exprt(prefix + nm, s->get_type());
     auto it = declared_kinds.find(nm);
     const typet t =
-      (it != declared_kinds.end()) ? type_of_kind(it->second) : int32_t_();
+      (it != declared_kinds.end()) ? type_of_kind(it->second) : dint_type();
     return declare_scoped(prefix + nm, t);
   };
   try
@@ -911,8 +948,8 @@ void ld_converter::convert()
     rm.static_lifetime = true;
     rm.file_local = false;
     rm.is_extern = false;
-    rm.set_type(int32_t_());
-    rm.set_value(int_const(0));
+    rm.set_type(dint_type());
+    rm.set_value(int_const(0, dint_type()));
     context_.move_symbol_to_context(rm);
   }
 

@@ -151,6 +151,7 @@ public:
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
   typet get_optional_type(const nlohmann::json &slice);
+  typet optional_container_type(const nlohmann::json &slice);
 
   string_builder &get_string_builder();
 
@@ -673,6 +674,9 @@ private:
   bool is_program_file(const std::string &file) const;
 
   exprt get_function_call(const nlohmann::json &ast_block);
+  /// A Call expression: folded into the caller when it passes a numpy view
+  /// to a simple function, converted as a call otherwise.
+  exprt get_call_expr(const nlohmann::json &element);
 
   /// Lowers len(obj) when obj is a class instance -- dispatching to its
   /// __len__, or raising TypeError as CPython does when it defines none.
@@ -1163,6 +1167,9 @@ private:
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+  exprt range_membership(const exprt &x, const nlohmann::json &element);
+  exprt
+  list_or_range_contains(exprt &lhs, exprt &rhs, const nlohmann::json &element);
 
   /// A PEP 604 union annotation, as the single type this
   /// monomorphic frontend has to represent it with.
@@ -1372,6 +1379,7 @@ private:
     const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
@@ -1524,7 +1532,67 @@ private:
 
   void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
 
-  void reject_unknown_numpy_view_call(const nlohmann::json &node);
+  /// The storage a view ultimately reads: its source, through any chain of
+  /// views, with storage aliases resolved.
+  std::string numpy_view_storage_root(const std::string &id) const;
+  bool is_numpy_storage_escaped(const nlohmann::json &name) const;
+  bool is_closed_return_expression(
+    const nlohmann::json &value,
+    const nlohmann::json &params) const;
+  std::optional<nlohmann::json>
+  simple_call_return_value(const nlohmann::json &call) const;
+  /// The return expression of a simple function that receives or returns a
+  /// numpy view, with the call's arguments substituted; nullopt when it
+  /// cannot be folded.
+  std::optional<nlohmann::json>
+  fold_numpy_view_call(const nlohmann::json &call);
+  /// An assignment whose value is a foldable call is converted as the
+  /// assignment of the folded expression.
+  void
+  get_folded_var_assign(const nlohmann::json &ast_node, codet &target_block);
+  /// A `return` of a numpy view name: rejected, unless the function is simple
+  /// enough for every supported call to be folded, in which case the body
+  /// only fails if it is reached.
+  void reject_or_defer_numpy_view_return(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  bool bind_numpy_pointer_view_alias(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+  void reject_multi_path_numpy_view_return(const nlohmann::json &call);
+  bool numpy_subscript_yields_view(const nlohmann::json &node) const;
+  bool holds_numpy_view(const nlohmann::json &node) const;
+  bool is_numpy_module_call(const nlohmann::json &node) const;
+  bool is_numpy_view_value(const nlohmann::json &node) const;
+  void reject_numpy_view_comprehension(const nlohmann::json &node) const;
+  /// The per-statement numpy view checks: comprehensions over views and uses
+  /// of storage that escaped.
+  void check_numpy_view_statement(const nlohmann::json &statement) const;
+  void reject_unfoldable_numpy_view_call(const nlohmann::json &call);
+  void reject_numpy_view_argument_use(const nlohmann::json &call);
+  void reject_numpy_view_method_call(const nlohmann::json &func) const;
+  void reject_numpy_view_callee(const nlohmann::json &call);
+  void reject_inline_runtime_numpy_slice(const nlohmann::json &call) const;
+  void reject_numpy_view_container_store(const nlohmann::json &ast_node);
+  bool is_numpy_view_syntax(
+    const nlohmann::json &value,
+    const std::string &scope,
+    std::size_t depth) const;
+  bool is_numpy_storage_syntax(
+    const nlohmann::json &value,
+    const std::string &scope,
+    std::size_t depth) const;
+  bool is_fold_only_numpy_function(const nlohmann::json &function_node) const;
+  /// Converts a function definition unless every call to it is folded.
+  void get_unfolded_function_definition(const nlohmann::json &function_node);
+  /// Records the storage of every view passed to a call that is not folded.
+  void track_numpy_view_call_escape(const nlohmann::json &call);
+  void reject_escaped_numpy_view_read(const nlohmann::json &node) const;
+  void reject_escaped_numpy_view_write(const nlohmann::json &target) const;
+  /// Rejects value reads and writes of storage that escaped to an unknown
+  /// call; shape queries stay allowed.
+  void reject_escaped_numpy_view_use(const nlohmann::json &statement) const;
 
   void reject_numpy_view_identity_query(const nlohmann::json &node);
 
@@ -1757,6 +1825,20 @@ private:
 
   void detach_numpy_pointer_views_of(
     const std::string &rebound_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach one view into a snapshot of just what it sees.
+  void detach_numpy_pointer_view(
+    const std::string &view_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach several views of one storage into a single snapshot of that
+  /// storage, so they keep aliasing each other.
+  void share_numpy_storage_snapshot(
+    const std::string &storage_id,
+    const std::vector<std::string> &view_ids,
     const locationt &location,
     codet &target_block);
 
@@ -2395,6 +2477,16 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  void reject_numpy_view_rebind() const;
+  /// Whether the assignment target may be registered as a view described by
+  /// `candidate`: it is not a view yet, or it already is one with the same
+  /// layout over the same storage. A different view on a conditional path
+  /// is rejected.
+  bool accepts_numpy_view_binding(
+    const std::string &lhs_id,
+    const numpy_scalar_pointer_view_infot &candidate,
+    const typet &view_ptr_type,
+    const exprt &source) const;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(
@@ -2411,6 +2503,42 @@ private:
     numpy_scalar_pointer_view_infot &info,
     const locationt &location,
     codet &target_block);
+  /// A local list/tuple/dict literal holding numpy views: each element is
+  /// bound to its own hidden view variable, so the view metadata follows the
+  /// element. Keyed by scope and name.
+  struct numpy_view_containert
+  {
+    std::vector<std::string> elements;
+    std::map<std::string, std::size_t> keys;
+    bool is_dict = false;
+  };
+  std::unordered_map<std::string, numpy_view_containert> numpy_view_containers_;
+  std::size_t numpy_view_container_count_ = 0;
+  const numpy_view_containert *
+  find_numpy_view_container(const nlohmann::json &node) const;
+  std::string numpy_view_container_element(
+    const numpy_view_containert &container,
+    const nlohmann::json &slice) const;
+  std::optional<nlohmann::json>
+  resolve_numpy_view_container_use(const nlohmann::json &node) const;
+  /// Replaces each literal-index read of a view container by the element's
+  /// own variable; rejects any other use of the container.
+  nlohmann::json
+  rewrite_numpy_view_container_reads(const nlohmann::json &node) const;
+  const nlohmann::json &resolve_numpy_view_containers(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten) const;
+  bool try_bind_numpy_view_container(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  /// Simple functions whose body returns a numpy view name: sound only
+  /// through a folded call.
+  std::unordered_set<std::string> numpy_view_return_functions_;
+  /// Simple functions whose body was not converted because every call
+  /// passes a numpy view and is folded.
+  std::unordered_set<std::string> numpy_fold_only_functions_;
+  /// Storage roots passed to a call the frontend could not fold.
+  std::unordered_set<std::string> numpy_escaped_storage_;
   /// Names bound to a read-only numpy view that is not a pointer view.
   std::unordered_set<std::string> numpy_readonly_arrays_;
   /// Namespace of each operational model loaded this run, in load order.
