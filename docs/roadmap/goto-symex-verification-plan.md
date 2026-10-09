@@ -836,6 +836,7 @@ this document** — each is a prioritised target for the cited harness.
 
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
+| **R96** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R93's open note on array new, §15 M9 (R96); **FIXED**, same entry | **An array new left its constructed elements alive when a later element's initialization threw.** [except.ctor]/3 destroys the elements whose initialization completed, newest first, before the exception leaves the new-expression. ESBMC destroyed none: in `new C[3]` whose third constructor throws, `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively, and the same held for a listed element or the filler of `new C[n]{...}`. | `convert_cpp_new_elements`, `user_code_throws`, `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/try_catch/array_new_unwind{,_fail}` | — | **Fixed**: in a program whose own code throws or catches, the element construction of an array new of a class with a destructor runs in a try block whose catch-all destroys the elements already built and rethrows. The storage is not freed ([expr.new]/26), and `delete[]` still destroys elements in increasing order. |
 | **R115** | **Medium (false FAILED, default configuration, C and C++)** — open PR #8122's note, §15 M9 (R115); **FIXED**, same entry | **The rotate builtins had no model.** `__builtin_rotateleft{8,16,32,64}` and `__builtin_rotateright*` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_rotateleft32(0x80000001u, 1) == 3)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`rol`/`ror` in `cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_rotate{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to two shifts and an or, with the distance and its complement taken modulo the width. |
 | **R104** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — #8141's open note, §15 M9 (R104); **FIXED**, same entry | **A declaration's constructor or by-value call kept its argument temporaries to block exit.** `D d(C(6));`, `D e{C(1), C(2)};`, `D h = D(C(7));` and `D m = make(C(4));` for a destructible `D` built `d` in place, and the temporaries their arguments created were destroyed at the end of the enclosing block, not of the declaration ([class.temporary]/4). `assert(live == 0)` after the declaration was FAILED, and a pointer kept from the argument, `Q q(P(3)); *q.q` with `~P` deleting it, read freed memory natively and verified. | `convert_decl_initializer`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/decl_argument_temporary{,_fail}` | — | **Fixed**: all three initializer paths destroy the temporaries they created when the declaration ends; only the generic assignment path did. That exposed a second defect: `typeid` built its `type_info` as a temporary, so `std::type_index i(typeid(int));` (the CORE `typeindex_model`) then read a dead object, as `const std::type_info *p = &typeid(int);` already did on master. `typeid` now refers to a static object, one per type, or per site for a polymorphic operand ([expr.typeid]/1; `typeid_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/typeid_static_storage{,_fail}`). |
 | **R109** | **Medium (false FAILED, default configuration, C and C++)** — found probing builtins, §15 M9 (R109); **FIXED**, same entry | **`__builtin_abs`, `__builtin_labs` and `__builtin_llabs` had no model.** `is_abs_builtin_name` matched `abs`, `labs`, `llabs` and every spelling of `fabs`, but not the integer builtins, so their calls stayed bodyless (`no body for function __builtin_abs`), returned a nondet value, and `assert(__builtin_abs(-3) == 3)` was FAILED; the program passes natively. | `is_abs_builtin_name`, `src/clang-c-frontend/builtin_names.cpp`; `regression/esbmc/builtin_abs{,_fail}` | — | **Fixed**: the three names lower to the `abs` node as `abs` does, in both adjust passes. |
@@ -10442,6 +10443,39 @@ Not fixed: `copy_memory_content` copies at most `--max-symbolic-realloc-copy`
 (default 128) elements even when the count is a constant, so
 `realloc(a, 300 * sizeof(int))` of a 200-element block leaves `q[150]`
 nondet, a false FAILED for `assert(q[150] == a_150)`.
+
+### M9 (R96) — 2026-10-03, the elements a throwing array new left behind
+
+R93 (open PR #8139) records that `new C[2]{C(1), C(2)}` does not destroy its
+first element when the second constructor throws. Neither does any array new:
+when the initialization of an element exits by an exception, [except.ctor]/3
+destroys every element whose initialization completed, newest first. ESBMC
+destroyed none. For `new C[3]` whose third default constructor throws,
+`assert(dtors == 0)` after the handler was SUCCESSFUL, where the native program
+aborts; `assert(dtors == 2)` was a false FAILED. A listed element, a filler
+after a nondet count, and `new C[2][2]` went the same way.
+
+**Fixed** in goto-convert. When a program's own code, outside the bundled
+operational models, has a `throw` or a `try`, the elements of an array new of
+a class with a destructor are built inside a try block. A counter is set to
+each leaf's index before its initializer runs, and the catch-all handler
+destroys the leaves below it, newest first, then rethrows. Other programs are
+converted as before, so a concurrent program that never throws is not sent
+through exception lowering for the handler's sake, and the handler costs
+nothing where no exception can reach it.
+
+`array_new_unwind` (the default constructor, a listed element, the filler
+after a nondet count, two dimensions, and an array new that completes) is
+FAILED on master and SUCCESSFUL now; `array_new_unwind_fail` is SUCCESSFUL on
+master and FAILED on the property it pins. Both agree with the native program
+under the default solver and `--z3`.
+
+Left open: the storage is not freed after the elements are destroyed
+([expr.new]/26), which only `--memory-leak-check` would see; a throw from an
+operational model with no `throw` or `try` in user code is not covered; and
+`delete[]` destroys elements in increasing index order where [expr.delete]/6
+requires decreasing, so `new C[2]{C(1), C(2)}` then `delete[]` leaving the
+last destroyed value 1 is a false FAILED.
 
 ### M9 (R115) — 2026-10-04, the rotate builtins
 
