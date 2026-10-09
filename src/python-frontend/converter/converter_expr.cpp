@@ -598,6 +598,21 @@ symbolt *python_converter::contract_return_value_symbol(
   return add_symbol_and_get_ptr(ret_symbol);
 }
 
+/// A bare name a function does not bind: its class scope when the function
+/// is a class body statement, otherwise the module. A class body is not an
+/// enclosing scope for its methods, so a method never sees a class attribute
+/// by its bare name (#8196).
+symbolt *python_converter::find_enclosing_scope_symbol(symbol_id sid) const
+{
+  if (sid.get_class().empty() || sid.get_function().empty())
+  {
+    sid.set_function("");
+    if (symbolt *symbol = find_symbol(sid.to_string()))
+      return symbol;
+  }
+  return find_symbol(sid.global_to_string());
+}
+
 /// The "variable is not defined" diagnostic for a Name that resolved to no
 /// symbol, naming the enclosing function when the reference is inside one.
 static std::string undefined_variable_message(
@@ -2103,16 +2118,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Fallback for global variables accessed inside functions or class
       // methods
       if (!is_class_attr && element["_type"] == "Name")
-      {
-        sid.set_function(""); // remove function scope
-        sid_str = sid.to_string();
-        symbol = find_symbol(sid_str);
-        if (!symbol)
-        {
-          // also try module-level global (strips class scope too)
-          symbol = find_symbol(sid.global_to_string());
-        }
-      }
+        symbol = find_enclosing_scope_symbol(sid);
       if (!symbol)
       {
         // Check if this Name refers to a function
