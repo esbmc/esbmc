@@ -3,4 +3,5 @@ def test():
     m[0] = None
     assert m[0] is None
 
+
 test()
