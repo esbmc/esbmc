@@ -11,4 +11,4 @@ ret = alias_and_return(v)
 assert a[1] == 99
 assert ret[1] == 99
 ret[0] = 5
-assert a[0] == 5
+assert a[0] == 1  # wrong: ret aliases a

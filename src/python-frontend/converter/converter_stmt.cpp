@@ -7929,6 +7929,8 @@ void python_converter::get_return_statements(
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
   bool is_user_defined_function = false;
+  // Callers bind the result to their own argument, so the view never leaves.
+  bool returns_view_param = false;
   if (
     !current_func_name_.empty() && current_func_name_ != "python_user_main" &&
     ast_json && ast_json->contains("filename") &&
@@ -7939,11 +7941,14 @@ void python_converter::get_return_statements(
     const nlohmann::json func_node =
       json_utils::find_function_by_path(*ast_json, function_path);
     is_user_defined_function = !func_node.empty() && !is_model_file(func_node);
+    returns_view_param = is_user_defined_function &&
+                         function_path.size() == 1 &&
+                         returns_bound_numpy_view_param(func_node);
   }
   const bool returns_name = ast_node["value"].value("_type", "") == "Name" &&
                             ast_node["value"].contains("id");
   if (
-    is_user_defined_function && returns_name &&
+    is_user_defined_function && returns_name && !returns_view_param &&
     contains_tracked_numpy_view_name(ast_node["value"]))
   {
     reject_or_defer_numpy_view_return(ast_node, target_block);
@@ -7953,7 +7958,7 @@ void python_converter::get_return_statements(
   const std::string return_file = return_location.get_file().as_string();
   if (
     returns_name && ast_json && is_user_defined_function &&
-    is_program_file(return_file))
+    !returns_view_param && is_program_file(return_file))
   {
     const std::string name = ast_node["value"]["id"].get<std::string>();
     const nlohmann::json decl =
@@ -8516,10 +8521,12 @@ exprt python_converter::get_block(
       // Function calls are handled here
       reject_numpy_view_identity_query(element["value"]);
       reject_numpy_view_mutating_method_call(element["value"]);
+      numpy_discarded_call_ = &element["value"];
       track_numpy_view_call_escape(element["value"]);
 
       exprt empty;
       exprt expr = get_expr(element["value"]);
+      numpy_discarded_call_ = nullptr;
       if (expr != empty)
       {
         codet code_stmt = convert_expression_to_code(expr);

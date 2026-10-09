@@ -1614,6 +1614,17 @@ private:
   /// of storage that escaped.
   void check_numpy_view_statement(const nlohmann::json &statement) const;
   void reject_unfoldable_numpy_view_call(const nlohmann::json &call);
+  /// Whether every `return` of @p func_node yields one of its bound view
+  /// parameters.
+  bool returns_bound_numpy_view_param(const nlohmann::json &func_node) const;
+  /// The view argument such a function hands back for @p call, or nullptr.
+  const nlohmann::json *
+  returned_numpy_view_argument(const nlohmann::json &call);
+  bool try_bind_returned_numpy_view_param(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  /// The call whose result is not used as a value.
+  const nlohmann::json *numpy_discarded_call_ = nullptr;
   void reject_numpy_view_argument_use(const nlohmann::json &call);
   void reject_numpy_view_method_call(const nlohmann::json &func) const;
   void reject_numpy_view_callee(const nlohmann::json &call);

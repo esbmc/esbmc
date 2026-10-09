@@ -102,6 +102,91 @@ bool references_name(const nlohmann::json &node, const std::string &name)
   return found;
 }
 
+// Calls `visit` on every `return` in the scope that owns `node`.
+void for_each_return(
+  const nlohmann::json &node,
+  const std::function<void(const nlohmann::json &)> &visit)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (
+    kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "Lambda" ||
+    kind == "ClassDef")
+    return;
+  if (kind == "Return")
+    visit(node);
+  for (const auto &child : node)
+    for_each_return(child, visit);
+}
+
+std::size_t count_stores(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t stores = 0;
+  for_each_name(node, [&](const nlohmann::json &id) {
+    const std::string ctx =
+      id.contains("ctx") ? id["ctx"].value("_type", "") : "";
+    if (id["id"].get<std::string>() == name && ctx != "Load")
+      ++stores;
+  });
+  return stores;
+}
+
+// Index of the parameter that `name` denotes in `func_node`: a parameter the
+// body never rebinds, or a local bound once, at the top level of the body, to
+// such a parameter.
+std::optional<std::size_t>
+aliased_param_index(const nlohmann::json &func_node, const std::string &name)
+{
+  const nlohmann::json &body = func_node["body"];
+  const nlohmann::json &params = func_node["args"]["args"];
+  const std::size_t stores = count_stores(body, name);
+  if (stores == 0)
+  {
+    for (std::size_t i = 0; i < params.size(); ++i)
+      if (params[i].value("arg", "") == name)
+        return i;
+    return std::nullopt;
+  }
+  if (stores != 1)
+    return std::nullopt;
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    const nlohmann::json *target = nullptr;
+    if (kind == "Assign" && stmt["targets"].size() == 1)
+      target = &stmt["targets"][0];
+    else if (kind == "AnnAssign")
+      target = &stmt["target"];
+    if (
+      target != nullptr && is_name(*target) &&
+      (*target)["id"].get<std::string>() == name && stmt.contains("value") &&
+      is_name(stmt["value"]) && count_stores(body, stmt["value"]["id"]) == 0)
+      return aliased_param_index(func_node, stmt["value"]["id"]);
+  }
+  return std::nullopt;
+}
+
+// Index of the parameter every `return` of `func_node` yields. The body must
+// end in a `return`, so no path falls off the end and yields None.
+std::optional<std::size_t> returned_param_index(const nlohmann::json &func_node)
+{
+  const nlohmann::json &body = func_node["body"];
+  if (body.empty() || body.back().value("_type", "") != "Return")
+    return std::nullopt;
+  std::optional<std::size_t> result;
+  bool same_param = true;
+  for_each_return(body, [&](const nlohmann::json &ret) {
+    const std::optional<std::size_t> index =
+      ret.contains("value") && is_name(ret["value"])
+        ? aliased_param_index(func_node, ret["value"]["id"])
+        : std::nullopt;
+    same_param = same_param && index && (!result || *result == *index);
+    result = index;
+  });
+  return same_param ? result : std::nullopt;
+}
+
 // Calls whose only use of an array argument is to read it.
 bool is_value_builtin(const std::string &name)
 {
@@ -432,12 +517,61 @@ bool python_converter::bind_numpy_pointer_view_alias(
   return true;
 }
 
+bool python_converter::returns_bound_numpy_view_param(
+  const nlohmann::json &func_node) const
+{
+  const std::optional<std::size_t> index = returned_param_index(func_node);
+  return index && numpy_view_params_.count(
+                    func_node["name"].get<std::string>() + "#" +
+                    std::to_string(*index)) != 0;
+}
+
+const nlohmann::json *
+python_converter::returned_numpy_view_argument(const nlohmann::json &call)
+{
+  if (!is_named_call(call))
+    return nullptr;
+  const nlohmann::json func_node = json_utils::try_find_function(
+    (*ast_json)["body"], call["func"]["id"].get<std::string>());
+  if (func_node.empty() || !returns_bound_numpy_view_param(func_node))
+    return nullptr;
+  const std::size_t index = *returned_param_index(func_node);
+  if (index >= call["args"].size())
+    return nullptr;
+  const nlohmann::json &arg = call["args"][index];
+  return is_name(arg) && contains_tracked_numpy_view_name(arg) ? &arg : nullptr;
+}
+
+// `ret = f(view)` where f always returns that parameter: run the call for its
+// effects and bind `ret` to the argument, which carries the view metadata.
+bool python_converter::try_bind_returned_numpy_view_param(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+  const nlohmann::json *arg = returned_numpy_view_argument(ast_node["value"]);
+  if (arg == nullptr)
+    return false;
+  numpy_discarded_call_ = &ast_node["value"];
+  exprt call = get_expr(ast_node["value"]);
+  numpy_discarded_call_ = nullptr;
+  if (call != exprt())
+    target_block.copy_to_operands(convert_expression_to_code(call));
+  nlohmann::json alias = ast_node;
+  alias["value"] = *arg;
+  get_var_assign(alias, target_block);
+  return true;
+}
+
 void python_converter::get_folded_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
   reject_numpy_view_container_store(ast_node);
-  if (try_bind_numpy_view_container(ast_node, target_block))
+  if (
+    try_bind_numpy_view_container(ast_node, target_block) ||
+    try_bind_returned_numpy_view_param(ast_node, target_block))
     return;
   std::optional<nlohmann::json> folded =
     ast_node.contains("value") ? fold_numpy_view_call(ast_node["value"])
@@ -499,6 +633,8 @@ void python_converter::reject_unfoldable_numpy_view_call(
     throw std::runtime_error(returned_view_error);
   if (numpy_fold_only_functions_.count(func_name) != 0)
     throw std::runtime_error(unfolded_call_error);
+  if (&call != numpy_discarded_call_ && returned_numpy_view_argument(call))
+    throw std::runtime_error(returned_view_error);
   reject_multi_path_numpy_view_return(call);
 }
 
