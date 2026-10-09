@@ -922,22 +922,33 @@ protected:
   determine_fallback_element_type(const sideeffect2t &code, const expr2tc &lhs);
 
   /**
-   *  Analyze the old object being reallocated.
-   *  Examines the source pointer to extract information about the existing
-   *  allocation, including element type, base array, array status, and count.
-   *  @param src_ptr The source pointer being reallocated.
+   *  Analyze an object a reallocated pointer may point to.
+   *  @param old_obj The object, as found by an internal dereference.
    *  @param elem_type Output parameter for the element type.
    *  @param old_base_array Output parameter for the base array symbol.
    *  @param old_is_array Output parameter indicating if it's a typed array.
-   *  @param old_elem_count Output parameter for the element count.
-   *  @return True if analysis succeeded and old object information was found.
    */
-  bool analyze_old_object(
-    const expr2tc &src_ptr,
+  void analyze_old_object(
+    const expr2tc &old_obj,
     type2tc &elem_type,
     expr2tc &old_base_array,
-    bool &old_is_array,
-    expr2tc &old_elem_count);
+    bool &old_is_array);
+
+  /**
+   *  Copy each object a reallocated pointer may point to into the new
+   *  allocation, guarded by the pointer pointing to it.
+   *  @param old_objects The objects found by an internal dereference.
+   *  @param new_array The destination array for copied data.
+   *  @param new_elem_count Number of elements in the new allocation.
+   *  @param elem_type Element type of the new allocation.
+   *  @param guard Guard condition for the copy operations.
+   */
+  void copy_old_objects(
+    const std::list<dereference_callbackt::internal_item> &old_objects,
+    const expr2tc &new_array,
+    const expr2tc &new_elem_count,
+    const type2tc &elem_type,
+    const guard2tc &guard);
 
   /**
    *  Handle realloc with zero size parameter.

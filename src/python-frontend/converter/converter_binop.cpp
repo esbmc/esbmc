@@ -385,6 +385,119 @@ std::string py_percent_format(
       "TypeError: not all arguments converted during string formatting");
   return out;
 }
+
+// `%d` takes an int or bool only: int() of a float does not raise on inf/nan.
+bool percent_d_accepts(const typet &t)
+{
+  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+// `%s` is limited to the types whose f-string lowering matches str().
+bool percent_s_accepts(const typet &t)
+{
+  return percent_d_accepts(t) || t.is_floatbv() ||
+         type_utils::is_string_type(t);
+}
+
+nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
+{
+  nlohmann::json node = {{"_type", type}};
+  for (const char *f : {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (loc.contains(f))
+      node[f] = loc[f];
+  return node;
+}
+
+// The f-string part for one %s/%d/%i conversion of `value`.
+std::optional<nlohmann::json>
+formatted_part(char conversion, nlohmann::json value, const typet &type)
+{
+  if (conversion == 'd' || conversion == 'i')
+  {
+    if (!percent_d_accepts(type))
+      return std::nullopt;
+    nlohmann::json call = ast_node("Call", value);
+    call["func"] = ast_node("Name", value);
+    call["func"]["id"] = "int";
+    call["func"]["ctx"] = {{"_type", "Load"}};
+    call["args"] = nlohmann::json::array({value});
+    call["keywords"] = nlohmann::json::array();
+    value = call;
+  }
+  else if (conversion != 's' || !percent_s_accepts(type))
+    return std::nullopt;
+  nlohmann::json part = ast_node("FormattedValue", value);
+  part["value"] = value;
+  part["conversion"] = -1;
+  return part;
+}
+
+// At least one variable and nothing else but constants: the f-string lowering
+// drops a call argument's side effects, and all-constant formats fold exactly.
+bool names_and_constants(const std::vector<nlohmann::json> &args)
+{
+  bool has_name = false;
+  for (const nlohmann::json &a : args)
+  {
+    const std::string kind = a.value("_type", "");
+    if (kind != "Name" && kind != "Constant")
+      return false;
+    has_name |= kind == "Name";
+  }
+  return has_name;
+}
+
+// `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
+// (#8224). Only flag-free %s/%d/%i/%% are rewritten.
+std::optional<nlohmann::json> percent_format_as_fstring(
+  const nlohmann::json &left,
+  const std::vector<nlohmann::json> &args,
+  const std::vector<typet> &arg_types)
+{
+  if (args.size() != arg_types.size() || !names_and_constants(args))
+    return std::nullopt;
+
+  const std::string fmt = left["value"].get<std::string>();
+  nlohmann::json joined = ast_node("JoinedStr", left);
+  joined["values"] = nlohmann::json::array();
+  std::string literal;
+  auto flush = [&]() {
+    if (literal.empty())
+      return;
+    nlohmann::json part = ast_node("Constant", left);
+    part["value"] = literal;
+    joined["values"].push_back(part);
+    literal.clear();
+  };
+  size_t argi = 0;
+  for (size_t i = 0; i < fmt.size(); ++i)
+  {
+    if (fmt[i] != '%')
+    {
+      literal.push_back(fmt[i]);
+      continue;
+    }
+    const char c = i + 1 < fmt.size() ? fmt[++i] : '\0';
+    if (c == '%')
+    {
+      literal.push_back('%');
+      continue;
+    }
+    if (argi >= args.size())
+      return std::nullopt;
+    std::optional<nlohmann::json> part =
+      formatted_part(c, args[argi], arg_types[argi]);
+    if (!part)
+      return std::nullopt;
+    ++argi;
+    flush();
+    joined["values"].push_back(*part);
+  }
+  flush();
+  if (argi != args.size())
+    return std::nullopt;
+  return joined;
+}
 } // namespace
 
 exprt python_converter::hoist_side_effecting_operand(
@@ -1110,6 +1223,42 @@ exprt python_converter::handle_tagged_scalar_binop(
     "' on a dynamically-typed variable is not yet supported");
 }
 
+exprt python_converter::get_percent_format_expr(
+  const nlohmann::json &left,
+  const std::vector<nlohmann::json> &args,
+  const std::map<std::string, nlohmann::json> &mapping,
+  const std::vector<typet> &arg_types)
+{
+  if (
+    std::optional<nlohmann::json> joined =
+      percent_format_as_fstring(left, args, arg_types))
+    return get_expr(*joined);
+  // Re-enter conversion through a synthesised Constant node so the folded
+  // string flows through the exact same path as a string literal (e.g.
+  // len("ab")), which materialises it correctly when consumed inline by
+  // len()/==. Building the array directly left it unaddressable inline.
+  nlohmann::json folded = left;
+  folded["value"] =
+    py_percent_format(left["value"].get<std::string>(), args, mapping);
+  return get_expr(folded);
+}
+
+std::vector<typet> python_converter::percent_arg_types(
+  const nlohmann::json &right,
+  const exprt &rhs) const
+{
+  // A tuple-valued operand spreads over the conversions; not rewritten.
+  if (right.value("_type", "") != "Tuple")
+    return tuple_handler_->is_tuple_type(rhs.type())
+             ? std::vector<typet>{}
+             : std::vector<typet>{rhs.type()};
+  std::vector<typet> types;
+  if (rhs.operands().size() == right["elts"].size())
+    for (const exprt &op : rhs.operands())
+      types.push_back(op.type());
+  return types;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
@@ -1366,14 +1515,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     else
       args.push_back(right);
 
-    // Re-enter conversion through a synthesised Constant node so the folded
-    // string flows through the exact same path as a string literal (e.g.
-    // len("ab")), which materialises it correctly when consumed inline by
-    // len()/==. Building the array directly left it unaddressable inline.
-    nlohmann::json folded = left;
-    folded["value"] =
-      py_percent_format(left["value"].get<std::string>(), args, mapping);
-    return get_expr(folded);
+    return get_percent_format_expr(
+      left, args, mapping, percent_arg_types(right, rhs));
   }
 
   // Handle array/string operations
