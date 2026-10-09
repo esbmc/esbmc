@@ -604,13 +604,23 @@ symbolt *python_converter::contract_return_value_symbol(
 /// by its bare name (#8196).
 symbolt *python_converter::find_enclosing_scope_symbol(symbol_id sid) const
 {
-  if (sid.get_class().empty() || sid.get_function().empty())
+  if (
+    sid.get_class().empty() || sid.get_function().empty() ||
+    converting_defaults_)
   {
     sid.set_function("");
     if (symbolt *symbol = find_symbol(sid.to_string()))
       return symbol;
   }
   return find_symbol(sid.global_to_string());
+}
+
+exprt python_converter::get_default_expr(const nlohmann::json &node)
+{
+  converting_defaults_ = true;
+  exprt default_expr = get_expr(node);
+  converting_defaults_ = false;
+  return default_expr;
 }
 
 /// The "variable is not defined" diagnostic for a Name that resolved to no
