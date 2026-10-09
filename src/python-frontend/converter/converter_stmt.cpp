@@ -676,21 +676,34 @@ static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
 {
   const typet rhs_type = rhs.type();
   // is_bool() must be explicit since is_integer_type() excludes bool.
-  const bool is_real = rhs_type.is_floatbv() ||
-                       type_utils::is_integer_type(rhs_type) ||
-                       rhs_type.is_bool();
-  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  const bool rhs_is_real = rhs_type.is_floatbv() ||
+                           type_utils::is_integer_type(rhs_type) ||
+                           rhs_type.is_bool();
+  const bool lhs_is_real = lhs_type.is_floatbv() ||
+                           type_utils::is_integer_type(lhs_type) ||
+                           lhs_type.is_bool();
+
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && rhs_is_real)
   {
     rhs = promote_to_complex(rhs);
     return true;
   }
-  if (
-    rhs_type.is_bool() &&
-    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  if (rhs_type.is_bool() && lhs_is_real && !lhs_type.is_bool())
   {
     rhs = typecast_exprt(rhs, lhs_type);
     return true;
   }
+
+  // Lower None to nondet to prevent invalid typecasts to primitive types
+  // (#8132).
+  if (rhs_type == none_type() && lhs_is_real)
+  {
+    auto loc = rhs.location();
+    rhs = side_effect_expr_nondett(lhs_type);
+    rhs.location() = loc;
+    return true;
+  }
+
   return false;
 }
 

@@ -279,6 +279,7 @@ public:
     size_t bracket_pos,
     size_t type_size) const;
   typet build_optional_type(const typet &base_type) const;
+  typet wrap_in_optional_if_primitive(const typet &t) const;
 
   /*
    * Returns true if `class_name` is the same as, or derives (directly or

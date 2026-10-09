@@ -131,7 +131,7 @@ typet get_elem_type_from_annotation(
   {
     typet elem_type = extract_subscript_elem(annotation);
     if (elem_type != typet())
-      return elem_type;
+      return type_handler_.wrap_in_optional_if_primitive(elem_type);
   }
 
   // Case 2: Union type annotation such as list[str] | None
@@ -147,7 +147,7 @@ typet get_elem_type_from_annotation(
     {
       typet elem_type = extract_subscript_elem(annotation["left"]);
       if (elem_type != typet())
-        return elem_type;
+        return type_handler_.wrap_in_optional_if_primitive(elem_type);
     }
 
     // Try right side (e.g., handles None | list[str])
@@ -158,13 +158,19 @@ typet get_elem_type_from_annotation(
     {
       typet elem_type = extract_subscript_elem(annotation["right"]);
       if (elem_type != typet())
-        return elem_type;
+        return type_handler_.wrap_in_optional_if_primitive(elem_type);
     }
   }
 
   // Case 3: Direct type annotation such as str, int
   if (annotation.contains("id") && annotation["id"].is_string())
-    return type_handler_.get_typet(annotation["id"].get<std::string>());
+  {
+    std::string id = annotation["id"].get<std::string>();
+    if (id == "list" || id == "dict" || id == "set" || id == "tuple")
+      return typet();
+    return type_handler_.wrap_in_optional_if_primitive(
+      type_handler_.get_typet(id));
+  }
 
   // Return empty type if annotation structure is not recognized
   return typet();
@@ -267,5 +273,6 @@ typet python_list::infer_literal_element_type(
       return double_type();
   }
 
-  return th.get_typet(first_elem);
+  typet elem_type = th.get_typet(first_elem);
+  return th.wrap_in_optional_if_primitive(elem_type);
 }
