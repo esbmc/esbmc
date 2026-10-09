@@ -4,6 +4,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
 
@@ -33,17 +34,15 @@ type2tc address_of_object_type(const expr2tc &ptr)
 
 /// The type of the object `ptr` addresses, for type-0 object-size purposes.
 ///
-/// `deref_items` is the non-empty resolution of `ptr`; `deref` is the
-/// dereference expression, consulted for a struct at a constant offset.
+/// `item` is one object `ptr` may resolve to; `deref` is the dereference
+/// expression, consulted for a struct at a constant offset.
 type2tc addressed_object_type(
   const expr2tc &ptr,
   const expr2tc &deref,
-  const std::list<dereference_callbackt::internal_item> &deref_items)
+  const dereference_callbackt::internal_item &item)
 {
   if (type2tc named = address_of_object_type(ptr); !is_nil_type(named))
     return named;
-
-  const auto &item = deref_items.front();
 
   if (
     is_constant_int2t(item.offset) && is_struct_type(item.object->type) &&
@@ -103,55 +102,45 @@ void goto_symext::intrinsic_builtin_object_size(
                         BigInt((1ULL << (config.ansi_c.word_size - 1)) - 1));
   };
 
-  expr2tc obj_size;
+  // Note: type_byte_size returns the allocated object size, not just the sum
+  // of fields. For structs/unions this includes alignment and padding, which
+  // matches GCC's __builtin_object_size semantics. The expression form also
+  // sizes a VLA or malloc(n), whose byte count is not a constant.
+  auto total_size_of = [&](const dereference_callbackt::internal_item &item) {
+    expr2tc size =
+      type_byte_size_expr(addressed_object_type(ptr, deref, item), &ns);
+    cur_state->rename(size);
+    return size;
+  };
 
-  if (internal_deref_items.empty())
+  expr2tc obj_size = create_fallback_size(use_zero_for_unknown);
+  if (!internal_deref_items.empty())
   {
-    // Unable to determine the underlying object; use the fallback sizes
-    // described above.
-    obj_size = create_fallback_size(use_zero_for_unknown);
-  }
-  else
-  {
-    const type2tc addressed_type =
-      addressed_object_type(ptr, deref, internal_deref_items);
+    // A pointer that may address several objects takes the size of the one it
+    // addresses, not of whichever the value set lists first. An `&x` operand
+    // or a single candidate keeps that object's size unguarded, as before.
+    if (
+      internal_deref_items.size() == 1 ||
+      !is_nil_type(address_of_object_type(ptr)))
+      obj_size = total_size_of(internal_deref_items.front());
+    else
+      for (const auto &item : internal_deref_items)
+        obj_size =
+          if2tc(size_type2(), item.guard, total_size_of(item), obj_size);
 
-    // Note: type_byte_size returns the allocated object size, not just the sum
-    // of fields. For structs/unions this includes alignment and padding, which
-    // matches GCC's __builtin_object_size semantics.
-    BigInt total_size = type_byte_size(addressed_type, &ns);
-
+    // Type 1 or 3: the bytes remaining after the pointer's offset.
     if (consider_offset)
     {
-      // Type 1 or 3: calculate remaining bytes from offset
-      expr2tc offset_expr = pointer_offset2tc(get_int64_type(), ptr);
-      cur_state->rename(offset_expr);
-      do_simplify(offset_expr);
-
-      if (is_constant_int2t(offset_expr))
-      {
-        BigInt offset = to_constant_int2t(offset_expr).value;
-        BigInt remaining =
-          (total_size > offset) ? (total_size - offset) : BigInt(0);
-        obj_size = constant_int2tc(size_type2(), remaining);
-      }
-      else
-      {
-        // Offset is symbolic - can't determine remaining size statically
-        const expr2tc total_size_expr =
-          constant_int2tc(get_int64_type(), total_size);
-        obj_size = if2tc(
-          size_type2(),
-          greaterthan2tc(total_size_expr, offset_expr),
-          sub2tc(size_type2(), total_size_expr, offset_expr),
-          gen_zero(size_type2()));
-      }
+      expr2tc offset = pointer_offset2tc(get_int64_type(), ptr);
+      cur_state->rename(offset);
+      const expr2tc total = typecast2tc(get_int64_type(), obj_size);
+      obj_size = if2tc(
+        size_type2(),
+        greaterthan2tc(total, offset),
+        typecast2tc(size_type2(), sub2tc(get_int64_type(), total, offset)),
+        gen_zero(size_type2()));
     }
-    else
-    {
-      // Type 0 or 2: return full object size of the addressed object
-      obj_size = constant_int2tc(size_type2(), total_size);
-    }
+    do_simplify(obj_size);
   }
 
   expr2tc ret_ref = func_call.ret;

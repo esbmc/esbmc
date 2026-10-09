@@ -3,6 +3,7 @@
 
 #include <goto-programs/goto_program.h>
 #include <list>
+#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
@@ -70,8 +71,9 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
-  /// Lowers the condition of an if, loop or for statement, a full-expression
-  /// whose temporaries are destroyed before the branch ([class.temporary]/4).
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
   /// The operands of a short-circuit operator keep block scope.
   void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
   bool in_short_circuit = false;
@@ -170,6 +172,7 @@ protected:
     const exprt &offset,
     const exprt &init,
     const locationt &location,
+    const exprt &built,
     code_blockt &out);
 
   bool cpp_new_init_list(
@@ -177,7 +180,17 @@ protected:
     const exprt &rhs,
     const exprt &init,
     const exprt &elem_count,
+    const exprt &built,
+    code_blockt &out);
+
+  void convert_cpp_new_elements(
+    const exprt &base,
+    const exprt &built,
+    const codet &construction,
     goto_programt &dest);
+
+  bool user_code_throws();
+  std::optional<bool> user_code_throws_cache;
 
   //
   // function calls
@@ -226,10 +239,23 @@ protected:
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  bool construct_in_place(
+    const exprt &object,
+    const exprt &initializer,
+    goto_programt &dest);
+  void remove_initializer_sideeffects(
+    const exprt &object,
+    exprt &initializer,
+    goto_programt &dest);
   void convert_dynamic_static_init(
     const codet &decl,
     const symbolt &s,
     const symbolt &guard,
+    goto_programt &dest);
+  void construct_array_elements(
+    const exprt &base,
+    const typet &type,
+    const side_effect_expr_function_callt &ctor,
     goto_programt &dest);
   void schedule_array_element_destructors(const exprt &base, const typet &type);
 
@@ -286,6 +312,9 @@ protected:
     std::size_t stack_size,
     const locationt &,
     goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,
@@ -295,6 +324,15 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// A destructor call on the destructor stack, possibly guarded by
+  /// guard_arm_destructors; the other entries are DEADs.
+  static bool is_destructor_entry(const codet &entry);
+  void guard_arm_destructors(
+    exprt &cond,
+    std::size_t true_size,
+    std::size_t false_size,
+    const locationt &location,
+    goto_programt &dest);
   void record_exception_unwind(goto_programt::instructiont &call);
 
   //
