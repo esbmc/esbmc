@@ -2345,6 +2345,8 @@ regression/goto-transcoder/cbmc_kani_dyn_vtable_fail
 regression/goto-transcoder/cbmc_missing_entry_point
 regression/esbmc/object_size_per_object
 regression/esbmc/object_size_per_object_fail
+regression/esbmc/cprover_object_size_per_object
+regression/esbmc/cprover_object_size_per_object_fail
 regression/python/github_8017
 regression/python/github_8017_fail
 regression/python/github_8226
@@ -2361,3 +2363,7 @@ regression/python/github_8261_int_inf_fail
 regression/python/github_8261_int_nan_fail
 regression/python/github_8261_int_nonfinite
 regression/python/github_8261_int_lazy_operand
+regression/python/github_8239
+regression/python/github_8239_fail
+regression/python/github_8200_late
+regression/python/github_8200_late_fail

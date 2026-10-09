@@ -6956,6 +6956,19 @@ void python_converter::get_compound_assign(
   target_block.copy_to_operands(code_assign);
 }
 
+// The length lives in an array's type, so branches of different lengths have
+// no common type to select between; truncating one proved #8239 wrongly.
+static const typet &common_array_type(const typet &a, const typet &b)
+{
+  BigInt a_size, b_size;
+  if (
+    a.subtype() != b.subtype() || to_integer(to_array_type(a).size(), a_size) ||
+    to_integer(to_array_type(b).size(), b_size) || a_size != b_size)
+    throw std::runtime_error(
+      "unsupported: conditional expression over arrays of different lengths");
+  return a;
+}
+
 typet resolve_ternary_type(
   const typet &then_type,
   const typet &else_type,
@@ -6982,9 +6995,8 @@ typet resolve_ternary_type(
   if (then_is_string && else_is_string)
     return gen_pointer_type(char_type());
 
-  // Both arrays (non-strings)
   if (then_type.is_array() && else_type.is_array())
-    return then_type;
+    return common_array_type(then_type, else_type);
 
   // Mixed signed/unsigned integers - prefer signed for safety
   if (then_type.is_signedbv() && else_type.is_unsignedbv())
