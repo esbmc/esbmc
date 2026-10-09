@@ -7341,6 +7341,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     return bool_expr;
   };
 
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  in_lazy_operand_ |= type == "While";
   if (
     test_type == "BoolOp" && current_block && type != "While" &&
     !coverage_mode && !pytest_generation_mode && !model_mode)
@@ -7475,6 +7477,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // Normal path: no function call to materialize
     cond = get_expr(ast_node["test"]);
   }
+  in_lazy_operand_ = old_in_lazy_operand;
 
   if (!(test_type == "BoolOp" && current_block && type != "While" &&
         !coverage_mode && !pytest_generation_mode && !model_mode))
