@@ -11379,7 +11379,16 @@ and searches for present and absent keys; it is FAILED on master.
 assertion holds and `a[0] == 3` after the sort fails; master passes the second
 and fails the first. `qsort_compar_incompatible` is SUCCESSFUL on master and
 aborts with the model but without the symex change; it pins the new claim.
-All three agree under the default solver and `--z3`. RESULTS_PLACEHOLDER
+All three agree under the default solver and `--z3` (Z3; Bitwuzla was not
+built). The 19 other tests whose sources call `qsort` or `bsearch` keep their
+verdicts; `github_1009_success` times out at 15 minutes on both binaries. Under
+`ESBMC_REGRESS_TIMEOUT_MAX=20`, `esbmc` (all 2757) and 1469 of the 1606 `cbmc`
+and `esbmc-cpp/cpp` tests fail the same tests on both binaries. A Python call
+whose argument does not fit still aborts, as `github_7359_mixed_arity` pins;
+the Python suite was not run, as this build left that frontend out.
+
+Not fixed: the `snprintf`, `sprintf`, `sscanf` and `longjmp` rows of R113's
+list.
 
 ---
 
