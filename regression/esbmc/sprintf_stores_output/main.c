@@ -12,5 +12,9 @@ int main(void)
   int n = snprintf(c, 3, "%c%u", 'q', 123u);
   assert(n == 4);
   assert(c[0] == 'q' && c[1] == '1' && c[2] == '\0' && c[3] == 'd');
+
+  char d[4] = "abc";
+  sprintf(d, "%-2d", 7);
+  assert(d[0] != ' ');
   return 0;
 }

@@ -25,6 +25,10 @@ public:
    *  a format whose conversions are all constant-bounded. */
   bool bounded = true;
 
+  /** False when a flag the formatter does not model ('-', '+', ' ', '#')
+   *  appeared, so the text it produced may differ from the real output. */
+  bool exact = true;
+
   /** True when `operands` are the call's actual arguments, so a non-literal
    *  %s operand may be used to derive a sound object-size length bound. For
    *  the v* variants (vprintf/vsprintf/vsnprintf/vasprintf/vfprintf) the

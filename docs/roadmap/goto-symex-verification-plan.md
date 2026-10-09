@@ -816,6 +816,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R71** | **High (false FAILED, default configuration)** — found probing R69's residual, §15 M9 (R71); **FIXED**, same entry | **A C++ local's renaming was misread, and an array new's object had two types.** `sym_name_to_symbol` took the first `#` and `&` in a symbol name as its renaming suffix, but a clang USR has `#` in its base name, so a renamed C++ local like `main#@n?1!0` came back from the legacy form as L2 `n#0`. `symex_cpp_new` referenced its object with the type it built but stored the round-tripped one in the context, so with a count such as `new S[n]` the solver saw two arrays, and Bitwuzla's tuple flattener read the one nothing wrote. | `sym_name_to_symbol`, `src/util/irep/migrate.cpp`; `symex_cpp_new`, `src/goto-symex/engine/builtin_functions/cpp_memory.cpp`; `unit/util/migrate.test.cpp`, `regression/esbmc-cpp/cpp/new_array_runtime_count{,_fail}` | — | **Fixed**: the suffix is found after the `?`, and the object's references use the context's type. |
 | **R84** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — found beside R83, §15 M9 (R84); **FIXED**, same entry | **A variable initialised from a braced class prvalue was copied out of a temporary that was then destroyed.** `A a = A{1};`, `auto a = A{1};` and the closure of `auto f = [m] { ... };` reached `convert_decl_initializer` as a `temporary_object` holding the aggregate (clang's `CXXBindTemporaryExpr`), so the variable was assigned from a temporary destroyed at the end of the declaration and destroyed again at scope exit. With an aggregate that frees a pointer in its destructor, every later dereference was a false FAILED (invalidated dynamic object) and scope exit a double free; `assert(dtors == 1)` right after the declaration, which aborts natively, was a false SUCCESSFUL. | `elide_prvalue_temporary`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/aggregate_prvalue_variable{,_fail}` | — | **Fixed**: a `temporary_object` with no constructor wrapping a value that is not a side effect initialises the variable directly ([dcl.init]/17.6.1). A lambda's by-copy capture of a class still has its capture-copy temporary destroyed (R83's path, open PR #8113). |
 | **R88** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R88); **FIXED**, same entry | **The `<op>_fetch` atomics did nothing, and nand was and.** `__atomic_<op>_fetch` and `__sync_<op>_and_fetch` were instantiated with an empty body that returned a nondet value and left the object unchanged: `x = 1; __atomic_add_fetch(&x, 1, 5); assert(x == 1);` was SUCCESSFUL. `__atomic_fetch_nand` and `__sync_fetch_and_nand` stored `old & val` instead of `~(old & val)`. | `fetch_op_expr`, `instantiate_read_modify_write`, `src/clang-c-frontend/clang_c_adjust_polymorphic_functions.cpp`; `regression/esbmc/atomic_op_fetch{,_fail}`, `atomic_fetch_nand{,_fail}` | — | **Fixed**: one body serves both orders and returns the old or the stored value; nand negates. The CAS, exchange and lock builtins still listed `// TODO` are open. |
+| **R121** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R113's untriaged `sprintf`/`snprintf` note, §15 M9 (R121); **FIXED** for a constant output, same entry | **`sprintf` and `snprintf` never wrote their destination.** `do_printf` lowers the call to a `printf` side effect and `symex_printf` only computes its return value, so the buffer kept its old contents and an overflowing write went unchecked: `char b[4]; sprintf(b, "%s", "hello");` was SUCCESSFUL. The formatter also printed `%c` as a decimal number, so `snprintf(c, 3, "%c%u", 'q', 123u)` returned 6, not 4. | `symex_sprintf_store` and `exact_printf_output`, `src/goto-symex/engine/builtin_functions/io.cpp`; `printf_formattert`, `src/goto-symex/trace/printf_formatter.cpp`; `regression/esbmc/sprintf_stores_output{,_fail}` | — | **Fixed** when the format and every argument are constants: the output is stored byte by byte through checked dereferences. Any other output still leaves the destination unchanged, as do `vsprintf` and `vsnprintf`. The `+`, ` ` and `#` flags still give a wrong length. |
 | **R113** | **High (false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R113); **FIXED**, same entry | **`memcpy` from an integer into an uninitialised `float` or `double` lost bytes.** `uint64_t u = 0x4000000000000000; double d; memcpy(&d, &u, 8); assert(d == 2.0);` was FAILED. `gen_byte_memcpy` declined operands of different types, so the copy fell back to `__memcpy_impl`'s byte loop, which updates `d` one byte at a time. Each `byte_update` reads the current value's bits, and floating-point theory has a single NaN: when an intermediate value is a NaN, its bits are free, so bytes already written are lost. | `gen_byte_memcpy`, `src/goto-symex/engine/builtin_functions/memory_ops.cpp`; `regression/esbmc/memcpy_int_to_float{,_fail}` | — | **Fixed** for a copy of a whole primitive object: it is a bitcast. A partial copy, or a byte loop the program writes, still builds intermediate values and can lose bytes. |
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R87** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R64's [except.ctor] residual, §15 M9 (R87); **FIXED**, same entry | **An exception leaving a callee skipped the caller's destructors.** `convert_throw` unwinds the automatic objects of the function that throws, but `remove_exceptions` lowered a call to a may-throw callee as a bare `if (thrown) goto dispatch` after the call, so every frame the exception passed through kept its locals alive. `void f() { Guard g; thrower(); }` caught in `main` never ran `~Guard`; a buffer freed again in the handler, a double free natively, verified. | `goto_convertt::record_exception_unwind`, `src/goto-programs/goto_convert.cpp`; `wire_call`, `src/goto-programs/remove_exceptions.cpp`; `regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee{,_fail}` | — | **Fixed**: record the destructor-stack slice on each call and destroy it on the call's exceptional edge. |
@@ -11347,6 +11348,45 @@ the default solver and `--z3`. The 173 regression tests whose sources use a
 compound assignment and a floating type or literal, and the `floats` and
 `floats-regression` suites, keep their verdicts against master (Z3; Bitwuzla
 was not built).
+
+---
+
+### M9 (R121) — 2026-10-09, the buffer `sprintf` never wrote
+
+R113's probe battery listed `sprintf` and `snprintf` among calls after which
+an assertion that holds natively was reported violated. Neither call wrote its
+destination: `do_printf` lowers it to a `printf` side effect, and
+`symex_printf` only works out the return value. The buffer kept whatever it
+held before, so `char b[8] = "abcdefg"; sprintf(b, "x"); assert(b[1] == 'b');`
+was SUCCESSFUL, and `char b[4]; sprintf(b, "%s", "hello");` raised no bounds
+violation. Probing the return value found a second fault: `printf_formattert`
+printed a constant `%c` argument as its decimal value, so
+`snprintf(c, 3, "%c%u", 'q', 123u)` returned 6 rather than 4.
+
+**Fixed** for an output the formatter knows exactly: a constant format whose
+arguments are integer constants or string literals. `symex_sprintf_store`
+writes each character and the NUL through a dereference of the destination,
+so the write is bounds-checked. For `snprintf` the write at index `i` is
+guarded by `i < n`, and the character becomes a NUL when `i + 1 < n` fails
+(C11 7.21.6.5p2). The guard also joins the state guard during each write, so
+`snprintf(NULL, 0, ...)` raises no NULL dereference. `%c` now emits its
+character, padded to the field width. The formatter ignores the `-`, `+`, ` `
+and `#` flags, so it now marks an output that used one as inexact and nothing
+is stored.
+
+`sprintf_stores_output` checks a `sprintf`, a truncating `snprintf` with its
+return value, and a `%-2d` that must not be stored as `" 7"`. It is FAILED on
+master. `sprintf_stores_output_fail` pins the bounds violation of the
+overflowing `sprintf` and is SUCCESSFUL on master. Reverting the store, the
+`%c` change, the flag check or the `snprintf` limit each flips
+`sprintf_stores_output`. The default solver is Z3 in this build (Bitwuzla was
+not built), and `--z3` gives the same verdicts. The 391 live regression tests
+whose sources mention `printf` keep their master verdicts under a 60 s cap.
+
+Not fixed: an output that is not fully constant (a nondet integer, a `%s` of
+an array, a float) still leaves the destination unchanged, as do `vsprintf`
+and `vsnprintf`. The `+`, ` ` and `#` flags still give a wrong return value,
+for example `printf("%+d", 5)` returns 1.
 
 ---
 

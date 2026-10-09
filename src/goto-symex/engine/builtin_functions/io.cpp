@@ -209,10 +209,36 @@ static bool is_literal_string_start(const expr2tc &e)
          to_constant_int2t(to_index2t(obj).index).value.is_zero();
 }
 
-void goto_symext::symex_sprintf_store(
+bool goto_symext::exact_printf_output(
   const code_printf2t &call,
-  const std::string &fmt,
-  size_t first_arg)
+  size_t fmt_idx,
+  std::string &out)
+{
+  expr2tc fmt = call.operands[fmt_idx];
+  cur_state->rename(fmt);
+  const expr2tc &fmt_str = get_base_object(fmt);
+  if (!is_constant_string2t(fmt_str))
+    return false;
+
+  std::list<expr2tc> args;
+  for (size_t i = fmt_idx + 1; i < call.operands.size(); i++)
+  {
+    expr2tc arg = call.operands[i];
+    cur_state->rename(arg);
+    do_simplify(arg);
+    if (!is_constant_int2t(arg) && !is_literal_string_start(arg))
+      return false;
+    args.push_back(arg);
+  }
+
+  printf_formattert formatter;
+  formatter(to_constant_string2t(fmt_str).value.as_string(), args);
+  out = formatter.as_string();
+  return formatter.exact && formatter.bounded &&
+         formatter.min_outlen == formatter.max_outlen;
+}
+
+void goto_symext::symex_sprintf_store(const code_printf2t &call)
 {
   const bool bounded_size = call.kind == printf_kindt::SNPRINTF;
   if (!bounded_size && call.kind != printf_kindt::SPRINTF)
@@ -220,25 +246,21 @@ void goto_symext::symex_sprintf_store(
 
   // Only an output known byte for byte is stored; any other leaves the
   // destination unchanged.
-  std::list<expr2tc> args;
-  for (size_t i = first_arg; i < call.operands.size(); i++)
-  {
-    expr2tc arg = call.operands[i];
-    do_simplify(arg);
-    if (!is_constant_int2t(arg) && !is_literal_string_start(arg))
-      return;
-    args.push_back(arg);
-  }
-
-  printf_formattert formatter;
-  formatter(fmt, args);
-  const std::string out = formatter.as_string();
-  if (!formatter.bounded || formatter.min_outlen != formatter.max_outlen)
+  std::string out;
+  if (!exact_printf_output(call, bounded_size ? 2 : 1, out))
     return;
 
   const expr2tc &dst = call.operands[0];
+  if (!is_pointer_type(dst) || !is_bv_type(to_pointer_type(dst->type).subtype))
+    return;
   const type2tc char_type = to_pointer_type(dst->type).subtype;
-  // C11 7.21.6.5p2: snprintf writes at most n - 1 characters, then a NUL.
+  expr2tc n = bounded_size ? call.operands[1] : expr2tc();
+  if (bounded_size)
+    cur_state->rename(n);
+  // Each write's guard joins the state guard, so the dereference checks are
+  // scoped as well. C11 7.21.6.5p2: snprintf writes at most n - 1
+  // characters, then a NUL.
+  const guard2tc saved_guard = cur_state->guard;
   for (size_t i = 0; i <= out.size(); i++)
   {
     const expr2tc pos = constant_int2tc(size_type2(), BigInt(i));
@@ -247,17 +269,20 @@ void goto_symext::symex_sprintf_store(
       char_type,
       is_signedbv_type(char_type) ? BigInt((signed char)c)
                                   : BigInt((unsigned char)c));
-    guard2tc guard;
+    guard2tc write_guard;
     if (bounded_size)
     {
-      const expr2tc &n = call.operands[1];
-      guard.add(lessthan2tc(constant_int2tc(n->type, BigInt(i)), n));
+      write_guard.add(lessthan2tc(constant_int2tc(n->type, BigInt(i)), n));
+      cur_state->guard = saved_guard;
+      cur_state->guard.add(write_guard.as_expr());
       const expr2tc next = constant_int2tc(n->type, BigInt(i + 1));
-      value = if2tc(char_type, lessthan2tc(next, n), value, gen_zero(char_type));
+      value =
+        if2tc(char_type, lessthan2tc(next, n), value, gen_zero(char_type));
     }
     const expr2tc elem = dereference2tc(char_type, add2tc(dst->type, dst, pos));
-    symex_assign(code_assign2tc(elem, value), false, guard);
+    symex_assign(code_assign2tc(elem, value), false, write_guard);
   }
+  cur_state->guard = saved_guard;
 }
 
 void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
@@ -466,8 +491,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
 
-  if (format_is_constant)
-    symex_sprintf_store(new_rhs, fmt.as_string(), idx);
+  symex_sprintf_store(to_code_printf2t(rhs));
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)

@@ -2363,3 +2363,5 @@ regression/python/github_8239
 regression/python/github_8239_fail
 regression/python/github_8200_late
 regression/python/github_8200_late_fail
+regression/esbmc/sprintf_stores_output
+regression/esbmc/sprintf_stores_output_fail
