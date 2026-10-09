@@ -520,8 +520,8 @@ void *bsearch(
 {
 __ESBMC_HIDE:;
   const char *a = base;
-  /* nmemb at least halves each step, so this concrete count bounds the loop
-   * when the comparisons are symbolic. */
+  /* nmemb at least halves each step, so a halving copy of it, which stays
+   * concrete when the comparisons are symbolic, bounds the loop. */
   for (size_t steps = nmemb; steps > 0 && nmemb > 0; steps /= 2)
   {
     const char *mid = a + nmemb / 2 * size;
