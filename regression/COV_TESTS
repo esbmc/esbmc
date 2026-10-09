@@ -2237,6 +2237,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc-cpp/try_catch/array_new_unwind
+regression/esbmc-cpp/try_catch/array_new_unwind_fail
 regression/esbmc/builtin_rotate
 regression/esbmc/builtin_rotate_fail
 regression/esbmc-cpp/cpp/decl_argument_temporary
@@ -2343,6 +2345,8 @@ regression/goto-transcoder/cbmc_kani_dyn_vtable_fail
 regression/goto-transcoder/cbmc_missing_entry_point
 regression/esbmc/object_size_per_object
 regression/esbmc/object_size_per_object_fail
+regression/esbmc/cprover_object_size_per_object
+regression/esbmc/cprover_object_size_per_object_fail
 regression/python/github_8017
 regression/python/github_8017_fail
 regression/python/github_8226
@@ -2357,3 +2361,5 @@ regression/python/github_8225
 regression/python/github_8225_fail
 regression/python/github_8239
 regression/python/github_8239_fail
+regression/python/github_8200_late
+regression/python/github_8200_late_fail
