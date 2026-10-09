@@ -75,28 +75,6 @@ bool is_incompatible_scalar_string_retype(
          (th.is_string_type(lhs) && th.is_numeric_scalar_type(rhs));
 }
 
-// True if the AST subtree contains a function-call node. Used to gate
-// constant-folding of assertion tests to expressions that actually invoke a
-// (potentially pure) function — plain symbolic asserts stay on the solver path.
-bool ast_contains_call(const nlohmann::json &n)
-{
-  if (n.is_object())
-  {
-    if (n.contains("_type") && n["_type"] == "Call")
-      return true;
-    for (auto it = n.begin(); it != n.end(); ++it)
-      if (ast_contains_call(it.value()))
-        return true;
-  }
-  else if (n.is_array())
-  {
-    for (const auto &e : n)
-      if (ast_contains_call(e))
-        return true;
-  }
-  return false;
-}
-
 using python_frontend::is_literal_int_node;
 using python_frontend::literal_int_value;
 

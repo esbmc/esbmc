@@ -2360,10 +2360,15 @@ class LoopMixin:
                 unpack_assigns.append(unpack_assign)
             else:
                 for i, elt in enumerate(node.target.elts):
-                    if not isinstance(elt, ast.Name):
+                    # A nested tuple/list element unpacks its own item (#8226).
+                    if isinstance(elt, (ast.Tuple, ast.List)):
+                        elt_target = copy.deepcopy(elt)
+                    elif isinstance(elt, ast.Name):
+                        elt_target = ast.Name(id=elt.id, ctx=ast.Store())
+                    else:
                         continue
                     unpack_assign = ast.Assign(
-                        targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                        targets=[elt_target],
                         value=ast.Subscript(
                             value=ast.Name(id=target_var_name, ctx=ast.Load()),
                             slice=ast.Constant(value=i),
