@@ -2239,6 +2239,8 @@ regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
 regression/esbmc/va_arg_callee_va_list
 regression/esbmc/va_arg_callee_va_list_fail
+regression/esbmc-cpp/try_catch/array_new_unwind
+regression/esbmc-cpp/try_catch/array_new_unwind_fail
 regression/esbmc/builtin_rotate
 regression/esbmc/builtin_rotate_fail
 regression/esbmc-cpp/cpp/decl_argument_temporary
