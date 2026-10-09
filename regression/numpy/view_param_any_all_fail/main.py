@@ -7,4 +7,4 @@ def some_but_not_all(row):
 
 a = np.array([0, 1, 0])
 v = a[0:]
-assert some_but_not_all(v)
+assert not some_but_not_all(v)

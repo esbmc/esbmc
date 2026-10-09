@@ -19,6 +19,13 @@ namespace
 const char *const view_use_error =
   "TypeError: passing a numpy view to a function that is not a single return "
   "expression over its parameters is not supported";
+const char *const live_copy_call_error =
+  "TypeError: passing a numpy view to a function while a copied view of its "
+  "storage is live is not supported";
+const char *const unnamed_view_argument_error =
+  "TypeError: passing a numpy view expression that is not bound to a name to "
+  "a function that is not a single return expression over its parameters is "
+  "not supported";
 const char *const returned_view_error =
   "TypeError: returning a copied numpy view is not supported";
 const char *const multi_path_return_error =
@@ -662,10 +669,52 @@ void python_converter::reject_numpy_view_argument_use(
     }
 }
 
+// A callee may write through a bound view parameter, which a copied view of
+// the same storage would not see.
+void python_converter::reject_live_numpy_view_copies_of(
+  const nlohmann::json &args)
+{
+  for_each_name(args, [&](const nlohmann::json &name) {
+    const std::string id =
+      resolve_name_symbol_id(name["id"].get<std::string>());
+    if (id.empty() || numpy_pointer_view_info_.count(id) == 0)
+      return;
+    const std::string root = numpy_view_storage_root(id);
+    for (const auto &copy : numpy_view_copy_sources_)
+      if (
+        (copy.second == id || copy.second == root) &&
+        numpy_pointer_view_info_.count(copy.first) == 0)
+        throw std::runtime_error(live_copy_call_error);
+  });
+}
+
+// A bound view parameter aliases its argument only when that argument is a
+// name: any other expression is evaluated into a temporary the callee would
+// write to instead. A body that is one return expression cannot write.
+void python_converter::reject_unnamed_numpy_view_argument(
+  const nlohmann::json &call) const
+{
+  const std::string func_name = call["func"]["id"].get<std::string>();
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    if (
+      is_name(call["args"][i]) ||
+      numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
+      continue;
+    const nlohmann::json func_node =
+      json_utils::try_find_function((*ast_json)["body"], func_name);
+    if (
+      !func_node.empty() &&
+      !straight_line_return_value(func_node["body"], imported_modules))
+      throw std::runtime_error(unnamed_view_argument_error);
+  }
+}
+
 void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
 {
   if (!is_named_call(call))
     return;
+  reject_unnamed_numpy_view_argument(call);
   reject_unfoldable_numpy_view_call(call);
   if (
     !contains_tracked_numpy_view_name(call["args"]) ||
@@ -686,7 +735,10 @@ void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
         numpy_view_params_.count(fname + "#" + std::to_string(i)) == 0)
         all_bound = false;
     if (all_bound)
+    {
+      reject_live_numpy_view_copies_of(call["args"]);
       return;
+    }
   }
 
   // Not assumed read-only: the callee may keep or mutate what it received.

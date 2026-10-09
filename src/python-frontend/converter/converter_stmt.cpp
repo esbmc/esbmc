@@ -3139,9 +3139,15 @@ void python_converter::record_numpy_view_copy(
   const std::string storage_id =
     resolve_numpy_array_storage_alias_id(source_id);
 
+  // An element read out of a view parameter is a scalar, not a view.
+  const typet &lhs_type = lhs.type();
+  const bool scalar_from_view_param =
+    numpy_view_param_symbols_.count(storage_id) != 0 &&
+    (lhs_type.is_signedbv() || lhs_type.is_unsignedbv() ||
+     lhs_type.is_floatbv() || lhs_type.is_bool());
   if (
-    numpy_array_symbols_.count(storage_id) == 0 &&
-    numpy_param_shapes_.count(storage_id) == 0)
+    scalar_from_view_param || (numpy_array_symbols_.count(storage_id) == 0 &&
+                               numpy_param_shapes_.count(storage_id) == 0))
   {
     clear_numpy_view_copy(lhs);
     return;

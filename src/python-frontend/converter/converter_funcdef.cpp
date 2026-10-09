@@ -3036,6 +3036,8 @@ size_t python_converter::register_function_argument(
     numpy_scalar_pointer_view_infot &vi = pending_view_inference->second;
     vi.source_id = arg_id;
     numpy_pointer_view_info_[arg_id] = vi;
+    numpy_array_symbols_.insert(arg_id);
+    numpy_view_param_symbols_.insert(arg_id);
     numpy_view_params_.insert(
       id.get_function() + "#" + std::to_string(inserted_index));
   }

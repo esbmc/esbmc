@@ -1614,6 +1614,8 @@ private:
   /// of storage that escaped.
   void check_numpy_view_statement(const nlohmann::json &statement) const;
   void reject_unfoldable_numpy_view_call(const nlohmann::json &call);
+  void reject_live_numpy_view_copies_of(const nlohmann::json &args);
+  void reject_unnamed_numpy_view_argument(const nlohmann::json &call) const;
   /// Whether every `return` of @p func_node yields one of its bound view
   /// parameters.
   bool returns_bound_numpy_view_param(const nlohmann::json &func_node) const;
@@ -2627,6 +2629,8 @@ private:
   // Keys are "func_name#param_index" for parameters that receive numpy views
   // and have registered view metadata in numpy_pointer_view_info_.
   std::set<std::string> numpy_view_params_;
+  /// Symbol ids of the parameters bound as views.
+  std::unordered_set<std::string> numpy_view_param_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
