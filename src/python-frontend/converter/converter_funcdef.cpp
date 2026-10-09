@@ -2196,6 +2196,156 @@ static std::optional<std::size_t> forwarded_param_index(
   return std::nullopt;
 }
 
+// `a[lo:hi:step]` on a 1-D array of `length` elements.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::slice_view_info(
+  std::size_t length,
+  const nlohmann::json &slice_node)
+{
+  const std::optional<std::size_t> len =
+    python_frontend::literal_slice_length(length, slice_node);
+  const std::optional<long long> step =
+    python_frontend::literal_slice_step(slice_node);
+  if (!len || !step || *step == 0)
+    return std::nullopt;
+  numpy_scalar_pointer_view_infot info{};
+  info.length = *len;
+  info.stride = *step;
+  info.shape = {*len};
+  if (*step != 1)
+    info.strides = {*step};
+  return info;
+}
+
+static bool is_index_node(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  return type == "Constant" || type == "UnaryOp" || type == "Name";
+}
+
+// `a[:, k]` on a rows x cols array: a column, one element every `cols`.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::column_view_info(
+  std::size_t rows,
+  std::size_t cols,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !slice_node.contains("elts") || slice_node["elts"].size() != 2 ||
+    slice_node["elts"][0].value("_type", "") != "Slice" ||
+    !is_index_node(slice_node["elts"][1]))
+    return std::nullopt;
+  numpy_scalar_pointer_view_infot info{};
+  info.length = rows;
+  info.stride = static_cast<long long>(cols);
+  info.shape = {rows};
+  info.strides = {static_cast<long long>(cols)};
+  return info;
+}
+
+// Length, stride and shape of the view a subscript takes of an array of
+// `src_shape`: a 1-D slice, or a row or a column of a 2-D array. nullopt for
+// non-literal bounds and any other form.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::view_info_from_subscript(
+  const std::vector<std::size_t> &src_shape,
+  const nlohmann::json &slice_node)
+{
+  const std::string slice_type = slice_node.value("_type", "");
+  if (slice_type == "Slice" && src_shape.size() == 1)
+    return slice_view_info(src_shape[0], slice_node);
+  if (src_shape.size() != 2)
+    return std::nullopt;
+  if (slice_type == "Tuple")
+    return column_view_info(src_shape[0], src_shape[1], slice_node);
+  if (!is_index_node(slice_node))
+    return std::nullopt;
+  numpy_scalar_pointer_view_infot info{};
+  info.length = src_shape[1];
+  info.stride = 1;
+  info.shape = {src_shape[1]};
+  return info;
+}
+
+bool python_converter::same_view_layout(
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &b)
+{
+  return a.first == b.first && a.second.shape == b.second.shape &&
+         a.second.stride == b.second.stride &&
+         a.second.strides == b.second.strides;
+}
+
+static bool calls_with_argument(
+  const nlohmann::json &call,
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  return call.value("func", nlohmann::json::object()).value("_type", "") ==
+           "Name" &&
+         call["func"].value("id", "") == func_name && call.contains("args") &&
+         call["args"].size() > param_index;
+}
+
+// Type of the literal `np.array(...)` that the module assigns to `arr_name`.
+std::optional<typet>
+python_converter::numpy_literal_array_type(const std::string &arr_name) const
+{
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    if (assignment_target_name(stmt) != arr_name)
+      continue;
+    if (
+      !stmt.contains("value") || stmt["value"].is_null() ||
+      !is_numpy_array_literal_call(stmt["value"]))
+      return std::nullopt;
+    return type_handler_.get_typet(stmt["value"]["args"][0]);
+  }
+  return std::nullopt;
+}
+
+// Element type and layout of the view one call site passes at `param_index`:
+// a parameter of the enclosing function forwarded unchanged, or a subscript
+// of a module-level literal array.
+std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
+python_converter::infer_numpy_view_argument(
+  const numpy_param_call_site &site,
+  std::size_t param_index,
+  std::set<std::string> &visiting) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const nlohmann::json &arg = (*site.call)["args"][param_index];
+  if (
+    const std::optional<std::size_t> forwarded =
+      forwarded_param_index(arg, module_body, site.enclosing_function))
+  {
+    std::pair<typet, numpy_scalar_pointer_view_infot> result;
+    if (!try_infer_numpy_view_param(
+          site.enclosing_function,
+          *forwarded,
+          result.first,
+          result.second,
+          visiting))
+      return std::nullopt;
+    return result;
+  }
+
+  const auto [arr_name, slice_node] = resolve_view_arg_source(arg, module_body);
+  const std::optional<typet> arr_type =
+    arr_name.empty() ? std::nullopt : numpy_literal_array_type(arr_name);
+  if (!arr_type)
+    return std::nullopt;
+  const auto shape_elem = array_type_shape_and_elem(*arr_type);
+  if (!shape_elem)
+    return std::nullopt;
+  const std::optional<numpy_scalar_pointer_view_infot> info =
+    view_info_from_subscript(shape_elem->first, slice_node);
+  if (!info)
+    return std::nullopt;
+  return std::make_pair(shape_elem->second, *info);
+}
+
 bool python_converter::try_infer_numpy_view_param(
   const std::string &func_name,
   std::size_t param_index,
@@ -2217,164 +2367,28 @@ bool python_converter::try_infer_numpy_view_param(
 {
   if (!visiting.insert(func_name + "#" + std::to_string(param_index)).second)
     return false;
-  const nlohmann::json &module_body = (*ast_json)["body"];
   std::vector<numpy_param_call_site> call_sites;
   collect_call_sites(*ast_json, "", call_sites);
 
-  // view_info_from_subscript: derive length/stride/shape from a subscript
-  // into an array of `src_shape`. Handles 1-D slices and integer/name
-  // indexing of 2-D arrays (row view). Returns nullopt for patterns with
-  // non-literal bounds, 3-D+ sources, or unsupported slice types.
-  auto view_info_from_subscript = [](
-                                    const std::vector<std::size_t> &src_shape,
-                                    const nlohmann::json &slice_node)
-    -> std::optional<numpy_scalar_pointer_view_infot> {
-    numpy_scalar_pointer_view_infot info{};
-    info.readonly = false;
-    const std::string slice_type = slice_node.value("_type", "");
-    if (slice_type == "Slice")
-    {
-      if (src_shape.size() != 1)
-        return std::nullopt;
-      std::optional<std::size_t> len =
-        python_frontend::literal_slice_length(src_shape[0], slice_node);
-      if (!len)
-        return std::nullopt;
-      std::optional<long long> step =
-        python_frontend::literal_slice_step(slice_node);
-      if (!step || *step == 0)
-        return std::nullopt;
-      info.length = *len;
-      info.stride = *step;
-      info.shape = {*len};
-      if (*step != 1)
-        info.strides = {*step};
-      return info;
-    }
-    // Integer or name index on a 2-D array: a[i] -> row view (stride 1).
-    if (
-      slice_type == "Constant" || slice_type == "UnaryOp" ||
-      slice_type == "Name")
-    {
-      if (src_shape.size() != 2)
-        return std::nullopt;
-      const std::size_t cols = src_shape[1];
-      info.length = cols;
-      info.stride = 1;
-      info.shape = {cols};
-      return info;
-    }
-    // Tuple index on a 2-D array: a[:, k] -> column view (stride = ncols).
-    if (slice_type == "Tuple" && src_shape.size() == 2)
-    {
-      if (!slice_node.contains("elts") || slice_node["elts"].size() != 2)
-        return std::nullopt;
-      const std::string t0 = slice_node["elts"][0].value("_type", "");
-      const std::string t1 = slice_node["elts"][1].value("_type", "");
-      const std::size_t rows = src_shape[0];
-      const std::size_t cols = src_shape[1];
-      if (
-        t0 == "Slice" && (t1 == "Constant" || t1 == "UnaryOp" || t1 == "Name"))
-      {
-        info.length = rows;
-        info.stride = static_cast<long long>(cols);
-        info.shape = {rows};
-        info.strides = {static_cast<long long>(cols)};
-        return info;
-      }
-    }
-    return std::nullopt;
-  };
-
-  bool found = false;
-  typet elem_type;
-  numpy_scalar_pointer_view_infot info;
-
+  // All call sites that pass an analyzable view must agree on its layout.
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> result;
   for (const numpy_param_call_site &site : call_sites)
   {
-    const nlohmann::json &call = *site.call;
-    if (
-      call.value("func", nlohmann::json::object()).value("_type", "") !=
-        "Name" ||
-      call["func"].value("id", "") != func_name || !call.contains("args") ||
-      call["args"].size() <= param_index)
+    if (!calls_with_argument(*site.call, func_name, param_index))
       continue;
-
-    const nlohmann::json &arg = call["args"][param_index];
-    typet candidate_elem;
-    std::optional<numpy_scalar_pointer_view_infot> candidate_info;
-    if (
-      const std::optional<std::size_t> forwarded =
-        forwarded_param_index(arg, module_body, site.enclosing_function))
-    {
-      numpy_scalar_pointer_view_infot forwarded_info;
-      if (!try_infer_numpy_view_param(
-            site.enclosing_function,
-            *forwarded,
-            candidate_elem,
-            forwarded_info,
-            visiting))
-        continue;
-      candidate_info = forwarded_info;
-    }
-    else
-    {
-      auto [arr_name, slice_node] = resolve_view_arg_source(arg, module_body);
-      if (arr_name.empty())
-        continue;
-
-      // Locate the source array's literal assignment in the module body.
-      std::optional<typet> arr_type;
-      for (const auto &stmt : module_body)
-      {
-        if (assignment_target_name(stmt) != arr_name)
-          continue;
-        const nlohmann::json *value = nullptr;
-        const std::string stype = stmt.value("_type", "");
-        if (stype == "Assign" && stmt.contains("value"))
-          value = &stmt["value"];
-        else if (
-          stype == "AnnAssign" && stmt.contains("value") &&
-          !stmt["value"].is_null())
-          value = &stmt["value"];
-        if (value && is_numpy_array_literal_call(*value))
-          arr_type = type_handler_.get_typet((*value)["args"][0]);
-        break;
-      }
-      if (!arr_type)
-        continue;
-
-      auto shape_elem = array_type_shape_and_elem(*arr_type);
-      if (!shape_elem)
-        continue;
-
-      candidate_info = view_info_from_subscript(shape_elem->first, slice_node);
-      if (!candidate_info)
-        continue;
-      candidate_elem = shape_elem->second;
-    }
-
-    // All call sites must agree on element type, shape, and stride.
-    if (found)
-    {
-      if (
-        elem_type != candidate_elem || info.shape != candidate_info->shape ||
-        info.stride != candidate_info->stride ||
-        info.strides != candidate_info->strides)
-        return false;
-    }
-    else
-    {
-      elem_type = candidate_elem;
-      info = *candidate_info;
-      found = true;
-    }
+    const auto candidate =
+      infer_numpy_view_argument(site, param_index, visiting);
+    if (!candidate)
+      continue;
+    if (result && !same_view_layout(*result, *candidate))
+      return false;
+    result = candidate;
   }
 
-  if (!found)
+  if (!result)
     return false;
-  out_elem_type = elem_type;
-  out_info = info;
+  out_elem_type = result->first;
+  out_info = result->second;
   return true;
 }
 
@@ -2838,6 +2852,45 @@ std::optional<typet> python_converter::try_infer_bytes_param_size(
   return type_handler_.get_typet("bytes", inferred_size);
 }
 
+// A parameter no numpy array was inferred for may receive a scalar-pointer
+// view (ADR-NP-003 etapa 2): on success `arg_type` becomes a pointer to the
+// element type and the view layout is returned.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::infer_numpy_view_param_type(
+  const std::string &func_name,
+  std::size_t param_index,
+  const std::string &arg_name,
+  bool numpy_array_param,
+  typet &arg_type) const
+{
+  if (
+    numpy_array_param || arg_name == "self" || arg_name == "cls" ||
+    (arg_type != any_type() && arg_type != type_handler_.get_list_type()))
+    return std::nullopt;
+  typet elem_type;
+  numpy_scalar_pointer_view_infot info;
+  if (!try_infer_numpy_view_param(func_name, param_index, elem_type, info))
+    return std::nullopt;
+  arg_type = gen_pointer_type(elem_type);
+  return info;
+}
+
+void python_converter::register_numpy_view_param(
+  const std::optional<numpy_scalar_pointer_view_infot> &view_param,
+  const std::string &arg_id,
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  if (!view_param)
+    return;
+  numpy_scalar_pointer_view_infot info = *view_param;
+  info.source_id = arg_id;
+  numpy_pointer_view_info_[arg_id] = info;
+  numpy_array_symbols_.insert(arg_id);
+  numpy_view_param_symbols_.insert(arg_id);
+  numpy_view_params_.insert(func_name + "#" + std::to_string(param_index));
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -2916,27 +2969,13 @@ size_t python_converter::register_function_argument(
     type.arguments().size(),
     arg_name);
 
-  // If no numpy array was inferred, check whether the parameter receives a
-  // scalar-pointer view (ADR-NP-003 etapa 2): infer elem type and view
-  // metadata from call-site subscript arguments.
-  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
-    pending_view_inference;
-  if (
-    !numpy_array_param && arg_name != "self" && arg_name != "cls" &&
-    (arg_type == any_type() || arg_type == type_handler_.get_list_type()))
-  {
-    typet view_elem_type;
-    numpy_scalar_pointer_view_infot view_info;
-    if (try_infer_numpy_view_param(
-          id.get_function(),
-          type.arguments().size(),
-          view_elem_type,
-          view_info))
-    {
-      arg_type = gen_pointer_type(view_elem_type);
-      pending_view_inference = {view_elem_type, view_info};
-    }
-  }
+  const std::optional<numpy_scalar_pointer_view_infot> view_param =
+    infer_numpy_view_param_type(
+      id.get_function(),
+      type.arguments().size(),
+      arg_name,
+      numpy_array_param,
+      arg_type);
 
   // Same idea, but for a parameter fed a dynamically-typed local variable.
   if (
@@ -3031,16 +3070,8 @@ size_t python_converter::register_function_argument(
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
 
-  if (pending_view_inference)
-  {
-    numpy_scalar_pointer_view_infot &vi = pending_view_inference->second;
-    vi.source_id = arg_id;
-    numpy_pointer_view_info_[arg_id] = vi;
-    numpy_array_symbols_.insert(arg_id);
-    numpy_view_param_symbols_.insert(arg_id);
-    numpy_view_params_.insert(
-      id.get_function() + "#" + std::to_string(inserted_index));
-  }
+  register_numpy_view_param(
+    view_param, arg_id, id.get_function(), inserted_index);
 
   symbolt *stored_param = symbol_table_.find_symbol(arg_id);
   if (

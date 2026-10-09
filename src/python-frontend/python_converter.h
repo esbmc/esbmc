@@ -1614,6 +1614,18 @@ private:
   /// of storage that escaped.
   void check_numpy_view_statement(const nlohmann::json &statement) const;
   void reject_unfoldable_numpy_view_call(const nlohmann::json &call);
+  bool reject_or_defer_numpy_view_name_return(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  nlohmann::json current_user_function_node() const;
+  bool is_numpy_module_param(const std::string &root_name) const;
+  bool is_copied_numpy_view_local(const std::string &name) const;
+  bool is_scalar_read_of_numpy_view_param(
+    const exprt &lhs,
+    const std::string &storage_id) const;
+  code_blockt *while_condition_block(
+    const nlohmann::json &ast_node,
+    code_blockt &cond_prelude);
   void reject_live_numpy_view_copies_of(const nlohmann::json &args);
   void reject_unnamed_numpy_view_argument(const nlohmann::json &call) const;
   /// Whether every `return` of @p func_node yields one of its bound view
@@ -2510,6 +2522,37 @@ private:
     typet &out_elem_type,
     numpy_scalar_pointer_view_infot &out_info,
     std::set<std::string> &visiting) const;
+  std::optional<typet>
+  numpy_literal_array_type(const std::string &arr_name) const;
+  static std::optional<numpy_scalar_pointer_view_infot>
+  slice_view_info(std::size_t length, const nlohmann::json &slice_node);
+  static std::optional<numpy_scalar_pointer_view_infot> column_view_info(
+    std::size_t rows,
+    std::size_t cols,
+    const nlohmann::json &slice_node);
+  static std::optional<numpy_scalar_pointer_view_infot>
+  view_info_from_subscript(
+    const std::vector<std::size_t> &src_shape,
+    const nlohmann::json &slice_node);
+  static bool same_view_layout(
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_numpy_view_argument(
+    const numpy_param_call_site &site,
+    std::size_t param_index,
+    std::set<std::string> &visiting) const;
+  std::optional<numpy_scalar_pointer_view_infot> infer_numpy_view_param_type(
+    const std::string &func_name,
+    std::size_t param_index,
+    const std::string &arg_name,
+    bool numpy_array_param,
+    typet &arg_type) const;
+  void register_numpy_view_param(
+    const std::optional<numpy_scalar_pointer_view_infot> &view_param,
+    const std::string &arg_id,
+    const std::string &func_name,
+    std::size_t param_index);
   // Runtime length of the named view when its extent is not a constant.
   std::optional<exprt>
   symbolic_numpy_view_length(const std::string &name) const;

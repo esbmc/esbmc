@@ -3093,6 +3093,17 @@ void python_converter::reject_numpy_view_slice_assignment(
       "TypeError: slice assignment through a numpy view is not supported");
 }
 
+// An element read out of a view parameter is a scalar, not a view.
+bool python_converter::is_scalar_read_of_numpy_view_param(
+  const exprt &lhs,
+  const std::string &storage_id) const
+{
+  const typet &type = lhs.type();
+  return numpy_view_param_symbols_.count(storage_id) != 0 &&
+         (type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+          type.is_bool());
+}
+
 void python_converter::record_numpy_view_copy(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3139,15 +3150,10 @@ void python_converter::record_numpy_view_copy(
   const std::string storage_id =
     resolve_numpy_array_storage_alias_id(source_id);
 
-  // An element read out of a view parameter is a scalar, not a view.
-  const typet &lhs_type = lhs.type();
-  const bool scalar_from_view_param =
-    numpy_view_param_symbols_.count(storage_id) != 0 &&
-    (lhs_type.is_signedbv() || lhs_type.is_unsignedbv() ||
-     lhs_type.is_floatbv() || lhs_type.is_bool());
   if (
-    scalar_from_view_param || (numpy_array_symbols_.count(storage_id) == 0 &&
-                               numpy_param_shapes_.count(storage_id) == 0))
+    is_scalar_read_of_numpy_view_param(lhs, storage_id) ||
+    (numpy_array_symbols_.count(storage_id) == 0 &&
+     numpy_param_shapes_.count(storage_id) == 0))
   {
     clear_numpy_view_copy(lhs);
     return;
@@ -7166,7 +7172,43 @@ codet lower_while_with_condition_prelude(
   while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
   return while_code;
 }
+
+// The `ifthenelse` or `while` statement for a converted condition and body.
+codet build_conditional_code(
+  const std::string &kind,
+  const code_blockt &cond_prelude,
+  const exprt &cond,
+  const exprt &then,
+  const exprt &else_expr,
+  const locationt &location)
+{
+  if (!cond_prelude.operands().empty())
+    return lower_while_with_condition_prelude(
+      cond_prelude, cond, then, else_expr, location);
+
+  codet code;
+  if (kind == "If")
+    code.set_statement("ifthenelse");
+  else if (kind == "While")
+    code.set_statement("while");
+  code.location() = location;
+  code.copy_to_operands(cond, then);
+  if (!else_expr.id_string().empty())
+    code.copy_to_operands(else_expr);
+  return code;
+}
 } // namespace
+
+// The block that receives the statements a loop condition emits: a `while`
+// test collects them so they can be re-run on every iteration.
+code_blockt *python_converter::while_condition_block(
+  const nlohmann::json &ast_node,
+  code_blockt &cond_prelude)
+{
+  return ast_node.value("_type", "") == "While" && current_block
+           ? &cond_prelude
+           : current_block;
+}
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
@@ -7309,8 +7351,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   code_blockt cond_prelude;
   code_blockt *const enclosing_block = current_block;
-  if (type == "While" && current_block)
-    current_block = &cond_prelude;
+  current_block = while_condition_block(ast_node, cond_prelude);
 
   // Keep `and` and `or` in conditions short-circuited.
   const bool coverage_mode = is_coverage_mode();
@@ -7787,26 +7828,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     return if_expr;
   }
 
-  if (!cond_prelude.operands().empty())
-    return lower_while_with_condition_prelude(
-      cond_prelude, cond, then, else_expr, get_location_from_decl(ast_node));
-
-  // Create if or while code
-  codet code;
-  if (type == "If")
-    code.set_statement("ifthenelse");
-  else if (type == "While")
-    code.set_statement("while");
-
-  // Set location for the conditional statement
-  code.location() = get_location_from_decl(ast_node);
-
-  // Append "then" block
-  code.copy_to_operands(cond, then);
-  if (!else_expr.id_string().empty())
-    code.copy_to_operands(else_expr);
-
-  return code;
+  return build_conditional_code(
+    ast_node.value("_type", ""),
+    cond_prelude,
+    cond,
+    then,
+    else_expr,
+    get_location_from_decl(ast_node));
 }
 exprt python_converter::box_value_on_heap(
   const exprt &value,
@@ -7886,6 +7914,86 @@ exprt python_converter::get_return_value(const nlohmann::json &value)
   return result;
 }
 
+// The AST node of the user function being converted, or an empty node when
+// the current scope is the module, a model, or not part of the program.
+nlohmann::json python_converter::current_user_function_node() const
+{
+  if (
+    current_func_name_.empty() || current_func_name_ == "python_user_main" ||
+    !ast_json || !ast_json->contains("filename") ||
+    !is_program_file((*ast_json)["filename"].get<std::string>()))
+    return nlohmann::json();
+  const nlohmann::json func_node = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  return func_node.empty() || is_model_file(func_node) ? nlohmann::json()
+                                                       : func_node;
+}
+
+// Whether `root_name` names a parameter of the function being converted, in a
+// module that imports numpy.
+bool python_converter::is_numpy_module_param(const std::string &root_name) const
+{
+  if (root_name.empty() || !ast_imports_numpy_module(*ast_json))
+    return false;
+  const nlohmann::json root_decl =
+    json_utils::find_var_decl(root_name, current_func_name_, *ast_json);
+  return root_decl.is_object() && root_decl.value("_type", "") == "arg";
+}
+
+// Whether the local `name` was bound to a copied view of a numpy array or of
+// an array parameter. A subscript of a pointer-backed view parameter is an
+// element, not a view.
+bool python_converter::is_copied_numpy_view_local(const std::string &name) const
+{
+  const nlohmann::json decl =
+    json_utils::find_var_decl(name, current_func_name_, *ast_json);
+  if (
+    !decl.is_object() || decl.value("_type", "") == "arg" ||
+    !decl.contains("value") || !is_numpy_view_copy_expr(decl["value"]))
+    return false;
+  const std::string root_name =
+    root_name_from_numpy_view_copy_expr(decl["value"]);
+  const std::string root_id =
+    root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
+  if (!root_id.empty() && numpy_pointer_view_info_.count(root_id) != 0)
+    return false;
+  const bool root_is_tracked_numpy =
+    !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
+                         numpy_view_copy_sources_.count(root_id) != 0);
+  return root_is_tracked_numpy || is_numpy_module_param(root_name);
+}
+
+// Rejects or defers a `return name` that would hand a numpy view out of a
+// user function; true when the return statement was consumed here.
+bool python_converter::reject_or_defer_numpy_view_name_return(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json &value = ast_node["value"];
+  const nlohmann::json func_node = current_user_function_node();
+  if (
+    func_node.empty() || value.value("_type", "") != "Name" ||
+    !value.contains("id"))
+    return false;
+
+  // Callers bind the result to their own argument, so the view never leaves.
+  if (
+    json_utils::split_function_path(current_func_name_).size() == 1 &&
+    returns_bound_numpy_view_param(func_node))
+    return false;
+
+  const bool in_program_file =
+    is_program_file(get_location_from_decl(ast_node).get_file().as_string());
+  if (
+    !contains_tracked_numpy_view_name(value) &&
+    !(in_program_file &&
+      is_copied_numpy_view_local(value["id"].get<std::string>())))
+    return false;
+
+  reject_or_defer_numpy_view_return(ast_node, target_block);
+  return true;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7934,70 +8042,8 @@ void python_converter::get_return_statements(
   // instead of an Assign target.
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
-  bool is_user_defined_function = false;
-  // Callers bind the result to their own argument, so the view never leaves.
-  bool returns_view_param = false;
-  if (
-    !current_func_name_.empty() && current_func_name_ != "python_user_main" &&
-    ast_json && ast_json->contains("filename") &&
-    is_program_file((*ast_json)["filename"].get<std::string>()))
-  {
-    const std::vector<std::string> function_path =
-      json_utils::split_function_path(current_func_name_);
-    const nlohmann::json func_node =
-      json_utils::find_function_by_path(*ast_json, function_path);
-    is_user_defined_function = !func_node.empty() && !is_model_file(func_node);
-    returns_view_param = is_user_defined_function &&
-                         function_path.size() == 1 &&
-                         returns_bound_numpy_view_param(func_node);
-  }
-  const bool returns_name = ast_node["value"].value("_type", "") == "Name" &&
-                            ast_node["value"].contains("id");
-  if (
-    is_user_defined_function && returns_name && !returns_view_param &&
-    contains_tracked_numpy_view_name(ast_node["value"]))
-  {
-    reject_or_defer_numpy_view_return(ast_node, target_block);
+  if (reject_or_defer_numpy_view_name_return(ast_node, target_block))
     return;
-  }
-  const locationt return_location = get_location_from_decl(ast_node);
-  const std::string return_file = return_location.get_file().as_string();
-  if (
-    returns_name && ast_json && is_user_defined_function &&
-    !returns_view_param && is_program_file(return_file))
-  {
-    const std::string name = ast_node["value"]["id"].get<std::string>();
-    const nlohmann::json decl =
-      json_utils::find_var_decl(name, current_func_name_, *ast_json);
-    if (
-      decl.is_object() && decl.value("_type", "") != "arg" &&
-      decl.contains("value") && is_numpy_view_copy_expr(decl["value"]))
-    {
-      const std::string root_name =
-        root_name_from_numpy_view_copy_expr(decl["value"]);
-      const std::string root_id =
-        root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
-      const bool root_is_tracked_numpy =
-        !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
-                             numpy_view_copy_sources_.count(root_id) != 0);
-      bool root_is_numpy_param = false;
-      if (!root_name.empty() && ast_json && ast_imports_numpy_module(*ast_json))
-      {
-        const nlohmann::json root_decl =
-          json_utils::find_var_decl(root_name, current_func_name_, *ast_json);
-        root_is_numpy_param =
-          root_decl.is_object() && root_decl.value("_type", "") == "arg";
-      }
-      const bool root_is_pointer_view =
-        !root_id.empty() && numpy_pointer_view_info_.count(root_id) != 0;
-      if (
-        (root_is_tracked_numpy || root_is_numpy_param) && !root_is_pointer_view)
-      {
-        reject_or_defer_numpy_view_return(ast_node, target_block);
-        return;
-      }
-    }
-  }
 
   exprt return_value = get_return_value(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
