@@ -56,6 +56,34 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
+// Moves `symbol` (named __ESBMC_main) into context. On a name collision,
+// another language module (e.g. the LD front end) already built the
+// canonical __ESBMC_main; with --secondary-entry-point, keep this wrapper
+// too, under a name a tool can still symex directly, instead of erroring.
+// contextt::move leaves `symbol` untouched on a failed move, so it is still
+// `__ESBMC_main` when the retry renames it.
+static bool move_main_or_secondary(contextt &context, symbolt &symbol)
+{
+  if (!context.move(symbol))
+    return false;
+  if (!config.options.get_bool_option("secondary-entry-point"))
+  {
+    log_error("main already defined by another language module");
+    return true;
+  }
+  symbol.id = "__ESBMC_secondary_main";
+  symbol.name = "__ESBMC_secondary_main";
+  if (context.move(symbol))
+  {
+    log_error("__ESBMC_secondary_main already defined");
+    return true;
+  }
+  log_warning(
+    "secondary entry point kept as __ESBMC_secondary_main: it is not "
+    "executed, so properties reachable only from it are not checked");
+  return false;
+}
+
 bool clang_c_maint::clang_main()
 {
   irep_idt main_symbol;
@@ -445,11 +473,5 @@ bool clang_c_maint::clang_main()
     new_symbol.set_value(std::move(v));
   }
 
-  if (context.move(new_symbol))
-  {
-    log_error("main already defined by another language module");
-    return true;
-  }
-
-  return false;
+  return move_main_or_secondary(context, new_symbol);
 }

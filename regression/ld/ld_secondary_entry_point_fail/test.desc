@@ -1,0 +1,5 @@
+CORE
+timer.ld
+--ld-props props.yaml --unwind 2 --no-unwinding-assertions --secondary-entry-point ref.c
+^VERIFICATION FAILED$
+^WARNING: secondary entry point kept as __ESBMC_secondary_main

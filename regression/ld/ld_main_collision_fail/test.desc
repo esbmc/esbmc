@@ -1,0 +1,5 @@
+CORE
+timer.ld
+--ld-props props.yaml --unwind 2 --no-unwinding-assertions main.c
+^ERROR: main already defined by another language module$
+^ERROR: CONVERSION ERROR$
