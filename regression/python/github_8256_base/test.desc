@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5
+^VERIFICATION SUCCESSFUL$
