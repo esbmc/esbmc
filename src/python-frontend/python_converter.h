@@ -1378,6 +1378,7 @@ private:
     const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
