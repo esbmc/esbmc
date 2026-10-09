@@ -713,6 +713,8 @@ regression/python/precedence2
 regression/python/print_call_and_arith_fail
 regression/python/property_getter
 regression/python/python_irep2_adjust_ieee_float
+regression/python/python_option_interpreter_path
+regression/python/python_option_missing_interpreter
 regression/python/python_str_count_runtime_model
 regression/python/python_str_join_nondet_fallback
 regression/python/queue_join
