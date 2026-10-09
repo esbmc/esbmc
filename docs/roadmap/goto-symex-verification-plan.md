@@ -886,6 +886,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R111** | **High (false SUCCESSFUL, false FAILED and no verdict, default configuration)** — R88's residual, §15 M9 (R111); **FIXED**, same entry | **An integer `op=` a floating operand ran as integer arithmetic.** `remove_assignment` chose `ieee_<op>` from the assignment's type, which is E1's, so `int i; i /= 3.5;` built an integer `div2t` over two doubles and Z3 rejected the sort. `+=`, `-=` and `*=` reached the solver as `add2t`/`sub2t`/`mul2t` on doubles, which Z3's operator overloads turn into round-to-nearest `fp.add`/`fp.sub`/`fp.mul`, ignoring the program's rounding mode: under `FE_UPWARD`, `long long x = 1LL << 53; x += 1.0;` gave `2^53` instead of `2^53 + 2`. | `goto_convertt::remove_assignment`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc/compound_assign_float_rhs{,_fail}` | — | **Fixed**: the operation is floating-point when E1 or E2 is. |
 | **R110** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R88's residual, §15 M9 (R110); **FIXED**, same entry | **A `__sync_*` call on an unsigned char or short returned a signed value.** Clang rewrites `__sync_fetch_and_add(&c, 1)` to the sized `__sync_fetch_and_add_1`, declared `char (volatile char *, char, ...)`, and gives the call the type `unsigned char`. The converter typed the call from the callee's declared return type, so the result went through a `char` temporary: with `c = 200`, `int k = __sync_fetch_and_add(&c, 1); assert(k < 128);` was SUCCESSFUL. | `CallExprClass`, `clang_c_convertert::get_expr`, `src/clang-c-frontend/clang_c_convert.cpp`; `regression/esbmc/sync_unsigned_result{,_fail}` | — | **Fixed**: a call to a builtin with custom type checking takes the call's type. |
 | **R103** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R83's open note, §15 M9 (R103); **FIXED**, same entry | **A temporary bound to an aggregate's reference member died with the full-expression.** `convert_decl_initializer` destroys every temporary of a non-reference declaration's initializer after the assignment, so `R x{M(1)};` ran `~M` before the next statement, although [class.temporary]/6 extends the temporary to the lifetime of `x`. A C++20 parenthesised `R y(M(1))` is not extended and lowers to the same GOTO. | `goto_convertt::convert_decl_initializer`, `goto_convert.cpp`; `CXXParenListInitExprClass`, `clang_c_convert.cpp` | — | **Fixed**: the entries of a temporary whose address is an operand of the declared aggregate, at any nesting depth, stay on the destructor stack until scope exit; the parenthesised form casts that address so it is not matched. |
+| **R116** | **Medium (false SUCCESSFUL, `--overflow-check`)** — R109's open note, §15 M9 (R116); **FIXED**, same entry | **`abs(INT_MIN)` had no overflow claim.** The C frontend lowers `abs`, `labs`, `llabs` and their `__builtin_` forms to an `abs2t` node, and `goto_checkt::check_rec` added overflow claims for `neg`, `add`, `sub`, `mul`, `div` and `mod` but not `abs`. `int x; __ESBMC_assume(x <= -2147483647); return abs(x);` was SUCCESSFUL under `--overflow-check`, although C11 7.22.6.1p2 leaves `abs(INT_MIN)` undefined. | `goto_checkt::overflow_check`, `src/goto-programs/goto_check.cpp`; `regression/esbmc/abs_overflow_check{,_fail}` | — | **Fixed**: a signed `abs` gets the claim of negating its operand. |
 
 ---
 
@@ -11347,6 +11348,32 @@ the default solver and `--z3`. The 173 regression tests whose sources use a
 compound assignment and a floating type or literal, and the `floats` and
 `floats-regression` suites, keep their verdicts against master (Z3; Bitwuzla
 was not built).
+
+---
+
+### M9 (R116) — 2026-10-09, the abs that never overflowed
+
+R109's entry left open that `abs(INT_MIN)` under `--overflow-check` is
+SUCCESSFUL, although C11 7.22.6.1p2 leaves it undefined. Both adjust passes
+lower `abs`, `labs`, `llabs` and their `__builtin_` forms to an `abs2t` node,
+and `goto_checkt::check_rec` sends `neg`, `add`, `sub`, `mul`, `div` and `mod`
+to `overflow_check`, but not `abs`. The node never got a claim, so
+`int x; __ESBMC_assume(x <= -2147483647); return abs(x);` verified.
+
+**Fixed**: `abs` now reaches `overflow_check`, whose claim for it is the one
+for negating its operand, `overflow_neg`. The claim is built in a new helper,
+`overflow_expr`, to keep `overflow_check` under the complexity threshold. A
+floating-point `abs` is unaffected, since `overflow_check` only claims signed
+integer types.
+
+`abs_overflow_check_fail` is SUCCESSFUL on master and FAILED here on
+`arithmetic overflow on abs`. `abs_overflow_check` bounds the arguments of
+`abs`, `labs` and `__builtin_abs` away from their minimum and pins under
+`--multi-property` that each gets a claim that holds: master reports 7
+properties, this change 10. Both change verdict when the fix is reverted (Z3;
+Bitwuzla was not built). The 295 other live C and C++ regression tests that
+run with `--overflow-check` or call an `abs` keep their master verdicts under
+a 60 s cap.
 
 ---
 
