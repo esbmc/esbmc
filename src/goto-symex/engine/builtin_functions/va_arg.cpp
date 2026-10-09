@@ -57,6 +57,19 @@ goto_symext::va_list_l1_record(const expr2tc &va_list_expr) const
   return renaming::level2t::name_record(sym);
 }
 
+std::vector<renaming::level2t::name_record>
+goto_symext::va_list_pointee_records(const expr2tc &va_list_expr) const
+{
+  std::vector<renaming::level2t::name_record> records;
+  value_setst::valuest values;
+  cur_state->value_set.get_value_set(va_list_expr, values);
+  for (const expr2tc &v : values)
+    if (is_object_descriptor2t(v))
+      if (auto rec = va_list_l1_record(to_object_descriptor2t(v).object))
+        records.push_back(*rec);
+  return records;
+}
+
 bool goto_symext::va_list_is_started(const expr2tc &va_list_expr) const
 {
   auto rec = va_list_l1_record(va_list_expr);
@@ -92,15 +105,21 @@ void goto_symext::va_list_mark_started(
   if (!started)
     return;
 
-  value_setst::valuest values;
-  cur_state->value_set.get_value_set(va_list_expr, values);
-  for (const expr2tc &v : values)
-  {
-    if (!is_object_descriptor2t(v))
-      continue;
-    if (auto obj_rec = va_list_l1_record(to_object_descriptor2t(v).object))
-      va_started[*obj_rec] = cursor;
-  }
+  for (const auto &obj_rec : va_list_pointee_records(va_list_expr))
+    va_started[obj_rec] = cursor;
+}
+
+goto_symex_statet::framet &
+goto_symext::va_list_frame(const expr2tc &va_list_expr)
+{
+  auto rec = va_list_l1_record(va_list_expr);
+  const auto records =
+    rec ? std::vector{*rec} : va_list_pointee_records(va_list_expr);
+  for (const auto &rec : records)
+    for (auto &frame : cur_state->call_stack)
+      if (frame.local_variables.count(rec))
+        return frame;
+  return cur_state->top();
 }
 
 void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
@@ -126,14 +145,14 @@ void goto_symext::symex_va_arg(
       not2tc(guard.as_expr()),
       "missing va_start: va_arg on an uninitialised va_list");
 
-  std::string base =
-    id2string(cur_state->top().function_identifier) + "::va_arg";
+  goto_symex_statet::framet &frame = va_list_frame(code.operand);
+  std::string base = id2string(frame.function_identifier) + "::va_arg";
 
-  /* The frame's cursor counts every va_arg in it, which symex_printf's
-   * va_list recovery reads. A va_list whose own cursor is known reads from
-   * that, so va_copy, a second va_start and a second va_list each read
-   * where they should. */
-  unsigned cursor = cur_state->top().va_cursor++;
+  /* The declaring frame's cursor counts every va_arg on its arguments, which
+   * symex_printf's va_list recovery reads. A va_list whose own cursor is known
+   * reads from that, so va_copy, a second va_start and a second va_list each
+   * read where they should. */
+  unsigned cursor = frame.va_cursor++;
   if (unsigned *own = va_list_cursor(code.operand))
     cursor = (*own)++;
   irep_idt id = base + std::to_string(cursor);
@@ -146,7 +165,7 @@ void goto_symext::symex_va_arg(
     type2tc symbol_type = migrate_symbol_type(*s);
 
     va_rhs = symbol2tc(symbol_type, s->id);
-    cur_state->top().level1.get_ident_name(va_rhs);
+    frame.level1.get_ident_name(va_rhs);
 
     va_rhs = typecast2tc(lhs->type, va_rhs);
   }
