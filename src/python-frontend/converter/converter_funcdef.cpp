@@ -2224,7 +2224,8 @@ static bool is_index_node(const nlohmann::json &node)
   return type == "Constant" || type == "UnaryOp" || type == "Name";
 }
 
-// `a[:, k]` on a rows x cols array: a column, one element every `cols`.
+// `a[lo:hi:step, k]` on a rows x cols array: the selected rows of a column,
+// one element every `step * cols`.
 std::optional<python_converter::numpy_scalar_pointer_view_infot>
 python_converter::column_view_info(
   std::size_t rows,
@@ -2236,11 +2237,12 @@ python_converter::column_view_info(
     slice_node["elts"][0].value("_type", "") != "Slice" ||
     !is_index_node(slice_node["elts"][1]))
     return std::nullopt;
-  numpy_scalar_pointer_view_infot info{};
-  info.length = rows;
-  info.stride = static_cast<long long>(cols);
-  info.shape = {rows};
-  info.strides = {static_cast<long long>(cols)};
+  std::optional<numpy_scalar_pointer_view_infot> info =
+    slice_view_info(rows, slice_node["elts"][0]);
+  if (!info)
+    return std::nullopt;
+  info->stride *= static_cast<long long>(cols);
+  info->strides = {info->stride};
   return info;
 }
 
