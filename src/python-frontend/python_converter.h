@@ -151,6 +151,7 @@ public:
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
   typet get_optional_type(const nlohmann::json &slice);
+  typet optional_container_type(const nlohmann::json &slice);
 
   string_builder &get_string_builder();
 
@@ -1166,6 +1167,9 @@ private:
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+  exprt range_membership(const exprt &x, const nlohmann::json &element);
+  exprt
+  list_or_range_contains(exprt &lhs, exprt &rhs, const nlohmann::json &element);
 
   /// A PEP 604 union annotation, as the single type this
   /// monomorphic frontend has to represent it with.
@@ -1375,6 +1379,7 @@ private:
     const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
@@ -1820,6 +1825,20 @@ private:
 
   void detach_numpy_pointer_views_of(
     const std::string &rebound_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach one view into a snapshot of just what it sees.
+  void detach_numpy_pointer_view(
+    const std::string &view_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach several views of one storage into a single snapshot of that
+  /// storage, so they keep aliasing each other.
+  void share_numpy_storage_snapshot(
+    const std::string &storage_id,
+    const std::vector<std::string> &view_ids,
     const locationt &location,
     codet &target_block);
 

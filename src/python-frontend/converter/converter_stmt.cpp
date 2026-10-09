@@ -75,28 +75,6 @@ bool is_incompatible_scalar_string_retype(
          (th.is_string_type(lhs) && th.is_numeric_scalar_type(rhs));
 }
 
-// True if the AST subtree contains a function-call node. Used to gate
-// constant-folding of assertion tests to expressions that actually invoke a
-// (potentially pure) function — plain symbolic asserts stay on the solver path.
-bool ast_contains_call(const nlohmann::json &n)
-{
-  if (n.is_object())
-  {
-    if (n.contains("_type") && n["_type"] == "Call")
-      return true;
-    for (auto it = n.begin(); it != n.end(); ++it)
-      if (ast_contains_call(it.value()))
-        return true;
-  }
-  else if (n.is_array())
-  {
-    for (const auto &e : n)
-      if (ast_contains_call(e))
-        return true;
-  }
-  return false;
-}
-
 using python_frontend::is_literal_int_node;
 using python_frontend::literal_int_value;
 
@@ -3255,39 +3233,31 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   return view_ids;
 }
 
-void python_converter::detach_numpy_pointer_views_of(
-  const std::string &rebound_id,
+void python_converter::detach_numpy_pointer_view(
+  const std::string &view_id,
   const locationt &location,
   codet &target_block)
 {
-  // numpy_view_copy_sources_ is mutated below (erase), so collect the
-  // matching keys first rather than erasing mid-iteration.
-  for (const std::string &view_id : numpy_views_of(rebound_id))
-  {
-    auto info_it = numpy_pointer_view_info_.find(view_id);
-    if (info_it == numpy_pointer_view_info_.end())
-      continue; // a plain copied view (etapa 1); already independent
+  const auto info_it = numpy_pointer_view_info_.find(view_id);
+  symbolt *view_symbol = symbol_table_.find_symbol(view_id);
+  if (info_it == numpy_pointer_view_info_.end() || !view_symbol)
+    return;
 
-    symbolt *view_symbol = symbol_table_.find_symbol(view_id);
-    if (!view_symbol)
-      continue;
+  // The view's own DECL was already emitted with pointer_typet at its
+  // creation point; retyping the symbol table entry now would desync it
+  // from that DECL. Keep the declared type and just repoint the pointer
+  // *value* at a fresh, independent snapshot instead.
+  info_it->second.source_id =
+    info_it->second.is_symbolic()
+      ? snapshot_symbolic_numpy_view(
+          symbol_expr(*view_symbol), info_it->second, location, target_block)
+      : snapshot_constant_numpy_view(
+          *view_symbol, info_it->second, location, target_block);
 
-    // The view's own DECL was already emitted with pointer_typet at its
-    // creation point; retyping the symbol table entry now would desync it
-    // from that DECL. Keep the declared type and just repoint the pointer
-    // *value* at a fresh, independent snapshot instead.
-    info_it->second.source_id =
-      info_it->second.is_symbolic()
-        ? snapshot_symbolic_numpy_view(
-            symbol_expr(*view_symbol), info_it->second, location, target_block)
-        : snapshot_constant_numpy_view(
-            *view_symbol, info_it->second, location, target_block);
-
-    // The view no longer aliases rebound_id's storage; drop the source
-    // link so a later write to the (new) rebound_id array is not held
-    // responsible for a view it can no longer affect.
-    numpy_view_copy_sources_.erase(view_id);
-  }
+  // The view no longer aliases the rebound storage; drop the source link so
+  // a later write to the (new) rebound array is not held responsible for a
+  // view it can no longer affect.
+  numpy_view_copy_sources_.erase(view_id);
 }
 
 // What a constant-shape view reads, as a shape and per-axis element strides
