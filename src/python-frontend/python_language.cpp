@@ -118,22 +118,37 @@ bool python_languaget::parse(const std::string &path)
 
   // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
-  auto python_exec_path = bp::search_path(python_exec);
-  std::list<std::string> python_exec_names = {"python3", "python"};
+  fs::path python_exec_path;
   if (!python_exec.empty())
-    python_exec_names.push_front(python_exec);
-  for (const auto &name : python_exec_names)
   {
-    python_exec_path = bp::search_path(name);
-    if (!python_exec_path.empty())
-      break;
+    // bp::search_path resolves a bare name against $PATH, so a value that
+    // names a file has to be taken as given; otherwise an absolute path
+    // never matches and the search silently falls back to $PATH's python.
+    python_exec_path = fs::path(python_exec).has_parent_path()
+                         ? fs::path(python_exec)
+                         : bp::search_path(python_exec);
+    if (python_exec_path.empty() || !fs::exists(python_exec_path))
+    {
+      log_error("Python executable not found: {}\n", python_exec);
+      exit(1);
+    }
   }
-  if (python_exec_path.empty())
+  else
   {
-    log_error(
-      "No python executable was found. Tried: {}\n",
-      fmt::join(python_exec_names, ", "));
-    exit(1);
+    const std::list<std::string> python_exec_names = {"python3", "python"};
+    for (const auto &name : python_exec_names)
+    {
+      python_exec_path = bp::search_path(name);
+      if (!python_exec_path.empty())
+        break;
+    }
+    if (python_exec_path.empty())
+    {
+      log_error(
+        "No python executable was found. Tried: {}\n",
+        fmt::join(python_exec_names, ", "));
+      exit(1);
+    }
   }
 
   // parser/__main__.py reports the version itself and exits non-zero on
