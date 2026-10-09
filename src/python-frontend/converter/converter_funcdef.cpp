@@ -2353,15 +2353,52 @@ bool python_converter::same_view_layout(
          a.second.strides == b.second.strides;
 }
 
-static bool calls_with_argument(
+// The argument a call passes for parameter `param_index` of `func_name`,
+// positionally or by keyword. nullptr when the call is to another function
+// or leaves the parameter to its default.
+static const nlohmann::json *call_site_argument(
   const nlohmann::json &call,
+  const nlohmann::json &module_body,
   const std::string &func_name,
   std::size_t param_index)
 {
-  return call.value("func", nlohmann::json::object()).value("_type", "") ==
-           "Name" &&
-         call["func"].value("id", "") == func_name && call.contains("args") &&
-         call["args"].size() > param_index;
+  if (
+    call.value("func", nlohmann::json::object()).value("_type", "") != "Name" ||
+    call["func"].value("id", "") != func_name || !call.contains("args"))
+    return nullptr;
+  if (call["args"].size() > param_index)
+    return &call["args"][param_index];
+  const nlohmann::json *def = find_function_def(module_body, func_name);
+  if (
+    def == nullptr || !call.contains("keywords") ||
+    (*def)["args"]["args"].size() <= param_index)
+    return nullptr;
+  const std::string param =
+    (*def)["args"]["args"][param_index].value("arg", "");
+  for (const auto &keyword : call["keywords"])
+    if (keyword.value("arg", "") == param)
+      return &keyword["value"];
+  return nullptr;
+}
+
+static std::string
+view_param_key(const std::string &func_name, std::size_t param_index)
+{
+  return func_name + "#" + std::to_string(param_index);
+}
+
+// Whether `arg` forwards a parameter whose inference is already in progress:
+// a recursive call, whose layout the other call sites determine.
+static bool forwards_param_being_inferred(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  const std::string &enclosing_function,
+  const std::set<std::string> &visiting)
+{
+  const std::optional<std::size_t> forwarded =
+    forwarded_param_index(arg, module_body, enclosing_function);
+  return forwarded &&
+         visiting.count(view_param_key(enclosing_function, *forwarded)) != 0;
 }
 
 // Type of the literal `np.array(...)` bound to `arr_name` for code in
@@ -2380,18 +2417,17 @@ std::optional<typet> python_converter::numpy_literal_array_type(
   return type_handler_.get_typet((*value)["args"][0]);
 }
 
-// Element type and layout of the view one call site passes at `param_index`:
+// Element type and layout of the view one call site passes as `arg`:
 // a parameter of the enclosing function forwarded unchanged, or a subscript
 // of a literal array, both resolved in the scope of the call.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
 python_converter::infer_numpy_view_argument(
   const numpy_param_call_site &site,
-  std::size_t param_index,
+  const nlohmann::json &arg,
   std::set<std::string> &visiting) const
 {
   const nlohmann::json &module_body = (*ast_json)["body"];
-  const nlohmann::json &arg = (*site.call)["args"][param_index];
   if (
     const std::optional<std::size_t> forwarded =
       forwarded_param_index(arg, module_body, site.enclosing_function))
@@ -2439,7 +2475,9 @@ bool python_converter::try_infer_numpy_view_param(
     func_name, param_index, out_elem_type, out_info, visiting);
 }
 
-// `visiting` stops the forwarding recursion on mutually recursive callees.
+// `visiting` holds the parameters on the current forwarding path. Every call
+// site must pass a view whose layout can be read and all must agree: a site
+// left out would run the callee with another site's length.
 bool python_converter::try_infer_numpy_view_param(
   const std::string &func_name,
   std::size_t param_index,
@@ -2447,27 +2485,33 @@ bool python_converter::try_infer_numpy_view_param(
   numpy_scalar_pointer_view_infot &out_info,
   std::set<std::string> &visiting) const
 {
-  if (!visiting.insert(func_name + "#" + std::to_string(param_index)).second)
+  const std::string key = view_param_key(func_name, param_index);
+  if (!visiting.insert(key).second)
     return false;
+  const nlohmann::json &module_body = (*ast_json)["body"];
   std::vector<numpy_param_call_site> call_sites;
   collect_call_sites(*ast_json, "", call_sites);
 
-  // All call sites that pass an analyzable view must agree on its layout.
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> result;
+  bool analyzable = true;
   for (const numpy_param_call_site &site : call_sites)
   {
-    if (!calls_with_argument(*site.call, func_name, param_index))
+    const nlohmann::json *arg =
+      call_site_argument(*site.call, module_body, func_name, param_index);
+    if (
+      arg == nullptr || forwards_param_being_inferred(
+                          *arg, module_body, site.enclosing_function, visiting))
       continue;
-    const auto candidate =
-      infer_numpy_view_argument(site, param_index, visiting);
-    if (!candidate)
-      continue;
-    if (result && !same_view_layout(*result, *candidate))
-      return false;
+    const auto candidate = infer_numpy_view_argument(site, *arg, visiting);
+    analyzable =
+      candidate && (!result || same_view_layout(*result, *candidate));
+    if (!analyzable)
+      break;
     result = candidate;
   }
 
-  if (!result)
+  visiting.erase(key);
+  if (!analyzable || !result)
     return false;
   out_elem_type = result->first;
   out_info = result->second;

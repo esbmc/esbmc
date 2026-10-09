@@ -2541,7 +2541,7 @@ private:
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
   infer_numpy_view_argument(
     const numpy_param_call_site &site,
-    std::size_t param_index,
+    const nlohmann::json &arg,
     std::set<std::string> &visiting) const;
   std::optional<numpy_scalar_pointer_view_infot> infer_numpy_view_param_type(
     const std::string &func_name,
