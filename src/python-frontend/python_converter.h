@@ -151,6 +151,7 @@ public:
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
   typet get_optional_type(const nlohmann::json &slice);
+  typet optional_container_type(const nlohmann::json &slice);
 
   string_builder &get_string_builder();
 
