@@ -7929,7 +7929,10 @@ void python_converter::get_return_statements(
         root_is_numpy_param =
           root_decl.is_object() && root_decl.value("_type", "") == "arg";
       }
-      if (root_is_tracked_numpy || root_is_numpy_param)
+      const bool root_is_pointer_view =
+        !root_id.empty() && numpy_pointer_view_info_.count(root_id) != 0;
+      if (
+        (root_is_tracked_numpy || root_is_numpy_param) && !root_is_pointer_view)
       {
         reject_or_defer_numpy_view_return(ast_node, target_block);
         return;

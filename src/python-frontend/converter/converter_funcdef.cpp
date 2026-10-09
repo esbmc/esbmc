@@ -2223,6 +2223,25 @@ bool python_converter::try_infer_numpy_view_param(
       info.shape = {cols};
       return info;
     }
+    // Tuple index on a 2-D array: a[:, k] -> column view (stride = ncols).
+    if (slice_type == "Tuple" && src_shape.size() == 2)
+    {
+      if (!slice_node.contains("elts") || slice_node["elts"].size() != 2)
+        return std::nullopt;
+      const std::string t0 = slice_node["elts"][0].value("_type", "");
+      const std::string t1 = slice_node["elts"][1].value("_type", "");
+      const std::size_t rows = src_shape[0];
+      const std::size_t cols = src_shape[1];
+      if (
+        t0 == "Slice" && (t1 == "Constant" || t1 == "UnaryOp" || t1 == "Name"))
+      {
+        info.length = rows;
+        info.stride = static_cast<long long>(cols);
+        info.shape = {rows};
+        info.strides = {cols};
+        return info;
+      }
+    }
     return std::nullopt;
   };
 
