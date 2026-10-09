@@ -2237,6 +2237,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc/realloc_pointed_objects
+regression/esbmc/realloc_pointed_objects_fail
 regression/esbmc-cpp/try_catch/array_new_unwind
 regression/esbmc-cpp/try_catch/array_new_unwind_fail
 regression/esbmc/builtin_rotate
