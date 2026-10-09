@@ -25,8 +25,9 @@ public:
    *  a format whose conversions are all constant-bounded. */
   bool bounded = true;
 
-  /** False when a flag the formatter does not model ('-', '+', ' ', '#')
-   *  appeared, so the text it produced may differ from the real output. */
+  /** False when a flag ('-', '+', ' ', '#') or a conversion (%p, an unknown
+   *  one) the formatter does not model appeared, so the text it produced may
+   *  differ from the real output. */
   bool exact = true;
 
   /** True when `operands` are the call's actual arguments, so a non-literal
