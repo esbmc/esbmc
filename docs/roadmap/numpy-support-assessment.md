@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-06.
+**Updated:** 2026-10-09.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -21,7 +21,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Partial | Concrete array/view/descriptor returns from supported constructors, bare parameters, parameter subscript/subarrays, and supported descriptor calls over parameters are implemented. Remaining gap: `array_return_call_arg_edge` is still pinned as `KNOWNBUG`; mutating a captured list/array inside a function without a `global` declaration is a pre-existing symbol-resolution gap, not specific to array returns. Genuinely symbolic parameter shapes are rejected when unsupported metadata/view consumers need concrete shape information; `len()` on such parameters remains supported through its independent path. |
-| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T`/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. A view also keeps its metadata when it leaves direct local use: a call to a function that is a single return expression over its parameters (after any local aliases) is folded into the caller, so views passed in or returned alias as written; a literal `list`/`tuple`/`dict` holding views binds each element to its own view and is read back by literal index or key; `alias = view` carries shape, strides and read-only state; a name bound on two paths to views with the same layout over the same array is one view. Remaining gaps, each rejected with its own `TypeError`: a view passed to any other callee (a function that uses it outside a single return expression, reads a global, or binds a call to a local that is unused, rebound or would be reordered by inlining, a builtin such as `sum`/`list`/`sorted`/`print`, a method, a class constructor, a lambda); value reads or writes of storage after it was passed to a function that does not use it (only `len`/`.shape`/`.ndim`/`.size` stay allowed, there is no havoc); a view stored by `append`, item assignment or a comprehension, in a nested container, an attribute or a global; a container of views that is mutated, indexed by a run-time key, bound inside a branch or loop, or used as a whole; views returned from more than one path; a source name rebound inside a branch or loop while views of it are alive; a name bound on different paths to views with a different shape, strides or storage; advanced `nditer`; `reshape`/`ravel` of an N-D view whose stride is only known at run time (whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name. |
+| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T`/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. A view also keeps its metadata when it leaves direct local use: a call to a function that is a single return expression over its parameters (after any local aliases) is folded into the caller, so views passed in or returned alias as written; a literal `list`/`tuple`/`dict` holding views binds each element to its own view and is read back by literal index or key; `alias = view` carries shape, strides and read-only state; a name bound on two paths to views with the same layout over the same array is one view. Remaining gaps, each rejected with its own `TypeError`: a view passed to a builtin such as `sum`/`list`/`sorted`/`print`/`any`/`all`, a method, a class constructor or a lambda; a view passed to a user function that is not a single return expression when its layout cannot be read from the call sites (the source is not a literal `np.array` assigned at module level, the argument is a slice of a 2-D array, call sites disagree on the layout, the callee is defined after its caller, or the argument is an expression not bound to a name); inside such a function, a write through a subview of the parameter, a subview passed on to another function, and a call that passes the parameter on while a copied subview of it is live; a view returned by such a function unless every `return` yields the same parameter and the call is the whole right-hand side of an assignment; value reads or writes of storage after it was passed to a function that does not use it (only `len`/`.shape`/`.ndim`/`.size` stay allowed, there is no havoc); a view stored by `append`, item assignment or a comprehension, in a nested container, an attribute or a global; a container of views that is mutated, indexed by a run-time key, bound inside a branch or loop, or used as a whole; views returned from more than one path; a source name rebound inside a branch or loop while views of it are alive; a name bound on different paths to views with a different shape, strides or storage; advanced `nditer`; `reshape`/`ravel` of an N-D view whose stride is only known at run time (whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name. |
 
 ---
 
@@ -36,7 +36,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
 | Structured arrays | Record dtypes. |
-| Views / strides | Views passed to functions that are not a single return expression, to builtins, methods or constructors; views stored by mutation, in attributes or globals; path-sensitive view metadata for branches with different layouts; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
+| Views / strides | Views passed to builtins, methods, constructors or lambdas; views passed to multi-statement functions outside the subset whose layout is read from the call sites, and subviews written or passed on inside such a function (see the shared-buffer view model row); views stored by mutation, in attributes or globals; path-sensitive view metadata for branches with different layouts; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
 | Iteration | Advanced `nditer` flags/options, multi-operand iteration, `external_loop`, `multi_index`, buffering, non-C order, casting/op_dtypes/op_axes, and broader mutable item forms. |
 
 ---
@@ -82,7 +82,7 @@ This file lists **no known NumPy unsound-success gap**. Every remaining item
 is documented backlog: unsupported cases should reject explicitly, and known
 false alarms are listed as gaps instead of treated as supported behavior.
 
-`regression/numpy` pins nine `KNOWNBUG` tests (2026-10-06):
+`regression/numpy` pins nine `KNOWNBUG` tests (2026-10-09):
 
 | test | expected | today |
 |---|---|---|
@@ -93,15 +93,31 @@ false alarms are listed as gaps instead of treated as supported behavior.
 | `array_return_call_arg_edge` | SUCCESSFUL | rejected: `'int' object is not subscriptable` |
 | `det2` | FAILED | rejected: `numpy.linalg.det supports only 2x2 and 3x3 matrices` |
 
+View-parameter cases outside the supported subset reject, each pinned by a
+`CORE` test:
+
+| test | NumPy | ESBMC |
+|---|---|---|
+| `view_param_subslice_write_fail` | a write through `sub = row[1:]` reaches the source | rejected: writing through a copied numpy view |
+| `view_param_nested_subview_call_fail` | a subview passed on aliases the source | rejected: view passed to a multi-statement function |
+| `view_param_live_copy_nested_call_fail` | a subview sees a write made by a nested callee | rejected: copied view of the storage is live |
+| `view_param_direct_expr_fail` | `f(a[0:])` writes into `a` | rejected: view expression not bound to a name |
+| `view_param_2d_slice_fail` | a 2-D slice is read and written in the callee | rejected: view passed to a multi-statement function |
+| `view_param_callee_order_fail` | the callee may be defined after its caller | rejected: view passed to a multi-statement function |
+| `view_param_branch_storage_conflict_fail` | a name bound per branch to views of two arrays | rejected: different storage on different paths |
+| `view_param_return_view_subscript_fail` | `f(v)[0]` reads through the returned view | rejected: returning a copied numpy view |
+
 ---
 
 ## Prioritised next steps
 
 No item is a known soundness gap; the backlog, in priority order:
 
-1. **Views in general callees** — give a view parameter its shape and strides
-   inside a function that is not a single return expression, so its body can
-   read and write the view; then builtins, methods and constructors.
+1. **Views in general callees** — the view-parameter cases in the table above
+   (subviews of a parameter as real views, 2-D slices, unnamed view
+   expressions, returned views used as values, callees defined after their
+   caller, sources that are not module-level literals); then builtins,
+   methods, constructors and lambdas.
 2. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
 3. **Random and iteration depth** — probability/replacement `choice`, extra
@@ -117,9 +133,10 @@ Each roadmap item above groups several sub-efforts; sizing them 1 PR per
 item undercounts the real work. Items below with multiple named consumers or
 distinct designs are sized accordingly instead of assumed to be one PR each.
 
-1. **Views in general callees** (~2 PRs) — typed view parameters for
-   multi-statement functions, separate from builtins/methods/constructors and
-   path-sensitive metadata for branches.
+1. **Views in general callees** (~2 PRs) — the remaining view-parameter
+   forms listed under "Community testing readiness", separate from
+   builtins/methods/constructors/lambdas and path-sensitive metadata for
+   branches.
 2. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.
