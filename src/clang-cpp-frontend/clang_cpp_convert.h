@@ -5,6 +5,7 @@
 #define __STDC_FORMAT_MACROS
 
 #include <clang-c-frontend/clang_c_convert.h>
+#include <optional>
 
 class clang_cpp_convertert : public clang_c_convertert
 {
@@ -181,6 +182,67 @@ protected:
    */
   bool
   build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
+
+public:
+  /*
+   * The destructor calls of one subobject of a class, and the subobject's
+   * position in construction order: the direct non-virtual bases, then the
+   * members, numbered from 0.
+   */
+  struct subobject_destructort
+  {
+    std::size_t position;
+    code_blockt calls;
+  };
+
+protected:
+  const this_mapt::mapped_type &
+  method_this(const clang::CXXMethodDecl &md) const;
+  const symbolt *nontrivial_destructor(const clang::CXXRecordDecl *rec);
+  bool member_destructor(
+    const clang::FieldDecl &field,
+    const exprt &deref,
+    code_blockt &calls);
+  code_function_callt base_destructor(
+    const symbolt &sym,
+    const clang::CXXRecordDecl &base,
+    const clang::CXXMethodDecl &md);
+
+  /*
+   * The members and direct non-virtual bases of md's class whose destructor
+   * is non-trivial, in destruction order, with `this` taken from md.
+   */
+  bool subobject_destructors(
+    const clang::CXXMethodDecl &md,
+    std::vector<subobject_destructort> &out);
+
+  /*
+   * Whether this translation unit's own code throws or catches. If not, no
+   * constructor gets the handler that unwinds its subobjects, so the program
+   * stays out of exception lowering and pays nothing for it.
+   */
+  std::optional<bool> uses_exceptions;
+  bool user_code_uses_exceptions();
+
+  /*
+   * Destroy the subobjects a constructor has built when an exception leaves
+   * it ([except.ctor]/3). starts[i] is where the code of cd's i-th
+   * initializer begins in body, and starts.back() where its own body does.
+   */
+  bool unwind_constructed_subobjects(
+    const clang::CXXConstructorDecl &cd,
+    const std::vector<std::size_t> &starts,
+    code_blockt &body);
+
+  /*
+   * Put a constructor's converted initializers at the start of its body.
+   */
+  bool insert_constructor_initializers(
+    const clang::CXXConstructorDecl &cd,
+    exprt::operandst &initializers,
+    std::vector<std::size_t> starts,
+    const symbolt *array_init_sym,
+    code_blockt &body);
 
   /*
    * The `this` a base destructor is called with: the address of the derived
@@ -389,6 +451,11 @@ protected:
   /* The single spelling of a type used as typeid identity; see #6310. */
   static std::string rtti_type_name(const clang::QualType &qtype);
   static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  exprt typeid_object(
+    const exprt &value,
+    const std::string &type_name,
+    const clang::Stmt &stmt,
+    bool dynamic);
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";

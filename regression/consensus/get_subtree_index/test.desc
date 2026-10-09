@@ -1,4 +1,5 @@
 THOROUGH
 main.py
 --incremental-bmc
+REQUIRES long_timeout
 ^VERIFICATION SUCCESSFUL$

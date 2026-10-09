@@ -255,8 +255,8 @@ following the SOS state-transition rules:
 | Set coil `--( S )--` | `code_ifthenelset(pf, code_assignt(var, true_exprt()))` |
 | Reset coil `--( R )--` | `code_ifthenelset(pf, code_assignt(var, false_exprt()))` |
 | Rising-edge contact `--[P]--` | `and_exprt(pf_in, and_exprt(var, not_exprt(prev)))`, with `prev` latched in the scan epilogue |
-| TON timer *(fixed-tick model)* | `code_ifthenelset(IN, ET := ET+1, ET := 0)`; `code_assignt(Q, and_exprt(IN, geq_exprt(ET, PT)))` — fires deterministically after exactly `PT` scan ticks |
-| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q, {ET := ET+1; Q := ET < PT}))` — holds `Q` for `PT` ticks after `IN` drops, and stays off until first enabled |
+| TON timer *(fixed-tick model)* | `code_ifthenelset(IN && prev, ET := ET+1, ET := 0)`; `code_assignt(Q, IN && prev && ET >= PT)`; `prev := IN` — fires `PT` scan ticks after the scan `IN` rises (one tick when `PT` is 0), as MATIEC's TON |
+| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q && !prev, {ET := ET+1; Q := ET < PT}))`; `prev := IN` — holds `Q` for max(`PT`, 1) scans counting the one `IN` drops, and stays off until first enabled |
 | CTU counter *(per-scan step)* | `code_ifthenelset` on rising edge → increment `CV`; `code_assignt` of `Q = (CV >= PV)` |
 
 The full step functions, and the rules for graphical-network resolution and
@@ -299,7 +299,7 @@ Property kinds (WP1 taxonomy):
 
 | Kind | IEC 61508 class | GOTO IR node emitted |
 |---|---|---|
-| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(and_exprt(A, B)))` |
+| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(or_exprt(and_exprt(A, B), ...)))`, one `and_exprt` per pair |
 | `invariant` | Safety function activation | `code_assertt(expr)` |
 | `response` | Activation time | auxiliary scan-counter `symbolt` + `code_assertt` on counter bound |
 | `absence` | Safe state persistence | `code_assertt(not_exprt(expr))` |
