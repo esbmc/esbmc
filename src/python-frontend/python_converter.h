@@ -143,6 +143,15 @@ public:
   typet get_callable_type(
     const nlohmann::json &annotation,
     const nlohmann::json &stmt);
+  /// A bare `Callable` return as the pointer type of the functions the body
+  /// returns by name, when they agree on a signature (#7802).
+  typet returned_function_type(const nlohmann::json &function_node);
+  typet named_return_type(
+    const std::string &name,
+    const nlohmann::json &return_node,
+    const nlohmann::json &function_node);
+  /// `get()()`: a call through the function pointer that `get()` returns.
+  std::optional<exprt> call_returned_function(const nlohmann::json &element);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -491,6 +500,16 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  /// The static types of the arguments a `str %` right operand supplies.
+  std::vector<typet>
+  percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
+  /// `str % args` with a literal format: an f-string when an argument is not
+  /// constant, otherwise folded to a literal.
+  exprt get_percent_format_expr(
+    const nlohmann::json &left,
+    const std::vector<nlohmann::json> &args,
+    const std::map<std::string, nlohmann::json> &mapping,
+    const std::vector<typet> &arg_types);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
