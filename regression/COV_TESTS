@@ -2345,6 +2345,10 @@ regression/goto-transcoder/cbmc_kani_dyn_vtable_fail
 regression/goto-transcoder/cbmc_missing_entry_point
 regression/esbmc/object_size_per_object
 regression/esbmc/object_size_per_object_fail
+regression/python/github_7802
+regression/python/github_7802_fail
+regression/python/github_7802_eval_order
+regression/python/github_7802_eval_order_fail
 regression/esbmc/cprover_object_size_per_object
 regression/esbmc/cprover_object_size_per_object_fail
 regression/python/github_8017

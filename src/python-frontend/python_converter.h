@@ -143,6 +143,15 @@ public:
   typet get_callable_type(
     const nlohmann::json &annotation,
     const nlohmann::json &stmt);
+  /// A bare `Callable` return as the pointer type of the functions the body
+  /// returns by name, when they agree on a signature (#7802).
+  typet returned_function_type(const nlohmann::json &function_node);
+  typet named_return_type(
+    const std::string &name,
+    const nlohmann::json &return_node,
+    const nlohmann::json &function_node);
+  /// `get()()`: a call through the function pointer that `get()` returns.
+  std::optional<exprt> call_returned_function(const nlohmann::json &element);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,

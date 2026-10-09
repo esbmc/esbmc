@@ -290,22 +290,6 @@ std::optional<nlohmann::json> straight_line_return_value(
   return std::nullopt;
 }
 
-// Every `return` value under `node`, through nested blocks but not nested
-// definitions.
-void collect_return_values(
-  const nlohmann::json &node,
-  std::vector<nlohmann::json> &values)
-{
-  if (!node.is_object() && !node.is_array())
-    return;
-  const std::string type = node.is_object() ? node.value("_type", "") : "";
-  if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
-    return;
-  if (type == "Return" && node.contains("value") && !node["value"].is_null())
-    values.push_back(node["value"]);
-  for (const auto &child : node)
-    collect_return_values(child, values);
-}
 } // namespace
 
 std::string
@@ -496,7 +480,7 @@ void python_converter::reject_multi_path_numpy_view_return(
     (*ast_json)["body"], call["func"]["id"].get<std::string>());
   std::vector<nlohmann::json> values;
   if (!func_node.empty())
-    collect_return_values(func_node["body"], values);
+    json_utils::collect_return_values(func_node["body"], values);
   if (values.size() < 2)
     return;
   for (const nlohmann::json &value : values)
