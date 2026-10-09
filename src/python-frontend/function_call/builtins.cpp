@@ -343,6 +343,19 @@ exprt function_call_expr::handle_check_type() const
   if (matches.is_true())
     return gen_boolean(true);
 
+  // handle_isinstance() folds to false both when it proves a mismatch and
+  // when it cannot tell, and a value produced by an indirect call through a
+  // function-valued parameter lands in the second case. Raising there is a
+  // false alarm on a correct program, so only a value whose own type the
+  // frontend tracks is allowed to decide.
+  const exprt value = converter_.get_expr(call_["args"][0]);
+  const typet value_type = value.type();
+  const bool type_is_known = type_handler_.is_numeric_scalar_type(value_type) ||
+                             type_handler_.is_string_type(value_type) ||
+                             type_handler_.is_tagged_scalar_type(value_type);
+  if (!type_is_known)
+    return gen_boolean(true);
+
   const locationt location = converter_.get_location_from_decl(call_);
   exprt raise = converter_.get_exception_handler().gen_exception_raise(
     "TypeError", "expected value of type " + hint_name_for_message());
