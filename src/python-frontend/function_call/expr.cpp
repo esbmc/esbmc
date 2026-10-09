@@ -938,6 +938,7 @@ exprt function_call_expr::build_constant_from_arg() const
     // Evaluate the operand once so that method-call arguments (e.g.
     // int(d.copy_abs())) are not lowered twice by the branches below.
     exprt operand_expr = converter_.get_expr(first_arg);
+    operand_expr = guard_nonfinite_float_to_int(operand_expr, base_expr);
 
     // Dispatch int() to the operand's __int__ when the operand is a class
     // instance (e.g. Decimal). Under the object-model migration (#3067/#4773)

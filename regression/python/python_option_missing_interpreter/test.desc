@@ -1,0 +1,4 @@
+CORE
+main.py
+--python esbmc-no-such-interpreter
+^ERROR: Python executable not found: esbmc-no-such-interpreter$

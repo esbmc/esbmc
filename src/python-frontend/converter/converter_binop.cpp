@@ -500,6 +500,50 @@ std::optional<nlohmann::json> percent_format_as_fstring(
 }
 } // namespace
 
+exprt python_converter::hoist_side_effecting_operand(
+  const exprt &operand,
+  const nlohmann::json &element,
+  const std::string &prefix)
+{
+  std::function<bool(const exprt &)> has_side_effect =
+    [&](const exprt &e) -> bool {
+    if (e.id() == "sideeffect")
+      return true;
+    for (const exprt &sub : e.operands())
+      if (has_side_effect(sub))
+        return true;
+    return false;
+  };
+  if (!has_side_effect(operand))
+    return operand;
+
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp = create_tmp_symbol(element, prefix, operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  add_instruction(decl);
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  add_instruction(assign);
+  return symbol_expr(tmp);
+}
+
+void python_converter::emit_guarded_raise(
+  const exprt &cond,
+  const std::string &exception,
+  const std::string &message,
+  const locationt &location)
+{
+  code_expressiont throw_code(
+    get_exception_handler().gen_exception_raise(exception, message));
+  code_ifthenelset guard;
+  guard.cond() = cond;
+  guard.then_case() = throw_code;
+  guard.location() = location;
+  guard.location().property("skipped");
+  add_instruction(guard);
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -551,11 +595,13 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   // expressions
   bool old_is_converting_rhs = is_converting_rhs;
   is_converting_rhs = true;
+  const bool old_in_lazy_operand = in_lazy_operand_;
 
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_expr(operand);
+    in_lazy_operand_ = true;
     if (operand_expr.is_code() && operand_expr.statement() == "function_call")
     {
       const code_function_callt &code_call =
@@ -576,6 +622,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
   // Restore the original flag state
   is_converting_rhs = old_is_converting_rhs;
+  in_lazy_operand_ = old_in_lazy_operand;
 
   // A BoolOp must have at least two values, but AST rewrites (e.g. lowering
   // `x == []` to `len(x) == 0`) can produce a degenerate one-value node. A
@@ -835,6 +882,9 @@ exprt python_converter::handle_chained_comparisons_logic(
   std::vector<exprt> conjuncts;
   conjuncts.push_back(bin_expr); // bin_expr compares left and comparators[0]
 
+  // Each later comparison runs only if the earlier ones held.
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  in_lazy_operand_ = true;
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
@@ -887,6 +937,7 @@ exprt python_converter::handle_chained_comparisons_logic(
       conjuncts.push_back(logical_expr);
     }
   }
+  in_lazy_operand_ = old_in_lazy_operand;
 
   expr2tc acc;
   migrate_expr(conjuncts.front(), acc);
@@ -1850,43 +1901,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
     // a different value than the one divided by. Hoist a side-effecting divisor
     // into a temporary so it is evaluated exactly once.
-    std::function<bool(const exprt &)> has_side_effect =
-      [&](const exprt &e) -> bool {
-      if (e.id() == "sideeffect")
-        return true;
-      for (const exprt &sub : e.operands())
-        if (has_side_effect(sub))
-          return true;
-      return false;
-    };
-
-    locationt div_loc = get_location_from_decl(element);
-    if (has_side_effect(rhs))
-    {
-      symbolt &tmp =
-        create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
-      code_declt decl(symbol_expr(tmp));
-      decl.location() = div_loc;
-      add_instruction(decl);
-      code_assignt assign(symbol_expr(tmp), rhs);
-      assign.location() = div_loc;
-      add_instruction(assign);
-      rhs = symbol_expr(tmp);
-    }
+    rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
     exprt is_zero("=", bool_type());
     is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-
-    exprt raise = get_exception_handler().gen_exception_raise(
-      "ZeroDivisionError", "division by zero");
-    code_expressiont throw_code(raise);
-
-    code_ifthenelset guard;
-    guard.cond() = is_zero;
-    guard.then_case() = throw_code;
-    guard.location() = div_loc;
-    guard.location().property("skipped");
-    add_instruction(guard);
+    emit_guarded_raise(
+      is_zero,
+      "ZeroDivisionError",
+      "division by zero",
+      get_location_from_decl(element));
   }
 
   // Build the binary expression

@@ -3,7 +3,117 @@ import copy
 # pylint: disable=too-many-boolean-expressions
 
 
+def _class_scope_nodes(node):
+    """The nodes of a class-body statement that are evaluated in the class
+    scope: not function or lambda bodies, nested class bodies, or the parts of
+    a comprehension past its first iterable."""
+    yield node
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        args = node.args
+        children = [*node.decorator_list, *args.defaults, *filter(None, args.kw_defaults)]
+        children += [
+            a.annotation
+            for a in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg)
+            if a and a.annotation
+        ]
+        children += [node.returns] if node.returns else []
+    elif isinstance(node, ast.Lambda):
+        children = [*node.args.defaults, *filter(None, node.args.kw_defaults)]
+    elif isinstance(node, ast.ClassDef):
+        children = [*node.decorator_list, *node.bases, *node.keywords]
+    elif isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+        children = [node.generators[0].iter]
+    else:
+        children = list(ast.iter_child_nodes(node))
+    for child in children:
+        yield from _class_scope_nodes(child)
+
+
+def _runs_call(node):
+    """Whether evaluating `node` in a class body may call something."""
+    for n in _class_scope_nodes(node):
+        if isinstance(n, ast.Call):
+            return True
+        if isinstance(n, ast.ClassDef) and any(_runs_call(s) for s in n.body):
+            return True
+        if isinstance(n, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)) and any(
+                isinstance(m, ast.Call) for m in ast.walk(n)):
+            return True
+    return False
+
+
+class _QualifyNestedClasses(ast.NodeTransformer):
+    """Rewrite `Outer.Inner` to the hoisted class's module-level name."""
+
+    def __init__(self, renames):
+        self.renames = renames
+
+    def visit_Attribute(self, node):  # pylint: disable=invalid-name,missing-function-docstring
+        self.generic_visit(node)
+        if isinstance(node.value, ast.Name) and isinstance(node.ctx, ast.Load):
+            hoisted = self.renames.get((node.value.id, node.attr))
+            if hoisted:
+                return ast.copy_location(ast.Name(id=hoisted, ctx=ast.Load()), node)
+        return node
+
+
 class ClassContextMixin:
+
+    def hoist_nested_classes(self, module):
+        """Lift each class nested in a module-level class body to module level
+        as `Outer__Inner`, since the converter only builds module-level classes
+        (#8256). `Outer.Inner` is rewritten everywhere, and so is a bare `Inner`
+        that the outer class body's scope resolves to the nested class.
+
+        The rewrite is purely by name, so an outer class whose name is bound
+        anywhere else in the module is left alone."""
+        bound = [name for n in ast.walk(module) for name in self._names_bound_by(n)]
+        taken = set(bound) | {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
+        renames = {}
+        body = []
+        for stmt in module.body:
+            if isinstance(stmt, ast.ClassDef) and bound.count(stmt.name) == 1:
+                body.extend(self._hoist_from_class(stmt, taken, renames))
+            else:
+                body.append(stmt)
+        if renames:
+            module.body = body
+            _QualifyNestedClasses(renames).visit(module)
+
+    def _hoist_from_class(self, cls, taken, renames):
+        """`cls` preceded by the classes hoisted out of it, recursively."""
+        hoisted = []
+        local = {}
+        kept = []
+        for index, stmt in enumerate(cls.body):
+            for n in _class_scope_nodes(stmt):
+                if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in local:
+                    n.id = local[n.id]
+            if self._can_hoist(cls, index, taken):
+                qualified = f"{cls.name}__{stmt.name}"
+                taken.add(qualified)
+                renames[(cls.name, stmt.name)] = qualified
+                local[stmt.name] = qualified
+                stmt.name = qualified
+                hoisted.extend(self._hoist_from_class(stmt, taken, renames))
+            else:
+                kept.append(stmt)
+        cls.body = kept or [ast.copy_location(ast.Pass(), cls)]
+        return [*hoisted, cls]
+
+    def _can_hoist(self, cls, index, taken):
+        """Whether `cls.body[index]` is a nested class that keeps its meaning
+        at module level: its name is bound by nothing else in the class scope,
+        and moving its definition ahead of the outer class does not reorder
+        two calls."""
+        stmt = cls.body[index]
+        if not isinstance(stmt, ast.ClassDef) or f"{cls.name}__{stmt.name}" in taken:
+            return False
+        if any(n is not stmt and stmt.name in self._names_bound_by(n) for other in cls.body
+               for n in _class_scope_nodes(other)):
+            return False
+        earlier = [*cls.decorator_list, *cls.bases, *cls.keywords, *cls.body[:index]]
+        return not (_runs_call(stmt) and any(_runs_call(e) for e in earlier))
 
     def visit_ClassDef(self, node):
         """Track class context for method definitions."""
