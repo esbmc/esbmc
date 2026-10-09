@@ -2715,7 +2715,7 @@ void python_converter::process_function_arguments(
           positional_indices[positional_indices.size() - defaults_count + i];
         if (!defaults[i].is_null())
         {
-          exprt default_expr = get_expr(defaults[i]);
+          exprt default_expr = get_default_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
           upgrade_param_type_from_default(
             type.arguments()[positional_index], default_expr);
@@ -2733,7 +2733,7 @@ void python_converter::process_function_arguments(
     {
       if (!kw_defaults[i].is_null())
       {
-        exprt default_expr = get_expr(kw_defaults[i]);
+        exprt default_expr = get_default_expr(kw_defaults[i]);
         type.arguments()[kwonly_indices[i]].default_value() = default_expr;
         upgrade_param_type_from_default(
           type.arguments()[kwonly_indices[i]], default_expr);
