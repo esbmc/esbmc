@@ -49,6 +49,7 @@ class ModuleLifecycleMixin:
         self._bind_classmethod_constructors(node)
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         self._unobservable_builtin_keys = self._scan_unobservable_builtin_keys(node)
+        self._closed_lambda_bindings = self._scan_closed_lambda_bindings(node)
         # Per-module scope for the eq-only set and call-origin map.
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = (self._scan_eq_only_items_view_targets(node.body))

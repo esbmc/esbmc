@@ -2365,6 +2365,8 @@ regression/python/github_8196
 regression/python/github_8196_fail
 regression/python/github_8225
 regression/python/github_8225_fail
+regression/python/sorted_key_lambda_name
+regression/python/sorted_key_lambda_name_fail
 regression/esbmc/cbrt_model
 regression/esbmc/cbrt_model_fail
 regression/python/github_8224

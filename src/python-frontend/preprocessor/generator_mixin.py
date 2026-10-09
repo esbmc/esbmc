@@ -1211,6 +1211,35 @@ class GeneratorMixin:
         return frozenset(name for name, dunder in cls._BUILTIN_KEY_DUNDERS.items()
                          if name not in bound and dunder not in dunders)
 
+    @classmethod
+    def _scan_closed_lambda_bindings(cls, module_node):
+        """Names the module binds exactly once, to a one-parameter lambda whose
+        body reads nothing but that parameter: inlining such a body wherever the
+        name is used cannot capture a different variable."""
+        counts, lambdas = {}, {}
+        for n in ast.walk(module_node):
+            for name in cls._names_bound_by(n):
+                counts[name] = counts.get(name, 0) + 1
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Lambda)
+                    and cls._inlinable_key_lambda(n.value)):
+                param = n.value.args.args[0].arg
+                if all(m.id == param for m in ast.walk(n.value.body) if isinstance(m, ast.Name)):
+                    lambdas[n.targets[0].id] = n.value
+        return {name: lam for name, lam in lambdas.items() if counts.get(name) == 1}
+
+    def _resolve_lambda_key_name(self, key_kw):
+        """``key=k`` for a name _scan_closed_lambda_bindings recorded, as the
+        lambda itself: called through the name, the scan's call resolves ``k``
+        as a function symbol and aborts conversion."""
+        if not isinstance(key_kw.value, ast.Name):
+            return key_kw
+        lam = self._closed_lambda_bindings.get(key_kw.value.id)
+        if lam is None:
+            return key_kw
+        return ast.keyword(arg=key_kw.arg,
+                           value=ast.copy_location(copy.deepcopy(lam), key_kw.value))
+
     @staticmethod
     def _names_bound_by(node):
         """The names @p node itself binds: a def or class, a Store/Del name, a
@@ -1288,6 +1317,7 @@ class GeneratorMixin:
         key_kw = self._single_key_keyword(call_node)
         if key_kw is None:
             return None
+        key_kw = self._resolve_lambda_key_name(key_kw)
 
         if not self._is_scannable_key(key_kw.value):
             return None
