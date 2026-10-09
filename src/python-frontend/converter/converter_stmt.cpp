@@ -7578,6 +7578,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     dynamic_type_names =
       dynamic_type_handler_.detect_dynamic_type_names(ast_node);
 
+  // A divergence the tagged path cannot carry must not convert on, or the
+  // name is typed by one branch alone (github #8263).
+  if (type == "If")
+    dynamic_type_handler_.refuse_untracked_divergence(
+      ast_node, dynamic_type_names);
+
   dynamic_type_handler_.declare_dynamic_type_names(
     dynamic_type_names, ast_node);
   dynamic_type_handler::scope_guard tag_scope_guard(

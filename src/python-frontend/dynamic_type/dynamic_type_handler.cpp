@@ -119,6 +119,47 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   return dynamic_type_names;
 }
 
+void dynamic_type_handler::refuse_untracked_divergence(
+  const nlohmann::json &if_node,
+  const std::unordered_set<std::string> &tagged) const
+{
+  const nlohmann::json &module_body = converter_.ast()["body"];
+  nlohmann::json func_def;
+  const nlohmann::json *scope_body = &module_body;
+  if (!converter_.current_function_name().empty())
+  {
+    func_def = json_utils::try_find_function(
+      module_body, converter_.current_function_name());
+    if (!func_def.empty() && func_def.contains("body"))
+      scope_body = &func_def["body"];
+  }
+
+  const std::unordered_set<std::string> divergent =
+    dynamic_type_detail::scope_divergent_names(*scope_body);
+  if (divergent.empty())
+    return;
+
+  std::unordered_set<std::string> assigned_here;
+  dynamic_type_detail::collect_assigned_names(if_node, assigned_here);
+
+  for (const std::string &name : assigned_here)
+  {
+    if (!divergent.count(name) || tagged.count(name))
+      continue;
+    if (!dynamic_type_detail::name_is_loaded_after(*scope_body, if_node, name))
+      continue;
+    const locationt loc = converter_.get_location_from_decl(if_node);
+    throw std::runtime_error(
+      "the type of '" + name + "' depends on the branch taken at line " +
+      std::to_string(
+        std::stoul(
+          loc.get_line().as_string().empty() ? "0"
+                                             : loc.get_line().as_string())) +
+      " and is not tracked here; a later use would be checked against one "
+      "branch's type only");
+  }
+}
+
 void dynamic_type_handler::declare_dynamic_type_names(
   const std::unordered_set<std::string> &dynamic_type_names,
   const nlohmann::json &ast_node)

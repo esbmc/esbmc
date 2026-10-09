@@ -28,6 +28,18 @@ public:
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
 
   /**
+   * @brief Refuses the `if` when a name it assigns leaves the join with two
+   * incompatible kinds that the tagged-object path cannot carry (a one-armed
+   * if, a float, an expression result), and the name is read afterwards.
+   * Converting on would type the name by one branch alone and report the
+   * other branch's exception as unreachable, or raise one it cannot reach.
+   * Names in `tagged` are already handled and skipped.
+   */
+  void refuse_untracked_divergence(
+    const nlohmann::json &if_node,
+    const std::unordered_set<std::string> &tagged) const;
+
+  /**
    * @brief Declares (or aliases) each name's tagged-object symbol before
    * either branch converts, so goto-symex's struct-merge resolves the join
    * for free
