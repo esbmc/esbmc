@@ -2237,6 +2237,10 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc-cpp/cpp/decl_argument_temporary
+regression/esbmc-cpp/cpp/decl_argument_temporary_fail
+regression/esbmc-cpp/cpp/typeid_static_storage
+regression/esbmc-cpp/cpp/typeid_static_storage_fail
 regression/esbmc/builtin_libm_call
 regression/esbmc/builtin_libm_call_fail
 regression/esbmc/compound_assign_float_rhs
@@ -2311,6 +2315,8 @@ regression/esbmc/deref_union_array_write
 regression/esbmc/deref_union_array_write_fail
 regression/function_contract/github_4219_old_in_forall_ptr_to_array
 regression/function_contract/github_4219_old_in_forall_ptr_to_array_fail
+regression/esbmc/memspace_distinct_locals
+regression/esbmc/memspace_freed_heap_reuse_fail
 regression/esbmc-unix/race_unlock_pointer_then_join_fail
 regression/esbmc-cpp/cpp/race_std_mutex_unlock_then_join
 regression/esbmc-cpp/cpp/race_std_mutex_unlock_then_join_fail
@@ -2320,6 +2326,12 @@ regression/goto-transcoder/cbmc_static_init_function
 regression/goto-transcoder/cbmc_static_init_function_fail
 regression/goto-transcoder/cbmc_vector
 regression/goto-transcoder/cbmc_vector_fail
+regression/esbmc/github_8204
+regression/esbmc/github_8204_fail
+regression/esbmc/github_8204_u32
+regression/esbmc/github_8204_u32_fail
+regression/goto-transcoder/cbmc_kani_union_padding
+regression/goto-transcoder/cbmc_kani_union_padding_fail
 regression/esbmc/memspace_first_page
 regression/esbmc/memspace_first_page_fail
 regression/esbmc/memspace_first_page_vla_band
@@ -2327,3 +2339,5 @@ regression/esbmc/memspace_first_page_vla_band_fail
 regression/goto-transcoder/cbmc_kani_dyn_vtable
 regression/goto-transcoder/cbmc_kani_dyn_vtable_fail
 regression/goto-transcoder/cbmc_missing_entry_point
+regression/esbmc/object_size_per_object
+regression/esbmc/object_size_per_object_fail

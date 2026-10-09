@@ -1,0 +1,4 @@
+CORE
+contact.ld
+--ld-props props.yaml 
+^ERROR: UnsupportedConstruct\(negated="yes", tier=2\)
