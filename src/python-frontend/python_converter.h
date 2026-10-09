@@ -151,6 +151,7 @@ public:
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
   typet get_optional_type(const nlohmann::json &slice);
+  typet optional_container_type(const nlohmann::json &slice);
 
   string_builder &get_string_builder();
 
@@ -1166,6 +1167,9 @@ private:
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+  exprt range_membership(const exprt &x, const nlohmann::json &element);
+  exprt
+  list_or_range_contains(exprt &lhs, exprt &rhs, const nlohmann::json &element);
 
   /// A PEP 604 union annotation, as the single type this
   /// monomorphic frontend has to represent it with.
@@ -1375,6 +1379,7 @@ private:
     const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 

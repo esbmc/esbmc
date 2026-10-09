@@ -33,6 +33,7 @@
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/lift_call_expressions.h>
+#include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -239,7 +240,7 @@ static bool retarget_esbmc_main(
 
 // The assignment CBMC's static_lifetime_init (src/linking/) makes for `sym`, or
 // nil when it leaves the symbol unassigned, so nondet.
-static expr2tc cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
+static exprt cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
 {
   static const std::set<std::string> special = {
     "__CPROVER_constant_infinity_uint",
@@ -256,21 +257,17 @@ static expr2tc cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
     !sym.static_lifetime || sym.is_type || sym.is_macro ||
     sym.get_type().is_code() || sym.get_type().is_empty() ||
     special.count(id) || has_prefix(id, "__CPROVER_architecture_"))
-    return expr2tc();
+    return nil_exprt();
 
   if (sym.get_value().is_not_nil())
-  {
-    expr2tc value;
-    migrate_expr(sym.get_value(), value);
-    return value;
-  }
+    return sym.get_value();
 
   if (sym.is_extern)
-    return expr2tc();
+    return nil_exprt();
 
   type2tc type = migrate_type(sym.get_type());
   base_type(type, ns);
-  return gen_zero(type, true);
+  return migrate_expr_back(gen_zero(type, true));
 }
 
 // CBMC builds __CPROVER_initialize when it picks the entry point, so a goto
@@ -278,22 +275,27 @@ static expr2tc cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
 // __CPROVER__start runs that function; a --function harness skips it, so these
 // assignments stand in for it.
 static goto_programt cbmc_static_init(
-  const contextt &context,
+  contextt &context,
+  optionst &options,
   const std::unordered_set<irep_idt, irep_id_hash> &preexisting)
 {
   const namespacet ns(context);
-  goto_programt init;
+  code_blockt block;
   context.foreach_operand_in_order([&](const symbolt &sym) {
     if (preexisting.count(sym.id))
       return;
-    const expr2tc value = cbmc_static_init_value(sym, ns);
-    if (is_nil_expr(value))
+    const exprt value = cbmc_static_init_value(sym, ns);
+    if (value.is_nil())
       return;
-    goto_programt::targett a = init.add_instruction(ASSIGN);
-    a->code =
-      code_assign2tc(symbol2tc(migrate_type(sym.get_type()), sym.id), value);
-    a->location = sym.location;
+    code_assignt assign(symbol_expr(sym), value);
+    assign.location() = sym.location;
+    block.move_to_operands(assign);
   });
+
+  // A value can carry a side effect -- Kani builds each vtable with a statement
+  // expression -- so it is goto-converted, as __CPROVER_initialize is in CBMC.
+  goto_programt init;
+  goto_convertt(context, options).goto_convert(block, init);
   return init;
 }
 
@@ -305,7 +307,8 @@ static goto_programt cbmc_static_init(
 // the run cannot continue.
 static bool bridge_binary_entry_point(
   const cmdlinet &cmdline,
-  const contextt &context,
+  contextt &context,
+  optionst &options,
   goto_functionst &goto_functions,
   bool cbmc_additions,
   const std::unordered_set<irep_idt, irep_id_hash> &preexisting)
@@ -314,7 +317,7 @@ static bool bridge_binary_entry_point(
   {
     goto_programt init;
     if (cbmc_additions)
-      init = cbmc_static_init(context, preexisting);
+      init = cbmc_static_init(context, options, preexisting);
     return retarget_esbmc_main(
       goto_functions, cmdline.getval("function"), init);
   }
@@ -390,23 +393,31 @@ bool esbmc_parseoptionst::create_goto_program(
       if (read_goto_binary(goto_functions))
         return true;
 
-      skip_property_classes(cmdline, goto_functions);
-
       // Resolve CBMC's bodyless libc externals (ceil/floor/..., strlen/strcmp/
       // strncmp) to the operational-model bodies the additions linked, before
       // symex sees a bodyless call returning nondet.
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
-      // CBMC serialises some intrinsics (object_size) as expressions that
-      // migrate to calls; goto_convert never runs on a loaded binary, so
-      // nothing else lifts them out to statement level.
-      lift_call_expressions(context, goto_functions);
-
       if (
         bridge_binary_entry_point(
-          cmdline, context, goto_functions, cbmc_additions, preexisting))
+          cmdline,
+          context,
+          options,
+          goto_functions,
+          cbmc_additions,
+          preexisting))
         return true;
+
+      // CBMC serialises some intrinsics (object_size) as expressions that
+      // migrate to calls; goto_convert never runs on a loaded binary, so
+      // nothing else lifts them out to statement level. After the bridge, so
+      // the static initialisers it splices into __ESBMC_main are lifted too.
+      lift_call_expressions(context, goto_functions);
+
+      // After the bridge, so the asserts of the spliced initialisers are
+      // filtered too.
+      skip_property_classes(cmdline, goto_functions);
 
       goto_functions.update();
     }

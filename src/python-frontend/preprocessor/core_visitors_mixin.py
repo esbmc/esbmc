@@ -1404,7 +1404,8 @@ class CoreVisitorsMixin:
                 self.functionDefaults[(qualified_name, arg_name)] = default_node.value
             elif isinstance(default_node, (ast.Name, ast.List, ast.Dict, ast.Set)):
                 assignment_node, target_var = self.generate_variable_copy(
-                    qualified_name, node.args.args[-i], default_node)
+                    qualified_name, node.args.args[-i],
+                    self.class_scope_default(default_node, node) if is_method else default_node)
                 self.functionDefaults[(qualified_name, arg_name)] = target_var
                 self.hoisted_default_names.add(target_var.id)
                 if is_method:
@@ -1421,7 +1422,8 @@ class CoreVisitorsMixin:
                 self.functionDefaults[(qualified_name, kwarg_name)] = default.value
             elif isinstance(default, (ast.Name, ast.List, ast.Dict, ast.Set)):
                 assignment_node, target_var = self.generate_variable_copy(
-                    qualified_name, node.args.kwonlyargs[i], default)
+                    qualified_name, node.args.kwonlyargs[i],
+                    self.class_scope_default(default, node) if is_method else default)
                 self.functionDefaults[(qualified_name, kwarg_name)] = target_var
                 self.hoisted_default_names.add(target_var.id)
                 if is_method:

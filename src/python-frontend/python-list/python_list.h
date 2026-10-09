@@ -79,11 +79,14 @@ public:
    * @param size     Expression giving the number of elements (often symbolic).
    * @param fill_value Element value pushed on each iteration.
    * @param elem_type  IRep2 type of @p fill_value, recorded in the registry.
+   * @param index_base When non-null, each element is @p index_base plus the
+   *        loop index rather than @p fill_value, which is what a range needs.
    */
   exprt build_symbolic_fill_list(
     const exprt &size,
     const exprt &fill_value,
-    const typet &elem_type);
+    const typet &elem_type,
+    const exprt *index_base = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
@@ -688,7 +691,8 @@ public:
   static exprt build_list_from_range(
     python_converter &converter,
     const nlohmann::json &range_args,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool materialise_elements = true);
 
   /**
    * @brief Materialise a tuple value into a fresh list, pushing each component
@@ -1122,18 +1126,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handle symbolic (non-constant) range arguments
-   * @param converter The python converter instance
-   * @param range_args The range arguments from the AST
-   * @param element The AST element for location tracking
-   * @return Expression representing the symbolic range list
-   */
-  static exprt handle_symbolic_range(
-    python_converter &converter,
-    const nlohmann::json &range_args,
-    const nlohmann::json &element);
-
-  /**
    * @brief Set symbolic size on a list structure
    * @param converter The python converter instance
    * @param list_expr The list expression to modify
@@ -1145,6 +1137,25 @@ private:
     exprt &list_expr,
     const exprt &size_expr,
     const nlohmann::json &element);
+
+  /**
+   * @brief Handle symbolic (non-constant) range arguments
+   * @param converter The python converter instance
+   * @param range_args The range arguments from the AST
+   * @param element The AST element for location tracking
+   * @param materialise_elements Write each element, which a `list(range(...))`
+   *        needs because its elements are read. A bare `range(...)` passes
+   *        false and keeps the size-only list it has always produced: its
+   *        elements are read by `x in range(...)` but materialising them
+   *        costs unwinding that `len(range(n))` cannot afford under a fixed
+   *        `--unwind`.
+   * @return Expression representing the symbolic range list
+   */
+  static exprt handle_symbolic_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element,
+    bool materialise_elements);
 
   /**
    * @brief Build a concrete range with constant bounds

@@ -772,6 +772,48 @@ static void set_handler_exception_id(const namespacet &ns, exprt &handler)
     handler.set("exception_id", ids.front());
 }
 
+/// The object a typeid expression refers to, which has static storage duration
+/// ([expr.typeid]/1): one per type name. A polymorphic operand's dynamic type
+/// is only known when it is evaluated, so its site gets its own object,
+/// assigned there.
+exprt clang_cpp_convertert::typeid_object(
+  const exprt &value,
+  const std::string &type_name,
+  const clang::Stmt &stmt,
+  bool dynamic)
+{
+  std::string id = "c:@__ESBMC_typeid@" + type_name;
+  if (dynamic)
+  {
+    locationt l;
+    get_start_location_from_stmt(stmt, l);
+    id += "@" + l.file().as_string() + ":" + l.line().as_string() + ":" +
+          l.column().as_string();
+  }
+
+  const symbolt *s = context.find_symbol(id);
+  if (!s)
+  {
+    symbolt symbol;
+    get_default_symbol(symbol, "", value.type(), id, id, locationt());
+    symbol.lvalue = true;
+    symbol.static_lifetime = true;
+    symbol.set_value(
+      dynamic ? gen_zero(get_complete_type(value.type(), ns), true) : value);
+    s = context.move_symbol_to_context(symbol);
+  }
+
+  exprt object = symbol_expr(*s);
+  if (!dynamic)
+    return object;
+
+  side_effect_exprt assign("assign", object.type());
+  assign.copy_to_operands(object, value);
+  exprt comma("comma", object.type());
+  comma.copy_to_operands(assign, object);
+  return comma;
+}
+
 /// A pseudo-destructor call does nothing but evaluate its base
 /// ([expr.pseudo]/1) -- there is nothing to call. Reduce it where it is built,
 /// so the node never reaches the goto program: IREP2 has no kind for it, and an
@@ -1576,10 +1618,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
       sym.copy_to_operands(gen_zero(pointer_type()));
-    make_temporary(sym);
 
-    new_expr = sym;
-
+    new_expr = typeid_object(sym, type_name, stmt, vtable_read.is_not_nil());
     break;
   }
   case clang::Stmt::LambdaExprClass:
