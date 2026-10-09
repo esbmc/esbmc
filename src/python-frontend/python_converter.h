@@ -2483,6 +2483,14 @@ private:
     numpy_pointer_view_info_;
   const numpy_scalar_pointer_view_infot *
   find_numpy_pointer_view_info(const std::string &name) const;
+  // Scans call sites of `func_name` for subscript view arguments at
+  // `param_index`; returns the common elem type and view info when all sites
+  // agree; returns false on conflict or when no analyzable view site exists.
+  bool try_infer_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index,
+    typet &out_elem_type,
+    numpy_scalar_pointer_view_infot &out_info) const;
   // Runtime length of the named view when its extent is not a constant.
   std::optional<exprt>
   symbolic_numpy_view_length(const std::string &name) const;
@@ -2599,6 +2607,9 @@ private:
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
   std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
+  // Keys are "func_name#param_index" for parameters that receive numpy views
+  // and have registered view metadata in numpy_pointer_view_info_.
+  std::set<std::string> numpy_view_params_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

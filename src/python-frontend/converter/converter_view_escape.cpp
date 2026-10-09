@@ -508,8 +508,9 @@ void python_converter::reject_unfoldable_numpy_view_call(
 void python_converter::reject_numpy_view_argument_use(
   const nlohmann::json &call)
 {
-  const nlohmann::json func_node = json_utils::try_find_function(
-    (*ast_json)["body"], call["func"]["id"].get<std::string>());
+  const std::string func_name = call["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
   reject_numpy_view_callee(call);
   if (func_node.empty())
     throw std::runtime_error(unknown_function_error);
@@ -519,7 +520,10 @@ void python_converter::reject_numpy_view_argument_use(
       contains_tracked_numpy_view_name(call["args"][i]) &&
       (i >= params.size() ||
        references_name(func_node["body"], params[i].value("arg", ""))))
-      throw std::runtime_error(view_use_error);
+    {
+      if (numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
+        throw std::runtime_error(view_use_error);
+    }
 }
 
 void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
@@ -533,6 +537,21 @@ void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
     fold_numpy_view_call(call))
     return;
   reject_numpy_view_argument_use(call);
+
+  // Every view arg that maps to a registered view-parameter binding is
+  // handled through the callee's own metadata; its storage does not escape.
+  // Skip the escape loop when all view args in this call are bound.
+  {
+    const std::string fname = call["func"]["id"].get<std::string>();
+    bool all_bound = true;
+    for (std::size_t i = 0; i < call["args"].size() && all_bound; ++i)
+      if (
+        contains_tracked_numpy_view_name(call["args"][i]) &&
+        numpy_view_params_.count(fname + "#" + std::to_string(i)) == 0)
+        all_bound = false;
+    if (all_bound)
+      return;
+  }
 
   // Not assumed read-only: the callee may keep or mutate what it received.
   for_each_name(call["args"], [&](const nlohmann::json &name) {
