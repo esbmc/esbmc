@@ -7124,6 +7124,44 @@ typet python_converter::optional_ternary_type(
   return result_type;
 }
 
+namespace
+{
+// Statements the condition conversion emitted (an index normalisation, an
+// IndexError check) must run before every evaluation of the condition, so
+// the loop becomes `while True: prelude; if not cond: orelse; break; body`.
+codet lower_while_with_condition_prelude(
+  const code_blockt &prelude,
+  const exprt &cond,
+  const exprt &body,
+  const exprt &orelse,
+  const locationt &location)
+{
+  expr2tc cond2;
+  migrate_expr(cond, cond2);
+
+  code_blockt exit_block;
+  if (!orelse.id_string().empty())
+    exit_block.copy_to_operands(orelse);
+  code_breakt break_stmt;
+  break_stmt.location() = location;
+  exit_block.copy_to_operands(break_stmt);
+
+  code_ifthenelset exit_if;
+  exit_if.cond() = migrate_expr_back(not2tc(cond2));
+  exit_if.then_case() = exit_block;
+  exit_if.location() = location;
+
+  code_blockt loop_body = prelude;
+  loop_body.copy_to_operands(exit_if, body);
+
+  codet while_code;
+  while_code.set_statement("while");
+  while_code.location() = location;
+  while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
+  return while_code;
+}
+} // namespace
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
@@ -7262,6 +7300,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Extract condition from AST
   exprt cond;
+
+  code_blockt cond_prelude;
+  code_blockt *const enclosing_block = current_block;
+  if (type == "While" && current_block)
+    current_block = &cond_prelude;
 
   // Keep `and` and `or` in conditions short-circuited.
   const bool coverage_mode = is_coverage_mode();
@@ -7572,6 +7615,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Recover type
   current_element_type = t;
+  current_block = enclosing_block;
 
   // Declares the flagged variable's tagged-object symbol before either
   // branch converts, so goto-symex's struct-merge resolves the join for
@@ -7736,6 +7780,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;
   }
+
+  if (!cond_prelude.operands().empty())
+    return lower_while_with_condition_prelude(
+      cond_prelude, cond, then, else_expr, get_location_from_decl(ast_node));
 
   // Create if or while code
   codet code;
