@@ -1389,6 +1389,9 @@ private:
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
+  /// A parameter default, evaluated where the def is, so a method's default
+  /// still sees the class body's names (#8200).
+  exprt get_default_expr(const nlohmann::json &node);
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
@@ -2373,6 +2376,7 @@ private:
   // are still unbound parameters) and during the discarded type-probe pass of
   // an assignment RHS (which would otherwise emit the guard twice as dead code
   // and evaluate a side-effecting divisor an extra time).
+  bool converting_defaults_ = false;
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
   // Set while probe_expr() evaluates a node only to inspect its result.
