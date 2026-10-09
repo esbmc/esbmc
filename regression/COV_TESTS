@@ -2355,3 +2355,5 @@ regression/python/github_8196
 regression/python/github_8196_fail
 regression/python/github_8225
 regression/python/github_8225_fail
+regression/python/github_8224
+regression/python/github_8224_fail
