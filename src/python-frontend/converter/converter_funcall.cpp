@@ -641,7 +641,52 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
   reject_inline_runtime_numpy_slice(element);
   if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
     return get_expr(*folded);
+  if (std::optional<exprt> call = call_returned_function(element))
+    return *call;
   return get_function_call(element);
+}
+
+std::optional<exprt>
+python_converter::call_returned_function(const nlohmann::json &element)
+{
+  const nlohmann::json &inner = element["func"];
+  if (
+    inner.value("_type", "") != "Call" ||
+    inner["func"].value("_type", "") != "Name")
+    return std::nullopt;
+  const symbolt *fn = find_symbol(
+    symbol_id(current_python_file, "", inner["func"]["id"].get<std::string>())
+      .to_string());
+  if (!fn || !fn->get_type().is_code())
+    return std::nullopt;
+  const typet &returned = to_code_type(fn->get_type()).return_type();
+  if (!returned.is_pointer() || !returned.subtype().is_code())
+    return std::nullopt;
+  const code_typet &callee_type = to_code_type(returned.subtype());
+  if (callee_type.arguments().size() != element["args"].size())
+    return std::nullopt;
+
+  // The inner call converts to a statement; as a side-effect expression
+  // goto-convert hoists it in evaluation order (short-circuit, loop guards).
+  exprt callee = get_expr(inner);
+  if (callee.statement() == "function_call")
+  {
+    const code_function_callt &code = to_code_function_call(to_code(callee));
+    side_effect_expr_function_callt value;
+    value.location() = code.location();
+    value.function() = code.function();
+    value.arguments() = code.arguments();
+    value.type() = returned;
+    callee = value;
+  }
+
+  side_effect_expr_function_callt call;
+  call.location() = get_location_from_decl(element);
+  call.function() = callee;
+  call.type() = callee_type.return_type();
+  for (const auto &arg : element["args"])
+    call.arguments().push_back(get_expr(arg));
+  return call;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)

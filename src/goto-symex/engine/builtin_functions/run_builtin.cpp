@@ -120,8 +120,31 @@ static expr2tc build_rotate(const code_function_call2t &func_call, bool left)
               : bitor2tc(t, lshr2tc(t, x, d), shl2tc(t, x, co));
 }
 
-/// Value of a bit-counting or rotating builtin call, or nil if \p symname is
-/// not one.
+/// Value of a __builtin_bitreverse{8,16,32,64} call: swap adjacent bits, then
+/// 2-bit groups, then 4-bit groups, doubling until the halves are swapped.
+static expr2tc build_bitreverse(const code_function_call2t &func_call)
+{
+  expr2tc acc = func_call.operands[0];
+  const type2tc &t = acc->type;
+  const unsigned width = t->get_width();
+  for (unsigned k = 1; k < width; k <<= 1)
+  {
+    // The low k bits of every 2k-bit block.
+    BigInt m = 0;
+    for (unsigned pos = 0; pos < width; pos += 2 * k)
+      m += BigInt::power2m1(k) * BigInt::power2(pos);
+    const expr2tc mask = constant_int2tc(t, m);
+    const expr2tc shift = constant_int2tc(t, k);
+    acc = bitor2tc(
+      t,
+      shl2tc(t, bitand2tc(t, acc, mask), shift),
+      bitand2tc(t, lshr2tc(t, acc, shift), mask));
+  }
+  return acc;
+}
+
+/// Value of a bit-counting, rotating or bit-reversing builtin call, or nil if
+/// \p symname is not one.
 static expr2tc build_bit_builtin(
   const code_function_call2t &func_call,
   const std::string &symname)
@@ -142,6 +165,10 @@ static expr2tc build_bit_builtin(
         symname == std::string("c:@F@__builtin_rotate") +
                      (left ? "left" : "right") + width)
         return build_rotate(func_call, left);
+
+  for (const char *width : {"8", "16", "32", "64"})
+    if (symname == std::string("c:@F@__builtin_bitreverse") + width)
+      return build_bitreverse(func_call);
 
   return expr2tc();
 }
