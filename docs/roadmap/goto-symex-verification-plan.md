@@ -840,6 +840,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
 | **R96** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R93's open note on array new, §15 M9 (R96); **FIXED**, same entry | **An array new left its constructed elements alive when a later element's initialization threw.** [except.ctor]/3 destroys the elements whose initialization completed, newest first, before the exception leaves the new-expression. ESBMC destroyed none: in `new C[3]` whose third constructor throws, `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively, and the same held for a listed element or the filler of `new C[n]{...}`. | `convert_cpp_new_elements`, `user_code_throws`, `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/try_catch/array_new_unwind{,_fail}` | — | **Fixed**: in a program whose own code throws or catches, the element construction of an array new of a class with a destructor runs in a try block whose catch-all destroys the elements already built and rethrows. The storage is not freed ([expr.new]/26), and `delete[]` still destroys elements in increasing order. |
 | **R115** | **Medium (false FAILED, default configuration, C and C++)** — open PR #8122's note, §15 M9 (R115); **FIXED**, same entry | **The rotate builtins had no model.** `__builtin_rotateleft{8,16,32,64}` and `__builtin_rotateright*` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_rotateleft32(0x80000001u, 1) == 3)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`rol`/`ror` in `cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_rotate{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to two shifts and an or, with the distance and its complement taken modulo the width. |
+| **R120** | **High (false FAILED and false SUCCESSFUL, default configuration)** — R113's list of assertions violated after `qsort` and `bsearch`, §15 M9 (R120); **FIXED**, same entry | **`qsort` and `bsearch` had no model.** Both reached symex as bodyless calls: `qsort` left the array as it was and `bsearch` returned a nondet pointer, so `assert(a[0] == 1)` after sorting `{3, 1, 4, 2}` was FAILED, and a comparator called through an incompatible type, which C11 6.3.2.3p8 leaves undefined, verified. Giving them a body exposed a symex abort: an argument whose type cannot be converted to the parameter's stopped the run with `type mismatch`. | `qsort`, `bsearch`, `src/c2goto/library/stdlib.c`; `goto_symext::argument_value`, `src/goto-symex/engine/symex_function.cpp`; `regression/esbmc/qsort_bsearch{,_fail}`, `qsort_compar_incompatible` | — | **Fixed**: `qsort` is an insertion sort that swaps whole elements with `memcpy`, and `bsearch` a binary search whose loop is bounded by a concrete halving count. An argument symex cannot convert is claimed undefined and passed as a nondet value. |
 | **R104** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — #8141's open note, §15 M9 (R104); **FIXED**, same entry | **A declaration's constructor or by-value call kept its argument temporaries to block exit.** `D d(C(6));`, `D e{C(1), C(2)};`, `D h = D(C(7));` and `D m = make(C(4));` for a destructible `D` built `d` in place, and the temporaries their arguments created were destroyed at the end of the enclosing block, not of the declaration ([class.temporary]/4). `assert(live == 0)` after the declaration was FAILED, and a pointer kept from the argument, `Q q(P(3)); *q.q` with `~P` deleting it, read freed memory natively and verified. | `convert_decl_initializer`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/decl_argument_temporary{,_fail}` | — | **Fixed**: all three initializer paths destroy the temporaries they created when the declaration ends; only the generic assignment path did. That exposed a second defect: `typeid` built its `type_info` as a temporary, so `std::type_index i(typeid(int));` (the CORE `typeindex_model`) then read a dead object, as `const std::type_info *p = &typeid(int);` already did on master. `typeid` now refers to a static object, one per type, or per site for a polymorphic operand ([expr.typeid]/1; `typeid_object`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/typeid_static_storage{,_fail}`). |
 | **R109** | **Medium (false FAILED, default configuration, C and C++)** — found probing builtins, §15 M9 (R109); **FIXED**, same entry | **`__builtin_abs`, `__builtin_labs` and `__builtin_llabs` had no model.** `is_abs_builtin_name` matched `abs`, `labs`, `llabs` and every spelling of `fabs`, but not the integer builtins, so their calls stayed bodyless (`no body for function __builtin_abs`), returned a nondet value, and `assert(__builtin_abs(-3) == 3)` was FAILED; the program passes natively. | `is_abs_builtin_name`, `src/clang-c-frontend/builtin_names.cpp`; `regression/esbmc/builtin_abs{,_fail}` | — | **Fixed**: the three names lower to the `abs` node as `abs` does, in both adjust passes. |
 | **R105** | **High (false SUCCESSFUL, `--loop-invariant-check`)** — found reading the loop summary behind R97's C++ residual, §15 M9 (R105); **FIXED**, same entry | **A callee's write through a pointer it was not handed escaped the loop invariant's havoc.** A loop that calls a function writing through a pointer havocs only what the call's pointer arguments point to. A callee that writes through a global pointer, or calls through a function pointer, left the written object at its pre-loop value, so `assert(x == 0)` after ten calls of `*gp = 1` was SUCCESSFUL. | `goto_loopst::compute_function_summary`, `summarise_call`, `goto_loops.cpp` | `regression/loop-invariants/callee_global_pointer{,_fail}`, `callee_function_pointer{,_fail}` | **Fixed**: a callee write counts as covered only through a parameter the callee never reassigns, and a call through a function pointer is never covered; otherwise the invariant is checked at its base case and the loop is left to the unwinder. |
@@ -11418,6 +11419,44 @@ was not built).
 
 ---
 
+### M9 (R120) — 2026-10-09, the sort and search functions
+
+R113's entry left open that assertions holding natively failed after `qsort`
+and `bsearch`. Neither had a body: `stdlib.h` declared them and nothing defined
+them, so symex skipped the call. `qsort` left the array unsorted and `bsearch`
+returned a nondet pointer, so sorting `{3, 1, 4, 2}` and asserting
+`a[0] == 1` was FAILED, as was any assertion on `bsearch`'s result.
+
+**Fixed** in `stdlib.c`. `qsort` is an insertion sort; C11 7.22.5.2 leaves the
+algorithm and the order of equal elements unspecified. It swaps whole elements
+through a `memcpy` to a temporary, so a `double` never holds a mix of two
+elements' bytes (R113). `bsearch` is a binary search. Its remaining count
+becomes symbolic once the comparisons are, so the loop is bounded by a second,
+concrete count that halves each step; the remaining count never exceeds it.
+
+The model then called the comparator, and `github_1087` passes
+`int compare(Player, Player)` cast to `void *`. Symex aborted on the pointer
+argument for a struct parameter (`type mismatch`), as it already did for a
+direct call through such a pointer on master. C11 6.3.2.3p8 makes the call
+undefined, so `argument_value` (split out of `argument_assignments`) now claims
+`function called through an incompatible type` and passes a nondet value.
+
+`qsort_bsearch` sorts constants, three nondet `int`s, `double`s and structs
+and searches for present and absent keys; it is FAILED on master.
+`qsort_bsearch_fail` runs `--multi-property` and pins that a `bsearch`
+assertion holds and `a[0] == 3` after the sort fails; master passes the second
+and fails the first. `qsort_compar_incompatible` is SUCCESSFUL on master and
+aborts with the model but without the symex change; it pins the new claim.
+All three agree under the default solver and `--z3` (Z3; Bitwuzla was not
+built). The 19 other tests whose sources call `qsort` or `bsearch` keep their
+verdicts; `github_1009_success` times out at 15 minutes on both binaries. Under
+`ESBMC_REGRESS_TIMEOUT_MAX=20`, `esbmc` (all 2757) and 1469 of the 1606 `cbmc`
+and `esbmc-cpp/cpp` tests fail the same tests on both binaries. A Python call
+whose argument does not fit still aborts, as `github_7359_mixed_arity` pins;
+the Python suite was not run, as this build left that frontend out.
+
+Not fixed: the `snprintf`, `sprintf`, `sscanf` and `longjmp` rows of R113's
+list.
 ### M9 (R112) — 2026-10-04, a `va_list` read in the function it was passed to
 
 R88's battery listed a struct read back with `va_arg` as failing. Reduced,
