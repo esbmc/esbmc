@@ -1038,7 +1038,8 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   {
     try
     {
-      exprt operand_expr = converter_.get_expr(arg);
+      exprt operand_expr = converter_.guard_nonfinite_float_to_int(
+        converter_.get_expr(arg), call_);
       typet float_type = type_handler_.get_typet("float", 0);
       typet int_type = type_handler_.get_typet("int", 0);
 

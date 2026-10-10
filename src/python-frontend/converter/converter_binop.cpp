@@ -544,6 +544,32 @@ void python_converter::emit_guarded_raise(
   add_instruction(guard);
 }
 
+exprt python_converter::guard_nonfinite_float_to_int(
+  exprt operand,
+  const nlohmann::json &element)
+{
+  if (!operand.type().is_floatbv() || !can_emit_runtime_guard())
+    return operand;
+
+  const locationt loc = get_location_from_decl(element);
+  operand = store_call_result(operand, loc, "int_arg");
+  operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
+  expr2tc value;
+  migrate_expr(operand, value);
+
+  emit_guarded_raise(
+    migrate_expr_back(isinf2tc(value)),
+    "OverflowError",
+    "cannot convert float infinity to integer",
+    loc);
+  emit_guarded_raise(
+    migrate_expr_back(isnan2tc(value)),
+    "ValueError",
+    "cannot convert float NaN to integer",
+    loc);
+  return operand;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
