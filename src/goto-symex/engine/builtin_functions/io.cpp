@@ -209,10 +209,11 @@ static bool is_literal_string_start(const expr2tc &e)
          to_constant_int2t(to_index2t(obj).index).value.is_zero();
 }
 
-bool goto_symext::exact_printf_output(
+bool goto_symext::format_printf_output(
   const code_printf2t &call,
   size_t fmt_idx,
-  std::string &out)
+  printf_formattert &formatter,
+  bool &constant_args)
 {
   expr2tc fmt = call.operands[fmt_idx];
   cur_state->rename(fmt);
@@ -220,39 +221,96 @@ bool goto_symext::exact_printf_output(
   if (!is_constant_string2t(fmt_str))
     return false;
 
+  constant_args = true;
   std::list<expr2tc> args;
   for (size_t i = fmt_idx + 1; i < call.operands.size(); i++)
   {
     expr2tc arg = call.operands[i];
     cur_state->rename(arg);
     do_simplify(arg);
-    if (!is_constant_int2t(arg) && !is_literal_string_start(arg))
-      return false;
+    constant_args &= is_constant_int2t(arg) || is_literal_string_start(arg);
     args.push_back(arg);
   }
 
-  printf_formattert formatter;
   formatter(to_constant_string2t(fmt_str).value.as_string(), args);
-  out = formatter.as_string();
-  return formatter.exact && formatter.bounded &&
-         formatter.min_outlen == formatter.max_outlen;
+  return true;
 }
 
-void goto_symext::symex_sprintf_store(const code_printf2t &call)
+expr2tc goto_symext::sprintf_output_length(
+  const printf_formattert &formatter,
+  bool known,
+  const expr2tc &retval)
+{
+  if (known && is_nil_expr(retval))
+    return gen_long(int_type2(), BigInt(formatter.max_outlen));
+  expr2tc len = retval;
+  if (is_nil_expr(len))
+  {
+    len = gen_nondet(int_type2());
+    replace_nondet(len);
+  }
+  assume(and2tc(
+    greaterthanequal2tc(
+      len, gen_long(int_type2(), BigInt(formatter.min_outlen))),
+    lessthanequal2tc(
+      len, gen_long(int_type2(), BigInt(formatter.max_outlen)))));
+  return len;
+}
+
+expr2tc goto_symext::sprintf_output_char(
+  const std::string &out,
+  bool known,
+  size_t i,
+  const expr2tc &len,
+  const type2tc &char_type)
+{
+  if (known)
+  {
+    const char c = i < out.size() ? out[i] : '\0';
+    return constant_int2tc(
+      char_type,
+      is_signedbv_type(char_type) ? BigInt((signed char)c)
+                                  : BigInt((unsigned char)c));
+  }
+  expr2tc c = gen_nondet(char_type);
+  replace_nondet(c);
+  return if2tc(
+    char_type,
+    lessthan2tc(gen_long(int_type2(), BigInt(i)), len),
+    c,
+    gen_zero(char_type));
+}
+
+void goto_symext::symex_sprintf_store(
+  const code_printf2t &call,
+  const expr2tc &retval)
 {
   const bool bounded_size = call.kind == printf_kindt::SNPRINTF;
   if (!bounded_size && call.kind != printf_kindt::SPRINTF)
     return;
 
-  // Only an output known byte for byte is stored; any other leaves the
-  // destination unchanged.
-  std::string out;
-  if (!exact_printf_output(call, bounded_size ? 2 : 1, out))
-    return;
-
   const expr2tc &dst = call.operands[0];
   if (!is_pointer_type(dst) || !is_bv_type(to_pointer_type(dst->type).subtype))
     return;
+
+  // An output whose length is not soundly bounded, or is bounded above
+  // max_stored, leaves the destination unchanged.
+  const size_t max_stored = 1024;
+  printf_formattert formatter;
+  bool constant_args = false;
+  if (!format_printf_output(
+        call, bounded_size ? 2 : 1, formatter, constant_args))
+    return;
+  const std::string out = formatter.as_string();
+  if (
+    !formatter.exact || !formatter.bounded || formatter.max_outlen > max_stored)
+    return;
+
+  // An output not known byte for byte is nondet characters up to its length,
+  // then a NUL.
+  const bool known =
+    constant_args && formatter.min_outlen == formatter.max_outlen;
+  const expr2tc len = sprintf_output_length(formatter, known, retval);
   const type2tc char_type = to_pointer_type(dst->type).subtype;
   expr2tc n = bounded_size ? call.operands[1] : expr2tc();
   if (bounded_size)
@@ -261,24 +319,23 @@ void goto_symext::symex_sprintf_store(const code_printf2t &call)
   // scoped as well. C11 7.21.6.5p2: snprintf writes at most n - 1
   // characters, then a NUL.
   const guard2tc saved_guard = cur_state->guard;
-  for (size_t i = 0; i <= out.size(); i++)
+  for (size_t i = 0; i <= formatter.max_outlen; i++)
   {
     const expr2tc pos = constant_int2tc(size_type2(), BigInt(i));
-    const char c = i < out.size() ? out[i] : '\0';
-    expr2tc value = constant_int2tc(
-      char_type,
-      is_signedbv_type(char_type) ? BigInt((signed char)c)
-                                  : BigInt((unsigned char)c));
+    expr2tc value = sprintf_output_char(out, known, i, len, char_type);
+    expr2tc in_output = lessthanequal2tc(gen_long(int_type2(), BigInt(i)), len);
+    do_simplify(in_output);
     guard2tc write_guard;
+    write_guard.add(in_output);
     if (bounded_size)
     {
       write_guard.add(lessthan2tc(constant_int2tc(n->type, BigInt(i)), n));
-      cur_state->guard = saved_guard;
-      cur_state->guard.add(write_guard.as_expr());
       const expr2tc next = constant_int2tc(n->type, BigInt(i + 1));
       value =
         if2tc(char_type, lessthan2tc(next, n), value, gen_zero(char_type));
     }
+    cur_state->guard = saved_guard;
+    cur_state->guard.add(write_guard.as_expr());
     const expr2tc elem = dereference2tc(char_type, add2tc(dst->type, dst, pos));
     symex_assign(code_assign2tc(elem, value), false, write_guard);
   }
@@ -491,7 +548,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
 
-  symex_sprintf_store(to_code_printf2t(rhs));
+  // rhs becomes the return value's side effect below.
+  const expr2tc call = rhs;
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
@@ -651,6 +709,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       symex_assign(code_assign2tc(lhs, nondet));
     }
   }
+
+  symex_sprintf_store(to_code_printf2t(call), retval);
 
   // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
   // The buffer size is modelled as 1 byte; exact sizing would need the
