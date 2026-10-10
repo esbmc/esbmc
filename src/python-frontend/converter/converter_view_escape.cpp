@@ -491,6 +491,9 @@ python_converter::fold_numpy_view_call(const nlohmann::json &call)
   // Fold only where a view is involved: one passed in, or one returned (a
   // subscript that reads a single element returns no view).
   nlohmann::json folded = substitute_call_arguments(*value, call);
+  // Inlining a local view into a call would pass the callee a temporary.
+  if (contains_unnamed_numpy_view_argument(folded))
+    return std::nullopt;
   // A subscript of a numpy call (`np.array(...)[0]`, a local array inlined)
   // is a view of that fresh array.
   std::vector<nlohmann::json> indices;
@@ -728,7 +731,7 @@ const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
 // A bound view parameter aliases its argument only when that argument is a
 // name: any other expression is evaluated into a temporary the callee would
 // write to instead. A body that is one return expression cannot write.
-void python_converter::reject_unnamed_numpy_view_argument(
+bool python_converter::passes_unnamed_numpy_view_argument(
   const nlohmann::json &call) const
 {
   const std::string func_name = call["func"]["id"].get<std::string>();
@@ -743,15 +746,29 @@ void python_converter::reject_unnamed_numpy_view_argument(
     if (
       !func_node.empty() &&
       !straight_line_return_value(func_node["body"], imported_modules))
-      throw std::runtime_error(unnamed_view_argument_error);
+      return true;
   }
+  return false;
+}
+
+bool python_converter::contains_unnamed_numpy_view_argument(
+  const nlohmann::json &node) const
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (is_named_call(node) && passes_unnamed_numpy_view_argument(node))
+    return true;
+  return std::any_of(node.begin(), node.end(), [this](const auto &child) {
+    return contains_unnamed_numpy_view_argument(child);
+  });
 }
 
 void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
 {
   if (!is_named_call(call))
     return;
-  reject_unnamed_numpy_view_argument(call);
+  if (passes_unnamed_numpy_view_argument(call))
+    throw std::runtime_error(unnamed_view_argument_error);
   reject_unfoldable_numpy_view_call(call);
   if (
     !contains_tracked_numpy_view_name(call["args"]) ||
@@ -1404,7 +1421,9 @@ bool python_converter::is_fold_only_numpy_function(
 {
   const std::optional<nlohmann::json> returned =
     straight_line_return_value(function_node["body"], imported_modules);
-  if (!current_func_name_.empty() || !returned)
+  if (
+    !current_func_name_.empty() || !returned ||
+    contains_unnamed_numpy_view_argument(*returned))
     return false;
   // A function that returns a view of its argument folds for any array.
   std::vector<nlohmann::json> indices;

@@ -1810,7 +1810,8 @@ private:
     const nlohmann::json &ast_node,
     code_blockt &cond_prelude);
   void reject_live_numpy_view_copies_of(const nlohmann::json &args);
-  void reject_unnamed_numpy_view_argument(const nlohmann::json &call) const;
+  bool passes_unnamed_numpy_view_argument(const nlohmann::json &call) const;
+  bool contains_unnamed_numpy_view_argument(const nlohmann::json &node) const;
   const nlohmann::json &hoist_unnamed_numpy_view_arguments(
     const nlohmann::json &statement,
     nlohmann::json &rewritten,
@@ -2767,11 +2768,15 @@ private:
   static bool same_view_layout(
     const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
     const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
+  static std::optional<numpy_scalar_pointer_view_infot> subview_info(
+    const numpy_scalar_pointer_view_infot &parent,
+    const nlohmann::json &slice_node);
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
-  infer_numpy_view_argument(
-    const numpy_param_call_site &site,
-    const nlohmann::json &arg,
-    std::set<std::string> &visiting) const;
+  infer_numpy_view_layout(
+    const nlohmann::json &node,
+    const std::string &function,
+    std::set<std::string> &visiting,
+    unsigned depth = 0) const;
   std::optional<numpy_scalar_pointer_view_infot> infer_numpy_view_param_type(
     const std::string &func_name,
     std::size_t param_index,

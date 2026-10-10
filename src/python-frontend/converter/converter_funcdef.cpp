@@ -2482,51 +2482,82 @@ std::optional<typet> python_converter::numpy_literal_array_type(
   return type_handler_.get_typet((*value)["args"][0]);
 }
 
-// Element type and layout of the view one call site passes as `arg`:
-// a parameter of the enclosing function forwarded unchanged, or a subscript
-// of a literal array, both resolved in the scope of the call.
+// `view[lo:hi:step]` on a 1-D view with constant length and stride.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::subview_info(
+  const numpy_scalar_pointer_view_infot &parent,
+  const nlohmann::json &slice_node)
+{
+  if (
+    slice_node.value("_type", "") != "Slice" || parent.shape.size() != 1 ||
+    parent.is_symbolic())
+    return std::nullopt;
+  std::optional<numpy_scalar_pointer_view_infot> info =
+    slice_view_info(parent.length, slice_node);
+  if (!info)
+    return std::nullopt;
+  info->stride *= parent.stride;
+  info->strides.clear();
+  if (info->stride != 1)
+    info->strides = {info->stride};
+  return info;
+}
+
+// Element type and layout of the view `node` denotes for code in `function`:
+// a parameter forwarded unchanged, or a subscript of a literal array or of
+// another such view.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
-python_converter::infer_numpy_view_argument(
-  const numpy_param_call_site &site,
-  const nlohmann::json &arg,
-  std::set<std::string> &visiting) const
+python_converter::infer_numpy_view_layout(
+  const nlohmann::json &node,
+  const std::string &function,
+  std::set<std::string> &visiting,
+  unsigned depth) const
 {
   const nlohmann::json &module_body = (*ast_json)["body"];
   if (
     const std::optional<std::size_t> forwarded =
-      forwarded_param_index(arg, module_body, site.enclosing_function))
+      forwarded_param_index(node, module_body, function))
   {
     std::pair<typet, numpy_scalar_pointer_view_infot> result;
     if (!try_infer_numpy_view_param(
-          site.enclosing_function,
-          *forwarded,
-          result.first,
-          result.second,
-          visiting))
+          function, *forwarded, result.first, result.second, visiting))
       return std::nullopt;
     return result;
   }
 
-  std::string scope = site.enclosing_function;
+  std::string scope = function;
   const nlohmann::json *subscript =
-    resolve_view_subscript(arg, module_body, scope);
+    resolve_view_subscript(node, module_body, scope);
   if (
     subscript == nullptr || !subscript->contains("slice") ||
     (*subscript)["value"].value("_type", "") != "Name")
     return std::nullopt;
-  const std::optional<typet> arr_type =
-    numpy_literal_array_type((*subscript)["value"].value("id", ""), scope);
-  if (!arr_type)
+  const nlohmann::json &base = (*subscript)["value"];
+  if (
+    const std::optional<typet> arr_type =
+      numpy_literal_array_type(base.value("id", ""), scope))
+  {
+    const auto shape_elem = array_type_shape_and_elem(*arr_type);
+    if (!shape_elem)
+      return std::nullopt;
+    const std::optional<numpy_scalar_pointer_view_infot> info =
+      view_info_from_subscript(shape_elem->first, (*subscript)["slice"]);
+    if (!info)
+      return std::nullopt;
+    return std::make_pair(shape_elem->second, *info);
+  }
+
+  if (depth > 8)
     return std::nullopt;
-  const auto shape_elem = array_type_shape_and_elem(*arr_type);
-  if (!shape_elem)
+  const auto parent = infer_numpy_view_layout(base, scope, visiting, depth + 1);
+  if (!parent)
     return std::nullopt;
   const std::optional<numpy_scalar_pointer_view_infot> info =
-    view_info_from_subscript(shape_elem->first, (*subscript)["slice"]);
+    subview_info(parent->second, (*subscript)["slice"]);
   if (!info)
     return std::nullopt;
-  return std::make_pair(shape_elem->second, *info);
+  return std::make_pair(parent->first, *info);
 }
 
 bool python_converter::try_infer_numpy_view_param(
@@ -2567,7 +2598,8 @@ bool python_converter::try_infer_numpy_view_param(
       arg == nullptr || forwards_param_being_inferred(
                           *arg, module_body, site.enclosing_function, visiting))
       continue;
-    const auto candidate = infer_numpy_view_argument(site, *arg, visiting);
+    const auto candidate =
+      infer_numpy_view_layout(*arg, site.enclosing_function, visiting);
     analyzable =
       candidate && (!result || same_view_layout(*result, *candidate));
     if (!analyzable)
