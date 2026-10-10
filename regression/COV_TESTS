@@ -2399,3 +2399,5 @@ regression/python/github_8256_order
 regression/python/github_8256_rebind
 regression/python/github_8256_rebind_fail
 regression/python/github_8256_shadowed_outer
+regression/esbmc/cbrtl_model
+regression/esbmc/cbrtl_model_fail

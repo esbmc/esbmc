@@ -11527,7 +11527,9 @@ over `__float128` returns those cubes exactly and agrees with libquadmath's
 `cbrtl_model` checks exact cubes, powers of two far outside `double`'s range,
 `-0.0`, an infinity, a NaN and `__builtin_cbrtl`; it is FAILED on master.
 `cbrtl_model_fail` runs under `--multi-property` and pins that `cbrtl(2.0L)`
-lies in `(1.2599, 1.26)` and is not `1.25`; master fails both.
+lies in `(1.2599, 1.26)` and is not `1.25`; master fails both. Each changes
+verdict when the model file is removed, under the default solver and `--z3`.
+The other tests that call `cbrt` or `cbrtl` keep their master verdicts.
 
 ---
 
