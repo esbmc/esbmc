@@ -995,6 +995,10 @@ exprt function_call_expr::build_constant_from_arg() const
       }
     }
 
+    // A statement-form call left under the conversion's typecast crashes
+    // symex (#8274).
+    operand_expr = to_value_expr(operand_expr, converter_.ns);
+
     // Handle Name type (variable reference)
     if (first_arg["_type"] == "Name")
     {
