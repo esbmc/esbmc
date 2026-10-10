@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view to a function that is not a single return expression over its parameters is not supported$

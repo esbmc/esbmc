@@ -15,6 +15,6 @@ def pick(v):
     return two() + v[n]
 
 
-a = np.array([[1, 2, 3], [4, 5, 6]])
+a = np.zeros((2, 3), dtype=int)
 row = a[0]
 assert pick(row) == 4

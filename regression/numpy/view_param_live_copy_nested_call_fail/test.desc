@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view to a function while a copied view of its storage is live is not supported$
