@@ -1454,15 +1454,21 @@ protected:
    *  assumed started. */
   bool va_list_is_started(const expr2tc &va_list_expr) const;
   /** Record the started-by-va_start state of the va_list denoted by this
-   *  expression, and the va_arg index it reads next, if known. No-op if the
-   *  base cannot be resolved to a local variable's symbol. */
+   *  expression, and the va_arg index it reads next, if known (nil if not).
+   *  No-op if the base cannot be resolved to a local variable's symbol. */
   void va_list_mark_started(
     const expr2tc &va_list_expr,
     bool started,
-    std::optional<unsigned> cursor);
-  /** The va_arg index a started local va_list reads next; nullptr when it is
+    const expr2tc &cursor);
+  /** va_start: the va_list reads this frame's first variadic argument next. */
+  void va_list_start(const expr2tc &va_list_expr);
+  /** The l1 symbol holding the va_arg index a local va_list reads next. It is
+   *  an SSA variable so that a va_arg on one branch moves it on that branch
+   *  only. */
+  expr2tc va_list_cursor_symbol(const renaming::level2t::name_record &rec);
+  /** The cursor symbol of a started local va_list; nil when its cursor is
    *  not known, and the frame's cursor applies. */
-  unsigned *va_list_cursor(const expr2tc &va_list_expr);
+  expr2tc va_list_cursor(const expr2tc &va_list_expr);
   /** The records va_list_frame looks for: a va_copy destination's are those
    *  of the va_list it was copied from. */
   std::vector<renaming::level2t::name_record>
@@ -1628,8 +1634,8 @@ protected:
     const type2tc &ret_type);
 
   /** Level-1 identities (base name, activation, thread) of va_list objects
-   *  initialised by va_start, or by va_copy from a started source, with the
-   *  va_arg index each reads next where it is known. Keyed on
+   *  initialised by va_start, or by va_copy from a started source, and
+   *  whether each has a cursor symbol of its own. Keyed on
    *  the l1 renaming so the same object is recognised across frames (a
    *  va_list reached through a pointer dereferences to the owning
    *  activation's l1 name) and across recursion or loop re-declaration (each
@@ -1638,7 +1644,7 @@ protected:
    *  so a conditional va_start can never yield a false positive. */
   std::unordered_map<
     renaming::level2t::name_record,
-    std::optional<unsigned>,
+    bool,
     renaming::level2t::name_rec_hash>
     va_started;
   /** For each va_copy destination, the local va_list whose frame's variadic
