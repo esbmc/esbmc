@@ -1894,24 +1894,63 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return fallback;
   }
 
-  if (needs_zero_division_guard(op, rhs))
-  {
-    // The divisor is referenced by both the zero-check guard and the division
-    // itself. If it carries a side effect (a call, or a nondet) it would be
-    // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
-    // a different value than the one divided by. Hoist a side-effecting divisor
-    // into a temporary so it is evaluated exactly once.
-    rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
+  return build_division_guarded_binop(op, lhs, rhs, element);
+}
 
-    exprt is_zero("=", bool_type());
-    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-    emit_guarded_raise(
-      is_zero,
-      "ZeroDivisionError",
-      "division by zero",
-      get_location_from_decl(element));
-  }
+exprt python_converter::build_division_guarded_binop(
+  const std::string &op,
+  const exprt &lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  if (!needs_zero_division_guard(op, rhs))
+    return build_arithmetic_binop(op, lhs, rhs, element);
 
+  // An and/or tail, a chained-comparison tail or a while test is evaluated
+  // conditionally or repeatedly, so a guard planted ahead of the statement
+  // would raise on a path Python never takes. There the hoist and the guard
+  // go into a statement expression that is evaluated with the division.
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (in_lazy_operand_)
+    current_block = &lazy_block;
+
+  // The divisor is referenced by both the zero-check guard and the division
+  // itself. If it carries a side effect (a call, or a nondet) it would be
+  // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
+  // a different value than the one divided by. Hoist a side-effecting divisor
+  // into a temporary so it is evaluated exactly once.
+  rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
+
+  exprt is_zero("=", bool_type());
+  is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+  emit_guarded_raise(
+    is_zero,
+    "ZeroDivisionError",
+    "division by zero",
+    get_location_from_decl(element));
+  current_block = saved_block;
+
+  exprt result = build_arithmetic_binop(op, lhs, rhs, element);
+  if (!in_lazy_operand_)
+    return result;
+
+  const locationt loc = get_location_from_decl(element);
+  code_expressiont value(result);
+  value.location() = loc;
+  lazy_block.copy_to_operands(value);
+  side_effect_exprt stmt_expr("statement_expression", result.type());
+  stmt_expr.copy_to_operands(lazy_block);
+  stmt_expr.location() = loc;
+  return stmt_expr;
+}
+
+exprt python_converter::build_arithmetic_binop(
+  const std::string &op,
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
