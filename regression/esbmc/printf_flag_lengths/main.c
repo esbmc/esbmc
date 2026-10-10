@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 
+char nondet_char(void);
+
 int main(void)
 {
   assert(printf("%+d", 5) == 2);
@@ -19,5 +21,12 @@ int main(void)
   assert(b[0] == '+' && b[1] == '0' && b[4] == '5' && b[5] == '\0');
   sprintf(b, "%#X|%-2c|", 10u, 'q');
   assert(b[1] == 'X' && b[3] == '|' && b[5] == ' ' && b[7] == '\0');
+
+  for (int i = 0; i < 7; i++)
+    b[i] = nondet_char();
+  b[7] = '\0';
+  assert(printf("%.2s", b) <= 2);
+  int unbounded = printf("%+.1f", 1.5);
+  (void)unbounded;
   return 0;
 }

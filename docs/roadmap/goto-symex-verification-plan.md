@@ -11731,10 +11731,10 @@ conversion, so a `+`, ` ` or `#` there leaves the return value unbounded, and
 a `-` or `0` keeps `sprintf` from storing the text.
 
 `printf_flag_lengths` checks the return values above, `%#x` of 0, `%#o`,
-`%.0d` of 0 and `%.1s`, and two `sprintf` outputs using `+0`, `#X` and `-`;
-it is FAILED on master. `printf_flag_lengths_fail` is the `%#x` program above,
-SUCCESSFUL on master. Removing the sign flags or the `%s` precision flips the
-first, and removing `0x` from the bound flips the second; both agree under
+`%.0d` of 0 and `%.1s`, two `sprintf` outputs using `+0`, `#X` and `-`, and
+the bound of a `%.2s` of a nondet array; it is FAILED on master. `printf_flag_lengths_fail` is the `%#x` program above,
+SUCCESSFUL on master. Removing the sign flags, the `%s` precision or the cap the
+precision puts on a non-literal `%s` flips the first, and removing `0x` from the bound flips the second; both agree under
 `--z3`. A probe of zero padding with a sign, `%#.3o`, `%#08x`, `% +d`, `%+u`,
 `%08.3d`, `%-4s`, `%3c` and a `%6s` of an array matches native execution.
 The 398 regression tests whose sources call a `printf`-family function keep
