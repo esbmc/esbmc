@@ -14,9 +14,11 @@ _Static_assert(
 
 #define FLT_BITS 32
 #define FLT_EXP_BITS 8
+#define FLT_MANT_BITS (FLT_MANT_DIG - 1)
 
 #define DBL_BITS 64
 #define DBL_EXP_BITS 11
+#define DBL_MANT_BITS (DBL_MANT_DIG - 1)
 
 /* No support for frexpl() and ldexpl() on:
  *
@@ -31,6 +33,9 @@ _Static_assert(
   !defined(__LONG_DOUBLE_IBM128__)
 #  define LDBL_BITS 128
 #  define LDBL_EXP_BITS 15
+/* ESBMC encodes a 128-bit long double as IEEE binary128 even where
+ * LDBL_MANT_DIG describes the x87 format (64 on x86-64). */
+#  define LDBL_MANT_BITS 112
 typedef __uint128_t __UINT128_TYPE__;
 #endif
 
@@ -39,7 +44,7 @@ typedef __uint128_t __UINT128_TYPE__;
 #define BITS(pre) pre##_BITS
 #define TYPE(pre) TYPE0(BITS(pre))
 #define EXP_BIAS(pre) ((pre##_MAX_EXP - pre##_MIN_EXP + 1) / 2)
-#define MANT_BITS(pre) (pre##_MANT_DIG - 1)
+#define MANT_BITS(pre) (pre##_MANT_BITS)
 #define EXP_BITS(pre) (pre##_EXP_BITS)
 #define EXP_MASK(pre) ((((TYPE(pre))1 << EXP_BITS(pre)) - 1) << MANT_BITS(pre))
 

@@ -2239,6 +2239,8 @@ regression/goto-transcoder/cbmc_object_size_jump_target
 regression/goto-transcoder/cbmc_object_size_jump_target_fail
 regression/goto-transcoder/cbmc_kani_popcount_type
 regression/goto-transcoder/cbmc_kani_popcount_type_fail
+regression/esbmc-cpp/cpp/comma_initializer_in_place
+regression/esbmc-cpp/cpp/comma_initializer_in_place_fail
 regression/esbmc/va_arg_callee_va_list
 regression/esbmc/va_arg_callee_va_list_fail
 regression/esbmc/realloc_pointed_objects
@@ -2369,6 +2371,8 @@ regression/python/github_8196
 regression/python/github_8196_fail
 regression/python/github_8225
 regression/python/github_8225_fail
+regression/python/github_8223
+regression/python/github_8223_fail
 regression/python/github_8261_int_inf_fail
 regression/python/github_8261_int_nan_fail
 regression/python/github_8261_int_nonfinite
@@ -2389,6 +2393,16 @@ regression/python/github_8239
 regression/python/github_8239_fail
 regression/python/github_8200_late
 regression/python/github_8200_late_fail
+regression/esbmc-unix/pthread_once
+regression/esbmc-unix/pthread_once_norace
+regression/esbmc-unix/pthread_once_race_fail
+regression/esbmc/sprintf_stores_output
+regression/esbmc/sprintf_stores_output_fail
+regression/esbmc/qsort_bsearch
+regression/esbmc/qsort_bsearch_fail
+regression/esbmc/qsort_compar_incompatible
+regression/esbmc/frexpl_binary128
+regression/esbmc/frexpl_binary128_fail
 regression/python/github_8256
 regression/python/github_8256_fail
 regression/python/github_8256_stub
@@ -2399,5 +2413,9 @@ regression/python/github_8256_order
 regression/python/github_8256_rebind
 regression/python/github_8256_rebind_fail
 regression/python/github_8256_shadowed_outer
+regression/esbmc/scanf_return_count
+regression/esbmc/scanf_return_count_fail
+regression/esbmc/va_copy_callee_va_list
+regression/esbmc/va_copy_callee_va_list_fail
 regression/esbmc/strnlen_model
 regression/esbmc/strnlen_model_fail
