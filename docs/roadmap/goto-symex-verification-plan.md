@@ -11727,7 +11727,9 @@ argument, an infinity and `__builtin_log10`; it is FAILED on master.
 `log10_model_fail` runs under `--multi-property` and pins that `log10(2.0)`
 lies in `(0.30102, 0.30103)` and that `log10(1000.0) != 3.0` fails; master
 passes both. Each changes verdict with the fix reverted, under the default
-solver and `--z3`.
+solver and `--z3`. A bound on `log10(x)` for a nondet `x` in `[1, 1e6]`
+did not finish within 600 s on master or with the fix, so the tests use
+constants.
 
 Not fixed: `log`, `log2` and `log1p` still use the truncated series, so
 `log(M_E) == 1.0` and similar exact cases can still be wrong. The model is
