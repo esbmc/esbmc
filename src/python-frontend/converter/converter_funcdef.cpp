@@ -2357,6 +2357,36 @@ python_converter::slice_view_info(
   return info;
 }
 
+// A 1-D view whose length and stride are only known where it is created.
+python_converter::numpy_scalar_pointer_view_infot
+python_converter::runtime_view_info()
+{
+  numpy_scalar_pointer_view_infot info{};
+  info.stride = 1;
+  info.shape = {0};
+  info.shape_symbols = {"?"};
+  info.stride_symbols = {"?"};
+  return info;
+}
+
+// slice_view_info, or the run-time layout when a bound or the step is not a
+// literal. nullopt for a literal zero step.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::slice_or_runtime_view_info(
+  std::size_t length,
+  const nlohmann::json &slice_node)
+{
+  if (
+    std::optional<numpy_scalar_pointer_view_infot> info =
+      slice_view_info(length, slice_node))
+    return info;
+  const std::optional<long long> step =
+    python_frontend::literal_slice_step(slice_node);
+  if (step && *step == 0)
+    return std::nullopt;
+  return runtime_view_info();
+}
+
 static bool is_index_node(const nlohmann::json &node)
 {
   const std::string type = node.value("_type", "");
@@ -2385,6 +2415,23 @@ python_converter::column_view_info(
   return info;
 }
 
+// `a[lo:hi:step]` on a rows x cols array: the selected rows.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::row_slice_view_info(
+  std::size_t rows,
+  std::size_t cols,
+  const nlohmann::json &slice_node)
+{
+  std::optional<numpy_scalar_pointer_view_infot> info =
+    slice_view_info(rows, slice_node);
+  if (!info)
+    return std::nullopt;
+  info->stride *= static_cast<long long>(cols);
+  info->shape = {info->length, cols};
+  info->strides = {info->stride, 1};
+  return info;
+}
+
 // Length, stride and shape of the view a subscript takes of an array of
 // `src_shape`: a 1-D slice, or a row or a column of a 2-D array. nullopt for
 // non-literal bounds and any other form.
@@ -2395,9 +2442,11 @@ python_converter::view_info_from_subscript(
 {
   const std::string slice_type = slice_node.value("_type", "");
   if (slice_type == "Slice" && src_shape.size() == 1)
-    return slice_view_info(src_shape[0], slice_node);
+    return slice_or_runtime_view_info(src_shape[0], slice_node);
   if (src_shape.size() != 2)
     return std::nullopt;
+  if (slice_type == "Slice")
+    return row_slice_view_info(src_shape[0], src_shape[1], slice_node);
   if (slice_type == "Tuple")
     return column_view_info(src_shape[0], src_shape[1], slice_node);
   if (!is_index_node(slice_node))
@@ -2407,6 +2456,26 @@ python_converter::view_info_from_subscript(
   info.stride = 1;
   info.shape = {src_shape[1]};
   return info;
+}
+
+// The layout a parameter takes when two call sites pass `a` and `b`: theirs
+// when they agree, the run-time one when either 1-D layout is only known at
+// its call site. nullopt when the sites cannot share one parameter.
+std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
+python_converter::merge_view_layouts(
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &b)
+{
+  const typet unknown;
+  const typet &elem_type = a.first == unknown ? b.first : a.first;
+  if (a.first != unknown && b.first != unknown && a.first != b.first)
+    return std::nullopt;
+  if (!a.second.is_symbolic() && !b.second.is_symbolic())
+    return same_view_layout(a, b) ? std::make_optional(a) : std::nullopt;
+  if (a.second.shape.size() != 1 || b.second.shape.size() != 1)
+    return std::nullopt;
+  return std::make_pair(elem_type, runtime_view_info());
 }
 
 bool python_converter::same_view_layout(
@@ -2488,14 +2557,14 @@ python_converter::subview_info(
   const numpy_scalar_pointer_view_infot &parent,
   const nlohmann::json &slice_node)
 {
-  if (
-    slice_node.value("_type", "") != "Slice" || parent.shape.size() != 1 ||
-    parent.is_symbolic())
+  if (slice_node.value("_type", "") != "Slice" || parent.shape.size() != 1)
     return std::nullopt;
+  if (parent.is_symbolic())
+    return runtime_view_info();
   std::optional<numpy_scalar_pointer_view_infot> info =
-    slice_view_info(parent.length, slice_node);
-  if (!info)
-    return std::nullopt;
+    slice_or_runtime_view_info(parent.length, slice_node);
+  if (!info || info->is_symbolic())
+    return info;
   info->stride *= parent.stride;
   info->strides.clear();
   if (info->stride != 1)
@@ -2548,6 +2617,12 @@ python_converter::infer_numpy_view_layout(
     return std::make_pair(shape_elem->second, *info);
   }
 
+  // A slice of the parameter being inferred, passed to the same function:
+  // a 1-D view whose element type the other call sites give.
+  if (
+    forwards_param_being_inferred(base, module_body, scope, visiting) &&
+    (*subscript)["slice"].value("_type", "") == "Slice")
+    return std::make_pair(typet(), runtime_view_info());
   if (depth > 8)
     return std::nullopt;
   const auto parent = infer_numpy_view_layout(base, scope, visiting, depth + 1);
@@ -2600,15 +2675,16 @@ bool python_converter::try_infer_numpy_view_param(
       continue;
     const auto candidate =
       infer_numpy_view_layout(*arg, site.enclosing_function, visiting);
-    analyzable =
-      candidate && (!result || same_view_layout(*result, *candidate));
+    const auto merged =
+      candidate && result ? merge_view_layouts(*result, *candidate) : candidate;
+    analyzable = merged.has_value();
     if (!analyzable)
       break;
-    result = candidate;
+    result = merged;
   }
 
   visiting.erase(key);
-  if (!analyzable || !result)
+  if (!analyzable || !result || result->first == typet())
     return false;
   out_elem_type = result->first;
   out_info = result->second;
@@ -3108,10 +3184,181 @@ void python_converter::register_numpy_view_param(
     return;
   numpy_scalar_pointer_view_infot info = *view_param;
   info.source_id = arg_id;
+  if (info.is_symbolic())
+    declare_runtime_numpy_view_param(
+      info, arg_id, func_name + "#" + std::to_string(param_index));
   numpy_pointer_view_info_[arg_id] = info;
   numpy_array_symbols_.insert(arg_id);
   numpy_view_param_symbols_.insert(arg_id);
   numpy_view_params_.insert(func_name + "#" + std::to_string(param_index));
+}
+
+// A view parameter with a run-time layout reads its length and stride from
+// two statics the caller sets right before the call. The callee copies them
+// into locals on entry, so a nested call to itself leaves them intact.
+void python_converter::declare_runtime_numpy_view_param(
+  numpy_scalar_pointer_view_infot &info,
+  const std::string &arg_id,
+  const std::string &key)
+{
+  const symbolt &param = *symbol_table_.find_symbol(arg_id);
+  const typet ll_type = signedbv_typet(64);
+  auto declare = [&](const std::string &suffix, bool is_static) {
+    const std::string id = arg_id + suffix + (is_static ? "$caller" : "");
+    symbolt symbol = create_symbol(
+      current_python_file,
+      param.name.as_string() + suffix + (is_static ? "$caller" : ""),
+      id,
+      param.location,
+      ll_type);
+    symbol.lvalue = true;
+    symbol.file_local = true;
+    symbol.static_lifetime = is_static;
+    if (is_static)
+      symbol.set_value(migrate_expr(gen_zero(ll_type)));
+    symbol_table_.add(symbol);
+    return id;
+  };
+  numpy_runtime_view_paramt runtime;
+  runtime.arg_id = arg_id;
+  runtime.caller_length = declare("$numpy_view_len", true);
+  runtime.caller_stride = declare("$numpy_view_stride", true);
+  runtime.length = declare("$numpy_view_len", false);
+  runtime.stride = declare("$numpy_view_stride", false);
+  info.shape_symbols = {runtime.length};
+  info.stride_symbols = {runtime.stride};
+  numpy_runtime_view_params_[key] = runtime;
+}
+
+// Copies each run-time view layout the caller set into the callee's locals.
+void python_converter::prepend_runtime_numpy_view_prologue(
+  const std::string &function_id,
+  exprt &function_body) const
+{
+  exprt::operandst prologue;
+  for (const auto &[key, runtime] : numpy_runtime_view_params_)
+  {
+    if (runtime.arg_id.rfind(function_id + "@", 0) != 0)
+      continue;
+    for (const auto &[local, caller] :
+         {std::make_pair(runtime.length, runtime.caller_length),
+          std::make_pair(runtime.stride, runtime.caller_stride)})
+    {
+      const exprt local_expr = symbol_expr(*symbol_table_.find_symbol(local));
+      prologue.push_back(code_declt(local_expr));
+      prologue.push_back(code_assignt(
+        local_expr, symbol_expr(*symbol_table_.find_symbol(caller))));
+    }
+  }
+  function_body.operands().insert(
+    function_body.operands().begin(), prologue.begin(), prologue.end());
+}
+
+static const char *const runtime_view_call_error =
+  "TypeError: passing a numpy view with run-time bounds to a function is "
+  "supported only by a call statement, assignment or return whose arguments "
+  "are names of 1-D views and contain no calls";
+
+static bool contains_call_node(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  return std::any_of(node.begin(), node.end(), contains_call_node);
+}
+
+// The call of `x = f(...)`, `f(...)` or `return f(...)`; nullptr otherwise.
+static const nlohmann::json *statement_level_call(const nlohmann::json &stmt)
+{
+  const std::string kind = stmt.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign" && kind != "Expr" &&
+     kind != "Return") ||
+    !stmt.contains("value") || !stmt["value"].is_object() ||
+    stmt["value"].value("_type", "") != "Call" ||
+    stmt["value"]["func"].value("_type", "") != "Name")
+    return nullptr;
+  return &stmt["value"];
+}
+
+// Stores the layout of the view `call` passes for one run-time parameter.
+void python_converter::store_runtime_numpy_view_layout(
+  const nlohmann::json &call,
+  const std::string &key,
+  const numpy_runtime_view_paramt &runtime,
+  codet &target_block)
+{
+  const std::size_t separator = key.rfind('#');
+  const nlohmann::json *arg = call_site_argument(
+    call,
+    (*ast_json)["body"],
+    key.substr(0, separator),
+    std::stoul(key.substr(separator + 1)));
+  const numpy_scalar_pointer_view_infot *info =
+    arg != nullptr && arg->value("_type", "") == "Name"
+      ? find_numpy_pointer_view_info(arg->value("id", ""))
+      : nullptr;
+  if (info == nullptr || info->shape.size() > 1)
+    throw std::runtime_error(runtime_view_call_error);
+  for (const auto &[caller, value] :
+       {std::make_pair(runtime.caller_length, numpy_view_extent(*info, 0)),
+        std::make_pair(runtime.caller_stride, numpy_view_stride(*info, 0))})
+  {
+    code_assignt store(symbol_expr(*symbol_table_.find_symbol(caller)), value);
+    store.location() = get_location_from_decl(call);
+    target_block.copy_to_operands(store);
+  }
+}
+
+// A statement-level call to a function that reads a parameter's layout at
+// run time: the layout of each such argument is stored for the callee before
+// the statement. Nothing may run between the stores and the call, so the
+// arguments must be free of calls.
+void python_converter::bind_runtime_numpy_view_arguments(
+  const nlohmann::json &statement,
+  codet &target_block)
+{
+  numpy_runtime_bound_call_ = nullptr;
+  const nlohmann::json *call = numpy_runtime_view_params_.empty()
+                                 ? nullptr
+                                 : statement_level_call(statement);
+  if (call == nullptr)
+    return;
+  const std::string prefix = (*call)["func"].value("id", "") + "#";
+  if (!has_runtime_numpy_view_param((*call)["func"].value("id", "")))
+    return;
+  if (
+    contains_call_node((*call)["args"]) ||
+    contains_call_node(call->value("keywords", nlohmann::json::array())))
+    throw std::runtime_error(runtime_view_call_error);
+
+  for (const auto &[key, runtime] : numpy_runtime_view_params_)
+    if (key.rfind(prefix, 0) == 0)
+      store_runtime_numpy_view_layout(*call, key, runtime, target_block);
+  numpy_runtime_bound_call_ = call;
+}
+
+bool python_converter::has_runtime_numpy_view_param(
+  const std::string &func_name) const
+{
+  const auto first = numpy_runtime_view_params_.lower_bound(func_name + "#");
+  return first != numpy_runtime_view_params_.end() &&
+         first->first.rfind(func_name + "#", 0) == 0;
+}
+
+void python_converter::reject_unbound_runtime_numpy_view_call(
+  const nlohmann::json &call) const
+{
+  // Conversion may hand over a copy of the statement, so the bound call is
+  // recognised by its source position.
+  const bool bound = numpy_runtime_bound_call_ != nullptr &&
+                     call.value("lineno", -1) ==
+                       numpy_runtime_bound_call_->value("lineno", -2) &&
+                     call.value("col_offset", -1) ==
+                       numpy_runtime_bound_call_->value("col_offset", -2);
+  if (!bound && has_runtime_numpy_view_param(call["func"].value("id", "")))
+    throw std::runtime_error(runtime_view_call_error);
 }
 
 size_t python_converter::register_function_argument(
@@ -4412,6 +4659,7 @@ void python_converter::get_function_definition(
     // so straight-line retyping (#4770/#4774) is permitted on the function's
     // own unconditional statements — see the retype gate in get_var_assign.
     function_body = get_function_body_or_unsupported(function_node);
+    prepend_runtime_numpy_view_prologue(id.to_string(), function_body);
   }
 
   // Restore saved function return type (for nested function defs)

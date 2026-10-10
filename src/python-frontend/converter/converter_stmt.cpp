@@ -8629,6 +8629,7 @@ exprt python_converter::get_block(
       hoisted_element,
       block);
     check_numpy_view_statement(element);
+    bind_runtime_numpy_view_arguments(element, block);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)

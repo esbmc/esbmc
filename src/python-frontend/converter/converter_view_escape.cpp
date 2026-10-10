@@ -648,6 +648,13 @@ void python_converter::reject_unfoldable_numpy_view_call(
   reject_multi_path_numpy_view_return(call);
 }
 
+// Whether an argument hands the callee a view: `len(v)`, `v.shape` and an
+// element read name one but pass a scalar.
+bool python_converter::passes_numpy_view(const nlohmann::json &arg)
+{
+  return contains_tracked_numpy_view_name(arg) && holds_numpy_view(arg);
+}
+
 // Only a user function that never touches the parameter can receive a view
 // without being folded: a builtin, an undefined name, or a body that uses
 // the parameter would read the view through the wrong model.
@@ -663,7 +670,7 @@ void python_converter::reject_numpy_view_argument_use(
   const nlohmann::json &params = func_node["args"]["args"];
   for (std::size_t i = 0; i < call["args"].size(); ++i)
     if (
-      contains_tracked_numpy_view_name(call["args"][i]) &&
+      passes_numpy_view(call["args"][i]) &&
       (i >= params.size() ||
        references_name(func_node["body"], params[i].value("arg", ""))))
     {
@@ -769,9 +776,10 @@ void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
     return;
   if (passes_unnamed_numpy_view_argument(call))
     throw std::runtime_error(unnamed_view_argument_error);
+  reject_unbound_runtime_numpy_view_call(call);
   reject_unfoldable_numpy_view_call(call);
   if (
-    !contains_tracked_numpy_view_name(call["args"]) ||
+    !passes_numpy_view(call["args"]) ||
     is_value_builtin(call["func"]["id"].get<std::string>()) ||
     fold_numpy_view_call(call))
     return;
@@ -785,7 +793,7 @@ void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
     bool all_bound = true;
     for (std::size_t i = 0; i < call["args"].size() && all_bound; ++i)
       if (
-        contains_tracked_numpy_view_name(call["args"][i]) &&
+        passes_numpy_view(call["args"][i]) &&
         numpy_view_params_.count(fname + "#" + std::to_string(i)) == 0)
         all_bound = false;
     if (all_bound)
@@ -1159,7 +1167,8 @@ bool python_converter::numpy_subscript_yields_view(
 // subscript that yields one. A scalar read out of a view is not a view.
 bool python_converter::holds_numpy_view(const nlohmann::json &node) const
 {
-  if (!node.is_object() && !node.is_array())
+  // `len(v)` and `v.shape` are scalars, whatever they are taken of.
+  if ((!node.is_object() && !node.is_array()) || is_shape_query(node))
     return false;
   if (is_name(node))
   {

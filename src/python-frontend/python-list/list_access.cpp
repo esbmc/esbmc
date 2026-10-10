@@ -1780,7 +1780,7 @@ constant_element_count(const std::vector<python_list::strided_axis> &axes)
 
 python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const nlohmann::json &slice_node,
-  long long n)
+  const exprt &extent)
 {
   const typet ll_type = signedbv_typet(64);
   const type2tc t = migrate_type(ll_type);
@@ -1837,20 +1837,22 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
 
   // CPython's PySlice_AdjustIndices: a given bound is wrapped once when
   // negative and clamped to [min, max]; an omitted one takes `fallback`.
+  const expr2tc n = to_ll(extent);
+  const expr2tc last = sub2tc(t, n, lit(1));
   auto adjust = [&](
                   const std::optional<expr2tc> &bound,
-                  long long min,
-                  long long max,
-                  long long fallback) {
+                  const expr2tc &min,
+                  const expr2tc &max,
+                  const expr2tc &fallback) {
     if (!bound)
-      return lit(fallback);
+      return fallback;
     const expr2tc wrapped =
-      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, lit(n)), *bound);
+      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, n), *bound);
     return if2tc(
       t,
-      lessthan2tc(wrapped, lit(min)),
-      lit(min),
-      if2tc(t, greaterthan2tc(wrapped, lit(max)), lit(max), wrapped));
+      lessthan2tc(wrapped, min),
+      min,
+      if2tc(t, greaterthan2tc(wrapped, max), max, wrapped));
   };
   const std::optional<expr2tc> lower = bound_temp("lower", "$numpy_lower$");
   const std::optional<expr2tc> upper = bound_temp("upper", "$numpy_upper$");
@@ -1858,10 +1860,17 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const expr2tc start = to_ll(emit_temp(
     "$numpy_slice_start$",
     if2tc(
-      t, forward, adjust(lower, 0, n, 0), adjust(lower, -1, n - 1, n - 1))));
+      t,
+      forward,
+      adjust(lower, lit(0), n, lit(0)),
+      adjust(lower, lit(-1), last, last))));
   const expr2tc stop = to_ll(emit_temp(
     "$numpy_slice_stop$",
-    if2tc(t, forward, adjust(upper, 0, n, n), adjust(upper, -1, n - 1, -1))));
+    if2tc(
+      t,
+      forward,
+      adjust(upper, lit(0), n, n),
+      adjust(upper, lit(-1), last, lit(-1)))));
 
   auto count = [&](const expr2tc &span, const expr2tc &magnitude) {
     return add2tc(t, div2tc(t, sub2tc(t, span, lit(1)), magnitude), lit(1));
@@ -2183,26 +2192,24 @@ std::optional<python_list::strided_axis> python_list::runtime_slice_axis(
   const nlohmann::json &node,
   exprt &offset)
 {
-  if (source.symbolic())
-    return std::nullopt;
   const typet ll_type = signedbv_typet(64);
+  const exprt source_stride = python_list::axis_stride(source);
   const symbolic_slice_params params =
-    emit_symbolic_slice_params(node, source.extent);
+    emit_symbolic_slice_params(node, python_list::axis_extent(source));
   strided_axis axis;
   axis.extent_expr = params.length;
   const slice_step_info step = get_slice_step_info(node);
-  if (step.literal)
+  if (step.literal && source.stride_expr.is_nil())
     axis.stride = source.stride * step.value;
   else
     axis.stride_expr = emit_ll_temp(
       node,
       "$numpy_axis_stride$",
-      build_mul(params.stride, from_integer(source.stride, ll_type), ll_type));
+      build_mul(params.stride, source_stride, ll_type));
   offset = build_add(
     offset,
     build_typecast(
-      build_mul(params.offset, from_integer(source.stride, ll_type), ll_type),
-      size_type()),
+      build_mul(params.offset, source_stride, ll_type), size_type()),
     size_type());
   return axis;
 }
@@ -3005,6 +3012,10 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   long long step_val,
   bool literal_step)
 {
+  if (
+    std::optional<exprt> subview =
+      try_build_numpy_view_subview(array, slice_node))
+    return subview;
   if (!literal_step || !array.is_symbol())
     return std::nullopt;
 
@@ -3361,11 +3372,6 @@ exprt python_list::handle_range_slice(
     std::optional<exprt> param_view =
       try_build_numpy_param_slice_view(array, resolved_array_type, slice_node))
     return *param_view;
-
-  if (
-    std::optional<exprt> subview =
-      try_build_numpy_view_subview(array, slice_node))
-    return *subview;
 
   if (
     std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
