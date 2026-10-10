@@ -1454,6 +1454,10 @@ protected:
   /** The va_arg index a started local va_list reads next; nullptr when it is
    *  not known, and the frame's cursor applies. */
   unsigned *va_list_cursor(const expr2tc &va_list_expr);
+  /** The records va_list_frame looks for: a va_copy destination's are those
+   *  of the va_list it was copied from. */
+  std::vector<renaming::level2t::name_record>
+  va_list_owner_records(const expr2tc &va_list_expr) const;
   /** va_copy: start dst as src is, reading where src reads next. */
   void va_list_copy(const expr2tc &dst, const expr2tc &src);
   /** The frame whose variadic arguments a va_list reads: the activation that
@@ -1628,6 +1632,13 @@ protected:
     std::optional<unsigned>,
     renaming::level2t::name_rec_hash>
     va_started;
+  /** For each va_copy destination, the local va_list whose frame's variadic
+   *  arguments it reads, so a copy made in a callee reads the caller's. */
+  std::unordered_map<
+    renaming::level2t::name_record,
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_copied_from;
 
   /** Disable return value optimization */
   bool no_return_value_opt;
