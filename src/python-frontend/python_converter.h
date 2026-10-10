@@ -16,6 +16,7 @@
 #include <util/symtab/namespace.h>
 #include <util/irep/std_code.h>
 #include <util/symtab/symbol_generator.h>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -696,6 +697,16 @@ private:
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
+
+  exprt get_boolop_operand(
+    const nlohmann::json &operand,
+    std::vector<code_blockt> &effects);
+
+  exprt lower_short_circuit_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
@@ -2420,6 +2431,9 @@ private:
   // clause either.
   bool in_contract_clause_ = false;
   bool in_lazy_operand_ = false;
+  // The test of the assert statement being converted; see
+  // lower_short_circuit_boolop.
+  const nlohmann::json *asserted_test_ = nullptr;
 
   bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
