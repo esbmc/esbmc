@@ -1308,53 +1308,53 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   return result;
 }
 
-exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
+bool function_call_expr::is_single_assignment_str_symbol(
+  const symbolt *sym,
+  const std::string &name) const
 {
-  auto value_opt = extract_string_from_symbol(sym);
-  if (!value_opt)
-    return from_double(0.0, type_handler_.get_typet("float", 0));
-
-  {
-    std::string digits;
-    const bool separators_ok =
-      type_utils::strip_pep515_underscores(*value_opt, digits);
-    char *end = nullptr;
-    double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
-    if (!separators_ok || !end || end != digits.c_str() + digits.size())
-    {
-      log_error(
-        "Failed float conversion from string \"{}\": invalid argument",
-        *value_opt);
-      return from_double(0.0, type_handler_.get_typet("float", 0));
-    }
-    return from_double(dval, type_handler_.get_typet("float", 0));
-  }
+  return sym && sym->get_value().is_constant() &&
+         type_utils::is_string_type(sym->get_type()) &&
+         type_utils::is_string_type(sym->get_value().type()) &&
+         !json_utils::has_multiple_assignments_in_scope(
+           name, converter_.get_current_func_name(), converter_.get_ast_json());
 }
 
-exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
 {
   auto value_opt = extract_string_from_symbol(sym);
   if (!value_opt)
-    return from_integer(0, type_handler_.get_typet("int", 0));
+    return std::nullopt;
 
-  const std::string &value = *value_opt;
+  std::string digits;
+  const bool separators_ok =
+    type_utils::strip_pep515_underscores(*value_opt, digits);
+  char *end = nullptr;
+  double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+  if (!separators_ok || !end || end != digits.c_str() + digits.size())
+    return std::nullopt;
+  return from_double(dval, type_handler_.get_typet("float", 0));
+}
+
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return std::nullopt;
+
   std::string digits;
   if (
-    !type_utils::strip_pep515_underscores(value, digits) || digits.empty() ||
-    !std::all_of(digits.begin(), digits.end(), ::isdigit))
-  {
-    log_error("Invalid string for integer conversion: \"{}\"", value);
-    return from_integer(0, type_handler_.get_typet("int", 0));
-  }
+    !type_utils::strip_pep515_underscores(*value_opt, digits) ||
+    digits.empty() || !std::all_of(digits.begin(), digits.end(), ::isdigit))
+    return std::nullopt;
 
   try
   {
-    int int_val = std::stoi(digits);
-    return from_integer(int_val, type_handler_.get_typet("int", 0));
+    return from_integer(std::stoi(digits), type_handler_.get_typet("int", 0));
   }
-  catch (const std::exception &e)
+  catch (const std::exception &)
   {
-    log_error("Failed int conversion from string \"{}\": {}", value, e.what());
-    return from_integer(0, type_handler_.get_typet("int", 0));
+    return std::nullopt;
   }
 }
