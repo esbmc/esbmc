@@ -896,6 +896,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
+| **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
 
@@ -11704,6 +11705,43 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R129) — 2026-10-10, the integer `sprintf` never wrote
+
+R121's entry left open that an output that is not fully constant leaves the
+destination unchanged. The common case is an integer: `char d[2];
+sprintf(d, "%d", x);` with `x` in `[10, 99]` writes three bytes into two, and
+was SUCCESSFUL. The return value was a nondet in the formatter's range for
+the type, 1 to 11 characters for an `int`, unrelated to the buffer, so
+`n = sprintf(b, "x%d!", x)` with `x` in `[-99, 999]` failed `n <= 6`.
+
+**Fixed** for a constant format made of text, `%%` and `%d`, `%i` or `%u`
+conversions with no flag, width or precision (length modifiers `l`, `ll`, `j`,
+`z`, `t` are accepted). `printf_output_length` builds the output's length as
+an expression: per conversion, one digit plus one for each power of ten the
+value reaches, and a sign for a negative signed value (C11 7.21.6.1p8). The
+characters before the NUL are fresh nondet values assumed nonzero, which none
+of these conversions prints. `symex_sprintf_store` writes position `i` under
+the guard `i <= len`, and `i < n` for `snprintf`, so a bounds violation is
+claimed only on the paths that reach it. `symex_printf` assumes the return
+value equals the length. The exact path R121 added now goes through the same
+loop with a constant length.
+
+`sprintf_nondet_int_output` checks the length range and the NUL position of a
+`sprintf`, a truncating `snprintf` with `%u%%%lu`, and a `%i` into a
+three-byte buffer; it holds natively over the whole input range and is FAILED
+on master. `sprintf_nondet_int_output_fail` is the overflow above, SUCCESSFUL
+on master. Dropping the symbolic length flips both; dropping the return-value
+assumption or the nonzero assumption flips the first. Both agree under the
+default solver and `--z3` (Z3; Bitwuzla was not built). The 55 other
+registered tests whose sources call `sprintf` or `snprintf`, and 319 more
+that call another `printf` form, give the same results on both binaries under
+a 15-30 s cap; three time out on both.
+
+Not fixed: a `%s` of an array, `%c` or `%x` of a nondet value, a float, any
+flag, width or precision, and `vsprintf` and `vsnprintf` still leave the
+destination unchanged. The characters are not the value's digits, so
+`atoi(d) == x` does not follow.
 
 ---
 
