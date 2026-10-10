@@ -896,6 +896,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
+| **R131** | **Medium (false FAILED, default configuration)** — R124's open note on `%n`, §15 M9 (R131); **FIXED**, same entry | **A `%n` target was written even when the scan stopped before it.** `symex_input` havocked a `%n` target unconditionally, so after `int n = -1; int r = sscanf("abc", "%d%n", &x, &n);`, `if (r < 1) assert(n == -1);` failed, although C11 7.21.6.2p12 writes it only when the directive is reached. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_percent_n_reached{,_fail}` | — | **Fixed**: a `%n` target after `k` input items is written only when the count is at least `k`. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
 
@@ -11704,6 +11705,30 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R131) — 2026-10-10, the `%n` a failed scan never reached
+
+R124's entry left a `%n` target havocked whether or not the scan reached it.
+C11 7.21.6.2p12 writes the count only when the `%n` directive executes, and a
+matching or input failure ends the scan first (p16). So after
+`int n = -1; int r = sscanf("abc", "%d%n", &x, &n);`, which returns 0 and
+leaves `n` alone natively, `if (r < 1) assert(n == -1);` was FAILED.
+
+**Fixed** in `symex_input`: a `%n` target that follows `k` input items is
+written under the guard `count >= k`. That is necessary for the directive to
+run, not sufficient, since a literal between the last item and the `%n` can
+still fail to match; the value stays nondet, so the write still covers that
+case. A `%n` before the first item stays unguarded.
+
+`scanf_percent_n_reached` checks two `%n` targets after one and after two
+items; master fails it. `scanf_percent_n_reached_fail` runs under
+`--multi-property` on `sscanf("12", "%d%n", &x, &n)` and pins that
+`n == -1` holds when `r < 1` and fails when `r == 1`; master fails both.
+Both change verdict with the fix reverted, under the default solver and
+`--z3`.
+
+Not fixed: the source string is still not read, so even a constant one
+gives nondet items and a nondet `%n` count.
 
 ---
 

@@ -765,11 +765,13 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   long assigned = 0;
   for (size_t i = 0; i < conversions.size(); i++)
   {
-    // Item k is stored only when the k conversions before it matched too.
-    // A %n target is havocked whether or not it is reached.
+    // Item k is stored only when the k conversions before it matched too,
+    // and a %n target only when every item before it was assigned.
     guard2tc stored;
     if (conversions[i])
       stored.add(greaterthan2tc(count, gen_long(int_type2(), assigned++)));
+    else if (assigned > 0)
+      stored.add(greaterthanequal2tc(count, gen_long(int_type2(), assigned)));
 
     expr2tc operand = func_call.operands[fmt_idx + 1 + i];
     internal_deref_items.clear();
