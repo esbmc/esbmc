@@ -2110,6 +2110,23 @@ private:
     const nlohmann::json &element,
     exprt &bin_expr);
 
+  /// Converts the operands of the chained comparison's pair \p i, binding
+  /// those an adjacent pair also reads; \p first_pair is pair 0.
+  std::pair<exprt, exprt> chained_pair_operands(
+    const nlohmann::json &element,
+    size_t i,
+    exprt &first_pair,
+    exprt &reuse);
+
+  /// Binds a side-effecting comparator that two adjacent pairs of a chained
+  /// comparison read to a temporary, so Python's single evaluation is kept.
+  /// Returns the expression that assigns and yields it, setting \p reuse to
+  /// the temporary, or nil when the operand needs no binding.
+  exprt bind_chained_comparator(
+    const exprt &operand,
+    const nlohmann::json &element,
+    exprt &reuse);
+
   /**
    * @brief Determines if None comparison setup is needed.
    *
