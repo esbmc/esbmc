@@ -699,6 +699,18 @@ private:
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
+  /**
+   * @brief Converts `x = a if c else b`, whose two branches are literals of
+   * incompatible kinds, as the `if`/`else` statement spelling of the same
+   * code, so the dynamic-type tagging that spelling already gets applies
+   * here too. Tagging the target around the ternary instead would store the
+   * already-collapsed value under a single type id, which is what hid the
+   * TypeError obligation (github #8263). True if it rewrote the assignment.
+   */
+  bool rewrite_divergent_conditional_assign(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+
   bool is_coverage_mode() const;
 
   bool is_assert_fold_disabled() const;
