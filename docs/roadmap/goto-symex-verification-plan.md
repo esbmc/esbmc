@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for a bounded output, same entry | **`sprintf` and `snprintf` with a non-constant argument left the destination unchanged.** R121 stores only an output the formatter knows byte for byte, so `char b[4]; sprintf(b, "%d", x);` with a nondet `x` raised no bounds violation, and after `char b[12] = "abcdefghijk"; int r = sprintf(b, "%d", x);` `b[r]` still read the old text, so `assert(b[r] == '\0')` was FAILED. | `symex_sprintf_store`, `sprintf_output_length` and `sprintf_output_char`, `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_symbolic_output{,_fail}` | — | **Fixed** when the formatter bounds the output at 1024 characters or fewer: the call writes nondet characters up to the return value and a NUL after them, each write bounds-checked. |
 
 ---
 
@@ -11704,6 +11705,46 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R129) — 2026-10-10, the `sprintf` output nobody knew
+
+R121's entry left open that an output that is not fully constant leaves the
+destination of `sprintf` or `snprintf` unchanged. `symex_sprintf_store`
+stored nothing unless every argument was a constant, so a nondet `%d` wrote
+nothing: `char b[4]; sprintf(b, "%d", x);` was SUCCESSFUL although
+`x = -1000000` writes nine bytes, and after
+`char b[12] = "abcdefghijk"; int r = sprintf(b, "%d", x);` the old text was
+still there, so `assert(b[r] == '\0')` was FAILED.
+
+**Fixed** when the formatter bounds the output's length, the same bound the
+return value already gets: the output's length is the return value (a fresh
+nondet value when the result is discarded) assumed within the bound, and
+the call writes a nondet character at each index below it and a NUL at it.
+Each write is guarded by `i <= len`, and for `snprintf` also by `i < n`, so
+only the bytes the call writes are bounds-checked. The characters may
+include a NUL, which over-approximates a `%c` of 0. An output known byte for
+byte is stored as before. `symex_printf` now stores the output after it has
+assigned the return value, so both are the same value.
+
+`sprintf_symbolic_output` checks that `b[r]` is the NUL, that `b[2]` keeps
+its old value when `r` is 1, and a truncating `snprintf` of a nondet value;
+it is FAILED on master. `sprintf_symbolic_output_fail` pins the bounds
+violation of a nondet `%d` into `char b[4]` and is SUCCESSFUL on master.
+Reverting the store, dropping the `i <= len` guard, storing each character
+unconditionally, or giving the store a length of its own each flips
+`sprintf_symbolic_output`; reverting the store flips both. Both agree under
+the default solver and `--z3` (Z3; Bitwuzla was not built). The 36 other
+regression tests whose sources call `sprintf` or `snprintf` keep their
+master verdicts under a 60 s cap.
+
+Not fixed: an output the formatter cannot bound (a `%s` of a pointer to an
+unknown object, a float, a non-constant format) or bounds above 1024
+characters, an output that uses a flag the formatter ignores (R127), and
+`vsprintf` and `vsnprintf` still leave the destination unchanged. The bound
+comes from the argument's type, not its value, so `sprintf(b, "%d", x)` into
+`char b[8]` is a bounds violation even when `x` is assumed to be below 100.
+Reading the result with `strlen` needs `--unwind`, as for any string of
+nondet characters.
 
 ---
 
