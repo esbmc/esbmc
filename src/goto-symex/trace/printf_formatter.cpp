@@ -4,6 +4,7 @@
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/format_constant.h>
+#include <util/arith/mp_arith.h>
 #include <util/expr/type_byte_size.h>
 
 const expr2tc
@@ -68,13 +69,12 @@ enum class length_modt
   BIG_L,
 };
 
-std::string pad_int(const std::string &s, unsigned min_width, bool zero_padding)
+std::string pad_field(const std::string &s, unsigned min_width, bool left)
 {
   if (s.length() >= min_width)
     return s;
-  if (zero_padding && s[0] == '-')
-    return s[0] + std::string(min_width - s.length(), '0') + s.substr(1);
-  return std::string(min_width - s.length(), zero_padding ? '0' : ' ') + s;
+  const std::string fill(min_width - s.length(), ' ');
+  return left ? s + fill : fill + s;
 }
 
 // Render an unsigned 64-bit value in base 8 or 16.
@@ -87,14 +87,132 @@ std::string format_radix(uint64_t val, int base, bool uppercase)
   return oss.str();
 }
 
-// Maximum number of decimal digits a bits-wide integer can produce,
-// including a leading '-' for signed types.
-size_t max_decimal_digits(bool is_signed, size_t bits)
+// Maximum number of decimal digits of a bits-wide magnitude.
+size_t max_decimal_digits(size_t bits)
 {
-  size_t mag_bits = is_signed ? bits - 1 : bits;
-  // ceil(mag_bits * log10(2)) via integer arithmetic (30103/100000 ≈ log10(2))
-  size_t digits = (mag_bits * 30103 + 99999) / 100000;
-  return is_signed ? digits + 1 : digits;
+  // ceil(bits * log10(2)) via integer arithmetic (30103/100000 ≈ log10(2))
+  return (bits * 30103 + 99999) / 100000;
+}
+
+// The flags of a conversion specification that format_spect does not hold.
+struct field_flagst
+{
+  bool left = false;
+  bool plus = false;
+  bool space = false;
+  bool alternate = false;
+  bool has_precision = false;
+
+  // format_constant renders no flag but '0' for a floating-point conversion.
+  bool float_length_modelled() const
+  {
+    return !plus && !space && !alternate;
+  }
+
+  // Record ch if it is a flag character other than '0'.
+  bool parse(char ch)
+  {
+    switch (ch)
+    {
+    case '-':
+      left = true;
+      return true;
+    case '+':
+      plus = true;
+      return true;
+    case ' ':
+      space = true;
+      return true;
+    case '#':
+      alternate = true;
+      return true;
+    default:
+      return false;
+    }
+  }
+};
+
+// The digits of an integer conversion, padded to the precision.
+std::string int_digits(
+  const BigInt &value,
+  int base,
+  bool uppercase,
+  const field_flagst &flags,
+  unsigned precision)
+{
+  std::string digits = (base == 10)
+                         ? integer2string(value.is_negative() ? -value : value)
+                         : format_radix(value.to_uint64(), base, uppercase);
+  if (flags.has_precision)
+  {
+    if (value.is_zero() && precision == 0)
+      digits.clear();
+    if (digits.length() < precision)
+      digits.insert(0, precision - digits.length(), '0');
+  }
+  if (flags.alternate && base == 8 && (digits.empty() || digits[0] != '0'))
+    digits.insert(0, "0");
+  return digits;
+}
+
+// The sign or radix prefix of an integer conversion.
+std::string int_prefix(
+  const BigInt &value,
+  int base,
+  bool uppercase,
+  bool is_signed,
+  const field_flagst &flags)
+{
+  if (value.is_negative())
+    return "-";
+  if (flags.alternate && base == 16 && !value.is_zero())
+    return uppercase ? "0X" : "0x";
+  if (!is_signed)
+    return "";
+  return flags.plus ? "+" : flags.space ? " " : "";
+}
+
+// The text of an integer conversion (C11 7.21.6.1p6, p8).
+std::string layout_int(
+  const BigInt &value,
+  int base,
+  bool uppercase,
+  bool is_signed,
+  const field_flagst &flags,
+  const format_spect &spec)
+{
+  std::string digits =
+    int_digits(value, base, uppercase, flags, spec.precision);
+  const std::string prefix =
+    int_prefix(value, base, uppercase, is_signed, flags);
+  // '0' is ignored under '-' or an explicit precision.
+  const size_t length = prefix.length() + digits.length();
+  if (
+    spec.zero_padding && !flags.left && !flags.has_precision &&
+    length < spec.min_width)
+    digits.insert(0, spec.min_width - length, '0');
+  return pad_field(prefix + digits, spec.min_width, flags.left);
+}
+
+// The longest text an integer conversion of a bits-wide argument can produce.
+size_t max_int_chars(
+  size_t bits,
+  int base,
+  bool is_signed,
+  const field_flagst &flags,
+  const format_spect &spec)
+{
+  const size_t digits = (base == 16) ? (bits + 3) / 4
+                        : (base == 8)
+                          ? (bits + 2) / 3
+                          : max_decimal_digits(is_signed ? bits - 1 : bits);
+  const size_t prefix = is_signed          ? 1
+                        : !flags.alternate ? 0
+                        : (base == 16)     ? 2
+                        : (base == 8)      ? 1
+                                           : 0;
+  const size_t precision = flags.has_precision ? spec.precision : 0;
+  return std::max<size_t>(prefix + std::max(digits, precision), spec.min_width);
 }
 
 // Pick the integer cast target for a given signedness and length modifier.
@@ -151,15 +269,9 @@ void printf_formattert::process_format(std::ostream &out)
 
   char ch = next();
 
-  // Parse flags: only '0' (zero-pad) is modelled; others are consumed
-  while (ch == '0' || ch == '-' || ch == '+' || ch == ' ' || ch == '#')
-  {
-    if (ch == '0')
-      format_constant.zero_padding = true;
-    else
-      exact = false;
-    ch = next();
-  }
+  field_flagst flags;
+  for (; flags.parse(ch) || ch == '0'; ch = next())
+    format_constant.zero_padding |= ch == '0';
 
   while (isdigit(ch)) // width
   {
@@ -170,6 +282,7 @@ void printf_formattert::process_format(std::ostream &out)
 
   if (ch == '.') // precision
   {
+    flags.has_precision = true;
     format_constant.precision = 0;
     ch = next();
 
@@ -236,7 +349,7 @@ void printf_formattert::process_format(std::ostream &out)
   // Emit an integer in the given base and update output-length bounds.
   // For constant args the exact formatted length is known. For non-constant
   // args we emit a max-width zero placeholder for the counterexample and
-  // record [1, max_digits] as the bound (widened by any explicit min-width).
+  // record [min, max] over every value of the argument's type.
   auto emit_int = [&](bool is_signed, int base, bool uppercase) {
     if (next_operand == operands.end())
     {
@@ -250,26 +363,23 @@ void printf_formattert::process_format(std::ostream &out)
     size_t min_chars, max_chars;
     if (is_constant_int2t(casted))
     {
-      s = (base == 10)
-            ? format_constant(casted)
-            : format_radix(
-                to_constant_int2t(casted).value.to_uint64(), base, uppercase);
-      s = pad_int(s, format_constant.min_width, format_constant.zero_padding);
+      s = layout_int(
+        to_constant_int2t(casted).value,
+        base,
+        uppercase,
+        is_signed,
+        flags,
+        format_constant);
       min_chars = max_chars = s.length();
     }
     else
     {
-      const size_t bits = target->get_width();
-      const size_t raw_max = (base == 16) ? (bits + 3) / 4
-                             : (base == 8)
-                               ? (bits + 2) / 3
-                               : max_decimal_digits(is_signed, bits);
-      s = pad_int(
-        std::string(raw_max, '0'),
+      max_chars = max_int_chars(
+        target->get_width(), base, is_signed, flags, format_constant);
+      s = std::string(max_chars, '0');
+      min_chars = std::max<size_t>(
         format_constant.min_width,
-        format_constant.zero_padding);
-      max_chars = s.length();
-      min_chars = std::max(size_t(1), size_t(format_constant.min_width));
+        flags.has_precision ? format_constant.precision : 1);
     }
     out << s;
     min_outlen += min_chars;
@@ -289,6 +399,11 @@ void printf_formattert::process_format(std::ostream &out)
       return;
     }
     const expr2tc farg = make_type(*(next_operand++), double_type2());
+    bounded &= flags.float_length_modelled();
+    // format_constant pads with spaces on the left only.
+    exact &= !flags.left && !format_constant.zero_padding;
+    if (!bounded)
+      return;
     if (
       is_constant_floatbv2t(farg) || is_constant_fixedbv2t(farg) ||
       is_constant_int2t(farg))
@@ -334,7 +449,11 @@ void printf_formattert::process_format(std::ostream &out)
     exprt char_array = migrate_expr_back(symbol2);
     if (char_array.id() == "string-constant")
     {
-      emit(char_array.value().as_string());
+      const std::string &str = char_array.value().as_string();
+      emit(pad_field(
+        flags.has_precision ? str.substr(0, format_constant.precision) : str,
+        format_constant.min_width,
+        flags.left));
       break;
     }
     // A non-literal %s: derive a sound upper bound from the pointed-to
@@ -355,7 +474,11 @@ void printf_formattert::process_format(std::ostream &out)
       const BigInt nbytes = type_byte_size_default(symbol2->type, BigInt(0));
       if (nbytes > 0)
       {
-        max_outlen += (nbytes - 1).to_uint64();
+        size_t max_len = (nbytes - 1).to_uint64();
+        if (flags.has_precision)
+          max_len = std::min(max_len, size_t(format_constant.precision));
+        min_outlen += format_constant.min_width;
+        max_outlen += std::max(max_len, size_t(format_constant.min_width));
         break;
       }
     }
@@ -395,10 +518,10 @@ void printf_formattert::process_format(std::ostream &out)
     }
     const expr2tc carg = make_type(*(next_operand++), char_type2());
     if (is_constant_int2t(carg))
-      emit(pad_int(
+      emit(pad_field(
         std::string(1, (char)to_constant_int2t(carg).value.to_int64()),
         format_constant.min_width,
-        false));
+        flags.left));
     else
     {
       // %c writes exactly one character regardless of its value (padded to
@@ -432,8 +555,10 @@ void printf_formattert::process_format(std::ostream &out)
       ++next_operand;
     exact = false;
     const unsigned hex_chars = (config.ansi_c.pointer_width() + 3) / 4;
-    emit(pad_int(
-      "0x" + std::string(hex_chars, '0'), format_constant.min_width, false));
+    emit(pad_field(
+      "0x" + std::string(hex_chars, '0'),
+      format_constant.min_width,
+      flags.left));
     break;
   }
 
