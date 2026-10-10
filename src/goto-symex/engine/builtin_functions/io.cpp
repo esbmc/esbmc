@@ -220,8 +220,13 @@ bool goto_symext::exact_printf_output(
   if (!is_constant_string2t(fmt_str))
     return false;
 
+  // A v* call's arguments sit behind its va_list, its last operand. Leaving
+  // it out makes any conversion that needs an argument unbounded.
+  const bool takes_va_list =
+    call.kind == printf_kindt::VSPRINTF || call.kind == printf_kindt::VSNPRINTF;
+  const size_t end = call.operands.size() - (takes_va_list ? 1 : 0);
   std::list<expr2tc> args;
-  for (size_t i = fmt_idx + 1; i < call.operands.size(); i++)
+  for (size_t i = fmt_idx + 1; i < end; i++)
   {
     expr2tc arg = call.operands[i];
     cur_state->rename(arg);
@@ -240,8 +245,11 @@ bool goto_symext::exact_printf_output(
 
 void goto_symext::symex_sprintf_store(const code_printf2t &call)
 {
-  const bool bounded_size = call.kind == printf_kindt::SNPRINTF;
-  if (!bounded_size && call.kind != printf_kindt::SPRINTF)
+  const bool bounded_size =
+    call.kind == printf_kindt::SNPRINTF || call.kind == printf_kindt::VSNPRINTF;
+  if (
+    !bounded_size && call.kind != printf_kindt::SPRINTF &&
+    call.kind != printf_kindt::VSPRINTF)
     return;
 
   // Only an output known byte for byte is stored; any other leaves the
