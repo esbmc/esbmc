@@ -892,6 +892,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 
 ---
 
@@ -11505,6 +11506,34 @@ files are removed, under the default solver and `--z3`. A symbolic cube over
 `[-100, 100]` did not finish within 600 s, so the tests use constants.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R124) — 2026-10-10, the `scanf` that never failed
+
+R113's battery listed `sscanf` among the calls that broke assertions holding
+natively. Reduced, the stored values are not the problem: they are nondet,
+which over-approximates. The return value is. `symex_input` assigned it the
+number of conversions in the format, so every call matched every conversion.
+C11 7.21.6.2p16 returns `EOF` if input fails before the first conversion and
+otherwise the number of items assigned, which a matching failure leaves
+lower. `int r = sscanf("abc", "%d", &x); assert(r == 1);` fails natively and
+was SUCCESSFUL, and so was any `if (scanf("%d", &x) != 1)` error branch. The
+count also included `%n`, which assigns but is not counted, so
+`sscanf(s, "%d%n", &x, &n)` could return 2.
+
+**Fixed** in `symex_input`: the return value is a nondet count assumed to lie
+in `[EOF, items]`, where `items` excludes `%n`, and item `k` is assigned under
+the guard `count > k`, so the targets after a failed conversion keep their
+values. A `%n` target is still havocked unconditionally. The format parser is
+now `scanf_conversions`, which also counts a `%[` scanset.
+
+`scanf_return_count_fail` is the program above, SUCCESSFUL on master.
+`scanf_return_count` reads `"%d %d%n"` from a nondet three-character string
+and checks the count's range and that unassigned targets keep their values;
+master fails the range check. Both change verdict when the fix is reverted,
+under the default solver and `--z3`.
+
+Not fixed: when the source string and format are constants, the result is
+still nondet rather than the parsed value.
 
 ---
 
