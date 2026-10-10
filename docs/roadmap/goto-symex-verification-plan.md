@@ -11725,6 +11725,20 @@ on master. `strnlen_model_fail` reads one byte past a four-byte buffer and pins
 `dereference failure: array bounds violated`; it is SUCCESSFUL on master. Both
 change verdict without the model, under the default solver and `--z3`.
 
+The Solidity operational models call `strnlen` in `solidity_bytes.c` and
+`solidity_string.c`, so four `esbmc-solidity` KNOWNBUG tests (`bytes_string_1`,
+`github_2564`, `struct_5`, `type_name_1`) now give their expected verdict and
+are CORE.
+
+Open: `esbmc-solidity/struct_5_fail` and `struct_7_fail` (THOROUGH,
+`--k-induction`) now report a false SUCCESSFUL from the inductive step at
+k = 4, before the base case reaches the assertion behind the `strnlen` loop.
+The bug is in k-induction and reproduces on master without `strnlen`: a loop
+in a function called from a nondet loop, followed by a `memset` through a
+pointer, lets the inductive step prove `1 + 2 >= 3 + 4`. Dropping the
+`memset` restores FAILED. Open PR #8221 targets loops that write through a
+pointer.
+
 Not fixed: the same probe found `tgamma`, `lgamma`, `erf`, `erfc`,
 `nexttoward` and the `long double` forms `powl`, `expl`, `logl`, `sinl`,
 `cosl` and `cbrtl` returning nondet values.
