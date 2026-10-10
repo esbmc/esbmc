@@ -643,7 +643,61 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
     return get_expr(*folded);
   if (std::optional<exprt> call = call_returned_function(element))
     return *call;
+  if (std::optional<exprt> raise = call_property_value(element))
+    return *raise;
   return get_function_call(element);
+}
+
+// `obj.prop()` on a @property: CPython runs the getter, then calls the value
+// it returns (#8250). A value that may itself be callable is refused.
+std::optional<exprt>
+python_converter::call_property_value(const nlohmann::json &element)
+{
+  const nlohmann::json &func = element["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    element.value("_property_getter", false) ||
+    !json_utils::any_class_has_property(
+      (*ast_json)["body"], func.value("attr", "")))
+    return std::nullopt;
+  const symbol_id callee =
+    function_call_builder(*this, element).build_function_id();
+  if (!json_utils::is_property_method(
+        (*ast_json)["body"], callee.get_class(), callee.get_function()))
+    return std::nullopt;
+
+  if (
+    func["value"].value("_type", "") == "Name" &&
+    is_class(func["value"].value("id", ""), *ast_json))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "'property' object is not callable");
+
+  const std::string unsupported =
+    "calling the value of @property '" + callee.get_function() + "'";
+  if (!element["args"].empty() || !element["keywords"].empty())
+    throw std::runtime_error(unsupported + " with arguments is not supported");
+
+  nlohmann::json getter_call = element;
+  getter_call["_property_getter"] = true;
+  const exprt value = get_expr(getter_call);
+  const typet &type = value.type();
+  if (may_be_callable(type))
+    throw std::runtime_error(unsupported + " is not supported");
+
+  if (value.is_code())
+    current_block->copy_to_operands(value);
+  else if (value.id() == "sideeffect")
+    current_block->copy_to_operands(code_expressiont(value));
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "'" + type_handler_.type_to_string(type) + "' object is not callable");
+}
+
+bool python_converter::may_be_callable(const typet &type)
+{
+  return type.is_nil() || type.id().empty() || type.is_code() ||
+         (type.is_pointer() && type.subtype().is_code()) ||
+         is_user_class_pointer(type) || is_user_class_struct_type(type);
 }
 
 std::optional<exprt>

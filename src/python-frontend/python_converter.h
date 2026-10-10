@@ -152,6 +152,10 @@ public:
     const nlohmann::json &function_node);
   /// `get()()`: a call through the function pointer that `get()` returns.
   std::optional<exprt> call_returned_function(const nlohmann::json &element);
+  std::optional<exprt> call_property_value(const nlohmann::json &element);
+  /// Unknown, function or class-instance types: a call on such a value may
+  /// succeed.
+  bool may_be_callable(const typet &type);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
