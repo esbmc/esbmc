@@ -253,18 +253,27 @@ class LoopMixin:
         self._iter_counter = getattr(self, "_iter_counter", 0) + 1
         it_name = f"ESBMC_iter_{self._iter_counter}"
         it_load = lambda: ast.Name(id=it_name, ctx=ast.Load())  # noqa: E731
-        init = ast.Assign(
-            targets=[ast.Name(id=it_name, ctx=ast.Store())],
-            value=ast.Call(func=ast.Attribute(value=it_expr, attr="__iter__", ctx=ast.Load()),
-                           args=[], keywords=[]))
-        fetch = ast.Try(
-            body=[ast.Assign(targets=[node.target],
-                             value=ast.Call(func=ast.Attribute(value=it_load(), attr="__next__",
-                                                               ctx=ast.Load()),
-                                            args=[], keywords=[]))],
-            handlers=[ast.ExceptHandler(type=ast.Name(id="StopIteration", ctx=ast.Load()),
-                                        name=None, body=[ast.Break()])],
-            orelse=[], finalbody=[])
+        init = ast.Assign(targets=[ast.Name(id=it_name, ctx=ast.Store())],
+                          value=ast.Call(func=ast.Attribute(value=it_expr,
+                                                            attr="__iter__",
+                                                            ctx=ast.Load()),
+                                         args=[],
+                                         keywords=[]))
+        fetch = ast.Try(body=[
+            ast.Assign(targets=[node.target],
+                       value=ast.Call(func=ast.Attribute(value=it_load(),
+                                                         attr="__next__",
+                                                         ctx=ast.Load()),
+                                      args=[],
+                                      keywords=[]))
+        ],
+                        handlers=[
+                            ast.ExceptHandler(type=ast.Name(id="StopIteration", ctx=ast.Load()),
+                                              name=None,
+                                              body=[ast.Break()])
+                        ],
+                        orelse=[],
+                        finalbody=[])
         loop = ast.While(test=ast.Constant(value=True), body=[fetch] + node.body, orelse=[])
         for new in (init, loop):
             ast.copy_location(new, node)

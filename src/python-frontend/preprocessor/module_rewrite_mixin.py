@@ -429,8 +429,8 @@ class ModuleRewriteMixin:
 
         # Classes implementing the iterator protocol, for visit_For.
         self.iterator_classes = {
-            n.name for n in ast.walk(node)
-            if isinstance(n, ast.ClassDef) and any(
+            n.name
+            for n in ast.walk(node) if isinstance(n, ast.ClassDef) and any(
                 isinstance(m, ast.FunctionDef) and m.name == "__next__" for m in n.body)
         }
 
