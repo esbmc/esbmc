@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R135** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R104's note on local classes, §15 M9 (R135); **FIXED**, same entry | **Same-named local classes shared one `type_info`.** `typeid` identity is the address of the type's printed name, and a local class prints without its enclosing function, so `S` in `f()` and `S` in `g()`, or in two instantiations of one function template, compared equal, and equal to a namespace-scope `S`. `assert(f() == g())` was SUCCESSFUL. | `rtti_type_name`, `src/clang-cpp-frontend/clang_cpp_convert_vft.cpp`; `regression/esbmc-cpp/cpp/local_class_typeid{,_fail}` | — | **Fixed**: a local class's name carries its record id. |
 
 ---
 
@@ -11704,6 +11705,39 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R135) — 2026-10-10, the local classes that shared a `type_info`
+
+R104's entry noted that two local classes `S` in different functions print the
+same name and so share one `type_info`. `typeid` identity is the `__name`
+pointer, which points at an interned string constant of the type's printed
+name, and `rtti_type_name` prints a local class without its enclosing
+function. Each local class is a distinct type ([class.local]), so their
+`type_info` objects must differ.
+
+| Program | Before | After | Native |
+|---|---|---|---|
+| `struct S` local to `f()` and to `g()`, `assert(f() == g())` | **`SUCCESSFUL`** | `FAILED` | aborts |
+| local `S` against a namespace-scope `S`, against the `S` of an overload `f(int)` or of a sibling block, polymorphic local classes read through a base pointer, one local class in `t<int>` and `t<char>`, all `!=` | `FAILED` | `SUCCESSFUL` | passes |
+
+**Fixed** in `rtti_type_name`: a record declared inside a function appends its
+record id, which `get_decl_name` already makes unique per function, block,
+and template instantiation. The vtable's `@rtti_name` entry goes through the
+same function, so a dynamic `typeid` agrees with a static one.
+`type_info::name()` for a local class now carries the id; the standard leaves
+that string implementation-defined ([type.info]).
+
+`local_class_typeid` checks the shapes in the table's second row and that one
+local class still equals itself; it is FAILED on master. `local_class_typeid_fail`
+pins `assertion f() == g()`; master reports SUCCESSFUL. Both change verdict
+with the fix reverted, under the default solver and `--z3`. The 73 test
+directories whose sources use `typeid`, `type_info`, `typeindex`,
+`dynamic_cast` or `bad_cast` keep master's verdicts: `github_6310_typeid_dynamic{,_fail}`
+hit the same Z3 sort mismatch on both binaries in this container, and
+`github_3387_containers_c++03` times out at 400 s on both. Only Z3 was built.
+
+Not fixed: two evaluations of one polymorphic `typeid` site still share its
+object, and `&typeid(*p) == &typeid(D)` is still false.
 
 ---
 
