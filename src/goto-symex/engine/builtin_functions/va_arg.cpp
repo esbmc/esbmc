@@ -91,6 +91,7 @@ void goto_symext::va_list_mark_started(
   auto rec = va_list_l1_record(va_list_expr);
   if (rec)
   {
+    va_copied_from.erase(*rec);
     if (started)
       va_started[*rec] = cursor;
     else
@@ -109,13 +110,22 @@ void goto_symext::va_list_mark_started(
     va_started[obj_rec] = cursor;
 }
 
+std::vector<renaming::level2t::name_record>
+goto_symext::va_list_owner_records(const expr2tc &va_list_expr) const
+{
+  auto rec = va_list_l1_record(va_list_expr);
+  auto records =
+    rec ? std::vector{*rec} : va_list_pointee_records(va_list_expr);
+  for (auto &r : records)
+    if (auto it = va_copied_from.find(r); it != va_copied_from.end())
+      r = it->second;
+  return records;
+}
+
 goto_symex_statet::framet &
 goto_symext::va_list_frame(const expr2tc &va_list_expr)
 {
-  auto rec = va_list_l1_record(va_list_expr);
-  const auto records =
-    rec ? std::vector{*rec} : va_list_pointee_records(va_list_expr);
-  for (const auto &rec : records)
+  for (const auto &rec : va_list_owner_records(va_list_expr))
     for (auto &frame : cur_state->call_stack)
       if (frame.local_variables.count(rec))
         return frame;
@@ -124,11 +134,20 @@ goto_symext::va_list_frame(const expr2tc &va_list_expr)
 
 void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
 {
+  /* A source with no cursor of its own, such as a va_list parameter, reads
+   * at its frame's cursor; the copy keeps that position for itself. */
+  const goto_symex_statet::framet &frame = va_list_frame(src);
   const unsigned *cursor = va_list_cursor(src);
+  if (!cursor && frame.va_index != UINT_MAX)
+    cursor = &frame.va_cursor;
   va_list_mark_started(
     dst,
     va_list_is_started(src),
     cursor ? std::optional{*cursor} : std::nullopt);
+
+  const auto owners = va_list_owner_records(src);
+  if (auto rec = va_list_l1_record(dst); rec && !owners.empty())
+    va_copied_from[*rec] = owners.front();
 }
 
 void goto_symext::symex_va_arg(
