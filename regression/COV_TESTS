@@ -2417,3 +2417,5 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc/cbrtl_model
+regression/esbmc/cbrtl_model_fail
