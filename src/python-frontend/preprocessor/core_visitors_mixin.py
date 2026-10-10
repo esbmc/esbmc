@@ -1802,8 +1802,8 @@ class CoreVisitorsMixin:
             return
         spelled = [
             ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
-                          slice=ast.Constant(value=i), ctx=ast.Load())
-            for i in range(len(slots))
+                          slice=ast.Constant(value=i),
+                          ctx=ast.Load()) for i in range(len(slots))
         ]
         call = ast.Call(func=node.func, args=node.args[:-1] + spelled, keywords=[])
         # TODO: a len(xs) that does not fill the slots should raise TypeError;
