@@ -2399,3 +2399,5 @@ regression/python/github_8256_order
 regression/python/github_8256_rebind
 regression/python/github_8256_rebind_fail
 regression/python/github_8256_shadowed_outer
+regression/esbmc-cpp/cpp/condition_short_circuit_temporary
+regression/esbmc-cpp/cpp/condition_short_circuit_temporary_fail

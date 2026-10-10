@@ -74,7 +74,6 @@ protected:
   /// Lowers the condition of an if, loop, for or switch statement, a
   /// full-expression whose temporaries are destroyed before the branch
   /// ([class.temporary]/4).
-  /// The operands of a short-circuit operator keep block scope.
   void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
   bool in_short_circuit = false;
 
@@ -97,7 +96,9 @@ protected:
   // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
   // sideeffect2t node, mirroring the legacy exprt overload above.
   bool has_sideeffect(const expr2tc &expr);
-  bool has_short_circuit_sideeffect(const exprt &expr);
+  /// True if lowering expr may create a temporary with a destructor.
+  bool has_destructible_sideeffect(const exprt &expr);
+  bool splits_and_condition(const exprt &cond);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
