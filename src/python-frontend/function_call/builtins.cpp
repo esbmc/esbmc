@@ -418,6 +418,28 @@ exprt function_call_expr::handle_isinstance() const
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
+    
+    //A value read from a list element is unboxed from __ESBMC_PyObj::value.
+    //Its static C type alone is not enough for isinstance(), beacuse the real
+    //Python runtime type is sotred in the sibling `type_id` field.
+    exprt element_type_id = converter_.list_element_type_id(obj_expr);
+
+    if (element_type_id.is_not_nil() && 
+        (
+          type_name == "int" ||
+          type_name == "bool" ||
+          type_name == "float" ||
+          type_name == "str"
+        ))
+      {
+        typet expected_element_type = type_handler_.get_typet(type_name, 0);
+
+        if (!expected_element_type.is_nil())
+        {
+          return type_handler_.tagged_scalar_type_matches(element_type_id, expected_element_type);
+        }
+      }
+
     if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
       return converter_.dynamic_type_handler_.build_isinstance_check(
         obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
