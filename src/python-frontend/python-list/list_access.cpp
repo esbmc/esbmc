@@ -2984,6 +2984,20 @@ python_list::try_build_ravel_pointer_view(const exprt &array)
     /*readonly=*/false);
 }
 
+// A slice of a pointer view: a view of the same storage when bound to a new
+// name, a copy of its elements otherwise.
+std::optional<exprt> python_list::try_build_numpy_view_subview(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !array.is_symbol() || converter_.numpy_pointer_view_info_.count(
+                            array.identifier().as_string()) == 0)
+    return std::nullopt;
+  return try_build_strided_basic_view(
+    array, {slice_node}, /*allow_plain_array=*/true);
+}
+
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   const exprt &array,
   const typet &elem_type,
@@ -3347,6 +3361,11 @@ exprt python_list::handle_range_slice(
     std::optional<exprt> param_view =
       try_build_numpy_param_slice_view(array, resolved_array_type, slice_node))
     return *param_view;
+
+  if (
+    std::optional<exprt> subview =
+      try_build_numpy_view_subview(array, slice_node))
+    return *subview;
 
   if (
     std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(

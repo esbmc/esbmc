@@ -1971,6 +1971,7 @@ private:
     codet &target_block);
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
+  std::string numpy_view_source_of(const std::string &storage_id) const;
 
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 

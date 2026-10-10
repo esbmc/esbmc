@@ -1047,6 +1047,10 @@ private:
     const exprt &array,
     const nlohmann::json &col_index_node);
 
+  std::optional<exprt> try_build_numpy_view_subview(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
   std::optional<exprt> try_copy_numpy_pointer_view_slice(
     const exprt &array,
     const typet &elem_type,
