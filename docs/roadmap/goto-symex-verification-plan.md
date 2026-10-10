@@ -835,6 +835,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R97** | **Low (a test that pins nothing, default configuration)** — found looking for a live KNOWNBUG to work, §15 M9 (R97); **FIXED** for the two `fam_*` tests, same entry | **Two KNOWNBUG tests stopped at a PARSING ERROR.** `fam_false_2` and `fam_true_4` declare `main()` with an implicit `int`, which clang now rejects without `-Wno-error=implicit-int`. `testing_tool.py` treats any KNOWNBUG run whose output misses the expected verdict as the bug still being live, so both passed in a third of a second without verifying anything. Behind the parse error the bug `fam_false_2` pinned was already fixed, and `fam_true_4` expected SUCCESSFUL for a write past the end of a copied flexible array member. | `regression/esbmc/fam_false_2`, `fam_true_4`; `FAIL_MODES`, `regression/testing_tool.py` | — | **Fixed**: both are CORE with the siblings' `-Wno-error` flags; `fam_true_4` reads the element through the heap object instead of the copy. Six more C/C++ KNOWNBUG tests stop at a parse error and are left open (see the entry). |
 | **R86** | **High (false SUCCESSFUL and false FAILED, `--std c++11`/`c++14`)** — R69's residual, §15 M9 (R86); **FIXED**, same entry | **A class conditional's branches kept their elidable copies.** Before C++17 clang wraps each branch of `b ? C(1) : C(2)` in an elidable copy of a bound temporary. `get_conditional_class_prvalue` built the result in place but converted each copy, so the copy constructor ran and the branch's source was destroyed as well. | `get_conditional_class_prvalue`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/cpp/cxx14_elided_copy_conditional{,_fail}` | — | **Fixed**: each branch is converted from the elided copy's source, the C++17 form. |
 
+| **R117** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — found probing class prvalues in declarations, §15 M9 (R117); **renumbered from R105** on merging master, which uses that number twice; this branch's commit message predates the renumbering; **FIXED**, same entry | **A comma's class prvalue result was copied out of a destroyed temporary.** `T x = (e, T(2));` reached `convert_decl_initializer` as a `comma`, which none of its in-place paths recognised, so the generic path built `T(2)` in a `tmp$` object, assigned `x` from it and destroyed it. With a class that deletes a pointer in its destructor, every later read through `x` was a false FAILED (invalidated dynamic object); `assert(dtors == 1)` after the declaration, which aborts natively, was a false SUCCESSFUL. C++14, C++17 and C++20 behave the same. | `discard_comma_operands`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/comma_initializer_in_place{,_fail}` | — | **Fixed**: the left operands are converted as discarded-value expressions and the right operand initialises the variable ([expr.comma]/1). A left operand's temporaries are still destroyed at the comma, not at the end of the declaration (see the entry). |
 | **R93** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R69's open note on throwing initializers, §15 M9 (R93); **FIXED** for bases and members, same entry | **A constructor left by an exception did not destroy the subobjects it had built.** [except.ctor]/3 destroys every base and member whose initialization completed, newest first, before the exception leaves the constructor. ESBMC destroyed none: for `P() : a(1), b(0)` where `C(0)` throws, `~C` never ran for `a`, so `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively; a throw from the constructor's body left every member alive in the same way. | `unwind_constructed_subobjects`, `subobject_destructors`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `initializer_block`, `src/clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp`; `regression/esbmc-cpp/try_catch/ctor_subobject_unwind{,_fail,_thread}` | — | **Fixed**: in a translation unit whose own code throws or catches, a constructor that may throw, of a class with a base or member whose destructor is non-trivial, runs its initializers and body in a try block whose catch-all destroys the subobjects already built, then rethrows. A delegating constructor, virtual bases and a partly built array member are not covered. |
 | **R88** | **Medium (no verdict, default configuration)** — R49's residual, §15 M9 (R88); **FIXED**, same entry | **A struct-typed write into a union never propagated, so a loop bounded by it never terminated.** `union U { struct P a; int b; } u; u.a.n = 4;` is `u WITH [a := u.a WITH [n := 4]]`, and the union arm accepted only literal or immutable updates, so `i < u.a.n` never folded and the loop unwound forever. Reached through a struct (`x.u.a.n`) it was the same. | `goto_symex_statet::constant_propagation`, `src/goto-symex/state/goto_symex_state.cpp`; `regression/esbmc/union_struct_member_bound{,_fail}` | **H-C2** | **Fixed**: the union arm gates each update with `update_may_propagate`, as the struct arm does. A read of a sibling member still does not fold, so it terminates no more often than before and answers nothing differently. |
 | **R96** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R93's open note on array new, §15 M9 (R96); **FIXED**, same entry | **An array new left its constructed elements alive when a later element's initialization threw.** [except.ctor]/3 destroys the elements whose initialization completed, newest first, before the exception leaves the new-expression. ESBMC destroyed none: in `new C[3]` whose third constructor throws, `assert(dtors == 0)` after the handler was SUCCESSFUL and aborts natively, and the same held for a listed element or the filler of `new C[n]{...}`. | `convert_cpp_new_elements`, `user_code_throws`, `cpp_new_init_list`, `src/goto-programs/builtin_functions.cpp`; `regression/esbmc-cpp/try_catch/array_new_unwind{,_fail}` | — | **Fixed**: in a program whose own code throws or catches, the element construction of an array new of a class with a destructor runs in a try block whose catch-all destroys the elements already built and rethrows. The storage is not freed ([expr.new]/26), and `delete[]` still destroys elements in increasing order. |
@@ -893,6 +894,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
+| **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
 
 ---
 
@@ -10424,6 +10426,38 @@ early, and the right operand's temporary is built on only one path, which
 R86 (PR #8118) guards for expressions. Those conditions keep block scope, as on
 master.
 
+### M9 (R117, renumbered from R105) — 2026-10-04, the comma that copied its result
+
+Probing class prvalues in declarations against the native program,
+`T x = (T(1), T(2));` ran three destructors of `T` where native runs two.
+A comma's right operand is its result ([expr.comma]/1), and in C++17 that
+prvalue initialises `x` itself. `convert_decl_initializer` constructs a class
+prvalue in place only when the initializer is the `temporary_object` or the
+call itself; a `comma` around it fell to the generic path, which built
+`T(2)` in a `tmp$` object, assigned `x` from it and destroyed it at the end
+of the declaration. With `struct A { int *p; ~A() { delete p; } }`,
+`A a = (++k, A(3)); *a.p` was a false FAILED (invalidated dynamic object),
+and `assert(dtors == 1)` right after the declaration, which aborts natively,
+was a false SUCCESSFUL. C++14 and C++20 behave the same.
+
+**Fixed** in `discard_comma_operands`: before the initializer is classified,
+each left operand of a comma is converted as an expression statement, as the
+generic path already did, and the right operand replaces the initializer, so
+the existing in-place paths see the `temporary_object` or the call.
+
+`comma_initializer_in_place` is FAILED on master and covers a constructor, a
+call returning by value and a nested comma; `comma_initializer_in_place_fail`
+is SUCCESSFUL on master. Both pin `--std c++17`: the class has a deleted copy
+constructor, which C++14 rejects. Both flip under Z3, the only solver in this
+build. The `esbmc-cpp/cpp` suite keeps master's verdicts (the same local
+timeouts and Z3 sort errors on both binaries), as do the 41 tests whose
+sources initialise a variable from a parenthesised comma.
+
+Not fixed, on master and here: a left operand's temporaries are destroyed at
+the comma, not at the end of the full-expression ([class.temporary]/4), so in
+`T x = (T(1), U(), T(2));` `U`'s constructor already sees `~T` for `T(1)`.
+
+---
 ### M9 (R104) — 2026-10-03, `realloc` of a pointer to one of several objects
 
 `symex_realloc` dereferences the old pointer in internal mode, which yields one
@@ -11539,6 +11573,31 @@ Not fixed: reading a copy still advances the declaring frame's cursor, which a
 `va_list` parameter reads from, so reading the copy and then the parameter
 skips an argument. When the value set gives records in more than one frame,
 the first frame found on the stack is still used.
+### M9 (R122) — 2026-10-09, the long double exponent
+
+R118's entry left `frexpl(1024.0L, &e)` not giving `e == 11` on x86-64, so
+`ilogbl` and `logbl` were wrong. The `FREXP` and `LDEXP` macros in
+`libm/frexp.c` take the mantissa width as `LDBL_MANT_DIG - 1`. On x86-64 that
+is 63, the x87 layout, but `build_float_type` encodes every 128-bit
+`long double` as IEEE binary128, with 112 fraction bits and the exponent at
+bit 112. The models masked bits 63 to 77 as the exponent. Every
+`frexpl`, `ldexpl`, `scalbnl` and `scalblnl` result was wrong, and so was
+anything that read them: `assert(ldexpl(1.0L, 3) == 8.0L)` was FAILED and
+`assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL.
+
+**Fixed** by giving each format its mantissa width directly, and 112 for a
+128-bit `long double`. The AArch64 and RISC-V `long double` is binary128
+already, and 32-bit x86 and PowerPC still have no `frexpl`.
+
+`frexpl_binary128` checks `frexpl` on a power of two, a negative value and a
+subnormal, `ldexpl`, `scalbnl`, `ilogbl` and `logbl` against glibc's results;
+master fails all eight assertions. `frexpl_binary128_fail` runs under
+`--multi-property` and pins that `frexpl(1024.0L, &e)` holds and
+`ldexpl(1.0L, 3) != 8.0L` fails; master fails the first and passes the
+second. Both change verdict with the fix reverted, under the default solver
+and `--z3`.
+
+Not fixed: `cbrtl` still returns a nondet value.
 
 ---
 
