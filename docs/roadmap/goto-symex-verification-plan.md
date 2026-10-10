@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R134** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R131's open note (PR #8320), §15 M9 (R134); **FIXED**, same entry | **`strcasecmp` and `strncasecmp` had no model.** Neither had a body under `src/c2goto/library`, so each call returned a nondet value and read nothing: `assert(strcasecmp("Hello", "hELLO") == 0)` was FAILED, and `strncasecmp(a, "ABC", 3)` with `char a[2]` was SUCCESSFUL although it reads past `a`. | `strncasecmp`, `strcasecmp`, `src/c2goto/library/strings.c`; `regression/esbmc/strcasecmp_model{,_fail}` | — | **Fixed**: both compare bytes as `unsigned char` after `tolower`, the POSIX locale's mapping. |
 
 ---
 
@@ -11704,6 +11705,36 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R134) — 2026-10-10, the case-insensitive compare
+
+R131's entry (PR #8320) noted that `strcasecmp` and `strncasecmp` have no
+model. `<strings.h>` declared them and nothing defined them, so symex skipped
+each call and returned a nondet value. `assert(strcasecmp("Hello", "hELLO") ==
+0)` was FAILED, and because the call read nothing, `strncasecmp(a, "ABC", 3)`
+with `char a[2] = {'a', 'b'}` was SUCCESSFUL; natively ASan reports a
+stack-buffer-overflow.
+
+**Fixed** in `strings.c`. `strncasecmp` compares at most `n` bytes as
+`unsigned char` after `tolower`, stopping at the first difference or a
+terminating null, and `strcasecmp` calls it with `n = SIZE_MAX`. POSIX
+specifies the comparison in the POSIX locale, where `tolower` maps only
+`A`-`Z`. The result is the difference of the lowered bytes; POSIX fixes only
+its sign.
+
+`strcasecmp_model` checks equality across case, both orderings, a byte
+between `Z` and `a` (`"["` sorts before `"a"`, as glibc gives), a prefix,
+`n = 0`, and a nondet upper-case letter against its lower case; master fails
+all eight assertions. `strcasecmp_model_fail` runs under `--multi-property` and
+pins that `strcasecmp("abc", "ABD") > 0` fails and that `strncasecmp` reads
+out of bounds; master fails the first and reports no bounds violation. Both
+change verdict with the model removed. Only Z3 is built here, so the default
+solver and `--z3` are the same run.
+
+Not fixed: like `strcmp`, a call on a string with no terminator in bounds
+keeps reading nondet bytes after the bounds failure, so `strcasecmp` on one
+does not terminate without `--unwind`. `strcasecmp_l` and `strncasecmp_l` have
+no model.
 
 ---
 
