@@ -11724,8 +11724,9 @@ case. A `%n` before the first item stays unguarded.
 items; master fails it. `scanf_percent_n_reached_fail` runs under
 `--multi-property` on `sscanf("12", "%d%n", &x, &n)` and pins that
 `n == -1` holds when `r < 1` and fails when `r == 1`; master fails both.
-Both change verdict with the fix reverted, under the default solver and
-`--z3`.
+Both change verdict with the fix reverted (Z3, the only solver in this
+build). The other 94 regression tests that call a `scanf`-family function
+keep their master verdicts.
 
 Not fixed: the source string is still not read, so even a constant one
 gives nondet items and a nondet `%n` count.
