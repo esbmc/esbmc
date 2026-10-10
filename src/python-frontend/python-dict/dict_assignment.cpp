@@ -57,7 +57,25 @@ bool python_dict_handler::handle_literal_assignment_check(
   if (!is_dict_literal(ast_node["value"]))
     return false;
 
-  create_dict_from_literal(ast_node["value"], lhs);
+  // An Optional[dict] target is a dict pointer: allocate a non-expiring dict
+  // for it, as a class instance bound to a Class* is.
+  const namespacet ns(symbol_table_);
+  const typet &lhs_type = lhs.type();
+  if (lhs_type.is_pointer() && is_dict_type(ns.follow(lhs_type.subtype())))
+  {
+    const symbolt *new_object =
+      symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
+    assert(new_object && "__ESBMC_new_object model required");
+    code_function_callt alloc;
+    alloc.lhs() = lhs;
+    alloc.function() = build_symbol(*new_object);
+    alloc.location() = converter.get_location_from_decl(ast_node);
+    converter.add_instruction(alloc);
+    create_dict_from_literal(
+      ast_node["value"], build_dereference(lhs, get_dict_struct_type()));
+  }
+  else
+    create_dict_from_literal(ast_node["value"], lhs);
   converter.set_current_lhs(nullptr);
   return true;
 }
