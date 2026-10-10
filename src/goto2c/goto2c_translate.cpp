@@ -1,5 +1,9 @@
 #include <goto2c/goto2c.h>
 #include <goto2c/expr2c.h>
+#include <irep2/irep2_utils.h>
+
+#include <map>
+#include <unordered_map>
 #include <util/expr/expr_util.h>
 #include <util/lang/c_sizeof.h>
 #include <util/config/config.h>
@@ -121,62 +125,192 @@ goto2ct::translate(std::string function_id, goto_functiont &goto_function)
   return out.str();
 }
 
+// A block never closes the scopes below `floor`, open before it began.
+void goto2ct::enter_scope(
+  const goto_programt::instructiont &instruction,
+  std::vector<unsigned int> &scopes,
+  std::size_t floor,
+  std::ostream &out)
+{
+  unsigned int cur_scope_id = scopes.back();
+  if (instruction.scope_id == cur_scope_id)
+    return;
+  // Entering a new scope
+  if (instruction.parent_scope_id == cur_scope_id)
+  {
+    out << "{ // SCOPE BEGIN {" << cur_scope_id << "}->{"
+        << instruction.scope_id << "}\n";
+    scopes.push_back(instruction.scope_id);
+    return;
+  }
+  if (scopes.size() <= floor)
+    return;
+  // Leaving the scope back to the current parent scope
+  leave_scope(scopes, out);
+  cur_scope_id = scopes.back();
+  // If there two scopes next to each other (i.e., {inst1;}{inst2;})
+  // we need to open a new scope immediately after the previous one
+  // so that we do not skip through the first instruction
+  // in the new scope
+  if (instruction.scope_id != cur_scope_id)
+  {
+    out << "{ // SCOPE BEGIN {" << cur_scope_id << "}->{"
+        << instruction.scope_id << "}\n";
+    scopes.push_back(instruction.scope_id);
+  }
+}
+
+// A block may not cut a scope, or a variable could escape its braces.
+static enclosablet scope_respecting_blocks(const goto_programt &goto_program)
+{
+  std::unordered_map<const goto_programt::instructiont *, std::size_t> position;
+  std::map<unsigned int, std::pair<std::size_t, std::size_t>> extent;
+  for (const auto &instruction : goto_program.instructions)
+  {
+    const std::size_t n = position.size();
+    position.emplace(&instruction, n);
+    extent.emplace(instruction.scope_id, std::make_pair(n, n))
+      .first->second.second = n;
+  }
+  const auto end = goto_program.instructions.end();
+  return
+    [position, extent, end](
+      goto_programt::const_targett first, goto_programt::const_targett last) {
+      auto at = [&](goto_programt::const_targett it) {
+        return it == end ? position.size() : position.at(&*it);
+      };
+      const std::size_t a = at(first), b = at(last);
+      for (const auto &[scope, span] : extent)
+      {
+        // The function scope is always open.
+        if (scope == 1)
+          continue;
+        const auto [lo, hi] = span;
+        const bool inside = lo >= a && hi < b;
+        const bool outside = hi < a || lo >= b;
+        const bool around = lo < a && hi >= b;
+        if (!inside && !outside && !around)
+          return false;
+      }
+      return true;
+    };
+}
+
+void goto2ct::leave_scope(std::vector<unsigned int> &scopes, std::ostream &out)
+{
+  const unsigned int left = scopes.back();
+  scopes.pop_back();
+  out << "} // SCOPE END {" << left << "}->{" << scopes.back() << "}\n";
+}
+
 // Convert GOTO program to C
 std::string goto2ct::translate(goto_programt &goto_program)
 {
   std::ostringstream out;
-
-  std::vector<unsigned int> scope_ids_stack = {1};
-  unsigned int cur_scope_id = scope_ids_stack.back();
-  for (auto it = goto_program.instructions.begin();
-       it != goto_program.instructions.end();
-       it++)
+  std::vector<unsigned int> scopes = {1};
+  if (structured_loops)
   {
-    // Scope change
-    if (it->scope_id != cur_scope_id)
-    {
-      // Entering a new scope
-      if (it->parent_scope_id == cur_scope_id)
-      {
-        out << "{ // SCOPE BEGIN {" << cur_scope_id << "}->{" << it->scope_id
-            << "}\n";
-        scope_ids_stack.push_back(it->scope_id);
-        cur_scope_id = scope_ids_stack.back();
-      }
-      // Leaving the scope back to the current parent scope
-      else
-      {
-        scope_ids_stack.pop_back();
-        out << "} // SCOPE END {" << cur_scope_id << "}->{"
-            << scope_ids_stack.back() << "}\n";
-        cur_scope_id = scope_ids_stack.back();
-        // If there two scopes next to each other (i.e., {inst1;}{inst2;})
-        // we need to open a new scope immediately after the previous one
-        // so that we do not skip through the first instruction
-        // in the new scope
-        if (it->scope_id != cur_scope_id)
-        {
-          out << "{ // SCOPE BEGIN {" << cur_scope_id << "}->{" << it->scope_id
-              << "}\n";
-          scope_ids_stack.push_back(it->scope_id);
-          cur_scope_id = scope_ids_stack.back();
-        }
-      }
-    }
-    out << translate(*it) << "\n";
+    translate(
+      recover_structure(goto_program, scope_respecting_blocks(goto_program)),
+      scopes,
+      1,
+      out);
+    return out.str();
+  }
+  for (const auto &instruction : goto_program.instructions)
+  {
+    enter_scope(instruction, scopes, 1, out);
+    out << translate(instruction) << "\n";
   }
   return out.str();
 }
 
+void goto2ct::translate(
+  const std::vector<structured_stmtt> &stmts,
+  std::vector<unsigned int> &scopes,
+  std::size_t floor,
+  std::ostream &out)
+{
+  for (const structured_stmtt &stmt : stmts)
+    translate(stmt, scopes, floor, out);
+}
+
+void goto2ct::translate_block(
+  const std::vector<structured_stmtt> &stmts,
+  std::vector<unsigned int> &scopes,
+  std::ostream &out)
+{
+  const std::size_t floor = scopes.size();
+  out << "{\n";
+  translate(stmts, scopes, floor, out);
+  while (scopes.size() > floor)
+    leave_scope(scopes, out);
+  out << "}\n";
+}
+
+void goto2ct::translate(
+  const structured_stmtt &stmt,
+  std::vector<unsigned int> &scopes,
+  std::size_t floor,
+  std::ostream &out)
+{
+  if (stmt.instruction)
+    enter_scope(*stmt.instruction, scopes, floor, out);
+  auto guard = [&] { return expr2c(migrate_expr_back(stmt.condition), ns); };
+  switch (stmt.kind)
+  {
+  case structured_stmtt::INSTRUCTION:
+  case structured_stmtt::GOTO:
+    out << translate(*stmt.instruction) << "\n";
+    return;
+  case structured_stmtt::ANCHOR:
+    out << label(*stmt.instruction);
+    return;
+  case structured_stmtt::BREAK:
+  case structured_stmtt::CONTINUE:
+    out << label(*stmt.instruction)
+        << (is_true(stmt.condition) ? "" : "if(" + guard() + ") ")
+        << (stmt.kind == structured_stmtt::BREAK ? "break;" : "continue;")
+        << "\n";
+    return;
+  case structured_stmtt::IF:
+    out << label(*stmt.instruction) << "if(" << guard() << ")\n";
+    translate_block(stmt.body, scopes, out);
+    if (!stmt.otherwise.empty())
+    {
+      out << "else\n";
+      translate_block(stmt.otherwise, scopes, out);
+    }
+    return;
+  case structured_stmtt::WHILE:
+    out << label(*stmt.instruction) << "while(" << guard() << ")\n";
+    translate_block(stmt.body, scopes, out);
+    return;
+  case structured_stmtt::DO_WHILE:
+    out << "do\n";
+    translate_block(stmt.body, scopes, out);
+    out << "while(" << guard() << ");\n";
+    return;
+  case structured_stmtt::FOREVER:
+    out << "while(1)\n";
+    translate_block(stmt.body, scopes, out);
+    return;
+  }
+}
+
+std::string goto2ct::label(const goto_programt::instructiont &instruction)
+{
+  if (!instruction.is_target())
+    return "";
+  return "__ESBMC_goto_label_" + std::to_string(instruction.target_number) +
+         ":; // Target\n";
+}
+
 // Convert GOTO instruction to C
-std::string goto2ct::translate(goto_programt::instructiont &instruction)
+std::string goto2ct::translate(const goto_programt::instructiont &instruction)
 {
   std::ostringstream out;
-
-  // This is a GOTO label
-  if (instruction.is_target())
-    out << "__ESBMC_goto_label_" << instruction.target_number
-        << ":; // Target\n";
+  out << label(instruction);
 
   // Identifying the type of the GOTO instruction
   switch (instruction.type)
@@ -227,6 +361,27 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   case ATOMIC_END:
     out << "__ESBMC_atomic_end()";
     break;
+  case LOOP_INVARIANT:
+  {
+    const char *separator = "";
+    for (const expr2tc &invariant : instruction.get_loop_invariants())
+    {
+      out << separator << "__ESBMC_loop_invariant("
+          << expr2c(migrate_expr_back(invariant), ns) << ")";
+      separator = "; ";
+    }
+    // What __ESBMC_loop_assigns(x, ...) expands to.
+    const std::list<expr2tc> assigns = instruction.get_loop_assigns_targets();
+    if (!assigns.empty())
+    {
+      out << separator << "__ESBMC_loop_assigns_impl(";
+      for (const expr2tc &target : assigns)
+        out << (&target == &assigns.front() ? "" : ", ") << "&("
+            << expr2c(migrate_expr_back(target), ns) << ")";
+      out << ")";
+    }
+    break;
+  }
   // These are C++ instructions. We do not translate those at the moment.
   case THROW:
   case CATCH:

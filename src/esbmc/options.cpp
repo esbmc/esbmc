@@ -447,6 +447,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
     {"goto2c", NULL, "Translate the GOTO program to C"},
+    {"goto2c-structured-loops",
+     NULL,
+     "With --goto2c, print loops and if/else as C statements instead of "
+     "labels and gotos"},
     {"generate-testcase",
      NULL,
      "If a solution is found, generates a testcase in XML"},

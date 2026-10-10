@@ -12,3 +12,5 @@ target_link_libraries(llm
   PUBLIC util_esbmc
   PRIVATE ESBMC::boost fmt::fmt
 )
+
+add_subdirectory(goto)

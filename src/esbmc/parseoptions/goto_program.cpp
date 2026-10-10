@@ -943,7 +943,8 @@ bool esbmc_parseoptionst::output_goto_program(
     if (cmdline.isset("goto2c"))
     {
       // Creating a translator here
-      goto2ct goto2c(ns, goto_functions);
+      goto2ct goto2c(
+        ns, goto_functions, cmdline.isset("goto2c-structured-loops"));
       goto2c.preprocess();
       goto2c.check();
       std::string res = goto2c.translate();
