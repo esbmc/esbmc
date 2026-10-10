@@ -892,6 +892,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R125** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R125); **FIXED**, same entry | **`strnlen` had no model.** It reached symex as a bodyless call, so each call returned a nondet value and read nothing: `assert(strnlen("hello", 3) == 3)` was FAILED, and `char b[4] = {'a','b','c','d'}; strnlen(b, 5);`, which reads past `b` (ASan reports a stack-buffer-overflow), was SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strnlen_model{,_fail}` | — | **Fixed**: `strnlen` reads at most `maxlen` bytes and stops at the first null, as POSIX.1-2008 specifies. |
 
 ---
 
@@ -11505,6 +11506,29 @@ files are removed, under the default solver and `--z3`. A symbolic cube over
 `[-100, 100]` did not finish within 600 s, so the tests use constants.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R125) — 2026-10-10, the strnlen that read nothing
+
+A native-differential probe of string functions found that `strnlen` had no
+operational model: `string.c` defines `strlen` but not `strnlen`, so a call
+reached symex without a body and returned a nondet value.
+`assert(strnlen("hello", 3) == 3)` was FAILED on master. Since the call read
+no memory, a `strnlen` over an unterminated buffer with a `maxlen` past its
+end was SUCCESSFUL, although POSIX.1-2008 has it read until the null or
+`maxlen` bytes and ASan reports the read natively.
+
+**Fixed** by a model beside `strlen` that counts while `len < maxlen` and
+`s[len]` is not null.
+
+`strnlen_model` checks constant strings, `maxlen` of 0, an unterminated buffer
+read to exactly its size, and a null placed at a symbolic index; it is FAILED
+on master. `strnlen_model_fail` reads one byte past a four-byte buffer and pins
+`dereference failure: array bounds violated`; it is SUCCESSFUL on master. Both
+change verdict without the model, under the default solver and `--z3`.
+
+Not fixed: the same probe found `tgamma`, `lgamma`, `erf`, `erfc`,
+`nexttoward` and the `long double` forms `powl`, `expl`, `logl`, `sinl`,
+`cosl` and `cbrtl` returning nondet values.
 
 ---
 
