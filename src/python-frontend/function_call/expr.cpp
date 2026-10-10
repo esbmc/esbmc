@@ -998,51 +998,21 @@ exprt function_call_expr::build_constant_from_arg() const
     // Handle Name type (variable reference)
     if (first_arg["_type"] == "Name")
     {
-      const symbolt *sym = lookup_python_symbol(first_arg["id"]);
-      // The compile-time fast path below decodes the symbol's stored value as
-      // a string; it is only valid for constant *string* symbols. For numeric
-      // symbols (int/float/bool) extract_string_from_symbol misreads the value
-      // — an int 65 decodes to the character 'A' (rejected as non-digit) and a
-      // float yields no string at all — so int(x) wrongly folds to 0. Route
-      // numeric symbols through the general numeric conversion instead, which
-      // truncates floats toward zero and treats ints as identity. (GitHub
-      // #4770)
-      if (
-        sym && sym->get_value().is_constant() &&
-        type_utils::is_string_type(sym->get_type()))
-      {
-        if (base_expr.is_nil())
-        {
-          return handle_str_symbol_to_int(sym);
-        }
-        else
-        {
-          // Convert symbol to expression and use with base
-          exprt value_expr = build_symbol(*sym);
-          return converter_.get_string_handler()
-            .handle_int_conversion_with_base(
-              value_expr, base_expr, converter_.get_location_from_decl(call_));
-        }
-      }
-      else
-      {
-        // Reuse the already-evaluated operand (see hoist above).
-        exprt expr = operand_expr;
+      // Numeric symbols must not take the string fold: an int 65 decodes to
+      // 'A' and a float to no string at all (GitHub #4770).
+      const std::string name = first_arg["id"].get<std::string>();
+      const symbolt *sym = lookup_python_symbol(name);
+      if (base_expr.is_nil() && is_single_assignment_str_symbol(sym, name))
+        if (const auto folded = handle_str_symbol_to_int(sym))
+          return *folded;
 
-        if (base_expr.is_nil())
-        {
-          // No base provided, use general conversion
-          return converter_.get_string_handler().handle_int_conversion(
-            expr, converter_.get_location_from_decl(call_));
-        }
-        else
-        {
-          // Base provided, use conversion with base
-          return converter_.get_string_handler()
-            .handle_int_conversion_with_base(
-              expr, base_expr, converter_.get_location_from_decl(call_));
-        }
-      }
+      // Reuse the already-evaluated operand (see hoist above).
+      const exprt &expr = operand_expr;
+      if (base_expr.is_nil())
+        return converter_.get_string_handler().handle_int_conversion(
+          expr, converter_.get_location_from_decl(call_));
+      return converter_.get_string_handler().handle_int_conversion_with_base(
+        expr, base_expr, converter_.get_location_from_decl(call_));
     }
     // Handle other types (Constant, etc.)
     else
@@ -1156,56 +1126,49 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle float(): convert string (from symbol) to float
   else if (func_name == "float" && arg["_type"] == "Name")
   {
-    const symbolt *sym = lookup_python_symbol(arg["id"]);
-    // Only take the constant-string fast path when the variable is genuinely
-    // string-typed here. A numeric variable conditionally reassigned a string
-    // (e.g. `if isinstance(x, str): x = x.replace(...)`) leaves a stale string
-    // value on its symbol even on paths where it stays numeric; keying off the
-    // value alone would mis-route float(x) into string parsing and fold it to
-    // 0.0 (#5161). Gate on the declared type so such cases fall through to the
-    // numeric typecast in the else branch.
-    if (
-      sym && sym->get_value().is_constant() &&
-      type_utils::is_string_type(sym->get_type()) &&
-      type_utils::is_string_type(sym->get_value().type()))
-      return handle_str_symbol_to_float(sym);
-    else
+    // A numeric variable conditionally reassigned a string leaves a stale
+    // string value on its symbol (#5161), and a string chosen on a branch
+    // leaves only one of its values (#8251), so fold only a string assigned
+    // once; anything else takes the runtime conversion below.
+    const std::string name = arg["id"].get<std::string>();
+    const symbolt *sym = lookup_python_symbol(name);
+    if (is_single_assignment_str_symbol(sym, name))
+      if (const auto folded = handle_str_symbol_to_float(sym))
+        return *folded;
+    // Try to get the expression type directly, even if symbol lookup failed
+    exprt expr = converter_.get_expr(arg);
+    if (type_utils::is_string_type(expr.type()))
     {
-      // Try to get the expression type directly, even if symbol lookup failed
-      exprt expr = converter_.get_expr(arg);
-      if (type_utils::is_string_type(expr.type()))
-      {
-        // Runtime string -> float. float("10") must succeed, but float() of an
-        // arbitrary string may raise ValueError. Gate the conversion on a
-        // runtime validity check so a concrete valid literal folds away while a
-        // genuinely non-float string still raises a reachable ValueError (the
-        // same exception path used by the string-literal case above).
-        auto &sh = converter_.get_string_handler();
-        auto loc = converter_.get_location_from_decl(call_);
+      // Runtime string -> float. float("10") must succeed, but float() of an
+      // arbitrary string may raise ValueError. Gate the conversion on a
+      // runtime validity check so a concrete valid literal folds away while a
+      // genuinely non-float string still raises a reachable ValueError (the
+      // same exception path used by the string-literal case above).
+      auto &sh = converter_.get_string_handler();
+      auto loc = converter_.get_location_from_decl(call_);
 
-        exprt valid = sh.handle_string_is_float(expr, loc);
-        exprt raise = converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", "could not convert string to float");
-        codet throw_code("expression");
-        throw_code.operands().push_back(raise);
-        code_ifthenelset guard;
-        // V.3: build the "not valid" guard condition in IREP2.
-        expr2tc valid2;
-        migrate_expr(valid, valid2);
-        guard.cond() = migrate_expr_back(not2tc(valid2));
-        guard.then_case() = throw_code;
-        guard.location() = loc;
-        guard.location().property("skipped");
-        converter_.add_instruction(guard);
+      exprt valid = sh.handle_string_is_float(expr, loc);
+      exprt raise = converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "could not convert string to float");
+      codet throw_code("expression");
+      throw_code.operands().push_back(raise);
+      code_ifthenelset guard;
+      // V.3: build the "not valid" guard condition in IREP2.
+      expr2tc valid2;
+      migrate_expr(valid, valid2);
+      guard.cond() = migrate_expr_back(not2tc(valid2));
+      guard.then_case() = throw_code;
+      guard.location() = loc;
+      guard.location().property("skipped");
+      converter_.add_instruction(guard);
 
-        return sh.handle_string_to_float(expr, loc);
-      }
-      // Numeric variable: emit a proper typecast to avoid mislabeled IR
-      typet float_t = type_handler_.get_typet("float", 0);
-      if (!expr.type().is_floatbv())
-        return build_typecast(expr, float_t);
-      return expr;
+      return sh.handle_string_to_float(expr, loc);
     }
+    // Numeric variable: emit a proper typecast to avoid mislabeled IR
+    typet float_t = type_handler_.get_typet("float", 0);
+    if (!expr.type().is_floatbv())
+      return build_typecast(expr, float_t);
+    return expr;
   }
 
   // Handle float(): convert bool to float
