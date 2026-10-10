@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5
+^ERROR: .*Unpacking \*x into add\(\) is supported only when x is a list or tuple of statically known length
