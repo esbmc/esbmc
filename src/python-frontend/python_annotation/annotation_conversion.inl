@@ -3973,7 +3973,26 @@ std::string python_annotation<Json>::infer_parameter_type_from_calls(
         else if (inferred_type != arg_type)
         {
           std::string common = find_common_ancestor(inferred_type, arg_type);
-          if (!common.empty())
+          // An empty literal (`[]`, `{}`) spells only the bare container,
+          // which says nothing against the element type another call site
+          // shows, so `list` and `list[int]` agree on `list[int]`. Without
+          // this the parameter fell to "Any" and an `==` on it compared the
+          // list pointers rather than the contents (#8302).
+          const auto bare_of = [](const std::string &t) {
+            const auto bracket = t.find('[');
+            return bracket == std::string::npos ? t : t.substr(0, bracket);
+          };
+          const bool same_container =
+            (inferred_type == "list" || inferred_type == "dict" ||
+             inferred_type == "set" || arg_type == "list" ||
+             arg_type == "dict" || arg_type == "set") &&
+            bare_of(inferred_type) == bare_of(arg_type);
+          if (same_container)
+          {
+            if (inferred_type.find('[') == std::string::npos)
+              inferred_type = arg_type;
+          }
+          else if (!common.empty())
             inferred_type = common;
           // Tuples of differing shape have no common spelling, but "Any" is
           // the wrong retreat: it is exactly the type refine_any_param_to_list
