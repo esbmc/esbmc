@@ -1667,7 +1667,7 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
 
-  if (!options.get_bool_option("no-assertions"))
+  if (emits_assert(code.location()))
   {
     goto_programt::targett t = dest.add_instruction(ASSERT);
     t->guard = tmp_cond;
@@ -1677,6 +1677,16 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
   }
 
   assume_if_ends_path(tmp_cond, code.location(), dest);
+}
+
+// --no-assertions drops every assert. --python-ignore-assertions drops only a
+// Python program's own, which still end the path through the assume below.
+bool goto_convertt::emits_assert(const locationt &location) const
+{
+  if (options.get_bool_option("no-assertions"))
+    return false;
+  return !location.get_bool("ends_path") ||
+         !options.get_bool_option("python-ignore-assertions");
 }
 
 // A Python assert raises AssertionError, which ends the program, so nothing

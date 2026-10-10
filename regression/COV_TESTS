@@ -716,6 +716,10 @@ regression/python/power10
 regression/python/precedence2
 regression/python/print_call_and_arith_fail
 regression/python/property_getter
+regression/python/python_ignore_assertions
+regression/python/python_ignore_assertions_caught
+regression/python/python_ignore_assertions_model
+regression/python/python_ignore_assertions_shapes
 regression/python/python_irep2_adjust_ieee_float
 regression/python/python_option_interpreter_path
 regression/python/python_option_missing_interpreter

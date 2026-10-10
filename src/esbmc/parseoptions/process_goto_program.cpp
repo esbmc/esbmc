@@ -351,7 +351,13 @@ bool esbmc_parseoptionst::process_goto_program(
     // is now the only exception path: a program the pass cannot lower is
     // reported as an error rather than silently miscompiled (the legacy
     // imperative path in symex was removed once the lowered subset covered it).
-    remove_exceptions(goto_functions, context, ns);
+    remove_exceptions(
+      goto_functions,
+      context,
+      ns,
+      options.get_bool_option("python-ignore-assertions")
+        ? std::set<irep_idt>{"AssertionError"}
+        : std::set<irep_idt>{});
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))

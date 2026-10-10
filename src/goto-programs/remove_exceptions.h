@@ -1,5 +1,8 @@
 #pragma once
 
+#include <set>
+#include <util/irep/irep_idt.h>
+
 class goto_functionst;
 class contextt;
 class namespacet;
@@ -30,7 +33,11 @@ class namespacet;
 /// Run before goto_partial_inline. This is the only exception path — the legacy
 /// imperative symex dispatch was removed once the lowered subset covered the
 /// corpus (#5075).
+///
+/// An uncaught exception whose type is in @p unreported ends the run without a
+/// property, as --python-ignore-assertions wants for AssertionError.
 void remove_exceptions(
   goto_functionst &goto_functions,
   contextt &context,
-  const namespacet &ns);
+  const namespacet &ns,
+  const std::set<irep_idt> &unreported = {});

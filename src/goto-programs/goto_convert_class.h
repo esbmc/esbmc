@@ -278,6 +278,7 @@ protected:
   void convert_dowhile(const codet &code, goto_programt &dest);
   void convert_assume(const codet &code, goto_programt &dest);
   void convert_assert(const codet &code, goto_programt &dest);
+  bool emits_assert(const locationt &location) const;
   void assume_if_ends_path(
     const expr2tc &guard,
     const locationt &location,
