@@ -895,6 +895,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R128** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R123's open note, §15 M9 (R128); **FIXED**, same entry | **A `va_list` parameter read at its frame's cursor, which every `va_arg` advanced.** A read through a `va_copy` advanced the frame's cursor as well as its own, so a callee that copied its `va_list` parameter, read the copy and then read the parameter skipped an argument: `f(2, 1, 2)` gave `b == 2` where native execution gives 1, so `assert(f(2, 1, 2) == 12)` was SUCCESSFUL. A read through a `va_copy` in the caller before the call did the same. | `goto_symext::va_list_cursor`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_list_parameter_cursor{,_fail}` | — | **Fixed**: a `va_list` parameter that points to one local `va_list` reads and advances that one's cursor. |
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
@@ -11704,6 +11705,49 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+---
+
+### M9 (R128) — 2026-10-10, the parameter that read the copy's position
+
+R123's entry left open that reading a copy still advances the declaring
+frame's cursor, which a `va_list` parameter reads from. `symex_va_arg`
+advances the frame's cursor on every read, and reads a `va_list` at its own
+cursor only when `va_list_cursor` finds one; a parameter is not a local, so it
+found none and read at the frame's. With
+
+```c
+static int copy_then_parameter(va_list ap)
+{
+  va_list cp;
+  va_copy(cp, ap);
+  int a = va_arg(cp, int);
+  va_end(cp);
+  int b = va_arg(ap, int);
+  return 10 * a + b;
+}
+```
+
+called from `f(int n, ...)` as `copy_then_parameter(ap)`, `f(2, 1, 2)` gave
+12 where native execution gives 11. A `va_copy` read in the caller before the
+call moved the parameter the same way.
+
+**Fixed**: when a `va_list` is not a local and its value set points to one
+local `va_list`, `va_list_cursor` returns that one's cursor, so the parameter
+reads and advances the `va_list` it was passed, as on x86-64, where `va_list`
+is an array and the parameter a pointer to it. The frame's cursor still
+counts every read for `symex_printf`.
+
+`va_list_parameter_cursor` checks `f` and a caller that reads a `va_copy`
+before the call; master fails both assertions. `va_list_parameter_cursor_fail`
+asserts `f(2, 1, 2) == 12`, SUCCESSFUL on master. Both change verdict with the
+fix reverted, under the default solver and `--z3` (Z3; Bitwuzla was not
+built). The 214 other live C and C++ regression tests that use `<stdarg.h>`
+or a `printf`-family call keep their master verdicts under a 30 s cap.
+
+Not fixed: a parameter whose value set has more than one target still reads
+at the frame's cursor, and R114's `va_arg` under a nondet branch is still
+counted on both paths.
 
 ---
 
