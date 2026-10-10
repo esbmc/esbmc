@@ -2417,3 +2417,7 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/python/github_8276_nonfinite_to_int
+regression/python/github_8276_trunc_inf_fail
+regression/python/github_8276_round_nan_fail
+regression/python/github_8276_floor_inf_fail
