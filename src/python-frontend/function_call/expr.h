@@ -285,6 +285,12 @@ private:
 
   exprt handle_hasattr() const;
 
+  /// getattr(obj, "name"[, default]) with a literal name, lowered to the
+  /// attribute read or the default when every instance of obj's class is
+  /// known to have, or to lack, the attribute; refused otherwise.
+  bool is_getattr_call() const;
+  exprt handle_getattr();
+
   /*
    * hasattr()'s first argument when it names an imported module. A module is
    * not a first-class value here, so it has no symbol of its own; resolve the
