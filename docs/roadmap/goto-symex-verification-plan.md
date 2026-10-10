@@ -892,6 +892,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R125** | **High (false SUCCESSFUL and false FAILED, default configuration, C++17)** — R98's open note on the aligned forms, §15 M9 (R125); **FIXED**, same entry | **A program's aligned `operator new` and `operator delete` were never called.** For a type with new-extended alignment, `new A` calls `operator new(size_t, std::align_val_t)` ([expr.new]/16). `get_new_storage` refused every aligned form and `resolve_deallocation_function` every aligned `delete`, so both used the built-in allocation: two `new A` from a replacement that returns one pool were distinct objects (`assert(a != b)` SUCCESSFUL, aborts natively), and a counter in the replacement stayed 0 (FAILED, passes natively). | `get_new_storage`, `get_dealloc_function`, `get_align_val`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `convert_cpp_delete`, `src/goto-programs/goto_convert.cpp`; `remove_cpp_delete`, `src/goto-programs/goto_sideeffects.cpp`; `migrate_cpp_delete`, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/aligned_operator_new{,_fail}` | — | **Fixed**: the frontend passes `alignof(T)` as the `std::align_val_t` argument to a defined aligned `operator new` and `operator delete`, sized or not. |
 
 ---
 
@@ -11505,6 +11506,48 @@ files are removed, under the default solver and `--z3`. A symbolic cube over
 `[-100, 100]` did not finish within 600 s, so the tests use constants.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+---
+
+### M9 (R125) — 2026-10-10, the aligned allocation functions
+
+R98's entry left open that the aligned forms of `operator new` still
+allocate. For a class with `alignas(64)`, `new A` calls
+`operator new(sizeof(A), std::align_val_t(64))` and `delete a` calls
+`operator delete(a, std::align_val_t(64))` ([expr.new]/16,
+[expr.delete]/10). `get_new_storage` rejected any new-expression that passes
+an alignment, and `resolve_deallocation_function` any `delete` whose function
+takes one, so both fell back to the built-in allocation. A replacement that
+hands out one pool twice gave two distinct objects (`assert(a != b)`
+SUCCESSFUL on master, aborts natively), and its counters never moved.
+Routing only `new` would be worse: the built-in `free` would then reject the
+pool storage.
+
+**Fixed** in the C++ frontend: a defined aligned `operator new` gets
+`alignof(T)`, typed as its `std::align_val_t` parameter, ahead of the
+placement arguments; a defined aligned `operator delete` gets it after the
+byte count when sized. `get_align_val` builds the argument,
+`get_dealloc_function` takes the `delete` lookup out of `get_expr`, and
+`migrate_cpp_delete` carries the alignment through irep2 in `arguments[2]`;
+`remove_cpp_delete` copies it into the statement form.
+
+`aligned_operator_new` checks the arguments each of the four replacements
+receives, for `new A`, `delete`, `new A[2]` and `delete[]`; it is FAILED on
+master. `aligned_operator_new_fail` is the pool program above
+(SUCCESSFUL on master). Reverting the `new` side flips both; reverting the
+`delete` side fails `aligned_operator_new` with a free of non-dynamic memory,
+and dropping the alignment in `remove_cpp_delete` fails it on the alignment
+`operator delete` receives (`sizeof(A)` is 128, `alignof(A)` 64). The existing
+`github_6494_aligned_delete`, which accepts either the built-in path or the
+right alignment, now takes the replacement and still verifies.
+Z3 only, the default in this build, and with `--z3`.
+
+Not fixed: clang 18 does not select the sized `operator delete(void *, size_t,
+std::align_val_t)` without `-fsized-deallocation`, so a program that defines
+both the sized and unsized aligned forms reaches the unsized one, as it does
+for the unaligned forms; g++ calls the sized one. An allocation function
+declared without a body in the translation unit is still replaced by the
+built-in allocation.
 
 ---
 

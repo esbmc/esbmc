@@ -2594,6 +2594,7 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   tmp.copy_to_operands(to_unary_expr(expr).op0());
   tmp.set("destructor", expr.find("destructor"));
   tmp.set("dealloc_function", expr.find("dealloc_function"));
+  tmp.set("dealloc_alignment", expr.find("dealloc_alignment"));
 
   convert_cpp_delete(tmp, dest);
 

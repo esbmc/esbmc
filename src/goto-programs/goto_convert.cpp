@@ -1606,11 +1606,15 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     call.arguments().back().make_typecast(params[0].type());
 
     // The C++14 sized form takes the object's byte count as its second
-    // argument ([basic.stc.dynamic.deallocation]).
-    if (params.size() == 2)
+    // argument ([basic.stc.dynamic.deallocation]), before any alignment.
+    const exprt &alignment =
+      static_cast<const exprt &>(code.find("dealloc_alignment"));
+    if (params.size() == (alignment.is_nil() ? 2 : 3))
       call.arguments().push_back(from_integer(
         type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
         params[1].type()));
+    if (alignment.is_not_nil())
+      call.arguments().push_back(alignment);
 
     call.location() = code.location();
 
