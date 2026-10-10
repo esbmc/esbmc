@@ -1486,6 +1486,15 @@ exprt string_handler::format_fstring_part(const nlohmann::json &value)
     (value.contains("conversion") && value["conversion"].is_number())
       ? value["conversion"].get<int>()
       : -1;
+
+  // A format spec or conversion may render a nondet string that drops the
+  // operand, so a call there runs as its own statement first. Elsewhere it
+  // becomes a side effect, hoisted when the enclosing statement is emitted
+  // rather than during the RHS type probe.
+  if ((has_spec || conversion != -1) && converter_.can_emit_runtime_guard())
+    expr = converter_.store_call_result(expr, expr.location(), "fstring_arg");
+  converter_.convert_function_call_to_side_effect(expr);
+
   if (conversion != -1 && conversion != 's')
     return has_spec ? build_nondet_string_fallback(expr.location())
                     : build_fstring_conversion(
