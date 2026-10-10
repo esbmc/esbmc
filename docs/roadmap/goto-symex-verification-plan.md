@@ -892,6 +892,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 
 ---
 
@@ -11505,6 +11506,39 @@ files are removed, under the default solver and `--z3`. A symbolic cube over
 `[-100, 100]` did not finish within 600 s, so the tests use constants.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R123) — 2026-10-10, the copy of a `va_list` passed down
+
+R112's entry left open that a `va_copy` into a local of the callee resolves
+to the callee's frame. `va_list_frame` looks for the frame whose locals hold
+the `va_list`; for the copy that is the callee, whose variadic arguments are
+not the ones the copy holds. A non-variadic helper read 0 through the copy,
+and a variadic one read its own arguments: with
+`int mid(int n, va_list outer, ...)` doing `va_copy(cp, outer)` and
+`va_arg(cp, int)`, `mid(0, ap, 9)` called from `g(1, 3)` gave 9, where
+native execution gives 3, so `assert(g(1, 3) == 9)` was SUCCESSFUL. The copy
+also had no cursor of its own when its source was a parameter, so it shared
+the frame's: after `va_copy(cp, ap); va_arg(ap, int);` the copy read the
+second argument, not the first.
+
+**Fixed**: `va_list_copy` records in `va_copied_from` the local `va_list` the
+source resolves to (following an earlier copy), and `va_list_frame` looks for
+that record's frame. A source with no cursor of its own gives the copy its
+frame's cursor at the time of the copy. A `va_start` on the destination
+drops the record.
+
+`regression/esbmc/va_copy_callee_va_list` reads two `int`s through a copy in
+a non-variadic helper, and reads the parameter before the copy (FAILED on
+master). `va_copy_callee_va_list_fail` is the `mid` program above
+(SUCCESSFUL on master). Without the recorded source both keep their master
+verdicts; without the cursor the first fails on its second assertion. The 66
+other regression tests that use `<stdarg.h>` or a `printf`-family call keep
+their master verdicts (Z3; Bitwuzla was not built).
+
+Not fixed: reading a copy still advances the declaring frame's cursor, which a
+`va_list` parameter reads from, so reading the copy and then the parameter
+skips an argument. When the value set gives records in more than one frame,
+the first frame found on the stack is still used.
 
 ---
 
