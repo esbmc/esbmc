@@ -233,6 +233,13 @@ protected:
   void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
   void discard_comma_operands(exprt &initializer, goto_programt &dest);
+  void remove_comma_operand(exprt &operand, goto_programt &dest);
+  void destroy_comma_operand_temporaries(
+    std::size_t stack_size,
+    const locationt &location,
+    goto_programt &dest);
+  /// Temporaries created by a comma's discarded operands.
+  std::set<irep_idt> comma_operand_temporaries;
   void convert_decl_initializer(
     const exprt &var,
     exprt &initializer,
