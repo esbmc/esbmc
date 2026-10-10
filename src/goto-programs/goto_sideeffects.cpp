@@ -1723,13 +1723,7 @@ void goto_convertt::remove_sideeffects(
           remove_sideeffects(result, dest, true);
         }
         else
-        {
-          remove_sideeffects(*it, dest, false);
-
-          // remember these for later checks
-          if (it->is_not_nil())
-            convert(code_expressiont(*it), dest);
-        }
+          remove_comma_operand(*it, dest);
       }
 
       expr.swap(result);
@@ -1737,13 +1731,7 @@ void goto_convertt::remove_sideeffects(
     else // result not used
     {
       Forall_operands (it, expr)
-      {
-        remove_sideeffects(*it, dest, false);
-
-        // remember as expression statement for later checks
-        if (it->is_not_nil())
-          convert(code_expressiont(*it), dest);
-      }
+        remove_comma_operand(*it, dest);
 
       expr = nil_exprt();
     }
