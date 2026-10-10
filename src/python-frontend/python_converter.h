@@ -353,6 +353,11 @@ public:
     const std::string &message,
     const locationt &location);
 
+  // Raises OverflowError (infinity) or ValueError (NaN) before a float
+  // @p operand is converted to int; returns the operand to convert.
+  exprt
+  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;

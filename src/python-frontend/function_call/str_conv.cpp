@@ -564,29 +564,9 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
   exprt operand,
   const exprt &base) const
 {
-  if (
-    !base.is_nil() || !operand.type().is_floatbv() ||
-    !converter_.can_emit_runtime_guard())
+  if (!base.is_nil())
     return operand;
-
-  const locationt loc = converter_.get_location_from_decl(call_);
-  operand = converter_.store_call_result(operand, loc, "int_arg");
-  operand =
-    converter_.hoist_side_effecting_operand(operand, call_, "$int_arg$");
-  expr2tc value;
-  migrate_expr(operand, value);
-
-  converter_.emit_guarded_raise(
-    migrate_expr_back(isinf2tc(value)),
-    "OverflowError",
-    "cannot convert float infinity to integer",
-    loc);
-  converter_.emit_guarded_raise(
-    migrate_expr_back(isnan2tc(value)),
-    "ValueError",
-    "cannot convert float NaN to integer",
-    loc);
-  return operand;
+  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const

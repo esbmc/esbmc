@@ -2399,3 +2399,7 @@ regression/python/github_8256_order
 regression/python/github_8256_rebind
 regression/python/github_8256_rebind_fail
 regression/python/github_8256_shadowed_outer
+regression/python/github_8276_nonfinite_to_int
+regression/python/github_8276_trunc_inf_fail
+regression/python/github_8276_round_nan_fail
+regression/python/github_8276_floor_inf_fail
