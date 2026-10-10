@@ -1409,8 +1409,28 @@ protected:
   /** Symbolic implementation of printf */
   virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Store an unrenamed sprintf or snprintf call's output in its
-   *  destination buffer, when the format and arguments fix that output. */
-  void symex_sprintf_store(const code_printf2t &call);
+   *  destination buffer, when the format and arguments fix that output or
+   *  its conversions are all %d, %i or %u. Returns the output's length, nil
+   *  when nothing is stored. */
+  expr2tc symex_sprintf_store(const code_printf2t &call);
+  /** The output of an unrenamed sprintf or snprintf call: its characters
+   *  before the NUL in `chars`, and its length, nil when unknown. */
+  expr2tc sprintf_output(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    const type2tc &char_type,
+    std::vector<expr2tc> &chars);
+  /** The length of an unrenamed printf-family call's output whose constant
+   *  format holds only text and %d, %i or %u conversions without flags,
+   *  width or precision, with its largest value in `max_len`; nil for any
+   *  other format. */
+  expr2tc printf_output_length(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    size_t &max_len);
+  /** Assume a printf-family call's return value equals the length of the
+   *  output stored, when both are known. */
+  void assume_printf_length(const expr2tc &retval, const expr2tc &len);
   /** Format an unrenamed printf-family call into `out`; true when the format
    *  and every argument are constants that fix the output exactly. */
   bool exact_printf_output(
