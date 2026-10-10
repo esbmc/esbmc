@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+FAILED.*assertion n == 3
+^VERIFICATION FAILED$
