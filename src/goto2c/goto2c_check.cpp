@@ -94,6 +94,9 @@ void goto2ct::check(goto_programt::instructiont &instruction)
   case OTHER:
     check_other(instruction);
     break;
+  case LOOP_INVARIANT:
+    check_loop_invariant(instruction);
+    break;
   default:
     assert(!"Unknown instruction type");
   }
@@ -220,4 +223,14 @@ void goto2ct::check_guard(const expr2tc &expr)
   check_if_sideeffect_or_assign_expr(expr);
   for (size_t i = 0; i < expr->get_num_sub_exprs(); i++)
     check_guard(*(expr->get_sub_expr(i)));
+}
+
+void goto2ct::check_loop_invariant(goto_programt::instructiont instruction)
+{
+  assert(
+    (!instruction.get_loop_invariants().empty() ||
+     !instruction.get_loop_assigns_targets().empty()) &&
+    "A LOOP_INVARIANT instruction must hold an invariant or assigns target");
+  for (const expr2tc &invariant : instruction.get_loop_invariants())
+    check_guard(invariant);
 }
