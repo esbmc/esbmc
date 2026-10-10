@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^  FAILED +\[main\.assertion\.1\] +line 31  assertion branch\(c, 1, 2\) == \(c \? 12 : 2\)$
+^  FAILED +\[main\.assertion\.2\] +line 32  assertion ternary\(c, 1, 2\) == \(c \? 12 : 2\)$
+^VERIFICATION FAILED$

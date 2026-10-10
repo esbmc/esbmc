@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R132** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R114's open note, §15 M9 (R132); **FIXED**, same entry | **A `va_arg` on one branch moved the `va_list` on both.** The cursor R114 gave each local `va_list` was an `unsigned` in symex, outside the SSA, so a branch that ran `va_arg` advanced it for the path that skipped the branch too. In `if (c) a = va_arg(ap, int); b = va_arg(ap, int);` called with `(0, 1, 2)`, `b` read 2, where C reads 1; `c ? va_arg(ap, int) : 0` did the same. | `goto_symext::symex_va_arg`, `va_list_cursor_symbol`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_arg_branch_cursor{,_fail}` | **H-A7** | **Fixed**: each local `va_list` with its own cursor keeps it in a hidden SSA variable, assigned under the path guard, so a merge gives it a phi. A cursor that is not constant selects the argument it denotes. A `va_list` parameter still reads at its frame's cursor, which is still symex state. |
 
 ---
 
@@ -11704,6 +11705,33 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R132) — 2026-10-10, the `va_arg` on a branch not taken
+
+R114's entry left open that a `va_arg` under a nondet branch advanced the
+`va_list` on both paths. The cursor R114 added for each started local
+`va_list` lived in `va_started` as an `unsigned`, symex state that no merge
+touches. With `c` nondet, `if (c) a = va_arg(ap, int); b = va_arg(ap, int);`
+read the second argument into `b` on the path where `c` is 0, and so did
+`int a = c ? va_arg(ap, int) : 0;`: called with `(c, 1, 2)`, both gave `b == 2`
+where native code gives 1.
+
+**Fixed** by moving that cursor into a hidden variable `<va_list>$va_cursor`,
+l1-renamed with its `va_list`. `va_start` and `va_copy` assign it, and
+`va_arg` assigns it the cursor plus one under the same guard as the read, so
+the merge after a branch gives it a phi. While it is a constant the read is
+the one argument it names, as before; after a phi it is a chain of `if` over
+the frame's arguments. The frame's `va_cursor`, which `symex_printf`'s
+`va_list` recovery reads, still moves on every `va_arg`.
+
+`va_arg_branch_cursor` asserts both shapes against their native results and
+`va_arg_branch_cursor_fail` runs under `--multi-property` and pins both as
+FAILED against the wrong results master gave; master gives each the opposite
+verdict. The 69 other regression tests that use `<stdarg.h>` or a `v*printf`
+keep their master verdicts (Z3, the only solver built).
+
+Not fixed: a `va_list` parameter, and a copy of one, still read at the frame's
+cursor, which a branch moves on both paths.
 
 ---
 
