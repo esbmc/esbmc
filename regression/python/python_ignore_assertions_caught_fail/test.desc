@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-ignore-assertions
+^VERIFICATION FAILED$
+uncaught exception: IndexError

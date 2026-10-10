@@ -213,6 +213,14 @@ static void apply_gcse(
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+// Exceptions whose escape is not reported as a failed property.
+static std::set<irep_idt> unreported_exceptions(const optionst &options)
+{
+  if (options.get_bool_option("python-ignore-assertions"))
+    return {"AssertionError"};
+  return {};
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -354,7 +362,8 @@ bool esbmc_parseoptionst::process_goto_program(
     // is now the only exception path: a program the pass cannot lower is
     // reported as an error rather than silently miscompiled (the legacy
     // imperative path in symex was removed once the lowered subset covered it).
-    remove_exceptions(goto_functions, context, ns);
+    remove_exceptions(
+      goto_functions, context, ns, unreported_exceptions(options));
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
