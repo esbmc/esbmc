@@ -21,6 +21,8 @@ int nest(void)
 
 int f(int n)
 {
+  if (n < 0)
+    return -1;
   if (n == 2)
     if (setjmp(rb) == 5)
       return n;

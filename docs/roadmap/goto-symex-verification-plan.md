@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R130** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R113's list of assertions violated after `longjmp`, §15 M9 (R130); **FIXED**, same entry | **`longjmp` did not transfer control.** The `longjmp` model was an empty body, so execution continued after the call, and `setjmp` returned a nondet value with the state it had when it was first called. With `if (setjmp(b) == 0) f(); else assert(g == 0);` and `f` setting `g = 1` before `longjmp(b, 2)`, the assertion fails natively and was SUCCESSFUL; code after a `longjmp`, which never runs, was checked as reachable. | `src/c2goto/library/setjmp.c`; `lower_longjmp`, `src/goto-programs/lower_longjmp.cpp`; `regression/esbmc/longjmp_frames{,_fail}`, `regression/cstd/jump_bug` | — | **Fixed**: `setjmp` stores a token in the `jmp_buf` and returns 0, and a GOTO pass resumes after the `setjmp` call whose frame recorded that token, returning through the frames in between. Off under `--enable-unreachability-intrinsic`. Non-volatile locals keep their values rather than becoming indeterminate (C11 7.13.2.1p3). |
 
 ---
 
@@ -11704,6 +11705,42 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R130) — 2026-10-10, the `longjmp` that went nowhere
+
+R113's battery listed `longjmp` among the calls that broke assertions holding
+natively. The `longjmp` model was an empty body, so execution continued after
+the call, and `setjmp` returned a nondet value. A nonzero return carried the
+state from the first call to `setjmp`, not the state at the `longjmp`. With
+`f` doing `g = 1; longjmp(b, 2);`, the program
+`if (setjmp(b) == 0) f(); else assert(g == 0);` fails natively and was
+SUCCESSFUL. In the other direction, code after a `longjmp` ran, so an
+`assert(0)` there was FAILED, and `cstd/jump_bug` was a KNOWNBUG.
+
+**Fixed** in two parts. The `setjmp` model now returns 0 (C11 7.13.1.1p3) and
+stores a fresh token in the `jmp_buf`. The `longjmp` model records that token
+and the value (1 if it is 0, 7.13.2.1p4) in thread-local globals and sets a
+pending flag. A new pass, `lower_longjmp`, runs before exception lowering when
+a program calls `longjmp`. Each `setjmp` call site copies the token into a
+local of its frame, zeroed on entry, so recursion and re-armed buffers resolve
+to the right frame. After every other call, a pending `longjmp` branches to
+the function's dispatch block, which resumes after the matching `setjmp` call
+with the value as its result, or returns so the caller dispatches. The pass
+is off under `--enable-unreachability-intrinsic`, where `setjmp` is reported
+as out of scope.
+
+`longjmp_frames_fail` is the program above, SUCCESSFUL on master.
+`longjmp_frames` jumps out of three recursive frames with value 0, which
+arrives as 1, and through a recursion where only one frame armed the buffer;
+master fails it. Both change verdict with the fix reverted, under the default
+solver and `--z3`, and under `--k-induction`. `cstd/jump_bug` is promoted to
+CORE. The other regression tests that call `setjmp` or `longjmp` keep their
+verdicts.
+
+Not fixed: non-volatile locals changed between `setjmp` and `longjmp` keep
+their values instead of becoming indeterminate (7.13.2.1p3). `sigsetjmp`,
+`siglongjmp` and `_longjmp` have no model, and a `longjmp` through a function
+pointer is not lowered. `<csetjmp>` does not parse in C++ mode.
 
 ---
 

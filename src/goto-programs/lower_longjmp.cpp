@@ -3,6 +3,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/context.h>
+#include <util/config/options.h>
 
 namespace
 {
@@ -154,9 +155,14 @@ private:
 };
 } // namespace
 
-void lower_longjmp(goto_functionst &goto_functions, contextt &context)
+void lower_longjmp(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const optionst &options)
 {
-  if (!program_calls_longjmp(goto_functions))
+  if (
+    options.get_bool_option("enable-unreachability-intrinsic") ||
+    !program_calls_longjmp(goto_functions))
     return;
   longjmp_loweringt lowering(context);
   if (!lowering.find_globals())
