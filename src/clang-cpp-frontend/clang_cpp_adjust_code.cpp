@@ -28,6 +28,19 @@ void clang_cpp_adjust::adjust_code(codet &code)
   {
     adjust_catch(code);
   }
+  else if (
+    statement == "cpp-throw" && code.find("exception_list").get_sub().empty())
+  {
+    // A throw side effect that went through an IREP2 round-trip before
+    // adjustment (e.g. the Python frontend's guard inside a statement
+    // expression) comes back in this code form; derive its exception_list
+    // as for the side effect, or remove_exceptions reads an empty one.
+    side_effect_exprt throw_expr("cpp-throw");
+    throw_expr.operands() = code.operands();
+    adjust_side_effect_throw(throw_expr);
+    code.operands() = throw_expr.operands();
+    code.set("exception_list", throw_expr.find("exception_list"));
+  }
   else
     clang_c_adjust::adjust_code(code);
 }

@@ -522,6 +522,16 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  exprt build_division_guarded_binop(
+    const std::string &op,
+    const exprt &lhs,
+    exprt rhs,
+    const nlohmann::json &element);
+  exprt build_arithmetic_binop(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
   /// The static types of the arguments a `str %` right operand supplies.
   std::vector<typet>
   percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
