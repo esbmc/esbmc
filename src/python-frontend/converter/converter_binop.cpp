@@ -1092,6 +1092,60 @@ exprt python_converter::list_or_range_contains(
   return list.contains(lhs, rhs);
 }
 
+/// The dict an Optional[dict] pointer refers to (NULL for None), or an empty
+/// type when @p t is no such pointer.
+typet python_converter::nullable_dict_pointee(const typet &t) const
+{
+  if (!t.is_pointer())
+    return typet();
+  const typet pointee =
+    t.subtype().id() == "symbol" ? ns.follow(t.subtype()) : t.subtype();
+  return dict_handler_->is_dict_type(pointee) ? pointee : typet();
+}
+
+bool python_converter::keeps_pointer_type_on_none(const typet &t)
+{
+  return is_user_class_pointer(t) || !nullable_dict_pointee(t).id().empty();
+}
+
+/// True when the container of membership test @p element is a variable or
+/// attribute, the only list operand that can hold None.
+static bool container_is_name(const nlohmann::json &element)
+{
+  if (element.value("_type", "") != "Compare")
+    return false;
+  const std::string type = element["comparators"][0].value("_type", "");
+  return type == "Name" || type == "Attribute";
+}
+
+/// A list, or an Optional[dict] pointer, is NULL for None: membership on it
+/// raises CPython's TypeError, and otherwise tests the container itself.
+void python_converter::guard_none_container(
+  exprt &rhs,
+  typet &rhs_type,
+  const nlohmann::json &element)
+{
+  const typet dict_type = nullable_dict_pointee(rhs_type);
+  const bool nullable_list =
+    rhs.type() == type_handler_.get_list_type() && container_is_name(element);
+  if (dict_type.id().empty() && !nullable_list)
+    return;
+
+  if (can_emit_runtime_guard())
+  {
+    rhs = hoist_side_effecting_operand(rhs, element, "$in_rhs$");
+    emit_guarded_raise(
+      python_expr::build_equal(rhs, gen_zero(rhs.type())),
+      "TypeError",
+      "argument of type 'NoneType' is not iterable",
+      get_location_from_decl(element));
+  }
+  if (dict_type.id().empty())
+    return;
+  rhs = python_expr::build_dereference(rhs, dict_type);
+  rhs_type = dict_type;
+}
+
 exprt python_converter::handle_membership_operator(
   exprt &lhs,
   exprt &rhs,
@@ -1109,6 +1163,8 @@ exprt python_converter::handle_membership_operator(
 
   if (rhs_resolved_type.id() == "symbol")
     rhs_resolved_type = ns.follow(rhs_resolved_type);
+
+  guard_none_container(rhs, rhs_resolved_type, element);
 
   if (rhs_resolved_type.is_struct())
   {

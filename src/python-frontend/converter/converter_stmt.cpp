@@ -1217,7 +1217,8 @@ void python_converter::handle_assignment_type_adjustments(
       // store a typed NULL, so a later `x = Class(...)` construction allocates
       // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
       // would shrink the pointee and corrupt the allocation.
-      if (is_user_class_pointer(lhs.type()))
+      // An Optional[dict] keeps its dict pointer type the same way.
+      if (keeps_pointer_type_on_none(lhs.type()))
         rhs = typecast_exprt(rhs, lhs.type());
       else
       {
