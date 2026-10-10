@@ -1268,6 +1268,35 @@ __ESBMC_HIDE:;
   return res;
 }
 
+/************************ once routine ***********************/
+
+#define __ESBMC_ONCE_RUNNING 1
+#define __ESBMC_ONCE_DONE 2
+
+// Exactly one caller runs init_routine; every other caller returns only after
+// it has completed (POSIX pthread_once).
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void))
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  _Bool run = *once_control == PTHREAD_ONCE_INIT;
+  if (run)
+    *once_control = __ESBMC_ONCE_RUNNING;
+  __ESBMC_atomic_end();
+
+  if (run)
+  {
+    init_routine();
+    __ESBMC_atomic_begin();
+    *once_control = __ESBMC_ONCE_DONE;
+    __ESBMC_atomic_end();
+  }
+  else
+    __ESBMC_assume(*once_control == __ESBMC_ONCE_DONE);
+
+  return 0;
+}
+
 /************************ detach routine ***********************/
 
 // The pthread_detach() function marks the thread identified by thread

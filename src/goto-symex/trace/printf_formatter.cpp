@@ -33,6 +33,7 @@ void printf_formattert::print(std::ostream &out)
   min_outlen = 0;
   max_outlen = 0;
   bounded = true;
+  exact = true;
 
   try
   {
@@ -150,11 +151,13 @@ void printf_formattert::process_format(std::ostream &out)
 
   char ch = next();
 
-  // Parse flags: only '0' (zero-pad) is tracked; others are consumed
+  // Parse flags: only '0' (zero-pad) is modelled; others are consumed
   while (ch == '0' || ch == '-' || ch == '+' || ch == ' ' || ch == '#')
   {
     if (ch == '0')
       format_constant.zero_padding = true;
+    else
+      exact = false;
     ch = next();
   }
 
@@ -392,7 +395,10 @@ void printf_formattert::process_format(std::ostream &out)
     }
     const expr2tc carg = make_type(*(next_operand++), char_type2());
     if (is_constant_int2t(carg))
-      emit(format_constant(carg));
+      emit(pad_int(
+        std::string(1, (char)to_constant_int2t(carg).value.to_int64()),
+        format_constant.min_width,
+        false));
     else
     {
       // %c writes exactly one character regardless of its value (padded to
@@ -424,6 +430,7 @@ void printf_formattert::process_format(std::ostream &out)
     // runtime output. %p ignores the '0' flag; pad with spaces only.
     if (next_operand != operands.end())
       ++next_operand;
+    exact = false;
     const unsigned hex_chars = (config.ansi_c.pointer_width() + 3) / 4;
     emit(pad_int(
       "0x" + std::string(hex_chars, '0'), format_constant.min_width, false));
@@ -431,6 +438,7 @@ void printf_formattert::process_format(std::ostream &out)
   }
 
   default:
+    exact = false;
     emit(std::string(1, '%') + ch);
   }
 }

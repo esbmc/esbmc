@@ -240,6 +240,35 @@ def try_match_dot_literal(pattern: str, pattern_len: int, string: str) -> int:
     return 1
 
 
+# Flag values as CPython's re module defines them.
+IGNORECASE: int = 2
+I: int = 2
+MULTILINE: int = 8
+M: int = 8
+DOTALL: int = 16
+S: int = 16
+UNICODE: int = 32
+U: int = 32
+VERBOSE: int = 64
+X: int = 64
+ASCII: int = 256
+A: int = 256
+
+
+def _flag_mode(pattern: str, flags: int) -> int:
+    """0: the flags change nothing for this model, 1: match case-insensitively
+    by lowering both sides, 2: not modelled, so the result is nondet.
+    UNICODE and ASCII only differ on non-ASCII text; lowering a pattern would
+    turn an escape such as \\D into \\d, so IGNORECASE needs a pattern without one."""
+    if (flags | 290) != 290:
+        return 2
+    if (flags & 2) == 0:
+        return 0
+    if "\\" in pattern:
+        return 2
+    return 1
+
+
 def match(pattern: str, string: str) -> bool:
     """
     Try to match pattern at the beginning of string
@@ -550,3 +579,33 @@ def fullmatch(pattern: str, string: str) -> bool:
     # For patterns with metacharacters, use nondeterministic behavior
     has_match: bool = __VERIFIER_nondet_bool()
     return has_match
+
+
+def _match_flags(pattern: str, string: str, flags: int) -> bool:
+    """re.match with a flags argument; the converter routes such calls here."""
+    mode: int = _flag_mode(pattern, flags)
+    if mode == 2:
+        return __VERIFIER_nondet_bool()
+    if mode == 1:
+        return match(pattern.lower(), string.lower())
+    return match(pattern, string)
+
+
+def _search_flags(pattern: str, string: str, flags: int) -> bool:
+    """re.search with a flags argument; the converter routes such calls here."""
+    mode: int = _flag_mode(pattern, flags)
+    if mode == 2:
+        return __VERIFIER_nondet_bool()
+    if mode == 1:
+        return search(pattern.lower(), string.lower())
+    return search(pattern, string)
+
+
+def _fullmatch_flags(pattern: str, string: str, flags: int) -> bool:
+    """re.fullmatch with a flags argument; the converter routes such calls here."""
+    mode: int = _flag_mode(pattern, flags)
+    if mode == 2:
+        return __VERIFIER_nondet_bool()
+    if mode == 1:
+        return fullmatch(pattern.lower(), string.lower())
+    return fullmatch(pattern, string)

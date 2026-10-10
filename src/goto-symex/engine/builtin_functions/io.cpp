@@ -194,6 +194,97 @@ bool goto_symext::recover_va_list_args(
   return true;
 }
 
+static bool is_literal_string_start(const expr2tc &e)
+{
+  if (is_typecast2t(e))
+    return is_literal_string_start(to_typecast2t(e).from);
+  if (!is_address_of2t(e))
+    return false;
+  const expr2tc &obj = to_address_of2t(e).ptr_obj;
+  if (is_constant_string2t(obj))
+    return true;
+  return is_index2t(obj) &&
+         is_constant_string2t(to_index2t(obj).source_value) &&
+         is_constant_int2t(to_index2t(obj).index) &&
+         to_constant_int2t(to_index2t(obj).index).value.is_zero();
+}
+
+bool goto_symext::exact_printf_output(
+  const code_printf2t &call,
+  size_t fmt_idx,
+  std::string &out)
+{
+  expr2tc fmt = call.operands[fmt_idx];
+  cur_state->rename(fmt);
+  const expr2tc &fmt_str = get_base_object(fmt);
+  if (!is_constant_string2t(fmt_str))
+    return false;
+
+  std::list<expr2tc> args;
+  for (size_t i = fmt_idx + 1; i < call.operands.size(); i++)
+  {
+    expr2tc arg = call.operands[i];
+    cur_state->rename(arg);
+    do_simplify(arg);
+    if (!is_constant_int2t(arg) && !is_literal_string_start(arg))
+      return false;
+    args.push_back(arg);
+  }
+
+  printf_formattert formatter;
+  formatter(to_constant_string2t(fmt_str).value.as_string(), args);
+  out = formatter.as_string();
+  return formatter.exact && formatter.bounded &&
+         formatter.min_outlen == formatter.max_outlen;
+}
+
+void goto_symext::symex_sprintf_store(const code_printf2t &call)
+{
+  const bool bounded_size = call.kind == printf_kindt::SNPRINTF;
+  if (!bounded_size && call.kind != printf_kindt::SPRINTF)
+    return;
+
+  // Only an output known byte for byte is stored; any other leaves the
+  // destination unchanged.
+  std::string out;
+  if (!exact_printf_output(call, bounded_size ? 2 : 1, out))
+    return;
+
+  const expr2tc &dst = call.operands[0];
+  if (!is_pointer_type(dst) || !is_bv_type(to_pointer_type(dst->type).subtype))
+    return;
+  const type2tc char_type = to_pointer_type(dst->type).subtype;
+  expr2tc n = bounded_size ? call.operands[1] : expr2tc();
+  if (bounded_size)
+    cur_state->rename(n);
+  // Each write's guard joins the state guard, so the dereference checks are
+  // scoped as well. C11 7.21.6.5p2: snprintf writes at most n - 1
+  // characters, then a NUL.
+  const guard2tc saved_guard = cur_state->guard;
+  for (size_t i = 0; i <= out.size(); i++)
+  {
+    const expr2tc pos = constant_int2tc(size_type2(), BigInt(i));
+    const char c = i < out.size() ? out[i] : '\0';
+    expr2tc value = constant_int2tc(
+      char_type,
+      is_signedbv_type(char_type) ? BigInt((signed char)c)
+                                  : BigInt((unsigned char)c));
+    guard2tc write_guard;
+    if (bounded_size)
+    {
+      write_guard.add(lessthan2tc(constant_int2tc(n->type, BigInt(i)), n));
+      cur_state->guard = saved_guard;
+      cur_state->guard.add(write_guard.as_expr());
+      const expr2tc next = constant_int2tc(n->type, BigInt(i + 1));
+      value =
+        if2tc(char_type, lessthan2tc(next, n), value, gen_zero(char_type));
+    }
+    const expr2tc elem = dereference2tc(char_type, add2tc(dst->type, dst, pos));
+    symex_assign(code_assign2tc(elem, value), false, write_guard);
+  }
+  cur_state->guard = saved_guard;
+}
+
 void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 {
   assert(is_code_printf2t(rhs));
@@ -400,6 +491,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
 
+  symex_sprintf_store(to_code_printf2t(rhs));
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
@@ -595,6 +688,33 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);
 }
 
+// One entry per conversion that takes an argument: true if it assigns an
+// input item, false for %n, which the return value does not count.
+static std::vector<bool> scanf_conversions(const std::string &fmt)
+{
+  std::vector<bool> conversions;
+  for (size_t i = 0; i + 1 < fmt.length(); ++i)
+  {
+    if (fmt[i] != '%')
+      continue;
+    if (fmt[++i] == '%')
+      continue;
+
+    // Width and length modifiers. '*' is left out: a suppressed conversion
+    // takes no argument.
+    while (i < fmt.length() &&
+           std::string("-+ #0123456789.hlLzjt").find(fmt[i]) !=
+             std::string::npos)
+      ++i;
+
+    if (
+      i < fmt.length() &&
+      std::string("diouxXfFeEgGaAcsp[n").find(fmt[i]) != std::string::npos)
+      conversions.push_back(fmt[i] != 'n');
+  }
+  return conversions;
+}
+
 void goto_symext::symex_input(const code_function_call2t &func_call)
 {
   assert(is_symbol2t(func_call.function));
@@ -617,101 +737,40 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   cur_state->source.pc--;
 
-  // Get the format string and count actual format specifiers
   expr2tc fmt_operand = func_call.operands[fmt_idx];
   cur_state->rename(fmt_operand);
 
-  unsigned actual_format_count = 0;
-
-  // Try to get the format string value to count specifiers
+  const size_t available_args = func_call.operands.size() - (fmt_idx + 1);
+  std::vector<bool> conversions(available_args, true);
   const expr2tc &base_expr = get_base_object(fmt_operand);
   if (is_constant_string2t(base_expr))
-  {
-    std::string format_str = to_constant_string2t(base_expr).value.as_string();
+    conversions =
+      scanf_conversions(to_constant_string2t(base_expr).value.as_string());
+  conversions.resize(std::min(conversions.size(), available_args));
 
-    // Count format specifiers in the string
-    // This is a simplified parser - handles %d, %s, %c, %f, etc.
-    // but not complex cases like %*d (ignored), %10d (width), etc.
-    for (size_t i = 0; i < format_str.length(); ++i)
-    {
-      if (format_str[i] == '%')
-      {
-        if (i + 1 < format_str.length())
-        {
-          if (format_str[i + 1] == '%')
-          {
-            // %% is an escaped %, not a format specifier
-            ++i; // skip the second %
-            continue;
-          }
-          else
-          {
-            // Skip any flags, width, precision specifiers
-            ++i;
-            while (i < format_str.length() &&
-                   (format_str[i] == '-' || format_str[i] == '+' ||
-                    format_str[i] == ' ' || format_str[i] == '#' ||
-                    format_str[i] == '0'))
-              ++i;
-
-            // Skip width
-            while (i < format_str.length() && isdigit(format_str[i]))
-              ++i;
-
-            // Skip precision
-            if (i < format_str.length() && format_str[i] == '.')
-            {
-              ++i;
-              while (i < format_str.length() && isdigit(format_str[i]))
-                ++i;
-            }
-
-            // Skip length modifiers (h, l, ll, etc.)
-            while (i < format_str.length() &&
-                   (format_str[i] == 'h' || format_str[i] == 'l' ||
-                    format_str[i] == 'L' || format_str[i] == 'z' ||
-                    format_str[i] == 'j' || format_str[i] == 't'))
-              ++i;
-            // Check for actual conversion specifier
-            if (i < format_str.length())
-            {
-              char spec = format_str[i];
-              if (
-                spec == 'd' || spec == 'i' || spec == 'o' || spec == 'u' ||
-                spec == 'x' || spec == 'X' || spec == 'f' || spec == 'F' ||
-                spec == 'e' || spec == 'E' || spec == 'g' || spec == 'G' ||
-                spec == 'a' || spec == 'A' || spec == 'c' || spec == 's' ||
-                spec == 'p' || spec == 'n')
-              {
-                // %n still needs a parameter even though it doesn't consume
-                // input
-                actual_format_count++;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  else
-  {
-    // If we can't determine the format string statically,
-    // fall back to processing all provided arguments
-    actual_format_count = func_call.operands.size() - (fmt_idx + 1);
-  }
-
-  // Limit to available arguments
-  unsigned available_args = func_call.operands.size() - (fmt_idx + 1);
-  unsigned args_to_process = std::min(actual_format_count, available_args);
-
+  // C11 7.21.6.2p16: EOF if input fails before the first conversion, else the
+  // number of items assigned, which a matching failure can leave below the
+  // number of conversions.
+  const long items = std::count(conversions.begin(), conversions.end(), true);
+  expr2tc count = gen_nondet(int_type2());
+  replace_nondet(count);
+  assume(and2tc(
+    greaterthanequal2tc(count, gen_long(int_type2(), -1)),
+    lessthanequal2tc(count, gen_long(int_type2(), items))));
   if (func_call.ret)
-    symex_assign(code_assign2tc(
-      func_call.ret, constant_int2tc(int_type2(), BigInt(args_to_process))));
+    symex_assign(code_assign2tc(func_call.ret, count));
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  for (unsigned i = 0; i < args_to_process; i++)
+  long assigned = 0;
+  for (size_t i = 0; i < conversions.size(); i++)
   {
+    // Item k is stored only when the k conversions before it matched too.
+    // A %n target is havocked whether or not it is reached.
+    guard2tc stored;
+    if (conversions[i])
+      stored.add(greaterthan2tc(count, gen_long(int_type2(), assigned++)));
+
     expr2tc operand = func_call.operands[fmt_idx + 1 + i];
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), operand);
@@ -730,7 +789,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
         type2tc(),
         sideeffect2t::allockind::nondet);
 
-      symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
+      symex_assign(code_assign2tc(item.object, val), false, stored);
     }
   }
 

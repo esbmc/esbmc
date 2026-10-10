@@ -181,6 +181,63 @@ bool goto_symext::get_unwind_recursion(
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
+expr2tc goto_symext::argument_value(
+  const type2tc &arg_type,
+  const expr2tc &rhs,
+  const irep_idt &identifier)
+{
+  if (base_type_eq(arg_type, rhs->type, ns))
+    return rhs;
+
+  // we are willing to do some limited conversion
+  if (
+    (is_number_type(arg_type) || is_pointer_type(arg_type)) &&
+    (is_number_type(rhs->type) || is_pointer_type(rhs->type)))
+    return typecast2tc(arg_type, rhs);
+
+  // Special handling for Python object semantics:
+  // Allow pointer types to match struct parameter types since Python
+  // objects are always passed by reference (pointer), but type
+  // annotations declare parameters with struct types (e.g., def
+  // __init__(self, f: Foo))
+  if (is_pointer_type(rhs->type) && is_struct_type(arg_type))
+  {
+    type2tc ptr_subtype = to_pointer_type(rhs->type).subtype;
+
+    // Resolve symbol types
+    while (is_symbol_type(ptr_subtype))
+    {
+      const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
+      symbolt const *sym = ns.lookup(sym_type.symbol_name);
+      if (sym)
+        ptr_subtype = migrate_symbol_type(*sym);
+      else
+        break;
+    }
+
+    // Type is compatible (pointer to struct), dereference pointer for
+    // assignment
+    if (base_type_eq(arg_type, ptr_subtype, ns))
+      return dereference2tc(arg_type, rhs);
+  }
+
+  // Python has no such undefined behaviour; the mismatch is a frontend defect.
+  if (config.language.lid == language_idt::PYTHON)
+  {
+    log_error(
+      "function call: argument \"{}\" type mismatch: got {}, expected {}",
+      id2string(identifier),
+      get_type_id(rhs->type),
+      get_type_id(arg_type));
+    abort();
+  }
+
+  // C11 6.3.2.3p8: calling through an incompatible type is undefined.
+  claim(gen_false_expr(), "function called through an incompatible type");
+  return symbol2tc(
+    arg_type, "nondet$symex::nondet" + i2string(get_nondet_counter()++));
+}
+
 unsigned goto_symext::argument_assignments(
   const irep_idt &function_identifier,
   const code_type2t &function_type,
@@ -246,68 +303,8 @@ unsigned goto_symext::argument_assignments(
     {
       expr2tc rhs = *it1;
 
-      // it should be the same exact type
       auto const &arg_type = function_type.arguments[name_idx];
-      if (!base_type_eq(arg_type, rhs->type, ns))
-      {
-        const type2tc &f_arg_type = arg_type;
-        const type2tc &f_rhs_type = rhs->type;
-
-        // we are willing to do some limited conversion
-        if (
-          (is_number_type(f_arg_type) || is_pointer_type(f_arg_type)) &&
-          (is_number_type(f_rhs_type) || is_pointer_type(f_rhs_type)))
-        {
-          rhs = typecast2tc(arg_type, rhs);
-        }
-        // Special handling for Python object semantics:
-        // Allow pointer types to match struct parameter types since Python
-        // objects are always passed by reference (pointer), but type
-        // annotations declare parameters with struct types (e.g., def
-        // __init__(self, f: Foo))
-        else if (is_pointer_type(f_rhs_type) && is_struct_type(f_arg_type))
-        {
-          // Check if the pointer points to the expected struct type
-          const pointer_type2t &ptr_type = to_pointer_type(f_rhs_type);
-          type2tc ptr_subtype = ptr_type.subtype;
-
-          // Resolve symbol types
-          while (is_symbol_type(ptr_subtype))
-          {
-            const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
-            symbolt const *sym = ns.lookup(sym_type.symbol_name);
-            if (sym)
-              ptr_subtype = migrate_symbol_type(*sym);
-            else
-              break;
-          }
-
-          // If pointer points to the expected struct type, allow it
-          if (!base_type_eq(f_arg_type, ptr_subtype, ns))
-          {
-            log_error(
-              "function call: argument \"{}\" type mismatch: got {}, expected "
-              "{}",
-              id2string(identifier),
-              get_type_id((*it1)->type),
-              get_type_id(arg_type));
-            abort();
-          }
-
-          // Type is compatible (pointer to struct), dereference pointer for
-          // assignment
-          rhs = dereference2tc(f_arg_type, rhs);
-        }
-        else
-        {
-          log_error(
-            "function call: argument \"{}\" type mismatch: got {}, expected {}",
-            id2string(identifier),
-            get_type_id((*it1)->type),
-            get_type_id(arg_type));
-          abort();
-        }
-      }
+      rhs = argument_value(arg_type, rhs, identifier);
 
       // 'Declare' the argument before assigning a value to it
       expr2tc lhs = symbol2tc(function_type.arguments[name_idx], identifier);

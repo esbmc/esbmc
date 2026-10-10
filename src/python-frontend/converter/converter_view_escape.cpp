@@ -19,6 +19,13 @@ namespace
 const char *const view_use_error =
   "TypeError: passing a numpy view to a function that is not a single return "
   "expression over its parameters is not supported";
+const char *const live_copy_call_error =
+  "TypeError: passing a numpy view to a function while a copied view of its "
+  "storage is live is not supported";
+const char *const unnamed_view_argument_error =
+  "TypeError: passing a numpy view expression that is not bound to a name to "
+  "a function that is not a single return expression over its parameters is "
+  "not supported";
 const char *const returned_view_error =
   "TypeError: returning a copied numpy view is not supported";
 const char *const multi_path_return_error =
@@ -100,6 +107,91 @@ bool references_name(const nlohmann::json &node, const std::string &name)
     found = found || id["id"].get<std::string>() == name;
   });
   return found;
+}
+
+// Calls `visit` on every `return` in the scope that owns `node`.
+void for_each_return(
+  const nlohmann::json &node,
+  const std::function<void(const nlohmann::json &)> &visit)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (
+    kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "Lambda" ||
+    kind == "ClassDef")
+    return;
+  if (kind == "Return")
+    visit(node);
+  for (const auto &child : node)
+    for_each_return(child, visit);
+}
+
+std::size_t count_stores(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t stores = 0;
+  for_each_name(node, [&](const nlohmann::json &id) {
+    const std::string ctx =
+      id.contains("ctx") ? id["ctx"].value("_type", "") : "";
+    if (id["id"].get<std::string>() == name && ctx != "Load")
+      ++stores;
+  });
+  return stores;
+}
+
+// Index of the parameter that `name` denotes in `func_node`: a parameter the
+// body never rebinds, or a local bound once, at the top level of the body, to
+// such a parameter.
+std::optional<std::size_t>
+aliased_param_index(const nlohmann::json &func_node, const std::string &name)
+{
+  const nlohmann::json &body = func_node["body"];
+  const nlohmann::json &params = func_node["args"]["args"];
+  const std::size_t stores = count_stores(body, name);
+  if (stores == 0)
+  {
+    for (std::size_t i = 0; i < params.size(); ++i)
+      if (params[i].value("arg", "") == name)
+        return i;
+    return std::nullopt;
+  }
+  if (stores != 1)
+    return std::nullopt;
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    const nlohmann::json *target = nullptr;
+    if (kind == "Assign" && stmt["targets"].size() == 1)
+      target = &stmt["targets"][0];
+    else if (kind == "AnnAssign")
+      target = &stmt["target"];
+    if (
+      target != nullptr && is_name(*target) &&
+      (*target)["id"].get<std::string>() == name && stmt.contains("value") &&
+      is_name(stmt["value"]) && count_stores(body, stmt["value"]["id"]) == 0)
+      return aliased_param_index(func_node, stmt["value"]["id"]);
+  }
+  return std::nullopt;
+}
+
+// Index of the parameter every `return` of `func_node` yields. The body must
+// end in a `return`, so no path falls off the end and yields None.
+std::optional<std::size_t> returned_param_index(const nlohmann::json &func_node)
+{
+  const nlohmann::json &body = func_node["body"];
+  if (body.empty() || body.back().value("_type", "") != "Return")
+    return std::nullopt;
+  std::optional<std::size_t> result;
+  bool same_param = true;
+  for_each_return(body, [&](const nlohmann::json &ret) {
+    const std::optional<std::size_t> index =
+      ret.contains("value") && is_name(ret["value"])
+        ? aliased_param_index(func_node, ret["value"]["id"])
+        : std::nullopt;
+    same_param = same_param && index && (!result || *result == *index);
+    result = index;
+  });
+  return same_param ? result : std::nullopt;
 }
 
 // Calls whose only use of an array argument is to read it.
@@ -432,12 +524,61 @@ bool python_converter::bind_numpy_pointer_view_alias(
   return true;
 }
 
+bool python_converter::returns_bound_numpy_view_param(
+  const nlohmann::json &func_node) const
+{
+  const std::optional<std::size_t> index = returned_param_index(func_node);
+  return index && numpy_view_params_.count(
+                    func_node["name"].get<std::string>() + "#" +
+                    std::to_string(*index)) != 0;
+}
+
+const nlohmann::json *
+python_converter::returned_numpy_view_argument(const nlohmann::json &call)
+{
+  if (!is_named_call(call))
+    return nullptr;
+  const nlohmann::json func_node = json_utils::try_find_function(
+    (*ast_json)["body"], call["func"]["id"].get<std::string>());
+  if (func_node.empty() || !returns_bound_numpy_view_param(func_node))
+    return nullptr;
+  const std::size_t index = *returned_param_index(func_node);
+  if (index >= call["args"].size())
+    return nullptr;
+  const nlohmann::json &arg = call["args"][index];
+  return is_name(arg) && contains_tracked_numpy_view_name(arg) ? &arg : nullptr;
+}
+
+// `ret = f(view)` where f always returns that parameter: run the call for its
+// effects and bind `ret` to the argument, which carries the view metadata.
+bool python_converter::try_bind_returned_numpy_view_param(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+  const nlohmann::json *arg = returned_numpy_view_argument(ast_node["value"]);
+  if (arg == nullptr)
+    return false;
+  numpy_discarded_call_ = &ast_node["value"];
+  exprt call = get_expr(ast_node["value"]);
+  numpy_discarded_call_ = nullptr;
+  if (call != exprt())
+    target_block.copy_to_operands(convert_expression_to_code(call));
+  nlohmann::json alias = ast_node;
+  alias["value"] = *arg;
+  get_var_assign(alias, target_block);
+  return true;
+}
+
 void python_converter::get_folded_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
   reject_numpy_view_container_store(ast_node);
-  if (try_bind_numpy_view_container(ast_node, target_block))
+  if (
+    try_bind_numpy_view_container(ast_node, target_block) ||
+    try_bind_returned_numpy_view_param(ast_node, target_block))
     return;
   std::optional<nlohmann::json> folded =
     ast_node.contains("value") ? fold_numpy_view_call(ast_node["value"])
@@ -499,6 +640,8 @@ void python_converter::reject_unfoldable_numpy_view_call(
     throw std::runtime_error(returned_view_error);
   if (numpy_fold_only_functions_.count(func_name) != 0)
     throw std::runtime_error(unfolded_call_error);
+  if (&call != numpy_discarded_call_ && returned_numpy_view_argument(call))
+    throw std::runtime_error(returned_view_error);
   reject_multi_path_numpy_view_return(call);
 }
 
@@ -508,8 +651,9 @@ void python_converter::reject_unfoldable_numpy_view_call(
 void python_converter::reject_numpy_view_argument_use(
   const nlohmann::json &call)
 {
-  const nlohmann::json func_node = json_utils::try_find_function(
-    (*ast_json)["body"], call["func"]["id"].get<std::string>());
+  const std::string func_name = call["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
   reject_numpy_view_callee(call);
   if (func_node.empty())
     throw std::runtime_error(unknown_function_error);
@@ -519,13 +663,95 @@ void python_converter::reject_numpy_view_argument_use(
       contains_tracked_numpy_view_name(call["args"][i]) &&
       (i >= params.size() ||
        references_name(func_node["body"], params[i].value("arg", ""))))
-      throw std::runtime_error(view_use_error);
+    {
+      if (numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
+        throw std::runtime_error(view_use_error);
+    }
+}
+
+// A callee may write through a bound view parameter, which a copied view of
+// the same storage would not see.
+void python_converter::reject_live_numpy_view_copies_of(
+  const nlohmann::json &args)
+{
+  for_each_name(args, [&](const nlohmann::json &name) {
+    const std::string id =
+      resolve_name_symbol_id(name["id"].get<std::string>());
+    if (id.empty() || numpy_pointer_view_info_.count(id) == 0)
+      return;
+    const std::string root = numpy_view_storage_root(id);
+    for (const auto &copy : numpy_view_copy_sources_)
+      if (
+        (copy.second == id || copy.second == root) &&
+        numpy_pointer_view_info_.count(copy.first) == 0)
+        throw std::runtime_error(live_copy_call_error);
+  });
+}
+
+// `x = f(a[lo:hi])` or `f(a[lo:hi])` where f binds that parameter as a view:
+// the subscript is first bound to a fresh name, as `t = a[lo:hi]; f(t)`, so
+// the callee writes through the view instead of a temporary.
+const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
+  const nlohmann::json &statement,
+  nlohmann::json &rewritten,
+  codet &target_block)
+{
+  const std::string kind = statement.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign" && kind != "Expr") ||
+    !statement.contains("value") || !is_named_call(statement["value"]))
+    return statement;
+  const nlohmann::json &call = statement["value"];
+  const std::string func_name = call["func"]["id"].get<std::string>();
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    const nlohmann::json &arg = call["args"][i];
+    if (
+      arg.value("_type", "") != "Subscript" || !is_name(arg["value"]) ||
+      numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
+      continue;
+    nlohmann::json name = arg["value"];
+    name["id"] = "$numpy_view_arg$" + std::to_string(numpy_view_arg_count_++);
+    nlohmann::json binding = statement;
+    binding["_type"] = "Assign";
+    binding["targets"] = nlohmann::json::array({name});
+    binding["targets"][0]["ctx"] = {{"_type", "Store"}};
+    binding["value"] = arg;
+    get_folded_var_assign(binding, target_block);
+    if (rewritten.is_null())
+      rewritten = statement;
+    rewritten["value"]["args"][i] = name;
+  }
+  return rewritten.is_null() ? statement : rewritten;
+}
+
+// A bound view parameter aliases its argument only when that argument is a
+// name: any other expression is evaluated into a temporary the callee would
+// write to instead. A body that is one return expression cannot write.
+void python_converter::reject_unnamed_numpy_view_argument(
+  const nlohmann::json &call) const
+{
+  const std::string func_name = call["func"]["id"].get<std::string>();
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    if (
+      is_name(call["args"][i]) ||
+      numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
+      continue;
+    const nlohmann::json func_node =
+      json_utils::try_find_function((*ast_json)["body"], func_name);
+    if (
+      !func_node.empty() &&
+      !straight_line_return_value(func_node["body"], imported_modules))
+      throw std::runtime_error(unnamed_view_argument_error);
+  }
 }
 
 void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
 {
   if (!is_named_call(call))
     return;
+  reject_unnamed_numpy_view_argument(call);
   reject_unfoldable_numpy_view_call(call);
   if (
     !contains_tracked_numpy_view_name(call["args"]) ||
@@ -533,6 +759,24 @@ void python_converter::track_numpy_view_call_escape(const nlohmann::json &call)
     fold_numpy_view_call(call))
     return;
   reject_numpy_view_argument_use(call);
+
+  // Every view arg that maps to a registered view-parameter binding is
+  // handled through the callee's own metadata; its storage does not escape.
+  // Skip the escape loop when all view args in this call are bound.
+  {
+    const std::string fname = call["func"]["id"].get<std::string>();
+    bool all_bound = true;
+    for (std::size_t i = 0; i < call["args"].size() && all_bound; ++i)
+      if (
+        contains_tracked_numpy_view_name(call["args"][i]) &&
+        numpy_view_params_.count(fname + "#" + std::to_string(i)) == 0)
+        all_bound = false;
+    if (all_bound)
+    {
+      reject_live_numpy_view_copies_of(call["args"]);
+      return;
+    }
+  }
 
   // Not assumed read-only: the callee may keep or mutate what it received.
   for_each_name(call["args"], [&](const nlohmann::json &name) {

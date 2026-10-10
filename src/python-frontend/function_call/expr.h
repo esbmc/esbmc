@@ -518,6 +518,7 @@ private:
    * validation passes
    */
   exprt validate_re_module_args() const;
+  void route_re_flags_call();
 
   bool is_any_call() const;
   bool is_all_call() const;

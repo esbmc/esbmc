@@ -500,20 +500,31 @@ std::optional<nlohmann::json> percent_format_as_fstring(
 }
 } // namespace
 
+static bool has_side_effect(const exprt &e)
+{
+  if (e.id() == "sideeffect")
+    return true;
+  for (const exprt &sub : e.operands())
+    if (has_side_effect(sub))
+      return true;
+  return false;
+}
+
+static exprt *find_subexpr(exprt &e, const exprt &what)
+{
+  if (e == what)
+    return &e;
+  Forall_operands (it, e)
+    if (exprt *found = find_subexpr(*it, what))
+      return found;
+  return nullptr;
+}
+
 exprt python_converter::hoist_side_effecting_operand(
   const exprt &operand,
   const nlohmann::json &element,
   const std::string &prefix)
 {
-  std::function<bool(const exprt &)> has_side_effect =
-    [&](const exprt &e) -> bool {
-    if (e.id() == "sideeffect")
-      return true;
-    for (const exprt &sub : e.operands())
-      if (has_side_effect(sub))
-        return true;
-    return false;
-  };
   if (!has_side_effect(operand))
     return operand;
 
@@ -911,13 +922,12 @@ exprt python_converter::handle_chained_comparisons_logic(
   // Each later comparison runs only if the earlier ones held.
   const bool old_in_lazy_operand = in_lazy_operand_;
   in_lazy_operand_ = true;
+  exprt reuse = nil_exprt();
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt op1 = get_expr(element["comparators"][i]);
-    exprt op2 = get_expr(element["comparators"][i + 1]);
-
-    convert_function_calls_to_side_effects(op1, op2);
+    auto [op1, op2] =
+      chained_pair_operands(element, i, conjuncts.front(), reuse);
 
     std::string op1_type = type_handler_.type_to_string(op1.type());
     std::string op2_type = type_handler_.type_to_string(op2.type());
@@ -974,6 +984,70 @@ exprt python_converter::handle_chained_comparisons_logic(
     acc = and2tc(acc, c2);
   }
   return migrate_expr_back(acc);
+}
+
+std::pair<exprt, exprt> python_converter::chained_pair_operands(
+  const nlohmann::json &element,
+  size_t i,
+  exprt &first_pair,
+  exprt &reuse)
+{
+  // A comparator is read by two adjacent pairs but evaluated once in Python.
+  const nlohmann::json &comparators = element["comparators"];
+  exprt op1 = reuse;
+  if (op1.is_nil())
+  {
+    op1 = get_expr(comparators[i]);
+    convert_function_call_to_side_effect(op1);
+    // first_pair already evaluates comparators[0]; bind it there.
+    exprt *first = i == 0 ? find_subexpr(first_pair, op1) : nullptr;
+    exprt bound =
+      first ? bind_chained_comparator(op1, element, reuse) : nil_exprt();
+    if (bound.is_not_nil())
+    {
+      *first = bound;
+      op1 = reuse;
+    }
+  }
+
+  exprt op2 = get_expr(comparators[i + 1]);
+  convert_function_call_to_side_effect(op2);
+  reuse = nil_exprt();
+  if (i + 2 < comparators.size())
+  {
+    exprt bound = bind_chained_comparator(op2, element, reuse);
+    if (bound.is_not_nil())
+      op2 = bound;
+  }
+  return {op1, op2};
+}
+
+exprt python_converter::bind_chained_comparator(
+  const exprt &operand,
+  const nlohmann::json &element,
+  exprt &reuse)
+{
+  if (
+    !current_block || !safe_to_emit_side_effecting_statement() ||
+    operand.type().is_array() || !has_side_effect(operand))
+    return nil_exprt();
+
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp =
+    create_tmp_symbol(element, "$cmp_operand$", operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  add_instruction(decl);
+
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  code_blockt block;
+  block.copy_to_operands(assign, code_expressiont(symbol_expr(tmp)));
+  side_effect_exprt bound("statement_expression", operand.type());
+  bound.copy_to_operands(block);
+  bound.location() = loc;
+  reuse = symbol_expr(tmp);
+  return bound;
 }
 
 /// The `range(...)` call a membership test of x can evaluate arithmetically:
