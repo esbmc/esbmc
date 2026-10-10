@@ -675,32 +675,39 @@ bool python_converter::name_bound_from_call(const nlohmann::json &node) const
     }
     if (!n.is_object())
       return false;
+    // The annotator rewrites `a = f(x)` into an AnnAssign carrying its own
+    // inferred type, so look at both spellings.
+    nlohmann::json targets = nlohmann::json::array();
     if (n.value("_type", "") == "Assign" && n.contains("targets"))
-      for (const auto &t : n["targets"])
-        if (
-          t.value("_type", "") == "Name" && t.value("id", "") == name &&
-          n.contains("value") && n["value"].value("_type", "") == "Call")
+      targets = n["targets"];
+    else if (n.value("_type", "") == "AnnAssign" && n.contains("target"))
+      targets.push_back(n["target"]);
+    for (const auto &t : targets)
+      if (
+        t.value("_type", "") == "Name" && t.value("id", "") == name &&
+        n.contains("value") && n["value"].is_object() &&
+        n["value"].value("_type", "") == "Call")
+      {
+        const auto &callee = n["value"]["func"];
+        // A direct call to a builtin or to a function the user annotated
+        // has a known result type.
+        if (callee.value("_type", "") == "Name")
         {
-          const auto &callee = n["value"]["func"];
-          // A direct call to a builtin or to a function the user annotated
-          // has a known result type.
-          if (callee.value("_type", "") == "Name")
-          {
-            const std::string fname = callee.value("id", "");
-            if (type_utils::is_builtin_type(fname))
-              continue;
-            nlohmann::json def =
-              json_utils::try_find_function((*ast_json)["body"], fname);
-            if (
-              !def.empty() &&
-              (def.contains("decorator_list") ? def["decorator_list"].empty()
-                                              : true) &&
-              def.contains("returns") && !def["returns"].is_null() &&
-              !def["returns"].value("_inferred_annotation", false))
-              continue;
-          }
-          return true;
+          const std::string fname = callee.value("id", "");
+          if (type_utils::is_builtin_type(fname))
+            continue;
+          nlohmann::json def =
+            json_utils::try_find_function((*ast_json)["body"], fname);
+          if (
+            !def.empty() &&
+            (def.contains("decorator_list") ? def["decorator_list"].empty()
+                                            : true) &&
+            def.contains("returns") && !def["returns"].is_null() &&
+            !def["returns"].value("_inferred_annotation", false))
+            continue;
         }
+        return true;
+      }
     for (const char *key : {"body", "orelse"})
       if (n.contains(key) && walk(n[key]))
         return true;
