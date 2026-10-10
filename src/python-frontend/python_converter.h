@@ -1811,10 +1811,25 @@ private:
     code_blockt &cond_prelude);
   void reject_live_numpy_view_copies_of(const nlohmann::json &args);
   bool passes_numpy_view(const nlohmann::json &arg);
+  bool is_scalar_numpy_view_call(const nlohmann::json &call);
   bool passes_unnamed_numpy_view_argument(const nlohmann::json &call) const;
   bool contains_unnamed_numpy_view_argument(const nlohmann::json &node) const;
   const nlohmann::json &hoist_unnamed_numpy_view_arguments(
     const nlohmann::json &statement,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  nlohmann::json bind_numpy_view_temporary(
+    const nlohmann::json &statement,
+    const nlohmann::json &value,
+    const std::string &prefix,
+    codet &target_block);
+  void hoist_numpy_view_arguments(
+    const nlohmann::json &statement,
+    const std::string &key,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  void hoist_returned_numpy_view_call(
+    const std::string &key,
     nlohmann::json &rewritten,
     codet &target_block);
   std::size_t numpy_view_arg_count_ = 0;

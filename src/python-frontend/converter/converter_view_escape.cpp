@@ -652,7 +652,30 @@ void python_converter::reject_unfoldable_numpy_view_call(
 // element read name one but pass a scalar.
 bool python_converter::passes_numpy_view(const nlohmann::json &arg)
 {
-  return contains_tracked_numpy_view_name(arg) && holds_numpy_view(arg);
+  if (arg.is_array())
+    return std::any_of(arg.begin(), arg.end(), [this](const auto &element) {
+      return passes_numpy_view(element);
+    });
+  return contains_tracked_numpy_view_name(arg) && holds_numpy_view(arg) &&
+         !is_scalar_numpy_view_call(arg);
+}
+
+// A call that binds every view it receives as a view parameter returns a
+// view only when it returns that parameter: any other view return is
+// rejected where the callee is converted.
+bool python_converter::is_scalar_numpy_view_call(const nlohmann::json &call)
+{
+  if (!is_named_call(call) || returned_numpy_view_argument(call) != nullptr)
+    return false;
+  const std::string name = call["func"]["id"].get<std::string>();
+  if (!call.value("keywords", nlohmann::json::array()).empty())
+    return false;
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+    if (
+      passes_numpy_view(call["args"][i]) &&
+      numpy_view_params_.count(name + "#" + std::to_string(i)) == 0)
+      return false;
+  return true;
 }
 
 // Only a user function that never touches the parameter can receive a view
@@ -696,43 +719,6 @@ void python_converter::reject_live_numpy_view_copies_of(
         numpy_pointer_view_info_.count(copy.first) == 0)
         throw std::runtime_error(live_copy_call_error);
   });
-}
-
-// `x = f(a[lo:hi])` or `f(a[lo:hi])` where f binds that parameter as a view:
-// the subscript is first bound to a fresh name, as `t = a[lo:hi]; f(t)`, so
-// the callee writes through the view instead of a temporary.
-const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
-  const nlohmann::json &statement,
-  nlohmann::json &rewritten,
-  codet &target_block)
-{
-  const std::string kind = statement.value("_type", "");
-  if (
-    (kind != "Assign" && kind != "AnnAssign" && kind != "Expr") ||
-    !statement.contains("value") || !is_named_call(statement["value"]))
-    return statement;
-  const nlohmann::json &call = statement["value"];
-  const std::string func_name = call["func"]["id"].get<std::string>();
-  for (std::size_t i = 0; i < call["args"].size(); ++i)
-  {
-    const nlohmann::json &arg = call["args"][i];
-    if (
-      arg.value("_type", "") != "Subscript" || !is_name(arg["value"]) ||
-      numpy_view_params_.count(func_name + "#" + std::to_string(i)) == 0)
-      continue;
-    nlohmann::json name = arg["value"];
-    name["id"] = "$numpy_view_arg$" + std::to_string(numpy_view_arg_count_++);
-    nlohmann::json binding = statement;
-    binding["_type"] = "Assign";
-    binding["targets"] = nlohmann::json::array({name});
-    binding["targets"][0]["ctx"] = {{"_type", "Store"}};
-    binding["value"] = arg;
-    get_folded_var_assign(binding, target_block);
-    if (rewritten.is_null())
-      rewritten = statement;
-    rewritten["value"]["args"][i] = name;
-  }
-  return rewritten.is_null() ? statement : rewritten;
 }
 
 // A bound view parameter aliases its argument only when that argument is a
