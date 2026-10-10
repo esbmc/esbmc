@@ -1599,8 +1599,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // path, so a TypeError on the other path is never emitted and the
     // program verifies. Refuse instead: an answer here would be checked
     // against one of the value's types only (github #8263).
+    // An unannotated parameter is also void*, and its call sites decide its
+    // type, so it keeps the cast below; only a local such as a call result
+    // has no other source of type information.
     auto is_void_ptr = [&](const exprt &e) {
-      return e.type().is_pointer() && e.type().subtype().id() == "empty";
+      if (!e.type().is_pointer() || e.type().subtype().id() != "empty")
+        return false;
+      if (e.is_symbol())
+      {
+        const symbolt *sym = symbol_table_.find_symbol(e.identifier());
+        if (sym && sym->is_parameter)
+          return false;
+      }
+      return true;
     };
     if (is_void_ptr(lhs) || is_void_ptr(rhs))
     {

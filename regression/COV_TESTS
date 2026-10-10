@@ -663,6 +663,7 @@ regression/python/github_7541_module_scope
 regression/python/github_7541_nested_class_body
 regression/python/github_8263_float
 regression/python/github_8263_onearm
+regression/python/github_8263_param
 regression/python/global
 regression/python/harness_bytes_param_len_bound
 regression/python/harness_bytes_param_len_bound_fail
