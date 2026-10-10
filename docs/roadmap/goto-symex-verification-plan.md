@@ -11706,6 +11706,31 @@ and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
 
+### M9 (R134) — 2026-10-10, the buffer `vsprintf` never wrote
+
+R121's entry left open that `vsprintf` and `vsnprintf` leave their
+destination unchanged. `symex_sprintf_store` returned early for any kind but
+`sprintf` and `snprintf`, and `exact_printf_output` took the `va_list` as a
+formatted argument, which is never a constant. After `vsprintf(b, "xy", ap)`
+the buffer kept its old text, and `char b[4]; vsprintf(b, "hello", ap);`
+raised no bounds violation; the program overflows natively.
+
+**Fixed** for a constant format that takes no argument: both calls now reach
+the store, and `exact_printf_output` leaves the `va_list` out of the
+arguments, so a conversion that needs one makes the output unbounded and
+nothing is stored. `vsnprintf` writes under the same `i < n` guard as
+`snprintf`.
+
+`vsprintf_stores_output` checks the text, NUL and return value of a
+`vsprintf`, a truncating `vsnprintf` and `vsnprintf(NULL, 0, ...)`; master
+fails it. `vsprintf_stores_output_fail` pins the bounds violation of the
+overflowing `vsprintf` and is SUCCESSFUL on master. Both change verdict when
+the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
+`vsprintf_stores_output`, under the default solver and `--z3`.
+
+Not fixed: a conversion that reads the `va_list` still leaves the destination
+unchanged, as does any output `sprintf` would not store.
+
 ---
 
 ## Appendix A — Methodological basis
