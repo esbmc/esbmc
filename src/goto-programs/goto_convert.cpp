@@ -1664,16 +1664,44 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
 
   remove_sideeffects(cond, dest);
 
-  if (options.get_bool_option("no-assertions"))
-    return;
-
-  goto_programt::targett t = dest.add_instruction(ASSERT);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
-  t->guard = tmp_cond;
-  t->location = code.location();
-  t->location.property("assertion");
-  t->location.user_provided(true);
+
+  if (emits_assert(code.location()))
+  {
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = tmp_cond;
+    t->location = code.location();
+    t->location.property("assertion");
+    t->location.user_provided(true);
+  }
+
+  assume_if_ends_path(tmp_cond, code.location(), dest);
+}
+
+// --no-assertions drops every assert. --python-ignore-assertions drops only a
+// Python program's own, which still end the path through the assume below.
+bool goto_convertt::emits_assert(const locationt &location) const
+{
+  if (options.get_bool_option("no-assertions"))
+    return false;
+  return !location.get_bool("ends_path") ||
+         !options.get_bool_option("python-ignore-assertions");
+}
+
+// A Python assert raises AssertionError, which ends the program, so nothing
+// after a failing assert runs. Assume the already evaluated guard, so the
+// condition's calls run once.
+void goto_convertt::assume_if_ends_path(
+  const expr2tc &guard,
+  const locationt &location,
+  goto_programt &dest)
+{
+  if (!location.get_bool("ends_path"))
+    return;
+  goto_programt::targett t = dest.add_instruction(ASSUME);
+  t->guard = guard;
+  t->location = location;
 }
 
 void goto_convertt::convert_skip(const codet &code, goto_programt &dest)

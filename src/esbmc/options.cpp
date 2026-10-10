@@ -229,6 +229,11 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"python-ignore-assertions",
+      NULL,
+      "Treat the program's own assert statements as assumptions, keeping the "
+      "frontend's and the operational model's exception checks (unlike "
+      "--no-assertions, which drops those too)"},
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},

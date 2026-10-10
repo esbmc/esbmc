@@ -107,9 +107,13 @@ struct sitet
 class exception_loweringt
 {
 public:
-  exception_loweringt(contextt &context, const namespacet &ns)
+  exception_loweringt(
+    contextt &context,
+    const namespacet &ns,
+    const std::set<irep_idt> &unreported)
     : context(context),
       ns(ns),
+      unreported(unreported),
       registry(ns),
       thrown(mk_global(exception_globals::thrown_id)),
       type_id(mk_global(exception_globals::typeid_id)),
@@ -438,6 +442,7 @@ public:
 private:
   contextt &context;
   const namespacet &ns;
+  const std::set<irep_idt> &unreported;
   exception_typeidt registry;
   expr2tc thrown, type_id, value, uncaught_count, terminate_reason, site;
   std::set<irep_idt> may_throw;
@@ -1613,6 +1618,8 @@ private:
     {
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+      if (unreported.count(name))
+        continue;
       const expr2tc t_escapes = and2tc(thrown, eq);
       const std::vector<throw_sitet> &sites = throw_sites(name);
 
@@ -1966,7 +1973,8 @@ private:
 void remove_exceptions(
   goto_functionst &goto_functions,
   contextt &context,
-  const namespacet &ns)
+  const namespacet &ns,
+  const std::set<irep_idt> &unreported)
 {
   // A program with no throw/catch needs no exception machinery. Skip entirely
   // so the pass is a true no-op for exception-free programs — otherwise it
@@ -1977,5 +1985,5 @@ void remove_exceptions(
   if (!exception_loweringt::program_uses_exceptions(goto_functions))
     return;
   create_exception_state_symbols(context);
-  exception_loweringt(context, ns).run(goto_functions);
+  exception_loweringt(context, ns, unreported).run(goto_functions);
 }

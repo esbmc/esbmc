@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-ignore-assertions
+^VERIFICATION SUCCESSFUL$
