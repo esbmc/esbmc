@@ -28,10 +28,12 @@
 #include <util/irep/migrate.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <optional>
+#include <set>
 #include <limits>
 #include <stdexcept>
 
@@ -611,6 +613,292 @@ exprt function_call_expr::handle_hasattr() const
   hasattr.copy_to_operands(obj_expr);
   hasattr.move_to_operands(attr_expr);
   return hasattr;
+}
+
+// getattr()'s receiver must be evaluated once: the call is lowered to an
+// attribute read, which re-reads it.
+static bool is_plain_receiver(const nlohmann::json &node)
+{
+  if (node["_type"] == "Name")
+    return true;
+  return node["_type"] == "Attribute" && is_plain_receiver(node["value"]);
+}
+
+/// A plain identifier with no `__`: dunder attributes come from `object`, and
+/// a private `__x` is stored unmangled, so neither matches the class struct.
+static bool is_plain_identifier(const std::string &name)
+{
+  auto word = [](char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  };
+  return !name.empty() && !std::isdigit(static_cast<unsigned char>(name[0])) &&
+         std::all_of(name.begin(), name.end(), word) &&
+         name.find("__") == std::string::npos;
+}
+
+/// Whether @p node, a single AST node, could bind @p name: an attribute or
+/// name store, any named binder (def, class, import alias, except or match
+/// capture), or a generic hook (setattr, __dict__) that binds any attribute.
+static bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  static const std::set<std::string> hooks{
+    "setattr", "__setattr__", "__dict__", "__getattr__", "__getattribute__"};
+  const std::string type = node.value("_type", "");
+  const bool stores =
+    node.contains("ctx") && node["ctx"].value("_type", "") != "Load";
+  if (type == "Attribute")
+    return hooks.count(node["attr"].get<std::string>()) ||
+           (stores && node["attr"] == name);
+  if (type == "Name")
+    return hooks.count(node["id"].get<std::string>()) ||
+           (stores && node["id"] == name);
+  for (const char *key : {"name", "asname", "rest"})
+    if (
+      node.contains(key) && node[key].is_string() &&
+      (node[key] == name || hooks.count(node[key].get<std::string>())))
+      return true;
+  return false;
+}
+
+static bool may_bind(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object() && binds_name(node, name))
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return may_bind(child, name);
+  });
+}
+
+static bool may_delete(const nlohmann::json &node, const std::string &attr)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    (node["attr"] == "__delattr__" ||
+     (node["attr"] == attr && node["ctx"].value("_type", "") == "Del")))
+    return true;
+  if (node.is_object() && node.value("id", "") == "delattr")
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return may_delete(child, attr);
+  });
+}
+
+bool function_call_expr::is_getattr_call() const
+{
+  if (
+    function_id_.get_function() != "getattr" ||
+    call_["func"]["_type"] != "Name" ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    return false;
+
+  const auto &args = call_["args"];
+  if (args.size() != 2 && args.size() != 3)
+    return false;
+  const auto &name = args[1];
+  // CPython evaluates the default even when the attribute exists, so it may
+  // only be dropped when evaluating it cannot fail.
+  return name["_type"] == "Constant" && name["value"].is_string() &&
+         is_plain_identifier(name["value"].get<std::string>()) &&
+         is_plain_receiver(args[0]) &&
+         (args.size() == 2 || args[2]["_type"] == "Constant" ||
+          args[2]["_type"] == "Name") &&
+         !may_bind(converter_.ast(), "getattr");
+}
+
+static const nlohmann::json *
+find_user_class(const std::string &name, const nlohmann::json &ast)
+{
+  for (const auto &node : ast["body"])
+    if (node.value("_type", "") == "ClassDef" && node["name"] == name)
+      return &node;
+  return nullptr;
+}
+
+/// The program's ClassDef for @p type when it and every base are defined in
+/// the program; null otherwise. A builtin type or base has attributes the
+/// program never binds.
+static const nlohmann::json *
+user_class_of(const typet &type, const nlohmann::json &ast)
+{
+  if (type.id() != "symbol")
+    return nullptr;
+  const std::string tag = type.identifier().as_string();
+  if (tag.rfind("tag-", 0) != 0)
+    return nullptr;
+  const nlohmann::json *cls = find_user_class(tag.substr(4), ast);
+  if (!cls)
+    return nullptr;
+  for (const auto &base : (*cls)["bases"])
+    if (
+      base["_type"] != "Name" ||
+      (base["id"] != "object" &&
+       !user_class_of(
+         symbol_typet("tag-" + base["id"].get<std::string>()), ast)))
+      return nullptr;
+  return cls;
+}
+
+static bool is_self_attribute(
+  const nlohmann::json &target,
+  const std::string &self,
+  const std::string &attr)
+{
+  return target.value("_type", "") == "Attribute" && target["attr"] == attr &&
+         target["value"].value("_type", "") == "Name" &&
+         target["value"]["id"] == self;
+}
+
+static bool is_super_init_call(const nlohmann::json &stmt)
+{
+  if (stmt.value("_type", "") != "Expr")
+    return false;
+  const auto &call = stmt["value"];
+  return call.value("_type", "") == "Call" &&
+         call["func"].value("_type", "") == "Attribute" &&
+         call["func"]["attr"] == "__init__" &&
+         call["func"]["value"].value("_type", "") == "Call" &&
+         call["func"]["value"]["func"].value("id", "") == "super";
+}
+
+static bool assigns_self_attribute(
+  const nlohmann::json &stmt,
+  const std::string &self,
+  const std::string &attr)
+{
+  const std::string type = stmt.value("_type", "");
+  if (type == "AnnAssign")
+    return stmt.contains("value") && !stmt["value"].is_null() &&
+           is_self_attribute(stmt["target"], self, attr);
+  return type == "Assign" &&
+         std::any_of(
+           stmt["targets"].begin(), stmt["targets"].end(), [&](const auto &t) {
+             return is_self_attribute(t, self, attr);
+           });
+}
+
+static bool init_binds(
+  const nlohmann::json &cls,
+  const std::string &attr,
+  const nlohmann::json &ast);
+
+static bool base_init_binds(
+  const nlohmann::json &cls,
+  const std::string &attr,
+  const nlohmann::json &ast)
+{
+  const auto &bases = cls["bases"];
+  if (bases.size() != 1 || bases[0]["id"] == "object")
+    return false;
+  const nlohmann::json *base = find_user_class(bases[0]["id"], ast);
+  return base && init_binds(*base, attr, ast);
+}
+
+/// Whether every constructed instance of @p cls has @p attr: its __init__
+/// (or the one it inherits or delegates to through super().__init__())
+/// assigns self.attr in straight-line code before any return.
+static bool init_binds(
+  const nlohmann::json &cls,
+  const std::string &attr,
+  const nlohmann::json &ast)
+{
+  for (const auto &def : cls["body"])
+  {
+    if (def.value("_type", "") != "FunctionDef" || def["name"] != "__init__")
+      continue;
+    const auto &params = def["args"]["args"];
+    if (params.empty())
+      return false;
+    const std::string self = params[0]["arg"];
+    for (const auto &stmt : def["body"])
+    {
+      if (stmt.value("_type", "") == "Return")
+        return false;
+      if (
+        (is_super_init_call(stmt) && base_init_binds(cls, attr, ast)) ||
+        assigns_self_attribute(stmt, self, attr))
+        return true;
+    }
+    return false;
+  }
+  return base_init_binds(cls, attr, ast);
+}
+
+static bool has_subclass(const std::string &name, const nlohmann::json &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == name)
+        return true;
+  if (!ast.is_object() && !ast.is_array())
+    return false;
+  return std::any_of(ast.begin(), ast.end(), [&](const auto &child) {
+    return has_subclass(name, child);
+  });
+}
+
+/// An imported module can subclass a class or bind attributes that the scan
+/// of this module does not see; typing and __future__ bind neither.
+static bool imports_other_modules(const nlohmann::json &ast)
+{
+  return std::any_of(ast["body"].begin(), ast["body"].end(), [](const auto &n) {
+    const std::string type = n.value("_type", "");
+    if (type == "ImportFrom")
+      return n["module"] != "typing" && n["module"] != "__future__";
+    return type == "Import";
+  });
+}
+
+/// Whether @p attr is decided for every instance whose static type is @p type:
+/// sets @p present to whether it exists. Undecided when a path, a subclass,
+/// a `del` or another module can change it.
+static bool attribute_decided(
+  const typet &type,
+  const std::string &attr,
+  const nlohmann::json &ast,
+  bool &present)
+{
+  const nlohmann::json *cls = user_class_of(type, ast);
+  if (!cls || imports_other_modules(ast))
+    return false;
+  if (!may_bind(ast, attr))
+  {
+    present = false;
+    return true;
+  }
+  present = true;
+  return !has_subclass((*cls)["name"], ast) && !may_delete(ast, attr) &&
+         init_binds(*cls, attr, ast);
+}
+
+exprt function_call_expr::handle_getattr()
+{
+  const auto &args = call_["args"];
+  const std::string attr = args[1]["value"].get<std::string>();
+
+  typet type = converter_.get_expr(args[0]).type();
+  if (type.is_pointer())
+    type = type.subtype();
+  bool present = false;
+  if (!attribute_decided(type, attr, converter_.ast(), present))
+    return handle_general_function_call();
+
+  if (!present && args.size() == 3)
+    return converter_.get_expr(args[2]);
+
+  // An absent attribute is read too, which raises AttributeError.
+  nlohmann::json access = call_;
+  access.erase("func");
+  access.erase("args");
+  access.erase("keywords");
+  access["_type"] = "Attribute";
+  access["value"] = args[0];
+  access["attr"] = attr;
+  access["ctx"] = {{"_type", "Load"}};
+  return converter_.get_expr(access);
 }
 
 exprt function_call_expr::handle_type_call() const
