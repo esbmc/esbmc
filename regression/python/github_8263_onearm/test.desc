@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: the type of 'result' depends on the branch taken at line

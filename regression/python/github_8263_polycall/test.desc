@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: the result type of an unannotated function call at line
