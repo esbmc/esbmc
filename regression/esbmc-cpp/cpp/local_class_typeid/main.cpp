@@ -63,6 +63,15 @@ const std::type_info &i()
   return typeid(*p);
 }
 
+template <class T>
+const std::type_info &t()
+{
+  struct L
+  {
+  };
+  return typeid(L);
+}
+
 int main()
 {
   assert(f() == f());
@@ -71,5 +80,7 @@ int main()
   assert(g(true) != g(false));
   assert(g(true) != f());
   assert(h() != i());
+  assert(t<int>() == t<int>());
+  assert(t<int>() != t<char>());
   return 0;
 }
