@@ -822,7 +822,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R75** | **High (a crash, default configuration)** — R60's residuals, §15 M9 (R75); **FIXED**, same entry | **Two SMT paths had no vector case.** `flatten_to_bitvector` handled arrays but not vectors, so reading a union holding `v4i a[2]` through its bytes aborted ("Unrecognized type vector when flattening to bytes"). The tuple-node flattener's `make_free` gave a vector member no element sort, so an array of structs holding a vector, written at a symbolic index, aborted Bitwuzla in `mk_fresh`; past that, `tuple_get_rec` could not build its counterexample. | `flatten_to_bitvector`, `src/solvers/smt/smt_bitcast.cpp`; `tuple_node_smt_ast::make_free`, `src/solvers/smt/tuple/smt_tuple_node_ast.cpp`; `tuple_get_rec`, `src/solvers/smt/tuple/smt_tuple_node.cpp`; `regression/esbmc/vector_union_bytes{,_fail}`, `regression/esbmc/vector_struct_array{,_fail}` | — | **Fixed**: a vector is treated as a fixed-size array at all three sites. |
 | **R87** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found probing R64's [except.ctor] residual, §15 M9 (R87); **FIXED**, same entry | **An exception leaving a callee skipped the caller's destructors.** `convert_throw` unwinds the automatic objects of the function that throws, but `remove_exceptions` lowered a call to a may-throw callee as a bare `if (thrown) goto dispatch` after the call, so every frame the exception passed through kept its locals alive. `void f() { Guard g; thrower(); }` caught in `main` never ran `~Guard`; a buffer freed again in the handler, a double free natively, verified. | `goto_convertt::record_exception_unwind`, `src/goto-programs/goto_convert.cpp`; `wire_call`, `src/goto-programs/remove_exceptions.cpp`; `regression/esbmc-cpp/try_catch/throw_dtor_unwind_callee{,_fail}` | — | **Fixed**: record the destructor-stack slice on each call and destroy it on the call's exceptional edge. |
 
-| **R89** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R82's open note (PR #8110), §15 M9 (R89); **FIXED** outside short-circuit operands, same entry | **A temporary in a statement's condition outlived it.** `if (C(true).ok())`, `while (C(n < 2).ok())`, and the conditions of `for` and `do`/`while` ran `~C` at the end of the enclosing block rather than at the end of the condition ([class.temporary]/4). A loop condition built its temporary on every iteration and destroyed one. `assert(dtors == 1)` inside the `if` was FAILED, `assert(dtors < 3)` after the loop SUCCESSFUL. | `generate_conditional_branch`, `convert_ifthenelse`, `convert_for` and `convert_dowhile`, `src/goto-programs/goto_convert.cpp`; the `for` and `do`/`while` arms of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/condition_temporary{,_fail,_legacy}` | — | **Fixed**: `remove_condition_sideeffects` copies the condition into a temporary and destroys the condition's temporaries before the branch. Operands of `&&`, `\|\|` and `?:` keep block scope. |
+| **R89** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R82's open note (PR #8110), §15 M9 (R89); **FIXED** outside short-circuit operands, same entry | **A temporary in a statement's condition outlived it.** `if (C(true).ok())`, `while (C(n < 2).ok())`, and the conditions of `for` and `do`/`while` ran `~C` at the end of the enclosing block rather than at the end of the condition ([class.temporary]/4). A loop condition built its temporary on every iteration and destroyed one. `assert(dtors == 1)` inside the `if` was FAILED, `assert(dtors < 3)` after the loop SUCCESSFUL. | `generate_conditional_branch`, `convert_ifthenelse`, `convert_for` and `convert_dowhile`, `src/goto-programs/goto_convert.cpp`; the `for` and `do`/`while` arms of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/condition_temporary{,_fail,_legacy}` | — | **Fixed**: `remove_condition_sideeffects` copies the condition into a temporary and destroys the condition's temporaries before the branch. Operands of `&&`, `\|\|` and `?:` kept block scope; fixed as R126. |
 | **R94** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R89's sibling (PR #8125), §15 M9 (R94); **FIXED**, same entry | **A temporary in a `switch` condition outlived it.** `convert_switch` lowered the value with `remove_sideeffects`, so `switch (T(1).v)` ran `~T` at the end of the enclosing block, or at a `return` from a case, rather than before the case label ([class.temporary]/4). `k = dtors;` under `case 1:` stored 0, so `assert(k == 0)` was SUCCESSFUL and `assert(k == 1)` FAILED. | `convert_switch`, `src/goto-programs/goto_convert.cpp`; the switch arm of `convert_native_rec`, `src/goto-programs/goto_convert_functions.cpp`; `regression/esbmc-cpp/cpp/switch_condition_temporary{,_fail,_legacy}` | — | **Fixed**: the switch value is lowered through R89's `remove_condition_sideeffects`. |
 
 
@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R126** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R89's open note, §15 M9 (R126); **FIXED**, same entry | **A temporary in an operand of `&&`, `||` or `?:` in a condition outlived the condition.** `if`, `while`, `for` and `do`/`while` conditions with a side-effecting `&&` or `||` were split into one branch per operand, and each operand kept its temporaries to the end of the enclosing block. `while (n < 3 && C().ok()) ++n;` built three objects and destroyed none before the loop ended, so `assert(dtors == 0)` after it was SUCCESSFUL and aborts natively. A `?:` condition and an `if` with an `else` were not split but kept block scope too. | `generate_conditional_branch` and `convert_ifthenelse`, `src/goto-programs/goto_convert.cpp`; `remove_condition_sideeffects`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/condition_short_circuit_temporary{,_fail}` | — | **Fixed**: a condition whose side effects create a temporary with a destructor is not split; it is lowered whole, and R86's guarded destructors run before the branch. |
 
 ---
 
@@ -11704,6 +11705,39 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R126) — 2026-10-10, the temporaries of a short-circuit condition
+
+R89 destroys a condition's temporaries before the branch but left the operands
+of `&&`, `||` and `?:` at block scope. `generate_conditional_branch` and
+`convert_ifthenelse` split a side-effecting `a && b` or `a || b` into one
+branch per operand, and `remove_condition_sideeffects` returned early whenever
+the condition held a short-circuit operator, so the destructors stayed on the
+enclosing block's stack. `while (n < 3 && C().ok()) ++n;` constructed three
+objects and destroyed them only when `main` returned: `assert(dtors == 0)`
+after the loop was SUCCESSFUL, and `assert(dtors == 3)` FAILED. Natively the
+first aborts and the second holds ([class.temporary]/4).
+
+**Fixed** by not splitting a condition whose side effects have a class type
+with a destructor (`has_destructible_sideeffect`, which replaces
+`has_short_circuit_sideeffect`). `remove_sideeffects` then lowers the whole
+condition, guarding the right operand's destructors by R86's flag, and
+`remove_condition_sideeffects` destroys them before the branch. It now counts
+a guarded destructor entry as a destructor. Conditions without such a side
+effect, which includes all of C, are split as before.
+
+`condition_short_circuit_temporary` covers `while`, `for` and `do`/`while`,
+`if` with and without `else`, `||`, a `?:` condition, a right operand that does
+not run, and the live count while the condition is evaluated; it matches
+`g++ -fsanitize=address,undefined` with `b` true and false.
+`condition_short_circuit_temporary_fail` pins `assertion dtors == 0` after the
+loop. Both change verdict against master under the default solver, `--z3`
+and `--no-irep2-native-body` (Z3; Bitwuzla was not built). Each part of the fix is needed: splitting in
+`generate_conditional_branch` again, splitting the no-`else` `if` again, or
+counting only unguarded destructors each fails `condition_short_circuit_temporary`.
+Of the 3,475 tests under `regression/esbmc-cpp*`, 49 others lower to a
+different GOTO program; all keep their master verdicts at about master's run
+time.
 
 ---
 

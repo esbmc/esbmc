@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
@@ -1357,15 +1358,14 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
   expr = symbol_expr(new_symbol);
 }
 
-bool goto_convertt::has_short_circuit_sideeffect(const exprt &expr)
+bool goto_convertt::has_destructible_sideeffect(const exprt &expr)
 {
-  if (
-    (expr.is_and() || expr.is_or() || expr.id() == "if") &&
-    has_sideeffect(expr))
+  code_function_callt destructor;
+  if (expr.id() == "sideeffect" && get_destructor(ns, expr.type(), destructor))
     return true;
 
   forall_operands (it, expr)
-    if (has_short_circuit_sideeffect(*it))
+    if (has_destructible_sideeffect(*it))
       return true;
 
   return false;
@@ -1376,17 +1376,13 @@ void goto_convertt::remove_condition_sideeffects(
   goto_programt &dest)
 {
   const locationt location = cond.find_location();
-  const bool short_circuit =
-    in_short_circuit || has_short_circuit_sideeffect(cond);
   const std::size_t stack_size = targets.destructor_stack.size();
   remove_sideeffects(cond, dest);
 
   destructor_stackt &stack = targets.destructor_stack;
   if (
-    short_circuit ||
-    std::none_of(stack.begin() + stack_size, stack.end(), [](const codet &d) {
-      return d.get_statement() == "function_call";
-    }))
+    in_short_circuit ||
+    std::none_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
     return;
 
   // The temporaries may be read by the condition, so its value is taken
