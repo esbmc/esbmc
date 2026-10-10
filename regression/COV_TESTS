@@ -2393,6 +2393,8 @@ regression/python/github_8239
 regression/python/github_8239_fail
 regression/python/github_8200_late
 regression/python/github_8200_late_fail
+regression/esbmc/frexpl_binary128
+regression/esbmc/frexpl_binary128_fail
 regression/python/github_8256
 regression/python/github_8256_fail
 regression/python/github_8256_stub
