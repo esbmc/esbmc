@@ -1453,6 +1453,10 @@ protected:
    *  declared it, which is a caller's when the va_list was passed down.
    *  Falls back to the current frame when that cannot be pinned down. */
   goto_symex_statet::framet &va_list_frame(const expr2tc &va_list_expr);
+  /** The record of the local va_list whose frame this va_list reads: its own,
+   *  or, for a va_copy, the source's; nullopt when none is on the stack. */
+  std::optional<renaming::level2t::name_record>
+  va_list_owner(const expr2tc &va_list_expr) const;
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1621,6 +1625,13 @@ protected:
     std::optional<unsigned>,
     renaming::level2t::name_rec_hash>
     va_started;
+
+  /** Each va_copy destination mapped to the va_list its source reads from. */
+  std::unordered_map<
+    renaming::level2t::name_record,
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_copied_from;
 
   /** Disable return value optimization */
   bool no_return_value_opt;

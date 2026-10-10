@@ -79,6 +79,12 @@ bool goto_symext::va_list_is_started(const expr2tc &va_list_expr) const
 unsigned *goto_symext::va_list_cursor(const expr2tc &va_list_expr)
 {
   auto rec = va_list_l1_record(va_list_expr);
+  if (!rec)
+  {
+    const auto records = va_list_pointee_records(va_list_expr);
+    if (records.size() == 1)
+      rec = records.front();
+  }
   auto it = rec ? va_started.find(*rec) : va_started.end();
   return it != va_started.end() && it->second ? &*it->second : nullptr;
 }
@@ -91,6 +97,7 @@ void goto_symext::va_list_mark_started(
   auto rec = va_list_l1_record(va_list_expr);
   if (rec)
   {
+    va_copied_from.erase(*rec);
     if (started)
       va_started[*rec] = cursor;
     else
@@ -112,14 +119,28 @@ void goto_symext::va_list_mark_started(
 goto_symex_statet::framet &
 goto_symext::va_list_frame(const expr2tc &va_list_expr)
 {
+  if (auto owner = va_list_owner(va_list_expr))
+    for (auto &frame : cur_state->call_stack)
+      if (frame.local_variables.count(*owner))
+        return frame;
+  return cur_state->top();
+}
+
+std::optional<renaming::level2t::name_record>
+goto_symext::va_list_owner(const expr2tc &va_list_expr) const
+{
   auto rec = va_list_l1_record(va_list_expr);
   const auto records =
     rec ? std::vector{*rec} : va_list_pointee_records(va_list_expr);
-  for (const auto &rec : records)
-    for (auto &frame : cur_state->call_stack)
+  for (auto rec : records)
+  {
+    if (auto it = va_copied_from.find(rec); it != va_copied_from.end())
+      rec = it->second;
+    for (const auto &frame : cur_state->call_stack)
       if (frame.local_variables.count(rec))
-        return frame;
-  return cur_state->top();
+        return rec;
+  }
+  return std::nullopt;
 }
 
 void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
@@ -129,6 +150,13 @@ void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
     dst,
     va_list_is_started(src),
     cursor ? std::optional{*cursor} : std::nullopt);
+
+  /* A copy reads the arguments of the frame its source reads, which is a
+   * caller's when the source was passed down (C11 7.16.1.2). */
+  const auto owner = va_list_owner(src);
+  const auto dst_rec = va_list_l1_record(dst);
+  if (owner && dst_rec && !(*owner == *dst_rec))
+    va_copied_from[*dst_rec] = *owner;
 }
 
 void goto_symext::symex_va_arg(

@@ -892,6 +892,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R122** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note on `va_copy`, §15 M9 (R122); **FIXED**, same entry | **A `va_list` passed to a helper was read from the wrong frame or position.** A `va_copy` made in the helper read the helper's arguments, so `int take(va_list ap)` copying `ap` read 0, and `assert(g(1, 3) == 0)` was SUCCESSFUL. A `va_arg` through the passed `va_list` did not advance the caller's own cursor, so the caller's next `va_arg` read the argument the helper had consumed. | `goto_symext::va_list_owner`, `va_list_copy`, `va_list_cursor`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a copy reads the frame its source reads, and a read through a pointer to one local `va_list` uses that local's cursor. |
 
 ---
 
@@ -11505,6 +11506,41 @@ files are removed, under the default solver and `--z3`. A symbolic cube over
 `[-100, 100]` did not finish within 600 s, so the tests use constants.
 
 Not fixed: `cbrtl` still returns a nondet value.
+### M9 (R122) — 2026-10-10, the copy of a `va_list` passed down
+
+R112's entry left open that a `va_copy` into a local of the callee resolves to
+the callee's frame. `va_list_frame` matched the copy's own record against each
+frame's locals, so it found the callee. In `int take(va_list ap)` doing
+`va_copy(cp, ap)`, `va_arg(cp, int)` read 0 where native execution reads the
+caller's 3, and `assert(g(1, 3) == 0)` was SUCCESSFUL. A variadic helper read
+its own arguments through the copy.
+
+A second fault showed once the copy read the right frame. A `va_arg` through
+the `va_list` parameter had no cursor of its own (the parameter is not a
+local), so it used the caller frame's shared cursor, which every `va_arg` on
+that frame advances, the copy's included. It also left the caller's own
+cursor where it was, so in `g(3, 1, 2, 3)` reading 1, passing `ap` to a helper
+that reads 2, then reading again, the caller got 2 instead of 3 (FAILED on
+master).
+
+**Fixed**: `va_copy` records, in `va_copied_from`, the local `va_list` whose
+frame the source reads, and `va_list_owner` follows that record before
+`va_list_frame` searches the stack. `va_list_cursor` resolves a `va_list`
+reached through a pointer to its pointee when the value set gives exactly
+one, so the helper reads and advances the caller's cursor, as on x86-64, where
+`va_list` is an array. A `va_start` or `va_end` on the copy drops its record.
+
+`va_copy_callee_va_list` copies in a non-variadic and a variadic helper,
+reads twice through the copy, then through the parameter, then again in the
+caller, and restarts the variadic helper's copy with `va_start`; it is FAILED
+on master and SUCCESSFUL here. `va_copy_callee_va_list_fail`
+is the `take` program above (SUCCESSFUL on master). Reverting the
+`va_copied_from` record fails both; reverting the cursor resolution, or the
+drop on `va_start`, fails the first. Both hold under the default solver and `--z3`.
+
+Not fixed: when the value set gives a pointer more than one `va_list`, the
+read still falls back to the frame's shared cursor. A `va_copy` whose
+destination is reached through a pointer gets no `va_copied_from` record.
 
 ---
 
