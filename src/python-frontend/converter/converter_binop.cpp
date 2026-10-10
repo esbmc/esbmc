@@ -603,6 +603,112 @@ static void attach_symbol_location(exprt &expr, contextt &symbol_table)
     expr.location() = sym->location;
 }
 
+bool python_converter::returns_unannotated_call_result(
+  const nlohmann::json &node) const
+{
+  if (!node.is_object() || node.value("_type", "") != "Call")
+    return false;
+  const auto &func = node["func"];
+  std::string name;
+  if (func.value("_type", "") == "Name")
+    name = func.value("id", "");
+  else if (func.value("_type", "") == "Attribute")
+    name = func.value("attr", "");
+  if (name.empty())
+    return false;
+
+  // Search every function definition, including methods, for `name`.
+  std::function<int(const nlohmann::json &)> find =
+    [&](const nlohmann::json &n) -> int {
+    if (n.is_array())
+    {
+      for (const auto &item : n)
+        if (int r = find(item))
+          return r;
+      return 0;
+    }
+    if (!n.is_object())
+      return 0;
+    if (n.value("_type", "") == "FunctionDef" && n.value("name", "") == name)
+    {
+      // The annotator writes an inferred return type into the node and marks
+      // it _inferred_annotation; only an annotation the user wrote counts.
+      const bool user_annotated =
+        n.contains("returns") && !n["returns"].is_null() &&
+        !n["returns"].value("_inferred_annotation", false);
+      return user_annotated ? 1 : 2;
+    }
+    if (n.contains("body"))
+      return find(n["body"]);
+    return 0;
+  };
+  return find((*ast_json)["body"]) == 2;
+}
+
+bool python_converter::name_bound_from_call(const nlohmann::json &node) const
+{
+  if (!node.is_object() || node.value("_type", "") != "Name")
+    return false;
+  const std::string name = node.value("id", "");
+
+  const nlohmann::json *scope = &(*ast_json)["body"];
+  nlohmann::json func_def;
+  if (!current_func_name_.empty())
+  {
+    func_def =
+      json_utils::try_find_function((*ast_json)["body"], current_func_name_);
+    if (!func_def.empty() && func_def.contains("body"))
+      scope = &func_def["body"];
+  }
+
+  // A call through a value (a function-valued parameter, a dict of
+  // functions, a decorated function) has no single return type the frontend
+  // can know, and the name it binds is typed by one of them.
+  std::function<bool(const nlohmann::json &)> walk =
+    [&](const nlohmann::json &n) -> bool {
+    if (n.is_array())
+    {
+      for (const auto &item : n)
+        if (walk(item))
+          return true;
+      return false;
+    }
+    if (!n.is_object())
+      return false;
+    if (n.value("_type", "") == "Assign" && n.contains("targets"))
+      for (const auto &t : n["targets"])
+        if (
+          t.value("_type", "") == "Name" && t.value("id", "") == name &&
+          n.contains("value") && n["value"].value("_type", "") == "Call")
+        {
+          const auto &callee = n["value"]["func"];
+          // A direct call to a builtin or to a function the user annotated
+          // has a known result type.
+          if (callee.value("_type", "") == "Name")
+          {
+            const std::string fname = callee.value("id", "");
+            if (type_utils::is_builtin_type(fname))
+              continue;
+            nlohmann::json def =
+              json_utils::try_find_function((*ast_json)["body"], fname);
+            if (
+              !def.empty() &&
+              (def.contains("decorator_list") ? def["decorator_list"].empty()
+                                              : true) &&
+              def.contains("returns") && !def["returns"].is_null() &&
+              !def["returns"].value("_inferred_annotation", false))
+              continue;
+          }
+          return true;
+        }
+    for (const char *key : {"body", "orelse"})
+      if (n.contains(key) && walk(n[key]))
+        return true;
+    return false;
+  };
+  return walk(*scope);
+}
+
 std::string python_converter::get_python_type_category(const typet &t) const
 {
   // Unannotated any_type (void*) — caller keeps the existing coercion path.
@@ -1093,6 +1199,63 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
 
+  // A value of empty type, such as the result of calling a function taken out
+  // of a dict, has no type the frontend knows. Any equality on it is decided
+  // by a later fold against whichever type the other operand has, so refuse.
+  if (
+    (op == "Eq" || op == "NotEq") &&
+    (lhs.type().id() == "empty" || rhs.type().id() == "empty"))
+    throw std::runtime_error(
+      "an operand of '" + op + "' at line " +
+      get_location_from_decl(element).get_line().as_string() +
+      " has no known type, so the comparison cannot be decided");
+
+  // A void* local (for instance a call result typed by inference) compared
+  // with a concrete value is lowered to a pointer compare against the value
+  // cast to void*, which only holds when the local happens to carry that
+  // type. An unannotated parameter is left alone: its call sites type it.
+  if (op == "Eq" || op == "NotEq")
+  {
+    auto is_untyped_local = [&](const exprt &e) {
+      if (!e.type().is_pointer() || e.type().subtype().id() != "empty")
+        return false;
+      if (e.is_symbol())
+      {
+        const symbolt *sym = symbol_table_.find_symbol(e.identifier());
+        if (sym && sym->is_parameter)
+          return false;
+      }
+      return true;
+    };
+    const bool l = is_untyped_local(lhs), r = is_untyped_local(rhs);
+    if (l != r)
+      throw std::runtime_error(
+        "an operand of '" + op + "' at line " +
+        get_location_from_decl(element).get_line().as_string() +
+        " has no known type, so the comparison cannot be decided");
+  }
+
+  // An unannotated function's return type is inferred once for the whole
+  // program, so a function returning its argument and called with both an int
+  // and a str carries one of those types at every call site. Any fold of a
+  // cross-category equality on that type decides the comparison wrongly at the
+  // other call sites, so refuse rather than answer (github #8263).
+  if (
+    (op == "Eq" || op == "NotEq") &&
+    (returns_unannotated_call_result(left) ||
+     returns_unannotated_call_result(right) || name_bound_from_call(left) ||
+     name_bound_from_call(right)))
+  {
+    const std::string lc = get_python_type_category(lhs.type());
+    const std::string rc = get_python_type_category(rhs.type());
+    if (!lc.empty() && !rc.empty() && lc != rc)
+      throw std::runtime_error(
+        "the result type of an unannotated function call at line " +
+        get_location_from_decl(element).get_line().as_string() +
+        " is inferred for the whole program, so this comparison would be "
+        "decided against one possible type only");
+  }
+
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
@@ -1157,6 +1320,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         nondet.location() = get_location_from_decl(element);
         return nondet;
       }
+      // An unannotated function's return type is inferred once for the whole
+      // program, so a function that returns its argument and is called with
+      // both an int and a str carries one of those types at every call site.
+      // Folding on that type decides the comparison wrongly at the other call
+      // sites, so refuse rather than answer (github #8263).
+      if (
+        returns_unannotated_call_result(left) ||
+        returns_unannotated_call_result(right))
+        throw std::runtime_error(
+          "the result type of an unannotated function call at line " +
+          get_location_from_decl(element).get_line().as_string() +
+          " is inferred for the whole program, so this comparison would be "
+          "decided against one possible type only");
       // V.3: constant fold built in IREP2.
       return migrate_expr_back(
         op == "NotEq" ? gen_true_expr() : gen_false_expr());

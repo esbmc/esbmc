@@ -503,6 +503,8 @@ private:
   /// still be dispatched). The caller MUST fall through to the existing
   /// handling on the empty result.
   std::string get_python_type_category(const typet &t) const;
+  bool returns_unannotated_call_result(const nlohmann::json &node) const;
+  bool name_bound_from_call(const nlohmann::json &node) const;
 
   bool is_bytes_literal(const nlohmann::json &element);
 
