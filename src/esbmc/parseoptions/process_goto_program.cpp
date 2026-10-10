@@ -44,6 +44,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
+#include <goto-programs/lower_longjmp.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
@@ -345,6 +346,10 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.line,
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
+
+    // Under the unreachability intrinsic, setjmp stays out of scope instead.
+    if (!options.get_bool_option("enable-unreachability-intrinsic"))
+      lower_longjmp(goto_functions, context);
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
