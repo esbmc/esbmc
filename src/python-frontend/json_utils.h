@@ -166,6 +166,67 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+template <typename JsonType>
+bool is_property_def(const JsonType &function_def)
+{
+  if (function_def.contains("decorator_list"))
+    for (const auto &dec : function_def["decorator_list"])
+      if (
+        dec.value("_type", std::string()) == "Name" &&
+        dec.value("id", std::string()) == "property")
+        return true;
+  return false;
+}
+
+/// True when a module-level class in @p ast_body defines a @property named
+/// @p name.
+template <typename JsonType>
+bool any_class_has_property(const JsonType &ast_body, const std::string &name)
+{
+  for (const auto &cls : ast_body)
+    if (cls.value("_type", std::string()) == "ClassDef" && cls.contains("body"))
+      for (const auto &stmt : cls["body"])
+        if (
+          stmt.value("_type", std::string()) == "FunctionDef" &&
+          stmt.value("name", std::string()) == name && is_property_def(stmt))
+          return true;
+  return false;
+}
+
+// True when `method_name` is a method decorated with @property in `class_name`
+// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
+// getter. A same-named non-property method in a derived class shadows a base
+// property (Python MRO), so a match that is not @property stops the search.
+template <typename JsonType>
+bool is_property_method(
+  const JsonType &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const JsonType cls = find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+  {
+    if (
+      stmt.value("_type", std::string()) != "FunctionDef" ||
+      stmt.value("name", std::string()) != method_name)
+      continue;
+    return is_property_def(stmt); // a plain method shadows any base property
+  }
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") &&
+        is_property_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
+}
+
 /// Counts every ClassDef under @p node, at any depth.
 template <typename JsonType>
 std::size_t count_class_defs(const JsonType &node)
