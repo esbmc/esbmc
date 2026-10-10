@@ -895,6 +895,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R127** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note on the `+`, ` ` and `#` flags, §15 M9 (R127); **FIXED**, same entry | **`printf_formattert` ignored every flag but `0`, and the precision of an integer or a `%s`.** The return value of a constant call came out short: `printf("%+d", 5)` returned 1, `printf("%#x", 255u)` 2, `printf("%.3d", 5)` 1 and `printf("%5s", "ab")` 2. The upper bound for a nondet argument left out the `#` prefix, so `printf("%#x", x) <= 8` was SUCCESSFUL although `0xffffffff` prints 10 characters. | `src/goto-symex/trace/printf_formatter.cpp`; `regression/esbmc/printf_flag_lengths{,_fail}` | — | **Fixed**: an integer conversion is laid out per C11 7.21.6.1p6: digits padded to the precision, then the sign or radix prefix, then the field width, on the left under `-`; `%s` and `%c` take the width and `%s` the precision. A floating-point conversion with `+`, ` ` or `#` now has an unbounded return value. |
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
@@ -11705,6 +11706,42 @@ and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
 
+### M9 (R127) — 2026-10-10, the flags `printf` did not count
+
+R121's entry left the `+`, ` ` and `#` flags giving a wrong return value.
+`printf_formattert::process_format` parsed them and dropped them, and it read
+the precision only for floating-point conversions. A constant integer was
+printed without its sign or radix prefix and without the zeros a precision
+adds, and a string literal without its field width or precision, so
+`printf("%+d", 5)` returned 1 where C11 7.21.6.1p6 gives 2, and `%#x` of 255,
+`%.3d` of 5 and `%5s` of `"ab"` were short as well. For a nondet argument the
+upper bound omitted the `0x` and the leading octal `0` that `#` adds, so
+`n = printf("%#x", x); assert(n <= 8);` was SUCCESSFUL although `0xffffffff`
+prints 10 characters.
+
+**Fixed**: `layout_int` builds a constant integer's text from its digits
+padded to the precision (with no digits for a zero under precision 0), the
+sign, `+`, ` `, `0x` or octal `0` prefix, and the field width, filled with
+zeros only when `0` is given without `-` or a precision; `max_int_chars`
+gives the matching bound for a nondet argument. `%s` and `%c` take the width
+and `-`, and `%s` the precision, including the bound derived for a
+non-literal `%s`. Since the flags are now modelled, `sprintf` stores their
+output (R121). `format_constant` renders none of them for a floating-point
+conversion, so a `+`, ` ` or `#` there leaves the return value unbounded, and
+a `-` or `0` keeps `sprintf` from storing the text.
+
+`printf_flag_lengths` checks the return values above, `%#x` of 0, `%#o`,
+`%.0d` of 0 and `%.1s`, and two `sprintf` outputs using `+0`, `#X` and `-`;
+it is FAILED on master. `printf_flag_lengths_fail` is the `%#x` program above,
+SUCCESSFUL on master. Removing the sign flags or the `%s` precision flips the
+first, and removing `0x` from the bound flips the second; both agree under
+`--z3`. A probe of zero padding with a sign, `%#.3o`, `%#08x`, `% +d`, `%+u`,
+`%08.3d`, `%-4s`, `%3c` and a `%6s` of an array matches native execution.
+The 398 regression tests whose sources call a `printf`-family function keep
+their master verdicts under a 60 s cap (Z3; Bitwuzla was not built).
+
+Not fixed: `printf("%+.1f", 1.5)` is now nondet rather than 4, and `%g` is
+still formatted wrongly: `printf("%g", 1.5)` does not return 3.
 ---
 
 ## Appendix A — Methodological basis

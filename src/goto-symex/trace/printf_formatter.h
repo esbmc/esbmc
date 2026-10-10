@@ -19,15 +19,16 @@ public:
   size_t max_outlen = 0;
   /** False when print() could not compute a sound upper bound on the output
    *  length: a value-dependent conversion (%s, %e/%f/%g) was given a
-   *  non-constant argument, or an expected argument was missing. When false,
-   *  max_outlen is NOT a valid upper bound and callers must treat the return
-   *  value as unbounded (unconstrained nondet). Always true after a run over
-   *  a format whose conversions are all constant-bounded. */
+   *  non-constant argument, a floating-point conversion had a '+', ' ' or
+   *  '#' flag, or an expected argument was missing. When false, max_outlen
+   *  is NOT a valid upper bound and callers must treat the return value as
+   *  unbounded (unconstrained nondet). Always true after a run over a format
+   *  whose conversions are all constant-bounded. */
   bool bounded = true;
 
-  /** False when a flag ('-', '+', ' ', '#') or a conversion (%p, an unknown
-   *  one) the formatter does not model appeared, so the text it produced may
-   *  differ from the real output. */
+  /** False when a conversion (%p, an unknown one) or a floating-point field
+   *  layout the formatter does not model appeared, so the text it produced
+   *  may differ from the real output. */
   bool exact = true;
 
   /** True when `operands` are the call's actual arguments, so a non-literal

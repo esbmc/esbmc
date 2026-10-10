@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  a %#x of an unsigned int prints at most 8 chars$
