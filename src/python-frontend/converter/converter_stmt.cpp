@@ -8310,7 +8310,9 @@ exprt python_converter::get_block(
       }
 
       current_element_type = bool_type();
+      asserted_test_ = &element["test"];
       exprt test = get_expr(element["test"]);
+      asserted_test_ = nullptr;
       // An object asserted directly is truth-tested like any condition, so a
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.
