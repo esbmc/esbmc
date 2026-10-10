@@ -233,6 +233,7 @@ protected:
   void convert_block(const codet &code, goto_programt &dest);
   void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void discard_comma_operands(exprt &initializer, goto_programt &dest);
   void convert_decl_initializer(
     const exprt &var,
     exprt &initializer,

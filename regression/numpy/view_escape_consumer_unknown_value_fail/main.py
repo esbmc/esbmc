@@ -8,7 +8,7 @@ def register(v):
     calls = calls + 1
 
 
-a = np.array([[1, 2, 3], [4, 5, 6]])
+a = np.zeros((2, 3), dtype=int)
 row = a[0]
 register(row)
 assert row.shape == (3,)
