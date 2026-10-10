@@ -821,6 +821,7 @@ protected:
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
+  void reject_untyped_isinstance(const expr2tc &value);
 
   void volatile_check(expr2tc &expr);
 
