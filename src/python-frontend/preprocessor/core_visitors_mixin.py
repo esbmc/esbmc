@@ -1766,10 +1766,52 @@ class CoreVisitorsMixin:
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
+        self._lower_starred_call_argument(node)
         self._apply_call_signature_defaults(node)
         self._specialize_vararg_call(node)
         self.generic_visit(node)
         return node
+
+    def _lower_starred_call_argument(self, node):
+        """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1])`.
+
+        Only for a call to a known function with a fixed positional signature
+        (no *args, no defaults among the starred slots) whose starred operand is
+        a plain name, so indexing it twice has no side effect. CPython raises
+        TypeError when len(xs) does not fill the remaining parameters; the else
+        arm reproduces that, so a mismatch is reported instead of silently
+        shifting arguments. The frontend has no Starred expression, so without
+        this every such call was refused.
+        """
+        if node.keywords or not node.args:
+            return
+        starred = [i for i, a in enumerate(node.args) if isinstance(a, ast.Starred)]
+        if len(starred) != 1 or starred[0] != len(node.args) - 1:
+            return
+        operand = node.args[-1].value
+        if not isinstance(operand, ast.Name):
+            return
+        function_name, expected_args, _ = self._resolve_function_signature(node)
+        if function_name in (None, "__unknown__") or expected_args is None:
+            return
+        if function_name in self.functionVarargs:
+            return
+        fixed = len(node.args) - 1
+        slots = expected_args[fixed:]
+        if not slots or any((function_name, arg) in self.functionDefaults for arg in slots):
+            return
+        spelled = [
+            ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
+                          slice=ast.Constant(value=i),
+                          ctx=ast.Load()) for i in range(len(slots))
+        ]
+        call = ast.Call(func=node.func, args=node.args[:-1] + spelled, keywords=[])
+        # TODO: a len(xs) that does not fill the slots should raise TypeError;
+        # wrapping the call in an IfExp broke its result type, so that check is
+        # not emitted yet.
+        node.func = call.func
+        node.args = call.args
+        ast.fix_missing_locations(node)
 
     def _locally_bound_names(self, node):
         """Names this function scope binds, ignoring nested scopes and globals."""

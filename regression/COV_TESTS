@@ -735,6 +735,8 @@ regression/python/set_variadic_methods
 regression/python/slice_step_zero_valueerror
 regression/python/sorted_mixed_key_fail
 regression/python/sorted_tuples_concrete
+regression/python/starred_call_argument
+regression/python/starred_call_argument_fail
 regression/python/str-concat1
 regression/python/str1
 regression/python/str_dunder_builtin
