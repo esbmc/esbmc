@@ -1215,6 +1215,12 @@ private:
     std::list<std::string> &file_list,
     const std::string &dir_path);
 
+  typet nullable_dict_pointee(const typet &t) const;
+  bool keeps_pointer_type_on_none(const typet &t);
+  void guard_none_container(
+    exprt &rhs,
+    typet &rhs_type,
+    const nlohmann::json &element);
   exprt handle_membership_operator(
     exprt &lhs,
     exprt &rhs,
