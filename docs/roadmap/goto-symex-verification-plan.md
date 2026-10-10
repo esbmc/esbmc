@@ -892,6 +892,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R116** | **Medium (false FAILED, default configuration, C and C++)** — R109's, R113's and R114's open note, §15 M9 (R116); **FIXED**, same entry | **The bit-reverse builtins had no model.** `__builtin_bitreverse{8,16,32,64}` reached symex as bodyless calls, so each returned a nondet value and `assert(__builtin_bitreverse16(0x1234) == 0x2c48)` was FAILED; the program passes natively. Only the CBMC `--binary` path lowered them (`cbmc_adapter.cpp`). | `goto_symext::run_builtin`, `src/goto-symex/engine/builtin_functions/run_builtin.cpp`; `regression/esbmc/builtin_bitreverse{,_fail}` | — | **Fixed**: `run_builtin` lowers each call to the shift-and-mask reversal, swapping groups of 1, 2, 4, ... bits. |
 | **R118** | **Medium (false FAILED, default configuration, C and C++)** — R113's open note, §15 M9 (R118); **FIXED**, same entry | **`ilogb` and `logb` had no model.** `ilogb`, `logb` and their `f` and `l` forms (and their `__builtin_` spellings, which R114 rewrites to the plain name) reached symex as bodyless calls, so each returned a nondet value and `assert(ilogb(8.0) == 3)` was FAILED; the program passes natively. | `src/c2goto/library/libm/logb.c`; `regression/esbmc/ilogb_logb{,_fail}` | — | **Fixed** for `float` and `double`: both take frexp's exponent minus one. `ilogbl` and `logbl` inherit `frexpl`, which gives the wrong exponent on x86-64 (open). |
 | **R119** | **High (false FAILED, default configuration)** — R113's open note on `cbrt`, §15 M9 (R119); **FIXED** for `double` and `float`, same entry | **`cbrt` and `cbrtf` had no model.** Neither had a body under `src/c2goto/library/libm`, so each call returned a nondet value: `assert(cbrt(27.0) == 3.0);` was FAILED. | `src/c2goto/library/libm/musl/cbrt.c`, `cbrtf.c`; `regression/esbmc/cbrt_model{,_fail}` | — | **Fixed** with musl's implementations. `cbrtl` still returns a nondet value. |
+| **R126** | **Medium (false FAILED, default configuration)** — R119's open note, §15 M9 (R126); **FIXED**, same entry | **`cbrtl` had no model.** A call returned a nondet value, so `assert(cbrtl(27.0L) == 3.0L);` was FAILED; `__builtin_cbrtl`, which R114 rewrites to `cbrtl`, was the same. | `src/c2goto/library/libm/cbrtl.c`; `regression/esbmc/cbrtl_model{,_fail}` | — | **Fixed** by a model that refines `cbrt`'s result with two Newton steps in `long double`. |
 
 ---
 
@@ -11505,6 +11506,28 @@ files are removed, under the default solver and `--z3`. A symbolic cube over
 `[-100, 100]` did not finish within 600 s, so the tests use constants.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R126) — 2026-10-10, the long double cube root
+
+R119 left `cbrtl` without a model, so a call returned a nondet value:
+`assert(cbrtl(27.0L) == 3.0L);` was FAILED on master, and so was any assertion
+on `__builtin_cbrtl`, which R114 rewrites to `cbrtl`. musl has no portable
+`cbrtl` to take: its versions read the x87 or binary128 layout, and ESBMC's
+x86-64 `long double` is binary128 while the native one is x87.
+
+**Fixed** by `libm/cbrtl.c`, written against the arithmetic only. It scales
+`x` by powers of `2^3k` into `double`'s normal range, takes R119's `cbrt` of
+the converted value, refines it with two Newton steps and scales the result
+back by `2^k`. Natively, with `long double` as x87, it is within one ulp of
+glibc's `cbrtl` over 2,000,000 random inputs across the whole exponent range
+and returns `i` for `cbrtl(i * i * i)` with `-100 <= i <= 100`; the same code
+over `__float128` returns those cubes exactly and agrees with libquadmath's
+`cbrtq(2)`. One Newton step was not enough for binary128.
+
+`cbrtl_model` checks exact cubes, powers of two far outside `double`'s range,
+`-0.0`, an infinity, a NaN and `__builtin_cbrtl`; it is FAILED on master.
+`cbrtl_model_fail` runs under `--multi-property` and pins that `cbrtl(2.0L)`
+lies in `(1.2599, 1.26)` and is not `1.25`; master fails both.
 
 ---
 
