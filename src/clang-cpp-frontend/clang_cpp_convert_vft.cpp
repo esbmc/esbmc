@@ -194,7 +194,16 @@ std::string clang_cpp_convertert::rtti_type_name(const clang::CXXRecordDecl &rd)
   // reading as it did before.
   clang::PrintingPolicy pp = rd.getASTContext().getPrintingPolicy();
   pp.SuppressTagKeyword = true;
-  return qtype.getAsString(pp);
+  std::string name = qtype.getAsString(pp);
+  // A local class prints without its enclosing function, so two of one name
+  // would share a type_info; its record id tells them apart.
+  if (rd.getParentFunctionOrMethod())
+  {
+    std::string tag_name, tag_id;
+    get_decl_name(rd, tag_name, tag_id);
+    name += "@" + tag_id;
+  }
+  return name;
 }
 
 irep_idt
