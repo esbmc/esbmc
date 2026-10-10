@@ -2296,15 +2296,21 @@ static bool cannot_throw(const clang::CXXConstructorDecl &cd)
          fpt->canThrow() == clang::CT_Cannot;
 }
 
-/// catch (...) { <destroy each built subobject, newest first> }
-static code_blockt destroy_built_subobjects(
-  const exprt &built,
-  const std::vector<clang_cpp_convertert::subobject_destructort> &dtors)
+static code_blockt catch_all_handler()
 {
   code_blockt handler;
   handler.type().set("ellipsis", 1);
   handler.set("exception_id", "ellipsis");
   handler.copy_to_operands(code_skipt());
+  return handler;
+}
+
+/// catch (...) { <destroy each built subobject, newest first> }
+static code_blockt destroy_built_subobjects(
+  const exprt &built,
+  const std::vector<clang_cpp_convertert::subobject_destructort> &dtors)
+{
+  code_blockt handler = catch_all_handler();
   for (const auto &d : dtors)
   {
     code_ifthenelset destroy;
@@ -2316,15 +2322,65 @@ static code_blockt destroy_built_subobjects(
   return handler;
 }
 
+codet clang_cpp_convertert::rethrowing_catch(
+  const code_blockt &tried,
+  code_blockt handler)
+{
+  exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+  convert_expression_to_code(rethrow);
+  handler.move_to_operands(rethrow);
+
+  codet guarded("cpp-catch");
+  guarded.location() = tried.location();
+  guarded.copy_to_operands(tried, handler);
+  return guarded;
+}
+
+bool clang_cpp_convertert::destroy_object_on_body_unwind(
+  const clang::CXXConstructorDecl &cd,
+  std::size_t body_start,
+  code_blockt &body)
+{
+  // The destructor may be declared after cd and not converted yet.
+  const clang::CXXDestructorDecl *dd = cd.getParent()->getDestructor();
+  exprt::operandst &ops = body.operands();
+  if (!dd || dd->isTrivial() || body_start == ops.size())
+    return false;
+
+  code_function_callt call;
+  if (get_ctor_dtor_ref(*dd, call.function()))
+    return true;
+
+  code_blockt tried;
+  tried.location() = body.location();
+  tried.operands().assign(
+    std::make_move_iterator(ops.begin() + body_start),
+    std::make_move_iterator(ops.end()));
+  ops.erase(ops.begin() + body_start, ops.end());
+
+  const auto &[this_id, this_ptr_type] = method_this(cd);
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  gen_typecast(
+    ns, this_expr, to_code_type(call.function().type()).arguments()[0].type());
+  call.arguments().push_back(this_expr);
+  code_blockt handler = catch_all_handler();
+  handler.move_to_operands(call);
+  body.copy_to_operands(rethrowing_catch(tried, std::move(handler)));
+  return false;
+}
+
 bool clang_cpp_convertert::unwind_constructed_subobjects(
   const clang::CXXConstructorDecl &cd,
   const std::vector<std::size_t> &starts,
   code_blockt &body)
 {
-  if (
-    cd.isDelegatingConstructor() || cannot_throw(cd) ||
-    !user_code_uses_exceptions())
+  if (cannot_throw(cd) || !user_code_uses_exceptions())
     return false;
+
+  // [except.ctor]/4: the delegation completed the object, so a throw from the
+  // body destroys it whole.
+  if (cd.isDelegatingConstructor())
+    return destroy_object_on_body_unwind(cd, starts.back(), body);
 
   std::vector<subobject_destructort> dtors;
   if (subobject_destructors(cd, dtors))
@@ -2373,15 +2429,10 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
         ops.begin() + start, progress(construction_position(**it, bases)));
   }
 
-  code_blockt handler = destroy_built_subobjects(built, dtors);
-  exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
-  convert_expression_to_code(rethrow);
-  handler.move_to_operands(rethrow);
-
-  codet guarded("cpp-catch");
+  codet guarded =
+    rethrowing_catch(body, destroy_built_subobjects(built, dtors));
   guarded.set("#subobject_unwind", true);
   guarded.location() = location;
-  guarded.copy_to_operands(body, handler);
 
   code_blockt wrapped;
   wrapped.location() = location;
@@ -3406,31 +3457,8 @@ bool clang_cpp_convertert::get_decl_ref(
     break;
   }
   case clang::Decl::CXXConstructor:
-  {
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl &>(decl);
-
-    get_decl_name(fd, name, id);
-
-    if (get_type(fd.getType(), type))
-      return true;
-
-    code_typet &fd_type = to_code_type(type);
-    if (get_function_params(fd, fd_type.arguments()))
-      return true;
-
-    // annotate return type - will be used to adjust the initiliazer or
-    // decl-derived stmt
-    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
-    assert(md);
-    annotate_ctor_dtor_rtn_type(*md, fd_type.return_type());
-
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.name(name);
-
-    break;
-  }
+    return get_ctor_dtor_ref(
+      static_cast<const clang::CXXMethodDecl &>(decl), new_expr);
 
   default:
   {
@@ -3447,6 +3475,31 @@ bool clang_cpp_convertert::get_decl_ref(
   }
   }
 
+  return false;
+}
+
+bool clang_cpp_convertert::get_ctor_dtor_ref(
+  const clang::CXXMethodDecl &md,
+  exprt &new_expr)
+{
+  std::string name, id;
+  get_decl_name(md, name, id);
+
+  typet type;
+  if (get_type(md.getType(), type))
+    return true;
+
+  code_typet &fd_type = to_code_type(type);
+  if (get_function_params(md, fd_type.arguments()))
+    return true;
+
+  // annotate return type - will be used to adjust the initiliazer or
+  // decl-derived stmt
+  annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.name(name);
   return false;
 }
 
