@@ -1,6 +1,7 @@
 #include <pointer-analysis/andersen.h>
 
 #include <irep2/irep2_utils.h>
+#include <util/base/prefix.h>
 #include <util/lang/c_types.h>
 
 namespace
@@ -24,7 +25,13 @@ expr2tc base_object(const expr2tc &e)
     if (is_member2t(cur))
       cur = to_member2t(cur).source_value;
     else if (is_index2t(cur))
-      cur = to_index2t(cur).source_value;
+    {
+      const expr2tc &source = to_index2t(cur).source_value;
+      // `p[i]` selects from the object p points to, not from p.
+      if (is_pointer_type(source->type))
+        return dereference2tc(to_pointer_type(source->type).subtype, source);
+      cur = source;
+    }
     else if (is_byte_extract2t(cur))
       cur = to_byte_extract2t(cur).source_value;
     else if (is_typecast2t(cur))
@@ -62,14 +69,301 @@ bool may_carry_pointer(const type2tc &t)
   return false;
 }
 
+/// Whether an object of this type can hold an address: anything that can hold
+/// a pointer, and an integer, which CIL-style code uses for every field access
+/// (`*(T *)((unsigned long)p + off)`), including inside an aggregate.
+bool may_hold_address(const type2tc &t)
+{
+  if (is_nil_type(t))
+    return false;
+  if (may_carry_pointer(t) || is_bv_type(t) || is_bool_type(t))
+    return true;
+  if (is_array_type(t))
+    return may_hold_address(to_array_type(t).subtype);
+  if (is_struct_type(t) || is_union_type(t))
+  {
+    const std::vector<type2tc> &members =
+      is_struct_type(t) ? to_struct_type(t).members : to_union_type(t).members;
+    for (const type2tc &m : members)
+      if (may_hold_address(m))
+        return true;
+  }
+  return false;
+}
+
+/// Whether \p e reads a variadic argument.
+bool mentions_va_arg(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (
+    is_sideeffect2t(e) &&
+    to_sideeffect2t(e).kind == sideeffect2t::allockind::va_arg)
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || mentions_va_arg(op); });
+  return found;
+}
+
+/// Whether \p e or any operand of it is a pointer: a value this model cannot
+/// track (a float, say) may still hide the address one of them holds.
+bool mentions_pointer(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (may_carry_pointer(e->type))
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || mentions_pointer(op); });
+  return found;
+}
+
 expr2tc top_source_expr()
 {
   return symbol2tc(pointer_type2(), "andersen::top_source");
 }
 
+expr2tc nondet_object_expr()
+{
+  return symbol2tc(pointer_type2(), andersent::nondet_object_name);
+}
+
+/// Whether \p function reads an argument passed beyond its signature.
+bool mentions_va_arg(const goto_functiont &function)
+{
+  bool found = false;
+  forall_goto_program_instructions (i, function.body)
+    for (const expr2tc &e : {i->code, i->guard})
+      found = found || mentions_va_arg(e);
+  return found;
+}
+
+/// Whether symex runs \p function itself, whatever its body: an intrinsic, a
+/// builtin or an input function, any of which may write through its arguments.
+/// Keep in step with goto_symext::symex_step's FUNCTION_CALL case.
+bool symex_runs(const irep_idt &function)
+{
+  const std::string &name = function.as_string();
+  return has_prefix(name, "c:@F@__ESBMC") ||
+         has_prefix(name, "c:@F@__CPROVER") ||
+         has_prefix(name, "c:@F@__builtin") || name == "c:@F@scanf" ||
+         name == "c:@F@sscanf" || name == "c:@F@fscanf";
+}
+
 expr2tc return_symbol(const irep_idt &fn)
 {
   return symbol2tc(pointer_type2(), "andersen::return::" + fn.as_string());
+}
+
+using namest = std::unordered_set<irep_idt, irep_id_hash>;
+
+/// Whether \p e passes on the value of a symbol in \p names, rather than
+/// only comparing it.
+bool passes_on(const expr2tc &e, const namest &names)
+{
+  if (is_nil_expr(e) || is_bool_type(e->type))
+    return false;
+  if (is_symbol2t(e))
+    return names.count(to_symbol2t(e).thename) != 0;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || passes_on(op, names); });
+  return found;
+}
+
+namest locals_of(const goto_functiont &function)
+{
+  namest locals;
+  if (is_code_type(function.type))
+    for (const irep_idt &arg : to_code_type(function.type).argument_names)
+      locals.insert(arg);
+  forall_goto_program_instructions (it, function.body)
+    if (it->is_decl())
+      locals.insert(to_code_decl2t(it->code).value);
+  return locals;
+}
+
+/// Whether \p function lets the values of \p tracked reach nothing but its
+/// own locals, comparisons, the callees that do the same, and, if
+/// \p returns, its result.
+bool keeps(
+  const goto_functionst &goto_functions,
+  const irep_idt &function,
+  namest tracked,
+  bool returns,
+  namest &visiting)
+{
+  const auto it = goto_functions.function_map.find(function);
+  if (
+    it == goto_functions.function_map.end() || !it->second.body_available ||
+    !visiting.insert(function).second)
+    return false;
+  const goto_functiont &f = it->second;
+  const namest locals = locals_of(f);
+
+  bool kept = true;
+  for (bool grew = true; grew && kept;)
+  {
+    grew = false;
+    forall_goto_program_instructions (i, f.body)
+    {
+      if (i->is_assign())
+      {
+        const code_assign2t &assign = to_code_assign2t(i->code);
+        // Overwriting a whole local passes nothing on.
+        if (!is_symbol2t(assign.target) && passes_on(assign.target, tracked))
+          kept = false;
+        else if (passes_on(assign.source, tracked))
+        {
+          if (
+            !is_symbol2t(assign.target) ||
+            !locals.count(to_symbol2t(assign.target).thename))
+            kept = false;
+          else
+            grew |= tracked.insert(to_symbol2t(assign.target).thename).second;
+        }
+      }
+      else if (i->is_return())
+        kept &=
+          returns || !passes_on(to_code_return2t(i->code).operand, tracked);
+      else if (i->is_function_call())
+      {
+        const code_function_call2t &call = to_code_function_call2t(i->code);
+        if (
+          (!is_nil_expr(call.ret) && !is_symbol2t(call.ret) &&
+           passes_on(call.ret, tracked)) ||
+          passes_on(call.function, tracked))
+          kept = false;
+        for (std::size_t n = 0; kept && n < call.operands.size(); ++n)
+        {
+          if (!passes_on(call.operands[n], tracked))
+            continue;
+          const auto callee = goto_functions.function_map.find(
+            is_symbol2t(call.function) ? to_symbol2t(call.function).thename
+                                       : irep_idt());
+          const auto &names =
+            callee == goto_functions.function_map.end() ||
+                !is_code_type(callee->second.type)
+              ? std::vector<irep_idt>()
+              : to_code_type(callee->second.type).argument_names;
+          kept =
+            n < names.size() && !names[n].empty() &&
+            keeps(goto_functions, callee->first, {names[n]}, false, visiting);
+        }
+      }
+      else if (!i->is_decl() && i->type != DEAD)
+        kept &= !passes_on(i->code, tracked);
+      kept &= !passes_on(i->guard, tracked);
+    }
+  }
+  visiting.erase(function);
+  return kept;
+}
+
+/// Whether \p e, stripped of casts, is NULL, an unconstrained value or an
+/// object it allocates afresh.
+bool fresh_value(const expr2tc &e)
+{
+  const expr2tc v = strip_casts(e);
+  if (
+    is_null_object2t(v) ||
+    (is_symbol2t(v) && to_symbol2t(v).thename == "NULL") ||
+    (is_constant_int2t(v) && to_constant_int2t(v).value.is_zero()))
+    return true;
+  if (!is_sideeffect2t(v))
+    return false;
+  switch (to_sideeffect2t(v).kind)
+  {
+  case sideeffect2t::allockind::malloc:
+  case sideeffect2t::allockind::alloca:
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
+  case sideeffect2t::allockind::nondet:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/// The functions each call of which returns NULL or an object of its own:
+/// they return only locals holding what they allocate, or what another such
+/// function returns, and let it reach nothing else (see keeps). Nothing in the
+/// call sets the object's contents, so each call can be its own allocation.
+namest find_allocators(const goto_functionst &goto_functions)
+{
+  namest allocators;
+  for (bool grew = true; grew;)
+  {
+    grew = false;
+    forall_goto_functions (it, goto_functions)
+    {
+      const goto_functiont &f = it->second;
+      if (
+        allocators.count(it->first) || !f.body_available ||
+        !is_code_type(f.type) ||
+        !is_pointer_type(to_code_type(f.type).ret_type))
+        continue;
+
+      // The locals every whole assignment of which is fresh.
+      namest fresh;
+      forall_goto_program_instructions (i, f.body)
+        if (i->is_decl())
+          fresh.insert(to_code_decl2t(i->code).value);
+      for (bool shrank = true; shrank;)
+      {
+        shrank = false;
+        forall_goto_program_instructions (i, f.body)
+        {
+          expr2tc target;
+          bool ok = false;
+          if (i->is_assign())
+          {
+            target = to_code_assign2t(i->code).target;
+            const expr2tc source =
+              strip_casts(to_code_assign2t(i->code).source);
+            ok =
+              fresh_value(source) ||
+              (is_symbol2t(source) && fresh.count(to_symbol2t(source).thename));
+          }
+          else if (i->is_function_call())
+          {
+            const code_function_call2t &call = to_code_function_call2t(i->code);
+            target = call.ret;
+            ok = is_symbol2t(call.function) &&
+                 allocators.count(to_symbol2t(call.function).thename);
+          }
+          if (
+            !ok && !is_nil_expr(target) && is_symbol2t(target) &&
+            fresh.erase(to_symbol2t(target).thename))
+            shrank = true;
+        }
+      }
+
+      bool returns_fresh = true;
+      bool allocates = false;
+      forall_goto_program_instructions (i, f.body)
+        if (i->is_return())
+        {
+          const expr2tc v = strip_casts(to_code_return2t(i->code).operand);
+          const bool local =
+            is_symbol2t(v) && fresh.count(to_symbol2t(v).thename);
+          returns_fresh &= local || fresh_value(v);
+          allocates |= local;
+        }
+
+      namest visiting;
+      if (
+        returns_fresh && allocates &&
+        keeps(goto_functions, it->first, fresh, true, visiting))
+      {
+        allocators.insert(it->first);
+        grew = true;
+      }
+    }
+  }
+  return allocators;
 }
 } // namespace
 
@@ -202,6 +496,10 @@ void andersent::solve()
     if (!pts[n].empty())
       enqueue(n);
 
+  // The nondet sentinel is inert; see nondet_object_name.
+  const node_id *found = find_node(nondet_object_expr());
+  const node_id nondet = found ? *found : TOP;
+
   while (!worklist.empty())
   {
     const node_id n = worklist.back();
@@ -220,7 +518,12 @@ void andersent::solve()
         enqueue(p);
 
       for (node_id o : targets)
-        if (o != TOP && add_copy_edge(o, p))
+        if (o == nondet)
+        {
+          if (pts[p].insert(o).second)
+            enqueue(p);
+        }
+        else if (o != TOP && add_copy_edge(o, p))
           enqueue(p);
     }
 
@@ -232,7 +535,7 @@ void andersent::solve()
         enqueue(TOP);
 
       for (node_id o : targets)
-        if (o != TOP && add_copy_edge(q, o))
+        if (o != TOP && o != nondet && add_copy_edge(q, o))
           enqueue(o);
     }
 
@@ -269,6 +572,16 @@ andersent::node_id andersent::top_source()
 andersent::node_id andersent::return_node(const irep_idt &fn)
 {
   return get_node(return_symbol(fn));
+}
+
+andersent::node_id andersent::allocation(const type2tc &type, unsigned loc)
+{
+  const node_id t = fresh_node();
+  add_constraint(
+    constraint_kindt::ADDRESS_OF,
+    t,
+    get_node(dynamic_object2tc(type, gen_ulong(loc), false, false)));
+  return t;
 }
 
 andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
@@ -309,27 +622,34 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     {
       // One node per allocation site, so every object a loop allocates shares
       // a single abstraction.  Keyed like value_sett's dynamic objects.
-      const type2tc &objtype = is_pointer_type(side.type)
-                                 ? to_pointer_type(side.type).subtype
-                                 : side.alloctype;
-      const node_id t = fresh_node();
-      add_constraint(
-        constraint_kindt::ADDRESS_OF,
-        t,
-        get_node(dynamic_object2tc(objtype, gen_ulong(loc), false, false)));
-      return t;
+      const node_id t = allocation(
+        is_pointer_type(side.type) ? to_pointer_type(side.type).subtype
+                                   : side.alloctype,
+        loc);
+      if (
+        side.kind != sideeffect2t::allockind::realloc ||
+        is_nil_expr(side.operand))
+        return t;
+      // realloc copies the old object into the new one, and on failure
+      // returns the old pointer (goto_symext::symex_realloc).
+      const node_id old = eval_rhs(side.operand, loc);
+      const node_id contents = fresh_node();
+      add_constraint(constraint_kindt::LOAD, contents, old);
+      add_constraint(constraint_kindt::STORE, t, contents);
+      const node_id result = fresh_node();
+      add_constraint(constraint_kindt::COPY, result, t);
+      add_constraint(constraint_kindt::COPY, result, old);
+      return result;
     }
 
     case sideeffect2t::allockind::nondet:
     {
-      // A nondet *pointer* is an unconstrained bit pattern that symbolic
-      // execution may later constrain to equal an existing object's address,
-      // so it may name anything.  Only a value that cannot carry a pointer at
-      // all names nothing.
-      const node_id t = fresh_node();
-      if (may_carry_pointer(side.type))
-        points_to_top(t);
-      return t;
+      // Symbolic execution resolves a dereference of an unconstrained pointer
+      // (an uninitialised local, a bodyless call's result) to an invalid
+      // object, never a named one, even under an assumption equating it with
+      // an address. It points at a sentinel rather than nothing, so a
+      // consumer can tell it apart from a set no constraint ever reached.
+      return unconstrained();
     }
 
     default:
@@ -359,13 +679,15 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
       return eval_rhs(rhs_op, loc);
   }
 
-  // NULL names no object, so an empty set is exact.  A *non-zero* integer
-  // turned into a pointer is an int->ptr cast that may name anything, so it
-  // deliberately falls through to TOP below.
+  // NULL names no object, so an empty set is exact. Symex resolves any other
+  // integer constant used as a pointer to an invalid object
+  // (value_sett::get_value_set_rec), just as it does an unconstrained one.
   if (
     is_null_object2t(r) ||
     (is_constant_int2t(r) && to_constant_int2t(r).value.is_zero()))
     return fresh_node();
+  if (is_constant_int2t(r))
+    return unconstrained();
 
   // A nameable l-value read as a value: its own node already holds its targets.
   if (
@@ -373,10 +695,50 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     is_symbol2t(base) || is_dynamic_object2t(base))
     return get_node(base);
 
+  // An integer carries the addresses it is computed from: `(long)p + 44`
+  // still points into p's object. A constant operand is an offset and carries
+  // none.
+  if (is_bv_type(r->type) || is_bool_type(r->type))
+  {
+    std::vector<node_id> carried;
+    r->foreach_operand([this, &carried, loc](const expr2tc &op) {
+      if (!is_nil_expr(op) && !is_constant_int2t(strip_casts(op)))
+        carried.push_back(eval_rhs(op, loc));
+    });
+    // `(long)p + 44` reaches what p does: share its node rather than build a
+    // chain of copies, which CIL emits for every field access.
+    if (carried.size() == 1)
+      return carried.front();
+    const node_id t = fresh_node();
+    for (node_id c : carried)
+      add_constraint(constraint_kindt::COPY, t, c);
+    return t;
+  }
+
+  if (
+    is_constant_struct2t(r) || is_constant_union2t(r) ||
+    is_constant_array2t(r) || is_constant_array_of2t(r))
+  {
+    const node_id t = fresh_node();
+    r->foreach_operand([this, &t, loc](const expr2tc &op) {
+      if (!is_nil_expr(op) && may_hold_address(op->type))
+        add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+    });
+    return t;
+  }
+
   // Anything else is a value this frontend does not model.  Leaving the set
   // empty would be an unsound under-approximation; TOP is the safe answer.
   const node_id t = fresh_node();
   points_to_top(t);
+  return t;
+}
+
+andersent::node_id andersent::unconstrained()
+{
+  const node_id t = fresh_node();
+  add_constraint(
+    constraint_kindt::ADDRESS_OF, t, get_node(nondet_object_expr()));
   return t;
 }
 
@@ -423,16 +785,16 @@ void andersent::handle_assign(
 
   const expr2tc r = strip_casts(rhs);
 
-  // A pointer cast into an integer object (`x = (long)p`) leaves this model:
-  // the integer arithmetic that may follow is not tracked, so whatever is cast
-  // back out of x later may name any object.  Dropping the assignment would
-  // leave x empty, and `q = (void *)x` would then copy that empty set.
-  if (!may_carry_pointer(lhs->type))
+  // An integer holds no address unless it is computed from one; a value this
+  // model does not track at all may still hide the one it was built from.
+  if (!may_hold_address(lhs->type))
   {
-    if (may_carry_pointer(r->type))
+    if (mentions_pointer(r))
       assign_top(lhs, loc);
     return;
   }
+  if (!may_carry_pointer(lhs->type) && is_constant_int2t(r))
+    return;
 
   assign_node(lhs, eval_rhs(rhs, loc), loc);
 }
@@ -442,11 +804,11 @@ void andersent::widen_call(
   const std::vector<expr2tc> &arguments,
   unsigned loc)
 {
-  if (!is_nil_expr(ret) && may_carry_pointer(ret->type))
+  if (!is_nil_expr(ret) && may_hold_address(ret->type))
     assign_top(ret, loc);
 
   for (const expr2tc &arg : arguments)
-    if (!is_nil_expr(arg) && may_carry_pointer(arg->type))
+    if (!is_nil_expr(arg) && may_hold_address(arg->type))
       add_constraint(constraint_kindt::STORE, eval_rhs(arg, loc), top_source());
 }
 
@@ -468,11 +830,18 @@ void andersent::bind_call(
   // Arguments no formal can be bound to: a nameless parameter, or one passed
   // beyond the signature (varargs, mismatched prototype) and read back out
   // with va_arg.  They reach the callee by a route this frontend cannot see.
-  std::vector<expr2tc> unbound(arguments.begin() + argc, arguments.end());
+  // Symex reads the latter only through a va_arg in the callee's own frame
+  // (goto_symext::symex_va_arg).
+  std::vector<expr2tc> unbound;
+  const auto reads = reads_varargs.try_emplace(callee_name, false);
+  if (reads.second)
+    reads.first->second = mentions_va_arg(callee);
+  if (reads.first->second)
+    unbound.assign(arguments.begin() + argc, arguments.end());
 
   for (std::size_t i = 0; i < argc; ++i)
   {
-    if (!may_carry_pointer(ftype.arguments[i]))
+    if (!may_hold_address(ftype.arguments[i]))
       continue;
 
     if (ftype.argument_names[i].empty())
@@ -496,7 +865,12 @@ void andersent::bind_call(
   if (!unbound.empty())
     widen_call(expr2tc(), unbound, loc);
 
-  if (!is_nil_expr(ret) && may_carry_pointer(ret->type))
+  if (is_nil_expr(ret) || !may_hold_address(ret->type))
+    return;
+  if (allocators.count(callee_name))
+    assign_node(
+      ret, allocation(to_pointer_type(ftype.ret_type).subtype, loc), loc);
+  else
     handle_assign(ret, return_symbol(callee_name), loc);
 }
 
@@ -511,8 +885,13 @@ void andersent::handle_function_call(
     auto it = goto_functions.function_map.find(callee_name);
     if (it != goto_functions.function_map.end() && it->second.body_available)
       bind_call(callee_name, it->second, call.ret, call.operands, loc);
-    else
-      widen_call(call.ret, call.operands, loc); // bodyless / intrinsic
+    else if (symex_runs(callee_name))
+      widen_call(call.ret, call.operands, loc);
+    // Symex gives a call to any other function without a body a fresh
+    // result and writes through none of its arguments
+    // (goto_symext::symex_function_call_code).
+    else if (!is_nil_expr(call.ret) && may_hold_address(call.ret->type))
+      assign_node(call.ret, unconstrained(), loc);
     return;
   }
 
@@ -632,7 +1011,7 @@ void andersent::collect_constraints(const goto_functionst &goto_functions)
       else if (i_it->is_return())
       {
         const expr2tc &value = to_code_return2t(i_it->code).operand;
-        if (!is_nil_expr(value) && may_carry_pointer(value->type))
+        if (!is_nil_expr(value) && may_hold_address(value->type))
           add_constraint(
             constraint_kindt::COPY,
             return_node(f_it->first),
@@ -653,6 +1032,7 @@ void andersent::collect_constraints(const goto_functionst &goto_functions)
 
 void andersent::operator()(const goto_functionst &goto_functions)
 {
+  allocators = find_allocators(goto_functions);
   collect_constraints(goto_functions);
   solve();
 
@@ -684,9 +1064,34 @@ void andersent::to_object_descriptors(node_id n, valuest &dest) const
   }
 }
 
-void andersent::get_values(locationt, const expr2tc &expr, valuest &dest)
+void andersent::get_values(locationt l, const expr2tc &expr, valuest &dest)
 {
-  const node_id *n = find_node(base_object(expr));
+  // Offset-insensitive: `p + i` holds whatever `p` does.
+  expr2tc e = strip_casts(expr);
+  while (is_add2t(e) || is_sub2t(e))
+  {
+    const expr2tc &lhs = *e->get_sub_expr(0);
+    const expr2tc &rhs = *e->get_sub_expr(1);
+    if (is_pointer_type(lhs->type))
+      e = strip_casts(lhs);
+    else if (is_add2t(e) && is_pointer_type(rhs->type))
+      e = strip_casts(rhs);
+    else
+      break;
+  }
+
+  if (is_address_of2t(e))
+  {
+    const expr2tc obj = base_object(to_address_of2t(e).ptr_obj);
+    if (is_dereference2t(obj))
+      get_values(l, to_dereference2t(obj).value, dest);
+    else
+      dest.push_back(
+        object_descriptor2tc(obj->type, obj, gen_zero(index_type2()), 0));
+    return;
+  }
+
+  const node_id *n = find_node(base_object(e));
   if (n == nullptr)
   {
     dest.push_back(unknown2tc(pointer_type2()));

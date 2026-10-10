@@ -4,16 +4,16 @@
 #include <util/expr/expr_util.h>
 
 // True iff `expr` denotes storage reached through a pointer: a dereference,
-// or an index/member off pointer-reached storage, or a pointer-typed
-// symbol being indexed. Used to fire the inductive-step gate only for
-// array-element writes into pointer-reached memory (e.g. `p[i]`,
-// `(*p)[i]`, `p->arr[i]`), which the inductive step cannot havoc (#5224).
-// A named stack array (array-typed symbol) returns false: the inductive
-// step havocs it as a whole symbol, which is sound.
-bool indexes_through_pointer(const expr2tc &expr)
+// an index/member off pointer-reached storage, a pointer-typed symbol being
+// indexed, or a conditional l-value with such a branch. A named stack array
+// (array-typed symbol) returns false: a havoc can name it as a whole (#5224).
+static bool indexes_through_pointer(const expr2tc &expr)
 {
   if (is_dereference2t(expr))
     return true;
+  if (is_if2t(expr))
+    return indexes_through_pointer(to_if2t(expr).true_value) ||
+           indexes_through_pointer(to_if2t(expr).false_value);
   if (is_index2t(expr))
     return indexes_through_pointer(to_index2t(expr).source_value);
   if (is_member2t(expr))
@@ -27,12 +27,9 @@ bool indexes_through_pointer(const expr2tc &expr)
   return false;
 }
 
-// Given the `source_value` of an array write that `indexes_through_pointer`
-// has flagged, return the pointer expression whose pointee Phase 2 should
-// resolve via the value-set fixpoint (e.g. `(*dest)[i]` -> `dest`,
-// `p[i]` -> `p`, `p->arr[i]` -> `p`). Returns a nil expr when no pointer
-// can be extracted, in which case the caller marks the write unresolvable
-// and the inductive step is disabled as in Phase 1. See issue #5230.
+// The pointer through which storage flagged by indexes_through_pointer is
+// reached (`(*dest)[i]` -> `dest`, `p[i]` -> `p`, `p->arr[i]` -> `p`), or nil
+// when no single pointer reaches it, as for a conditional l-value (#5230).
 static expr2tc extract_queried_pointer(const expr2tc &expr)
 {
   if (is_dereference2t(expr))
@@ -164,12 +161,140 @@ void goto_loopst::create_function_loop(
 /// `p->f = ...`, `p->e[i] = ...`, `((S *)v)->f = ...`): nothing named is
 /// written, so a havoc over named symbols cannot cover it. Writing the pointer
 /// variable itself (`p = ...`) names a symbol the havoc does cover.
-/// `modifies_pointer_array` reports the array shapes too, but only
-/// goto_k_induction reads that flag, so they are recognised here rather than
-/// deferred to it (#5224, #5230).
 static bool writes_through_pointer(const expr2tc &lhs)
 {
   return !is_nil_expr(lhs) && !is_symbol2t(lhs) && indexes_through_pointer(lhs);
+}
+
+// `*p` when `lhs` writes inside it: `*p` or a member chain `p->f.g`. An
+// element write (`p->a[i]`) can leave the declared type through a flexible
+// array member, so it is resolved through the pointer instead.
+static expr2tc written_pointee(const expr2tc &lhs)
+{
+  if (is_member2t(lhs))
+    return written_pointee(to_member2t(lhs).source_value);
+  // Symex cannot assign a whole array through a dereference.
+  if (
+    is_dereference2t(lhs) && is_symbol2t(to_dereference2t(lhs).value) &&
+    !is_array_type(lhs->type))
+    return lhs;
+  return expr2tc();
+}
+
+static void record_pointer_write(loopst &loop, const expr2tc &lhs)
+{
+  loop.set_writes_through_pointer();
+  const expr2tc pointee = written_pointee(lhs);
+  const expr2tc ptr = extract_queried_pointer(lhs);
+  if (!is_nil_expr(pointee))
+    loop.add_written_pointee(pointee);
+  else if (!is_nil_expr(ptr))
+    loop.add_written_pointer(ptr);
+  else
+    loop.set_unnamed_pointer_write();
+}
+
+// Bodyless intrinsics that symex runs, writing through their first argument.
+static bool writes_through_first_argument(const irep_idt &function)
+{
+  static const std::unordered_set<std::string> writers{
+    "c:@F@__ESBMC_memcpy",
+    "c:@F@__ESBMC_memmove",
+    "c:@F@__ESBMC_memset",
+    "c:@F@__ESBMC_init_object"};
+  return writers.count(function.as_string()) != 0;
+}
+
+/// A variable whose address the callee takes can be reassigned through that
+/// address, which collect_lhs_symbols does not see.
+void goto_loopst::collect_address_taken(
+  const expr2tc &e,
+  function_summaryt &out) const
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_address_of2t(e))
+  {
+    expr2tc obj = to_address_of2t(e).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+      obj = is_member2t(obj)  ? to_member2t(obj).source_value
+            : is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_typecast2t(obj).from;
+    if (is_symbol2t(obj))
+      out.address_taken.insert(to_symbol2t(obj).thename);
+  }
+  e->foreach_operand(
+    [this, &out](const expr2tc &op) { collect_address_taken(op, out); });
+}
+
+void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
+{
+  const expr2tc ptr = extract_queried_pointer(lhs);
+  if (is_nil_expr(ptr))
+    unnamed_write = true;
+  else
+    written_pointers.insert(ptr);
+}
+
+static expr2tc replace_symbols(
+  const expr2tc &e,
+  const std::unordered_map<irep_idt, expr2tc, irep_id_hash> &by)
+{
+  if (is_nil_expr(e))
+    return e;
+  if (is_symbol2t(e))
+  {
+    auto it = by.find(to_symbol2t(e).thename);
+    if (it == by.end())
+      return e;
+    if (it->second->type == e->type)
+      return it->second;
+    return typecast2tc(e->type, it->second);
+  }
+  bool changed = false;
+  e->foreach_operand([&by, &changed](const expr2tc &op) {
+    changed = changed || (!is_nil_expr(op) && replace_symbols(op, by) != op);
+  });
+  if (!changed)
+    return e;
+  expr2tc copy = e;
+  copy->Foreach_operand([&by](expr2tc &op) { op = replace_symbols(op, by); });
+  return copy;
+}
+
+/// Restate the callee's written pointers in the caller's scope: a parameter
+/// the callee never reassigns holds the argument this call passes, which
+/// resolves more precisely than the parameter every call site shares.
+void goto_loopst::function_summaryt::bind_arguments(
+  const goto_functiont &callee,
+  const std::vector<expr2tc> &arguments)
+{
+  if (!is_code_type(callee.type))
+    return;
+  const code_type2t &type = to_code_type(callee.type);
+  std::unordered_set<irep_idt, irep_id_hash> reassigned = address_taken;
+  for (const expr2tc &v : modified)
+    if (is_symbol2t(v))
+      reassigned.insert(to_symbol2t(v).thename);
+
+  // check_var_name filters the modified set, and an assignment through the
+  // parameter's own address never enters it, so both are ruled out here.
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> actual;
+  const std::size_t n = std::min(
+    {type.arguments.size(), type.argument_names.size(), arguments.size()});
+  for (std::size_t i = 0; i < n; ++i)
+    if (
+      !is_nil_expr(arguments[i]) && !type.argument_names[i].empty() &&
+      !reassigned.count(type.argument_names[i]) &&
+      check_var_name(symbol2tc(type.arguments[i], type.argument_names[i])))
+      actual.emplace(type.argument_names[i], arguments[i]);
+  if (actual.empty())
+    return;
+
+  loopst::loop_varst bound;
+  for (const expr2tc &ptr : written_pointers)
+    bound.insert(replace_symbols(ptr, actual));
+  written_pointers = std::move(bound);
 }
 
 void goto_loopst::collect_loop_symbols(
@@ -229,6 +354,11 @@ void goto_loopst::merge_summary(
   out.modifies_pointer_array |= from.modifies_pointer_array;
   out.writes_through_pointer |= from.writes_through_pointer;
   out.pointer_write_unresolvable |= from.pointer_write_unresolvable;
+  out.written_pointers.insert(
+    from.written_pointers.begin(), from.written_pointers.end());
+  out.unnamed_write |= from.unnamed_write;
+  out.address_taken.insert(
+    from.address_taken.begin(), from.address_taken.end());
 }
 
 /// The caller havocs what a call's pointer arguments point to, which covers a
@@ -255,6 +385,7 @@ void goto_loopst::note_pointer_write(
   if (!writes_through_pointer(target))
     return;
   local.writes_through_pointer = true;
+  local.record_write(target);
   written_ptrs.push_back(extract_queried_pointer(target));
 }
 
@@ -275,6 +406,13 @@ bool goto_loopst::summarise_call(
   collect_loop_symbols(call.ret, local.modified);
 
   const irep_idt &callee = to_symbol2t(call.function).thename;
+  if (writes_through_first_argument(callee) && !call.operands.empty())
+  {
+    local.writes_through_pointer = true;
+    local.modifies_pointer_array = true;
+    local.written_pointers.insert(call.operands[0]);
+    written_ptrs.push_back(call.operands[0]);
+  }
   // Cycle cut: matches the legacy "do nothing on recursion" behaviour. The
   // result is incomplete so it is not cached — the missing recursive
   // contributions are call-site dependent.
@@ -290,6 +428,8 @@ bool goto_loopst::summarise_call(
     for (const expr2tc &arg : call.operands)
       if (!is_nil_expr(arg) && is_pointer_type(arg->type))
         written_ptrs.push_back(arg);
+  callee_summary.bind_arguments(
+    goto_functions.function_map.at(callee), call.operands);
   merge_summary(callee_summary, local);
   return complete;
 }
@@ -325,6 +465,8 @@ bool goto_loopst::compute_function_summary(
 
   for (const auto &instr : it->second.body.instructions)
   {
+    collect_address_taken(instr.code, local);
+    collect_address_taken(instr.guard, local);
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;
@@ -391,15 +533,14 @@ void goto_loopst::apply_callee_summary(
     record_callee_pointer_writes(loop, call);
   if (summary.pointer_write_unresolvable)
     loop.set_pointer_array_write_unresolvable();
+  for (const auto &ptr : summary.written_pointers)
+    loop.add_written_pointer(ptr);
+  if (summary.unnamed_write)
+    loop.set_unnamed_pointer_write();
+  // Havocking through the call's arguments cannot cover an element the
+  // callee writes past them (#5230).
   if (summary.modifies_pointer_array)
-  {
-    loop.set_modifies_pointer_array();
-    // The write happens inside the callee, so the written pointer (a
-    // callee parameter) is not in scope at the caller's loop head and
-    // cannot be resolved there. Fall back to Phase 1: disable the
-    // inductive step. See issue #5230.
     loop.set_pointer_array_write_unresolvable();
-  }
 }
 
 void goto_loopst::get_modified_variables(
@@ -411,7 +552,7 @@ void goto_loopst::get_modified_variables(
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
     if (writes_through_pointer(assign.target))
-      loop->set_writes_through_pointer();
+      record_pointer_write(*loop, assign.target);
     add_loop_var(*loop, assign.target, true);
   }
   else if (instruction->is_function_call())
@@ -426,15 +567,24 @@ void goto_loopst::get_modified_variables(
     {
       loop->set_writes_through_pointer();
       loop->set_pointer_array_write_unresolvable();
+      loop->set_unnamed_pointer_write();
       return;
     }
 
     // First, add its return
     if (writes_through_pointer(function_call.ret))
-      loop->set_writes_through_pointer();
+      record_pointer_write(*loop, function_call.ret);
     add_loop_var(*loop, function_call.ret, true);
 
     const irep_idt &identifier = to_symbol2t(function_call.function).thename;
+    if (
+      writes_through_first_argument(identifier) &&
+      !function_call.operands.empty())
+    {
+      loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
+      loop->add_written_pointer(function_call.operands[0]);
+    }
 
     // This means recursion, do nothing — matches legacy behaviour.
     if (
@@ -447,6 +597,8 @@ void goto_loopst::get_modified_variables(
     // instead of re-walking the helper from scratch.
     function_summaryt summary;
     compute_function_summary(identifier, function_names, summary);
+    summary.bind_arguments(
+      goto_functions.function_map.at(identifier), function_call.operands);
     apply_callee_summary(*loop, summary, function_call);
   }
   else if (
@@ -475,9 +627,9 @@ void goto_loopst::add_loop_var(
   // pointer at loop entry — unsound if the loop never reassigns it.
   if (is_modified && is_dereference2t(expr))
   {
-    // The pointee has no named symbol, so record the pointer for the value-set
-    // resolution to turn into one; an unextractable pointer leaves the write
-    // uncoverable and the loop-invariant schema declines (#5230, #7478).
+    // The pointee has no named symbol, so record the pointer for the
+    // loop-invariant schema to havoc through; an unextractable pointer leaves
+    // the write uncoverable and the schema declines (#5230, #7478).
     expr2tc ptr = extract_queried_pointer(expr);
     if (is_nil_expr(ptr))
       loop.set_pointer_array_write_unresolvable();
@@ -490,17 +642,10 @@ void goto_loopst::add_loop_var(
   {
     const index2t &idx = to_index2t(expr);
     // An array-element write into pointer-reached memory (e.g. `p[i]`,
-    // `(*p)[i]`) cannot be havoc'd by the inductive step, making its
-    // hypothesis unsound. Flag the loop so the strategy disables the
-    // inductive step (#5224). A stack array (array-typed symbol source)
-    // is havoc'd as a whole symbol and stays sound.
+    // `(*p)[i]`) has no named symbol to havoc (#5224); a stack array
+    // (array-typed symbol source) is havoc'd as a whole symbol.
     if (indexes_through_pointer(idx.source_value))
     {
-      loop.set_modifies_pointer_array();
-      // Phase 2: record the pointer so it can be resolved against the
-      // value-set fixpoint and the referenced object havoc'd. If no pointer
-      // can be extracted, mark the write unresolvable so the inductive step
-      // is disabled as in Phase 1. See issue #5230.
       expr2tc ptr = extract_queried_pointer(idx.source_value);
       if (!is_nil_expr(ptr))
         loop.add_pointer_array_write_ptr(ptr);

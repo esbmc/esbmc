@@ -99,6 +99,21 @@ public:
   /// Reserved "may point anywhere"
   static constexpr node_id TOP = 0;
 
+  /// The object an unconstrained pointer points at: symbolic execution
+  /// resolves a dereference of one to an invalid object, so a consumer can
+  /// skip it, while an empty set still means "nothing constrained this".
+  /// It is inert, as that invalid object is: a store into it is dropped and a
+  /// load from it yields another unconstrained pointer. Sound relative to
+  /// symex's memory model, not to C's.
+  static constexpr const char *nondet_object_name = "andersen::nondet";
+
+  /// True iff \p object is that sentinel.
+  static bool is_nondet_object(const expr2tc &object)
+  {
+    return is_symbol2t(object) &&
+           to_symbol2t(object).thename == nondet_object_name;
+  }
+
   /// The four inclusion-constraint shapes of \ref andersen_constraints.
   enum class constraint_kindt
   {
@@ -161,10 +176,11 @@ public:
   /// @}
 
   /// \name Query / transparency layer
-  /// Lets whole-program consumers (GCSE, the k-induction pointer-array-write
+  /// Lets whole-program consumers (GCSE, the k-induction pointer-write
   /// resolver) use Andersen wherever they used the value-set analysis.
   /// Because the analysis is flow-insensitive, the location argument \p l is
-  /// accepted for API compatibility and ignored.
+  /// accepted for API compatibility and ignored. Queries are
+  /// offset-insensitive: `p + i` reaches what `p` does.
   /// @{
 
   /// Runs the whole analysis: \ref collect_constraints, then \ref solve and
@@ -235,6 +251,19 @@ protected:
   /// Adds the copy edge `from -> to` and propagates along it immediately.
   /// True iff `pts[to]` grew.
   bool add_copy_edge(node_id from, node_id to);
+
+  /// A node pointing to the heap object allocated at \p loc.
+  node_id allocation(const type2tc &type, unsigned loc);
+
+  /// Functions each call of which allocates an object of its own, so a call
+  /// to one is an allocation site rather than a binding of its return value.
+  std::unordered_set<irep_idt, irep_id_hash> allocators;
+
+  /// Whether each function bound so far reads its variadic arguments.
+  std::unordered_map<irep_idt, bool, irep_id_hash> reads_varargs;
+
+  /// A node pointing to the nondet sentinel: an unconstrained value.
+  node_id unconstrained();
 
   /// A node whose points-to set is `{TOP}`.  Used as the source of a STORE to
   /// express "an unmodelled callee may write anything through this pointer".
