@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R125** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R125); **FIXED**, same entry | **`strnlen` had no model.** It reached symex as a bodyless call, so each call returned a nondet value and read nothing: `assert(strnlen("hello", 3) == 3)` was FAILED, and `char b[4] = {'a','b','c','d'}; strnlen(b, 5);`, which reads past `b` (ASan reports a stack-buffer-overflow), was SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strnlen_model{,_fail}` | — | **Fixed**: `strnlen` reads at most `maxlen` bytes and stops at the first null, as POSIX.1-2008 specifies. |
 
 ---
 
@@ -11704,6 +11705,43 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R125) — 2026-10-10, the strnlen that read nothing
+
+A native-differential probe of string functions found that `strnlen` had no
+operational model: `string.c` defines `strlen` but not `strnlen`, so a call
+reached symex without a body and returned a nondet value.
+`assert(strnlen("hello", 3) == 3)` was FAILED on master. Since the call read
+no memory, a `strnlen` over an unterminated buffer with a `maxlen` past its
+end was SUCCESSFUL, although POSIX.1-2008 has it read until the null or
+`maxlen` bytes and ASan reports the read natively.
+
+**Fixed** by a model beside `strlen` that counts while `len < maxlen` and
+`s[len]` is not null.
+
+`strnlen_model` checks constant strings, `maxlen` of 0, an unterminated buffer
+read to exactly its size, and a null placed at a symbolic index; it is FAILED
+on master. `strnlen_model_fail` reads one byte past a four-byte buffer and pins
+`dereference failure: array bounds violated`; it is SUCCESSFUL on master. Both
+change verdict without the model, under the default solver and `--z3`.
+
+The Solidity operational models call `strnlen` in `solidity_bytes.c` and
+`solidity_string.c`, so four `esbmc-solidity` KNOWNBUG tests (`bytes_string_1`,
+`github_2564`, `struct_5`, `type_name_1`) now give their expected verdict and
+are CORE.
+
+Open: `esbmc-solidity/struct_5_fail` and `struct_7_fail` (THOROUGH,
+`--k-induction`) now report a false SUCCESSFUL from the inductive step at
+k = 4, before the base case reaches the assertion behind the `strnlen` loop.
+The bug is in k-induction and reproduces on master without `strnlen`: a loop
+in a function called from a nondet loop, followed by a `memset` through a
+pointer, lets the inductive step prove `1 + 2 >= 3 + 4`. Dropping the
+`memset` restores FAILED. Open PR #8221 targets loops that write through a
+pointer.
+
+Not fixed: the same probe found `tgamma`, `lgamma`, `erf`, `erfc`,
+`nexttoward` and the `long double` forms `powl`, `expl`, `logl`, `sinl`,
+`cosl` and `cbrtl` returning nondet values.
 
 ---
 

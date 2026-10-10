@@ -7,6 +7,7 @@
 #undef strcat
 #undef strncat
 #undef strlen
+#undef strnlen
 #undef strcmp
 #undef strncmp
 #undef strchr
@@ -90,6 +91,15 @@ size_t strlen(const char *s)
 __ESBMC_HIDE:;
   size_t len = 0;
   while (s[len] != 0)
+    len++;
+  return len;
+}
+
+size_t strnlen(const char *s, size_t maxlen)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (len < maxlen && s[len] != 0)
     len++;
   return len;
 }
