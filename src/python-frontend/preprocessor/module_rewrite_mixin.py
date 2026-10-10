@@ -427,6 +427,13 @@ class ModuleRewriteMixin:
 
         self._scan_shadowed_nondet_collections(node)
 
+        # Classes implementing the iterator protocol, for visit_For.
+        self.iterator_classes = {
+            n.name for n in ast.walk(node)
+            if isinstance(n, ast.ClassDef) and any(
+                isinstance(m, ast.FunctionDef) and m.name == "__next__" for m in n.body)
+        }
+
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:

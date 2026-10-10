@@ -218,11 +218,59 @@ class LoopMixin:
         remember to preserve the original `orelse`.
         """
         self._update_assignment_call_origins([node.target], None)
+        lowered = self._lower_iterator_protocol_for(node)
+        if lowered is not None:
+            return lowered
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
             result = [result]
         return for_else_pre + result + for_else_post
+
+    def _lower_iterator_protocol_for(self, node):
+        """Lower `for x in Obj(...)` over a class defining `__next__`.
+
+        The sequence lowering below indexes the iterable by position, which a
+        user iterator does not support, so the loop reported a TypeError on a
+        correct program. Spell out the protocol instead:
+
+            it = <iterable>.__iter__()
+            while True:
+                try:
+                    x = it.__next__()
+                except StopIteration:
+                    break
+                <body>
+
+        Only for a constructor call of such a class, the one shape whose
+        class is known here, and without a for-else.
+        """
+        classes = getattr(self, "iterator_classes", set())
+        it_expr = node.iter
+        if not (isinstance(it_expr, ast.Call) and isinstance(it_expr.func, ast.Name)
+                and it_expr.func.id in classes) or node.orelse:
+            return None
+        self._iter_counter = getattr(self, "_iter_counter", 0) + 1
+        it_name = f"ESBMC_iter_{self._iter_counter}"
+        it_load = lambda: ast.Name(id=it_name, ctx=ast.Load())  # noqa: E731
+        init = ast.Assign(
+            targets=[ast.Name(id=it_name, ctx=ast.Store())],
+            value=ast.Call(func=ast.Attribute(value=it_expr, attr="__iter__", ctx=ast.Load()),
+                           args=[], keywords=[]))
+        fetch = ast.Try(
+            body=[ast.Assign(targets=[node.target],
+                             value=ast.Call(func=ast.Attribute(value=it_load(), attr="__next__",
+                                                               ctx=ast.Load()),
+                                            args=[], keywords=[]))],
+            handlers=[ast.ExceptHandler(type=ast.Name(id="StopIteration", ctx=ast.Load()),
+                                        name=None, body=[ast.Break()])],
+            orelse=[], finalbody=[])
+        loop = ast.While(test=ast.Constant(value=True), body=[fetch] + node.body, orelse=[])
+        for new in (init, loop):
+            ast.copy_location(new, node)
+        ast.fix_missing_locations(init)
+        ast.fix_missing_locations(loop)
+        return [self.visit(init), self.visit(loop)]
 
     def _lower_for_else(self, node):
         """Lower `for ... else: <orelse>` into a did-not-break flag.
