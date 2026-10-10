@@ -664,6 +664,7 @@ regression/python/github_7541_nested_class_body
 regression/python/github_8281
 regression/python/github_8281_fail
 regression/python/github_8281_indirect
+regression/python/github_8281_inferred
 regression/python/global
 regression/python/harness_bytes_param_len_bound
 regression/python/harness_bytes_param_len_bound_fail

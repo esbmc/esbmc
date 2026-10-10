@@ -353,7 +353,13 @@ exprt function_call_expr::handle_check_type() const
   const bool type_is_known = type_handler_.is_numeric_scalar_type(value_type) ||
                              type_handler_.is_string_type(value_type) ||
                              type_handler_.is_tagged_scalar_type(value_type);
-  if (!type_is_known)
+  // A type the frontend only inferred, from a decorated function, a lambda or
+  // a function whose returns disagree, is one guess for the whole program and
+  // must not decide either.
+  const auto &value_node = call_["args"][0];
+  if (
+    !type_is_known || converter_.returns_unannotated_call_result(value_node) ||
+    converter_.name_bound_from_call(value_node))
     return gen_boolean(true);
 
   const locationt location = converter_.get_location_from_decl(call_);
