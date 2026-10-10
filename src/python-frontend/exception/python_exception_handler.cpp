@@ -425,24 +425,6 @@ void python_exception_handler::get_raise_statement(
 
   typet type = type_handler_.get_typet(exc_name);
 
-  // AssertionError is special-cased to a clean assert(false)
-  if (exc_name == "AssertionError")
-  {
-    code_assertt assert_code{false_exprt()};
-    assert_code.location() = location;
-    if (
-      element["exc"].contains("args") && !element["exc"]["args"].empty() &&
-      !element["exc"]["args"][0].is_null())
-    {
-      const std::string msg =
-        converter_.get_string_handler().process_format_spec(
-          element["exc"]["args"][0]);
-      assert_code.location().comment(msg);
-    }
-    block.move_to_operands(assert_code);
-    return;
-  }
-
   exprt raise;
   if (type_utils::is_python_exceptions(exc_name))
   {
