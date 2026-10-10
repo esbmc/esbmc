@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R125** | **High (false SUCCESSFUL and false FAILED, default configuration, C++17)** — R98's open note on the aligned forms, §15 M9 (R125); **FIXED**, same entry | **A program's aligned `operator new` and `operator delete` were never called.** For a type with new-extended alignment, `new A` calls `operator new(size_t, std::align_val_t)` ([expr.new]/16). `get_new_storage` refused every aligned form and `resolve_deallocation_function` every aligned `delete`, so both used the built-in allocation: two `new A` from a replacement that returns one pool were distinct objects (`assert(a != b)` SUCCESSFUL, aborts natively), and a counter in the replacement stayed 0 (FAILED, passes natively). | `get_new_storage`, `get_dealloc_function`, `get_align_val`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `convert_cpp_delete`, `src/goto-programs/goto_convert.cpp`; `remove_cpp_delete`, `src/goto-programs/goto_sideeffects.cpp`; `migrate_cpp_delete`, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/aligned_operator_new{,_fail}` | — | **Fixed**: the frontend passes `alignof(T)` as the `std::align_val_t` argument to a defined aligned `operator new` and `operator delete`, sized or not. |
 
 ---
 
@@ -11704,6 +11705,48 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+---
+
+### M9 (R125) — 2026-10-10, the aligned allocation functions
+
+R98's entry left open that the aligned forms of `operator new` still
+allocate. For a class with `alignas(64)`, `new A` calls
+`operator new(sizeof(A), std::align_val_t(64))` and `delete a` calls
+`operator delete(a, std::align_val_t(64))` ([expr.new]/16,
+[expr.delete]/10). `get_new_storage` rejected any new-expression that passes
+an alignment, and `resolve_deallocation_function` any `delete` whose function
+takes one, so both fell back to the built-in allocation. A replacement that
+hands out one pool twice gave two distinct objects (`assert(a != b)`
+SUCCESSFUL on master, aborts natively), and its counters never moved.
+Routing only `new` would be worse: the built-in `free` would then reject the
+pool storage.
+
+**Fixed** in the C++ frontend: a defined aligned `operator new` gets
+`alignof(T)`, typed as its `std::align_val_t` parameter, ahead of the
+placement arguments; a defined aligned `operator delete` gets it after the
+byte count when sized. `get_align_val` builds the argument,
+`get_dealloc_function` takes the `delete` lookup out of `get_expr`, and
+`migrate_cpp_delete` carries the alignment through irep2 in `arguments[2]`;
+`remove_cpp_delete` copies it into the statement form.
+
+`aligned_operator_new` checks the arguments each of the four replacements
+receives, for `new A`, `delete`, `new A[2]` and `delete[]`; it is FAILED on
+master. `aligned_operator_new_fail` is the pool program above
+(SUCCESSFUL on master). Reverting the `new` side flips both; reverting the
+`delete` side fails `aligned_operator_new` with a free of non-dynamic memory,
+and dropping the alignment in `remove_cpp_delete` fails it on the alignment
+`operator delete` receives (`sizeof(A)` is 128, `alignof(A)` 64). The existing
+`github_6494_aligned_delete`, which accepts either the built-in path or the
+right alignment, now takes the replacement and still verifies.
+Z3 only, the default in this build, and with `--z3`.
+
+Not fixed: clang 18 does not select the sized `operator delete(void *, size_t,
+std::align_val_t)` without `-fsized-deallocation`, so a program that defines
+both the sized and unsized aligned forms reaches the unsized one, as it does
+for the unaligned forms; g++ calls the sized one. An allocation function
+declared without a body in the translation unit is still replaced by the
+built-in allocation.
 
 ---
 
