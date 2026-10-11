@@ -1,5 +1,7 @@
 import ast
 import copy
+
+from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
 
@@ -419,6 +421,7 @@ class ModuleRewriteMixin:
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         self.expand_unittest_main(node)
+        guard_unbound_locals(node)
         self.hoist_nested_classes(node)
 
         for n in ast.walk(node):
