@@ -285,6 +285,12 @@ private:
 
   exprt handle_hasattr() const;
 
+  /// getattr(obj, "name"[, default]) with a literal name, lowered to the
+  /// attribute read or the default when every instance of obj's class is
+  /// known to have, or to lack, the attribute; refused otherwise.
+  bool is_getattr_call() const;
+  exprt handle_getattr();
+
   /*
    * hasattr()'s first argument when it names an imported module. A module is
    * not a first-class value here, so it has no symbol of its own; resolve the
@@ -311,17 +317,26 @@ private:
   exprt handle_type_call() const;
 
   /*
-   * Handles str-to-int conversions (e.g., int('65')) by reconstructing
-   * the string value from a symbol's internal representation and
-   * converting it to an integer expression.
+   * Whether a string symbol's stored constant is the only value it can hold
+   * at this call: it is assigned exactly once in scope. The stored value is
+   * only its last static assignment, so a rebound name must not be folded.
    */
-  exprt handle_str_symbol_to_int(const symbolt *sym) const;
+  bool is_single_assignment_str_symbol(
+    const symbolt *sym,
+    const std::string &name) const;
 
   /*
-   * Handles str-to-float conversions (e.g., float("3.14")) by reconstructing
-   * the string value from the symbol and converting it to a float expression.
+   * Folds int() of a single-assignment string symbol (e.g. s = '65';
+   * int(s)). Returns std::nullopt when the string is not a valid literal, so
+   * the caller emits the runtime conversion that raises ValueError.
    */
-  exprt handle_str_symbol_to_float(const symbolt *sym) const;
+  std::optional<exprt> handle_str_symbol_to_int(const symbolt *sym) const;
+
+  /*
+   * Folds float() of a single-assignment string symbol. Returns std::nullopt
+   * when the string does not parse as a float (see handle_str_symbol_to_int).
+   */
+  std::optional<exprt> handle_str_symbol_to_float(const symbolt *sym) const;
 
   /*
    * Handles float-to-str conversions (e.g., str(5.5)) by converting

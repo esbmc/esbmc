@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^  file .*main\.c line 7 column 3 function main$
+^  assertion n == 1$
