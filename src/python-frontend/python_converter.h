@@ -690,6 +690,14 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  void raise_on_optional_none(
+    const std::string &op,
+    const exprt &lhs_none,
+    const exprt &rhs_none,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   /// Rewrites `sl.start/stop/step is/is not None` to a check of the
   /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
   /// Returns `nil_exprt()` when the operands are not a slice-member access
@@ -2357,8 +2365,9 @@ private:
     return type_utils::is_optional_struct(type) ? wrap_in_optional(value, type)
                                                 : value;
   }
-  /// A (non-None) literal stored into an Optional<T> variable, wrapped (#8016).
-  exprt wrap_literal_if_optional(const exprt &value, const typet &type);
+  /// None, a literal or a scalar stored into an Optional<T> variable, wrapped
+  /// (#8016, #8248).
+  exprt wrap_stored_if_optional(const exprt &value, const typet &type);
   typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
   exprt get_return_value(const nlohmann::json &value);
   typet subscript_annotation_type(

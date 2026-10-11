@@ -102,14 +102,22 @@ exprt python_converter::wrap_in_optional(
   return optional_value;
 }
 
-exprt python_converter::wrap_literal_if_optional(
+exprt python_converter::wrap_stored_if_optional(
   const exprt &value,
   const typet &type)
 {
-  // None keeps the retyping handle_assignment_type_adjustments gives it.
-  return value.is_constant() && value.type() != none_type()
-           ? wrap_if_optional(value, type)
-           : value;
+  if (!type_utils::is_optional_struct(type) || value.is_code())
+    return value;
+  // None and a scalar read are wrapped too: retyping the variable to either
+  // one drops the None flag on the other path (#8248).
+  if (value.type() == none_type())
+    return wrap_in_optional(value, type);
+  if (!type_utils::is_optional_scalar(value.type()))
+    return value;
+  const typet &value_type = to_struct_type(type).get_component("value").type();
+  return wrap_in_optional(
+    value.type() == value_type ? value : typecast_exprt(value, value_type),
+    type);
 }
 
 // Extract non-None type from union

@@ -69,7 +69,6 @@ __ESBMC_HIDE:;
     len = 32;
   size_t copy_len = strnlen(str, len);
   memcpy(b.data, str, copy_len);
-  memset(b.data + copy_len, 0, len - copy_len);
   b.length = len;
   return b;
 }

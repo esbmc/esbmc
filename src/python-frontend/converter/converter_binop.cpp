@@ -2275,6 +2275,7 @@ exprt python_converter::resolve_optional_operands(
                             type_utils::is_optional_struct(rhs.type());
   const exprt lhs_none = none_flag(lhs);
   const exprt rhs_none = none_flag(rhs);
+  raise_on_optional_none(op, lhs_none, rhs_none, lhs, rhs, element);
   if (!any_optional || (op != "Eq" && op != "NotEq"))
     return nil_exprt();
 
