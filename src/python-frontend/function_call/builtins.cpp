@@ -924,8 +924,12 @@ exprt function_call_expr::handle_divmod() const
 
   exprt dividend = converter_.get_expr(args[0]);
   exprt divisor = converter_.get_expr(args[1]);
+  converter_.convert_function_calls_to_side_effects(dividend, divisor);
 
-  return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
+  return converter_.lower_operands_once(
+    dividend, divisor, call_, false, [&](const exprt &a, const exprt &b) {
+      return converter_.get_math_handler().handle_divmod(a, b, call_);
+    });
 }
 
 exprt function_call_expr::handle_issubclass() const
@@ -1048,9 +1052,15 @@ exprt function_call_expr::handle_pow() const
   exprt exp = converter_.get_expr(args[1]);
 
   if (args.size() == 2)
+  {
     // pow(base, exp) shares the exact lowering of the ** operator, so integer,
     // float, and negative-exponent cases behave identically to base ** exp.
-    return converter_.get_math_handler().handle_power(base, exp);
+    converter_.convert_function_calls_to_side_effects(base, exp);
+    return converter_.lower_operands_once(
+      base, exp, call_, false, [&](const exprt &b, const exprt &e) {
+        return converter_.get_math_handler().handle_power(b, e);
+      });
+  }
 
   // 3-argument form: pow(base, exp, mod) == (base ** exp) % mod. CPython
   // requires all three operands to be integers.

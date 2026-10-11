@@ -2143,13 +2143,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
-  // Handle special mathematical operations
-  if (op == "Pow" || op == "power")
-    return math_handler_.handle_power(lhs, rhs);
-
-  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
-    return math_handler_.handle_modulo(lhs, rhs, element);
-
   if (type_utils::is_relational_op(op))
   {
     const locationt loc = get_location_from_decl(element);
@@ -2174,47 +2167,63 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 exprt python_converter::build_division_guarded_binop(
   const std::string &op,
   const exprt &lhs,
-  exprt rhs,
+  const exprt &rhs,
   const nlohmann::json &element)
 {
-  if (!needs_zero_division_guard(op, rhs))
+  const bool guard = needs_zero_division_guard(op, rhs);
+  if (!guard && op != "Pow" && op != "power")
     return build_arithmetic_binop(op, lhs, rhs, element);
 
+  return lower_operands_once(
+    lhs, rhs, element, guard, [&](const exprt &l, const exprt &r) {
+      if (guard)
+      {
+        exprt is_zero("=", bool_type());
+        is_zero.copy_to_operands(r, gen_zero(r.type()));
+        emit_guarded_raise(
+          is_zero,
+          "ZeroDivisionError",
+          "division by zero",
+          get_location_from_decl(element));
+      }
+      return build_arithmetic_binop(op, l, r, element);
+    });
+}
+
+exprt python_converter::lower_operands_once(
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element,
+  bool plants,
+  const std::function<exprt(const exprt &, const exprt &)> &lower)
+{
+  const bool bind = current_block && safe_to_emit_side_effecting_statement() &&
+                    (has_side_effect(lhs) || has_side_effect(rhs));
   // An and/or tail, a chained-comparison tail or a while test is evaluated
-  // conditionally or repeatedly, so a guard planted ahead of the statement
-  // would raise on a path Python never takes. There the hoist and the guard
-  // go into a statement expression that is evaluated with the division.
-  code_blockt lazy_block;
+  // conditionally or repeatedly, so a statement planted ahead of it would run
+  // on a path Python never takes.
+  const bool in_place = in_lazy_operand_ && (bind || plants);
+  code_blockt block;
   code_blockt *const saved_block = current_block;
-  if (in_lazy_operand_)
-    current_block = &lazy_block;
+  if (in_place)
+    current_block = &block;
 
-  // The divisor is referenced by both the zero-check guard and the division
-  // itself. If it carries a side effect (a call, or a nondet) it would be
-  // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
-  // a different value than the one divided by. Hoist a side-effecting divisor
-  // into a temporary so it is evaluated exactly once.
-  rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
-
-  exprt is_zero("=", bool_type());
-  is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-  emit_guarded_raise(
-    is_zero,
-    "ZeroDivisionError",
-    "division by zero",
-    get_location_from_decl(element));
+  if (bind)
+  {
+    lhs = hoist_side_effecting_operand(lhs, element, "$lhs$");
+    rhs = hoist_side_effecting_operand(rhs, element, "$rhs$");
+  }
+  exprt result = lower(lhs, rhs);
   current_block = saved_block;
-
-  exprt result = build_arithmetic_binop(op, lhs, rhs, element);
-  if (!in_lazy_operand_)
+  if (!in_place)
     return result;
 
   const locationt loc = get_location_from_decl(element);
   code_expressiont value(result);
   value.location() = loc;
-  lazy_block.copy_to_operands(value);
+  block.copy_to_operands(value);
   side_effect_exprt stmt_expr("statement_expression", result.type());
-  stmt_expr.copy_to_operands(lazy_block);
+  stmt_expr.copy_to_operands(block);
   stmt_expr.location() = loc;
   return stmt_expr;
 }
@@ -2225,6 +2234,12 @@ exprt python_converter::build_arithmetic_binop(
   exprt rhs,
   const nlohmann::json &element)
 {
+  if (op == "Pow" || op == "power")
+    return math_handler_.handle_power(lhs, rhs);
+
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return math_handler_.handle_modulo(lhs, rhs, element);
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 

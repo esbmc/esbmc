@@ -535,8 +535,20 @@ private:
   exprt build_division_guarded_binop(
     const std::string &op,
     const exprt &lhs,
-    exprt rhs,
+    const exprt &rhs,
     const nlohmann::json &element);
+  /// Applies \p lower to \p lhs and \p rhs with each operand that has a side
+  /// effect (a call, or a nondet) bound to a temporary first, left to right,
+  /// for a lowering such as //, % or divmod that mentions an operand more
+  /// than once while Python evaluates it once. The bindings, and the
+  /// statements \p lower plants when \p plants holds, precede the statement,
+  /// or travel with the result in a lazily evaluated operand.
+  exprt lower_operands_once(
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element,
+    bool plants,
+    const std::function<exprt(const exprt &, const exprt &)> &lower);
   exprt build_arithmetic_binop(
     const std::string &op,
     exprt lhs,
