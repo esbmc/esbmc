@@ -564,48 +564,9 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
   exprt operand,
   const exprt &base) const
 {
-  if (
-    !base.is_nil() || !operand.type().is_floatbv() ||
-    !converter_.current_block ||
-    !converter_.safe_to_emit_side_effecting_statement())
+  if (!base.is_nil())
     return operand;
-
-  // In an and/or tail or a while test the guard must run where the operand is
-  // evaluated, not once ahead of the statement.
-  const bool lazy = converter_.in_lazy_operand_;
-  code_blockt lazy_block;
-  code_blockt *const saved_block = converter_.current_block;
-  if (lazy)
-    converter_.current_block = &lazy_block;
-
-  const locationt loc = converter_.get_location_from_decl(call_);
-  operand = converter_.store_call_result(operand, loc, "int_arg");
-  operand =
-    converter_.hoist_side_effecting_operand(operand, call_, "$int_arg$");
-  expr2tc value;
-  migrate_expr(operand, value);
-
-  converter_.emit_guarded_raise(
-    migrate_expr_back(isinf2tc(value)),
-    "OverflowError",
-    "cannot convert float infinity to integer",
-    loc);
-  converter_.emit_guarded_raise(
-    migrate_expr_back(isnan2tc(value)),
-    "ValueError",
-    "cannot convert float NaN to integer",
-    loc);
-  converter_.current_block = saved_block;
-  if (!lazy)
-    return operand;
-
-  code_expressiont result(operand);
-  result.location() = loc;
-  lazy_block.copy_to_operands(result);
-  side_effect_exprt guarded("statement_expression", operand.type());
-  guarded.copy_to_operands(lazy_block);
-  guarded.location() = loc;
-  return guarded;
+  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
