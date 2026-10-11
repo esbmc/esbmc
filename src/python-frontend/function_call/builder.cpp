@@ -1184,14 +1184,123 @@ exprt function_call_builder::len_of_bitvector_operand(
   return from_integer(1, long_long_int_type());
 }
 
+static std::string none_has_no_attribute(const nlohmann::json &call)
+{
+  return "'NoneType' object has no attribute '" +
+         call["func"]["attr"].get<std::string>() + "'";
+}
+
+bool function_call_builder::receiver_is_bound_to_none() const
+{
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (receiver.value("_type", "") != "Name")
+    return false;
+  const std::string &name = receiver["id"].get_ref<const std::string &>();
+  if (json_utils::count_name_bindings(converter_.ast(), name) != 1)
+    return false;
+  const nlohmann::json decl = json_utils::find_var_decl(
+    name, converter_.current_function_name(), converter_.ast());
+  return decl.contains("value") && decl["value"].is_object() &&
+         decl["value"].value("_type", "") == "Constant" &&
+         decl["value"]["value"].is_null();
+}
+
+static bool annotation_is_optional(const nlohmann::json &ann)
+{
+  return (ann.value("_type", "") == "Subscript" &&
+          ann["value"].value("id", "") == "Optional") ||
+         type_utils::annotation_admits_none(ann);
+}
+
+// A None value, directly or as a branch of a conditional expression.
+static bool is_none_valued(const nlohmann::json &value)
+{
+  if (!value.is_object())
+    return false;
+  if (value.value("_type", "") == "IfExp")
+    return is_none_valued(value["body"]) || is_none_valued(value["orelse"]);
+  return value.value("_type", "") == "Constant" && value["value"].is_null();
+}
+
+// Whether `node` is a parameter, or a single-target assignment, of `name`.
+static bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "arg")
+    return node["arg"] == name;
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &node["target"];
+  else if (kind == "Assign" && node["targets"].size() == 1)
+    target = &node["targets"][0];
+  return target && target->value("_type", "") == "Name" &&
+         (*target)["id"] == name;
+}
+
+// Whether some parameter, declaration or assignment of `name` under `node`
+// admits None, through its annotation or its value.
+static bool may_hold_none(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && binds_name(node, name) &&
+    ((node.contains("annotation") && node["annotation"].is_object() &&
+      annotation_is_optional(node["annotation"])) ||
+     (node.contains("value") && is_none_valued(node["value"]))))
+    return true;
+  for (const auto &child : node)
+    if (child.is_structured() && may_hold_none(child, name))
+      return true;
+  return false;
+}
+
+void function_call_builder::raise_if_none_receiver() const
+{
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (
+    receiver.value("_type", "") != "Name" ||
+    !converter_.can_emit_runtime_guard() ||
+    !may_hold_none(converter_.ast(), receiver["id"].get<std::string>()))
+    return;
+
+  symbol_id sid = converter_.create_symbol_id();
+  sid.set_object(receiver["id"].get<std::string>());
+  const symbolt *symbol = converter_.find_symbol(sid.to_string());
+  if (!symbol || !symbol->get_type().is_pointer())
+    return;
+
+  const typet &pointee = symbol->get_type().subtype();
+  const std::string tag =
+    pointee.id() == "symbol" ? pointee.identifier().as_string() : "";
+  const bool is_instance =
+    boost::starts_with(tag, "tag-") &&
+    json_utils::is_class(tag.substr(4), converter_.ast());
+  if (!is_instance && !type_utils::is_string_type(symbol->get_type()))
+    return;
+
+  const exprt ref = symbol_expr(*symbol);
+  converter_.emit_guarded_raise(
+    equality_exprt(ref, gen_zero(ref.type())),
+    "AttributeError",
+    none_has_no_attribute(call_),
+    converter_.get_location_from_decl(call_));
+}
+
+exprt function_call_builder::build_method_call_on_receiver() const
+{
+  if (receiver_is_bound_to_none())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "AttributeError", none_has_no_attribute(call_));
+  raise_if_none_receiver();
+  return converter_.get_string_handler().handle_string_attribute_call(call_);
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
   {
-    exprt handled_string_method =
-      converter_.get_string_handler().handle_string_attribute_call(call_);
-    if (!handled_string_method.is_nil())
-      return handled_string_method;
+    exprt handled_method = build_method_call_on_receiver();
+    if (!handled_method.is_nil())
+      return handled_method;
   }
 
   symbol_id function_id = build_function_id();
