@@ -315,6 +315,8 @@ private:
   exprt handle_callable() const;
 
   exprt handle_type_call() const;
+  std::string
+  exact_instance_class(const nlohmann::json &arg, const exprt &expr) const;
 
   /*
    * Whether a string symbol's stored constant is the only value it can hold

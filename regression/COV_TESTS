@@ -2598,3 +2598,12 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8401
+regression/python/github_8401_annotated_fail
+regression/python/github_8401_class_rebound
+regression/python/github_8401_factory_fail
+regression/python/github_8401_fail
+regression/python/github_8401_param_fail
+regression/python/github_8401_rebound_fail
+regression/python/github_8401_subclass_fail
+regression/python/github_8401_unbound_fail

@@ -69,4 +69,10 @@ private:
     bool is_parameter = false);
 };
 
+/// The one name target a plain `x = v` or `x: T = v` statement binds, or null.
+const nlohmann::json *binding_target(const nlohmann::json &stmt);
+
+/// Every construct under @p node that binds @p name, in any nested scope too.
+size_t count_bindings(const nlohmann::json &node, const std::string &name);
+
 #endif // ESBMC_PYTHON_LAMBDA_H
