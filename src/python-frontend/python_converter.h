@@ -16,6 +16,7 @@
 #include <util/symtab/namespace.h>
 #include <util/irep/std_code.h>
 #include <util/symtab/symbol_generator.h>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -152,6 +153,10 @@ public:
     const nlohmann::json &function_node);
   /// `get()()`: a call through the function pointer that `get()` returns.
   std::optional<exprt> call_returned_function(const nlohmann::json &element);
+  std::optional<exprt> call_property_value(const nlohmann::json &element);
+  /// Unknown, function or class-instance types: a call on such a value may
+  /// succeed.
+  bool may_be_callable(const typet &type);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -353,6 +358,11 @@ public:
     const std::string &message,
     const locationt &location);
 
+  // Raises OverflowError (infinity) or ValueError (NaN) before a float
+  // @p operand is converted to int; returns the operand to convert.
+  exprt
+  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
@@ -522,6 +532,16 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  exprt build_division_guarded_binop(
+    const std::string &op,
+    const exprt &lhs,
+    exprt rhs,
+    const nlohmann::json &element);
+  exprt build_arithmetic_binop(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
   /// The static types of the arguments a `str %` right operand supplies.
   std::vector<typet>
   percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
@@ -696,6 +716,16 @@ private:
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
+
+  exprt get_boolop_operand(
+    const nlohmann::json &operand,
+    std::vector<code_blockt> &effects);
+
+  exprt lower_short_circuit_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
@@ -2479,6 +2509,9 @@ private:
   // clause either.
   bool in_contract_clause_ = false;
   bool in_lazy_operand_ = false;
+  // The test of the assert statement being converted; see
+  // lower_short_circuit_boolop.
+  const nlohmann::json *asserted_test_ = nullptr;
 
   bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
