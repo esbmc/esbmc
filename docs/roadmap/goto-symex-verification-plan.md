@@ -899,6 +899,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
 | **R132** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R114's open note, §15 M9 (R132); **FIXED**, same entry | **A `va_arg` on one branch moved the `va_list` on both.** The cursor R114 gave each local `va_list` was an `unsigned` in symex, outside the SSA, so a branch that ran `va_arg` advanced it for the path that skipped the branch too. In `if (c) a = va_arg(ap, int); b = va_arg(ap, int);` called with `(0, 1, 2)`, `b` read 2, where C reads 1; `c ? va_arg(ap, int) : 0` did the same. | `goto_symext::symex_va_arg`, `va_list_cursor_symbol`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_arg_branch_cursor{,_fail}` | **H-A7** | **Fixed**: each local `va_list` with its own cursor keeps it in a hidden SSA variable, assigned under the path guard, so a merge gives it a phi. A cursor that is not constant selects the argument it denotes. A `va_list` parameter still reads at its frame's cursor, which is still symex state. |
+| **R135** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R104's note on local classes, §15 M9 (R135); **FIXED**, same entry | **Same-named local classes shared one `type_info`.** `typeid` identity is the address of the type's printed name, and a local class prints without its enclosing function, so `S` in `f()` and `S` in `g()`, or in two instantiations of one function template, compared equal, and equal to a namespace-scope `S`. `assert(f() == g())` was SUCCESSFUL. | `rtti_type_name`, `src/clang-cpp-frontend/clang_cpp_convert_vft.cpp`; `regression/esbmc-cpp/cpp/local_class_typeid{,_fail}` | — | **Fixed**: a local class's name carries its record id. |
+| **R131** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe of string functions, §15 M9 (R131); **FIXED**, same entry | **`strndup` had no model.** The call reached symex without a body and returned a pointer to no object, so any read of the copy was `dereference failure: invalid pointer` and `strndup("hello", 2)` could not be checked. It read no memory and allocated none, so an over-read of an unterminated source and a leaked copy (ASan reports both natively) were SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strndup_model{,_fail}` | — | **Fixed**: `strndup` reads at most `n` bytes, stopping at the first null, and returns a `malloc`ed, null-terminated copy. |
 
 ---
 
@@ -11732,6 +11734,69 @@ keep their master verdicts (Z3, the only solver built).
 
 Not fixed: a `va_list` parameter, and a copy of one, still read at the frame's
 cursor, which a branch moves on both paths.
+### M9 (R135) — 2026-10-10, the local classes that shared a `type_info`
+
+R104's entry noted that two local classes `S` in different functions print the
+same name and so share one `type_info`. `typeid` identity is the `__name`
+pointer, which points at an interned string constant of the type's printed
+name, and `rtti_type_name` prints a local class without its enclosing
+function. Each local class is a distinct type ([class.local]), so their
+`type_info` objects must differ.
+
+| Program | Before | After | Native |
+|---|---|---|---|
+| `struct S` local to `f()` and to `g()`, `assert(f() == g())` | **`SUCCESSFUL`** | `FAILED` | aborts |
+| local `S` against a namespace-scope `S`, against the `S` of an overload `f(int)` or of a sibling block, polymorphic local classes read through a base pointer, one local class in `t<int>` and `t<char>`, all `!=` | `FAILED` | `SUCCESSFUL` | passes |
+
+**Fixed** in `rtti_type_name`: a record declared inside a function appends its
+record id, which `get_decl_name` already makes unique per function, block,
+and template instantiation. The vtable's `@rtti_name` entry goes through the
+same function, so a dynamic `typeid` agrees with a static one.
+`type_info::name()` for a local class now carries the id; the standard leaves
+that string implementation-defined ([type.info]).
+
+`local_class_typeid` checks the shapes in the table's second row and that one
+local class still equals itself; it is FAILED on master. `local_class_typeid_fail`
+pins `assertion f() == g()`; master reports SUCCESSFUL. Both change verdict
+with the fix reverted, under the default solver and `--z3`. The 73 test
+directories whose sources use `typeid`, `type_info`, `typeindex`,
+`dynamic_cast` or `bad_cast` keep master's verdicts: `github_6310_typeid_dynamic{,_fail}`
+hit the same Z3 sort mismatch on both binaries in this container, and
+`github_3387_containers_c++03` times out at 400 s on both. Only Z3 was built.
+
+Not fixed: two evaluations of one polymorphic `typeid` site still share its
+object, and `&typeid(*p) == &typeid(D)` is still false.
+### M9 (R131) — 2026-10-10, the strndup with no body
+
+A native-differential probe of string functions found that `strndup` had no
+operational model: `string.c` defines `strdup` but not `strndup`, so a call
+reached symex without a body and returned a pointer to no object. Every read
+of the copy was `dereference failure: invalid pointer`, so
+`char *s = strndup("hello", 2); if (s) assert(s[0] == 'h');` was FAILED.
+The call also read and allocated nothing. `strndup(b, 5)` on an unterminated
+`char b[3]` reads past `b` natively (ASan reports a stack-buffer-overflow), and
+a copy never freed is a leak, but both were SUCCESSFUL, the leak under
+`--memory-leak-check` as well.
+
+**Fixed** by a model beside `strdup`. POSIX.1-2008 has `strndup` copy at most
+`n` bytes, stopping at the first null, into storage from `malloc`, and always
+null-terminate the copy. The model counts the bytes, allocates one more, and
+copies them with a loop that stops on the same test. A `memcpy` of the counted
+length is not bounded in symex when the source has unknown bytes, so it is not
+used.
+
+`strndup_model` copies a truncated, a short and an empty prefix, an
+unterminated buffer read to exactly `n`, and a constant string with a symbolic
+`n`, frees each copy under `--memory-leak-check`; it is FAILED on master.
+`strndup_model_fail` is the over-read above, pinned on
+`dereference failure: array bounds violated`; it is SUCCESSFUL on master. Both
+change verdict without the model, under the default solver and `--z3`.
+
+Not fixed: `strlen` of a heap string does not terminate in symex; on master
+`strlen(strdup("hello"))` unwinds past 2500 iterations within 60 s, so the
+tests compare characters instead. The same probe found that `strcasecmp`,
+`strncasecmp` and `tgamma` have no model, and that `log10(1000.0) == 3.0`,
+which holds under glibc, is FAILED.
 
 ---
 
