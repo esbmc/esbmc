@@ -32,7 +32,7 @@ bool program_calls_longjmp(const goto_functionst &goto_functions)
 class longjmp_loweringt
 {
 public:
-  longjmp_loweringt(contextt &context) : context(context)
+  explicit longjmp_loweringt(contextt &context) : context(context)
   {
   }
 
