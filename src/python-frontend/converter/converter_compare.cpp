@@ -555,6 +555,36 @@ exprt python_converter::handle_none_operand(
   return handle_none_comparison(op, lhs, rhs);
 }
 
+/// Optional counterpart of handle_none_operand: whether an operand is None is
+/// only known at run time, so the TypeError is raised under its flag (#8248).
+void python_converter::raise_on_optional_none(
+  const std::string &op,
+  const exprt &lhs_none,
+  const exprt &rhs_none,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (!raises_on_none_operand(op))
+    return;
+  const locationt location = get_location_from_decl(element);
+  auto raise = [&](
+                 const exprt &flag,
+                 const std::string &lhs_name,
+                 const std::string &rhs_name) {
+    if (flag.is_false())
+      return;
+    emit_guarded_raise(
+      flag,
+      "TypeError",
+      "unsupported operand type(s) for " + python_operator_symbol(op) + ": '" +
+        lhs_name + "' and '" + rhs_name + "'",
+      location);
+  };
+  raise(lhs_none, "NoneType", type_handler_.get_python_type_name(rhs.type()));
+  raise(rhs_none, type_handler_.get_python_type_name(lhs.type()), "NoneType");
+}
+
 exprt python_converter::handle_none_comparison(
   const std::string &op,
   const exprt &lhs,
