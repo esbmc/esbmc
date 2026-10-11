@@ -1,3 +1,4 @@
+#include <float.h>
 #include <math.h>
 
 /* Moves x's exponent towards double's normal range by 3k, so that the
@@ -20,10 +21,13 @@ __ESBMC_HIDE:;
   if (x == 0 || !isfinite(x))
     return x;
   long double scale = 1;
+  /* A binary64 long double cannot hold these scales; the last one covers it. */
+#if LDBL_MAX_EXP > 1024
   CBRTL_SCALE(0x1p12288L, 0x1p11289L, 0x1p4096L)
   CBRTL_SCALE(0x1p6144L, 0x1p5145L, 0x1p2048L)
   CBRTL_SCALE(0x1p3072L, 0x1p2073L, 0x1p1024L)
   CBRTL_SCALE(0x1p1536L, 0x1p537L, 0x1p512L)
+#endif
   CBRTL_SCALE(0x1p768L, 0x1p-231L, 0x1p256L)
   /* Each Newton step doubles the correct bits of cbrt's 53, which binary128's
    * 113 need twice. */
