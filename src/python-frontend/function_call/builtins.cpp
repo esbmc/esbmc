@@ -306,18 +306,32 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
-// Whether a class object is an instance of isinstance's second argument: only
-// `type` and `object` admit one, alone or in a tuple.
-static bool admits_class_object(const nlohmann::json &type_arg)
+// The types named by an isinstance/issubclass classinfo: a type, a (nested)
+// tuple of classinfos, or a union X | Y. A union operand cannot be a tuple, so
+// one is kept whole and rejected as a type.
+static void
+collect_classinfo(const nlohmann::json &node, std::vector<nlohmann::json> &out)
 {
-  auto admits = [](const nlohmann::json &node) {
-    return node["_type"] == "Name" &&
-           (node["id"] == "type" || node["id"] == "object");
-  };
-  if (type_arg["_type"] != "Tuple")
-    return admits(type_arg);
-  const auto &elts = type_arg["elts"];
-  return std::any_of(elts.begin(), elts.end(), admits);
+  if (node["_type"] == "Tuple")
+    for (const auto &e : node["elts"])
+      collect_classinfo(e, out);
+  else if (node["_type"] == "BinOp" && node["op"]["_type"] == "BitOr")
+    for (const auto *side : {&node["left"], &node["right"]})
+      if ((*side)["_type"] == "Tuple")
+        out.push_back(*side);
+      else
+        collect_classinfo(*side, out);
+  else
+    out.push_back(node);
+}
+
+// Whether a class object is an instance of isinstance's second argument: only
+// `type` and `object` admit one.
+static bool admits_class_object(const std::vector<nlohmann::json> &types)
+{
+  return std::any_of(types.begin(), types.end(), [](const nlohmann::json &n) {
+    return n["_type"] == "Name" && (n["id"] == "type" || n["id"] == "object");
+  });
 }
 
 exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
@@ -341,7 +355,8 @@ exprt function_call_expr::handle_isinstance() const
   // Convert the first argument (the object being checked) into an expression
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &obj_arg = args[0];
-  const auto &type_arg = args[1];
+  std::vector<nlohmann::json> types;
+  collect_classinfo(args[1], types);
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x,
   // str)) Type objects themselves are not instances of other types (except
@@ -351,7 +366,7 @@ exprt function_call_expr::handle_isinstance() const
     const std::string *name =
       converter_.class_object_name(obj_expr.identifier());
     if (name && type_utils::is_type_identifier(*name))
-      return gen_boolean(admits_class_object(type_arg));
+      return gen_boolean(admits_class_object(types));
   }
 
   // Extract type name from various AST node formats
@@ -516,32 +531,18 @@ exprt function_call_expr::handle_isinstance() const
     return migrate_expr_back(isinstance2tc(obj2, t2));
   };
 
-  // Handle tuple of types: isinstance(v, (int, str, type(None)))
-  if (type_arg["_type"] == "Tuple")
+  if (types.empty())
+    throw std::runtime_error("isinstance() tuple cannot be empty");
+
+  exprt result = build_isinstance(extract_type_name(types[0]));
+  for (size_t i = 1; i < types.size(); ++i)
   {
-    const auto &elts = type_arg["elts"];
-    if (elts.empty())
-      throw std::runtime_error("isinstance() tuple cannot be empty");
-
-    // Build isinstance check for first element
-    exprt result = build_isinstance(extract_type_name(elts[0]));
-
-    // Chain OR expressions for remaining elements
-    for (size_t i = 1; i < elts.size(); ++i)
-    {
-      exprt next_check = build_isinstance(extract_type_name(elts[i]));
-
-      exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(result);
-      or_expr.move_to_operands(next_check);
-      result = or_expr;
-    }
-
-    return result;
+    exprt or_expr("or", typet("bool"));
+    or_expr.move_to_operands(result);
+    or_expr.copy_to_operands(build_isinstance(extract_type_name(types[i])));
+    result = or_expr;
   }
-
-  // Handle single type: isinstance(v, int) or isinstance(v, type(None))
-  return build_isinstance(extract_type_name(type_arg));
+  return result;
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -941,18 +942,16 @@ exprt function_call_expr::handle_issubclass() const
       "TypeError", "issubclass() arg 1 must be a class");
   const std::string cls = args[0]["id"].get<std::string>();
 
-  // arg 2 is a single class or a tuple of classes.
+  // arg 2 is a class, a tuple of classes or a union of classes.
+  std::vector<nlohmann::json> info;
+  collect_classinfo(args[1], info);
   std::vector<std::string> targets;
-  const auto &info = args[1];
-  auto add_name = [&targets](const nlohmann::json &n) {
+  for (const auto &n : info)
     if (n["_type"] == "Name")
       targets.push_back(n["id"].get<std::string>());
-  };
-  if (info["_type"] == "Tuple")
-    for (const auto &e : info["elts"])
-      add_name(e);
-  else
-    add_name(info);
+    else if (n["_type"] == "Tuple")
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "unsupported operand type(s) for |");
 
   if (targets.empty())
     return converter_.get_exception_handler().gen_exception_raise(
