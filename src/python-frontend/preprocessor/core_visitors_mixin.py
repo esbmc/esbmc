@@ -723,10 +723,6 @@ class CoreVisitorsMixin:
                 function_name = qualified_name
                 expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
-            elif method_name in self.functionParams:
-                function_name = method_name
-                expected_args = self._params_without_implicit_self(method_name)
-                kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"

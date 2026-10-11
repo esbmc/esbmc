@@ -2457,5 +2457,10 @@ regression/python/github_8276_nonfinite_to_int
 regression/python/github_8276_trunc_inf_fail
 regression/python/github_8276_round_nan_fail
 regression/python/github_8276_floor_inf_fail
+regression/python/github_8364_attr_chain
+regression/python/github_8364_inherited
+regression/python/github_8364_default
+regression/python/github_8364_method_arity_fail
+regression/python/github_8364_function_arity_fail
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
