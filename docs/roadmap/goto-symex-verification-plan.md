@@ -902,6 +902,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R130** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R113's list of assertions violated after `longjmp`, §15 M9 (R130); **FIXED**, same entry | **`longjmp` did not transfer control.** The `longjmp` model was an empty body, so execution continued after the call, and `setjmp` returned a nondet value with the state it had when it was first called. With `if (setjmp(b) == 0) f(); else assert(g == 0);` and `f` setting `g = 1` before `longjmp(b, 2)`, the assertion fails natively and was SUCCESSFUL; code after a `longjmp`, which never runs, was checked as reachable. | `src/c2goto/library/setjmp.c`; `lower_longjmp`, `src/goto-programs/lower_longjmp.cpp`; `regression/esbmc/longjmp_frames{,_fail}`, `regression/cstd/jump_bug` | — | **Fixed**: `setjmp` stores a token in the `jmp_buf` and returns 0, and a GOTO pass resumes after the `setjmp` call whose frame recorded that token, returning through the frames in between. Off under `--enable-unreachability-intrinsic`. Non-volatile locals keep their values rather than becoming indeterminate (C11 7.13.2.1p3). |
 | **R139** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R139); **renumbered from R125** on merging master, which uses that number for the aligned allocation functions; **FIXED**, same entry | **`strnlen` had no model.** It reached symex as a bodyless call, so each call returned a nondet value and read nothing: `assert(strnlen("hello", 3) == 3)` was FAILED, and `char b[4] = {'a','b','c','d'}; strnlen(b, 5);`, which reads past `b` (ASan reports a stack-buffer-overflow), was SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strnlen_model{,_fail}` | — | **Fixed**: `strnlen` reads at most `maxlen` bytes and stops at the first null, as POSIX.1-2008 specifies. |
 | **R140** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R89's open note, §15 M9 (R140); **FIXED**, same entry | **A temporary in an operand of `&&`, `||` or `?:` in a condition outlived the condition.** `if`, `while`, `for` and `do`/`while` conditions with a side-effecting `&&` or `||` were split into one branch per operand, and each operand kept its temporaries to the end of the enclosing block. `while (n < 3 && C().ok()) ++n;` built three objects and destroyed none before the loop ended, so `assert(dtors == 0)` after it was SUCCESSFUL and aborts natively. A `?:` condition and an `if` with an `else` were not split but kept block scope too. | `generate_conditional_branch` and `convert_ifthenelse`, `src/goto-programs/goto_convert.cpp`; `remove_condition_sideeffects`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/condition_short_circuit_temporary{,_fail}` | — | **Fixed**: a condition whose side effects create a temporary with a destructor is not split; it is lowered whole, and R86's guarded destructors run before the branch. |
 | **R133** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8320's open note on `log10`, §15 M9 (R133); **FIXED**, same entry | **`log10` was wrong at exact powers of ten.** The model returned `log(x) / M_LN10`, and `log` is a truncated Taylor series, so `log10(1000.0)` was not `3.0`: `assert(log10(1000.0) == 3.0);` was FAILED and `assert(log10(1000.0) != 3.0);` was SUCCESSFUL. | `src/c2goto/library/libm/musl/log10.c`; `regression/esbmc/log10_model{,_fail}` | — | **Fixed** with musl's `log10`. `log`, `log2` and `log1p` keep the series. |
@@ -12248,6 +12249,42 @@ characters, and `vsprintf` and `vsnprintf` still leave the destination
 unchanged. The bound comes from the argument's type, not its value, so
 `sprintf(b, "%x", x)` into `char b[8]` is a bounds violation even when `x` is
 assumed to be below 16.
+
+### M9 (R130) — 2026-10-10, the `longjmp` that went nowhere
+
+R113's battery listed `longjmp` among the calls that broke assertions holding
+natively. The `longjmp` model was an empty body, so execution continued after
+the call, and `setjmp` returned a nondet value. A nonzero return carried the
+state from the first call to `setjmp`, not the state at the `longjmp`. With
+`f` doing `g = 1; longjmp(b, 2);`, the program
+`if (setjmp(b) == 0) f(); else assert(g == 0);` fails natively and was
+SUCCESSFUL. In the other direction, code after a `longjmp` ran, so an
+`assert(0)` there was FAILED, and `cstd/jump_bug` was a KNOWNBUG.
+
+**Fixed** in two parts. The `setjmp` model now returns 0 (C11 7.13.1.1p3) and
+stores a fresh token in the `jmp_buf`. The `longjmp` model records that token
+and the value (1 if it is 0, 7.13.2.1p4) in thread-local globals and sets a
+pending flag. A new pass, `lower_longjmp`, runs before exception lowering when
+a program calls `longjmp`. Each `setjmp` call site copies the token into a
+local of its frame, zeroed on entry, so recursion and re-armed buffers resolve
+to the right frame. After every other call, a pending `longjmp` branches to
+the function's dispatch block, which resumes after the matching `setjmp` call
+with the value as its result, or returns so the caller dispatches. The pass
+is off under `--enable-unreachability-intrinsic`, where `setjmp` is reported
+as out of scope.
+
+`longjmp_frames_fail` is the program above, SUCCESSFUL on master.
+`longjmp_frames` jumps out of three recursive frames with value 0, which
+arrives as 1, and through a recursion where only one frame armed the buffer;
+master fails it. Both change verdict with the fix reverted, under the default
+solver and `--z3`, and under `--k-induction`. `cstd/jump_bug` is promoted to
+CORE. The other regression tests that call `setjmp` or `longjmp` keep their
+verdicts.
+
+Not fixed: non-volatile locals changed between `setjmp` and `longjmp` keep
+their values instead of becoming indeterminate (7.13.2.1p3). `sigsetjmp`,
+`siglongjmp` and `_longjmp` have no model, and a `longjmp` through a function
+pointer is not lowered. `<csetjmp>` does not parse in C++ mode.
 
 ### M9 (R137) — 2026-10-10, the buffer `vsprintf` never wrote
 

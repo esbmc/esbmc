@@ -3804,25 +3804,6 @@ static bool any_return(
   return false;
 }
 
-/// Whether a return annotation spells a union with None (`T | None`,
-/// `Union[T, None]`).
-static bool annotation_admits_none(const nlohmann::json &returns)
-{
-  if (!returns.is_object())
-    return false;
-  if (returns.value("_type", "") == "BinOp")
-    return type_utils::extract_binop_union_types(returns).has_none;
-  if (
-    returns.value("_type", "") != "Subscript" ||
-    returns["value"].value("id", "") != "Union")
-    return false;
-  const nlohmann::json &slice = returns["slice"];
-  for (const auto &elt : slice.value("elts", nlohmann::json::array()))
-    if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
-      return true;
-  return false;
-}
-
 /// Whether a return in \p body yields None: a bare `return`, `return None`, or
 /// a conditional expression with a None arm.
 static bool returns_none(const nlohmann::json &body)
@@ -3853,7 +3834,9 @@ typet python_converter::optional_return_type(
   const bool unannotated = !returns.is_object() ||
                            returns.value("_inferred_annotation", false) ||
                            declared.is_empty();
-  if (!returns_none(function_node["body"]) && !annotation_admits_none(returns))
+  if (
+    !returns_none(function_node["body"]) &&
+    !type_utils::annotation_admits_none(returns))
     return typet();
   if (!unannotated)
     return type_handler_.build_optional_type(declared);

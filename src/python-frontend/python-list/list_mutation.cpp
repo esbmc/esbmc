@@ -539,6 +539,103 @@ exprt python_list::build_insert_list_call(
   return converter_.convert_expression_to_code(insert_func_call);
 }
 
+namespace
+{
+enum class store_kind
+{
+  other,
+  integer,
+  floating,
+  string,
+  tuple
+};
+
+store_kind kind_of(const typet &type, const python_converter &converter)
+{
+  if (type.is_signedbv() || type.is_unsignedbv() || type.is_bool())
+    return store_kind::integer;
+  if (type.is_floatbv())
+    return store_kind::floating;
+  if ((type.is_array() || type.is_pointer()) && type.subtype() == char_type())
+    return store_kind::string;
+  if (converter.get_tuple_handler().is_tuple_type(type))
+    return store_kind::tuple;
+  return store_kind::other;
+}
+
+const side_effect_expr_function_callt *find_list_at_call(const exprt &expr)
+{
+  if (expr.id() == "sideeffect" && expr.statement() == "function_call")
+  {
+    const auto &call = to_side_effect_expr_function_call(expr);
+    if (
+      call.function().is_symbol() &&
+      call.function().identifier() == "c:@F@__ESBMC_list_at")
+      return &call;
+  }
+  for (const exprt &op : expr.operands())
+    if (const side_effect_expr_function_callt *call = find_list_at_call(op))
+      return call;
+  return nullptr;
+}
+} // namespace
+
+// Writing through the slot reinterprets `rhs` as the old element's type, so a
+// store that changes the element's type replaces the element instead (#8131).
+std::optional<exprt> python_list::build_element_replacement(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &op)
+{
+  const store_kind old_kind = kind_of(lhs.type(), converter_);
+  const store_kind new_kind = kind_of(rhs.type(), converter_);
+  const bool same_kind =
+    old_kind == new_kind &&
+    (old_kind != store_kind::tuple || lhs.type() == rhs.type());
+  // An int stored into a float slot keeps its value as a float.
+  if (
+    old_kind == store_kind::other || new_kind == store_kind::other ||
+    same_kind ||
+    (old_kind == store_kind::floating && new_kind == store_kind::integer))
+    return std::nullopt;
+
+  const side_effect_expr_function_callt *list_at = find_list_at_call(lhs);
+  if (!list_at || list_at->arguments().size() != 2)
+    return std::nullopt;
+
+  const symbolt *set_at_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_at");
+  if (!set_at_sym)
+    throw std::runtime_error("__ESBMC_list_set_at not found in the list model");
+
+  const list_elem_info info = get_list_element_info(op, rhs);
+  const typet &value_type = info.elem_symbol->get_type();
+  const exprt value_arg =
+    value_type.is_pointer() && value_type.subtype() == char_type()
+      ? build_symbol(*info.elem_symbol)
+      : build_address_of(build_symbol(*info.elem_symbol));
+  const exprt float_type_id =
+    value_type.is_floatbv()
+      ? static_cast<exprt>(build_symbol(*info.elem_type_sym))
+      : from_integer(BigInt(0), size_type());
+
+  code_function_callt set_at;
+  set_at.function() = build_symbol(*set_at_sym);
+  set_at.arguments() = {
+    list_at->arguments()[0],
+    list_at->arguments()[1],
+    value_arg,
+    build_symbol(*info.elem_type_sym),
+    info.elem_size,
+    float_type_id,
+    from_integer(
+      BigInt(converter_.get_type_handler().is_pointer_free(value_type)),
+      int_type())};
+  set_at.type() = bool_type();
+  set_at.location() = info.location;
+  return set_at;
+}
+
 void python_list::emit_list_copy(
   const exprt &src,
   const symbolt &dst,
