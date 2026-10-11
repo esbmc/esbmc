@@ -656,6 +656,47 @@ struct retype_alias_scope_guard
   }
 };
 
+// A str literal stored on a symbol is what folds read as the name's value. One
+// assigned inside a conditional or loop body is only that body's literal past
+// its end, and on a loop's next iteration no earlier literal holds, so drop
+// the body's literals when it ends, and all of them when a loop starts (#8413).
+struct str_value_scope_guard
+{
+  contextt &symbols;
+  std::unordered_set<std::string> &ids;
+  std::unordered_set<std::string> outer;
+  bool active;
+  str_value_scope_guard(
+    contextt &s,
+    std::unordered_set<std::string> &i,
+    bool act,
+    bool is_loop)
+    : symbols(s), ids(i), active(act)
+  {
+    if (is_loop)
+      forget();
+    outer.swap(ids);
+  }
+  ~str_value_scope_guard()
+  {
+    if (active)
+      forget();
+    ids.merge(outer);
+  }
+  void forget()
+  {
+    for (const std::string &id : ids)
+    {
+      symbolt *symbol = symbols.find_symbol(id);
+      if (
+        symbol && symbol->get_value().is_constant() &&
+        type_utils::is_string_type(symbol->get_value().type()))
+        symbol->set_value(nil_exprt());
+    }
+    ids.clear();
+  }
+};
+
 } // namespace
 
 std::optional<std::vector<std::size_t>>
@@ -1137,6 +1178,34 @@ void python_converter::reject_attribute_scalar_change(
     "; an attribute whose type changes is not modelled");
 }
 
+// Every assignment to a name takes the symbol's final type, so a reassigned
+// str literal of another length cannot share one fixed-size array once a read
+// may run past a join: retype the name to char*, as a conditional expression's
+// str is, and decay the rhs. On the straight-line spine, while the earlier
+// literal is still stored, reads fold and the array is kept.
+void python_converter::retype_resized_str(
+  symbolt &symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  auto is_char_array = [](const typet &t) {
+    return t.is_array() && t.subtype() == char_type();
+  };
+  const bool may_join = block_nesting_ != function_body_depth_ + 1 ||
+                        !symbol.get_value().is_constant();
+  if (
+    may_join && rhs.is_constant() && !is_class_object(rhs) &&
+    is_char_array(rhs.type()) && is_char_array(symbol.get_type()) &&
+    rhs.type() != symbol.get_type() &&
+    str_assigned_symbols_.count(symbol.id.as_string()))
+  {
+    symbol.set_type(gen_pointer_type(char_type()));
+    symbol.set_value(nil_exprt());
+    lhs.type() = symbol.get_type();
+    rhs = string_handler_.get_array_base_address(rhs);
+  }
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1272,6 +1341,7 @@ void python_converter::handle_assignment_type_adjustments(
         lhs_symbol->set_value(migrate_expr(rhs));
       return;
     }
+    retype_resized_str(*lhs_symbol, lhs, rhs);
     // Handle string-to-string variable assignments
     if (lhs_type == "str" && rhs.is_symbol())
     {
@@ -1401,6 +1471,15 @@ void python_converter::handle_assignment_type_adjustments(
 void python_converter::set_assigned_value(symbolt &symbol, const exprt &rhs)
 {
   symbol.set_value(rhs);
+  if (
+    rhs.is_constant() && type_utils::is_string_type(rhs.type()) &&
+    !is_class_object(rhs))
+  {
+    str_valued_symbols_.insert(symbol.id.as_string());
+    str_assigned_symbols_.insert(symbol.id.as_string());
+  }
+  else
+    str_valued_symbols_.erase(symbol.id.as_string());
   if (is_class_object(rhs))
     class_object_names_[symbol.id] = rhs.get_string("value");
   else
@@ -7702,6 +7781,7 @@ void python_converter::get_compound_assign(
       symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
       if (symbol)
       {
+        retype_resized_str(*symbol, lhs, concatenated);
         // Update the symbol's type to pointer if concatenated returns pointer
         symbol->set_type(migrate_type(concatenated.type()));
 
@@ -7711,9 +7791,7 @@ void python_converter::get_compound_assign(
         // For pointer results, don't update the value
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
-        {
-          symbol->set_value(migrate_expr(concatenated));
-        }
+          set_assigned_value(*symbol, concatenated);
       }
     }
 
@@ -8105,8 +8183,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
 
-  const loop_depth_guard loop_guard(
-    numpy_loop_depth_, ast_node.value("_type", "") == "While");
+  // A while test re-evaluates after the body, so no pre-loop literal holds.
+  const bool is_while = ast_node.value("_type", "") == "While";
+  const loop_depth_guard loop_guard(numpy_loop_depth_, is_while);
+  str_value_scope_guard test_guard(
+    symbol_table_, str_valued_symbols_, is_while, is_while);
 
   // Copy current type
   typet t = current_element_type;
@@ -9226,6 +9307,8 @@ exprt python_converter::get_block(
   // established before the loop.
   const bool is_conditional_body = (block_nesting_ != function_body_depth_ + 1);
   retype_alias_scope_guard retype_guard(retype_aliases_, is_conditional_body);
+  str_value_scope_guard str_guard(
+    symbol_table_, str_valued_symbols_, is_conditional_body, is_loop_body);
 
   // Entering any nested/conditional body (function, if/while/for, try/except):
   // straight-line flow-sensitive class tracking is no longer valid here, so

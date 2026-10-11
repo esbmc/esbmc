@@ -1739,6 +1739,7 @@ private:
     codet &target_block);
 
   void set_assigned_value(symbolt &symbol, const exprt &rhs);
+  void retype_resized_str(symbolt &symbol, exprt &lhs, exprt &rhs);
 
   /// True when an assignment's annotation is only a guess that the rhs type
   /// should replace.
@@ -3520,6 +3521,10 @@ private:
   /// mapped to the flag its binding sets and the type the reads took (#8369).
   std::unordered_map<std::string, std::pair<std::string, typet>>
     unbound_global_flags_;
+  /// Symbols whose stored value is a str literal; see str_value_scope_guard.
+  std::unordered_set<std::string> str_valued_symbols_;
+  /// Symbols ever assigned a str literal; see retype_resized_str.
+  std::unordered_set<std::string> str_assigned_symbols_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
