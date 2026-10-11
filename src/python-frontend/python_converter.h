@@ -1812,8 +1812,8 @@ private:
   void reject_live_numpy_view_copies_of(const nlohmann::json &args);
   bool passes_numpy_view(const nlohmann::json &arg);
   bool is_scalar_numpy_view_call(const nlohmann::json &call);
-  bool passes_unnamed_numpy_view_argument(const nlohmann::json &call) const;
-  bool contains_unnamed_numpy_view_argument(const nlohmann::json &node) const;
+  bool passes_unnamed_numpy_view_argument(const nlohmann::json &call);
+  bool contains_unnamed_numpy_view_argument(const nlohmann::json &node);
   const nlohmann::json &hoist_unnamed_numpy_view_arguments(
     const nlohmann::json &statement,
     nlohmann::json &rewritten,
@@ -1835,7 +1835,7 @@ private:
   std::size_t numpy_view_arg_count_ = 0;
   /// Whether every `return` of @p func_node yields one of its bound view
   /// parameters.
-  bool returns_bound_numpy_view_param(const nlohmann::json &func_node) const;
+  bool returns_bound_numpy_view_param(const nlohmann::json &func_node);
   /// The view argument such a function hands back for @p call, or nullptr.
   const nlohmann::json *
   returned_numpy_view_argument(const nlohmann::json &call);
@@ -1857,7 +1857,7 @@ private:
     const nlohmann::json &value,
     const std::string &scope,
     std::size_t depth) const;
-  bool is_fold_only_numpy_function(const nlohmann::json &function_node) const;
+  bool is_fold_only_numpy_function(const nlohmann::json &function_node);
   /// Converts a function definition unless every call to it is folded.
   void get_unfolded_function_definition(const nlohmann::json &function_node);
   /// Records the storage of every view passed to a call that is not folded.
@@ -2770,7 +2770,27 @@ private:
     std::set<std::string> &visiting) const;
   std::optional<typet> numpy_literal_array_type(
     const std::string &arr_name,
-    const std::string &function) const;
+    const std::string &function,
+    int line,
+    unsigned depth = 0) const;
+  std::optional<typet>
+  numpy_filled_array_type(const nlohmann::json &value) const;
+  const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &
+  inferred_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index);
+  bool is_bound_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index);
+  void reject_numpy_view_argument_type_mismatch(const nlohmann::json &call);
+  std::map<
+    std::string,
+    std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>>
+    numpy_view_param_layouts_;
+  // Parameters whose conversion has decided whether they bind a view, and
+  // what callers converted before that were told.
+  std::set<std::string> numpy_view_params_decided_;
+  std::map<std::string, bool> numpy_view_params_assumed_;
   static std::optional<numpy_scalar_pointer_view_infot>
   slice_view_info(std::size_t length, const nlohmann::json &slice_node);
   static std::optional<numpy_scalar_pointer_view_infot> row_slice_view_info(

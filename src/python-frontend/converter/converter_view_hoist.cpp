@@ -203,10 +203,10 @@ void python_converter::hoist_numpy_view_arguments(
   for (const json_pointer &argument : arguments)
   {
     const json_pointer call = argument.parent_pointer().parent_pointer();
-    const std::string param =
-      statement[call]["func"]["id"].get<std::string>() + "#" + argument.back();
     if (
-      numpy_view_params_.count(param) == 0 ||
+      !is_bound_numpy_view_param(
+        statement[call]["func"]["id"].get<std::string>(),
+        std::stoul(argument.back())) ||
       is_preceded_by_call(statement[key], statement[argument]))
       continue;
     if (rewritten.is_null())
@@ -253,7 +253,7 @@ const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
   codet &target_block)
 {
   const std::string key = statement_expression_key(statement);
-  if (key.empty() || numpy_view_params_.empty())
+  if (key.empty())
     return statement;
   hoist_numpy_view_arguments(statement, key, rewritten, target_block);
   nlohmann::json candidate = rewritten.is_null() ? statement : rewritten;

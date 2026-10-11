@@ -2261,6 +2261,38 @@ static const nlohmann::json *single_assigned_value(
   return nullptr;
 }
 
+// The value `name` holds at `line` of the scope of `function`: that of the
+// last top-level assignment above it. nullptr when the name is also bound in
+// a nested block or from another scope, where the path decides. A negative
+// `line` asks for the value of a name bound exactly once.
+static const nlohmann::json *reaching_assigned_value(
+  const nlohmann::json &module_body,
+  const std::string &function,
+  const std::string &name,
+  int line)
+{
+  const nlohmann::json &body =
+    function.empty() ? module_body
+                     : (*find_function_def(module_body, function))["body"];
+  if (declared_global_or_nonlocal(module_body, name))
+    return nullptr;
+  const nlohmann::json *reaching = nullptr;
+  std::size_t assignments = 0;
+  for (const auto &stmt : body)
+  {
+    if (
+      assignment_target_name(stmt) != name || !stmt.contains("value") ||
+      stmt["value"].is_null())
+      continue;
+    ++assignments;
+    if (line < 0 || stmt.value("lineno", 0) < line)
+      reaching = &stmt["value"];
+  }
+  const bool path_independent = count_scope_stores(body, name) == assignments &&
+                                (line >= 0 || assignments == 1);
+  return path_independent ? reaching : nullptr;
+}
+
 // The subscript a call argument denotes for code in `function`: the argument
 // itself, or the value of the name it is, followed through single
 // assignments. `function` becomes the scope the subscript is evaluated in.
@@ -2459,8 +2491,8 @@ python_converter::view_info_from_subscript(
 }
 
 // The layout a parameter takes when two call sites pass `a` and `b`: theirs
-// when they agree, the run-time one when either 1-D layout is only known at
-// its call site. nullopt when the sites cannot share one parameter.
+// when they agree, the run-time one when they are 1-D and differ or are only
+// known at the call site. nullopt when the sites cannot share one parameter.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
 python_converter::merge_view_layouts(
@@ -2471,8 +2503,10 @@ python_converter::merge_view_layouts(
   const typet &elem_type = a.first == unknown ? b.first : a.first;
   if (a.first != unknown && b.first != unknown && a.first != b.first)
     return std::nullopt;
-  if (!a.second.is_symbolic() && !b.second.is_symbolic())
-    return same_view_layout(a, b) ? std::make_optional(a) : std::nullopt;
+  if (
+    !a.second.is_symbolic() && !b.second.is_symbolic() &&
+    same_view_layout(a, b))
+    return a;
   if (a.second.shape.size() != 1 || b.second.shape.size() != 1)
     return std::nullopt;
   return std::make_pair(elem_type, runtime_view_info());
@@ -2535,20 +2569,66 @@ static bool forwards_param_being_inferred(
          visiting.count(view_param_key(enclosing_function, *forwarded)) != 0;
 }
 
-// Type of the literal `np.array(...)` bound to `arr_name` for code in
-// `function`.
+// Type of the array `np.zeros(shape)` or `np.ones(shape)` builds for a
+// literal shape and no dtype, or dtype int or float. The other constructors
+// build list-backed arrays, whose slices are copies.
+std::optional<typet>
+python_converter::numpy_filled_array_type(const nlohmann::json &value) const
+{
+  static const std::set<std::string> filled = {"zeros", "ones"};
+  if (
+    !is_numpy_array_constructor_expr(value) ||
+    filled.count(value["func"].value("attr", "")) == 0 ||
+    value["args"].size() != 1)
+    return std::nullopt;
+  const std::optional<std::vector<std::size_t>> shape =
+    get_numpy_constructor_shape(value);
+  const nlohmann::json keywords =
+    value.value("keywords", nlohmann::json::array());
+  std::string dtype = "float";
+  if (keywords.size() == 1 && keywords[0].value("arg", "") == "dtype")
+    dtype = keywords[0]["value"].value("id", "");
+  else if (!keywords.empty())
+    return std::nullopt;
+  if (!shape || shape->empty() || (dtype != "float" && dtype != "int"))
+    return std::nullopt;
+  typet type = type_handler_.get_typet(dtype);
+  for (auto dim = shape->rbegin(); dim != shape->rend(); ++dim)
+    type = array_typet(type, from_integer(*dim, size_type()));
+  return type;
+}
+
+// Type of the array bound to `arr_name` where code in `function` reads it at
+// `line`: a literal `np.array(...)`, a call to a function returning one,
+// `np.zeros`/`np.ones`, or another name for such an array.
 std::optional<typet> python_converter::numpy_literal_array_type(
   const std::string &arr_name,
-  const std::string &function) const
+  const std::string &function,
+  int line,
+  unsigned depth) const
 {
   const nlohmann::json &module_body = (*ast_json)["body"];
   const std::optional<std::string> scope =
     binding_function(module_body, function, arr_name);
+  // Code of another scope runs at a time the line does not order.
   const nlohmann::json *value =
-    scope ? single_assigned_value(module_body, *scope, arr_name) : nullptr;
-  if (value == nullptr || !is_numpy_array_literal_call(*value))
+    scope ? reaching_assigned_value(
+              module_body, *scope, arr_name, *scope == function ? line : -1)
+          : nullptr;
+  if (value == nullptr)
     return std::nullopt;
-  return type_handler_.get_typet((*value)["args"][0]);
+  if (value->value("_type", "") == "Name")
+    return depth > 8 ? std::nullopt
+                     : numpy_literal_array_type(
+                         value->value("id", ""),
+                         *scope,
+                         value->value("lineno", -1),
+                         depth + 1);
+  if (
+    const std::optional<typet> type =
+      try_infer_numpy_array_arg_type(*value, module_body))
+    return type;
+  return numpy_filled_array_type(*value);
 }
 
 // `view[lo:hi:step]` on a 1-D view with constant length and stride.
@@ -2604,8 +2684,8 @@ python_converter::infer_numpy_view_layout(
     return std::nullopt;
   const nlohmann::json &base = (*subscript)["value"];
   if (
-    const std::optional<typet> arr_type =
-      numpy_literal_array_type(base.value("id", ""), scope))
+    const std::optional<typet> arr_type = numpy_literal_array_type(
+      base.value("id", ""), scope, subscript->value("lineno", -1)))
   {
     const auto shape_elem = array_type_shape_and_elem(*arr_type);
     if (!shape_elem)
@@ -3180,17 +3260,91 @@ void python_converter::register_numpy_view_param(
   const std::string &func_name,
   std::size_t param_index)
 {
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  // A caller converted earlier was told whether this parameter binds a view.
+  const auto assumed = numpy_view_params_assumed_.find(key);
+  if (
+    assumed != numpy_view_params_assumed_.end() &&
+    assumed->second != (view_param && !view_param->is_symbolic()))
+    throw std::runtime_error(
+      "TypeError: passing a numpy view to a function defined after its "
+      "caller is not supported for this parameter");
+  numpy_view_params_decided_.insert(key);
   if (!view_param)
     return;
   numpy_scalar_pointer_view_infot info = *view_param;
   info.source_id = arg_id;
   if (info.is_symbolic())
-    declare_runtime_numpy_view_param(
-      info, arg_id, func_name + "#" + std::to_string(param_index));
+    declare_runtime_numpy_view_param(info, arg_id, key);
   numpy_pointer_view_info_[arg_id] = info;
   numpy_array_symbols_.insert(arg_id);
   numpy_view_param_symbols_.insert(arg_id);
-  numpy_view_params_.insert(func_name + "#" + std::to_string(param_index));
+  numpy_view_params_.insert(key);
+}
+
+// The element type and layout call sites give a parameter, inferred once.
+const std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>> &
+python_converter::inferred_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  auto cached = numpy_view_param_layouts_.find(key);
+  if (cached != numpy_view_param_layouts_.end())
+    return cached->second;
+  std::pair<typet, numpy_scalar_pointer_view_infot> layout;
+  const bool inferred =
+    find_function_def((*ast_json)["body"], func_name) != nullptr &&
+    try_infer_numpy_view_param(
+      func_name, param_index, layout.first, layout.second);
+  return numpy_view_param_layouts_
+    .emplace(key, inferred ? std::make_optional(layout) : std::nullopt)
+    .first->second;
+}
+
+// Whether parameter `param_index` of `func_name` binds a view. For a function
+// defined after the caller being converted this is what its call sites
+// imply, which register_numpy_view_param confirms when it gets there.
+bool python_converter::is_bound_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  if (numpy_view_params_decided_.count(key) != 0)
+    return numpy_view_params_.count(key) != 0;
+  const auto &layout = inferred_numpy_view_param(func_name, param_index);
+  return numpy_view_params_assumed_
+    .emplace(key, layout && !layout->second.is_symbolic())
+    .first->second;
+}
+
+// The view a call passes must have the element type its parameter was
+// given: the callee reads the storage through a pointer of that type.
+void python_converter::reject_numpy_view_argument_type_mismatch(
+  const nlohmann::json &call)
+{
+  const std::string func_name = call["func"].value("id", "");
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    const nlohmann::json &arg = call["args"][i];
+    if (
+      arg.value("_type", "") != "Name" ||
+      !is_bound_numpy_view_param(func_name, i))
+      continue;
+    const symbolt *symbol =
+      symbol_table_.find_symbol(resolve_name_symbol_id(arg.value("id", "")));
+    const auto &layout = inferred_numpy_view_param(func_name, i);
+    if (symbol == nullptr || !layout)
+      continue;
+    typet type = ns.follow(symbol->get_type());
+    while (type.is_pointer() || type.is_array())
+      type = ns.follow(type.subtype());
+    if (type != ns.follow(layout->first))
+      throw std::runtime_error(
+        "TypeError: passing a numpy view whose element type differs from "
+        "the one inferred for the parameter is not supported");
+  }
 }
 
 // A view parameter with a run-time layout reads its length and stride from
