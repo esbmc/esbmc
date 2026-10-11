@@ -1,5 +1,6 @@
 #pragma once
 
+#include <irep2/irep2.h>
 #include <nlohmann/json.hpp>
 #include <python-frontend/type/element_type_registry.h>
 #include <util/irep/type.h>
@@ -556,6 +557,27 @@ public:
     const nlohmann::json &right_node,
     const exprt &lhs,
     const exprt &rhs);
+
+  /**
+   * @brief Turn the store @p lhs = @p rhs into a replacement of the element
+   * record when the value cannot be written through the element's type.
+   *
+   * @p lhs is the subscript target `*(T *)item->value` of the list subscript
+   * this handler was built for. When @p rhs is a tuple of another type than T
+   * (or T is a tuple and @p rhs is not), the pair is rewritten into
+   * `*item = *list_at(tmp, 0)`, with tmp a list holding @p rhs, so the slot
+   * gets the new value, type_id and size. Otherwise both are left unchanged.
+   */
+  void retype_element_store(exprt &lhs, exprt &rhs);
+
+  /// Equality of two list elements read as @p lhs_type and @p rhs_type for
+  /// compare()'s fast path, or nullopt when it cannot relate them. Both types
+  /// are numeric, bool or tuple.
+  std::optional<expr2tc> fast_elem_equality(
+    exprt lhs_val,
+    exprt rhs_val,
+    const typet &lhs_type,
+    const typet &rhs_type) const;
 
   exprt build_push_list_call(
     const symbolt &list,
