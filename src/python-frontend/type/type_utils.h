@@ -158,7 +158,7 @@ public:
       "PermissionError",   "NotImplementedError",
       "ImportError",       "ModuleNotFoundError",
       "RuntimeError",      "StopIteration",
-      "EOFError"};
+      "EOFError",          "UnboundLocalError"};
     return exceptions.count(name) != 0;
   }
 
@@ -340,6 +340,25 @@ public:
     }
 
     return flags;
+  }
+
+  // Whether an annotation spells a union with None (`T | None`,
+  // `Union[T, None]`).
+  static bool annotation_admits_none(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return false;
+    if (ann.value("_type", "") == "BinOp")
+      return type_utils::extract_binop_union_types(ann).has_none;
+    if (
+      ann.value("_type", "") != "Subscript" ||
+      ann["value"].value("id", "") != "Union")
+      return false;
+    const nlohmann::json &slice = ann["slice"];
+    for (const auto &elt : slice.value("elts", nlohmann::json::array()))
+      if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+        return true;
+    return false;
   }
 
   static bool is_integer_type(const typet &type)
