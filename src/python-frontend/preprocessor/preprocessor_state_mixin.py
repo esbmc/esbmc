@@ -14,6 +14,8 @@ class PreprocessorStateMixin:
         self.range_loop_counter = 0
         self.iterable_loop_counter = 0
         self.enumerate_loop_counter = 0
+        self._iter_counter = 0
+        self.iterator_classes = set()
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.static_methods = set()

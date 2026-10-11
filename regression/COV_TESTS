@@ -2417,6 +2417,7 @@ regression/python/github_8256_rebind
 regression/python/github_8256_rebind_fail
 regression/python/github_8256_shadowed_outer
 regression/python/github_8302
+regression/python/github_8329
 regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
@@ -2460,5 +2461,10 @@ regression/python/github_8276_nonfinite_to_int
 regression/python/github_8276_trunc_inf_fail
 regression/python/github_8276_round_nan_fail
 regression/python/github_8276_floor_inf_fail
+regression/python/for_user_iterator_break_continue
+regression/python/for_user_iterator_break_continue_fail
+regression/python/for_user_iterable_separate_iterator
+regression/python/for_user_iterator_subclass
+regression/python/for_user_iterator_no_iter
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
