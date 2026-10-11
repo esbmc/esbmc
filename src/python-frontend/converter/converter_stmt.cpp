@@ -485,6 +485,28 @@ bool assignment_target_is_subscript(const nlohmann::json &ast_node)
          (ast_node.contains("target") && is_subscript(ast_node["target"]));
 }
 
+static bool is_array_into_scalar(const typet &lhs_type, const typet &rhs_type)
+{
+  return rhs_type.is_array() && !lhs_type.is_array() && !lhs_type.is_pointer();
+}
+
+static bool emit_list_element_replacement(
+  python_converter &converter,
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  const exprt &rhs,
+  codet &target_block)
+{
+  if (!assignment_target_is_subscript(ast_node))
+    return false;
+  python_list list(converter, ast_node);
+  const std::optional<exprt> replacement =
+    list.build_element_replacement(lhs, rhs, ast_node);
+  if (replacement)
+    target_block.copy_to_operands(*replacement);
+  return replacement.has_value();
+}
+
 bool is_same_name_assignment(
   const nlohmann::json &target,
   const nlohmann::json &ast_node)
@@ -6603,10 +6625,7 @@ void python_converter::get_var_assign(
     // which would coerce rhs type to match lhs, hiding the mismatch.
     // Only enforce when type assertions are enabled (--is-instance-check).
     if (
-      type_assertions_enabled() && lhs.type() != rhs.type() &&
-      !rhs.type().is_code() && !rhs.type().is_empty() &&
-      rhs.type().is_array() && !lhs.type().is_array() &&
-      !lhs.type().is_pointer())
+      type_assertions_enabled() && is_array_into_scalar(lhs.type(), rhs.type()))
     {
       // V.3: build the always-fail assert condition in IREP2.
       code_assertt type_assert(migrate_expr_back(gen_false_expr()));
@@ -6627,6 +6646,12 @@ void python_converter::get_var_assign(
     }
 
     reject_conditional_numpy_alias_rebind(lhs, effective_ast_node);
+
+    if (emit_list_element_replacement(*this, ast_node, lhs, rhs, target_block))
+    {
+      current_lhs = nullptr;
+      return;
+    }
 
     adjust_statement_types(lhs, rhs);
 

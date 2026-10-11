@@ -64,6 +64,18 @@ private:
    */
   void check_contract_call(const symbol_id &function_id) const;
 
+  /// Whether the receiver of `name.method(...)` is a name bound only once, to
+  /// None.
+  bool receiver_is_bound_to_none() const;
+
+  /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
+  /// class-instance reference holding None (a null pointer).
+  void raise_if_none_receiver() const;
+
+  /// For `recv.method(...)`: the AttributeError of a None receiver or the
+  /// str-method lowering, or nil when neither applies.
+  exprt build_method_call_on_receiver() const;
+
   /*
    * Rejects a contract clause that does not lower to a pure expression.
    * Throws with a diagnostic naming the offending construct.
