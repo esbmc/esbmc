@@ -6628,6 +6628,17 @@ void python_converter::get_var_assign(
 
     reject_conditional_numpy_alias_rebind(lhs, effective_ast_node);
 
+    if (assignment_target_is_subscript(ast_node))
+    {
+      python_list list(*this, ast_node);
+      if (auto replacement = list.build_element_replacement(lhs, rhs, ast_node))
+      {
+        target_block.copy_to_operands(*replacement);
+        current_lhs = nullptr;
+        return;
+      }
+    }
+
     adjust_statement_types(lhs, rhs);
 
     // Handle list type info propagation. A subscript store rebinds an element,
