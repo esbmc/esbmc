@@ -898,6 +898,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R124** | **High (false SUCCESSFUL, default configuration)** — R113's open note on `sscanf`, §15 M9 (R124); **FIXED**, same entry | **`scanf`, `sscanf` and `fscanf` always matched every conversion.** `symex_input` set the return value to the number of conversions in the format, so the matching-failure and `EOF` paths (C11 7.21.6.2p16) were never explored: `int r = sscanf("abc", "%d", &x); assert(r == 1);` was SUCCESSFUL. A `%n` was counted as well, so `sscanf(s, "%d%n", &x, &n)` could return 2. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/scanf_return_count{,_fail}` | — | **Fixed**: the call returns a nondet count in `[EOF, items]`, `%n` excluded, and stores item `k` only when the count exceeds `k`. Inputs are still nondet even when the source string is a constant. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R137** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found reading `nextafter.c` while checking the open notes of PR #8296, §15 M9 (R137); **FIXED**, same entry | **`nextafter` from an infinity returned the infinity.** The model's `FP_INFINITE` case left the value unchanged, so `nextafter(INFINITY, 0.0)` was `INFINITY` rather than `DBL_MAX`, and `nextafterf` was the same: `assert(isinf(nextafter(INFINITY, 0.0)))` was SUCCESSFUL. The `nextafter-spec` and `nextafterf-spec` tests asserted the wrong result. | `src/c2goto/library/libm/nextafter.c`; `regression/esbmc/nextafter_from_infinity{,_fail}`; `regression/floats-regression/nextafter{,f}-spec` | — | **Fixed** by stepping an infinity's bits like a finite value's. `nextafterl` and `nexttoward` still have no model. |
 
 ---
 
@@ -11704,6 +11705,32 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+
+### M9 (R137) — 2026-10-11, the step off an infinity
+
+C11 7.12.11.3 gives the next representable value after `x` in the direction of
+`y`, so `nextafter(INFINITY, 0.0)` is `DBL_MAX`, as glibc returns. The model's
+`FP_INFINITE` case broke out of the switch with the value unchanged, so both
+`nextafter` and `nextafterf` returned the infinity:
+`assert(nextafter(INFINITY, 0.0) == DBL_MAX)` was FAILED and
+`assert(isinf(nextafter(INFINITY, 0.0)))` was SUCCESSFUL. The
+`floats-regression` tests `nextafter-spec` and `nextafterf-spec` asserted
+`isinf(z) == isinf(x)`, the wrong result, and passed.
+
+**Fixed** by giving an infinity the finite case: one step on its bit pattern
+towards `y` is the largest finite value of its sign. When `x == y` the step is
+0 and the infinity is returned.
+
+`nextafter_from_infinity` checks both signs of both functions and
+`nextafter(INFINITY, INFINITY)`; master fails it. `nextafter_from_infinity_fail`
+runs under `--multi-property` and pins that `nextafter(INFINITY, 0.0)` equals
+`DBL_MAX` and is not infinite; master fails the first and passes the second.
+The two spec tests now assert `fabs(z)` is the largest finite value when `x`
+is infinite and differs from `y`; master fails both. All four change verdict
+with the fix reverted, under the default solver and `--z3`. Only Z3 was built.
+
+Not fixed: `nextafterl`, `nexttoward`, `nexttowardf` and `nexttowardl` have no
+model and return nondet values.
 
 ---
 
