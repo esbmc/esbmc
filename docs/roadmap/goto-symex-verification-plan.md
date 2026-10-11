@@ -12210,8 +12210,10 @@ return as before, so programs with nothing to run keep master's exploration
 and schedule counters. The atomic section keeps the interleavings explored
 after `main` as they were. The case moved to `symex_end_function` to keep
 `symex_step` under the complexity threshold. `__ESBMC_main` calls the atexit
-handler only when some symbol's value mentions `atexit`: its
-`while (__ESBMC_atexit_count > 0)` loop does not fold under
+handler only when some symbol's value mentions `atexit`, or under
+`--memory-leak-check` or `--termination`, where symex already ran past `main`
+and the 242 tests that use them or pin schedule counts keep their results:
+the handler's `while (__ESBMC_atexit_count > 0)` loop does not fold under
 `--no-propagation`, and `github_6464_merged_pointer_bounds` unwound it
 without bound. `clang_cpp_maint::static_lifetime_destroy` appends the
 destructor calls to `__ESBMC_main` after the atexit handler

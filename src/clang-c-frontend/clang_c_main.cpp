@@ -74,9 +74,16 @@ static bool mentions_symbol(const irept &irep, const irep_idt &id)
 }
 
 // Only call the atexit handler when some function can register one: its loop
-// does not fold under --no-propagation and would unwind without bound.
+// does not fold under --no-propagation and would unwind without bound. Under
+// --memory-leak-check and --termination symex always ran past main, so the
+// call stays and their schedule exploration is unchanged.
 bool clang_c_maint::atexit_may_register() const
 {
+  if (
+    config.options.get_bool_option("memory-leak-check") ||
+    config.options.get_bool_option("termination"))
+    return true;
+
   const irep_idt atexit_id = "c:@F@atexit";
   bool found = false;
   context.foreach_operand([&](const symbolt &s) {
