@@ -569,11 +569,23 @@ private:
 
   // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
   // `is not` paths); the public wrappers back-migrate once at the legacy seam.
-  expr2tc build_is_equality(const exprt &lhs, const exprt &rhs);
+  expr2tc build_is_equality(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+  exprt get_binary_operator_expr_for_is(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+  exprt get_negated_is_expr(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
   exprt get_resolved_value(const exprt &expr);
 

@@ -2506,3 +2506,6 @@ regression/ld/ld_counter_output_read_by_contact_safe
 regression/ld/ld_timer_output_read_by_contact_safe
 regression/ld/ld_tp_output_state_kept_safe
 regression/ld/ld_user_fb_output_read_by_contact_safe
+regression/python/github_8412
+regression/python/github_8412_fail
+regression/python/github_8412_rebound

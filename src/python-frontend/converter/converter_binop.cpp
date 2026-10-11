@@ -1952,9 +1952,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle identity comparisons
   if (op == "Is")
-    return get_binary_operator_expr_for_is(lhs, rhs);
+    return get_binary_operator_expr_for_is(lhs, rhs, left, right);
   if (op == "IsNot")
-    return get_negated_is_expr(lhs, rhs);
+    return get_negated_is_expr(lhs, rhs, left, right);
 
   // Handle relational operation type mismatches
   if (type_utils::is_relational_op(op))
