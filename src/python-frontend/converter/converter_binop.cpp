@@ -555,6 +555,112 @@ void python_converter::emit_guarded_raise(
   add_instruction(guard);
 }
 
+/// Converts one and/or operand. An operand after the first runs only when the
+/// earlier ones did not decide the result, so the statements its conversion
+/// plants (an exception guard, a hoisted temporary) go into its own block in
+/// \p effects for lower_short_circuit_boolop to place.
+exprt python_converter::get_boolop_operand(
+  const nlohmann::json &operand,
+  std::vector<code_blockt> &effects)
+{
+  effects.emplace_back();
+  code_blockt *saved_block = current_block;
+  if (current_block && effects.size() > 1)
+    current_block = &effects.back();
+  exprt operand_expr = get_expr(operand);
+  current_block = saved_block;
+
+  if (!operand_expr.is_code() || operand_expr.statement() != "function_call")
+    return operand_expr;
+
+  const code_function_callt &code_call =
+    to_code_function_call(to_code(operand_expr));
+  typet return_type = code_call.type();
+  if (return_type.is_empty() || return_type.id() == typet::t_empty)
+    return_type = type_handler_.get_typet("int", 0);
+  side_effect_expr_function_callt side_effect_call;
+  side_effect_call.function() = code_call.function();
+  side_effect_call.arguments() = code_call.arguments();
+  side_effect_call.type() = return_type;
+  side_effect_call.location() = code_call.location();
+  return side_effect_call;
+}
+
+/// When a later and/or operand planted statements, lowers the operation into
+/// a result temporary updated by one guarded block per operand, so each
+/// operand's statements run only when Python evaluates it (#8275). Returns nil
+/// when nothing was planted, or, after emitting the planted statements
+/// unconditionally as before, when the operation is itself evaluated lazily
+/// (a while test), is an `and` asserted directly, or the operands do not share
+/// a type whose truthiness is a plain condition. An asserted `and` fails anyway
+/// when a later operand is skipped, so its early guard matters only when the
+/// exception is caught; guarding it made dict_update_kwargs' k-induction
+/// forward condition go from 28s to over 20 minutes.
+exprt python_converter::lower_short_circuit_boolop(
+  const exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const nlohmann::json &element)
+{
+  const auto planted = [](const code_blockt &b) {
+    return !b.operands().empty();
+  };
+  if (std::none_of(effects.begin(), effects.end(), planted))
+    return nil_exprt();
+
+  const exprt::operandst &operands = logical_expr.operands();
+  const typet &type = operands.front().type();
+  const auto same_type = [&](const exprt &e) { return e.type() == type; };
+  const typet cond_type = truthy(operands.front()).type();
+  const bool plain_cond = cond_type.is_bool() || cond_type.is_floatbv() ||
+                          type_utils::is_integer_type(cond_type);
+  const bool asserted_and = logical_expr.is_and() && &element == asserted_test_;
+  if (
+    asserted_and || !plain_cond || !can_emit_runtime_guard() ||
+    !std::all_of(operands.begin(), operands.end(), same_type))
+  {
+    for (const code_blockt &block : effects)
+      for (const exprt &statement : block.operands())
+        current_block->copy_to_operands(statement);
+    return nil_exprt();
+  }
+
+  const locationt location = get_location_from_decl(element);
+  symbolt result_symbol =
+    create_return_temp_variable(type, location, "boolop_result");
+  symbol_table_.add(result_symbol);
+  const exprt result = symbol_expr(result_symbol);
+
+  code_declt result_decl(result);
+  result_decl.location() = location;
+  current_block->copy_to_operands(result_decl);
+  code_assignt result_init(result, operands.front());
+  result_init.location() = location;
+  current_block->copy_to_operands(result_init);
+
+  exprt cond = truthy(result);
+  if (!cond.type().is_bool())
+    cond = typecast_exprt(cond, bool_type());
+  if (!logical_expr.is_and())
+    cond = not_exprt(cond);
+
+  for (std::size_t i = 1; i < operands.size(); ++i)
+  {
+    code_blockt branch = effects[i];
+    code_assignt update(result, operands[i]);
+    update.location() = location;
+    branch.copy_to_operands(update);
+
+    code_ifthenelset short_circuit;
+    short_circuit.cond() = cond;
+    short_circuit.then_case() = branch;
+    short_circuit.location() = location;
+    short_circuit.location().property("skipped");
+    current_block->copy_to_operands(short_circuit);
+  }
+  return result;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -607,26 +713,13 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   bool old_is_converting_rhs = is_converting_rhs;
   is_converting_rhs = true;
   const bool old_in_lazy_operand = in_lazy_operand_;
+  std::vector<code_blockt> operand_effects;
 
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
-    exprt operand_expr = get_expr(operand);
+    exprt operand_expr = get_boolop_operand(operand, operand_effects);
     in_lazy_operand_ = true;
-    if (operand_expr.is_code() && operand_expr.statement() == "function_call")
-    {
-      const code_function_callt &code_call =
-        to_code_function_call(to_code(operand_expr));
-      typet return_type = code_call.type();
-      if (return_type.is_empty() || return_type.id() == typet::t_empty)
-        return_type = type_handler_.get_typet("int", 0);
-      side_effect_expr_function_callt side_effect_call;
-      side_effect_call.function() = code_call.function();
-      side_effect_call.arguments() = code_call.arguments();
-      side_effect_call.type() = return_type;
-      side_effect_call.location() = code_call.location();
-      operand_expr = side_effect_call;
-    }
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
   }
@@ -642,6 +735,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   // which is the correct result for a one-value boolean operation.
   if (logical_expr.operands().size() == 1)
     return logical_expr.operands().front();
+
+  exprt lowered = lower_short_circuit_boolop(
+    logical_expr, operand_effects, get_truthy_condition, element);
+  if (lowered.is_not_nil())
+    return lowered;
 
   // V.3: build the boolean `and`/`or` as the left-nested IREP2 and2t/or2t
   // chain that migrate splices the legacy n-ary node into (cf.
