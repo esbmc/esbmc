@@ -222,8 +222,6 @@ code_blockt python_converter::create_capture_cells(
   const symbol_id &id,
   const locationt &location)
 {
-  code_blockt bindings;
-
   // Only a function nested directly in another function has an enclosing frame
   // to capture from. A top-level function would cut back to the module scope
   // (its globals need no cell), and a method's id carries an @C@ component the
@@ -231,10 +229,20 @@ code_blockt python_converter::create_capture_cells(
   if (
     current_func_name_.find("@F@") == std::string::npos ||
     !current_class_name_.empty())
-    return bindings;
+    return code_blockt();
 
   const std::string func_id = id.to_string();
-  const std::string enclosing_scope = func_id.substr(0, func_id.rfind("@F@"));
+  return bind_capture_cells(
+    function_node, func_id, func_id.substr(0, func_id.rfind("@F@")), location);
+}
+
+code_blockt python_converter::bind_capture_cells(
+  const nlohmann::json &function_node,
+  const std::string &func_id,
+  const std::string &enclosing_scope,
+  const locationt &location)
+{
+  code_blockt bindings;
 
   // A Python closure reads the enclosing binding, not a def-time copy, so the
   // cell is only faithful while nothing rebinds the name after the `def`. The

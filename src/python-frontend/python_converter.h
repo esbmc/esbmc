@@ -283,6 +283,14 @@ public:
     symbol_table_.add(s);
   }
 
+  /// Cells of create_capture_cells for the function @p func_id, whose free
+  /// variables resolve to locals of the scope @p enclosing_scope.
+  code_blockt bind_capture_cells(
+    const nlohmann::json &function_node,
+    const std::string &func_id,
+    const std::string &enclosing_scope,
+    const locationt &location);
+
   void add_instruction(const exprt &expr)
   {
     if (current_block)

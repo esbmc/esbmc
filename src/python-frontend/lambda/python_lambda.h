@@ -19,7 +19,7 @@ public:
     type_handler &type_handler);
 
   // Main method to create lambda expression from AST
-  exprt get_lambda_expr(const nlohmann::json &element);
+  exprt get_lambda_expr(const nlohmann::json &element, bool bind_captures);
 
   // Check if a variable assignment involves a lambda
   bool is_lambda_assignment(const nlohmann::json &ast_node) const;
@@ -56,6 +56,12 @@ private:
   exprt process_lambda_body(
     const nlohmann::json &body_node,
     const locationt &location);
+
+  void prepend_parameter_closures(
+    const nlohmann::json &element,
+    const std::string &param_scope_id,
+    const locationt &location,
+    exprt &lambda_body);
 
   std::string generate_unique_lambda_name();
 

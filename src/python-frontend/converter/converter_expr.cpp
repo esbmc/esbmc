@@ -473,8 +473,13 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   // any division inside it must not emit a ZeroDivisionError guard (which would
   // fire on the unconstrained divisor); it is checked at the bound call site.
   bool saved = converting_lambda_body_;
+  // A lambda can outlive the function that defines it, like a nested def.
+  // Methods are left to the scope walk, as create_capture_cells does.
+  const bool bind_captures = !saved && can_emit_runtime_guard() &&
+                             enclosing_function_node_ != nullptr &&
+                             current_class_name_.empty();
   converting_lambda_body_ = true;
-  exprt result = lambda_handler_->get_lambda_expr(element);
+  exprt result = lambda_handler_->get_lambda_expr(element, bind_captures);
   converting_lambda_body_ = saved;
   return result;
 }
