@@ -899,6 +899,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
 | **R135** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R104's note on local classes, §15 M9 (R135); **FIXED**, same entry | **Same-named local classes shared one `type_info`.** `typeid` identity is the address of the type's printed name, and a local class prints without its enclosing function, so `S` in `f()` and `S` in `g()`, or in two instantiations of one function template, compared equal, and equal to a namespace-scope `S`. `assert(f() == g())` was SUCCESSFUL. | `rtti_type_name`, `src/clang-cpp-frontend/clang_cpp_convert_vft.cpp`; `regression/esbmc-cpp/cpp/local_class_typeid{,_fail}` | — | **Fixed**: a local class's name carries its record id. |
+| **R131** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe of string functions, §15 M9 (R131); **FIXED**, same entry | **`strndup` had no model.** The call reached symex without a body and returned a pointer to no object, so any read of the copy was `dereference failure: invalid pointer` and `strndup("hello", 2)` could not be checked. It read no memory and allocated none, so an over-read of an unterminated source and a leaked copy (ASan reports both natively) were SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strndup_model{,_fail}` | — | **Fixed**: `strndup` reads at most `n` bytes, stopping at the first null, and returns a `malloc`ed, null-terminated copy. |
 
 ---
 
@@ -11738,6 +11739,37 @@ hit the same Z3 sort mismatch on both binaries in this container, and
 
 Not fixed: two evaluations of one polymorphic `typeid` site still share its
 object, and `&typeid(*p) == &typeid(D)` is still false.
+### M9 (R131) — 2026-10-10, the strndup with no body
+
+A native-differential probe of string functions found that `strndup` had no
+operational model: `string.c` defines `strdup` but not `strndup`, so a call
+reached symex without a body and returned a pointer to no object. Every read
+of the copy was `dereference failure: invalid pointer`, so
+`char *s = strndup("hello", 2); if (s) assert(s[0] == 'h');` was FAILED.
+The call also read and allocated nothing. `strndup(b, 5)` on an unterminated
+`char b[3]` reads past `b` natively (ASan reports a stack-buffer-overflow), and
+a copy never freed is a leak, but both were SUCCESSFUL, the leak under
+`--memory-leak-check` as well.
+
+**Fixed** by a model beside `strdup`. POSIX.1-2008 has `strndup` copy at most
+`n` bytes, stopping at the first null, into storage from `malloc`, and always
+null-terminate the copy. The model counts the bytes, allocates one more, and
+copies them with a loop that stops on the same test. A `memcpy` of the counted
+length is not bounded in symex when the source has unknown bytes, so it is not
+used.
+
+`strndup_model` copies a truncated, a short and an empty prefix, an
+unterminated buffer read to exactly `n`, and a constant string with a symbolic
+`n`, frees each copy under `--memory-leak-check`; it is FAILED on master.
+`strndup_model_fail` is the over-read above, pinned on
+`dereference failure: array bounds violated`; it is SUCCESSFUL on master. Both
+change verdict without the model, under the default solver and `--z3`.
+
+Not fixed: `strlen` of a heap string does not terminate in symex; on master
+`strlen(strdup("hello"))` unwinds past 2500 iterations within 60 s, so the
+tests compare characters instead. The same probe found that `strcasecmp`,
+`strncasecmp` and `tgamma` have no model, and that `log10(1000.0) == 3.0`,
+which holds under glibc, is FAILED.
 
 ---
 
