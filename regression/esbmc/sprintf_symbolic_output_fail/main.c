@@ -1,10 +1,10 @@
 #include <stdio.h>
 
-int nondet_int(void);
+unsigned nondet_uint(void);
 
 int main(void)
 {
   char b[4];
-  sprintf(b, "%d", nondet_int());
+  sprintf(b, "%x", nondet_uint());
   return 0;
 }

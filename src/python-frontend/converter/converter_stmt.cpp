@@ -7489,9 +7489,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   const bool old_in_lazy_operand = in_lazy_operand_;
   in_lazy_operand_ |= type == "While";
-  if (
-    test_type == "BoolOp" && current_block && type != "While" &&
-    !coverage_mode && !pytest_generation_mode && !model_mode)
+  const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
+                                    !coverage_mode && !pytest_generation_mode &&
+                                    !model_mode;
+  if (short_circuit_boolop)
   {
     const auto &test_node = ast_node["test"];
     const auto &operands = test_node["values"];
@@ -7625,8 +7626,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   }
   in_lazy_operand_ = old_in_lazy_operand;
 
-  if (!(test_type == "BoolOp" && current_block && type != "While" &&
-        !coverage_mode && !pytest_generation_mode && !model_mode))
+  if (!short_circuit_boolop)
   {
     cond.location() = get_location_from_decl(ast_node["test"]);
 
@@ -8476,7 +8476,9 @@ exprt python_converter::get_block(
       }
 
       current_element_type = bool_type();
+      asserted_test_ = &element["test"];
       exprt test = get_expr(element["test"]);
+      asserted_test_ = nullptr;
       // An object asserted directly is truth-tested like any condition, so a
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.
