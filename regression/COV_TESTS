@@ -2415,12 +2415,19 @@ regression/python/github_8256_order
 regression/python/github_8256_rebind
 regression/python/github_8256_rebind_fail
 regression/python/github_8256_shadowed_outer
+regression/python/github_8302
 regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
 regression/esbmc/strnlen_model
 regression/esbmc/strnlen_model_fail
+regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind
+regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind_fail
+regression/esbmc-cpp/cpp/condition_short_circuit_temporary
+regression/esbmc-cpp/cpp/condition_short_circuit_temporary_fail
+regression/esbmc/va_list_parameter_cursor
+regression/esbmc/va_list_parameter_cursor_fail
 regression/esbmc/printf_flags_length
 regression/esbmc/printf_flags_length_fail
 regression/esbmc/sprintf_nondet_int_output
@@ -2437,3 +2444,7 @@ regression/python/isinstance_erased_type
 regression/python/return_type_param_shadows_global
 regression/esbmc/strndup_model
 regression/esbmc/strndup_model_fail
+regression/python/github_8276_nonfinite_to_int
+regression/python/github_8276_trunc_inf_fail
+regression/python/github_8276_round_nan_fail
+regression/python/github_8276_floor_inf_fail

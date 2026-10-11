@@ -95,7 +95,13 @@ goto_symext::va_list_cursor_symbol(const renaming::level2t::name_record &rec)
 
 expr2tc goto_symext::va_list_cursor(const expr2tc &va_list_expr)
 {
+  /* A va_list parameter reads, and advances, the one it points to. */
   auto rec = va_list_l1_record(va_list_expr);
+  if (!rec)
+    if (
+      auto pointees = va_list_pointee_records(va_list_expr);
+      pointees.size() == 1)
+      rec = pointees.front();
   auto it = rec ? va_started.find(*rec) : va_started.end();
   return it != va_started.end() && it->second ? va_list_cursor_symbol(*rec)
                                               : expr2tc();
@@ -170,8 +176,8 @@ goto_symext::va_list_frame(const expr2tc &va_list_expr)
 
 void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
 {
-  /* A source with no cursor of its own, such as a va_list parameter, reads
-   * at its frame's cursor; the copy keeps that position for itself. */
+  /* A source with no cursor of its own reads at its frame's cursor; the copy
+   * keeps that position for itself. */
   const goto_symex_statet::framet &frame = va_list_frame(src);
   expr2tc cursor = va_list_cursor(src);
   if (!is_nil_expr(cursor))

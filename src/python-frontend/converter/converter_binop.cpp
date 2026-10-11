@@ -555,6 +555,52 @@ void python_converter::emit_guarded_raise(
   add_instruction(guard);
 }
 
+exprt python_converter::guard_nonfinite_float_to_int(
+  exprt operand,
+  const nlohmann::json &element)
+{
+  if (
+    !operand.type().is_floatbv() || !current_block ||
+    !safe_to_emit_side_effecting_statement())
+    return operand;
+
+  // In an and/or tail or a while test the guard must run where the operand is
+  // evaluated, not once ahead of the statement.
+  const bool lazy = in_lazy_operand_;
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (lazy)
+    current_block = &lazy_block;
+
+  const locationt loc = get_location_from_decl(element);
+  operand = store_call_result(operand, loc, "int_arg");
+  operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
+  expr2tc value;
+  migrate_expr(operand, value);
+
+  emit_guarded_raise(
+    migrate_expr_back(isinf2tc(value)),
+    "OverflowError",
+    "cannot convert float infinity to integer",
+    loc);
+  emit_guarded_raise(
+    migrate_expr_back(isnan2tc(value)),
+    "ValueError",
+    "cannot convert float NaN to integer",
+    loc);
+  current_block = saved_block;
+  if (!lazy)
+    return operand;
+
+  code_expressiont result(operand);
+  result.location() = loc;
+  lazy_block.copy_to_operands(result);
+  side_effect_exprt guarded("statement_expression", operand.type());
+  guarded.copy_to_operands(lazy_block);
+  guarded.location() = loc;
+  return guarded;
+}
+
 /// Converts one and/or operand. An operand after the first runs only when the
 /// earlier ones did not decide the result, so the statements its conversion
 /// plants (an exception guard, a hoisted temporary) go into its own block in

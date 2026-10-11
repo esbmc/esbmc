@@ -564,48 +564,9 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
   exprt operand,
   const exprt &base) const
 {
-  if (
-    !base.is_nil() || !operand.type().is_floatbv() ||
-    !converter_.current_block ||
-    !converter_.safe_to_emit_side_effecting_statement())
+  if (!base.is_nil())
     return operand;
-
-  // In an and/or tail or a while test the guard must run where the operand is
-  // evaluated, not once ahead of the statement.
-  const bool lazy = converter_.in_lazy_operand_;
-  code_blockt lazy_block;
-  code_blockt *const saved_block = converter_.current_block;
-  if (lazy)
-    converter_.current_block = &lazy_block;
-
-  const locationt loc = converter_.get_location_from_decl(call_);
-  operand = converter_.store_call_result(operand, loc, "int_arg");
-  operand =
-    converter_.hoist_side_effecting_operand(operand, call_, "$int_arg$");
-  expr2tc value;
-  migrate_expr(operand, value);
-
-  converter_.emit_guarded_raise(
-    migrate_expr_back(isinf2tc(value)),
-    "OverflowError",
-    "cannot convert float infinity to integer",
-    loc);
-  converter_.emit_guarded_raise(
-    migrate_expr_back(isnan2tc(value)),
-    "ValueError",
-    "cannot convert float NaN to integer",
-    loc);
-  converter_.current_block = saved_block;
-  if (!lazy)
-    return operand;
-
-  code_expressiont result(operand);
-  result.location() = loc;
-  lazy_block.copy_to_operands(result);
-  side_effect_exprt guarded("statement_expression", operand.type());
-  guarded.copy_to_operands(lazy_block);
-  guarded.location() = loc;
-  return guarded;
+  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
@@ -1327,53 +1288,53 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   return result;
 }
 
-exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
+bool function_call_expr::is_single_assignment_str_symbol(
+  const symbolt *sym,
+  const std::string &name) const
 {
-  auto value_opt = extract_string_from_symbol(sym);
-  if (!value_opt)
-    return from_double(0.0, type_handler_.get_typet("float", 0));
-
-  {
-    std::string digits;
-    const bool separators_ok =
-      type_utils::strip_pep515_underscores(*value_opt, digits);
-    char *end = nullptr;
-    double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
-    if (!separators_ok || !end || end != digits.c_str() + digits.size())
-    {
-      log_error(
-        "Failed float conversion from string \"{}\": invalid argument",
-        *value_opt);
-      return from_double(0.0, type_handler_.get_typet("float", 0));
-    }
-    return from_double(dval, type_handler_.get_typet("float", 0));
-  }
+  return sym && sym->get_value().is_constant() &&
+         type_utils::is_string_type(sym->get_type()) &&
+         type_utils::is_string_type(sym->get_value().type()) &&
+         !json_utils::has_multiple_assignments_in_scope(
+           name, converter_.get_current_func_name(), converter_.get_ast_json());
 }
 
-exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
 {
   auto value_opt = extract_string_from_symbol(sym);
   if (!value_opt)
-    return from_integer(0, type_handler_.get_typet("int", 0));
+    return std::nullopt;
 
-  const std::string &value = *value_opt;
+  std::string digits;
+  const bool separators_ok =
+    type_utils::strip_pep515_underscores(*value_opt, digits);
+  char *end = nullptr;
+  double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+  if (!separators_ok || !end || end != digits.c_str() + digits.size())
+    return std::nullopt;
+  return from_double(dval, type_handler_.get_typet("float", 0));
+}
+
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return std::nullopt;
+
   std::string digits;
   if (
-    !type_utils::strip_pep515_underscores(value, digits) || digits.empty() ||
-    !std::all_of(digits.begin(), digits.end(), ::isdigit))
-  {
-    log_error("Invalid string for integer conversion: \"{}\"", value);
-    return from_integer(0, type_handler_.get_typet("int", 0));
-  }
+    !type_utils::strip_pep515_underscores(*value_opt, digits) ||
+    digits.empty() || !std::all_of(digits.begin(), digits.end(), ::isdigit))
+    return std::nullopt;
 
   try
   {
-    int int_val = std::stoi(digits);
-    return from_integer(int_val, type_handler_.get_typet("int", 0));
+    return from_integer(std::stoi(digits), type_handler_.get_typet("int", 0));
   }
-  catch (const std::exception &e)
+  catch (const std::exception &)
   {
-    log_error("Failed int conversion from string \"{}\": {}", value, e.what());
-    return from_integer(0, type_handler_.get_typet("int", 0));
+    return std::nullopt;
   }
 }
