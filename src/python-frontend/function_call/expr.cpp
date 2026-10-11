@@ -422,6 +422,16 @@ void function_call_expr::get_function_type()
   }
 }
 
+exprt function_call_expr::build_value_receiver(const symbolt &method) const
+{
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  // Nothing, or a constant, stands in for an item that has already raised
+  // IndexError (`ps[3].m()`); a null self keeps the dead call well typed.
+  if (receiver.is_nil() || receiver.is_constant())
+    return gen_zero(to_code_type(method.get_type()).arguments()[0].type());
+  return receiver;
+}
+
 bool function_call_expr::is_nondet_call() const
 {
   static std::regex pattern(
@@ -1569,8 +1579,8 @@ std::string function_call_expr::get_object_name() const
     // temporary value, not a named symbol, so resolving obj_name to the base
     // variable (e.g. 'd' from d["k"]) would cause method handlers to operate
     // on the wrong object.  For-loop uses of dict.items() are rewritten by the
-    // preprocessor into a named temp before reaching here; other methods on
-    // subscript results are not yet supported.
+    // preprocessor into a named temp before reaching here; a method on an item
+    // of a list of instances dispatches on the class build_function_id found.
   }
   else
   {
@@ -2152,6 +2162,12 @@ bool function_call_expr::receiver_is_non_dict_object() const
       cls = cls.substr(4);
     return !cls.empty() && cls != "__python_dict__";
   }
+
+  // A list element (`ps[0].get()`) whose class build_function_id resolved is
+  // an instance; any other subscript (`d["k"].get()`) stays with the dict
+  // handler, since an unresolved receiver defaults to "str".
+  if (node_type_of(recv) == "Subscript")
+    return is_class(function_id_.get_class(), converter_.ast());
 
   // A constructor call as the receiver (`C().get()`) is a class instance, so
   // the class's own method must win over the same-named dict method. Without
@@ -4239,6 +4255,18 @@ exprt function_call_expr::get()
   return handle_general_function_call();
 }
 
+symbolt *
+function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
+{
+  const std::string caller = get_object_name();
+  // A receiver with no name (`ps[0].m()`) has no symbol: looking one up would
+  // find the enclosing function, whose id is what an empty object leaves.
+  if (caller.empty())
+    return nullptr;
+  obj_symbol_id.set_object(caller);
+  return converter_.find_symbol(obj_symbol_id.to_string());
+}
+
 exprt function_call_expr::handle_general_function_call()
 {
   // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
@@ -4286,11 +4314,7 @@ exprt function_call_expr::handle_general_function_call()
   symbol_id obj_symbol_id = converter_.create_symbol_id();
 
   if (call_["func"]["_type"] == "Attribute")
-  {
-    std::string caller = get_object_name();
-    obj_symbol_id.set_object(caller);
-    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
-  }
+    obj_symbol = find_receiver_symbol(obj_symbol_id);
 
   // Indirect call through a variable holding a function pointer, e.g.:
   // times3 = make_multiplier(3); times3(4)
@@ -6334,8 +6358,8 @@ size_t function_call_expr::bind_call_receiver(
         {
           // Member/variable receiver (e.g., self.builder.build()): use the
           // actual receiver expression instead of a nondet temporary.
-          exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(bind_instance_receiver(obj_expr));
+          call.arguments().push_back(
+            bind_instance_receiver(build_value_receiver(*func_symbol)));
         }
       }
       else
