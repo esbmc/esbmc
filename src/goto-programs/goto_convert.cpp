@@ -1050,13 +1050,36 @@ void goto_convertt::discard_comma_operands(
   {
     exprt::operandst &operands = initializer.operands();
     for (auto it = operands.begin(); std::next(it) != operands.end(); ++it)
-    {
-      code_expressiont discarded(*it);
-      discarded.location() = it->location();
-      convert(discarded, dest);
-    }
+      remove_comma_operand(*it, dest);
     exprt result = operands.back();
     initializer.swap(result);
+  }
+}
+
+/// A comma's operand is a discarded-value expression ([expr.comma]/1), but a
+/// temporary object it creates lives until the end of the enclosing
+/// full-expression ([class.temporary]/4). Lowering it as a used value leaves
+/// its scope-exit entries for the full-expression to emit.
+void goto_convertt::remove_comma_operand(exprt &operand, goto_programt &dest)
+{
+  const exprt *value = &operand;
+  while (value->id() == "typecast")
+    value = &value->op0();
+  const bool is_temporary =
+    value->id() == "sideeffect" && value->statement() == "temporary_object";
+  const auto &stack = targets.destructor_stack;
+  const std::size_t stack_size = stack.size();
+  remove_sideeffects(operand, dest, is_temporary);
+  for (auto it = stack.begin() + stack_size; it != stack.end(); ++it)
+    if (const irep_idt id = destructor_entry_symbol(*it); !id.empty())
+      comma_operand_temporaries.insert(id);
+
+  // remember as expression statement for later checks
+  if (operand.is_not_nil())
+  {
+    code_expressiont discarded(operand);
+    discarded.location() = operand.location();
+    convert(discarded, dest);
   }
 }
 
@@ -1104,6 +1127,24 @@ void goto_convertt::convert_decl_initializer(
       keep_reference_member_temporaries(initializer, stack_size),
       new_code.location(),
       dest);
+  else
+    destroy_comma_operand_temporaries(stack_size, new_code.location(), dest);
+}
+
+/// A reference declaration keeps its initializer's temporaries to the end of
+/// the scope, but those of a discarded comma operand still die with it.
+void goto_convertt::destroy_comma_operand_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  auto &stack = targets.destructor_stack;
+  const auto kept = std::stable_partition(
+    stack.begin() + stack_size, stack.end(), [&](const codet &entry) {
+      return comma_operand_temporaries.count(destructor_entry_symbol(entry)) ==
+             0;
+    });
+  destroy_full_expression_temporaries(kept - stack.begin(), location, dest);
 }
 
 /// The temporaries a braced aggregate initialiser binds to reference members,
