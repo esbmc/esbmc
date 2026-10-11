@@ -3137,3 +3137,6 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/python/github_8413_str_branch
+regression/python/github_8413_str_branch_fail
+regression/python/github_8413_str_once
