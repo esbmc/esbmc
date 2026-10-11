@@ -256,8 +256,7 @@ bool goto_symext::run_builtin(
   // va_arg on an unstarted va_list is then flagged in symex_va_arg.
   if (symname == "c:@F@__builtin_va_start" && !func_call.operands.empty())
   {
-    va_list_mark_started(
-      func_call.operands[0], true, cur_state->top().va_index);
+    va_list_start(func_call.operands[0]);
     return true;
   }
 
