@@ -901,6 +901,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R133** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8320's open note on `log10`, §15 M9 (R133); **FIXED**, same entry | **`log10` was wrong at exact powers of ten.** The model returned `log(x) / M_LN10`, and `log` is a truncated Taylor series, so `log10(1000.0)` was not `3.0`: `assert(log10(1000.0) == 3.0);` was FAILED and `assert(log10(1000.0) != 3.0);` was SUCCESSFUL. | `src/c2goto/library/libm/musl/log10.c`; `regression/esbmc/log10_model{,_fail}` | — | **Fixed** with musl's `log10`. `log`, `log2` and `log1p` keep the series. |
 | **R131** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R117's open note, §15 M9 (R131); **FIXED**, same entry | **A temporary in a comma's left operand was destroyed at the comma.** A discarded `temporary_object` emits its destructor where it is lowered, so in `int a = (T(), seen());` `~T` ran before `seen()`, where [class.temporary]/4 runs it at the end of the full-expression. `assert(a == 0)`, which holds natively, was a false FAILED, and `assert(a == 1)`, which aborts natively, a false SUCCESSFUL. Declarations, assignments, conditions, call arguments and `return` were all affected. | `remove_comma_operand`, `destroy_comma_operand_temporaries`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/comma_operand_temporaries{,_fail}` | — | **Fixed**: a temporary object in a comma operand is lowered as a used value, so the enclosing full-expression destroys it; a reference declaration, which keeps its other temporaries to the end of the scope, destroys these after the declaration. |
 | **R134** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R131's open note (PR #8320), §15 M9 (R134); **FIXED**, same entry | **`strcasecmp` and `strncasecmp` had no model.** Neither had a body under `src/c2goto/library`, so each call returned a nondet value and read nothing: `assert(strcasecmp("Hello", "hELLO") == 0)` was FAILED, and `strncasecmp(a, "ABC", 3)` with `char a[2]` was SUCCESSFUL although it reads past `a`. | `strncasecmp`, `strcasecmp`, `src/c2goto/library/strings.c`; `regression/esbmc/strcasecmp_model{,_fail}` | — | **Fixed**: both compare bytes as `unsigned char` after `tolower`, the POSIX locale's mapping. |
 | **R136** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R93's open note, §15 M9 (R136); **FIXED**, same entry | **A delegating constructor whose body threw left its object alive.** [except.ctor]/4 runs the object's destructor when the body of a delegating constructor exits by an exception, since the target constructor has completed the object. R93's unwinding skipped delegating constructors, so the destructor never ran: with `C(int b) : C(false) { if (b) throw 2; }`, `assert(dtors == 0)` after catching from `C c(1);` was SUCCESSFUL, and `assert(dtors == 1)` was FAILED. | `clang_cpp_convertert::unwind_constructed_subobjects`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind{,_fail}` | — | **Fixed**: the body after the delegation runs in a try block whose catch-all handler calls the class destructor on `this` and rethrows. |
@@ -12120,6 +12121,36 @@ file names and timings in the output. Beyond the new pair, 11 C++ tests differ:
 a postfix `++` on an iterator in a `for` increment now destroys its result
 after the increment, and the rest is `--k-induction-parallel` and timing
 output. All 11 keep their master verdicts.
+
+### M9 (R133) — 2026-10-10, the logarithm of a power of ten
+
+PR #8320's probe found that `log10(1000.0) == 3.0`, which holds under glibc,
+was FAILED. The model in `src/c2goto/library/libm/log10.c` returned
+`log(x) / M_LN10`, and `log` is `log2(x) * M_LN2` with `log2` a Taylor series
+cut after a few terms, so the result was a few ulps off even at exact powers
+of ten. `assert(log10(1000.0) != 3.0);` was SUCCESSFUL, and
+`log10(1e22) == 22.0`, `log10(0.001) == -3.0` and
+`__builtin_log10(100.0) == 2.0` were FAILED.
+
+**Fixed** by replacing the model with musl's `log10.c` under
+`src/c2goto/library/libm/musl`. It reduces `x` to `2^k (1 + f)` and evaluates
+the fdlibm polynomial in extra precision, and returns `N` for `10^N`,
+`N = 0..22`. Compiled natively, it gave glibc's result within 4e-16 relative
+error on 2,000,000 random bit patterns, and exactly glibc's on the test inputs.
+
+`log10_model` checks powers of ten, `1.0`, a subnormal, both zeros, a negative
+argument, an infinity and `__builtin_log10`; it is FAILED on master.
+`log10_model_fail` runs under `--multi-property` and pins that `log10(2.0)`
+lies in `(0.30102, 0.30103)` and that `log10(1000.0) != 3.0` fails; master
+passes both. Each changes verdict with the fix reverted, under the default
+solver and `--z3`. A bound on `log10(x)` for a nondet `x` in `[1, 1e6]`
+did not finish within 600 s on master or with the fix, so the tests use
+constants.
+
+Not fixed: `log`, `log2` and `log1p` still use the truncated series, so
+`log(M_E) == 1.0` and similar exact cases can still be wrong. The model is
+now in the musl set, which the parsed fallback used when a build has no
+prebuilt C library does not load, as for `cbrt`.
 
 ---
 
