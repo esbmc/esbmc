@@ -901,6 +901,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R136** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R93's open note, §15 M9 (R136); **FIXED**, same entry | **A delegating constructor whose body threw left its object alive.** [except.ctor]/4 runs the object's destructor when the body of a delegating constructor exits by an exception, since the target constructor has completed the object. R93's unwinding skipped delegating constructors, so the destructor never ran: with `C(int b) : C(false) { if (b) throw 2; }`, `assert(dtors == 0)` after catching from `C c(1);` was SUCCESSFUL, and `assert(dtors == 1)` was FAILED. | `clang_cpp_convertert::unwind_constructed_subobjects`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind{,_fail}` | — | **Fixed**: the body after the delegation runs in a try block whose catch-all handler calls the class destructor on `this` and rethrows. |
 | **R126** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R89's open note, §15 M9 (R126); **FIXED**, same entry | **A temporary in an operand of `&&`, `||` or `?:` in a condition outlived the condition.** `if`, `while`, `for` and `do`/`while` conditions with a side-effecting `&&` or `||` were split into one branch per operand, and each operand kept its temporaries to the end of the enclosing block. `while (n < 3 && C().ok()) ++n;` built three objects and destroyed none before the loop ended, so `assert(dtors == 0)` after it was SUCCESSFUL and aborts natively. A `?:` condition and an `if` with an `else` were not split but kept block scope too. | `generate_conditional_branch` and `convert_ifthenelse`, `src/goto-programs/goto_convert.cpp`; `remove_condition_sideeffects`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/condition_short_circuit_temporary{,_fail}` | — | **Fixed**: a condition whose side effects create a temporary with a destructor is not split; it is lowered whole, and R86's guarded destructors run before the branch. |
 | **R125** | **High (false SUCCESSFUL and false FAILED, default configuration, C++17)** — R98's open note on the aligned forms, §15 M9 (R125); **FIXED**, same entry | **A program's aligned `operator new` and `operator delete` were never called.** For a type with new-extended alignment, `new A` calls `operator new(size_t, std::align_val_t)` ([expr.new]/16). `get_new_storage` refused every aligned form and `resolve_deallocation_function` every aligned `delete`, so both used the built-in allocation: two `new A` from a replacement that returns one pool were distinct objects (`assert(a != b)` SUCCESSFUL, aborts natively), and a counter in the replacement stayed 0 (FAILED, passes natively). | `get_new_storage`, `get_dealloc_function`, `get_align_val`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `convert_cpp_delete`, `src/goto-programs/goto_convert.cpp`; `remove_cpp_delete`, `src/goto-programs/goto_sideeffects.cpp`; `migrate_cpp_delete`, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/aligned_operator_new{,_fail}` | — | **Fixed**: the frontend passes `alignof(T)` as the `std::align_val_t` argument to a defined aligned `operator new` and `operator delete`, sized or not. |
 | **R126** | **Medium (false FAILED, default configuration)** — R119's open note, §15 M9 (R126); **FIXED**, same entry | **`cbrtl` had no model.** A call returned a nondet value, so `assert(cbrtl(27.0L) == 3.0L);` was FAILED; `__builtin_cbrtl`, which R114 rewrites to `cbrtl`, was the same. | `src/c2goto/library/libm/cbrtl.c`; `regression/esbmc/cbrtl_model{,_fail}` | — | **Fixed** by a model that refines `cbrt`'s result with two Newton steps in `long double`. |
@@ -11713,6 +11714,47 @@ second. Both change verdict with the fix reverted, under the default solver
 and `--z3`.
 
 Not fixed: `cbrtl` still returns a nondet value.
+### M9 (R136) — 2026-10-10, the delegating constructor that threw
+
+R93's entry left open that a delegating constructor whose body throws does not
+run the object's destructor. [except.ctor]/4 requires it: once the target
+constructor returns, the object is complete, so an exception leaving the
+delegating constructor's body destroys it. `unwind_constructed_subobjects`
+returned early for every delegating constructor. With
+`C(int b) : C(false) { if (b) throw 2; }` and a destructor that counts,
+`try { C c(1); } catch (int) {}` left the count at 0: `assert(dtors == 1)`,
+which holds natively, was FAILED, and `assert(dtors == 0)` was SUCCESSFUL.
+Members, bases, a virtual base, a class template and a `new` expression went
+the same way.
+
+**Fixed** in the C++ frontend, under R93's gates: a constructor that may throw
+in a translation unit whose own code throws or catches. The statements after
+the delegating call run in a try block whose catch-all handler calls the
+class's destructor on `this` and rethrows. A throw from the target
+constructor is not caught there, as that constructor already unwinds its own
+subobjects. The destructor is often declared after the constructor and not
+yet converted, so the call takes its reference the way a constructor call
+does, through `get_ctor_dtor_ref`. A class with a trivial destructor, or a
+delegating constructor with an empty body, is converted as on master; the
+operational models' `basic_string`, `bitset` and `fstream` delegating
+constructors have empty bodies, and a program using `bitset` with a `throw`
+gives the same GOTO program as on master.
+
+`ctor_delegating_body_unwind` throws from a delegating body, from a target
+reached through a delegating constructor with an empty body, and completes
+one object; master fails its first assertion.
+`ctor_delegating_body_unwind_fail` is the program above, SUCCESSFUL on master
+and FAILED on `dtors == 0` now. Both change verdict with the fix reverted,
+under the default solver and `--z3` (Bitwuzla was not built). The
+`esbmc-cpp/try_catch`, `destructors`, `bitset`, `stream`,
+`esbmc-cpp11/constructors`, `esbmc-cpp11/cpp`, `esbmc-cpp20/cpp` and
+`esbmc-cpp23/cpp` suites pass. No other regression test has both a
+delegating constructor and a `throw` or `try`.
+
+Not fixed: R93's other notes (virtual bases left undestroyed by a throwing
+non-delegating constructor, an array member destroyed element by element, and
+exceptions passing through a translation unit that neither throws nor
+catches).
 
 ### M9 (R126) — 2026-10-10, the temporaries of a short-circuit condition
 

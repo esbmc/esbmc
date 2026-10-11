@@ -2419,6 +2419,8 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind
+regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind_fail
 regression/esbmc-cpp/cpp/condition_short_circuit_temporary
 regression/esbmc-cpp/cpp/condition_short_circuit_temporary_fail
 regression/esbmc/va_list_parameter_cursor
