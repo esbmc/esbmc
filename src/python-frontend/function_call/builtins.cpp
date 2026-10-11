@@ -1210,7 +1210,6 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   exprt fallback_expr = converter_.get_expr(arg);
   if (fallback_expr.is_nil() || fallback_expr.statement() == "cpp-throw")
     return fallback_expr;
-  fallback_expr = to_value_expr(fallback_expr, converter_.ns);
   // Skip __abs__ dispatch in this fallback: arg_type is restricted to the
   // built-in numeric types (int/float/complex) which never define a Python
   // __abs__ method in user code, and probing it can perturb downstream SMT
