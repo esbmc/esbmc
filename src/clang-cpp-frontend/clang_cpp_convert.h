@@ -470,8 +470,8 @@ protected:
   static struct_typet::componentt
   rtti_name_component(const irep_idt &vtable_type_id);
   /* The single spelling of a type used as typeid identity; see #6310. */
-  static std::string rtti_type_name(const clang::QualType &qtype);
-  static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  std::string rtti_type_name(const clang::QualType &qtype);
+  std::string rtti_type_name(const clang::CXXRecordDecl &rd);
   exprt typeid_object(
     const exprt &value,
     const std::string &type_name,
@@ -805,6 +805,11 @@ protected:
     bool &elided);
 
   bool get_new_storage(const clang::CXXNewExpr &ne, exprt &new_expr);
+  bool get_dealloc_function(const clang::CXXDeleteExpr &de, exprt &new_expr);
+  bool get_align_val(
+    const clang::QualType &type,
+    const clang::ParmVarDecl &param,
+    exprt &align);
 
   /* Lower a non-allocating placement new to
    * comma(<initialize *(T*)place>, (T*)place); a side-effecting place is

@@ -108,10 +108,10 @@ def isnan(x: float) -> bool:
 
 
 def floor(x: float) -> int:
-    # infinity and NaN inputs cause assertion failures
-    # since they cannot be converted to integers.
-    assert not isinf(x), "Input cannot be infinity"
-    assert not isnan(x), "Input cannot be NaN"
+    if isinf(x):
+        raise OverflowError("cannot convert float infinity to integer")
+    if isnan(x):
+        raise ValueError("cannot convert float NaN to integer")
 
     if x >= 0:
         return int(x)
@@ -124,10 +124,10 @@ def floor(x: float) -> int:
 
 
 def ceil(x: float) -> int:
-    # infinity and NaN inputs cause assertion failures
-    # since they cannot be converted to integers.
-    assert not isinf(x), "Input cannot be infinity"
-    assert not isnan(x), "Input cannot be NaN"
+    if isinf(x):
+        raise OverflowError("cannot convert float infinity to integer")
+    if isnan(x):
+        raise ValueError("cannot convert float NaN to integer")
 
     if x <= 0:
         return int(x)
