@@ -49,6 +49,7 @@ class AlignedAttr;
 class InitListExpr;
 class TemplateParamObjectDecl;
 class Expr;
+class OpaqueValueExpr;
 } // namespace clang
 
 std::string
@@ -260,6 +261,8 @@ protected:
   void size_flexible_array_member(const clang::ValueDecl &vd, typet &t);
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+  virtual bool
+  get_opaque_value(const clang::OpaqueValueExpr &ove, exprt &new_expr);
 
   bool get_base_flattened_inits(
     const clang::InitListExpr &init,

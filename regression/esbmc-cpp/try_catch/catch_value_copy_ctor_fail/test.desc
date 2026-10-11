@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property
+^VERIFICATION FAILED$
+^  PASSED .* assertion c.v == 1$
+^  FAILED .* assertion copies == 0$

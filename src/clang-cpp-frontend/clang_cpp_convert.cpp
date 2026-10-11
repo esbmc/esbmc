@@ -466,7 +466,39 @@ bool clang_cpp_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if (vd.getDeclContext()->isDependentContext())
     return false;
 
-  return clang_c_convertert::get_var(vd, new_expr);
+  if (clang_c_convertert::get_var(vd, new_expr))
+    return true;
+
+  return vd.isExceptionVariable() && get_catch_param_copy(vd, new_expr);
+}
+
+bool clang_cpp_convertert::get_opaque_value(
+  const clang::OpaqueValueExpr &ove,
+  exprt &new_expr)
+{
+  if (catch_param && !ove.getSourceExpr())
+    return get_decl_ref(*catch_param, new_expr);
+  return clang_c_convertert::get_opaque_value(ove, new_expr);
+}
+
+bool clang_cpp_convertert::get_catch_param_copy(
+  const clang::VarDecl &vd,
+  exprt &new_expr)
+{
+  const auto *ctor = llvm::dyn_cast_or_null<clang::CXXConstructExpr>(
+    vd.getInit() ? vd.getInit()->IgnoreImplicit() : nullptr);
+  if (!ctor || ctor->getConstructor()->isTrivial())
+    return false;
+
+  catch_param = &vd;
+  exprt val;
+  const bool failed = get_expr(*ctor, val);
+  catch_param = nullptr;
+  if (failed)
+    return true;
+
+  new_expr.copy_to_operands(val);
+  return false;
 }
 
 bool clang_cpp_convertert::get_method(

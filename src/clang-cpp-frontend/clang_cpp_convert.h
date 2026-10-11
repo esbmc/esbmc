@@ -138,6 +138,17 @@ protected:
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
+
+  /*
+   * A by-value catch parameter is copy-initialized from the exception object
+   * ([except.handle]/15). Clang spells the source as an OpaqueValueExpr, which
+   * is converted as the parameter itself; remove_exceptions points that
+   * argument at the thrown object.
+   */
+  const clang::VarDecl *catch_param = nullptr;
+  bool get_catch_param_copy(const clang::VarDecl &vd, exprt &new_expr);
+  bool
+  get_opaque_value(const clang::OpaqueValueExpr &ove, exprt &new_expr) override;
   const clang::Expr &elided_copy_source(const clang::Expr &init) override;
 
   bool get_struct_union_class_fields(

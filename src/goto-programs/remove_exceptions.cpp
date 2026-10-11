@@ -57,6 +57,25 @@ static void track_open_handlers(
 /// escapes, so it must not narrow -- or clear -- the type's anchor: a
 /// `try: raise ValueError / except ValueError` beside an escaping raise of the
 /// same type otherwise reported at the caught line (#7433).
+/// Whether \p e is the address of \p var, through any casts.
+static bool is_address_of(const expr2tc &e, const expr2tc &var)
+{
+  const expr2tc &bare = is_typecast2t(e) ? to_typecast2t(e).from : e;
+  return is_address_of2t(bare) && to_address_of2t(bare).ptr_obj == var;
+}
+
+/// Whether \p it is the copy constructor the C++ frontend emits for a by-value
+/// catch parameter \p var, as the call `T(&var, &var)`.
+static bool
+is_catch_param_copy(goto_programt::const_targett it, const expr2tc &var)
+{
+  if (!it->is_function_call())
+    return false;
+  const std::vector<expr2tc> &args = to_code_function_call2t(it->code).operands;
+  return args.size() == 2 && is_address_of(args[0], var) &&
+         is_address_of(args[1], var);
+}
+
 static bool locally_caught(
   const std::vector<std::vector<irep_idt>> &open_handlers,
   const std::vector<irep_idt> &chain)
@@ -1396,9 +1415,20 @@ private:
       type2tc catch_ptr_type =
         ref_catch ? var->type : pointer_type2tc(var->type);
       expr2tc obj_ptr = catch_object_pointer(catch_ptr_type, h.type);
-      expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
-      bind->code = code_assign2tc(var, src);
-      before_body = bind;
+      auto copy = std::next(bind);
+      if (!ref_catch && is_catch_param_copy(copy, var))
+      {
+        code_function_call2t call = to_code_function_call2t(copy->code);
+        call.operands[1] = typecast2tc(call.operands[1]->type, obj_ptr);
+        copy->code = code_function_call2tc(call);
+        before_body = copy;
+      }
+      else
+      {
+        expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
+        bind->code = code_assign2tc(var, src);
+        before_body = bind;
+      }
     }
 
     auto insert_after = before_body;

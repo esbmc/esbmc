@@ -823,6 +823,13 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
+bool clang_c_convertert::get_opaque_value(
+  const clang::OpaqueValueExpr &ove,
+  exprt &new_expr)
+{
+  return get_expr(*ove.getSourceExpr(), new_expr);
+}
+
 bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
@@ -2332,10 +2339,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // condition
   case clang::Stmt::OpaqueValueExprClass:
   {
-    const clang::OpaqueValueExpr &opaque_expr =
-      static_cast<const clang::OpaqueValueExpr &>(stmt);
-
-    if (get_expr(*opaque_expr.getSourceExpr(), new_expr))
+    if (
+      get_opaque_value(
+        static_cast<const clang::OpaqueValueExpr &>(stmt), new_expr))
       return true;
 
     break;
