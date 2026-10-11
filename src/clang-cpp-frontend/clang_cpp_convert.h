@@ -449,8 +449,8 @@ protected:
   static struct_typet::componentt
   rtti_name_component(const irep_idt &vtable_type_id);
   /* The single spelling of a type used as typeid identity; see #6310. */
-  static std::string rtti_type_name(const clang::QualType &qtype);
-  static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  std::string rtti_type_name(const clang::QualType &qtype);
+  std::string rtti_type_name(const clang::CXXRecordDecl &rd);
   exprt typeid_object(
     const exprt &value,
     const std::string &type_name,
