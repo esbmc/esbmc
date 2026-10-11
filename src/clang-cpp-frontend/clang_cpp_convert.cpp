@@ -665,6 +665,14 @@ static void replace_new_object_with(const exprt &object, exprt &dest)
       replace_new_object_with(object, *it);
 }
 
+// The aligned forms take std::align_val_t last
+// ([basic.stc.dynamic.deallocation]/3).
+static bool is_aligned_deallocation(const clang::FunctionDecl &op_del)
+{
+  const unsigned n = op_del.getNumParams();
+  return n >= 2 && op_del.getParamDecl(n - 1)->getType()->isAlignValT();
+}
+
 // Pick the deallocation function goto-conversion can actually call for a
 // delete-expression, or null to leave it on the built-in path (github #6494).
 // Clang resolves `delete p` to the C++14 sized form whenever one is declared,
@@ -680,15 +688,17 @@ static const clang::FunctionDecl *resolve_deallocation_function(
   if (!op_del)
     return nullptr;
 
-  // The aligned and user-placement forms also take two parameters, but want an
-  // alignment or a tag rather than the byte count this lowering supplies; the
-  // array form has no byte count to give, since the element size it knows is
-  // not the whole array's.
-  const bool sized = !array_form && op_del->getNumParams() == 2 &&
+  // The user-placement forms also take two parameters, but want a tag rather
+  // than the byte count this lowering supplies; the array form has no byte
+  // count to give, since the element size it knows is not the whole array's.
+  const bool aligned = is_aligned_deallocation(*op_del);
+  const unsigned unsized_params = aligned ? 2 : 1;
+  const bool sized = !array_form &&
+                     op_del->getNumParams() == unsized_params + 1 &&
                      op_del->getParamDecl(1)->getType()->isIntegerType();
 
   if (op_del->isDefined())
-    return op_del->getNumParams() == 1 || sized ? op_del : nullptr;
+    return op_del->getNumParams() == unsized_params || sized ? op_del : nullptr;
 
   // Only the sized form forwards to a replacement the program did define.
   if (!sized)
@@ -697,7 +707,9 @@ static const clang::FunctionDecl *resolve_deallocation_function(
   for (const clang::NamedDecl *d :
        op_del->getDeclContext()->lookup(op_del->getDeclName()))
     if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
-      if (fd->getNumParams() == 1 && fd->isDefined())
+      if (
+        fd->getNumParams() == unsized_params &&
+        is_aligned_deallocation(*fd) == aligned && fd->isDefined())
         return fd;
 
   return nullptr;
@@ -1195,18 +1207,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     new_expr.move_to_operands(arg);
 
-    // Mirror of the allocation side above: a replaced operator delete has to
-    // be called, or state it maintains is never updated and correct programs
-    // are reported as failing (github #6494).
-    const clang::FunctionDecl *op_del = resolve_deallocation_function(
-      de.getOperatorDelete(), de.isArrayFormAsWritten());
-    if (op_del)
-    {
-      exprt dealloc_function;
-      if (get_decl_ref(*op_del, dealloc_function))
-        return true;
-      new_expr.add("dealloc_function") = dealloc_function;
-    }
+    if (get_dealloc_function(de, new_expr))
+      return true;
 
     // `delete[]` of a `T (*)[m]` destroys T elements ([expr.delete]/6).
     const clang::QualType destroyed =
@@ -2296,15 +2298,21 @@ static bool cannot_throw(const clang::CXXConstructorDecl &cd)
          fpt->canThrow() == clang::CT_Cannot;
 }
 
-/// catch (...) { <destroy each built subobject, newest first> }
-static code_blockt destroy_built_subobjects(
-  const exprt &built,
-  const std::vector<clang_cpp_convertert::subobject_destructort> &dtors)
+static code_blockt catch_all_handler()
 {
   code_blockt handler;
   handler.type().set("ellipsis", 1);
   handler.set("exception_id", "ellipsis");
   handler.copy_to_operands(code_skipt());
+  return handler;
+}
+
+/// catch (...) { <destroy each built subobject, newest first> }
+static code_blockt destroy_built_subobjects(
+  const exprt &built,
+  const std::vector<clang_cpp_convertert::subobject_destructort> &dtors)
+{
+  code_blockt handler = catch_all_handler();
   for (const auto &d : dtors)
   {
     code_ifthenelset destroy;
@@ -2316,15 +2324,65 @@ static code_blockt destroy_built_subobjects(
   return handler;
 }
 
+codet clang_cpp_convertert::rethrowing_catch(
+  const code_blockt &tried,
+  code_blockt handler)
+{
+  exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+  convert_expression_to_code(rethrow);
+  handler.move_to_operands(rethrow);
+
+  codet guarded("cpp-catch");
+  guarded.location() = tried.location();
+  guarded.copy_to_operands(tried, handler);
+  return guarded;
+}
+
+bool clang_cpp_convertert::destroy_object_on_body_unwind(
+  const clang::CXXConstructorDecl &cd,
+  std::size_t body_start,
+  code_blockt &body)
+{
+  // The destructor may be declared after cd and not converted yet.
+  const clang::CXXDestructorDecl *dd = cd.getParent()->getDestructor();
+  exprt::operandst &ops = body.operands();
+  if (!dd || dd->isTrivial() || body_start == ops.size())
+    return false;
+
+  code_function_callt call;
+  if (get_ctor_dtor_ref(*dd, call.function()))
+    return true;
+
+  code_blockt tried;
+  tried.location() = body.location();
+  tried.operands().assign(
+    std::make_move_iterator(ops.begin() + body_start),
+    std::make_move_iterator(ops.end()));
+  ops.erase(ops.begin() + body_start, ops.end());
+
+  const auto &[this_id, this_ptr_type] = method_this(cd);
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  gen_typecast(
+    ns, this_expr, to_code_type(call.function().type()).arguments()[0].type());
+  call.arguments().push_back(this_expr);
+  code_blockt handler = catch_all_handler();
+  handler.move_to_operands(call);
+  body.copy_to_operands(rethrowing_catch(tried, std::move(handler)));
+  return false;
+}
+
 bool clang_cpp_convertert::unwind_constructed_subobjects(
   const clang::CXXConstructorDecl &cd,
   const std::vector<std::size_t> &starts,
   code_blockt &body)
 {
-  if (
-    cd.isDelegatingConstructor() || cannot_throw(cd) ||
-    !user_code_uses_exceptions())
+  if (cannot_throw(cd) || !user_code_uses_exceptions())
     return false;
+
+  // [except.ctor]/4: the delegation completed the object, so a throw from the
+  // body destroys it whole.
+  if (cd.isDelegatingConstructor())
+    return destroy_object_on_body_unwind(cd, starts.back(), body);
 
   std::vector<subobject_destructort> dtors;
   if (subobject_destructors(cd, dtors))
@@ -2373,15 +2431,10 @@ bool clang_cpp_convertert::unwind_constructed_subobjects(
         ops.begin() + start, progress(construction_position(**it, bases)));
   }
 
-  code_blockt handler = destroy_built_subobjects(built, dtors);
-  exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
-  convert_expression_to_code(rethrow);
-  handler.move_to_operands(rethrow);
-
-  codet guarded("cpp-catch");
+  codet guarded =
+    rethrowing_catch(body, destroy_built_subobjects(built, dtors));
   guarded.set("#subobject_unwind", true);
   guarded.location() = location;
-  guarded.copy_to_operands(body, handler);
 
   code_blockt wrapped;
   wrapped.location() = location;
@@ -3406,31 +3459,8 @@ bool clang_cpp_convertert::get_decl_ref(
     break;
   }
   case clang::Decl::CXXConstructor:
-  {
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl &>(decl);
-
-    get_decl_name(fd, name, id);
-
-    if (get_type(fd.getType(), type))
-      return true;
-
-    code_typet &fd_type = to_code_type(type);
-    if (get_function_params(fd, fd_type.arguments()))
-      return true;
-
-    // annotate return type - will be used to adjust the initiliazer or
-    // decl-derived stmt
-    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
-    assert(md);
-    annotate_ctor_dtor_rtn_type(*md, fd_type.return_type());
-
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.name(name);
-
-    break;
-  }
+    return get_ctor_dtor_ref(
+      static_cast<const clang::CXXMethodDecl &>(decl), new_expr);
 
   default:
   {
@@ -3447,6 +3477,31 @@ bool clang_cpp_convertert::get_decl_ref(
   }
   }
 
+  return false;
+}
+
+bool clang_cpp_convertert::get_ctor_dtor_ref(
+  const clang::CXXMethodDecl &md,
+  exprt &new_expr)
+{
+  std::string name, id;
+  get_decl_name(md, name, id);
+
+  typet type;
+  if (get_type(md.getType(), type))
+    return true;
+
+  code_typet &fd_type = to_code_type(type);
+  if (get_function_params(md, fd_type.arguments()))
+    return true;
+
+  // annotate return type - will be used to adjust the initiliazer or
+  // decl-derived stmt
+  annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.name(name);
   return false;
 }
 
@@ -4097,10 +4152,9 @@ bool clang_cpp_convertert::get_conditional_class_prvalue(
 // different program: two allocations from a pool allocator that alias
 // are modelled as distinct objects, hiding real bugs (github #6494).
 // Record the resolved function for goto-conversion to call instead.
-// The plain (size) form and the user-placement forms are routed, the latter
-// with their placement arguments ([expr.new]/16); the aligned forms take an
-// alignment this lowering does not supply, and an allocation function without
-// a body in this TU has nothing to call.
+// The plain (size) form, the aligned form and the user-placement forms are
+// routed, with the alignment and then the placement arguments ([expr.new]/16);
+// an allocation function without a body in this TU has nothing to call.
 bool clang_cpp_convertert::get_new_storage(
   const clang::CXXNewExpr &ne,
   exprt &new_expr)
@@ -4115,9 +4169,10 @@ bool clang_cpp_convertert::get_new_storage(
     return false;
   }
 
+  const unsigned implicit_params = ne.passAlignment() ? 2 : 1;
   if (
-    !op_new || !op_new->isDefined() || ne.passAlignment() ||
-    op_new->getNumParams() != 1 + ne.getNumPlacementArgs())
+    !op_new || !op_new->isDefined() ||
+    op_new->getNumParams() != implicit_params + ne.getNumPlacementArgs())
     return false;
 
   exprt alloc_function;
@@ -4126,6 +4181,13 @@ bool clang_cpp_convertert::get_new_storage(
   new_expr.add("alloc_function") = alloc_function;
 
   exprt alloc_arguments("arguments");
+  if (ne.passAlignment())
+  {
+    exprt align;
+    if (get_align_val(ne.getAllocatedType(), *op_new->getParamDecl(1), align))
+      return true;
+    alloc_arguments.move_to_operands(align);
+  }
   for (const clang::Expr *arg : ne.placement_arguments())
   {
     exprt a;
@@ -4135,6 +4197,54 @@ bool clang_cpp_convertert::get_new_storage(
   }
   if (alloc_arguments.has_operands())
     new_expr.add("alloc_arguments") = alloc_arguments;
+  return false;
+}
+
+// Mirror of the allocation side: a replaced operator delete has to be called,
+// or state it maintains is never updated and correct programs are reported as
+// failing (github #6494).
+bool clang_cpp_convertert::get_dealloc_function(
+  const clang::CXXDeleteExpr &de,
+  exprt &new_expr)
+{
+  const clang::FunctionDecl *op_del = resolve_deallocation_function(
+    de.getOperatorDelete(), de.isArrayFormAsWritten());
+  if (!op_del)
+    return false;
+
+  exprt dealloc_function;
+  if (get_decl_ref(*op_del, dealloc_function))
+    return true;
+  new_expr.add("dealloc_function") = dealloc_function;
+
+  if (is_aligned_deallocation(*op_del))
+  {
+    exprt align;
+    if (
+      get_align_val(
+        ASTContext->getBaseElementType(de.getDestroyedType()),
+        *op_del->getParamDecl(op_del->getNumParams() - 1),
+        align))
+      return true;
+    new_expr.add("dealloc_alignment") = align;
+  }
+  return false;
+}
+
+// The std::align_val_t argument clang's codegen passes for a type
+// ([expr.new]/16, [expr.delete]/10).
+bool clang_cpp_convertert::get_align_val(
+  const clang::QualType &type,
+  const clang::ParmVarDecl &param,
+  exprt &align)
+{
+  typet t;
+  if (get_type(param.getType(), t))
+    return true;
+  align = typecast_exprt(
+    from_integer(
+      ASTContext->getTypeAlignInChars(type).getQuantity(), size_type()),
+    t);
   return false;
 }
 
