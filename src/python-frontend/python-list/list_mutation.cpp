@@ -633,7 +633,7 @@ std::optional<exprt> python_list::build_element_replacement(
       int_type())};
   set_at.type() = bool_type();
   set_at.location() = info.location;
-  return std::move(set_at);
+  return set_at;
 }
 
 void python_list::emit_list_copy(
