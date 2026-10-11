@@ -860,6 +860,21 @@ private:
 
   /// Indirect call through a function pointer held in an instance field.
   std::optional<exprt> try_indirect_member_call();
+  /// The functions field @p attr of @p class_name holds, when it is untyped
+  /// and no class in its MRO binds @p attr too.
+  const python_converter::attribute_functions *held_functions(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// The one signature of the functions @p held, which this call must match.
+  code_typet
+  held_signature(const python_converter::attribute_functions &held) const;
+  /// A call through field @p member of @p recv, which holds @p held when not
+  /// typed as a function pointer.
+  exprt call_field(
+    const python_converter::attribute_functions *held,
+    const exprt &recv,
+    const exprt &member) const;
 
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass
