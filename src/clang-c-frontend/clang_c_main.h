@@ -19,6 +19,9 @@ public:
   virtual void static_lifetime_destroy(codet &dest);
 
 protected:
+  bool atexit_may_register() const;
+  void add_exit_code(codet &dest, const locationt &location);
+
   contextt &context;
 };
 

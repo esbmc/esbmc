@@ -243,17 +243,32 @@ static bool mpor_set_conflicts(const std::set<expr2tc> &s, const expr2tc &key)
   return false;
 }
 
+/// Whether __ESBMC_main has exit-time code (atexit handlers, static
+/// destructors) to run between main's return at \p call and the end hook.
+static bool exit_code_follows(goto_programt::const_targett call)
+{
+  const goto_programt::instructiont &next = *std::next(call);
+  if (next.function != "__ESBMC_main" || !next.is_function_call())
+    return false;
+  const expr2tc &function = to_code_function_call2t(next.code).function;
+  return !is_symbol2t(function) ||
+         to_symbol2t(function).thename != "c:@F@__ESBMC_pthread_end_main_hook";
+}
+
 void execution_statet::symex_end_function(
   reachability_treet &art,
   const goto_programt::instructiont &instruction)
 {
+  const bool main_ends = (instruction.function == "c:@F@main" ||
+                          instruction.function == "c:@F@main#") &&
+                         !options.get_bool_option("memory-leak-check") &&
+                         !options.get_bool_option("termination");
+
   if (instruction.function == "__ESBMC_main")
     end_thread();
   else if (
-    (instruction.function == "c:@F@main" ||
-     instruction.function == "c:@F@main#") &&
-    !options.get_bool_option("memory-leak-check") &&
-    !options.get_bool_option("termination"))
+    main_ends &&
+    exit_code_follows(get_active_state().top().calling_location.pc))
   {
     // Returning from main is a call to exit() (C11 5.1.2.2.3), which runs
     // the atexit functions and, in C++, destroys objects with static
@@ -265,8 +280,8 @@ void execution_statet::symex_end_function(
     goto_symext::symex_step(art);
   }
   else if (
-    main_returned &&
-    instruction.function == "c:@F@__ESBMC_pthread_end_main_hook")
+    main_ends || (main_returned &&
+                  instruction.function == "c:@F@__ESBMC_pthread_end_main_hook"))
   {
     // End the main thread to avoid exploring further interleavings.
     // TODO: we should support verifying memory leaks in multi-threaded C
