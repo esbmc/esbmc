@@ -13,4 +13,4 @@ a = np.array([1, 2, 3, 4])
 n = 3
 v = a[0:n]
 x = outer(v)
-assert x == 3
+assert x == 4

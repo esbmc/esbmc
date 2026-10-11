@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view whose layout is read at run time to a function is supported only where the call is what its statement evaluates first and its arguments are names of views and contain no calls$
