@@ -118,6 +118,7 @@ public:
 
     bool char_is_unsigned;
     bool use_fixed_for_float;
+    bool reserve_first_page = false;
 
     enum cheri_flavor
     {

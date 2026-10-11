@@ -883,6 +883,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
+    {"reserve-first-page",
+     NULL,
+     "Place no object below address 4096, as CBMC does, so a pointer made "
+     "from a small integer never aliases one"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "

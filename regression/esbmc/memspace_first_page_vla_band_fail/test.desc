@@ -1,5 +1,5 @@
 CORE
 main.c
---no-vla-size-check --no-bounds-check
+--no-vla-size-check --no-bounds-check --reserve-first-page
 ^VERIFICATION FAILED$
 ^  assertion \(unsigned long( int)?\)a == 0$

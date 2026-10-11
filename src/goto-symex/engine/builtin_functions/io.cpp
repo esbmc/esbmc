@@ -209,10 +209,11 @@ static bool is_literal_string_start(const expr2tc &e)
          to_constant_int2t(to_index2t(obj).index).value.is_zero();
 }
 
-bool goto_symext::exact_printf_output(
+bool goto_symext::format_printf_output(
   const code_printf2t &call,
   size_t fmt_idx,
-  std::string &out)
+  printf_formattert &formatter,
+  bool &constant_args)
 {
   expr2tc fmt = call.operands[fmt_idx];
   cur_state->rename(fmt);
@@ -220,22 +221,19 @@ bool goto_symext::exact_printf_output(
   if (!is_constant_string2t(fmt_str))
     return false;
 
+  constant_args = true;
   std::list<expr2tc> args;
   for (size_t i = fmt_idx + 1; i < call.operands.size(); i++)
   {
     expr2tc arg = call.operands[i];
     cur_state->rename(arg);
     do_simplify(arg);
-    if (!is_constant_int2t(arg) && !is_literal_string_start(arg))
-      return false;
+    constant_args &= is_constant_int2t(arg) || is_literal_string_start(arg);
     args.push_back(arg);
   }
 
-  printf_formattert formatter;
   formatter(to_constant_string2t(fmt_str).value.as_string(), args);
-  out = formatter.as_string();
-  return formatter.exact && formatter.bounded &&
-         formatter.min_outlen == formatter.max_outlen;
+  return true;
 }
 
 // The characters a %d, %i or %u conversion prints for `v`: C11 7.21.6.1p8
@@ -323,8 +321,13 @@ expr2tc goto_symext::sprintf_output(
   const type2tc &char_type,
   std::vector<expr2tc> &chars)
 {
-  std::string out;
-  if (exact_printf_output(call, fmt_idx, out))
+  printf_formattert formatter;
+  bool constant_args = false;
+  if (!format_printf_output(call, fmt_idx, formatter, constant_args))
+    return expr2tc();
+  const std::string out = formatter.as_string();
+  const bool sound = formatter.exact && formatter.bounded;
+  if (constant_args && sound && formatter.min_outlen == formatter.max_outlen)
   {
     for (const char c : out)
       chars.push_back(constant_int2tc(
@@ -337,16 +340,37 @@ expr2tc goto_symext::sprintf_output(
   // Text and integer conversions print no NUL, so each character is only
   // known to be nonzero.
   size_t max_len;
-  const expr2tc len = printf_output_length(call, fmt_idx, max_len);
-  if (is_nil_expr(len))
+  expr2tc len = printf_output_length(call, fmt_idx, max_len);
+  if (!is_nil_expr(len))
+  {
+    for (size_t i = 0; i < max_len; i++)
+    {
+      expr2tc c = gen_nondet(char_type);
+      replace_nondet(c);
+      assume(notequal2tc(c, gen_zero(char_type)));
+      chars.push_back(c);
+    }
     return len;
-  for (size_t i = 0; i < max_len; i++)
+  }
+
+  // Any other output the formatter bounds, up to max_stored: its length is
+  // within those bounds and its characters may include a NUL (%c of 0).
+  const size_t max_stored = 1024;
+  if (!sound || formatter.max_outlen > max_stored)
+    return expr2tc();
+  for (size_t i = 0; i < formatter.max_outlen; i++)
   {
     expr2tc c = gen_nondet(char_type);
     replace_nondet(c);
-    assume(notequal2tc(c, gen_zero(char_type)));
     chars.push_back(c);
   }
+  len = gen_nondet(int_type2());
+  replace_nondet(len);
+  assume(and2tc(
+    greaterthanequal2tc(
+      len, gen_long(int_type2(), BigInt(formatter.min_outlen))),
+    lessthanequal2tc(
+      len, gen_long(int_type2(), BigInt(formatter.max_outlen)))));
   return len;
 }
 
@@ -360,8 +384,8 @@ expr2tc goto_symext::symex_sprintf_store(const code_printf2t &call)
   if (!is_pointer_type(dst) || !is_bv_type(to_pointer_type(dst->type).subtype))
     return expr2tc();
   const type2tc char_type = to_pointer_type(dst->type).subtype;
-  // Only an output known byte for byte, or one of text and integer
-  // conversions, is stored; any other leaves the destination unchanged.
+  // An output whose length is not soundly bounded leaves the destination
+  // unchanged.
   std::vector<expr2tc> chars;
   const expr2tc len =
     sprintf_output(call, bounded_size ? 2 : 1, char_type, chars);
