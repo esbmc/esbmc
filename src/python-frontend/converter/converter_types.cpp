@@ -416,6 +416,9 @@ typet python_converter::get_optional_type(const nlohmann::json &slice)
     // struct `T | None` does, not a T* holding the value (#8016).
     if (type_utils::is_optional_scalar(base_type))
       return type_handler_.build_optional_type(base_type);
+    // A list is already a reference, NULL for None, as in Optional[List[T]].
+    if (base_type == type_handler_.get_list_type())
+      return base_type;
     return gen_pointer_type(base_type);
   }
 
