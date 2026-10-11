@@ -1050,13 +1050,36 @@ void goto_convertt::discard_comma_operands(
   {
     exprt::operandst &operands = initializer.operands();
     for (auto it = operands.begin(); std::next(it) != operands.end(); ++it)
-    {
-      code_expressiont discarded(*it);
-      discarded.location() = it->location();
-      convert(discarded, dest);
-    }
+      remove_comma_operand(*it, dest);
     exprt result = operands.back();
     initializer.swap(result);
+  }
+}
+
+/// A comma's operand is a discarded-value expression ([expr.comma]/1), but a
+/// temporary object it creates lives until the end of the enclosing
+/// full-expression ([class.temporary]/4). Lowering it as a used value leaves
+/// its scope-exit entries for the full-expression to emit.
+void goto_convertt::remove_comma_operand(exprt &operand, goto_programt &dest)
+{
+  const exprt *value = &operand;
+  while (value->id() == "typecast")
+    value = &value->op0();
+  const bool is_temporary =
+    value->id() == "sideeffect" && value->statement() == "temporary_object";
+  const auto &stack = targets.destructor_stack;
+  const std::size_t stack_size = stack.size();
+  remove_sideeffects(operand, dest, is_temporary);
+  for (auto it = stack.begin() + stack_size; it != stack.end(); ++it)
+    if (const irep_idt id = destructor_entry_symbol(*it); !id.empty())
+      comma_operand_temporaries.insert(id);
+
+  // remember as expression statement for later checks
+  if (operand.is_not_nil())
+  {
+    code_expressiont discarded(operand);
+    discarded.location() = operand.location();
+    convert(discarded, dest);
   }
 }
 
@@ -1104,6 +1127,24 @@ void goto_convertt::convert_decl_initializer(
       keep_reference_member_temporaries(initializer, stack_size),
       new_code.location(),
       dest);
+  else
+    destroy_comma_operand_temporaries(stack_size, new_code.location(), dest);
+}
+
+/// A reference declaration keeps its initializer's temporaries to the end of
+/// the scope, but those of a discarded comma operand still die with it.
+void goto_convertt::destroy_comma_operand_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  auto &stack = targets.destructor_stack;
+  const auto kept = std::stable_partition(
+    stack.begin() + stack_size, stack.end(), [&](const codet &entry) {
+      return comma_operand_temporaries.count(destructor_entry_symbol(entry)) ==
+             0;
+    });
+  destroy_full_expression_temporaries(kept - stack.begin(), location, dest);
 }
 
 /// The temporaries a braced aggregate initialiser binds to reference members,
@@ -1628,11 +1669,15 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     call.arguments().back().make_typecast(params[0].type());
 
     // The C++14 sized form takes the object's byte count as its second
-    // argument ([basic.stc.dynamic.deallocation]).
-    if (params.size() == 2)
+    // argument ([basic.stc.dynamic.deallocation]), before any alignment.
+    const exprt &alignment =
+      static_cast<const exprt &>(code.find("dealloc_alignment"));
+    if (params.size() == (alignment.is_nil() ? 2 : 3))
       call.arguments().push_back(from_integer(
         type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
         params[1].type()));
+    if (alignment.is_not_nil())
+      call.arguments().push_back(alignment);
 
     call.location() = code.location();
 
@@ -2431,6 +2476,13 @@ void goto_convertt::generate_ifthenelse(
   dest.destructive_append(tmp_z);
 }
 
+bool goto_convertt::splits_and_condition(const exprt &cond)
+{
+  return cond.is_and() && cond.operands().size() == 2 &&
+         (has_sideeffect(cond.op0()) || has_sideeffect(cond.op1())) &&
+         !has_destructible_sideeffect(cond);
+}
+
 void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 {
   const code_ifthenelset &code = to_code_ifthenelse(c);
@@ -2447,10 +2499,7 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 
   // We do a bit of special treatment for && in the condition
   // in case cleaning would be needed otherwise.
-  if (
-    code.cond().is_and() && code.cond().operands().size() == 2 &&
-    (has_sideeffect(code.cond().op0()) || has_sideeffect(code.cond().op1())) &&
-    !has_else)
+  if (!has_else && splits_and_condition(code.cond()))
   {
     // if(a && b) XX --> if(a) if(b) XX
     code_ifthenelset new_if0, new_if1;
@@ -2573,7 +2622,11 @@ void goto_convertt::generate_conditional_branch(
     return;
   }
 
-  if (guard.is_and())
+  // Splitting would leave the temporaries of a short-circuit operand alive
+  // past the condition, which is one full-expression ([class.temporary]/4).
+  const bool split = !has_destructible_sideeffect(guard);
+
+  if (split && guard.is_and())
   {
     // turn
     //   if(a && b) goto target_true; else goto target_false;
@@ -2598,7 +2651,7 @@ void goto_convertt::generate_conditional_branch(
 
     return;
   }
-  if (guard.id() == "or")
+  if (split && guard.id() == "or")
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;

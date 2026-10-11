@@ -1015,7 +1015,7 @@ void python_converter::handle_assignment_type_adjustments(
   if (assignment_target_is_subscript(ast_node))
     return;
 
-  rhs = wrap_literal_if_optional(rhs, lhs.type());
+  rhs = wrap_stored_if_optional(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -1217,7 +1217,8 @@ void python_converter::handle_assignment_type_adjustments(
       // store a typed NULL, so a later `x = Class(...)` construction allocates
       // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
       // would shrink the pointee and corrupt the allocation.
-      if (is_user_class_pointer(lhs.type()))
+      // An Optional[dict] keeps its dict pointer type the same way.
+      if (keeps_pointer_type_on_none(lhs.type()))
         rhs = typecast_exprt(rhs, lhs.type());
       else
       {
@@ -7489,9 +7490,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   const bool old_in_lazy_operand = in_lazy_operand_;
   in_lazy_operand_ |= type == "While";
-  if (
-    test_type == "BoolOp" && current_block && type != "While" &&
-    !coverage_mode && !pytest_generation_mode && !model_mode)
+  const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
+                                    !coverage_mode && !pytest_generation_mode &&
+                                    !model_mode;
+  if (short_circuit_boolop)
   {
     const auto &test_node = ast_node["test"];
     const auto &operands = test_node["values"];
@@ -7625,8 +7627,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   }
   in_lazy_operand_ = old_in_lazy_operand;
 
-  if (!(test_type == "BoolOp" && current_block && type != "While" &&
-        !coverage_mode && !pytest_generation_mode && !model_mode))
+  if (!short_circuit_boolop)
   {
     cond.location() = get_location_from_decl(ast_node["test"]);
 
@@ -8476,7 +8477,9 @@ exprt python_converter::get_block(
       }
 
       current_element_type = bool_type();
+      asserted_test_ = &element["test"];
       exprt test = get_expr(element["test"]);
+      asserted_test_ = nullptr;
       // An object asserted directly is truth-tested like any condition, so a
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.

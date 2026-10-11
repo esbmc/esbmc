@@ -183,6 +183,7 @@ bool configt::set(const cmdlinet &cmdline)
   }
 
   ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
+  ansi_c.reserve_first_page = cmdline.isset("reserve-first-page");
 
   ansi_c.cheri = ansi_ct::CHERI_OFF;
   if (cmdline.isset("cheri"))

@@ -16,6 +16,7 @@
 #include <util/symtab/namespace.h>
 #include <util/irep/std_code.h>
 #include <util/symtab/symbol_generator.h>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -152,6 +153,10 @@ public:
     const nlohmann::json &function_node);
   /// `get()()`: a call through the function pointer that `get()` returns.
   std::optional<exprt> call_returned_function(const nlohmann::json &element);
+  std::optional<exprt> call_property_value(const nlohmann::json &element);
+  /// Unknown, function or class-instance types: a call on such a value may
+  /// succeed.
+  bool may_be_callable(const typet &type);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -353,6 +358,11 @@ public:
     const std::string &message,
     const locationt &location);
 
+  // Raises OverflowError (infinity) or ValueError (NaN) before a float
+  // @p operand is converted to int; returns the operand to convert.
+  exprt
+  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
@@ -522,6 +532,16 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  exprt build_division_guarded_binop(
+    const std::string &op,
+    const exprt &lhs,
+    exprt rhs,
+    const nlohmann::json &element);
+  exprt build_arithmetic_binop(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
   /// The static types of the arguments a `str %` right operand supplies.
   std::vector<typet>
   percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
@@ -670,6 +690,14 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  void raise_on_optional_none(
+    const std::string &op,
+    const exprt &lhs_none,
+    const exprt &rhs_none,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   /// Rewrites `sl.start/stop/step is/is not None` to a check of the
   /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
   /// Returns `nil_exprt()` when the operands are not a slice-member access
@@ -696,6 +724,16 @@ private:
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
+
+  exprt get_boolop_operand(
+    const nlohmann::json &operand,
+    std::vector<code_blockt> &effects);
+
+  exprt lower_short_circuit_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
@@ -1215,6 +1253,12 @@ private:
     std::list<std::string> &file_list,
     const std::string &dir_path);
 
+  typet nullable_dict_pointee(const typet &t) const;
+  bool keeps_pointer_type_on_none(const typet &t);
+  void guard_none_container(
+    exprt &rhs,
+    typet &rhs_type,
+    const nlohmann::json &element);
   exprt handle_membership_operator(
     exprt &lhs,
     exprt &rhs,
@@ -2321,8 +2365,9 @@ private:
     return type_utils::is_optional_struct(type) ? wrap_in_optional(value, type)
                                                 : value;
   }
-  /// A (non-None) literal stored into an Optional<T> variable, wrapped (#8016).
-  exprt wrap_literal_if_optional(const exprt &value, const typet &type);
+  /// None, a literal or a scalar stored into an Optional<T> variable, wrapped
+  /// (#8016, #8248).
+  exprt wrap_stored_if_optional(const exprt &value, const typet &type);
   typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
   exprt get_return_value(const nlohmann::json &value);
   typet subscript_annotation_type(
@@ -2479,6 +2524,9 @@ private:
   // clause either.
   bool in_contract_clause_ = false;
   bool in_lazy_operand_ = false;
+  // The test of the assert statement being converted; see
+  // lower_short_circuit_boolop.
+  const nlohmann::json *asserted_test_ = nullptr;
 
   bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
