@@ -1015,7 +1015,7 @@ void python_converter::handle_assignment_type_adjustments(
   if (assignment_target_is_subscript(ast_node))
     return;
 
-  rhs = wrap_literal_if_optional(rhs, lhs.type());
+  rhs = wrap_stored_if_optional(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
