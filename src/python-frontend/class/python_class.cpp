@@ -1,31 +1,6 @@
 #include <python-frontend/class/python_class.h>
+#include <python-frontend/json_utils.h>
 #include <cassert>
-
-namespace
-{
-// Recursively extracts base class name (handles Name and dotted Attribute)
-std::string base_name_from_ast(const json &node)
-{
-  if (!node.is_object())
-    return {};
-
-  const std::string type = node.value("_type", "");
-  if (type == "Name")
-    return node.value("id", "");
-
-  if (type == "Attribute")
-  {
-    std::string left = base_name_from_ast(node.value("value", json::object()));
-    std::string right = node.value("attr", "");
-    if (!left.empty() && !right.empty())
-      return left + "." + right;
-    return right.empty() ? left : right;
-  }
-
-  return {};
-}
-
-} // namespace
 
 void python_class::parse(const json &class_def)
 {
@@ -74,7 +49,7 @@ void python_class::parse(const json &class_def)
   {
     for (const auto &b : class_def["bases"])
     {
-      std::string base_name = base_name_from_ast(b);
+      std::string base_name = json_utils::dotted_name(b);
       if (!base_name.empty())
         bases_.insert(base_name);
     }
