@@ -11736,18 +11736,20 @@ The Solidity operational models call `strnlen` in `solidity_bytes.c` and
 `github_2564`, `struct_5`, `type_name_1`) now give their expected verdict and
 are CORE.
 
-Open: `esbmc-solidity/struct_5_fail` and `struct_7_fail` (THOROUGH,
-`--k-induction`) now report a false SUCCESSFUL from the inductive step at
-k = 4, before the base case reaches the assertion behind the `strnlen` loop.
-The bug is in k-induction and reproduces on master without `strnlen`: a loop
-in a function called from a nondet loop, followed by a `memset` through a
-pointer, lets the inductive step prove `1 + 2 >= 3 + 4`. Dropping the
-`memset` restores FAILED. Open PR #8221 targets loops that write through a
-pointer.
+Open: with the `strnlen` loop in place, `esbmc-solidity/struct_5_fail` and
+`struct_7_fail` (THOROUGH, `--k-induction`) reported a false SUCCESSFUL from
+the inductive step at k = 4, before the base case reached the assertion. The
+bug is in k-induction and reproduces on master without `strnlen`: a loop in a
+function called from a nondet loop, followed by a `memset` through a pointer,
+lets the inductive step prove `1 + 2 >= 3 + 4`. Open PR #8221 targets loops
+that write through a pointer. `bytes_static_from_string` no longer has that
+shape: its `memset` cleared bytes the `{0}` initialiser had already cleared,
+so it is removed and both tests are FAILED again. The k-induction bug itself
+is not fixed.
 
 Not fixed: the same probe found `tgamma`, `lgamma`, `erf`, `erfc`,
-`nexttoward` and the `long double` forms `powl`, `expl`, `logl`, `sinl`,
-`cosl` and `cbrtl` returning nondet values.
+`nexttoward` and the `long double` forms `powl`, `expl`, `logl`, `sinl` and
+`cosl` returning nondet values.
 ### M9 (R129) — 2026-10-10, the integer `sprintf` never wrote
 
 R121's entry left open that an output that is not fully constant leaves the
