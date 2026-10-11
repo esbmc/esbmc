@@ -1,5 +1,6 @@
 #include <functional>
 #include <clang-cpp-frontend/clang_cpp_main.h>
+#include <goto-programs/destructor.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -146,4 +147,47 @@ void clang_cpp_maint::convert_expression_to_code(exprt &expr)
   code.move_to_operands(expr);
 
   expr.swap(code);
+}
+
+// [basic.start.term]/1: objects with static storage duration are destroyed
+// after main returns, in reverse order of the completion of their
+// constructors. A function-local static with a dynamic initializer is
+// constructed after every global, so it is destroyed first, and only if its
+// declaration was reached. The standard library's own objects are left
+// alone: [iostream.objects] never destroys the standard streams, and a
+// program may not add to namespace std.
+void clang_cpp_maint::static_lifetime_destroy(codet &dest)
+{
+  namespacet ns(context);
+  std::vector<codet> local_statics, globals;
+
+  context.foreach_operand_in_order([&](const symbolt &s) {
+    code_function_callt destructor;
+    if (
+      !s.static_lifetime || s.is_extern || s.is_type ||
+      s.get_type().is_code() || has_prefix(s.id, "c:@N@std@") ||
+      !get_destructor(ns, s.get_type(), destructor))
+      return;
+
+    destructor.arguments().push_back(address_of_exprt(symbol_expr(s)));
+    destructor.location() = s.location;
+
+    const symbolt *guard =
+      context.find_symbol(s.id.as_string() + "$init_guard");
+    if (guard == nullptr)
+    {
+      globals.push_back(destructor);
+      return;
+    }
+
+    code_ifthenelset if_constructed;
+    if_constructed.cond() = symbol_expr(*guard);
+    if_constructed.then_case() = destructor;
+    local_statics.push_back(if_constructed);
+  });
+
+  for (auto it = local_statics.rbegin(); it != local_statics.rend(); ++it)
+    dest.copy_to_operands(*it);
+  for (auto it = globals.rbegin(); it != globals.rend(); ++it)
+    dest.copy_to_operands(*it);
 }

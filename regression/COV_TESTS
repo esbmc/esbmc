@@ -2422,6 +2422,10 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc/atexit_after_main_return
+regression/esbmc/atexit_after_main_return_fail
+regression/esbmc-cpp/cpp/static_storage_exit_destructors
+regression/esbmc-cpp/cpp/static_storage_exit_destructors_fail
 regression/esbmc/longjmp_frames
 regression/esbmc/longjmp_frames_fail
 regression/cstd/jump_bug

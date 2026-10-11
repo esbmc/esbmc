@@ -902,6 +902,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R142** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R55's and R107's open note on exit-time destructors, §15 M9 (R142); **FIXED**, same entry | **Nothing ran after `main` returned.** `execution_statet::symex_step` ended the path at `main`'s `END_FUNCTION` unless `--memory-leak-check` or `--termination` was set, so the `atexit` handlers that `__ESBMC_main` calls next were never checked: `void h(void) { assert(0); }` registered with `atexit` was SUCCESSFUL in C and C++. The C++ frontend also never destroyed objects with static storage duration, so a failing assertion in a global's destructor was SUCCESSFUL, and a global that frees its memory in its destructor was a `forgotten memory` FAILED under `--memory-leak-check`. | `execution_statet::symex_step`, `src/goto-symex/scheduler/execution_state.cpp`; `clang_cpp_maint::static_lifetime_destroy`, `src/clang-cpp-frontend/clang_cpp_main.cpp`; `rw_sett`, `src/goto-programs/rw_set.cpp`; `regression/esbmc/atexit_after_main_return{,_fail}`, `regression/esbmc-cpp/cpp/static_storage_exit_destructors{,_fail}` | — | **Fixed**: when there is exit-time code, `main`'s return runs the atexit handlers (called only if the program mentions `atexit`) and the static destructors atomically and ends the path when `__ESBMC_pthread_end_main_hook` returns. Destructors run in reverse definition order, function-local statics first and only if constructed. Arrays of class type and `exit()` still skip them. |
 | **R130** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R113's list of assertions violated after `longjmp`, §15 M9 (R130); **FIXED**, same entry | **`longjmp` did not transfer control.** The `longjmp` model was an empty body, so execution continued after the call, and `setjmp` returned a nondet value with the state it had when it was first called. With `if (setjmp(b) == 0) f(); else assert(g == 0);` and `f` setting `g = 1` before `longjmp(b, 2)`, the assertion fails natively and was SUCCESSFUL; code after a `longjmp`, which never runs, was checked as reachable. | `src/c2goto/library/setjmp.c`; `lower_longjmp`, `src/goto-programs/lower_longjmp.cpp`; `regression/esbmc/longjmp_frames{,_fail}`, `regression/cstd/jump_bug` | — | **Fixed**: `setjmp` stores a token in the `jmp_buf` and returns 0, and a GOTO pass resumes after the `setjmp` call whose frame recorded that token, returning through the frames in between. Off under `--enable-unreachability-intrinsic`. Non-volatile locals keep their values rather than becoming indeterminate (C11 7.13.2.1p3). |
 | **R139** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R139); **renumbered from R125** on merging master, which uses that number for the aligned allocation functions; **FIXED**, same entry | **`strnlen` had no model.** It reached symex as a bodyless call, so each call returned a nondet value and read nothing: `assert(strnlen("hello", 3) == 3)` was FAILED, and `char b[4] = {'a','b','c','d'}; strnlen(b, 5);`, which reads past `b` (ASan reports a stack-buffer-overflow), was SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strnlen_model{,_fail}` | — | **Fixed**: `strnlen` reads at most `maxlen` bytes and stops at the first null, as POSIX.1-2008 specifies. |
 | **R140** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R89's open note, §15 M9 (R140); **FIXED**, same entry | **A temporary in an operand of `&&`, `||` or `?:` in a condition outlived the condition.** `if`, `while`, `for` and `do`/`while` conditions with a side-effecting `&&` or `||` were split into one branch per operand, and each operand kept its temporaries to the end of the enclosing block. `while (n < 3 && C().ok()) ++n;` built three objects and destroyed none before the loop ended, so `assert(dtors == 0)` after it was SUCCESSFUL and aborts natively. A `?:` condition and an `if` with an `else` were not split but kept block scope too. | `generate_conditional_branch` and `convert_ifthenelse`, `src/goto-programs/goto_convert.cpp`; `remove_condition_sideeffects`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/condition_short_circuit_temporary{,_fail}` | — | **Fixed**: a condition whose side effects create a temporary with a destructor is not split; it is lowered whole, and R86's guarded destructors run before the branch. |
@@ -12219,6 +12220,80 @@ keep their master verdicts.
 
 Not fixed: the source string is still not read, so even a constant one
 gives nondet items and a nondet `%n` count.
+
+### M9 (R142) — 2026-10-11, the code that runs after `main` returns
+
+R55's and R107's entries left exit-time destructors of statics unmodelled.
+Probing them found that nothing after `main` was checked at all.
+`execution_statet::symex_step` ended the path at `main`'s `END_FUNCTION`
+unless `--memory-leak-check` or `--termination` was set, so the
+`__ESBMC_atexit_handler` call that `__ESBMC_main` makes next never ran:
+
+```c
+int order;
+void first(void) { order = order * 10 + 1; assert(order == 12); }
+void second(void) { order = order * 10 + 2; }
+int main(void) { atexit(first); atexit(second); return 0; }
+```
+
+aborts natively (C11 7.22.4.4p4 runs the handlers in reverse order, so
+`order == 21`) and was SUCCESSFUL. Separately, the C++ frontend never called
+the destructor of an object with static storage duration, so with
+`G a(1); G b(2);` and `~G` asserting `order != 21`, the program aborts natively
+and was SUCCESSFUL, and a global whose destructor frees what its constructor
+allocated was a `forgotten memory` FAILED under `--memory-leak-check`.
+
+**Fixed** in two parts. When `__ESBMC_main` has exit-time code after the call
+to `main`, `main`'s return now marks the state, enters an atomic section and
+returns normally; the path ends when `__ESBMC_pthread_end_main_hook` returns,
+after the handlers and destructors. Otherwise the path ends at `main`'s
+return as before, so programs with nothing to run keep master's exploration
+and schedule counters. The atomic section keeps the interleavings explored
+after `main` as they were. The case moved to `symex_end_function` to keep
+`symex_step` under the complexity threshold. `__ESBMC_main` calls the atexit
+handler only when some symbol's value mentions `atexit`, or under
+`--memory-leak-check` or `--termination`, where symex already ran past `main`
+and the 242 tests that use them or pin schedule counts keep their results:
+the handler's `while (__ESBMC_atexit_count > 0)` loop does not fold under
+`--no-propagation`, and `github_6464_merged_pointer_bounds` unwound it
+without bound. `clang_cpp_maint::static_lifetime_destroy` appends the
+destructor calls to `__ESBMC_main` after the atexit handler
+([basic.start.term]/1, /3): function-local statics with a dynamic initializer
+first, each guarded by its `$init_guard`, then the others, each group in
+reverse definition order. Objects in namespace `std` are skipped, since
+[iostream.objects] never destroys the standard streams.
+
+Under `--data-races-check` the handler's read of `__ESBMC_atexit_count` got a
+race claim in every interleaving, which made `race_unlock_then_join` four
+times slower before the handler call was made conditional. `rw_set` already meant to skip the atexit bookkeeping, but
+under a name, `__ESBMC_atexits`, that the model no longer uses; it now names
+`__ESBMC_atexit_count`, `__ESBMC_atexit_registered` and
+`__ESBMC_stdlib_atexit_key`.
+
+`regression/esbmc/atexit_after_main_return_fail` is the program above,
+SUCCESSFUL on master. `atexit_after_main_return` asserts `order == 21` and
+pins its `PASSED` line, which master never reaches.
+`regression/esbmc-cpp/cpp/static_storage_exit_destructors_fail` is the `G`
+program. `static_storage_exit_destructors` runs under `--memory-leak-check`,
+checks the order across two globals and a function-local static, that a
+static whose function never ran is not destroyed, and that the owning
+global frees its memory; master reports the leak. Reverting the symex change
+flips all but the leak test, and reverting the frontend change flips both C++
+tests, under the default solver and `--z3` (Z3; Bitwuzla was not built).
+The 683 regression tests whose sources call `atexit` or create a thread, and
+the 97 C++ tests whose `__ESBMC_main` gains a destructor call, keep master's
+verdicts under a 60 s cap, apart from the new tests and three that time out
+on master and now finish with their expected verdict (`github_4634` in 38 s,
+against more than 150 s on master). So do 400 other C and C++ tests sampled at
+random under a 30 s cap, two of which time out on master and finish here.
+`map_operator_assign_bug` (THOROUGH) stays FAILED but takes 25 s rather than
+10 s in Z3, on an SMT formula that differs from master's only in the order of
+its declarations. `schedule_prune_counters` keeps master's counters.
+
+Not fixed: `exit()` runs the atexit handlers but not the destructors, an array
+of class type with static storage duration is not destroyed, and local
+statics are destroyed in reverse definition order, not in reverse order of
+construction.
 
 ### M9 (R138) — 2026-10-11, the `sprintf` output that was not a decimal
 
