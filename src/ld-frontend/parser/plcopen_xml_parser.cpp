@@ -1,4 +1,5 @@
 #include <ld-frontend/parser/plcopen_xml_parser.h>
+#include <ld-frontend/ld_cycle_time.h>
 #include <pugixml.hpp>
 #include <algorithm>
 #include <cassert>
@@ -525,6 +526,13 @@ static long long task_interval_ms(const std::string &text)
   if (ms < 0)
     throw UnsupportedConstructError("task interval '" + text + "'", 2);
   return ms;
+}
+
+// The unit a timer preset is counted in. Timing mode counts milliseconds, so a
+// preset is not divided by the task period.
+static unsigned preset_unit_ms(unsigned task_interval_ms)
+{
+  return ld_cycle_time() ? 1 : task_interval_ms;
 }
 
 // Resolve an <inVariable> literal to the value the fixed-tick model expects.
@@ -1605,6 +1613,8 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       break;
     }
   }
+
+  scan_interval_ms_ = preset_unit_ms(scan_interval_ms_);
 
   // Program variables. A function block's interface is its own: each
   // instance gets it from the definition, under the instance's prefix (#7581).

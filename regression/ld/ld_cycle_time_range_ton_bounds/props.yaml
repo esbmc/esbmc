@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "(!Q1 || (H1 && H2)) && (!(H1 && H2 && H3) || Q1)"
+    description: "With scans of 10 to 30 ms and PT 20 ms, Q needs two held scans and three held scans suffice"

@@ -110,6 +110,22 @@ esbmc loop.ld --ld-props props.yaml --ld-scan-watchdog --ld-scan-budget 8 \
   --k-induction --unlimited-k-steps --unwind 11
 ```
 
+## Timing mode
+
+By default a scan is one tick: a timer's `ET` grows by 1 per scan and a preset is a scan count. With
+`--ld-cycle-time=MIN:MAX` every scan lasts between `MIN` and `MAX` milliseconds (`1 <= MIN <= MAX`), chosen anew
+each scan and shared by all timers, and timer presets are milliseconds (`T#50ms`, or a plain integer). The
+elapsed time of a running timer is the sum of the scan lengths since the scan on which its input started the
+interval, which counts as no elapsed time, and it stops at the preset. Fold the clock resolution and any
+overrun allowance into `MAX`.
+
+```sh
+esbmc timer.ld --ld-props props.yaml --ld-cycle-time 10:30 --k-induction --unlimited-k-steps
+```
+
+With `MIN = MAX` equal to the task interval the verdicts match the default model. A wide range
+over-approximates the timing, so a property that holds only for one scan length can fail.
+
 ## Reading the result
 
 | ESBMC output | Strategy | Meaning |

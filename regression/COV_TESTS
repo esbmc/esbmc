@@ -2468,3 +2468,11 @@ regression/python/for_user_iterator_subclass
 regression/python/for_user_iterator_no_iter
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
+regression/ld/ld_cycle_time_fixed_tof_timing
+regression/ld/ld_cycle_time_fixed_ton_timing
+regression/ld/ld_cycle_time_min_above_max_fail
+regression/ld/ld_cycle_time_no_colon_fail
+regression/ld/ld_cycle_time_not_a_number_fail
+regression/ld/ld_cycle_time_range_ton_bounds
+regression/ld/ld_cycle_time_range_ton_early_fail
+regression/ld/ld_cycle_time_trailing_text_fail

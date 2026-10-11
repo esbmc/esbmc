@@ -1,4 +1,5 @@
 #include <ld-frontend/ld_language.h>
+#include <ld-frontend/ld_cycle_time.h>
 #include <ld-frontend/parser/plcopen_xml_parser.h>
 #include <ld-frontend/semantics/type_checker.h>
 #include <ld-frontend/ir/ld_ir_builder.h>
@@ -24,6 +25,16 @@ bool ld_languaget::parse(const std::string &path)
   // from the --ld-props option unless one was already set explicitly.
   if (props_path_.empty())
     props_path_ = config.options.get_option("ld-props");
+
+  try
+  {
+    ld_cycle_time();
+  }
+  catch (const std::invalid_argument &e)
+  {
+    log_error("{}", e.what());
+    return true;
+  }
 
   try
   {

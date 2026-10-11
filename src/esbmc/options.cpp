@@ -278,6 +278,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "scan-watchdog "
      "assertion that fails once a loop exceeds --ld-scan-budget iterations, "
      "modelling a PLC scan overrun (changes the verified model)"},
+    {"ld-cycle-time",
+     boost::program_options::value<std::string>()->value_name("MIN:MAX"),
+     "Timing mode: every scan lasts between MIN and MAX milliseconds "
+     "(1 <= MIN <= MAX), chosen anew each scan, and timer presets are "
+     "milliseconds. Default: one tick per scan"},
     {"ld-scan-budget",
      boost::program_options::value<int>()->value_name("N"),
      "Tolerated iterations before the --ld-scan-watchdog assertion fails "
