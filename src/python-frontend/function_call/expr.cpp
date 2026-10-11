@@ -413,8 +413,9 @@ void function_call_expr::get_function_type()
       func_node.contains("attr") && func_node["attr"].is_string()
         ? func_node["attr"].template get<std::string>()
         : std::string();
-    const nlohmann::json class_node =
-      find_class_node(type_handler_.get_var_type(caller));
+    // Ask the class the call resolved to, not the receiver's annotation,
+    // which `C()`, `self` and attribute chains lack (#8409).
+    const nlohmann::json class_node = find_class_node(function_id_.get_class());
     function_type_ = resolves_to_staticmethod(class_node, method)
                        ? FunctionType::ClassMethod
                        : FunctionType::InstanceMethod;
