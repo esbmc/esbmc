@@ -428,15 +428,20 @@ struct GNode
   int document_order = 0; // index among the body's children
 };
 
+static bool steps_every_scan(const std::string &type_name);
+
 // A wire into a sink from an element the resolver does not model (a
-// continuation, a Boolean inVariable, a vendor element) would otherwise be
-// dropped as carrying no power, leaving the sink driven by fewer paths than
-// the file wires.
+// continuation, a Boolean inVariable, a vendor element, a block whose output
+// is not a timer's or counter's Q) would otherwise be dropped as carrying no
+// power, leaving the sink driven by fewer paths than the file wires.
 static void require_modeled_source(const GNode &g)
 {
-  if (g.tag != "contact" && g.tag != "block" && g.tag != "Block")
+  const bool block = g.tag == "block" || g.tag == "Block";
+  if (block ? !steps_every_scan(g.type_name) : g.tag != "contact")
     throw UnsupportedConstructError(
-      g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
+      block ? g.type_name
+            : g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"),
+      2);
 }
 
 static std::vector<int>
