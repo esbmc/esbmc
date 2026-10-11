@@ -2173,7 +2173,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
 exprt python_converter::build_division_guarded_binop(
   const std::string &op,
-  const exprt &lhs,
+  exprt lhs,
   exprt rhs,
   const nlohmann::json &element)
 {
@@ -2193,7 +2193,10 @@ exprt python_converter::build_division_guarded_binop(
   // itself. If it carries a side effect (a call, or a nondet) it would be
   // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
   // a different value than the one divided by. Hoist a side-effecting divisor
-  // into a temporary so it is evaluated exactly once.
+  // into a temporary so it is evaluated exactly once. The dividend is hoisted
+  // first, as Python evaluates it first, and `//` and `%` read it again in
+  // their sign correction.
+  lhs = hoist_side_effecting_operand(lhs, element, "$div_lhs$");
   rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
   exprt is_zero("=", bool_type());

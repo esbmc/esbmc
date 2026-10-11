@@ -534,7 +534,7 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt build_division_guarded_binop(
     const std::string &op,
-    const exprt &lhs,
+    exprt lhs,
     exprt rhs,
     const nlohmann::json &element);
   exprt build_arithmetic_binop(
