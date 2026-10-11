@@ -306,18 +306,34 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+// The classes named by isinstance's or issubclass's second argument: a class,
+// a union `X | Y` or a tuple, each of which may nest the others.
+static void collect_classinfo(
+  const nlohmann::json &node,
+  std::vector<const nlohmann::json *> &classes)
+{
+  if (node["_type"] == "Tuple")
+    for (const auto &elt : node["elts"])
+      collect_classinfo(elt, classes);
+  else if (node["_type"] == "BinOp" && node["op"]["_type"] == "BitOr")
+  {
+    collect_classinfo(node["left"], classes);
+    collect_classinfo(node["right"], classes);
+  }
+  else
+    classes.push_back(&node);
+}
+
 // Whether a class object is an instance of isinstance's second argument: only
-// `type` and `object` admit one, alone or in a tuple.
+// `type` and `object` admit one.
 static bool admits_class_object(const nlohmann::json &type_arg)
 {
-  auto admits = [](const nlohmann::json &node) {
-    return node["_type"] == "Name" &&
-           (node["id"] == "type" || node["id"] == "object");
-  };
-  if (type_arg["_type"] != "Tuple")
-    return admits(type_arg);
-  const auto &elts = type_arg["elts"];
-  return std::any_of(elts.begin(), elts.end(), admits);
+  std::vector<const nlohmann::json *> classes;
+  collect_classinfo(type_arg, classes);
+  return std::any_of(classes.begin(), classes.end(), [](const auto *node) {
+    return (*node)["_type"] == "Name" &&
+           ((*node)["id"] == "type" || (*node)["id"] == "object");
+  });
 }
 
 exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
@@ -516,32 +532,24 @@ exprt function_call_expr::handle_isinstance() const
     return migrate_expr_back(isinstance2tc(obj2, t2));
   };
 
-  // Handle tuple of types: isinstance(v, (int, str, type(None)))
-  if (type_arg["_type"] == "Tuple")
+  // isinstance(v, int), isinstance(v, (int, type(None))), isinstance(v, A | B)
+  std::vector<const nlohmann::json *> classes;
+  collect_classinfo(type_arg, classes);
+  if (classes.empty())
+    throw std::runtime_error("isinstance() tuple cannot be empty");
+
+  exprt result = build_isinstance(extract_type_name(*classes[0]));
+  for (size_t i = 1; i < classes.size(); ++i)
   {
-    const auto &elts = type_arg["elts"];
-    if (elts.empty())
-      throw std::runtime_error("isinstance() tuple cannot be empty");
+    exprt next_check = build_isinstance(extract_type_name(*classes[i]));
 
-    // Build isinstance check for first element
-    exprt result = build_isinstance(extract_type_name(elts[0]));
-
-    // Chain OR expressions for remaining elements
-    for (size_t i = 1; i < elts.size(); ++i)
-    {
-      exprt next_check = build_isinstance(extract_type_name(elts[i]));
-
-      exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(result);
-      or_expr.move_to_operands(next_check);
-      result = or_expr;
-    }
-
-    return result;
+    exprt or_expr("or", typet("bool"));
+    or_expr.move_to_operands(result);
+    or_expr.move_to_operands(next_check);
+    result = or_expr;
   }
 
-  // Handle single type: isinstance(v, int) or isinstance(v, type(None))
-  return build_isinstance(extract_type_name(type_arg));
+  return result;
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -941,18 +949,12 @@ exprt function_call_expr::handle_issubclass() const
       "TypeError", "issubclass() arg 1 must be a class");
   const std::string cls = args[0]["id"].get<std::string>();
 
-  // arg 2 is a single class or a tuple of classes.
+  std::vector<const nlohmann::json *> classes;
+  collect_classinfo(args[1], classes);
   std::vector<std::string> targets;
-  const auto &info = args[1];
-  auto add_name = [&targets](const nlohmann::json &n) {
-    if (n["_type"] == "Name")
-      targets.push_back(n["id"].get<std::string>());
-  };
-  if (info["_type"] == "Tuple")
-    for (const auto &e : info["elts"])
-      add_name(e);
-  else
-    add_name(info);
+  for (const auto *n : classes)
+    if ((*n)["_type"] == "Name")
+      targets.push_back((*n)["id"].get<std::string>());
 
   if (targets.empty())
     return converter_.get_exception_handler().gen_exception_raise(

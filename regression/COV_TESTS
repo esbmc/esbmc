@@ -2459,3 +2459,7 @@ regression/python/github_8276_round_nan_fail
 regression/python/github_8276_floor_inf_fail
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
+regression/python/isinstance_union
+regression/python/isinstance_union_fail
+regression/python/issubclass_union
+regression/python/issubclass_union_fail
