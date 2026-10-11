@@ -2598,3 +2598,11 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8395_empty_classes
+regression/python/github_8395_empty_classes_fail
+regression/python/github_8395_empty_subclass
+regression/python/github_8395_empty_subclass_fail
+regression/python/github_8395_same_layout
+regression/python/github_8395_same_layout_fail
+regression/python/github_8395_subclass
+regression/python/github_8395_subclass_fail
