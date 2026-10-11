@@ -2420,6 +2420,12 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc/scanf_percent_n_reached
+regression/esbmc/scanf_percent_n_reached_fail
+regression/esbmc/log10_model
+regression/esbmc/log10_model_fail
+regression/esbmc-cpp/cpp/comma_operand_temporaries
+regression/esbmc-cpp/cpp/comma_operand_temporaries_fail
 regression/esbmc/strcasecmp_model
 regression/esbmc/strcasecmp_model_fail
 regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind
