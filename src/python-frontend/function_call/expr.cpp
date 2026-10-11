@@ -3943,6 +3943,10 @@ function_call_expr::get_dispatch_table()
      },
      "isinstance/hasattr"},
 
+    {[this]() { return is_getattr_call(); },
+     [this]() { return handle_getattr(); },
+     "getattr()"},
+
     // Input function
     {[this]() { return is_input_call(); },
      [this]() { return handle_input(); },
