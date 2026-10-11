@@ -18,6 +18,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -5626,10 +5627,65 @@ bool python_converter::module_scope_rhs_needs_type_probe(
          dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
 }
 
+bool python_converter::rewrite_divergent_conditional_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+
+  const nlohmann::json &value = ast_node["value"];
+  if (
+    value.value("_type", "") != "IfExp" || !value.contains("test") ||
+    !value.contains("body") || !value.contains("orelse"))
+    return false;
+
+  const std::string then_kind =
+    dynamic_type_detail::classify_literal_value_kind(value["body"]);
+  const std::string else_kind =
+    dynamic_type_detail::classify_literal_value_kind(value["orelse"]);
+  if (then_kind.empty() || else_kind.empty() || then_kind == else_kind)
+    return false;
+
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  if (target.value("_type", "") != "Name")
+    return false;
+
+  // Each arm keeps the assignment's own location, so a violation still points
+  // at the line the ternary is written on.
+  auto arm = [&](const nlohmann::json &branch) {
+    nlohmann::json assign = ast_node;
+    assign["_type"] = "Assign";
+    assign["targets"] = nlohmann::json::array({target});
+    assign.erase("target");
+    assign.erase("annotation");
+    assign.erase("simple");
+    assign["value"] = branch;
+    return nlohmann::json::array({assign});
+  };
+
+  nlohmann::json if_node = nlohmann::json::object();
+  if_node["_type"] = "If";
+  if_node["test"] = value["test"];
+  if_node["body"] = arm(value["body"]);
+  if_node["orelse"] = arm(value["orelse"]);
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (ast_node.contains(key))
+      if_node[key] = ast_node[key];
+
+  target_block.copy_to_operands(get_conditional_stm(if_node));
+  return true;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  if (rewrite_divergent_conditional_assign(ast_node, target_block))
+    return;
+
   if (try_tagged_var_assign(ast_node, target_block))
     return;
 
@@ -7433,9 +7489,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   const bool old_in_lazy_operand = in_lazy_operand_;
   in_lazy_operand_ |= type == "While";
-  if (
-    test_type == "BoolOp" && current_block && type != "While" &&
-    !coverage_mode && !pytest_generation_mode && !model_mode)
+  const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
+                                    !coverage_mode && !pytest_generation_mode &&
+                                    !model_mode;
+  if (short_circuit_boolop)
   {
     const auto &test_node = ast_node["test"];
     const auto &operands = test_node["values"];
@@ -7569,8 +7626,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   }
   in_lazy_operand_ = old_in_lazy_operand;
 
-  if (!(test_type == "BoolOp" && current_block && type != "While" &&
-        !coverage_mode && !pytest_generation_mode && !model_mode))
+  if (!short_circuit_boolop)
   {
     cond.location() = get_location_from_decl(ast_node["test"]);
 
@@ -8420,7 +8476,9 @@ exprt python_converter::get_block(
       }
 
       current_element_type = bool_type();
+      asserted_test_ = &element["test"];
       exprt test = get_expr(element["test"]);
+      asserted_test_ = nullptr;
       // An object asserted directly is truth-tested like any condition, so a
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.

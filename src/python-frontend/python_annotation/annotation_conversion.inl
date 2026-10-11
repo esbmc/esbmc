@@ -767,9 +767,13 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   }
   else if (arg["_type"] == "BinOp")
   {
-    // For binary operations, try to infer from operands
+    // For binary operations, try to infer from operands. Resolve them in the
+    // enclosing function first, so a parameter is not typed by a module global
+    // of the same name.
     Json dummy_stmt = {{"value", arg}};
-    return get_type_from_binary_expr(dummy_stmt, ast_);
+    const Json func =
+      json_utils::try_find_function(ast_["body"], get_current_func_name());
+    return get_type_from_binary_expr(dummy_stmt, func.empty() ? ast_ : func);
   }
   else if (arg["_type"] == "List")
   {
