@@ -225,8 +225,23 @@ protected:
   bool user_code_uses_exceptions();
 
   /*
+   * try { tried } catch (...) { handler; throw; }
+   */
+  codet rethrowing_catch(const code_blockt &tried, code_blockt handler);
+
+  /*
+   * Run cd's class destructor when the body of the delegating constructor cd,
+   * which starts at body_start in body, exits by an exception.
+   */
+  bool destroy_object_on_body_unwind(
+    const clang::CXXConstructorDecl &cd,
+    std::size_t body_start,
+    code_blockt &body);
+
+  /*
    * Destroy the subobjects a constructor has built when an exception leaves
-   * it ([except.ctor]/3). starts[i] is where the code of cd's i-th
+   * it ([except.ctor]/3), or a delegating constructor's object when its body
+   * throws ([except.ctor]/4). starts[i] is where the code of cd's i-th
    * initializer begins in body, and starts.back() where its own body does.
    */
   bool unwind_constructed_subobjects(
@@ -330,6 +345,12 @@ protected:
   void annotate_ctor_dtor_rtn_type(
     const clang::CXXMethodDecl &cxxmdd,
     typet &rtn_type);
+
+  /*
+   * A reference to the ctor or dtor md, with its `this` parameter, whether or
+   * not md has been converted yet.
+   */
+  bool get_ctor_dtor_ref(const clang::CXXMethodDecl &md, exprt &new_expr);
   bool is_copy_or_move_ctor(const clang::DeclContext &dcxt);
   bool is_defaulted_ctor(const clang::CXXMethodDecl &md);
 
