@@ -1289,6 +1289,7 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
       return from_integer(static_cast<long long>(truncated), int_type());
   }
 
+  operand = converter.guard_nonfinite_float_to_int(std::move(operand), element);
   exprt trunc_call =
     build_unary_c_math_call("c:@F@trunc", "trunc", std::move(operand), element);
   exprt to_int("typecast", int_type());

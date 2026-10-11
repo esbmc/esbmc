@@ -292,6 +292,25 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
+char *strndup(const char *str, size_t n)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (len < n && str[len] != '\0')
+    ++len;
+  char *cpy = (char *)malloc(len + 1);
+  if (cpy == ((void *)0))
+    return 0;
+  size_t i = 0;
+  while (i < n && str[i] != '\0')
+  {
+    cpy[i] = str[i];
+    ++i;
+  }
+  cpy[i] = '\0';
+  return cpy;
+}
+
 void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;

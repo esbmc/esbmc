@@ -1274,6 +1274,41 @@ static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+// The parts of a cpp_delete side effect that sideeffect2t has no field for.
+static void migrate_cpp_delete(const exprt &expr, std::vector<expr2tc> &args)
+{
+  const exprt &destructor = static_cast<const exprt &>(expr.find("destructor"));
+  if (destructor.is_not_nil())
+  {
+    expr2tc d;
+    migrate_expr(destructor, d);
+    args.push_back(d);
+  }
+
+  // A replaced operator delete rides in arguments[1], mirroring the
+  // allocation side (github #6494).
+  const exprt &dealloc_function =
+    static_cast<const exprt &>(expr.find("dealloc_function"));
+  if (dealloc_function.is_not_nil())
+  {
+    if (args.empty())
+      args.emplace_back();
+    expr2tc fn;
+    migrate_expr(dealloc_function, fn);
+    args.push_back(fn);
+  }
+
+  // An aligned operator delete's alignment rides in arguments[2].
+  const exprt &dealloc_alignment =
+    static_cast<const exprt &>(expr.find("dealloc_alignment"));
+  if (dealloc_alignment.is_not_nil())
+  {
+    expr2tc align;
+    migrate_expr(dealloc_alignment, align);
+    args.push_back(align);
+  }
+}
+
 // The parts of a cpp_new side effect that sideeffect2t has no field for.
 static void
 migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
@@ -2559,27 +2594,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = expr.statement() == "cpp_delete"
             ? sideeffect2t::allockind::cpp_delete
             : sideeffect2t::allockind::cpp_delete_array;
-      const exprt &destructor =
-        static_cast<const exprt &>(expr.find("destructor"));
-      if (destructor.is_not_nil())
-      {
-        expr2tc d;
-        migrate_expr(destructor, d);
-        args.push_back(d);
-      }
-
-      // A replaced operator delete rides in arguments[1], mirroring the
-      // allocation side (github #6494).
-      const exprt &dealloc_function =
-        static_cast<const exprt &>(expr.find("dealloc_function"));
-      if (dealloc_function.is_not_nil())
-      {
-        if (args.empty())
-          args.emplace_back();
-        expr2tc fn;
-        migrate_expr(dealloc_function, fn);
-        args.push_back(fn);
-      }
+      migrate_cpp_delete(expr, args);
     }
     else if (expr.statement() == "temporary_object")
     {
@@ -3652,13 +3667,16 @@ static const char *back_sideeffect_statement(sideeffect2t::allockind kind)
 static void back_sideeffect_cpp_delete(const sideeffect2t &ref2, exprt &theexpr)
 {
   // op0 = pointer (in `operand`); arguments[0] = destructor call, if any,
-  // arguments[1] = replaced operator delete, if any. remove_cpp_delete
-  // asserts exactly one operand and reads both named subs back out.
+  // arguments[1] = replaced operator delete, if any, arguments[2] = its
+  // alignment, if aligned. remove_cpp_delete asserts exactly one operand and
+  // reads the named subs back out.
   theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
     theexpr.add("dealloc_function") = migrate_expr_back(ref2.arguments[1]);
+  if (ref2.arguments.size() > 2)
+    theexpr.add("dealloc_alignment") = migrate_expr_back(ref2.arguments[2]);
 }
 
 static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)

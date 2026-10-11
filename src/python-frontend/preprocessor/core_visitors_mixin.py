@@ -1069,6 +1069,11 @@ class CoreVisitorsMixin:
         if function_name == "__unknown__" or function_name is None or expected_args is None:
             return False
 
+        if (function_name not in self.functionVarargs
+                and any(isinstance(arg, ast.Starred) for arg in node.args)):
+            raise NotImplementedError(
+                f"Unpacking *x into {self._display_name(function_name)}() is supported only "
+                "when x is a list or tuple of statically known length")
         keywords = self._build_keyword_map(node)
         self._validate_kwonly_args(function_name, kwonly_args, keywords)
         self._validate_positional_call_arity(node, function_name, expected_args)
@@ -1729,6 +1734,7 @@ class CoreVisitorsMixin:
         return self.visit(rewritten)
 
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
+        self._expand_starred_call_args(node)
         self._invalidate_list_literals_for_call(node)
         rewritten_nondet = self._rewrite_nondet_collection_call(node)
         if rewritten_nondet is not None:
