@@ -1043,8 +1043,12 @@ bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
 
 PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
 {
+  // An uncaught IndexError ends the program, so a failed check also ends the
+  // path rather than reporting the reads past it.
   __ESBMC_assert(l != NULL, "IndexError: pop from empty list");
+  __ESBMC_assume(l != NULL);
   __ESBMC_assert(l->size > 0, "IndexError: pop from empty list");
+  __ESBMC_assume(l->size > 0);
 
   // Handle negative index or default (pop last element)
   size_t actual_index;
@@ -1053,12 +1057,14 @@ PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
     // Convert negative index to positive
     int64_t positive_index = (int64_t)l->size + index;
     __ESBMC_assert(positive_index >= 0, "IndexError: pop index out of range");
+    __ESBMC_assume(positive_index >= 0);
     actual_index = (size_t)positive_index;
   }
   else
     actual_index = (size_t)index;
 
   __ESBMC_assert(actual_index < l->size, "IndexError: pop index out of range");
+  __ESBMC_assume(actual_index < l->size);
 
   // Make a copy of the element to return before shifting
   PyObject *popped = __ESBMC_alloca(sizeof(PyObject));
