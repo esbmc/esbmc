@@ -913,6 +913,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R132** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R114's open note, §15 M9 (R132); **FIXED**, same entry | **A `va_arg` on one branch moved the `va_list` on both.** The cursor R114 gave each local `va_list` was an `unsigned` in symex, outside the SSA, so a branch that ran `va_arg` advanced it for the path that skipped the branch too. In `if (c) a = va_arg(ap, int); b = va_arg(ap, int);` called with `(0, 1, 2)`, `b` read 2, where C reads 1; `c ? va_arg(ap, int) : 0` did the same. | `goto_symext::symex_va_arg`, `va_list_cursor_symbol`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `run_builtin.cpp`; `regression/esbmc/va_arg_branch_cursor{,_fail}` | **H-A7** | **Fixed**: each local `va_list` with its own cursor keeps it in a hidden SSA variable, assigned under the path guard, so a merge gives it a phi. A cursor that is not constant selects the argument it denotes. A `va_list` parameter still reads at its frame's cursor, which is still symex state. |
 | **R135** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R104's note on local classes, §15 M9 (R135); **FIXED**, same entry | **Same-named local classes shared one `type_info`.** `typeid` identity is the address of the type's printed name, and a local class prints without its enclosing function, so `S` in `f()` and `S` in `g()`, or in two instantiations of one function template, compared equal, and equal to a namespace-scope `S`. `assert(f() == g())` was SUCCESSFUL. | `rtti_type_name`, `src/clang-cpp-frontend/clang_cpp_convert_vft.cpp`; `regression/esbmc-cpp/cpp/local_class_typeid{,_fail}` | — | **Fixed**: a local class's name carries its record id. |
 | **R131** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe of string functions, §15 M9 (R131); **FIXED**, same entry | **`strndup` had no model.** The call reached symex without a body and returned a pointer to no object, so any read of the copy was `dereference failure: invalid pointer` and `strndup("hello", 2)` could not be checked. It read no memory and allocated none, so an over-read of an unterminated source and a leaked copy (ASan reports both natively) were SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strndup_model{,_fail}` | — | **Fixed**: `strndup` reads at most `n` bytes, stopping at the first null, and returns a `malloc`ed, null-terminated copy. |
+| **R138** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R129's open note, §15 M9 (R138); **FIXED** for a bounded output, same entry | **`sprintf` and `snprintf` of a nondet value through anything but `%d`, `%i` or `%u` left the destination unchanged.** R129 stores text and those three conversions only, so `char b[4]; sprintf(b, "%x", x);` with a nondet `x` raised no bounds violation, and after `char b[12] = "abcdefghijk"; int r = sprintf(b, "%x", x);` `b[r]` still read the old text, so `assert(b[r] == '\0')` was FAILED. | `sprintf_output` and `format_printf_output`, `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_symbolic_output{,_fail}` | — | **Fixed** when the formatter bounds the output at 1024 characters or fewer: the call writes nondet characters up to a length within those bounds and a NUL after them, each write bounds-checked. |
 
 ---
 
@@ -12178,6 +12179,35 @@ keep their master verdicts.
 
 Not fixed: the source string is still not read, so even a constant one
 gives nondet items and a nondet `%n` count.
+
+### M9 (R138) — 2026-10-11, the `sprintf` output that was not a decimal
+
+R129's entry left open that a `%c` or `%x` of a nondet value, and any flag,
+width or precision, leave the destination of `sprintf` or `snprintf`
+unchanged: `char b[4]; sprintf(b, "%x", x);` was SUCCESSFUL although
+`x = 0xffffffff` writes nine bytes, and after
+`char b[12] = "abcdefghijk"; int r = sprintf(b, "%x", x);` the old text was
+still there, so `assert(b[r] == '\0')` was FAILED.
+
+**Fixed** when the formatter bounds the output's length, the same bound the
+return value already gets. `sprintf_output` keeps R121's exact output and
+R129's decimal lengths, and for any other bounded format returns a nondet
+length within the formatter's bounds and that many nondet characters; the
+store R129 added writes them, and `assume_printf_length` ties the length to
+the return value. The characters may include a NUL, which over-approximates
+a `%c` of 0.
+
+`sprintf_symbolic_output` checks that `b[r]` is the NUL, that `b[2]` keeps
+its old value when `r` is 1, and a truncating `snprintf` of a nondet value;
+it is FAILED on master. `sprintf_symbolic_output_fail` pins the bounds
+violation of a nondet `%x` into `char b[4]` and is SUCCESSFUL on master.
+
+Not fixed: an output the formatter cannot bound (a `%s` of a pointer to an
+unknown object, a float, a non-constant format) or bounds above 1024
+characters, and `vsprintf` and `vsnprintf` still leave the destination
+unchanged. The bound comes from the argument's type, not its value, so
+`sprintf(b, "%x", x)` into `char b[8]` is a bounds violation even when `x` is
+assumed to be below 16.
 
 ---
 

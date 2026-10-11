@@ -16,6 +16,7 @@
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
+class printf_formattert;
 
 // Thrown by symex when the inductive step encounters a construct it cannot
 // soundly encode (recursion, threads, function-pointer calls). The thrower
@@ -1410,9 +1411,8 @@ protected:
   /** Symbolic implementation of printf */
   virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Store an unrenamed sprintf or snprintf call's output in its
-   *  destination buffer, when the format and arguments fix that output or
-   *  its conversions are all %d, %i or %u. Returns the output's length, nil
-   *  when nothing is stored. */
+   *  destination buffer, when the format bounds that output's length.
+   *  Returns the output's length, nil when nothing is stored. */
   expr2tc symex_sprintf_store(const code_printf2t &call);
   /** The output of an unrenamed sprintf or snprintf call: its characters
    *  before the NUL in `chars`, and its length, nil when unknown. */
@@ -1432,12 +1432,14 @@ protected:
   /** Assume a printf-family call's return value equals the length of the
    *  output stored, when both are known. */
   void assume_printf_length(const expr2tc &retval, const expr2tc &len);
-  /** Format an unrenamed printf-family call into `out`; true when the format
-   *  and every argument are constants that fix the output exactly. */
-  bool exact_printf_output(
+  /** Run `formatter` over an unrenamed printf-family call; false when the
+   *  format is not a constant. `constant_args` is set when every argument
+   *  is a constant. */
+  bool format_printf_output(
     const code_printf2t &call,
     size_t fmt_idx,
-    std::string &out);
+    printf_formattert &formatter,
+    bool &constant_args);
   /** Recover the variadic arguments hidden behind a va_list operand of a
    *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
    *  Succeeds only under conservative conditions guaranteeing the mapping is

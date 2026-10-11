@@ -2454,3 +2454,5 @@ regression/python/github_8276_nonfinite_to_int
 regression/python/github_8276_trunc_inf_fail
 regression/python/github_8276_round_nan_fail
 regression/python/github_8276_floor_inf_fail
+regression/esbmc/sprintf_symbolic_output
+regression/esbmc/sprintf_symbolic_output_fail
