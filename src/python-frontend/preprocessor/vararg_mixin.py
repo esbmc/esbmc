@@ -155,3 +155,109 @@ class VarargMixin:
                     or self._name_is_used(survivors + specializations, stmt.name)):
                 body.append(stmt)
         node.body = body
+
+    @staticmethod
+    def _sequence_display_length(value):
+        if not isinstance(value, (ast.List, ast.Tuple)):
+            return None
+        if any(isinstance(e, ast.Starred) for e in value.elts):
+            return None
+        return len(value.elts)
+
+    @staticmethod
+    def _bound_names(node):
+        """Names `node` binds or rebinds without being a plain Name store."""
+        if isinstance(node, ast.Name):
+            return [node.id] if not isinstance(node.ctx, ast.Load) else []
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return [node.name]
+        if isinstance(node, ast.arg):
+            return [node.arg]
+        if isinstance(node, ast.alias):
+            return [node.asname or node.name.split(".")[0]]
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            return list(node.names)
+        name = getattr(node, "name", None) or getattr(node, "rest", None)
+        return [name] if isinstance(name, str) else []
+
+    @staticmethod
+    def _is_length_preserving_use(name, parent, grandparent, len_bound):
+        """A load of `name` under `parent` that can neither resize nor alias it."""
+        if isinstance(parent, ast.Starred):
+            return isinstance(grandparent, ast.Call) and parent in grandparent.args
+        if isinstance(parent, ast.Subscript):
+            return parent.value is name and isinstance(parent.ctx, ast.Load)
+        if isinstance(parent, (ast.For, ast.comprehension)):
+            return parent.iter is name
+        if isinstance(parent, ast.Call):
+            return (not len_bound and isinstance(parent.func, ast.Name) and parent.func.id == "len"
+                    and parent.args == [name] and not parent.keywords)
+        return isinstance(parent, ast.Compare)
+
+    def _scan_fixed_length_starred(self, module):
+        """Map each `f(*xs)` argument whose `xs` has a statically known length.
+
+        `xs` qualifies when it is bound once in the whole module, by a direct
+        statement of its scope, to a list or tuple display, and every read of
+        the name only indexes, iterates, measures, compares or unpacks it. An
+        unpacking is mapped only below that statement, where `xs` is bound.
+        """
+        parents = {}
+        bind_counts = {}
+        unsafe = set()
+        for node in ast.walk(module):
+            for child in ast.iter_child_nodes(node):
+                parents[child] = node
+            for bound in self._bound_names(node):
+                bind_counts[bound] = bind_counts.get(bound, 0) + 1
+        len_bound = "len" in bind_counts
+        for node, parent in parents.items():
+            if not isinstance(node, ast.Name) or not isinstance(node.ctx, ast.Load):
+                continue
+            if not self._is_length_preserving_use(node, parent, parents.get(parent), len_bound):
+                unsafe.add(node.id)
+        fixed = {}
+        defs = [
+            n for n in ast.walk(module) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        for scope in [module] + defs:
+            for index, stmt in enumerate(scope.body):
+                self._record_fixed_length_starred(stmt, scope.body[index + 1:], bind_counts, unsafe,
+                                                  fixed)
+        return fixed
+
+    def _record_fixed_length_starred(self, stmt, later, bind_counts, unsafe, fixed):
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            target = stmt.targets[0]
+        elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+            target = stmt.target
+        else:
+            return
+        length = self._sequence_display_length(stmt.value)
+        if (not isinstance(target, ast.Name) or length is None or target.id in unsafe
+                or bind_counts.get(target.id) != 1):
+            return
+        for node in (n for s in later for n in ast.walk(s)):
+            if (isinstance(node, ast.Starred) and isinstance(node.value, ast.Name)
+                    and node.value.id == target.id):
+                fixed[node] = length
+
+    def _expand_starred_call_args(self, node):
+        """Splice `*seq` into the call when `seq` has a statically known length."""
+        args = []
+        for arg in node.args:
+            if not isinstance(arg, ast.Starred):
+                args.append(arg)
+            elif self._sequence_display_length(arg.value) is not None:
+                args.extend(arg.value.elts)
+            elif arg in self._fixed_length_starred:
+                args.extend(
+                    ast.copy_location(
+                        ast.Subscript(value=ast.Name(id=arg.value.id, ctx=ast.Load()),
+                                      slice=ast.Constant(value=i),
+                                      ctx=ast.Load()), arg)
+                    for i in range(self._fixed_length_starred[arg]))
+            else:
+                args.append(arg)
+        node.args = args
+        ast.fix_missing_locations(node)
