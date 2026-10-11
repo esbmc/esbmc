@@ -566,8 +566,17 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
 {
   if (
     !base.is_nil() || !operand.type().is_floatbv() ||
-    !converter_.can_emit_runtime_guard())
+    !converter_.current_block ||
+    !converter_.safe_to_emit_side_effecting_statement())
     return operand;
+
+  // In an and/or tail or a while test the guard must run where the operand is
+  // evaluated, not once ahead of the statement.
+  const bool lazy = converter_.in_lazy_operand_;
+  code_blockt lazy_block;
+  code_blockt *const saved_block = converter_.current_block;
+  if (lazy)
+    converter_.current_block = &lazy_block;
 
   const locationt loc = converter_.get_location_from_decl(call_);
   operand = converter_.store_call_result(operand, loc, "int_arg");
@@ -586,7 +595,17 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
     "ValueError",
     "cannot convert float NaN to integer",
     loc);
-  return operand;
+  converter_.current_block = saved_block;
+  if (!lazy)
+    return operand;
+
+  code_expressiont result(operand);
+  result.location() = loc;
+  lazy_block.copy_to_operands(result);
+  side_effect_exprt guarded("statement_expression", operand.type());
+  guarded.copy_to_operands(lazy_block);
+  guarded.location() = loc;
+  return guarded;
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const

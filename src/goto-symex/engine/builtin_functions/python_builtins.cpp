@@ -18,6 +18,20 @@ static bool null_is_none(const type2tc &subt, const namespacet &ns)
          ns.follow(migrate_type_back(subt)).id() == "struct";
 }
 
+// An untyped (`void *`) operand that neither constant propagation nor the
+// value set traced back to its object carries no Python type, so no answer is
+// sound: comparing `void *` itself would say "no" to every type. Fail only if
+// this path is reachable, and end it so no check after it relies on the guess.
+void goto_symext::reject_untyped_isinstance(const expr2tc &value)
+{
+  if (
+    !is_symbol2t(value) || !is_pointer_type(value->type) ||
+    !is_empty_type(to_pointer_type(value->type).subtype))
+    return;
+  claim(gen_false_expr(), "isinstance() on a value whose type was lost");
+  assume(gen_false_expr());
+}
+
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
@@ -79,6 +93,8 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
 
     if (is_address_of2t(value))
       value = to_address_of2t(value).ptr_obj;
+
+    reject_untyped_isinstance(value);
 
     if (is_struct_type(value))
     {
