@@ -365,6 +365,7 @@ def is_typed_assignment(stmt, merged, already_annotated):
     if not can_make_annotation(inferred_type):
         return False
 
+
 # if isinstance(stmt.value, ast.List):
 # if len(stmt.value.elts) == 0:
 #    return False
