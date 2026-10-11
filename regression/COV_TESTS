@@ -2419,6 +2419,8 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc-cpp/cpp/local_class_typeid
+regression/esbmc-cpp/cpp/local_class_typeid_fail
 regression/python/isinstance_erased_type
 regression/python/return_type_param_shadows_global
 regression/esbmc/strndup_model
