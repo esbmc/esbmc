@@ -1,4 +1,4 @@
 CORE
 main.c
-
+--reserve-first-page
 ^VERIFICATION SUCCESSFUL$

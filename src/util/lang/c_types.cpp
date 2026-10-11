@@ -303,11 +303,12 @@ BigInt max_object_size()
   return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
 }
 
-// Lowest address smt_memspace.cpp places an object at: the first page is
-// reserved, so a pointer made from a small integer never aliases an object.
+// Lowest address smt_memspace.cpp places an object at. Reserving the first
+// page is opt-in: SV-COMP's LDV tasks accept an allocation only at an address
+// at or below 2012, so a default floor makes every such path infeasible.
 BigInt first_object_address()
 {
-  return 4096;
+  return config.ansi_c.reserve_first_page ? 4096 : 0;
 }
 
 // Largest object smt_memspace.cpp can lay out at all: it places each object at

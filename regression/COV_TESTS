@@ -2348,6 +2348,7 @@ regression/goto-transcoder/cbmc_kani_union_padding
 regression/goto-transcoder/cbmc_kani_union_padding_fail
 regression/esbmc/memspace_first_page
 regression/esbmc/memspace_first_page_fail
+regression/esbmc/memspace_low_address_fail
 regression/esbmc/memspace_first_page_vla_band
 regression/esbmc/memspace_first_page_vla_band_fail
 regression/goto-transcoder/cbmc_kani_dyn_vtable
@@ -2421,6 +2422,11 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc/longjmp_frames
+regression/esbmc/longjmp_frames_fail
+regression/cstd/jump_bug
+regression/esbmc/strnlen_model
+regression/esbmc/strnlen_model_fail
 regression/esbmc/scanf_percent_n_reached
 regression/esbmc/scanf_percent_n_reached_fail
 regression/esbmc/log10_model
@@ -2460,3 +2466,5 @@ regression/python/for_user_iterator_break_continue_fail
 regression/python/for_user_iterable_separate_iterator
 regression/python/for_user_iterator_subclass
 regression/python/for_user_iterator_no_iter
+regression/esbmc/sprintf_symbolic_output
+regression/esbmc/sprintf_symbolic_output_fail
