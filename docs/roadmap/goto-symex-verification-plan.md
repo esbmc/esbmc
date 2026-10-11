@@ -902,6 +902,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R139** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe battery, §15 M9 (R139); **renumbered from R125** on merging master, which uses that number for the aligned allocation functions; **FIXED**, same entry | **`strnlen` had no model.** It reached symex as a bodyless call, so each call returned a nondet value and read nothing: `assert(strnlen("hello", 3) == 3)` was FAILED, and `char b[4] = {'a','b','c','d'}; strnlen(b, 5);`, which reads past `b` (ASan reports a stack-buffer-overflow), was SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strnlen_model{,_fail}` | — | **Fixed**: `strnlen` reads at most `maxlen` bytes and stops at the first null, as POSIX.1-2008 specifies. |
 | **R140** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R89's open note, §15 M9 (R140); **FIXED**, same entry | **A temporary in an operand of `&&`, `||` or `?:` in a condition outlived the condition.** `if`, `while`, `for` and `do`/`while` conditions with a side-effecting `&&` or `||` were split into one branch per operand, and each operand kept its temporaries to the end of the enclosing block. `while (n < 3 && C().ok()) ++n;` built three objects and destroyed none before the loop ended, so `assert(dtors == 0)` after it was SUCCESSFUL and aborts natively. A `?:` condition and an `if` with an `else` were not split but kept block scope too. | `generate_conditional_branch` and `convert_ifthenelse`, `src/goto-programs/goto_convert.cpp`; `remove_condition_sideeffects`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/condition_short_circuit_temporary{,_fail}` | — | **Fixed**: a condition whose side effects create a temporary with a destructor is not split; it is lowered whole, and R86's guarded destructors run before the branch. |
 | **R133** | **High (false SUCCESSFUL and false FAILED, default configuration)** — PR #8320's open note on `log10`, §15 M9 (R133); **FIXED**, same entry | **`log10` was wrong at exact powers of ten.** The model returned `log(x) / M_LN10`, and `log` is a truncated Taylor series, so `log10(1000.0)` was not `3.0`: `assert(log10(1000.0) == 3.0);` was FAILED and `assert(log10(1000.0) != 3.0);` was SUCCESSFUL. | `src/c2goto/library/libm/musl/log10.c`; `regression/esbmc/log10_model{,_fail}` | — | **Fixed** with musl's `log10`. `log`, `log2` and `log1p` keep the series. |
 | **R131** | **High (false FAILED and false SUCCESSFUL, default configuration, C++)** — R117's open note, §15 M9 (R131); **FIXED**, same entry | **A temporary in a comma's left operand was destroyed at the comma.** A discarded `temporary_object` emits its destructor where it is lowered, so in `int a = (T(), seen());` `~T` ran before `seen()`, where [class.temporary]/4 runs it at the end of the full-expression. `assert(a == 0)`, which holds natively, was a false FAILED, and `assert(a == 1)`, which aborts natively, a false SUCCESSFUL. Declarations, assignments, conditions, call arguments and `return` were all affected. | `remove_comma_operand`, `destroy_comma_operand_temporaries`, `src/goto-programs/goto_convert.cpp`; `regression/esbmc-cpp/cpp/comma_operand_temporaries{,_fail}` | — | **Fixed**: a temporary object in a comma operand is lowered as a used value, so the enclosing full-expression destroys it; a reference declaration, which keeps its other temporaries to the end of the scope, destroys these after the declaration. |
@@ -11722,6 +11723,44 @@ and `--z3`.
 Not fixed: `cbrtl` still returns a nondet value.
 ### M9 (R136) — 2026-10-10, the delegating constructor that threw
 
+### M9 (R139) — 2026-10-10, the strnlen that read nothing
+
+A native-differential probe of string functions found that `strnlen` had no
+operational model: `string.c` defines `strlen` but not `strnlen`, so a call
+reached symex without a body and returned a nondet value.
+`assert(strnlen("hello", 3) == 3)` was FAILED on master. Since the call read
+no memory, a `strnlen` over an unterminated buffer with a `maxlen` past its
+end was SUCCESSFUL, although POSIX.1-2008 has it read until the null or
+`maxlen` bytes and ASan reports the read natively.
+
+**Fixed** by a model beside `strlen` that counts while `len < maxlen` and
+`s[len]` is not null.
+
+`strnlen_model` checks constant strings, `maxlen` of 0, an unterminated buffer
+read to exactly its size, and a null placed at a symbolic index; it is FAILED
+on master. `strnlen_model_fail` reads one byte past a four-byte buffer and pins
+`dereference failure: array bounds violated`; it is SUCCESSFUL on master. Both
+change verdict without the model, under the default solver and `--z3`.
+
+The Solidity operational models call `strnlen` in `solidity_bytes.c` and
+`solidity_string.c`, so four `esbmc-solidity` KNOWNBUG tests (`bytes_string_1`,
+`github_2564`, `struct_5`, `type_name_1`) now give their expected verdict and
+are CORE.
+
+Open: with the `strnlen` loop in place, `esbmc-solidity/struct_5_fail` and
+`struct_7_fail` (THOROUGH, `--k-induction`) reported a false SUCCESSFUL from
+the inductive step at k = 4, before the base case reached the assertion. The
+bug is in k-induction and reproduces on master without `strnlen`: a loop in a
+function called from a nondet loop, followed by a `memset` through a pointer,
+lets the inductive step prove `1 + 2 >= 3 + 4`. Open PR #8221 targets loops
+that write through a pointer. `bytes_static_from_string` no longer has that
+shape: its `memset` cleared bytes the `{0}` initialiser had already cleared,
+so it is removed and both tests are FAILED again. The k-induction bug itself
+is not fixed.
+
+Not fixed: the same probe found `tgamma`, `lgamma`, `erf`, `erfc`,
+`nexttoward` and the `long double` forms `powl`, `expl`, `logl`, `sinl` and
+`cosl` returning nondet values.
 R93's entry left open that a delegating constructor whose body throws does not
 run the object's destructor. [except.ctor]/4 requires it: once the target
 constructor returns, the object is complete, so an exception leaving the
