@@ -3265,7 +3265,7 @@ void python_converter::register_numpy_view_param(
   const auto assumed = numpy_view_params_assumed_.find(key);
   if (
     assumed != numpy_view_params_assumed_.end() &&
-    assumed->second != (view_param && !view_param->is_symbolic()))
+    assumed->second != view_param.has_value())
     throw std::runtime_error(
       "TypeError: passing a numpy view to a function defined after its "
       "caller is not supported for this parameter");
@@ -3314,8 +3314,13 @@ bool python_converter::is_bound_numpy_view_param(
   if (numpy_view_params_decided_.count(key) != 0)
     return numpy_view_params_.count(key) != 0;
   const auto &layout = inferred_numpy_view_param(func_name, param_index);
-  return numpy_view_params_assumed_
-    .emplace(key, layout && !layout->second.is_symbolic())
+  // The statics a run-time layout is passed through exist only once the
+  // callee is converted.
+  if (layout && layout->second.is_symbolic())
+    throw std::runtime_error(
+      "TypeError: passing a numpy view with run-time bounds to a function "
+      "defined after its caller is not supported");
+  return numpy_view_params_assumed_.emplace(key, layout.has_value())
     .first->second;
 }
 
