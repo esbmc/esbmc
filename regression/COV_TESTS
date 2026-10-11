@@ -2419,6 +2419,10 @@ regression/esbmc/scanf_return_count
 regression/esbmc/scanf_return_count_fail
 regression/esbmc/va_copy_callee_va_list
 regression/esbmc/va_copy_callee_va_list_fail
+regression/esbmc-cpp/cpp/condition_short_circuit_temporary
+regression/esbmc-cpp/cpp/condition_short_circuit_temporary_fail
+regression/esbmc/va_list_parameter_cursor
+regression/esbmc/va_list_parameter_cursor_fail
 regression/esbmc/printf_flags_length
 regression/esbmc/printf_flags_length_fail
 regression/esbmc/sprintf_nondet_int_output
