@@ -901,6 +901,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R129** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note, §15 M9 (R129); **FIXED** for text and `%d`, `%i`, `%u` conversions, same entry | **`sprintf` and `snprintf` of a nondet integer never wrote their destination.** `symex_sprintf_store` stored only an output known byte for byte, so `char d[2]; sprintf(d, "%d", x);` with `x` in `[10, 99]` raised no bounds violation, and the return value, a nondet in the formatter's type-wide range, was unrelated to the buffer. | `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_nondet_int_output{,_fail}` | — | **Fixed**: the output's length is a symbolic expression in the arguments, the return value equals it, and the characters before the NUL are nonzero nondet values. A `%s` of an array, a float, a flag, width or precision, and `vsprintf` and `vsnprintf` still leave the destination unchanged. |
 | **R123** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R112's open note, §15 M9 (R123); **FIXED**, same entry | **A `va_copy` made in the function a `va_list` was passed to read that function's arguments.** R112 made `va_arg` find the frame that declared the `va_list`, but a copy is a local of the callee, so its reads resolved to the callee's frame. In a non-variadic helper each read gave 0; in `int mid(int n, va_list outer, ...)` called as `mid(0, ap, 9)` from `g(1, 3)`, `va_copy(cp, outer); va_arg(cp, int)` gave 9, so `assert(g(1, 3) == 9)` was SUCCESSFUL. A copy of a parameter also kept no position of its own, so reading the parameter after the copy moved the copy. | `goto_symext::va_list_copy`, `va_list_frame`, `src/goto-symex/engine/builtin_functions/va_arg.cpp`; `regression/esbmc/va_copy_callee_va_list{,_fail}` | — | **Fixed**: a `va_copy` destination records the `va_list` it was copied from and reads that one's frame, from the position the source had. |
 | **R122** | **High (false SUCCESSFUL and false FAILED, default configuration, x86-64)** — R118's open note on `frexpl`, §15 M9 (R122); **FIXED**, same entry | **The `long double` forms of `frexp` and `ldexp` read the wrong bits.** The model took the mantissa width from `LDBL_MANT_DIG`, which is 64 on x86-64 (the x87 format), but ESBMC encodes a 128-bit `long double` as IEEE binary128 with 112 fraction bits. `frexpl(1024.0L, &e)` did not give `e == 11`, and `assert(ldexpl(1.0L, 3) != 8.0L)` was SUCCESSFUL; `scalbnl`, `scalblnl`, `ilogbl` and `logbl` call them. | `src/c2goto/library/libm/frexp.c`; `regression/esbmc/frexpl_binary128{,_fail}` | — | **Fixed** by giving the binary128 mantissa width directly. `cbrtl` still has no model. |
+| **R134** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R131's open note (PR #8320), §15 M9 (R134); **FIXED**, same entry | **`strcasecmp` and `strncasecmp` had no model.** Neither had a body under `src/c2goto/library`, so each call returned a nondet value and read nothing: `assert(strcasecmp("Hello", "hELLO") == 0)` was FAILED, and `strncasecmp(a, "ABC", 3)` with `char a[2]` was SUCCESSFUL although it reads past `a`. | `strncasecmp`, `strcasecmp`, `src/c2goto/library/strings.c`; `regression/esbmc/strcasecmp_model{,_fail}` | — | **Fixed**: both compare bytes as `unsigned char` after `tolower`, the POSIX locale's mapping. |
 | **R136** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R93's open note, §15 M9 (R136); **FIXED**, same entry | **A delegating constructor whose body threw left its object alive.** [except.ctor]/4 runs the object's destructor when the body of a delegating constructor exits by an exception, since the target constructor has completed the object. R93's unwinding skipped delegating constructors, so the destructor never ran: with `C(int b) : C(false) { if (b) throw 2; }`, `assert(dtors == 0)` after catching from `C c(1);` was SUCCESSFUL, and `assert(dtors == 1)` was FAILED. | `clang_cpp_convertert::unwind_constructed_subobjects`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `regression/esbmc-cpp/try_catch/ctor_delegating_body_unwind{,_fail}` | — | **Fixed**: the body after the delegation runs in a try block whose catch-all handler calls the class destructor on `this` and rethrows. |
 | **R126** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R89's open note, §15 M9 (R126); **FIXED**, same entry | **A temporary in an operand of `&&`, `||` or `?:` in a condition outlived the condition.** `if`, `while`, `for` and `do`/`while` conditions with a side-effecting `&&` or `||` were split into one branch per operand, and each operand kept its temporaries to the end of the enclosing block. `while (n < 3 && C().ok()) ++n;` built three objects and destroyed none before the loop ended, so `assert(dtors == 0)` after it was SUCCESSFUL and aborts natively. A `?:` condition and an `if` with an `else` were not split but kept block scope too. | `generate_conditional_branch` and `convert_ifthenelse`, `src/goto-programs/goto_convert.cpp`; `remove_condition_sideeffects`, `src/goto-programs/goto_sideeffects.cpp`; `regression/esbmc-cpp/cpp/condition_short_circuit_temporary{,_fail}` | — | **Fixed**: a condition whose side effects create a temporary with a destructor is not split; it is lowered whole, and R86's guarded destructors run before the branch. |
 | **R125** | **High (false SUCCESSFUL and false FAILED, default configuration, C++17)** — R98's open note on the aligned forms, §15 M9 (R125); **FIXED**, same entry | **A program's aligned `operator new` and `operator delete` were never called.** For a type with new-extended alignment, `new A` calls `operator new(size_t, std::align_val_t)` ([expr.new]/16). `get_new_storage` refused every aligned form and `resolve_deallocation_function` every aligned `delete`, so both used the built-in allocation: two `new A` from a replacement that returns one pool were distinct objects (`assert(a != b)` SUCCESSFUL, aborts natively), and a counter in the replacement stayed 0 (FAILED, passes natively). | `get_new_storage`, `get_dealloc_function`, `get_align_val`, `src/clang-cpp-frontend/clang_cpp_convert.cpp`; `convert_cpp_delete`, `src/goto-programs/goto_convert.cpp`; `remove_cpp_delete`, `src/goto-programs/goto_sideeffects.cpp`; `migrate_cpp_delete`, `src/util/irep/migrate.cpp`; `regression/esbmc-cpp/cpp/aligned_operator_new{,_fail}` | — | **Fixed**: the frontend passes `alignof(T)` as the `std::align_val_t` argument to a defined aligned `operator new` and `operator delete`, sized or not. |
@@ -12052,6 +12053,36 @@ or a `printf`-family call keep their master verdicts under a 30 s cap.
 Not fixed: a parameter whose value set has more than one target still reads
 at the frame's cursor, and R114's `va_arg` under a nondet branch is still
 counted on both paths.
+
+### M9 (R134) — 2026-10-10, the case-insensitive compare
+
+R131's entry (PR #8320) noted that `strcasecmp` and `strncasecmp` have no
+model. `<strings.h>` declared them and nothing defined them, so symex skipped
+each call and returned a nondet value. `assert(strcasecmp("Hello", "hELLO") ==
+0)` was FAILED, and because the call read nothing, `strncasecmp(a, "ABC", 3)`
+with `char a[2] = {'a', 'b'}` was SUCCESSFUL; natively ASan reports a
+stack-buffer-overflow.
+
+**Fixed** in `strings.c`. `strncasecmp` compares at most `n` bytes as
+`unsigned char` after `tolower`, stopping at the first difference or a
+terminating null, and `strcasecmp` calls it with `n = SIZE_MAX`. POSIX
+specifies the comparison in the POSIX locale, where `tolower` maps only
+`A`-`Z`. The result is the difference of the lowered bytes; POSIX fixes only
+its sign.
+
+`strcasecmp_model` checks equality across case, both orderings, a byte
+between `Z` and `a` (`"["` sorts before `"a"`, as glibc gives), a prefix,
+`n = 0`, and a nondet upper-case letter against its lower case; master fails
+all eight assertions. `strcasecmp_model_fail` runs under `--multi-property` and
+pins that `strcasecmp("abc", "ABD") > 0` fails and that `strncasecmp` reads
+out of bounds; master fails the first and reports no bounds violation. Both
+change verdict with the model removed. Only Z3 is built here, so the default
+solver and `--z3` are the same run.
+
+Not fixed: like `strcmp`, a call on a string with no terminator in bounds
+keeps reading nondet bytes after the bounds failure, so `strcasecmp` on one
+does not terminate without `--unwind`. `strcasecmp_l` and `strncasecmp_l` have
+no model.
 
 ---
 
