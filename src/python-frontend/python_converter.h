@@ -345,6 +345,14 @@ public:
            !in_lazy_operand_;
   }
 
+  /// Bind a static cell, named under @p lambda_id, for each scalar free
+  /// variable of @p lambda_node that is a local of the enclosing function, as
+  /// create_capture_cells does for a nested `def`.
+  void capture_lambda_free_variables(
+    const nlohmann::json &lambda_node,
+    const std::string &lambda_id,
+    const locationt &location);
+
   // Hoists @p operand into a temporary when it carries a side effect, so a
   // guard and its use evaluate it once.
   exprt hoist_side_effecting_operand(
@@ -961,6 +969,12 @@ private:
   code_blockt create_capture_cells(
     const nlohmann::json &function_node,
     const symbol_id &id,
+    const locationt &location);
+
+  code_blockt bind_capture_cells(
+    const std::set<std::string> &free_names,
+    const std::string &enclosing_scope,
+    const std::string &func_id,
     const locationt &location);
 
   /// Cell bindings produced by the last nested `get_function_definition`,
