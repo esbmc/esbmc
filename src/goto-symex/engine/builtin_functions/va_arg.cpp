@@ -76,24 +76,48 @@ bool goto_symext::va_list_is_started(const expr2tc &va_list_expr) const
   return !rec || va_started.count(*rec) != 0;
 }
 
-unsigned *goto_symext::va_list_cursor(const expr2tc &va_list_expr)
+expr2tc
+goto_symext::va_list_cursor_symbol(const renaming::level2t::name_record &rec)
+{
+  const irep_idt id = id2string(rec.base_name) + "$va_cursor";
+  const type2tc type = get_uint_type(config.ansi_c.int_width);
+  if (new_context.find_symbol(id) == nullptr)
+  {
+    symbolt symbol;
+    symbol.id = id;
+    symbol.name = id;
+    set_symbol_type(symbol, type);
+    new_context.move(symbol);
+  }
+  return symbol2tc(
+    type, id, symbol2t::renaming_level::level1, rec.l1_num, 0, rec.t_num, 0);
+}
+
+expr2tc goto_symext::va_list_cursor(const expr2tc &va_list_expr)
 {
   auto rec = va_list_l1_record(va_list_expr);
   auto it = rec ? va_started.find(*rec) : va_started.end();
-  return it != va_started.end() && it->second ? &*it->second : nullptr;
+  return it != va_started.end() && it->second ? va_list_cursor_symbol(*rec)
+                                              : expr2tc();
 }
 
 void goto_symext::va_list_mark_started(
   const expr2tc &va_list_expr,
   bool started,
-  std::optional<unsigned> cursor)
+  const expr2tc &cursor)
 {
+  auto start = [&](const renaming::level2t::name_record &rec) {
+    va_started[rec] = !is_nil_expr(cursor);
+    if (!is_nil_expr(cursor))
+      symex_assign(code_assign2tc(va_list_cursor_symbol(rec), cursor), true);
+  };
+
   auto rec = va_list_l1_record(va_list_expr);
   if (rec)
   {
     va_copied_from.erase(*rec);
     if (started)
-      va_started[*rec] = cursor;
+      start(*rec);
     else
       va_started.erase(*rec);
     return;
@@ -107,7 +131,19 @@ void goto_symext::va_list_mark_started(
     return;
 
   for (const auto &obj_rec : va_list_pointee_records(va_list_expr))
-    va_started[obj_rec] = cursor;
+    start(obj_rec);
+}
+
+void goto_symext::va_list_start(const expr2tc &va_list_expr)
+{
+  const unsigned va_index = cur_state->top().va_index;
+  va_list_mark_started(
+    va_list_expr,
+    true,
+    va_index == UINT_MAX
+      ? expr2tc()
+      : constant_int2tc(
+          get_uint_type(config.ansi_c.int_width), BigInt(va_index)));
 }
 
 std::vector<renaming::level2t::name_record>
@@ -137,13 +173,13 @@ void goto_symext::va_list_copy(const expr2tc &dst, const expr2tc &src)
   /* A source with no cursor of its own, such as a va_list parameter, reads
    * at its frame's cursor; the copy keeps that position for itself. */
   const goto_symex_statet::framet &frame = va_list_frame(src);
-  const unsigned *cursor = va_list_cursor(src);
-  if (!cursor && frame.va_index != UINT_MAX)
-    cursor = &frame.va_cursor;
-  va_list_mark_started(
-    dst,
-    va_list_is_started(src),
-    cursor ? std::optional{*cursor} : std::nullopt);
+  expr2tc cursor = va_list_cursor(src);
+  if (!is_nil_expr(cursor))
+    cur_state->rename(cursor);
+  else if (frame.va_index != UINT_MAX)
+    cursor = constant_int2tc(
+      get_uint_type(config.ansi_c.int_width), BigInt(frame.va_cursor));
+  va_list_mark_started(dst, va_list_is_started(src), cursor);
 
   const auto owners = va_list_owner_records(src);
   if (auto rec = va_list_l1_record(dst); rec && !owners.empty())
@@ -165,33 +201,54 @@ void goto_symext::symex_va_arg(
       "missing va_start: va_arg on an uninitialised va_list");
 
   goto_symex_statet::framet &frame = va_list_frame(code.operand);
-  std::string base = id2string(frame.function_identifier) + "::va_arg";
+  const std::string base = id2string(frame.function_identifier) + "::va_arg";
+
+  auto argument = [&](unsigned index) -> expr2tc {
+    const symbolt *s = new_context.find_symbol(base + std::to_string(index));
+    if (s == nullptr)
+      return gen_zero(lhs->type);
+    expr2tc arg = symbol2tc(migrate_symbol_type(*s), s->id);
+    frame.level1.get_ident_name(arg);
+    return typecast2tc(lhs->type, arg);
+  };
 
   /* The declaring frame's cursor counts every va_arg on its arguments, which
    * symex_printf's va_list recovery reads. A va_list whose own cursor is known
    * reads from that, so va_copy, a second va_start and a second va_list each
    * read where they should. */
-  unsigned cursor = frame.va_cursor++;
-  if (unsigned *own = va_list_cursor(code.operand))
-    cursor = (*own)++;
-  irep_idt id = base + std::to_string(cursor);
-
-  expr2tc va_rhs;
-
-  const symbolt *s = new_context.find_symbol(id);
-  if (s != nullptr)
+  const unsigned frame_cursor = frame.va_cursor++;
+  const expr2tc own = va_list_cursor(code.operand);
+  if (is_nil_expr(own))
   {
-    type2tc symbol_type = migrate_symbol_type(*s);
-
-    va_rhs = symbol2tc(symbol_type, s->id);
-    frame.level1.get_ident_name(va_rhs);
-
-    va_rhs = typecast2tc(lhs->type, va_rhs);
+    symex_assign(code_assign2tc(lhs, argument(frame_cursor)), true, guard);
+    return;
   }
+
+  /* After a va_arg on one branch only, the cursor differs between paths and
+   * is no longer a constant: select the argument it denotes. */
+  expr2tc cursor = own;
+  cur_state->rename(cursor);
+  expr2tc va_rhs;
+  if (is_constant_int2t(cursor))
+    va_rhs = argument(to_constant_int2t(cursor).value.to_uint64());
   else
   {
     va_rhs = gen_zero(lhs->type);
+    for (unsigned k = frame.va_index;
+         frame.va_index != UINT_MAX &&
+         new_context.find_symbol(base + std::to_string(k)) != nullptr;
+         k++)
+      va_rhs = if2tc(
+        lhs->type,
+        equality2tc(cursor, constant_int2tc(cursor->type, BigInt(k))),
+        argument(k),
+        va_rhs);
   }
 
   symex_assign(code_assign2tc(lhs, va_rhs), true, guard);
+  symex_assign(
+    code_assign2tc(
+      own, add2tc(cursor->type, cursor, constant_int2tc(cursor->type, 1))),
+    true,
+    guard);
 }
