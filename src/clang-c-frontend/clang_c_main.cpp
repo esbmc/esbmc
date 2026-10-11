@@ -56,6 +56,10 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
+void clang_c_maint::static_lifetime_destroy(codet &)
+{
+}
+
 bool clang_c_maint::clang_main()
 {
   irep_idt main_symbol;
@@ -424,6 +428,7 @@ bool clang_c_maint::clang_main()
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
   init_code.move_to_operands(atexit_call);
+  static_lifetime_destroy(init_code);
   init_code.move_to_operands(thread_end_call);
 
   // add "main"
