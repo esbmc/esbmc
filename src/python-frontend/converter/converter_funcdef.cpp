@@ -2389,15 +2389,16 @@ python_converter::slice_view_info(
   return info;
 }
 
-// A 1-D view whose length and stride are only known where it is created.
+// A view whose extents and strides are only known where it is created.
 python_converter::numpy_scalar_pointer_view_infot
-python_converter::runtime_view_info()
+python_converter::runtime_view_info(std::size_t rank)
 {
   numpy_scalar_pointer_view_infot info{};
   info.stride = 1;
-  info.shape = {0};
-  info.shape_symbols = {"?"};
-  info.stride_symbols = {"?"};
+  info.shape.assign(rank, 0);
+  info.strides.assign(rank, 1);
+  info.shape_symbols.assign(rank, "?");
+  info.stride_symbols.assign(rank, "?");
   return info;
 }
 
@@ -2478,7 +2479,16 @@ python_converter::view_info_from_subscript(
   if (src_shape.size() != 2)
     return std::nullopt;
   if (slice_type == "Slice")
-    return row_slice_view_info(src_shape[0], src_shape[1], slice_node);
+  {
+    if (
+      std::optional<numpy_scalar_pointer_view_infot> rows =
+        row_slice_view_info(src_shape[0], src_shape[1], slice_node))
+      return rows;
+    const std::optional<long long> step =
+      python_frontend::literal_slice_step(slice_node);
+    return step && *step == 0 ? std::nullopt
+                              : std::make_optional(runtime_view_info(2));
+  }
   if (slice_type == "Tuple")
     return column_view_info(src_shape[0], src_shape[1], slice_node);
   if (!is_index_node(slice_node))
@@ -2491,8 +2501,8 @@ python_converter::view_info_from_subscript(
 }
 
 // The layout a parameter takes when two call sites pass `a` and `b`: theirs
-// when they agree, the run-time one when they are 1-D and differ or are only
-// known at the call site. nullopt when the sites cannot share one parameter.
+// when they agree, the run-time one of their rank when they differ or are
+// only known at the call site. nullopt when the element type or rank differ.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
 python_converter::merge_view_layouts(
@@ -2507,9 +2517,9 @@ python_converter::merge_view_layouts(
     !a.second.is_symbolic() && !b.second.is_symbolic() &&
     same_view_layout(a, b))
     return a;
-  if (a.second.shape.size() != 1 || b.second.shape.size() != 1)
+  if (a.second.shape.size() != b.second.shape.size())
     return std::nullopt;
-  return std::make_pair(elem_type, runtime_view_info());
+  return std::make_pair(elem_type, runtime_view_info(a.second.shape.size()));
 }
 
 bool python_converter::same_view_layout(
@@ -3314,12 +3324,6 @@ bool python_converter::is_bound_numpy_view_param(
   if (numpy_view_params_decided_.count(key) != 0)
     return numpy_view_params_.count(key) != 0;
   const auto &layout = inferred_numpy_view_param(func_name, param_index);
-  // The statics a run-time layout is passed through exist only once the
-  // callee is converted.
-  if (layout && layout->second.is_symbolic())
-    throw std::runtime_error(
-      "TypeError: passing a numpy view with run-time bounds to a function "
-      "defined after its caller is not supported");
   return numpy_view_params_assumed_.emplace(key, layout.has_value())
     .first->second;
 }
@@ -3352,9 +3356,43 @@ void python_converter::reject_numpy_view_argument_type_mismatch(
   }
 }
 
-// A view parameter with a run-time layout reads its length and stride from
-// two statics the caller sets right before the call. The callee copies them
-// into locals on entry, so a nested call to itself leaves them intact.
+// The statics a caller writes the layout of a run-time view parameter to,
+// one extent and one stride per axis. Created on first use, which may be a
+// call converted before the callee.
+const python_converter::numpy_runtime_view_layoutt &
+python_converter::runtime_numpy_view_statics(
+  const std::string &key,
+  std::size_t rank)
+{
+  const auto existing = numpy_runtime_view_statics_.find(key);
+  if (existing != numpy_runtime_view_statics_.end())
+    return existing->second;
+  const typet ll_type = signedbv_typet(64);
+  locationt location;
+  location.set_file(current_python_file);
+  numpy_runtime_view_layoutt statics;
+  for (std::size_t axis = 0; axis < rank; ++axis)
+    for (std::vector<std::string> *ids : {&statics.extents, &statics.strides})
+    {
+      const std::string name =
+        "$numpy_view_layout$" + key + "$" + std::to_string(axis) +
+        (ids == &statics.extents ? "$extent" : "$stride");
+      const std::string id = "py:" + current_python_file + "@" + name;
+      symbolt symbol =
+        create_symbol(current_python_file, name, id, location, ll_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.static_lifetime = true;
+      symbol.set_value(migrate_expr(gen_zero(ll_type)));
+      symbol_table_.add(symbol);
+      ids->push_back(id);
+    }
+  return numpy_runtime_view_statics_.emplace(key, statics).first->second;
+}
+
+// A view parameter with a run-time layout reads it from the statics its
+// caller sets right before the call. The callee copies them into locals on
+// entry, so a nested call to itself leaves them intact.
 void python_converter::declare_runtime_numpy_view_param(
   numpy_scalar_pointer_view_infot &info,
   const std::string &arg_id,
@@ -3362,51 +3400,52 @@ void python_converter::declare_runtime_numpy_view_param(
 {
   const symbolt &param = *symbol_table_.find_symbol(arg_id);
   const typet ll_type = signedbv_typet(64);
-  auto declare = [&](const std::string &suffix, bool is_static) {
-    const std::string id = arg_id + suffix + (is_static ? "$caller" : "");
-    symbolt symbol = create_symbol(
-      current_python_file,
-      param.name.as_string() + suffix + (is_static ? "$caller" : ""),
-      id,
-      param.location,
-      ll_type);
-    symbol.lvalue = true;
-    symbol.file_local = true;
-    symbol.static_lifetime = is_static;
-    if (is_static)
-      symbol.set_value(migrate_expr(gen_zero(ll_type)));
-    symbol_table_.add(symbol);
-    return id;
-  };
-  numpy_runtime_view_paramt runtime;
-  runtime.arg_id = arg_id;
-  runtime.caller_length = declare("$numpy_view_len", true);
-  runtime.caller_stride = declare("$numpy_view_stride", true);
-  runtime.length = declare("$numpy_view_len", false);
-  runtime.stride = declare("$numpy_view_stride", false);
-  info.shape_symbols = {runtime.length};
-  info.stride_symbols = {runtime.stride};
-  numpy_runtime_view_params_[key] = runtime;
+  numpy_runtime_view_layoutt locals;
+  for (std::size_t axis = 0; axis < info.shape.size(); ++axis)
+    for (std::vector<std::string> *ids : {&locals.extents, &locals.strides})
+    {
+      const std::string suffix =
+        "$numpy_view$" + std::to_string(axis) +
+        (ids == &locals.extents ? "$extent" : "$stride");
+      symbolt symbol = create_symbol(
+        current_python_file,
+        param.name.as_string() + suffix,
+        arg_id + suffix,
+        param.location,
+        ll_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol_table_.add(symbol);
+      ids->push_back(arg_id + suffix);
+    }
+  info.shape_symbols = locals.extents;
+  info.stride_symbols = locals.strides;
+  numpy_runtime_view_locals_[key] = {arg_id, locals};
 }
 
 // Copies each run-time view layout the caller set into the callee's locals.
 void python_converter::prepend_runtime_numpy_view_prologue(
   const std::string &function_id,
-  exprt &function_body) const
+  exprt &function_body)
 {
   exprt::operandst prologue;
-  for (const auto &[key, runtime] : numpy_runtime_view_params_)
+  auto copy = [&](const std::string &local, const std::string &caller) {
+    const exprt local_expr = symbol_expr(*symbol_table_.find_symbol(local));
+    prologue.push_back(code_declt(local_expr));
+    prologue.push_back(code_assignt(
+      local_expr, symbol_expr(*symbol_table_.find_symbol(caller))));
+  };
+  for (const auto &[key, entry] : numpy_runtime_view_locals_)
   {
-    if (runtime.arg_id.rfind(function_id + "@", 0) != 0)
+    const auto &[arg_id, locals] = entry;
+    if (arg_id.rfind(function_id + "@", 0) != 0)
       continue;
-    for (const auto &[local, caller] :
-         {std::make_pair(runtime.length, runtime.caller_length),
-          std::make_pair(runtime.stride, runtime.caller_stride)})
+    const numpy_runtime_view_layoutt &statics =
+      runtime_numpy_view_statics(key, locals.extents.size());
+    for (std::size_t axis = 0; axis < locals.extents.size(); ++axis)
     {
-      const exprt local_expr = symbol_expr(*symbol_table_.find_symbol(local));
-      prologue.push_back(code_declt(local_expr));
-      prologue.push_back(code_assignt(
-        local_expr, symbol_expr(*symbol_table_.find_symbol(caller))));
+      copy(locals.extents[axis], statics.extents[axis]);
+      copy(locals.strides[axis], statics.strides[axis]);
     }
   }
   function_body.operands().insert(
@@ -3414,9 +3453,10 @@ void python_converter::prepend_runtime_numpy_view_prologue(
 }
 
 static const char *const runtime_view_call_error =
-  "TypeError: passing a numpy view with run-time bounds to a function is "
-  "supported only by a call statement, assignment or return whose arguments "
-  "are names of 1-D views and contain no calls";
+  "TypeError: passing a numpy view whose layout is read at run time to a "
+  "function is supported only where the call is what its statement "
+  "evaluates first and its arguments are names of views and contain no "
+  "calls";
 
 static bool contains_call_node(const nlohmann::json &node)
 {
@@ -3441,32 +3481,35 @@ static const nlohmann::json *statement_level_call(const nlohmann::json &stmt)
   return &stmt["value"];
 }
 
-// Stores the layout of the view `call` passes for one run-time parameter.
+// Stores the layout of the view `call` passes for run-time parameter
+// `param_index` of the function it calls.
 void python_converter::store_runtime_numpy_view_layout(
   const nlohmann::json &call,
-  const std::string &key,
-  const numpy_runtime_view_paramt &runtime,
+  std::size_t param_index,
   codet &target_block)
 {
-  const std::size_t separator = key.rfind('#');
-  const nlohmann::json *arg = call_site_argument(
-    call,
-    (*ast_json)["body"],
-    key.substr(0, separator),
-    std::stoul(key.substr(separator + 1)));
+  const std::string func_name = call["func"].value("id", "");
+  const std::size_t rank =
+    inferred_numpy_view_param(func_name, param_index)->second.shape.size();
+  const nlohmann::json *arg =
+    call_site_argument(call, (*ast_json)["body"], func_name, param_index);
   const numpy_scalar_pointer_view_infot *info =
     arg != nullptr && arg->value("_type", "") == "Name"
       ? find_numpy_pointer_view_info(arg->value("id", ""))
       : nullptr;
-  if (info == nullptr || info->shape.size() > 1)
+  if (info == nullptr || std::max<std::size_t>(info->shape.size(), 1) != rank)
     throw std::runtime_error(runtime_view_call_error);
-  for (const auto &[caller, value] :
-       {std::make_pair(runtime.caller_length, numpy_view_extent(*info, 0)),
-        std::make_pair(runtime.caller_stride, numpy_view_stride(*info, 0))})
+  const numpy_runtime_view_layoutt &statics = runtime_numpy_view_statics(
+    func_name + "#" + std::to_string(param_index), rank);
+  auto store = [&](const std::string &id, const exprt &value) {
+    code_assignt assign(symbol_expr(*symbol_table_.find_symbol(id)), value);
+    assign.location() = get_location_from_decl(call);
+    target_block.copy_to_operands(assign);
+  };
+  for (std::size_t axis = 0; axis < rank; ++axis)
   {
-    code_assignt store(symbol_expr(*symbol_table_.find_symbol(caller)), value);
-    store.location() = get_location_from_decl(call);
-    target_block.copy_to_operands(store);
+    store(statics.extents[axis], numpy_view_extent(*info, axis));
+    store(statics.strides[axis], numpy_view_stride(*info, axis));
   }
 }
 
@@ -3479,35 +3522,44 @@ void python_converter::bind_runtime_numpy_view_arguments(
   codet &target_block)
 {
   numpy_runtime_bound_call_ = nullptr;
-  const nlohmann::json *call = numpy_runtime_view_params_.empty()
-                                 ? nullptr
-                                 : statement_level_call(statement);
+  const nlohmann::json *call = statement_level_call(statement);
   if (call == nullptr)
     return;
-  const std::string prefix = (*call)["func"].value("id", "") + "#";
-  if (!has_runtime_numpy_view_param((*call)["func"].value("id", "")))
+  const std::vector<std::size_t> params =
+    runtime_numpy_view_params((*call)["func"].value("id", ""));
+  if (params.empty())
     return;
   if (
     contains_call_node((*call)["args"]) ||
     contains_call_node(call->value("keywords", nlohmann::json::array())))
     throw std::runtime_error(runtime_view_call_error);
 
-  for (const auto &[key, runtime] : numpy_runtime_view_params_)
-    if (key.rfind(prefix, 0) == 0)
-      store_runtime_numpy_view_layout(*call, key, runtime, target_block);
+  for (const std::size_t param_index : params)
+    store_runtime_numpy_view_layout(*call, param_index, target_block);
   numpy_runtime_bound_call_ = call;
 }
 
-bool python_converter::has_runtime_numpy_view_param(
-  const std::string &func_name) const
+// The parameters of `func_name` that bind a view with a run-time layout.
+std::vector<std::size_t>
+python_converter::runtime_numpy_view_params(const std::string &func_name)
 {
-  const auto first = numpy_runtime_view_params_.lower_bound(func_name + "#");
-  return first != numpy_runtime_view_params_.end() &&
-         first->first.rfind(func_name + "#", 0) == 0;
+  std::vector<std::size_t> params;
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (def == nullptr || !def->contains("args"))
+    return params;
+  for (std::size_t i = 0; i < (*def)["args"]["args"].size(); ++i)
+  {
+    const auto &layout = inferred_numpy_view_param(func_name, i);
+    if (
+      layout && layout->second.is_symbolic() &&
+      is_bound_numpy_view_param(func_name, i))
+      params.push_back(i);
+  }
+  return params;
 }
 
 void python_converter::reject_unbound_runtime_numpy_view_call(
-  const nlohmann::json &call) const
+  const nlohmann::json &call)
 {
   // Conversion may hand over a copy of the statement, so the bound call is
   // recognised by its source position.
@@ -3516,7 +3568,8 @@ void python_converter::reject_unbound_runtime_numpy_view_call(
                        numpy_runtime_bound_call_->value("lineno", -2) &&
                      call.value("col_offset", -1) ==
                        numpy_runtime_bound_call_->value("col_offset", -2);
-  if (!bound && has_runtime_numpy_view_param(call["func"].value("id", "")))
+  if (
+    !bound && !runtime_numpy_view_params(call["func"].value("id", "")).empty())
     throw std::runtime_error(runtime_view_call_error);
 }
 

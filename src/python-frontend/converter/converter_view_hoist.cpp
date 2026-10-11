@@ -33,9 +33,10 @@ std::string statement_expression_key(const nlohmann::json &statement)
   static const std::set<std::string> with_value = {
     "Assign", "AnnAssign", "AugAssign", "Expr", "Return"};
   const std::string kind = statement.value("_type", "");
-  const std::string key = kind == "Assert"              ? "test"
-                          : with_value.count(kind) != 0 ? "value"
-                                                        : "";
+  // An `if` test runs once, before either branch.
+  const std::string key = kind == "Assert" || kind == "If" ? "test"
+                          : with_value.count(kind) != 0    ? "value"
+                                                           : "";
   return !key.empty() && statement.contains(key) && statement[key].is_object()
            ? key
            : "";
@@ -142,8 +143,13 @@ std::string first_evaluated_child(
   const std::string type = node.value("_type", "");
   if (type == "Subscript" || type == "Attribute")
     return "/value";
+  // A constant left operand evaluates nothing.
   if (type == "Compare" || type == "BinOp")
-    return "/left";
+  {
+    if (node["left"].value("_type", "") != "Constant")
+      return "/left";
+    return type == "BinOp" ? "/right" : "/comparators/0";
+  }
   if (type != "Call" || !node.contains("func"))
     return "";
   const nlohmann::json &func = node["func"];
@@ -216,6 +222,17 @@ void python_converter::hoist_numpy_view_arguments(
   }
 }
 
+// A call that must be a statement of its own: one returning its view
+// parameter, whose result carries the view through a name, or one whose
+// callee reads a view layout the caller stores right before the call.
+bool python_converter::needs_numpy_view_call_binding(const nlohmann::json &node)
+{
+  return is_named_call(node) &&
+         (returned_numpy_view_argument(node) != nullptr ||
+          !runtime_numpy_view_params(node["func"]["id"].get<std::string>())
+             .empty());
+}
+
 // `f(v)[0]`, `len(f(v))`, `f(v).tolist()` where f returns its view
 // parameter: the call is first bound to a fresh name, which then carries the
 // view. Only the call the statement evaluates first is moved.
@@ -233,7 +250,7 @@ void python_converter::hoist_returned_numpy_view_call(
   while (rewritten.contains(path) && rewritten[path].is_object())
   {
     const nlohmann::json node = rewritten[path];
-    if (!skip && returned_numpy_view_argument(node) != nullptr)
+    if (!skip && needs_numpy_view_call_binding(node))
     {
       rewritten[path] = bind_numpy_view_temporary(
         rewritten, node, "$numpy_view_ret$", target_block);

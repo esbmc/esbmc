@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: passing a numpy view with run-time bounds to a function is supported only by a call statement, assignment or return whose arguments are names of 1-D views and contain no calls$

@@ -1828,6 +1828,7 @@ private:
     const std::string &key,
     nlohmann::json &rewritten,
     codet &target_block);
+  bool needs_numpy_view_call_binding(const nlohmann::json &node);
   void hoist_returned_numpy_view_call(
     const std::string &key,
     nlohmann::json &rewritten,
@@ -2805,7 +2806,8 @@ private:
   view_info_from_subscript(
     const std::vector<std::size_t> &src_shape,
     const nlohmann::json &slice_node);
-  static numpy_scalar_pointer_view_infot runtime_view_info();
+  static numpy_scalar_pointer_view_infot
+  runtime_view_info(std::size_t rank = 1);
   static std::optional<numpy_scalar_pointer_view_infot>
   slice_or_runtime_view_info(
     std::size_t length,
@@ -2814,36 +2816,38 @@ private:
   merge_view_layouts(
     const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
     const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
-  // Symbols of a view parameter whose layout is set by each caller: the
-  // statics a call site writes and the callee's own copies.
-  struct numpy_runtime_view_paramt
+  // Symbol ids holding the extent and stride of each axis of a view whose
+  // layout is read at run time.
+  struct numpy_runtime_view_layoutt
   {
-    std::string arg_id;
-    std::string caller_length;
-    std::string caller_stride;
-    std::string length;
-    std::string stride;
+    std::vector<std::string> extents;
+    std::vector<std::string> strides;
   };
-  // Keyed like numpy_view_params_.
-  std::map<std::string, numpy_runtime_view_paramt> numpy_runtime_view_params_;
+  // Keyed like numpy_view_params_: the statics every caller writes, and the
+  // parameter symbol with the callee's own copies.
+  std::map<std::string, numpy_runtime_view_layoutt> numpy_runtime_view_statics_;
+  std::map<std::string, std::pair<std::string, numpy_runtime_view_layoutt>>
+    numpy_runtime_view_locals_;
   const nlohmann::json *numpy_runtime_bound_call_ = nullptr;
+  const numpy_runtime_view_layoutt &
+  runtime_numpy_view_statics(const std::string &key, std::size_t rank);
   void declare_runtime_numpy_view_param(
     numpy_scalar_pointer_view_infot &info,
     const std::string &arg_id,
     const std::string &key);
   void prepend_runtime_numpy_view_prologue(
     const std::string &function_id,
-    exprt &function_body) const;
+    exprt &function_body);
   void bind_runtime_numpy_view_arguments(
     const nlohmann::json &statement,
     codet &target_block);
   void store_runtime_numpy_view_layout(
     const nlohmann::json &call,
-    const std::string &key,
-    const numpy_runtime_view_paramt &runtime,
+    std::size_t param_index,
     codet &target_block);
-  bool has_runtime_numpy_view_param(const std::string &func_name) const;
-  void reject_unbound_runtime_numpy_view_call(const nlohmann::json &call) const;
+  std::vector<std::size_t>
+  runtime_numpy_view_params(const std::string &func_name);
+  void reject_unbound_runtime_numpy_view_call(const nlohmann::json &call);
   static bool same_view_layout(
     const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
     const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
