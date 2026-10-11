@@ -2439,5 +2439,9 @@ regression/python/isinstance_erased_type
 regression/python/return_type_param_shadows_global
 regression/esbmc/strndup_model
 regression/esbmc/strndup_model_fail
+regression/python/github_8276_nonfinite_to_int
+regression/python/github_8276_trunc_inf_fail
+regression/python/github_8276_round_nan_fail
+regression/python/github_8276_floor_inf_fail
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
