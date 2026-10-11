@@ -157,6 +157,18 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+// A str value is stored in a member as `char*`, as python_class_builder types
+// string members; the annotation type (char or a sized char array) would not
+// match the literal assigned to it (#8383).
+static typet stored_member_type(const typet &value_type)
+{
+  if (
+    type_utils::is_string_type(value_type) ||
+    type_utils::is_char_type(value_type))
+    return gen_pointer_type(char_type());
+  return value_type;
+}
+
 // True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
 // Used to recognize the two 2-D slicing patterns this frontend supports,
 // `a[:, j]` and `a[i, :]`; any other slice (bounded or stepped) inside a
@@ -2531,7 +2543,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (!class_type.has_component(attr_name))
         {
           struct_typet::componentt comp = python_frontend::build_component(
-            class_type.tag().as_string(), attr_name, current_element_type);
+            class_type.tag().as_string(),
+            attr_name,
+            stored_member_type(current_element_type));
           class_type.components().push_back(comp);
           // Persist the mutation back to the symbol (read-modify-set).
           class_symbol->set_type(migrate_type(class_symbol_type));
