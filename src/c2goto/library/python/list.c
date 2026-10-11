@@ -34,6 +34,10 @@ static PyType __ESBMC_list_type;
 static double __ESBMC_float_buf[__ESBMC_FLOAT_BUF_SIZE];
 static size_t __ESBMC_float_buf_idx = 0;
 
+// Set once a store changes an element's type, which the frontend's per-list
+// element type map does not see; its == fast path holds only while unset.
+bool __ESBMC_list_retyped = false;
+
 /* An 8-byte read of an object whose declared type is not known here. A packed
  * struct has alignment 1, so forming this pointer is defined whatever the
  * object's alignment -- a plain `uint64_t *` cast is not (C23 6.3.2.3p7) --
@@ -651,6 +655,9 @@ bool __ESBMC_list_set_at(
   size_t float_idx = 0;
   void *copied_value = __ESBMC_copy_value(
     value, type_size, type_id, float_type_id, &float_idx, ptr_free);
+
+  if (l->items[index].type_id != type_id)
+    __ESBMC_list_retyped = true;
 
   // Update the element at the given index
   l->items[index].value = copied_value;

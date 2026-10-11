@@ -1,5 +1,6 @@
 import ast
 import copy
+from collections import Counter
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -314,6 +315,45 @@ class ClassContextMixin:
                     method = copy.deepcopy(template)
                     self._rebind_cls_calls(method, heir.name)
                     heir.body.append(method)
+
+    @staticmethod
+    def _is_name_copy(node):
+        """Whether `node` is a plain `x = y` assignment."""
+        return (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Name))
+
+    @staticmethod
+    def _module_level_nodes(module):
+        """The nodes of `module` outside any function or lambda body."""
+        stack = [module]
+        while stack:
+            node = stack.pop()
+            yield node
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                stack.extend(ast.iter_child_nodes(node))
+
+    def _bind_class_alias_calls(self, module):
+        """Rewrite `alias(...)` to `Class(...)` where a top-level `alias = Class`
+        statement is the only binding of `alias`, to a top-level class the
+        module never rebinds: the converter recognises a constructor call only
+        by the class's own name (#8352). A module-level call before the binding
+        stays as written, since CPython raises NameError there."""
+        counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
+        classes = {stmt.name for stmt in module.body if isinstance(stmt, ast.ClassDef)}
+        bindings = {
+            n.targets[0].id: n
+            for n in filter(self._is_name_copy, module.body)
+            if n.value.id in classes and counts[n.targets[0].id] == counts[n.value.id] == 1
+        }
+        module_level = set(map(id, self._module_level_nodes(module)))
+        for n in ast.walk(module):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+                continue
+            binding = bindings.get(n.func.id)
+            if binding is None or (id(n) in module_level and
+                                   (n.lineno, n.col_offset) < (binding.lineno, binding.col_offset)):
+                continue
+            n.func = ast.copy_location(ast.Name(id=binding.value.id, ctx=ast.Load()), n.func)
 
     def _record_exit_suppresses_all(self, class_node):
         """Cache classes whose __exit__ unconditionally returns True."""
