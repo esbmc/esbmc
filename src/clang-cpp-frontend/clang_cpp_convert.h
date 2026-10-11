@@ -784,6 +784,11 @@ protected:
     bool &elided);
 
   bool get_new_storage(const clang::CXXNewExpr &ne, exprt &new_expr);
+  bool get_dealloc_function(const clang::CXXDeleteExpr &de, exprt &new_expr);
+  bool get_align_val(
+    const clang::QualType &type,
+    const clang::ParmVarDecl &param,
+    exprt &align);
 
   /* Lower a non-allocating placement new to
    * comma(<initialize *(T*)place>, (T*)place); a side-effecting place is
