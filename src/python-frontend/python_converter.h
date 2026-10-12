@@ -2732,6 +2732,9 @@ private:
     bool readonly;
     std::vector<std::size_t> shape;
     std::string source_id;
+    // The other storages a view bound to different arrays on different
+    // paths may point at.
+    std::set<std::string> other_sources;
     // Per-axis element strides of an N-D view over a scalar pointer; empty
     // for a contiguous view (typed pointer to rows) or a legacy 1-D view.
     std::vector<long long> strides;
@@ -2855,6 +2858,12 @@ private:
     const numpy_scalar_pointer_view_infot &parent,
     const nlohmann::json &slice_node);
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_branch_bound_view_layout(
+    const nlohmann::json &node,
+    const std::string &function,
+    std::set<std::string> &visiting,
+    unsigned depth) const;
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
   infer_numpy_view_layout(
     const nlohmann::json &node,
     const std::string &function,
@@ -2920,7 +2929,25 @@ private:
     const std::string &lhs_id,
     const numpy_scalar_pointer_view_infot &candidate,
     const typet &view_ptr_type,
-    const exprt &source) const;
+    const exprt &source);
+  bool can_merge_numpy_view_layouts(const std::string &view_id) const;
+  const numpy_runtime_view_layoutt &
+  numpy_view_layout_vars(const std::string &view_id, std::size_t rank);
+  void record_numpy_view_layout(
+    const std::string &view_id,
+    const std::string &storage_id);
+  void merge_numpy_view_binding(const std::string &view_id, bool same_kind);
+  static bool same_numpy_view_kind(
+    const numpy_scalar_pointer_view_infot &a,
+    const numpy_scalar_pointer_view_infot &b);
+  // Layout variables of each view name, the function-local ones among them,
+  // and the names whose metadata reads them.
+  std::map<std::string, numpy_runtime_view_layoutt> numpy_view_layout_vars_;
+  std::vector<std::string> numpy_view_layout_locals_;
+  std::set<std::string> numpy_merged_views_;
+  std::map<std::string, std::set<std::string>> numpy_view_other_sources_;
+  std::set<std::string> numpy_view_storage_roots(const std::string &id) const;
+  unsigned numpy_loop_depth_ = 0;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(

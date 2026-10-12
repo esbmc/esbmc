@@ -3214,6 +3214,7 @@ void python_converter::record_numpy_view_copy(
     // not a copy to mirror writes into; the source is kept to detach it when
     // the source name is rebound.
     pointer_view->second.source_id = numpy_view_source_of(storage_id);
+    record_numpy_view_layout(lhs_id, storage_id);
     numpy_view_copy_sources_.erase(lhs_id);
     numpy_array_symbols_.insert(lhs_id);
     return;
@@ -3288,8 +3289,16 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   {
     const std::string view_source_id =
       resolve_numpy_array_storage_alias_id(entry.second.source_id);
+    const bool other_source = std::any_of(
+      entry.second.other_sources.begin(),
+      entry.second.other_sources.end(),
+      [&](const std::string &other) {
+        return same_numpy_storage_id(
+          resolve_numpy_array_storage_alias_id(other), rebound_storage_id);
+      });
     if (
-      same_numpy_storage_id(view_source_id, rebound_storage_id) &&
+      (other_source ||
+       same_numpy_storage_id(view_source_id, rebound_storage_id)) &&
       !is_local_to_other_function(entry.first, current_func_name_))
       view_ids.push_back(entry.first);
   }
@@ -7526,6 +7535,23 @@ exprt python_converter::get_flat_boolop_test(
     get_location_from_decl(test_node));
 }
 
+namespace
+{
+struct loop_depth_guard
+{
+  unsigned &depth;
+  const bool active;
+  loop_depth_guard(unsigned &d, bool a) : depth(d), active(a)
+  {
+    depth += active;
+  }
+  ~loop_depth_guard()
+  {
+    depth -= active;
+  }
+};
+} // namespace
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -7539,6 +7565,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     contains_nested_scope_named_expr(ast_node["test"]))
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
+
+  const loop_depth_guard loop_guard(
+    numpy_loop_depth_, ast_node.value("_type", "") == "While");
 
   // Copy current type
   typet t = current_element_type;

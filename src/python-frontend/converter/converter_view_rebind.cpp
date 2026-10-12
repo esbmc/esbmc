@@ -72,6 +72,14 @@ void python_converter::detach_numpy_pointer_views_of(
   for (const std::string &view_id : numpy_views_of(rebound_id))
   {
     const auto info = numpy_pointer_view_info_.find(view_id);
+    // Which storage such a view points at is only known at run time, so it
+    // cannot be repointed at a snapshot of one of them.
+    if (
+      info != numpy_pointer_view_info_.end() &&
+      !info->second.other_sources.empty())
+      throw std::runtime_error(
+        "TypeError: rebinding a numpy array while a view bound to different "
+        "arrays on different paths is alive is not supported");
     if (
       info != numpy_pointer_view_info_.end() &&
       symbol_table_.find_symbol(view_id))

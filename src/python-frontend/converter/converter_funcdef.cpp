@@ -2293,6 +2293,25 @@ static const nlohmann::json *reaching_assigned_value(
   return path_independent ? reaching : nullptr;
 }
 
+// The value of every assignment to `name` in the scope whose statements are
+// `node`, whatever block it is in.
+static void collect_assigned_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &out)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  if (node.is_object() && scope_kinds.count(node.value("_type", "")) != 0)
+    return;
+  if (
+    node.is_object() && assignment_target_name(node) == name &&
+    node.contains("value") && !node["value"].is_null())
+    out.push_back(&node["value"]);
+  for (const auto &child : node)
+    collect_assigned_values(child, name, out);
+}
+
 // The subscript a call argument denotes for code in `function`: the argument
 // itself, or the value of the name it is, followed through single
 // assignments. `function` becomes the scope the subscript is evaluated in.
@@ -2662,6 +2681,44 @@ python_converter::subview_info(
   return info;
 }
 
+// Layout of a name bound to a view by several assignments of its scope, as
+// on the branches of an `if`: what those views share, so the run-time layout
+// when they differ.
+std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
+python_converter::infer_branch_bound_view_layout(
+  const nlohmann::json &node,
+  const std::string &function,
+  std::set<std::string> &visiting,
+  unsigned depth) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const std::string name = node.value("id", "");
+  const std::optional<std::string> scope =
+    node.value("_type", "") == "Name" && depth <= 8
+      ? binding_function(module_body, function, name)
+      : std::nullopt;
+  if (!scope || declared_global_or_nonlocal(module_body, name))
+    return std::nullopt;
+  const nlohmann::json &body =
+    scope->empty() ? module_body
+                   : (*find_function_def(module_body, *scope))["body"];
+  std::vector<const nlohmann::json *> values;
+  collect_assigned_values(body, name, values);
+  if (values.size() < 2 || values.size() != count_scope_stores(body, name))
+    return std::nullopt;
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> result;
+  for (const nlohmann::json *value : values)
+  {
+    const auto layout =
+      infer_numpy_view_layout(*value, *scope, visiting, depth + 1);
+    result = layout && result ? merge_view_layouts(*result, *layout) : layout;
+    if (!result)
+      return std::nullopt;
+  }
+  return result;
+}
+
 // Element type and layout of the view `node` denotes for code in `function`:
 // a parameter forwarded unchanged, or a subscript of a literal array or of
 // another such view.
@@ -2688,8 +2745,10 @@ python_converter::infer_numpy_view_layout(
   std::string scope = function;
   const nlohmann::json *subscript =
     resolve_view_subscript(node, module_body, scope);
+  if (subscript == nullptr)
+    return infer_branch_bound_view_layout(node, function, visiting, depth);
   if (
-    subscript == nullptr || !subscript->contains("slice") ||
+    !subscript->contains("slice") ||
     (*subscript)["value"].value("_type", "") != "Name")
     return std::nullopt;
   const nlohmann::json &base = (*subscript)["value"];
@@ -3423,6 +3482,49 @@ void python_converter::declare_runtime_numpy_view_param(
   numpy_runtime_view_locals_[key] = {arg_id, locals};
 }
 
+// Whether `symbol_id` names a local of `function_id` itself, not of a
+// function nested in it.
+static bool
+is_local_of(const std::string &symbol_id, const std::string &function_id)
+{
+  const std::string prefix = function_id + "@";
+  return symbol_id.rfind(prefix, 0) == 0 &&
+         symbol_id.find('@', prefix.size()) == std::string::npos;
+}
+
+// Moves the declarations of `ids` out of the blocks nested in `code`.
+static void hoist_nested_declarations(
+  exprt &code,
+  const std::set<std::string> &ids,
+  exprt::operandst &out,
+  bool outermost)
+{
+  if (code.id() != "code")
+    return;
+  if (code.statement() != "block")
+  {
+    for (exprt &operand : code.operands())
+      hoist_nested_declarations(operand, ids, out, false);
+    return;
+  }
+  exprt::operandst kept;
+  for (exprt &operand : code.operands())
+  {
+    const bool declares =
+      !outermost && operand.id() == "code" && operand.statement() == "decl" &&
+      operand.operands().size() == 1 && operand.op0().is_symbol() &&
+      ids.count(operand.op0().identifier().as_string()) != 0;
+    if (declares)
+      out.push_back(operand);
+    else
+    {
+      hoist_nested_declarations(operand, ids, out, false);
+      kept.push_back(operand);
+    }
+  }
+  code.operands() = kept;
+}
+
 // Copies each run-time view layout the caller set into the callee's locals.
 void python_converter::prepend_runtime_numpy_view_prologue(
   const std::string &function_id,
@@ -3438,7 +3540,7 @@ void python_converter::prepend_runtime_numpy_view_prologue(
   for (const auto &[key, entry] : numpy_runtime_view_locals_)
   {
     const auto &[arg_id, locals] = entry;
-    if (arg_id.rfind(function_id + "@", 0) != 0)
+    if (!is_local_of(arg_id, function_id))
       continue;
     const numpy_runtime_view_layoutt &statics =
       runtime_numpy_view_statics(key, locals.extents.size());
@@ -3448,6 +3550,20 @@ void python_converter::prepend_runtime_numpy_view_prologue(
       copy(locals.strides[axis], statics.strides[axis]);
     }
   }
+  // Layout variables of the function's local view names, and those names
+  // themselves when first bound inside a branch: a declaration there would
+  // end the name's life with the branch.
+  exprt::operandst declarations;
+  for (const std::string &local : numpy_view_layout_locals_)
+    if (is_local_of(local, function_id))
+      declarations.push_back(
+        code_declt(symbol_expr(*symbol_table_.find_symbol(local))));
+  std::set<std::string> views;
+  for (const auto &entry : numpy_view_layout_vars_)
+    if (is_local_of(entry.first, function_id))
+      views.insert(entry.first);
+  hoist_nested_declarations(function_body, views, declarations, true);
+  prologue.insert(prologue.begin(), declarations.begin(), declarations.end());
   function_body.operands().insert(
     function_body.operands().begin(), prologue.begin(), prologue.end());
 }
