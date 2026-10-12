@@ -617,7 +617,16 @@ public:
   typet bare_list_param_elem_type(
     const nlohmann::json &param_node,
     const std::string &param_id,
-    const typet &annotated);
+    const typet &annotated,
+    size_t index);
+
+  /// True when the recorded elements of \p id mix a list with another type.
+  bool mixes_list_and_other(const std::string &id) const;
+
+  /// Refuses a read that no single recorded element type answers (#8472).
+  void reject_unresolved_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
 
   /**
    * @brief Create an empty set
