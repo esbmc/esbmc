@@ -2808,3 +2808,11 @@ regression/python/github_8368_record_loop_unsupported
 regression/python/github_8368_record_loop_unsupported_fail
 regression/python/github_8368_record_param_unsupported
 regression/python/github_8368_record_param_unsupported_fail
+regression/python/github_8473
+regression/python/github_8473_fail
+regression/python/github_8473_branch
+regression/python/github_8473_branch_fail
+regression/python/github_8473_mixed
+regression/python/github_8473_call_result
+regression/python/github_8473_module
+regression/python/github_8473_instance_branch

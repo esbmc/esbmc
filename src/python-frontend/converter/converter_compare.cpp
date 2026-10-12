@@ -680,6 +680,51 @@ sole_object_owner(const nlohmann::json &module, const nlohmann::json &node)
   return "";
 }
 
+enum class identity_kind
+{
+  function,
+  instance,
+  other
+};
+
+/// A code-typed operand is the def itself only when it is a symbol: a call's
+/// result merely carries the code type.
+static identity_kind
+identity_kind_of(const expr2tc &operand, bool user_class_pointer)
+{
+  if (
+    (is_code_type(operand->type) && is_symbol2t(operand)) ||
+    (is_pointer_type(operand->type) &&
+     is_code_type(to_pointer_type(operand->type).subtype)))
+    return identity_kind::function;
+  return user_class_pointer ? identity_kind::instance : identity_kind::other;
+}
+
+/// `is` with a function on one side, or nil when neither side is a function.
+/// A def is a code symbol and a name bound to one a pointer to code, so both
+/// compare as addresses and the pointer model decides identity on each path.
+/// A class instance is never a function: comparing its address gives False
+/// and keeps any call inside the operand. Any other operand may be a function
+/// that lost its type in a container, so it is left to the caller.
+static expr2tc function_identity(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  identity_kind lhs_kind,
+  identity_kind rhs_kind)
+{
+  if (
+    lhs_kind == identity_kind::other || rhs_kind == identity_kind::other ||
+    (lhs_kind == identity_kind::instance &&
+     rhs_kind == identity_kind::instance))
+    return expr2tc();
+  const type2tc ptr = pointer_type2tc(get_empty_type());
+  auto address = [&ptr](const expr2tc &e) {
+    return typecast2tc(
+      ptr, is_code_type(e->type) ? address_of2tc(e->type, e) : e);
+  };
+  return equality2tc(address(lhs), address(rhs));
+}
+
 /// Build the Python 'is' identity equality in IREP2. The operands are the
 /// raw values, or the arrays' base addresses when both sides are arrays.
 expr2tc python_converter::build_is_equality(
@@ -706,14 +751,27 @@ expr2tc python_converter::build_is_equality(
     migrate_expr(rhs, rhs2);
   }
 
+  if (
+    expr2tc fn = function_identity(
+      lhs2,
+      rhs2,
+      identity_kind_of(lhs2, is_user_class_pointer(lhs.type())),
+      identity_kind_of(rhs2, is_user_class_pointer(rhs.type())));
+    !is_nil_expr(fn))
+    return fn;
+
   /* An object that lost its type through a container comes back as an
    * integer, and comparing that with the object's pointer builds an equality
    * every backend's mk_eq rejects on the width mismatch (#6640 territory).
-   * Say so here rather than abort in the solver. */
-  if (is_pointer_type(lhs2->type) != is_pointer_type(rhs2->type))
+   * A function that is not known to be a def is the same case. Say so here
+   * rather than abort in the solver. */
+  if (
+    is_pointer_type(lhs2->type) != is_pointer_type(rhs2->type) ||
+    ((is_code_type(lhs2->type) || is_code_type(rhs2->type)) &&
+     !is_array_type(lhs2->type) && !is_array_type(rhs2->type)))
     throw std::runtime_error(
-      "'is' between a pointer and a non-pointer: one operand lost its object "
-      "type, which ESBMC cannot compare by identity");
+      "'is' with an operand that lost its object type, which ESBMC cannot "
+      "compare by identity");
 
   return equality2tc(lhs2, rhs2);
 }
