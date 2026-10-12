@@ -71,6 +71,8 @@ private:
   // arguments (see numpy_call_expr.cpp for the full rationale). Split out of
   // get() to keep that function's own decision count from growing further.
   exprt get_arange_expr();
+  bool binds_static_array(const nlohmann::json &list) const;
+  exprt literal_constructor_expr(const nlohmann::json &list);
 
   bool is_math_function() const;
 

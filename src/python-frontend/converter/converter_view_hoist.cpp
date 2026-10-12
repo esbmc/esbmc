@@ -264,11 +264,47 @@ void python_converter::hoist_returned_numpy_view_call(
   }
 }
 
+// `x = a if c else f(v[lo:hi])`: the view expression may only be built when
+// its operand runs, so the assignment becomes an `if` with one assignment
+// per branch, where each is handled on its own.
+bool python_converter::split_conditional_numpy_view_assignment(
+  const nlohmann::json &statement,
+  nlohmann::json &rewritten)
+{
+  const std::string kind = statement.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign") || !statement.contains("value") ||
+    !statement["value"].is_object() ||
+    statement["value"].value("_type", "") != "IfExp")
+    return false;
+  const nlohmann::json &choice = statement["value"];
+  std::vector<json_pointer> arguments;
+  for (const char *branch : {"body", "orelse"})
+    collect_subscript_arguments(choice[branch], json_pointer(), arguments);
+  if (arguments.empty())
+    return false;
+  nlohmann::json taken = statement, other = statement;
+  taken["value"] = choice["body"];
+  other["value"] = choice["orelse"];
+  rewritten = statement;
+  rewritten.erase("value");
+  rewritten.erase("targets");
+  rewritten.erase("target");
+  rewritten.erase("annotation");
+  rewritten["_type"] = "If";
+  rewritten["test"] = choice["test"];
+  rewritten["body"] = nlohmann::json::array({taken});
+  rewritten["orelse"] = nlohmann::json::array({other});
+  return true;
+}
+
 const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
   const nlohmann::json &statement,
   nlohmann::json &rewritten,
   codet &target_block)
 {
+  if (split_conditional_numpy_view_assignment(statement, rewritten))
+    return rewritten;
   const std::string key = statement_expression_key(statement);
   if (key.empty())
     return statement;

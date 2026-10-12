@@ -7389,6 +7389,30 @@ static nlohmann::json resolve_arange_call_args(
   return resolved;
 }
 
+// Whether the literal list a constructor produced is bound to a name as a
+// static array: it must be non-empty, and the shape must not be a tuple,
+// whose results the callers of these constructors still expect as lists.
+bool numpy_call_expr::binds_static_array(const nlohmann::json &list) const
+{
+  const bool tuple_shape =
+    !call_["args"].empty() && call_["args"][0].value("_type", "") == "Tuple";
+  return converter_.current_lhs != nullptr &&
+         converter_.current_lhs->is_symbol() && !tuple_shape &&
+         list.contains("elts") && !list["elts"].empty();
+}
+
+exprt numpy_call_expr::literal_constructor_expr(const nlohmann::json &list)
+{
+  if (binds_static_array(list))
+    return converter_.get_static_array(
+      list, type_handler_.get_typet(list["elts"]));
+  const bool old_build_static_lists = converter_.build_static_lists;
+  converter_.build_static_lists = false;
+  exprt expr = converter_.get_expr(list);
+  converter_.build_static_lists = old_build_static_lists;
+  return expr;
+}
+
 exprt numpy_call_expr::get_arange_expr()
 {
   // A dtype= (or any other) keyword changes arange()'s output in ways the
@@ -7414,10 +7438,7 @@ exprt numpy_call_expr::get_arange_expr()
   const arange_materialize_result result = materialize_arange_ex(resolved_args);
   if (result.list)
   {
-    const bool old_build_static_lists = converter_.build_static_lists;
-    converter_.build_static_lists = false;
-    exprt expr = converter_.get_expr(*result.list);
-    converter_.build_static_lists = old_build_static_lists;
+    exprt expr = literal_constructor_expr(*result.list);
     if (converter_.current_lhs)
     {
       converter_.current_lhs->type() = expr.type();
@@ -9214,6 +9235,13 @@ exprt numpy_call_expr::get()
       return converter_.get_expr(node);
     };
 
+    // A non-empty literal bound to a name becomes a static array, like
+    // np.array of it, so its slices are views. Used in place it stays a
+    // list, which compares with a list literal.
+    auto to_array_expr = [this](const nlohmann::json &node) {
+      return literal_constructor_expr(node);
+    };
+
     auto get_arg = [&](std::size_t index) {
       nlohmann::json arg = call_["args"][index];
       resolve_var(arg);
@@ -9432,7 +9460,7 @@ exprt numpy_call_expr::get()
           row.push_back(make_constant(i == j ? 1 : 0));
         out_rows.push_back(make_list(row));
       }
-      return to_list_expr(apply_constructor_dtype(make_list(out_rows)));
+      return to_array_expr(apply_constructor_dtype(make_list(out_rows)));
     }
 
     if (function == "linspace")
@@ -9446,14 +9474,14 @@ exprt numpy_call_expr::get()
         return to_list_expr(make_list({}));
       const std::string dtype = get_dtype();
       if (num == 1)
-        return to_list_expr(apply_constructor_dtype(
+        return to_array_expr(apply_constructor_dtype(
           make_list({make_numpy_linspace_constant(start, dtype)})));
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<nlohmann::json> elts;
       for (std::size_t i = 0; i < num; ++i)
         elts.push_back(make_numpy_linspace_constant(
           start + (step * static_cast<double>(i)), dtype));
-      return to_list_expr(apply_constructor_dtype(make_list(elts)));
+      return to_array_expr(apply_constructor_dtype(make_list(elts)));
     }
   }
 

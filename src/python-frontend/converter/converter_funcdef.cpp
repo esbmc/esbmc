@@ -2598,33 +2598,103 @@ static bool forwards_param_being_inferred(
          visiting.count(view_param_key(enclosing_function, *forwarded)) != 0;
 }
 
-// Type of the array `np.zeros(shape)` or `np.ones(shape)` builds for a
-// literal shape and no dtype, or dtype int or float. The other constructors
-// build list-backed arrays, whose slices are copies.
+static std::optional<long long> int_constant(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") != "Constant" || !node.contains("value") ||
+    !node["value"].is_number_integer())
+    return std::nullopt;
+  return node["value"].get<long long>();
+}
+
+// Length of `np.arange` over one to three integer literals.
+static std::optional<std::size_t> arange_length(const nlohmann::json &args)
+{
+  std::vector<long long> values;
+  for (const auto &arg : args)
+  {
+    const std::optional<long long> value = int_constant(arg);
+    if (!value)
+      return std::nullopt;
+    values.push_back(*value);
+  }
+  if (values.empty() || values.size() > 3)
+    return std::nullopt;
+  const long long start = values.size() == 1 ? 0 : values[0];
+  const long long stop = values.size() == 1 ? values[0] : values[1];
+  const long long step = values.size() == 3 ? values[2] : 1;
+  if (step == 0)
+    return std::nullopt;
+  const long long span = step > 0 ? stop - start : start - stop;
+  const long long magnitude = step > 0 ? step : -step;
+  return span <= 0 ? 0 : static_cast<std::size_t>((span - 1) / magnitude + 1);
+}
+
+// Element kind ("int" or "float") of the array a numpy constructor with
+// literal arguments builds; "" when it is not read here.
+static std::string
+filled_array_dtype(const std::string &ctor, const nlohmann::json &call)
+{
+  const nlohmann::json keywords =
+    call.value("keywords", nlohmann::json::array());
+  if (ctor == "zeros" || ctor == "ones")
+  {
+    if (keywords.empty())
+      return "float";
+    return keywords.size() == 1 && keywords[0].value("arg", "") == "dtype"
+             ? keywords[0]["value"].value("id", "")
+             : "";
+  }
+  if (!keywords.empty())
+    return "";
+  // The frontend builds `eye` and `identity` from integer literals.
+  return ctor == "linspace" ? "float" : "int";
+}
+
+// Type of the array a numpy constructor other than `np.array` builds from
+// literal arguments: `zeros`, `ones`, `arange`, `linspace`, `eye`,
+// `identity`. `np.full` builds a list, whose slices are copies.
 std::optional<typet>
 python_converter::numpy_filled_array_type(const nlohmann::json &value) const
 {
-  static const std::set<std::string> filled = {"zeros", "ones"};
-  if (
-    !is_numpy_array_constructor_expr(value) ||
-    filled.count(value["func"].value("attr", "")) == 0 ||
-    value["args"].size() != 1)
-    return std::nullopt;
   const std::optional<std::vector<std::size_t>> shape =
-    get_numpy_constructor_shape(value);
-  const nlohmann::json keywords =
-    value.value("keywords", nlohmann::json::array());
-  std::string dtype = "float";
-  if (keywords.size() == 1 && keywords[0].value("arg", "") == "dtype")
-    dtype = keywords[0]["value"].value("id", "");
-  else if (!keywords.empty())
+    numpy_filled_array_shape(value);
+  if (!shape)
     return std::nullopt;
-  if (!shape || shape->empty() || (dtype != "float" && dtype != "int"))
+  const std::string dtype =
+    filled_array_dtype(value["func"].value("attr", ""), value);
+  if (dtype != "float" && dtype != "int")
     return std::nullopt;
   typet type = type_handler_.get_typet(dtype);
   for (auto dim = shape->rbegin(); dim != shape->rend(); ++dim)
     type = array_typet(type, from_integer(*dim, size_type()));
   return type;
+}
+
+// Shape of the non-empty array such a constructor builds. A tuple shape is
+// read only for `zeros` and `ones`: the others then build a list.
+std::optional<std::vector<std::size_t>>
+python_converter::numpy_filled_array_shape(const nlohmann::json &value) const
+{
+  static const std::set<std::string> filled = {
+    "zeros", "ones", "arange", "linspace", "eye", "identity"};
+  if (!is_numpy_array_constructor_expr(value) || value["args"].empty())
+    return std::nullopt;
+  const std::string ctor = value["func"].value("attr", "");
+  const bool zeros_or_ones = ctor == "zeros" || ctor == "ones";
+  const bool tuple_shape = value["args"][0].value("_type", "") == "Tuple";
+  if (
+    filled.count(ctor) == 0 || (tuple_shape && !zeros_or_ones) ||
+    (zeros_or_ones && value["args"].size() != 1))
+    return std::nullopt;
+  std::optional<std::vector<std::size_t>> shape;
+  if (ctor != "arange")
+    shape = get_numpy_constructor_shape(value);
+  else if (const auto length = arange_length(value["args"]))
+    shape = std::vector<std::size_t>{*length};
+  const bool empty = !shape || shape->empty() ||
+                     std::find(shape->begin(), shape->end(), 0) != shape->end();
+  return empty ? std::nullopt : shape;
 }
 
 // Type of the array bound to `arr_name` where code in `function` reads it at
@@ -2681,9 +2751,9 @@ python_converter::subview_info(
   return info;
 }
 
-// Layout of a name bound to a view by several assignments of its scope, as
-// on the branches of an `if`: what those views share, so the run-time layout
-// when they differ.
+// Layout of a name bound to a view by assignments nested in blocks of its
+// scope, as on the branches of an `if` or in a loop: what those views
+// share, so the run-time layout when they differ.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
 python_converter::infer_branch_bound_view_layout(
@@ -2705,7 +2775,7 @@ python_converter::infer_branch_bound_view_layout(
                    : (*find_function_def(module_body, *scope))["body"];
   std::vector<const nlohmann::json *> values;
   collect_assigned_values(body, name, values);
-  if (values.size() < 2 || values.size() != count_scope_stores(body, name))
+  if (values.empty() || values.size() != count_scope_stores(body, name))
     return std::nullopt;
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> result;
   for (const nlohmann::json *value : values)

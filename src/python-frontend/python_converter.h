@@ -1829,6 +1829,9 @@ private:
     nlohmann::json &rewritten,
     codet &target_block);
   bool needs_numpy_view_call_binding(const nlohmann::json &node);
+  bool split_conditional_numpy_view_assignment(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten);
   void hoist_returned_numpy_view_call(
     const std::string &key,
     nlohmann::json &rewritten,
@@ -2779,6 +2782,8 @@ private:
     unsigned depth = 0) const;
   std::optional<typet>
   numpy_filled_array_type(const nlohmann::json &value) const;
+  std::optional<std::vector<std::size_t>>
+  numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &
   inferred_numpy_view_param(
     const std::string &func_name,
