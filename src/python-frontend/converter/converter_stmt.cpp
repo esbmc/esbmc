@@ -5161,8 +5161,8 @@ void python_converter::preregister_global_variables(
 
     // Skip implicitly inferred annotations (plain Assign converted by the
     // annotator). Only preregister variables that the user explicitly annotated
-    // (e.g., `x: SomeClass = ...`). Inferred globals like `l = [1, 2, 3]`
-    // should not be visible inside functions that don't declare `global l`.
+    // (e.g., `x: SomeClass = ...`). An inferred global like `l = [1, 2, 3]`
+    // is registered only when a read reaches it first (find_global_symbol).
     if (element.value("_inferred_annotation", false))
       continue;
 
@@ -8427,6 +8427,7 @@ exprt python_converter::get_block(
     {
       // Add an assignment to the block
       get_folded_var_assign(element, block);
+      mark_global_bound(element, block);
       break;
     }
     case StatementType::IF_STATEMENT:
@@ -8462,6 +8463,7 @@ exprt python_converter::get_block(
       get_unfolded_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
+      mark_global_bound(element, block);
 
       // Bind the closure's capture cells where the `def` executes (#6256).
       exprt::operandst &bindings = pending_captures_.operands();
