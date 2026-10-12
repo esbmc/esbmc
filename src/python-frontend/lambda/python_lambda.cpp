@@ -1018,6 +1018,13 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);
 
+  // Lambda function symbol is always top-level: py:module@F@lambda_name
+  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
+
+  // The cells must exist before the body is converted, so a free variable
+  // resolves to the cell rather than to the enclosing frame's local.
+  converter_.capture_lambda_free_variables(element, lambda_id, location);
+
   // Determine the scope for parameters: use first lambda's scope for all nested
   // lambdas
   std::string param_scope;
@@ -1044,9 +1051,6 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   }
 
   lambda_type.return_type() = return_type;
-
-  // Lambda function symbol is always top-level: py:module@F@lambda_name
-  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
 
   // Parameters are created in param_scope (shared for nested lambdas)
   std::string param_scope_id = "py:" + module_name + "@F@" + param_scope;

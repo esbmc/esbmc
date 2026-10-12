@@ -42,6 +42,7 @@ execution_statet::execution_statet(
   monitor_from_tid = 0;
   guard_execution = guard_execution_name;
   interleaving_unviable = false;
+  main_returned = false;
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
@@ -150,6 +151,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
   interleaving_unviable = ex.interleaving_unviable;
+  main_returned = ex.main_returned;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -241,6 +243,73 @@ static bool mpor_set_conflicts(const std::set<expr2tc> &s, const expr2tc &key)
   return false;
 }
 
+/// Whether __ESBMC_main has exit-time code (atexit handlers, static
+/// destructors) to run between main's return at \p call and the end hook.
+static bool exit_code_follows(goto_programt::const_targett call)
+{
+  const goto_programt::instructiont &next = *std::next(call);
+  if (next.function != "__ESBMC_main" || !next.is_function_call())
+    return false;
+  const expr2tc &function = to_code_function_call2t(next.code).function;
+  return !is_symbol2t(function) ||
+         to_symbol2t(function).thename != "c:@F@__ESBMC_pthread_end_main_hook";
+}
+
+void execution_statet::symex_end_function(
+  reachability_treet &art,
+  const goto_programt::instructiont &instruction)
+{
+  const bool main_ends = (instruction.function == "c:@F@main" ||
+                          instruction.function == "c:@F@main#") &&
+                         !options.get_bool_option("memory-leak-check") &&
+                         !options.get_bool_option("termination");
+
+  if (instruction.function == "__ESBMC_main")
+    end_thread();
+  else if (
+    main_ends &&
+    exit_code_follows(get_active_state().top().calling_location.pc))
+  {
+    // Returning from main is a call to exit() (C11 5.1.2.2.3), which runs
+    // the atexit functions and, in C++, destroys objects with static
+    // storage duration ([basic.start.term]) before the process ends.
+    // __ESBMC_main does both before __ESBMC_pthread_end_main_hook; run them
+    // atomically and end the path when that hook returns.
+    main_returned = true;
+    increment_active_atomic_number();
+    goto_symext::symex_step(art);
+  }
+  else if (
+    main_ends || (main_returned &&
+                  instruction.function == "c:@F@__ESBMC_pthread_end_main_hook"))
+  {
+    // End the main thread to avoid exploring further interleavings.
+    // TODO: we should support verifying memory leaks in multi-threaded C
+    // programs.
+    //
+    // Returning from main is a call to exit(): the process terminates and
+    // every other thread is torn down (C11 5.1.2.2.3), so a thread still
+    // waiting on a lock main held is not deadlocked. This point is reached
+    // only after a real return -- pthread_exit() ends in
+    // __ESBMC_assume(0) -- so a program whose threads outlive main via
+    // pthread_exit keeps being explored under --deadlock-check (#6479).
+    //
+    // Skipped under --termination: the strategy inserts an
+    // `assert(false)` after the main() call in __ESBMC_main to
+    // detect terminating paths. The assume(false) here would kill
+    // the path before reaching that marker; the assertion would
+    // never become a VCC.
+    assume(gen_false_expr());
+    end_thread();
+    interleaving_unviable = true;
+  }
+  else
+  {
+    // Fall through to base class
+    goto_symext::symex_step(art);
+  }
+}
+
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
@@ -295,42 +364,7 @@ void execution_statet::symex_step(reachability_treet &art)
   switch (instruction.type)
   {
   case END_FUNCTION:
-    if (instruction.function == "__ESBMC_main")
-      end_thread();
-    else if (
-      (instruction.function == "c:@F@main" ||
-       instruction.function == "c:@F@main#") &&
-      !options.get_bool_option("memory-leak-check") &&
-      !options.get_bool_option("termination"))
-    {
-      // check whether we reached the end of the main function and
-      // whether we are not checking for memory leaks.
-      // We should end the main thread to avoid exploring further interleavings
-      // TODO: once we support at_exit, we should check this code
-      // TODO: we should support verifying memory leaks in multi-threaded C
-      // programs.
-      //
-      // Returning from main is a call to exit(): the process terminates and
-      // every other thread is torn down (C11 5.1.2.2.3), so a thread still
-      // waiting on a lock main held is not deadlocked. This END_FUNCTION is
-      // reached only on a real return -- pthread_exit() ends in
-      // __ESBMC_assume(0) -- so a program whose threads outlive main via
-      // pthread_exit keeps being explored under --deadlock-check (#6479).
-      //
-      // Skipped under --termination: the strategy inserts an
-      // `assert(false)` after the main() call in __ESBMC_main to
-      // detect terminating paths. The assume(false) here would kill
-      // the path before reaching that marker; the assertion would
-      // never become a VCC.
-      assume(gen_false_expr());
-      end_thread();
-      interleaving_unviable = true;
-    }
-    else
-    {
-      // Fall through to base class
-      goto_symext::symex_step(art);
-    }
+    symex_end_function(art, instruction);
     break;
   case ATOMIC_BEGIN:
     state.source.pc++;
