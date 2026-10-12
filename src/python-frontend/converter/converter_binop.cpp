@@ -671,9 +671,22 @@ exprt python_converter::lower_short_circuit_boolop(
     return nil_exprt();
   }
 
-  const locationt location = get_location_from_decl(element);
-  symbolt result_symbol =
-    create_return_temp_variable(type, location, "boolop_result");
+  return emit_guarded_boolop(
+    logical_expr, effects, truthy, get_location_from_decl(element));
+}
+
+/// Lowers the and/or \p logical_expr into a result temporary that each later
+/// operand updates in its own guarded block, after the statements its
+/// conversion planted in \p effects.
+exprt python_converter::emit_guarded_boolop(
+  const exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const locationt &location)
+{
+  const exprt::operandst &operands = logical_expr.operands();
+  symbolt result_symbol = create_return_temp_variable(
+    operands.front().type(), location, "boolop_result");
   symbol_table_.add(result_symbol);
   const exprt result = symbol_expr(result_symbol);
 
@@ -1567,6 +1580,46 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
 
+  const exprt result =
+    get_binary_operator_expr(element, left, right, op, lhs, rhs);
+  return keep_operand_calls(result, lhs, rhs);
+}
+
+/// A comparison decided from its operand types alone still evaluates its
+/// operands, so a call in one of them must run (#8447).
+exprt python_converter::keep_operand_calls(
+  const exprt &result,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!result.is_constant() || !result.type().is_bool())
+    return result;
+
+  code_blockt block;
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    if (operand->is_function_call())
+      block.copy_to_operands(*operand);
+    else if (has_side_effect(*operand))
+      block.copy_to_operands(code_expressiont(*operand));
+  }
+  if (block.operands().empty())
+    return result;
+
+  block.copy_to_operands(code_expressiont(result));
+  side_effect_exprt kept("statement_expression", result.type());
+  kept.copy_to_operands(block);
+  return kept;
+}
+
+exprt python_converter::get_binary_operator_expr(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))

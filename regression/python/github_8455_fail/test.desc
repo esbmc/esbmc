@@ -1,0 +1,5 @@
+CORE
+main.py
+--generate-pytest-testcase
+^  FAILED .* line +3  assertion v == 4$
+^VERIFICATION FAILED$
