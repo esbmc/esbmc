@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Type inference failed at line 8\. Variable scale not found$
