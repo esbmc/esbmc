@@ -3936,7 +3936,7 @@ void python_converter::get_function_definition(
     // tagged return type instead of the post-hoc scan below narrowing to
     // whichever branch it sees first.
     type.return_type() =
-      dynamic_type_handler_.detect_dynamic_return_type(function_node["body"])
+      dynamic_type_handler_.detect_dynamic_return_type(function_node)
         ? type_handler_.get_tagged_object_type()
         : empty_typet();
   }
