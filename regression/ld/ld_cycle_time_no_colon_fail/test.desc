@@ -1,0 +1,4 @@
+CORE
+timer.ld
+--ld-props props.yaml --ld-cycle-time 10
+^ERROR: invalid --ld-cycle-time .10.: expected MIN:MAX

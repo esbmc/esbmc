@@ -1,4 +1,5 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
+#include <ld-frontend/ld_cycle_time.h>
 #include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <cctype>
 #include <algorithm>
@@ -70,6 +71,8 @@ static std::string ld_name(const std::string &var)
 {
   return "ld::" + var;
 }
+
+static const char *const kCycleDelta = "__cycle_delta";
 
 // plus_exprt/mult_exprt set no result type (the C frontend fills it in during
 // its adjust pass; the LD frontend builds final IR directly and has none), so
@@ -310,6 +313,19 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   };
   exprt one = gen_one(et_sym.type());
   exprt zero = gen_zero(et_sym.type());
+
+  // Timing mode: a scan adds the shared delta, capped so ET never passes PT.
+  exprt advance_by = one;
+  if (ld_cycle_time())
+  {
+    const typet wide = dint_type();
+    const symbol_exprt delta(ld_name(kCycleDelta), wide);
+    const exprt left = make_arith(
+      exprt::minus, cast_to(pt_sym, wide), cast_to(et_sym, wide), wide);
+    advance_by = cast_to(
+      if_exprt(binary_relation_exprt(delta, "<", left), delta, left),
+      et_sym.type());
+  }
   exprt in_val = bool_value_of(in_sym);
   exprt q_val = bool_value_of(q_sym);
 
@@ -318,8 +334,8 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   // eventually overflows, which is UB and flips Q back to false.
   code_ifthenelset advance_et;
   advance_et.cond() = et_pt("<");
-  advance_et.then_case() =
-    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, et_sym.type()));
+  advance_et.then_case() = code_assignt(
+    et_sym, make_arith(exprt::plus, et_sym, advance_by, et_sym.type()));
   auto q_while_pending = code_assignt(q_sym, et_pt("<"));
 
   symbol_exprt in_prev = declare_bool_shadow(
@@ -709,6 +725,19 @@ code_blockt ld_converter::build_scan_body(const exprt &)
   // iteration each physical input is re-sampled nondeterministically.  Without
   // this the inputs stay frozen at their initial value and every property
   // verifies vacuously.
+  if (const auto cycle = ld_cycle_time())
+  {
+    const symbol_exprt delta =
+      declare_scoped(ld_name(kCycleDelta), dint_type());
+    scan_body.copy_to_operands(
+      code_assignt(delta, side_effect_expr_nondett(delta.type())));
+    scan_body.copy_to_operands(code_assumet(and_exprt(
+      binary_relation_exprt(
+        delta, ">=", int_const(cycle->min_ms, delta.type())),
+      binary_relation_exprt(
+        delta, "<=", int_const(cycle->max_ms, delta.type())))));
+  }
+
   const bool closed_world = config.options.get_bool_option("ld-closed-world");
   report_shared(ir_.variables, closed_world);
   for (const auto &v : ir_.variables)

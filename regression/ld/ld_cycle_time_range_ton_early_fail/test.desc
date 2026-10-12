@@ -1,0 +1,4 @@
+CORE
+timer.ld
+--ld-props props.yaml --unwind 8 --no-unwinding-assertions --ld-cycle-time 10:30
+^VERIFICATION FAILED$
