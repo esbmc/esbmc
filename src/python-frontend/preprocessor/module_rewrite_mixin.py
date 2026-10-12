@@ -429,6 +429,8 @@ class ModuleRewriteMixin:
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
         self._scan_fixed_receivers(node)
+        self.variable_names = self._variable_names(node)
+        self.scope_binding_counts = self._scope_binding_counts(node)
 
         self._scan_shadowed_nondet_collections(node)
 

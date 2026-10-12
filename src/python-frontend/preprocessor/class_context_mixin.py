@@ -30,6 +30,17 @@ def _class_scope_nodes(node):
         yield from _class_scope_nodes(child)
 
 
+def _def_scope_nodes(scope):
+    """The nodes under `scope` outside any nested def, which the visit tracks
+    as a scope of its own; a nested def is yielded but not entered."""
+    stack = list(ast.iter_child_nodes(scope))
+    while stack:
+        node = stack.pop()
+        yield node
+        if not isinstance(node, ast.FunctionDef):
+            stack.extend(ast.iter_child_nodes(node))
+
+
 def _runs_call(node):
     """Whether evaluating `node` in a class body may call something."""
     for n in _class_scope_nodes(node):
@@ -526,6 +537,30 @@ class ClassContextMixin:
             n.attr
             for n in ast.walk(module)
             if isinstance(n, ast.Attribute) and not isinstance(n.ctx, ast.Load)
+        }
+
+    @staticmethod
+    def _variable_names(module):
+        """The names `module` binds anywhere other than by an import or a
+        definition."""
+        return {
+            name
+            for n in ast.walk(module)
+            if not isinstance(n, (ast.alias, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            for name in ClassContextMixin._names_bound_by(n)
+        }
+
+    @staticmethod
+    def _scope_binding_counts(module):
+        """For each def in `module`, keyed by node id, and for `module`, keyed
+        by None, the node and how often each name is bound in it outside its
+        nested defs."""
+        return {
+            None if scope is module else id(scope):
+            (scope,
+             Counter(name for n in _def_scope_nodes(scope)
+                     for name in ClassContextMixin._names_bound_by(n)))
+            for scope in (module, *(n for n in ast.walk(module) if isinstance(n, ast.FunctionDef)))
         }
 
     def _scan_fixed_receivers(self, module):
