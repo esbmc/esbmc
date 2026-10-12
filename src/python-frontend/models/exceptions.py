@@ -122,6 +122,16 @@ class NameError(Exception):
         return self.message
 
 
+class UnboundLocalError(NameError):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class OSError(Exception):
     """Base class for I/O related errors"""
     message: str = ""

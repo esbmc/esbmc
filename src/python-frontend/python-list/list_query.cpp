@@ -244,12 +244,20 @@ exprt python_list::compare(
         size);
       return equality2tc(size, constant_int2tc(size->type, BigInt(n)));
     };
+    // ...and while no store changed an element's type (#8131).
+    const symbolt *retyped_sym =
+      converter_.symbol_table().find_symbol("c:@__ESBMC_list_retyped");
+    assert(retyped_sym);
+    expr2tc retyped;
+    migrate_expr(build_symbol(*retyped_sym), retyped);
+    const expr2tc not_retyped = not2tc(retyped);
     auto unless_resized = [&](const expr2tc &fast, const expr2tc &sizes_ok) {
       const code_function_callt call = build_list_eq_call(BigInt(0));
       expr2tc slow;
       migrate_expr(
         build_call(call.function(), bool_type(), call.arguments()), slow);
-      const expr2tc eq = if2tc(get_bool_type(), sizes_ok, fast, slow);
+      const expr2tc eq =
+        if2tc(get_bool_type(), and2tc(not_retyped, sizes_ok), fast, slow);
       return migrate_expr_back(op == "NotEq" ? not2tc(eq) : eq);
     };
 

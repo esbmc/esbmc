@@ -178,6 +178,19 @@ static exprt dunder_ref_arg(const exprt &operand)
   return gen_address_of(operand);
 }
 
+// The other argument of a dunder call. A number goes by value to a number
+// parameter, so `3 * V(2)` passes 3 to `__rmul__(self, k: int)`.
+static exprt
+dunder_other_arg(const exprt &operand, const code_typet &method_type)
+{
+  const auto &params = method_type.arguments();
+  if (
+    params.size() > 1 && is_number(params[1].type()) &&
+    is_number(operand.type()))
+    return typecast_exprt(operand, params[1].type());
+  return dunder_ref_arg(operand);
+}
+
 // Check whether the argument type matches the "other" parameter type.
 // In case the user annotates it with a concrete class type.
 static bool is_other_param_compatible(
@@ -319,7 +332,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {dunder_ref_arg(lhs), dunder_ref_arg(rhs)});
+              {dunder_ref_arg(lhs), dunder_other_arg(rhs, method_type)});
             call.location() = loc;
             return call;
           }
@@ -349,7 +362,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {dunder_ref_arg(rhs), dunder_ref_arg(lhs)});
+              {dunder_ref_arg(rhs), dunder_other_arg(lhs, method_type)});
             call.location() = loc;
             return call;
           }
