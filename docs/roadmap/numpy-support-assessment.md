@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-11.
+**Updated:** 2026-10-12.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -21,7 +21,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Partial | Concrete array/view/descriptor returns from supported constructors, bare parameters, parameter subscript/subarrays, and supported descriptor calls over parameters are implemented. Remaining gap: `array_return_call_arg_edge` is still pinned as `KNOWNBUG`; mutating a captured list/array inside a function without a `global` declaration is a pre-existing symbol-resolution gap, not specific to array returns. Genuinely symbolic parameter shapes are rejected when unsupported metadata/view consumers need concrete shape information; `len()` on such parameters remains supported through its independent path. |
-| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T`/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. A view also keeps its metadata when it leaves direct local use: a call to a function that is a single return expression over its parameters (after any local aliases) is folded into the caller, so views passed in or returned alias as written; a literal `list`/`tuple`/`dict` holding views binds each element to its own view and is read back by literal index or key; `alias = view` carries shape, strides and read-only state; a name bound on two paths to views with the same layout over the same array is one view. Remaining gaps, each rejected with its own `TypeError`: a view passed to a builtin such as `sum`/`list`/`sorted`/`print`/`any`/`all`, a method, a class constructor or a lambda; a view passed to a user function that is not a single return expression when its layout cannot be read from every call site (the source is a list-backed constructor such as `np.arange`/`np.full`/`np.linspace`/`np.eye`, is rebound inside a branch or loop, or is bound inside a loop; call sites disagree on the element type or on a 2-D layout; a 2-D slice has a run-time bound); a view with run-time bounds, or one callee called with different 1-D layouts, anywhere but a call statement, assignment or return whose arguments contain no calls, or when the callee is defined after its caller; a view expression passed as an argument from a conditionally evaluated operand or after another call of the same statement; a view returned by such a function unless every `return` yields the same parameter and the call is what the statement evaluates first; value reads or writes of storage after it was passed to a function that does not use it (only `len`/`.shape`/`.ndim`/`.size` stay allowed, there is no havoc); a view stored by `append`, item assignment or a comprehension, in a nested container, an attribute or a global; a container of views that is mutated, indexed by a run-time key, bound inside a branch or loop, or used as a whole; views returned from more than one path; a source name rebound inside a branch or loop while views of it are alive; a name bound on different paths to views with a different shape, strides or storage; advanced `nditer`; `reshape`/`ravel` of an N-D view whose stride is only known at run time (whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name. |
+| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T`/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. A view also keeps its metadata when it leaves direct local use: a call to a function that is a single return expression over its parameters (after any local aliases) is folded into the caller, so views passed in or returned alias as written; a literal `list`/`tuple`/`dict` holding views binds each element to its own view and is read back by literal index or key; `alias = view` carries shape, strides and read-only state; a name bound on two paths to views with the same layout over the same array is one view. Remaining gaps, each rejected with its own `TypeError`: a view passed to a builtin such as `sum`/`list`/`sorted`/`print`/`any`/`all`, a method, a class constructor or a lambda; a view passed to a user function that is not a single return expression when its layout cannot be read from every call site (the source is `np.full`, `np.eye` or `np.identity`, which build lists, or is rebound inside a branch or loop; call sites disagree on the element type or the rank); a view whose layout the callee reads at run time (run-time bounds, or one callee called with different layouts) when the call is not what its statement evaluates first or its arguments contain calls; a view expression passed as an argument after another call of the same statement; a view returned by such a function unless every `return` yields the same parameter and the call is what the statement evaluates first; value reads or writes of storage after it was passed to a function that does not use it (only `len`/`.shape`/`.ndim`/`.size` stay allowed, there is no havoc); a view stored by `append`, item assignment or a comprehension, in a nested container, an attribute or a global; a container of views that is mutated, indexed by a run-time key, bound inside a branch or loop, or used as a whole; views returned from more than one path; a source name rebound inside a branch or loop while views of it are alive; a name bound on different paths to views with a different rank, element type or read-only state, or to different layouts or arrays inside a loop or while a nested function reads the name; an array rebound while a view bound per path to it or to another array is alive; advanced `nditer`; `reshape`/`ravel` of an N-D view whose stride is only known at run time (whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name. |
 
 ---
 
@@ -36,7 +36,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
 | Structured arrays | Record dtypes. |
-| Views / strides | Views passed to builtins, methods, constructors or lambdas; views passed to multi-statement functions outside the subset whose layout is read from the call sites (see the shared-buffer view model row); views stored by mutation, in attributes or globals; path-sensitive view metadata for branches with different layouts; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
+| Views / strides | Views passed to builtins, methods, constructors or lambdas; views passed to multi-statement functions outside the subset whose layout is read from the call sites (see the shared-buffer view model row); views stored by mutation, in attributes or globals; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
 | Iteration | Advanced `nditer` flags/options, multi-operand iteration, `external_loop`, `multi_index`, buffering, non-C order, casting/op_dtypes/op_axes, and broader mutable item forms. |
 
 ---
@@ -71,7 +71,19 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 7. **A reduction on a row of a strided 2-D view gives a false alarm**:
    `v = a[1:]; v[1].sum()` fails although the value is correct; `v.sum()` and
    element reads are right.
-8. **A generator over a NumPy array inside `sum()` reads wrong values**
+8. **Writing a float into an integer array ends in a solver exception**
+   instead of truncating (`a = np.array([1, 2]); a[0] = 2.7`), with no
+   verdict. `np.arange` bound to a name is such an array.
+9. **A local first bound inside a branch of a function does not outlive
+   the branch.** `if c: b = [1, 2]` followed by `b[0]` gives a false alarm
+   for any pointer-typed local. NumPy view names are declared at the top
+   of the function and are not affected; lists and other objects are.
+10. **An array name rebound to a view of itself gives a false alarm**:
+    `x = np.zeros((4, 4)); y = x[1]; x = y` retypes `x` and breaks `y`.
+    `np.eye` and `np.identity` stay lists for this reason
+    (`shape_cache_view_rebind_success`); `np.arange` and `np.linspace`
+    bound to a name are arrays and share it.
+11. **A generator over a NumPy array inside `sum()` reads wrong values**
    (`sum(v for v in a)` gives a false alarm; the plain `for` loop is
    correct), and `np.transpose` of an array with a run-time shape fails with
    a raw JSON exception instead of a diagnostic.
@@ -93,12 +105,11 @@ to NumPy. Every other remaining item is documented backlog: unsupported
 cases should reject explicitly, and known false alarms are listed as gaps
 instead of treated as supported behavior.
 
-`regression/numpy` pins nine `KNOWNBUG` tests (2026-10-11):
+`regression/numpy` pins eight `KNOWNBUG` tests (2026-10-12):
 
 | test | expected | today |
 |---|---|---|
 | `e`, `round2` | SUCCESSFUL | `VERIFICATION FAILED` (false alarm) |
-| `view_branch_registration_conflict_knownbug` | SUCCESSFUL | rejected: binding a view name to views with a different shape on different paths (needs path-sensitive view metadata) |
 | `view_rebind_sibling_name_alias_knownbug` | SUCCESSFUL | `VERIFICATION FAILED` (false alarm) |
 | `isclose`, `nextafter`, `remainder` | SUCCESSFUL | internal error (an expression dump, no verdict) |
 | `array_return_call_arg_edge` | SUCCESSFUL | rejected: `'int' object is not subscriptable` |
@@ -106,30 +117,29 @@ instead of treated as supported behavior.
 
 A view passed to a multi-statement user function keeps its shape, strides
 and aliasing: subviews taken in the callee, nested and recursive callees,
-2-D row slices, 1-D views with run-time bounds or with a different layout
-per call site, view expressions and view-returning calls inside a larger
-expression, callees defined after their caller, and sources that are an
-alias, `np.zeros`/`np.ones`, or a function's literal array. The cases
-still outside that subset reject, each pinned by a `CORE` test:
+row slices of a 2-D array, views with run-time bounds or with a different
+layout per call site, view expressions and view-returning calls inside a
+larger expression, callees defined after their caller, and sources that are
+an alias, `np.zeros`/`np.ones`/`np.arange`/`np.linspace`, or a function's
+literal array. A view name bound on
+different paths to views with different layouts or of different arrays
+keeps the metadata of the path taken. The cases still outside that subset
+reject, each pinned by a `CORE` test:
 
 | test | NumPy | ESBMC |
 |---|---|---|
 | `view_param_builtin_remaining_fail`, `view_param_method_remaining_fail`, `view_param_constructor_remaining_fail`, `view_param_lambda_remaining_fail` | a builtin, method, class constructor or lambda receives the view | rejected: only plain user functions bind a view parameter |
-| `view_param_branch_storage_conflict_fail`, `view_param_branch_layout_remaining_fail` | a name bound per branch to views of two arrays or two layouts | rejected: different shape, strides or storage on different paths |
-| `view_param_branch_source_rebind_fail` | the source array is rebound inside a branch before the view is taken | rejected: view passed to a multi-statement function |
-| `view_param_unknown_source_remaining_fail` | a view of `np.arange`/`np.full`/`np.linspace`/`np.eye`/`np.identity` aliases it | rejected: these arrays are list-backed and their slices are copies |
+| `view_param_unknown_source_remaining_fail` | a view of `np.full(...)`, `np.eye(...)` or `np.identity(...)` aliases it | rejected: these build a list whose slices are copies, as do `np.arange` and `np.linspace` called with a keyword |
 | `view_param_element_type_conflict_fail` | one function takes an int view and a float view | rejected: view passed to a multi-statement function |
-| `view_param_unbounded_runtime_bound_fail` | a view with run-time bounds is passed from inside a larger expression (`f(v) + 1`, `assert f(v) == 2`) | rejected: supported only by a call statement, assignment or return with call-free arguments |
-| `view_param_runtime_bound_forward_callee_fail` | a view with run-time bounds reaches a callee defined after its caller | rejected: run-time bounds to a function defined after its caller |
-| `view_param_direct_expr_conditional_fail` | `x if c else f(a[0:2])` builds the view only when the operand runs | rejected: view expression not bound to a name |
+| `view_param_branch_source_rebind_fail` | the source array is rebound inside a branch before the view is taken | rejected: view passed to a multi-statement function |
+| `view_param_runtime_bound_second_call_fail` | `f(w) + f(v)` with run-time layouts | rejected: only the call a statement evaluates first is given its layout |
 | `view_param_direct_expr_preceding_call_fail` | `g() + f(a[0:n])` evaluates `g()` before the slice | rejected: view expression not bound to a name |
 | `view_param_return_view_late_operand_fail` | `a[1] + f(v)[0]` reads `a[1]` before the call | rejected: returning a copied numpy view |
 | `view_param_return_multi_path_fail` | a function returns one of two view parameters | rejected: returning a copied numpy view |
-
-Also outside the subset, rejected with the same diagnostics and not pinned
-separately: 2-D views with run-time bounds or a per-site layout as
-parameters, a view bound inside a loop before the call, and `v.T` of a
-2-D view parameter.
+| `view_branch_merge_loop_fail` | a view name rebound to another layout inside a loop | rejected: different shape, strides or storage on different paths |
+| `view_branch_merge_nested_function_fail` | a view name rebound on a path while a nested function reads it | rejected: different shape, strides or storage on different paths |
+| `view_branch_element_type_fail` | a name bound per branch to an int view and a float view | rejected: different shape, strides or storage on different paths |
+| `view_branch_storage_rebind_fail` | an array is rebound while a view bound per branch to it or to another array is alive | rejected: which storage the view points at is only known at run time |
 
 ---
 
@@ -138,10 +148,10 @@ parameters, a view bound inside a loop before the call, and `v.T` of a
 No item is a known soundness gap; the backlog, in priority order:
 
 1. **Views in general callees** — builtins, methods, class constructors and
-   lambdas receiving a view; then the residual forms in the table above
-   (list-backed constructor sources, run-time layouts inside larger
-   expressions or for forward callees, 2-D run-time layouts) and
-   path-sensitive view metadata for branches.
+   lambdas receiving a view. The residual forms in the table above are
+   narrow and each needs something outside the view model: operand
+   evaluation order in the frontend, a per-type copy of the callee, or
+   `np.full`, `np.eye` and `np.identity` building arrays.
 2. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
 3. **Random and iteration depth** — probability/replacement `choice`, extra
@@ -157,10 +167,8 @@ Each roadmap item above groups several sub-efforts; sizing them 1 PR per
 item undercounts the real work. Items below with multiple named consumers or
 distinct designs are sized accordingly instead of assumed to be one PR each.
 
-1. **Views in general callees** (~2 PRs) — views passed to builtins,
-   methods, constructors and lambdas; separately, the residual
-   view-parameter forms listed under "Community testing readiness" with
-   path-sensitive metadata for branches.
+1. **Views in general callees** (~1 PR) — views passed to builtins,
+   methods, constructors and lambdas.
 2. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.
@@ -169,10 +177,9 @@ distinct designs are sized accordingly instead of assumed to be one PR each.
 4. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
    separate from fuller `eig`/`svd`/`norm`.
 
-**Total to close every item in this file: ~8 PRs.** The view-parameter
-forms counted here before are implemented; the residual forms found while
-doing so take their place. The operand evaluation order ("Soundness /
-performance concerns", item 6) is a Python frontend fix outside this count.
+**Total to close every item in this file: ~7 PRs.** The operand evaluation
+order and the branch-declared locals ("Soundness / performance concerns",
+items 6 and 9) are Python frontend fixes outside this count.
 
 ---
 
