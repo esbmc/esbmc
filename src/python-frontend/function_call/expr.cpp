@@ -6431,27 +6431,6 @@ static std::optional<std::string> string_literal(const nlohmann::json &node)
   return std::nullopt;
 }
 
-// The value a top-level `name = ...` or `name: T = ...` statement assigns.
-static const nlohmann::json *
-top_level_value(const nlohmann::json &module, const std::string &name)
-{
-  auto binds = [&](const nlohmann::json &target) {
-    return target.value("_type", "") == "Name" && target["id"] == name;
-  };
-  for (const auto &stmt : module["body"])
-  {
-    const std::string type = stmt.value("_type", "");
-    if (
-      type == "Assign" && stmt["targets"].size() == 1 &&
-      binds(stmt["targets"][0]))
-      return &stmt["value"];
-    if (
-      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
-      return &stmt["value"];
-  }
-  return nullptr;
-}
-
 // The string a byteorder argument denotes: a literal, or a module-level name
 // bound exactly once, to a literal. Any other binding of the name (`global`,
 // walrus, a shadowing local) makes its value flow-dependent, so it is refused.
@@ -6464,7 +6443,7 @@ constant_byteorder(const nlohmann::json &node, const nlohmann::json &module)
   const std::string name = node["id"].get<std::string>();
   if (json_utils::count_name_bindings(module, name) != 1)
     return std::nullopt;
-  const nlohmann::json *value = top_level_value(module, name);
+  const nlohmann::json *value = json_utils::top_level_value(module, name);
   return value ? string_literal(*value) : std::nullopt;
 }
 

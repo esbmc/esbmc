@@ -355,6 +355,46 @@ class ClassContextMixin:
                 continue
             n.func = ast.copy_location(ast.Name(id=binding.value.id, ctx=ast.Load()), n.func)
 
+    @staticmethod
+    def _construction(stmt):
+        """`(o, C)` for a statement `o = C(...)`, else None."""
+        if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Call)
+                and isinstance(stmt.value.func, ast.Name)):
+            return stmt.targets[0].id, stmt.value.func.id
+        return None
+
+    @staticmethod
+    def _assigned_attributes(module):
+        """The attribute names `module` assigns or deletes anywhere."""
+        return {
+            n.attr
+            for n in ast.walk(module)
+            if isinstance(n, ast.Attribute) and not isinstance(n.ctx, ast.Load)
+        }
+
+    def _scan_fixed_receivers(self, module):
+        """Map each `o` of a top-level `o = C(...)` to the methods `C` defines,
+        where `o` and `C` are each bound only once and `C` is a top-level
+        class, less any attribute name the module ever assigns: there `o.m`
+        names the same method wherever it is evaluated (#8354)."""
+        counts = Counter(name for n in ast.walk(module)
+                         for name in ClassContextMixin._names_bound_by(n))
+        stored = self._assigned_attributes(module)
+        methods = {
+            stmt.name: {m.name
+                        for m in stmt.body if isinstance(m, ast.FunctionDef)} - stored
+            for stmt in module.body if isinstance(stmt, ast.ClassDef) and counts[stmt.name] == 1
+        }
+        self.fixed_receivers = {
+            name: methods[cls]
+            for name, cls in filter(None, map(self._construction, module.body))
+            if counts[name] == 1 and cls in methods
+        }
+        self.once_bound_names = {name for name, count in counts.items() if count == 1}
+        # Holding the nodes keeps their ids from being reused.
+        self.module_statements = {id(stmt): stmt for stmt in module.body}
+
     def _record_exit_suppresses_all(self, class_node):
         """Cache classes whose __exit__ unconditionally returns True."""
         if not hasattr(self, "_exit_suppresses_all"):
