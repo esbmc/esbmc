@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Starred unpacking into b, which already holds a non-list value, is not supported$
