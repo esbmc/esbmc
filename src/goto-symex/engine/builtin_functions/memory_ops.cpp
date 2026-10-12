@@ -1762,3 +1762,21 @@ void goto_symext::intrinsic_memset(
     symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
   }
 }
+
+void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
+{
+  assert(call.operands.size() == 1);
+  if (cur_state->guard.is_false())
+    return;
+
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
+  dereference(deref, dereferencet::INTERNAL);
+  for (const auto &item : internal_deref_items)
+    // Anything else is a constant, such as a string literal, or a function.
+    if (is_symbol2t(item.object) && !is_code_type(item.object->type))
+      symex_assign(
+        code_assign2tc(item.object, gen_nondet(item.object->type)),
+        false,
+        cur_state->guard);
+}

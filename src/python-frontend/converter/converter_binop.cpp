@@ -671,9 +671,22 @@ exprt python_converter::lower_short_circuit_boolop(
     return nil_exprt();
   }
 
-  const locationt location = get_location_from_decl(element);
-  symbolt result_symbol =
-    create_return_temp_variable(type, location, "boolop_result");
+  return emit_guarded_boolop(
+    logical_expr, effects, truthy, get_location_from_decl(element));
+}
+
+/// Lowers the and/or \p logical_expr into a result temporary that each later
+/// operand updates in its own guarded block, after the statements its
+/// conversion planted in \p effects.
+exprt python_converter::emit_guarded_boolop(
+  const exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const locationt &location)
+{
+  const exprt::operandst &operands = logical_expr.operands();
+  symbolt result_symbol = create_return_temp_variable(
+    operands.front().type(), location, "boolop_result");
   symbol_table_.add(result_symbol);
   const exprt result = symbol_expr(result_symbol);
 
