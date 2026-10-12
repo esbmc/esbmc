@@ -6732,6 +6732,7 @@ void python_converter::get_var_assign(
       return;
     }
 
+    python_list(*this, target).retype_element_store(lhs, rhs);
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);

@@ -2546,6 +2546,8 @@ regression/ld/ld_user_fb_output_read_by_contact_safe
 regression/python/github_8412
 regression/python/github_8412_fail
 regression/python/github_8412_rebound
+regression/python/list_store_tuple_over_int
+regression/python/list_store_tuple_over_int_fail
 regression/python/github_8356_mul_int
 regression/python/github_8356_mul_int_fail
 regression/python/github_8356_rmul_other_class
