@@ -1000,6 +1000,22 @@ exprt python_math::handle_divmod(
     (rejected_by_divmod(dividend.type(), list_type) ||
      rejected_by_divmod(divisor.type(), list_type)))
     return raise_divmod_type_error(dividend.type(), divisor.type(), element);
+
+  // An unannotated parameter no call site types is a void* carrier. Read it
+  // as an int, as binary arithmetic does, so the divmod lowering stays typed.
+  auto is_any_ptr = [](const exprt &e) {
+    return e.type().is_pointer() && e.type().subtype().is_empty();
+  };
+  auto int_like = [this](const exprt &other) {
+    const typet &t = other.type();
+    return t.is_signedbv() || t.is_unsignedbv()
+             ? t
+             : type_handler_.get_typet(std::string("int"));
+  };
+  if (is_any_ptr(dividend))
+    dividend = typecast_exprt(dividend, int_like(divisor));
+  if (is_any_ptr(divisor))
+    divisor = typecast_exprt(divisor, int_like(dividend));
   return handle_numeric_divmod(
     std::move(dividend), std::move(divisor), element);
 }

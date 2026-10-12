@@ -11,6 +11,7 @@
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -2806,7 +2807,8 @@ exprt string_handler::handle_string_attribute_call(
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr = converter_.get_expr(receiver_json);
+      cached_receiver_expr =
+        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
     return *cached_receiver_expr;
   };
 
