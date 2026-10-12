@@ -2467,6 +2467,11 @@ regression/python/github_8276_nonfinite_to_int
 regression/python/github_8276_trunc_inf_fail
 regression/python/github_8276_round_nan_fail
 regression/python/github_8276_floor_inf_fail
+regression/python/github_8364_attr_chain
+regression/python/github_8364_inherited
+regression/python/github_8364_default
+regression/python/github_8364_method_arity_fail
+regression/python/github_8364_function_arity_fail
 regression/python/for_user_iterator_break_continue
 regression/python/for_user_iterator_break_continue_fail
 regression/python/for_user_iterable_separate_iterator
@@ -2474,6 +2479,8 @@ regression/python/for_user_iterator_subclass
 regression/python/for_user_iterator_no_iter
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
+regression/esbmc/vsprintf_stores_output
+regression/esbmc/vsprintf_stores_output_fail
 regression/python/github_8352
 regression/python/github_8352_inline
 regression/python/github_8352_fail
@@ -2481,6 +2488,15 @@ regression/python/github_8352_shadowed
 regression/python/github_8352_before_binding_fail
 regression/python/github_8352_function_alias
 regression/python/github_8352_local_binding_fail
+regression/esbmc/nextafter_from_infinity
+regression/esbmc/nextafter_from_infinity_fail
+regression/floats-regression/nextafter-spec
+regression/floats-regression/nextafterf-spec
+regression/python/github_8410_lambda_capture
+regression/python/github_8410_lambda_capture_fail
+regression/python/github_8410_lambda_capture_late_rebind_fail
+regression/python/github_8410_lambda_capture_rebind_fail
+regression/python/github_8410_lambda_in_frame
 regression/python/github_8354
 regression/python/github_8354_fail
 regression/python/github_8354_local_target_fail
@@ -2506,6 +2522,9 @@ regression/ld/ld_counter_output_read_by_contact_safe
 regression/ld/ld_timer_output_read_by_contact_safe
 regression/ld/ld_tp_output_state_kept_safe
 regression/ld/ld_user_fb_output_read_by_contact_safe
+regression/python/github_8412
+regression/python/github_8412_fail
+regression/python/github_8412_rebound
 regression/python/github_8455
 regression/python/github_8455_branch_coverage
 regression/python/github_8455_condition_coverage

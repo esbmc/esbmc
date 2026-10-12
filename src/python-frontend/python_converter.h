@@ -345,6 +345,14 @@ public:
            !in_lazy_operand_;
   }
 
+  /// Bind a static cell, named under @p lambda_id, for each scalar free
+  /// variable of @p lambda_node that is a local of the enclosing function, as
+  /// create_capture_cells does for a nested `def`.
+  void capture_lambda_free_variables(
+    const nlohmann::json &lambda_node,
+    const std::string &lambda_id,
+    const locationt &location);
+
   // Hoists @p operand into a temporary when it carries a side effect, so a
   // guard and its use evaluate it once.
   exprt hoist_side_effecting_operand(
@@ -534,7 +542,7 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt build_division_guarded_binop(
     const std::string &op,
-    const exprt &lhs,
+    exprt lhs,
     exprt rhs,
     const nlohmann::json &element);
   exprt build_arithmetic_binop(
@@ -569,11 +577,23 @@ private:
 
   // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
   // `is not` paths); the public wrappers back-migrate once at the legacy seam.
-  expr2tc build_is_equality(const exprt &lhs, const exprt &rhs);
+  expr2tc build_is_equality(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+  exprt get_binary_operator_expr_for_is(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+  exprt get_negated_is_expr(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
   exprt get_resolved_value(const exprt &expr);
 
@@ -975,6 +995,12 @@ private:
   code_blockt create_capture_cells(
     const nlohmann::json &function_node,
     const symbol_id &id,
+    const locationt &location);
+
+  code_blockt bind_capture_cells(
+    const std::set<std::string> &free_names,
+    const std::string &enclosing_scope,
+    const std::string &func_id,
     const locationt &location);
 
   /// Cell bindings produced by the last nested `get_function_definition`,
