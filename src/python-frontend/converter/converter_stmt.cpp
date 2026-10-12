@@ -76,6 +76,21 @@ bool is_incompatible_scalar_string_retype(
          (th.is_string_type(lhs) && th.is_numeric_scalar_type(rhs));
 }
 
+// Whether the rebinding needs a fresh symbol. An int rebound to a float would
+// otherwise promote the shared symbol in place, so reads before the rebind see
+// a float (#8402). That case is taken only on the unconditional spine: an alias
+// made in a conditional body is dropped at the join, where the in-place
+// promotion is still needed.
+bool is_scalar_retype(
+  const type_handler &th,
+  const typet &lhs,
+  const typet &rhs,
+  bool on_spine)
+{
+  return is_incompatible_scalar_string_retype(th, lhs, rhs) ||
+         (on_spine && type_utils::is_integer_type(lhs) && rhs.is_floatbv());
+}
+
 using python_frontend::is_literal_int_node;
 using python_frontend::literal_int_value;
 
@@ -6473,8 +6488,11 @@ void python_converter::get_var_assign(
         !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
 
       if (
-        is_incompatible_scalar_string_retype(
-          type_handler_, lhs.type(), rhs.type()) ||
+        is_scalar_retype(
+          type_handler_,
+          lhs.type(),
+          rhs.type(),
+          block_nesting_ == function_body_depth_ + 1) ||
         tuple_to_nontuple_rebind)
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(

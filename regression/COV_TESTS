@@ -2525,3 +2525,5 @@ regression/ld/ld_user_fb_output_read_by_contact_safe
 regression/python/github_8412
 regression/python/github_8412_fail
 regression/python/github_8412_rebound
+regression/python/github_8402
+regression/python/github_8402_fail
