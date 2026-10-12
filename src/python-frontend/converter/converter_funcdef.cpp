@@ -215,6 +215,33 @@ void count_bindings(
   for (const auto &child : node.items())
     count_bindings(child.value(), writes, nested || enters_scope);
 }
+
+/// Whether @p node, outside any nested scope, holds `return <lambda>`.
+bool returned_by(const nlohmann::json &node, const nlohmann::json &lambda)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &item) {
+      return returned_by(item, lambda);
+    });
+  if (!node.is_object())
+    return false;
+
+  const std::string kind = node.value("_type", "");
+  if (kind == "Return")
+  {
+    const nlohmann::json &value = field(node, "value");
+    return value.is_object() && value.value("_type", "") == "Lambda" &&
+           value.value("lineno", -1) == lambda.value("lineno", -2) &&
+           value.value("col_offset", -1) == lambda.value("col_offset", -2);
+  }
+  if (scope_kinds.count(kind))
+    return false;
+
+  for (const auto &child : node.items())
+    if (returned_by(child.value(), lambda))
+      return true;
+  return false;
+}
 } // namespace
 
 code_blockt python_converter::create_capture_cells(
@@ -233,13 +260,43 @@ code_blockt python_converter::create_capture_cells(
 
   const std::string func_id = id.to_string();
   return bind_capture_cells(
-    function_node, func_id, func_id.substr(0, func_id.rfind("@F@")), location);
+    free_variables(function_node),
+    func_id.substr(0, func_id.rfind("@F@")),
+    func_id,
+    location);
+}
+
+void python_converter::capture_lambda_free_variables(
+  const nlohmann::json &lambda_node,
+  const std::string &lambda_id,
+  const locationt &location)
+{
+  // A lambda is converted to a module-level function, so a free variable it
+  // reads resolves to the enclosing function's local, which is gone once the
+  // lambda is returned out of the frame (#8410). A lambda used inside the frame
+  // keeps reading that local: a cell would be poisoned as soon as the function
+  // runs twice with different values. can_emit_runtime_guard() would refuse
+  // here, as converting_lambda_body_ is already set for the whole lambda.
+  if (
+    current_func_name_.empty() || !current_class_name_.empty() ||
+    enclosing_function_node_ == nullptr || !current_block ||
+    in_rhs_type_probe_ || in_contract_clause_ || in_lazy_operand_ ||
+    !returned_by(field(*enclosing_function_node_, "body"), lambda_node))
+    return;
+
+  code_blockt bindings = bind_capture_cells(
+    free_variables(lambda_node),
+    create_symbol_id().to_string(),
+    lambda_id,
+    location);
+  for (const exprt &binding : bindings.operands())
+    add_instruction(binding);
 }
 
 code_blockt python_converter::bind_capture_cells(
-  const nlohmann::json &function_node,
-  const std::string &func_id,
+  const std::set<std::string> &free_names,
   const std::string &enclosing_scope,
+  const std::string &func_id,
   const locationt &location)
 {
   code_blockt bindings;
@@ -271,7 +328,7 @@ code_blockt python_converter::bind_capture_cells(
     return symbol_expr(*symbol_table_.find_symbol(sym_id));
   };
 
-  for (const std::string &name : free_variables(function_node))
+  for (const std::string &name : free_names)
   {
     symbolt *source = symbol_table_.find_symbol(enclosing_scope + "@" + name);
     if (source == nullptr || writes[name] > (source->is_parameter ? 0u : 1u))

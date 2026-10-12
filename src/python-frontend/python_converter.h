@@ -283,14 +283,6 @@ public:
     symbol_table_.add(s);
   }
 
-  /// Cells of create_capture_cells for the function @p func_id, whose free
-  /// variables resolve to locals of the scope @p enclosing_scope.
-  code_blockt bind_capture_cells(
-    const nlohmann::json &function_node,
-    const std::string &func_id,
-    const std::string &enclosing_scope,
-    const locationt &location);
-
   void add_instruction(const exprt &expr)
   {
     if (current_block)
@@ -352,6 +344,14 @@ public:
     return current_block && safe_to_emit_side_effecting_statement() &&
            !in_lazy_operand_;
   }
+
+  /// Bind a static cell, named under @p lambda_id, for each scalar free
+  /// variable of @p lambda_node that is a local of the enclosing function, as
+  /// create_capture_cells does for a nested `def`.
+  void capture_lambda_free_variables(
+    const nlohmann::json &lambda_node,
+    const std::string &lambda_id,
+    const locationt &location);
 
   // Hoists @p operand into a temporary when it carries a side effect, so a
   // guard and its use evaluate it once.
@@ -542,7 +542,7 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt build_division_guarded_binop(
     const std::string &op,
-    const exprt &lhs,
+    exprt lhs,
     exprt rhs,
     const nlohmann::json &element);
   exprt build_arithmetic_binop(
@@ -577,11 +577,23 @@ private:
 
   // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
   // `is not` paths); the public wrappers back-migrate once at the legacy seam.
-  expr2tc build_is_equality(const exprt &lhs, const exprt &rhs);
+  expr2tc build_is_equality(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+  exprt get_binary_operator_expr_for_is(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+  exprt get_negated_is_expr(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
   exprt get_resolved_value(const exprt &expr);
 
@@ -969,6 +981,12 @@ private:
   code_blockt create_capture_cells(
     const nlohmann::json &function_node,
     const symbol_id &id,
+    const locationt &location);
+
+  code_blockt bind_capture_cells(
+    const std::set<std::string> &free_names,
+    const std::string &enclosing_scope,
+    const std::string &func_id,
     const locationt &location);
 
   /// Cell bindings produced by the last nested `get_function_definition`,
@@ -1485,6 +1503,18 @@ private:
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
+  symbolt *find_global_symbol(const symbol_id &sid);
+  exprt
+  module_function_expr(const std::string &name, const nlohmann::json &element);
+  void track_unbound_global(
+    const std::string &id,
+    const nlohmann::json &binding,
+    const typet &type);
+  void guard_unbound_global(
+    const std::string &id,
+    const std::string &name,
+    const nlohmann::json &element);
+  void mark_global_bound(const nlohmann::json &stmt, code_blockt &block);
   /// A parameter default, evaluated where the def is, so a method's default
   /// still sees the class body's names (#8200).
   exprt get_default_expr(const nlohmann::json &node);
@@ -2804,6 +2834,11 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// A module global or function read by code converted before its binding,
+  /// mapped to the flag its binding sets and the type the reads took (#8369).
+  std::unordered_map<std::string, std::pair<std::string, typet>>
+    unbound_global_flags_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to

@@ -3,6 +3,7 @@
 
 import importlib.util
 import os
+import tempfile
 import unittest
 
 _spec = importlib.util.spec_from_file_location(
@@ -333,6 +334,17 @@ class PythonModulePathTest(unittest.TestCase):
         wrapper.add_python_module_path("/sv-benchmarks/python/vllm/vllm_cdiv.py")
         self.assertEqual(
             os.environ["PYTHONPATH"].split(os.pathsep)[-1], "/already/here")
+
+    def test_a_task_nested_deeper_reaches_the_verifier_module(self):
+        os.environ.pop("PYTHONPATH", None)
+        with tempfile.TemporaryDirectory() as root:
+            python = os.path.join(root, "python")
+            task = os.path.join(python, "type-eval-py", "args_assigned_call")
+            os.makedirs(task)
+            with open(os.path.join(python, "_sv_verifier.py"), "w", encoding="utf-8"):
+                pass
+            wrapper.add_python_module_path(os.path.join(task, "main.py"))
+            self.assertIn(python, os.environ["PYTHONPATH"].split(os.pathsep))
 
     def test_a_relative_benchmark_path_is_made_absolute(self):
         os.environ.pop("PYTHONPATH", None)

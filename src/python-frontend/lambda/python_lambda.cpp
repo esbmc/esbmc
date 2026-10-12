@@ -999,46 +999,7 @@ exprt python_lambda::process_lambda_body(
   return lambda_block;
 }
 
-// Prepend closure assignments: lam@x = lam@x$param for each parameter.
-// This copies the transient argument value (which lives in the symex
-// local frame and is cleared on return) into the static closure variable
-// (which is never in frame.local_variables and therefore persists).
-// Inner lambdas then read the static variable and see the correct value.
-void python_lambda::prepend_parameter_closures(
-  const nlohmann::json &element,
-  const std::string &param_scope_id,
-  const locationt &location,
-  exprt &lambda_body)
-{
-  if (
-    !element.contains("args") || !element["args"].contains("args") ||
-    !element["args"]["args"].is_array() || element["args"]["args"].empty())
-    return;
-
-  code_blockt closure_body;
-  for (const auto &arg : element["args"]["args"])
-  {
-    std::string arg_name = arg["arg"].get<std::string>();
-    std::string closure_id = param_scope_id + "@" + arg_name;
-    std::string actual_param_id = closure_id + "$param";
-
-    const symbolt *closure_sym = context_.find_symbol(closure_id);
-    const symbolt *param_sym = context_.find_symbol(actual_param_id);
-    if (closure_sym && param_sym)
-    {
-      code_assignt assign(symbol_expr(*closure_sym), symbol_expr(*param_sym));
-      assign.location() = location;
-      closure_body.copy_to_operands(assign);
-    }
-  }
-  for (const auto &op : lambda_body.operands())
-    closure_body.copy_to_operands(op);
-  lambda_body = closure_body;
-}
-
-exprt python_lambda::get_lambda_expr(
-  const nlohmann::json &element,
-  bool bind_captures)
+exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
 {
   // Generate unique lambda name
   std::string lambda_name = generate_unique_lambda_name();
@@ -1056,6 +1017,13 @@ exprt python_lambda::get_lambda_expr(
 
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);
+
+  // Lambda function symbol is always top-level: py:module@F@lambda_name
+  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
+
+  // The cells must exist before the body is converted, so a free variable
+  // resolves to the cell rather than to the enclosing frame's local.
+  converter_.capture_lambda_free_variables(element, lambda_id, location);
 
   // Determine the scope for parameters: use first lambda's scope for all nested
   // lambdas
@@ -1083,9 +1051,6 @@ exprt python_lambda::get_lambda_expr(
   }
 
   lambda_type.return_type() = return_type;
-
-  // Lambda function symbol is always top-level: py:module@F@lambda_name
-  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
 
   // Parameters are created in param_scope (shared for nested lambdas)
   std::string param_scope_id = "py:" + module_name + "@F@" + param_scope;
@@ -1115,16 +1080,6 @@ exprt python_lambda::get_lambda_expr(
   symbolt *added_symbol = context_.move_symbol_to_context(lambda_symbol);
   assert(added_symbol);
 
-  // Bound before the body is converted, so a free variable resolves to its
-  // cell rather than to the enclosing frame's local (#8410).
-  if (bind_captures)
-  {
-    const code_blockt cells = converter_.bind_capture_cells(
-      element, lambda_id, "py:" + module_name + "@F@" + old_func, location);
-    for (const auto &cell : cells.operands())
-      converter_.add_instruction(cell);
-  }
-
   // Process lambda body
   if (element.contains("body"))
   {
@@ -1151,7 +1106,36 @@ exprt python_lambda::get_lambda_expr(
       }
     }
 
-    prepend_parameter_closures(element, param_scope_id, location, lambda_body);
+    // Prepend closure assignments: lam@x = lam@x$param for each parameter.
+    // This copies the transient argument value (which lives in the symex
+    // local frame and is cleared on return) into the static closure variable
+    // (which is never in frame.local_variables and therefore persists).
+    // Inner lambdas then read the static variable and see the correct value.
+    if (
+      element.contains("args") && element["args"].contains("args") &&
+      element["args"]["args"].is_array() && !element["args"]["args"].empty())
+    {
+      code_blockt closure_body;
+      for (const auto &arg : element["args"]["args"])
+      {
+        std::string arg_name = arg["arg"].get<std::string>();
+        std::string closure_id = param_scope_id + "@" + arg_name;
+        std::string actual_param_id = closure_id + "$param";
+
+        const symbolt *closure_sym = context_.find_symbol(closure_id);
+        const symbolt *param_sym = context_.find_symbol(actual_param_id);
+        if (closure_sym && param_sym)
+        {
+          code_assignt assign(
+            symbol_expr(*closure_sym), symbol_expr(*param_sym));
+          assign.location() = location;
+          closure_body.copy_to_operands(assign);
+        }
+      }
+      for (const auto &op : lambda_body.operands())
+        closure_body.copy_to_operands(op);
+      lambda_body = closure_body;
+    }
 
     added_symbol->set_value(migrate_expr(lambda_body));
   }
