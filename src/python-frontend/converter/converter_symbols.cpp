@@ -1002,6 +1002,25 @@ std::string python_converter::current_module_name() const
   return std::filesystem::path(current_python_file).stem().string();
 }
 
+std::string python_converter::current_ast_scope() const
+{
+  if (
+    current_class_name_.empty() || current_func_name_.empty() ||
+    current_func_name_.find("@C@") != std::string::npos)
+    return current_func_name_;
+
+  const std::string outer =
+    json_utils::split_function_path(current_func_name_).front();
+  // __init__ is converted under its class's name.
+  const std::string method =
+    current_class_name_ + "@C@" +
+    (outer == current_class_name_ ? "__init__" : outer);
+  // A class nested in a function or class is not reachable as Cls@C@m.
+  if (json_utils::find_function_by_path(*ast_json, {method}).empty())
+    return current_func_name_;
+  return method + current_func_name_.substr(outer.size());
+}
+
 symbolt &python_converter::create_tmp_symbol(
   const nlohmann::json &element,
   const std::string var_name,

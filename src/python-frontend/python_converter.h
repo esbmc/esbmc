@@ -263,6 +263,10 @@ public:
     return current_class_name_;
   }
 
+  /// The current function as the AST lookups in json_utils name it: a method
+  /// is "Cls@C@m", so a same-named method of another class is not found.
+  std::string current_ast_scope() const;
+
   const namespacet &name_space() const
   {
     return ns;
