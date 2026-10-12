@@ -6,5 +6,7 @@ def foo(x: int) -> Any:
     else:
         return 5
 
-assert foo(4) != True
-assert foo(0) != 5
+if nondet_bool():
+    assert foo(4) != True
+if nondet_bool():
+    assert foo(0) != 5
