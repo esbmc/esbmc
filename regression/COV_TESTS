@@ -2479,6 +2479,8 @@ regression/python/for_user_iterator_subclass
 regression/python/for_user_iterator_no_iter
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
+regression/esbmc/vsprintf_stores_output
+regression/esbmc/vsprintf_stores_output_fail
 regression/python/github_8352
 regression/python/github_8352_inline
 regression/python/github_8352_fail

@@ -917,6 +917,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R135** | **High (false SUCCESSFUL and false FAILED, default configuration, C++)** — R104's note on local classes, §15 M9 (R135); **FIXED**, same entry | **Same-named local classes shared one `type_info`.** `typeid` identity is the address of the type's printed name, and a local class prints without its enclosing function, so `S` in `f()` and `S` in `g()`, or in two instantiations of one function template, compared equal, and equal to a namespace-scope `S`. `assert(f() == g())` was SUCCESSFUL. | `rtti_type_name`, `src/clang-cpp-frontend/clang_cpp_convert_vft.cpp`; `regression/esbmc-cpp/cpp/local_class_typeid{,_fail}` | — | **Fixed**: a local class's name carries its record id. |
 | **R131** | **High (false SUCCESSFUL and false FAILED, default configuration)** — found by a native-differential probe of string functions, §15 M9 (R131); **FIXED**, same entry | **`strndup` had no model.** The call reached symex without a body and returned a pointer to no object, so any read of the copy was `dereference failure: invalid pointer` and `strndup("hello", 2)` could not be checked. It read no memory and allocated none, so an over-read of an unterminated source and a leaked copy (ASan reports both natively) were SUCCESSFUL. | `src/c2goto/library/string.c`; `regression/esbmc/strndup_model{,_fail}` | — | **Fixed**: `strndup` reads at most `n` bytes, stopping at the first null, and returns a `malloc`ed, null-terminated copy. |
 | **R138** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R129's open note, §15 M9 (R138); **FIXED** for a bounded output, same entry | **`sprintf` and `snprintf` of a nondet value through anything but `%d`, `%i` or `%u` left the destination unchanged.** R129 stores text and those three conversions only, so `char b[4]; sprintf(b, "%x", x);` with a nondet `x` raised no bounds violation, and after `char b[12] = "abcdefghijk"; int r = sprintf(b, "%x", x);` `b[r]` still read the old text, so `assert(b[r] == '\0')` was FAILED. | `sprintf_output` and `format_printf_output`, `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/sprintf_symbolic_output{,_fail}` | — | **Fixed** when the formatter bounds the output at 1024 characters or fewer: the call writes nondet characters up to a length within those bounds and a NUL after them, each write bounds-checked. |
+| **R137** | **High (false SUCCESSFUL and false FAILED, default configuration)** — R121's open note on `vsprintf` and `vsnprintf`, §15 M9 (R137); **FIXED** for a format that takes no argument, same entry | **`vsprintf` and `vsnprintf` never wrote their destination.** `symex_sprintf_store` stored only `sprintf` and `snprintf` output, so after `vsprintf(b, "xy", ap)` the buffer kept its old text and `char b[4]; vsprintf(b, "hello", ap);` raised no bounds violation. | `symex_sprintf_store` and `format_printf_output`, `src/goto-symex/engine/builtin_functions/io.cpp`; `regression/esbmc/vsprintf_stores_output{,_fail}` | — | **Fixed** when the format is constant and needs no argument: the output is stored as for `sprintf`. A conversion that reads the `va_list` still leaves the destination unchanged. |
 
 ---
 
@@ -12359,6 +12360,31 @@ Not fixed: non-volatile locals changed between `setjmp` and `longjmp` keep
 their values instead of becoming indeterminate (7.13.2.1p3). `sigsetjmp`,
 `siglongjmp` and `_longjmp` have no model, and a `longjmp` through a function
 pointer is not lowered. `<csetjmp>` does not parse in C++ mode.
+
+### M9 (R137) — 2026-10-10, the buffer `vsprintf` never wrote
+
+R121's entry left open that `vsprintf` and `vsnprintf` leave their
+destination unchanged. `symex_sprintf_store` returned early for any kind but
+`sprintf` and `snprintf`, and `format_printf_output` took the `va_list` as a
+formatted argument, which is never a constant. After `vsprintf(b, "xy", ap)`
+the buffer kept its old text, and `char b[4]; vsprintf(b, "hello", ap);`
+raised no bounds violation; the program overflows natively.
+
+**Fixed** for a constant format that takes no argument: both calls now reach
+the store, and `format_printf_output` leaves the `va_list` out of the
+arguments, so a conversion that needs one makes the output unbounded and
+nothing is stored. `vsnprintf` writes under the same `i < n` guard as
+`snprintf`.
+
+`vsprintf_stores_output` checks the text, NUL and return value of a
+`vsprintf`, a truncating `vsnprintf` and `vsnprintf(NULL, 0, ...)`; master
+fails it. `vsprintf_stores_output_fail` pins the bounds violation of the
+overflowing `vsprintf` and is SUCCESSFUL on master. Both change verdict when
+the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
+`vsprintf_stores_output`, under the default solver and `--z3`.
+
+Not fixed: a conversion that reads the `va_list` still leaves the destination
+unchanged, as does any output `sprintf` would not store.
 
 ---
 
