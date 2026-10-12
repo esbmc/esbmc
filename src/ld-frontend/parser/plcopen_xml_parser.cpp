@@ -1566,6 +1566,53 @@ static void reject_concurrent_programs(const pugi::xml_node &root)
     throw UnsupportedConstructError("more than one program POU", 2);
 }
 
+// Heuristic I/O inference for programs whose variables have neither a hardware
+// address nor an interface direction (tutorial and simulation programs that
+// declare everything in <localVars>). A variable that appears only as a contact
+// is an input and one that appears only as a coil is an output. A variable that
+// a timer, counter, arithmetic block or user function block writes is driven by
+// the program, so reading it through a contact does not make it an input.
+static void infer_io_directions(LdAst &ast)
+{
+  std::set<std::string> contact_vars, coil_vars, block_vars;
+  for (const auto &net : ast.networks)
+    for (const auto &rung : net.rungs)
+      for (const auto &elem : rung.elements)
+        switch (elem.kind)
+        {
+        case RungElementKind::Contact:
+          contact_vars.insert(elem.contact.variable);
+          break;
+        case RungElementKind::Coil:
+          coil_vars.insert(elem.coil.variable);
+          break;
+        case RungElementKind::TimerFB:
+          block_vars.insert({elem.timer_fb.Q_var, elem.timer_fb.ET_var});
+          break;
+        case RungElementKind::CounterFB:
+          block_vars.insert({elem.counter_fb.Q_var, elem.counter_fb.CV_var});
+          break;
+        case RungElementKind::ArithFB:
+          block_vars.insert(elem.arith_fb.OUT_var);
+          break;
+        }
+  for (const auto &fb : ast.user_fb_instances)
+    for (const auto &wire : fb.out_wires)
+      block_vars.insert(wire.prog_var);
+
+  for (auto &v : ast.variables)
+  {
+    if (v.is_input || v.is_output)
+      continue;
+    const bool read = contact_vars.count(v.name);
+    const bool coiled = coil_vars.count(v.name);
+    if (read && !coiled && !block_vars.count(v.name))
+      v.is_input = true;
+    else if (coiled && !read)
+      v.is_output = true;
+  }
+}
+
 LdAst PlcopenXmlParser::parse(const std::string &path)
 {
   source_file_ = path;
@@ -1679,33 +1726,6 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // alone rather than havocking them as physical inputs.
   append_synthesized(ast.variables, synth_vars_);
 
-  // Heuristic I/O inference for graphical LD programs without hardware
-  // addresses (%IX/%QX). Variables that appear only as contacts across all
-  // networks are treated as inputs; variables that appear only as coils are
-  // treated as outputs. This covers tutorial and simulation programs that
-  // declare all variables as <localVars> without address attributes.
-  {
-    std::set<std::string> contact_vars, coil_vars;
-    for (const auto &net : ast.networks)
-      for (const auto &rung : net.rungs)
-        for (const auto &elem : rung.elements)
-        {
-          if (elem.kind == RungElementKind::Contact)
-            contact_vars.insert(elem.contact.variable);
-          if (elem.kind == RungElementKind::Coil)
-            coil_vars.insert(elem.coil.variable);
-        }
-    for (auto &v : ast.variables)
-    {
-      if (v.is_input || v.is_output)
-        continue;
-      if (contact_vars.count(v.name) && !coil_vars.count(v.name))
-        v.is_input = true;
-      else if (coil_vars.count(v.name) && !contact_vars.count(v.name))
-        v.is_output = true;
-    }
-  }
-
   // -------------------------------------------------------------------
   // User-defined function-block bodies (e.g. EQ_0/GT_0/SUB_0 wrappers that
   // may carry Ladder Logic Bombs).  Register each functionBlock POU's
@@ -1793,6 +1813,8 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       }
     }
   }
+
+  infer_io_directions(ast);
 
   // Last, so the function-block definitions above are already registered.
   reject_untranslated_bodies(root, ast);

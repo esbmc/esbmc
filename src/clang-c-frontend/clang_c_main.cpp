@@ -56,6 +56,57 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
+void clang_c_maint::static_lifetime_destroy(codet &)
+{
+}
+
+static bool mentions_symbol(const irept &irep, const irep_idt &id)
+{
+  if (irep.id() == "symbol" && irep.identifier() == id)
+    return true;
+  for (const auto &sub : irep.get_sub())
+    if (mentions_symbol(sub, id))
+      return true;
+  for (const auto &named : irep.get_named_sub())
+    if (named.first != "type" && mentions_symbol(named.second, id))
+      return true;
+  return false;
+}
+
+// Only call the atexit handler when some function can register one: its loop
+// does not fold under --no-propagation and would unwind without bound. Under
+// --memory-leak-check and --termination symex always ran past main, so the
+// call stays and their schedule exploration is unchanged.
+bool clang_c_maint::atexit_may_register() const
+{
+  if (
+    config.options.get_bool_option("memory-leak-check") ||
+    config.options.get_bool_option("termination"))
+    return true;
+
+  const irep_idt atexit_id = "c:@F@atexit";
+  bool found = false;
+  context.foreach_operand([&](const symbolt &s) {
+    if (!found && s.id != atexit_id)
+      found = mentions_symbol(s.get_value(), atexit_id);
+  });
+  return found;
+}
+
+// What exit() does after main returns: the atexit handlers (C11 7.22.4.4p4),
+// then any static-storage-duration destructors.
+void clang_c_maint::add_exit_code(codet &dest, const locationt &location)
+{
+  if (atexit_may_register())
+  {
+    code_function_callt atexit_call;
+    atexit_call.location() = location;
+    atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
+    dest.move_to_operands(atexit_call);
+  }
+  static_lifetime_destroy(dest);
+}
+
 bool clang_c_maint::clang_main()
 {
   irep_idt main_symbol;
@@ -417,13 +468,9 @@ bool clang_c_maint::clang_main()
   thread_end_call.function() =
     symbol_exprt("c:@F@__ESBMC_pthread_end_main_hook");
 
-  code_function_callt atexit_call;
-  atexit_call.location() = symbol.location;
-  atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
-
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
-  init_code.move_to_operands(atexit_call);
+  add_exit_code(init_code, symbol.location);
   init_code.move_to_operands(thread_end_call);
 
   // add "main"
