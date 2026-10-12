@@ -17,6 +17,7 @@
 #include <util/message/message.h>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1411,69 +1412,113 @@ void reads_and_assigns(
     read(target);
 }
 
-/// See iterationt. Call it before any loop of \p function is transformed.
-iterationt iteration_of(const goto_functiont &function, const loopst &loop)
+/// A loop's body in program order, and the position of each instruction.
+struct loop_bodyt
 {
-  iterationt iteration;
-  iteration.head = loop.get_original_loop_head()->location_number;
-  iteration.back = loop.get_original_loop_exit()->location_number;
-
   std::vector<goto_programt::const_targett> body;
   std::unordered_map<const instructiont *, size_t> index;
-  for (goto_programt::const_targett it = loop.get_original_loop_head();; ++it)
+
+  explicit loop_bodyt(const loopst &loop)
   {
-    index.emplace(&*it, body.size());
-    body.push_back(it);
-    if (it == loop.get_original_loop_exit())
-      break;
+    for (goto_programt::const_targett it = loop.get_original_loop_head();; ++it)
+    {
+      index.emplace(&*it, body.size());
+      body.push_back(it);
+      if (it == loop.get_original_loop_exit())
+        break;
+    }
   }
 
-  // A jump into the body starts an iteration too, havoced only when it is
-  // unconditional (see collect_entry_jumps). Nothing a loop reads past its
-  // exit may be counted: the step can leave the loop right after the havoc.
-  std::vector<size_t> work{0};
-  std::unordered_set<irep_idt, irep_id_hash> excluded;
+  /// Where in the body \p target lands, if past the head.
+  std::optional<size_t> inner(goto_programt::const_targett target) const
+  {
+    const auto f = index.find(&*target);
+    if (f == index.end() || f->second == 0)
+      return std::nullopt;
+    return f->second;
+  }
+};
+
+/// Adds to \p entries where jumps from outside enter the body, and to
+/// \p excluded what the code outside the loop reads. Returns false on a
+/// conditional jump into the body, which the step does not havoc.
+bool outside_the_loop(
+  const goto_functiont &function,
+  const loop_bodyt &loop,
+  std::vector<size_t> &entries,
+  std::unordered_set<irep_idt, irep_id_hash> &excluded)
+{
   for (const auto &instr : function.body.instructions)
   {
-    if (index.count(&instr))
+    if (loop.index.count(&instr))
       continue;
     for (const auto &t : instr.targets)
-      if (const auto f = index.find(&*t); f != index.end() && f->second != 0)
+      if (const auto f = loop.inner(t))
       {
         if (!is_true(instr.guard))
-          return iteration;
-        work.push_back(f->second);
+          return false;
+        entries.push_back(*f);
       }
     std::vector<irep_idt> reads;
     irep_idt assigned;
     reads_and_assigns(instr, reads, assigned);
     excluded.insert(reads.begin(), reads.end());
   }
+  return true;
+}
 
-  std::vector<std::vector<irep_idt>> reads(body.size());
-  std::vector<irep_idt> assigned(body.size());
-  std::unordered_map<irep_idt, size_t, irep_id_hash> vars;
-  for (size_t i = 0; i < body.size(); ++i)
-  {
-    reads_and_assigns(*body[i], reads[i], assigned[i]);
-    if (!assigned[i].empty())
-      vars.emplace(assigned[i], vars.size());
-  }
-
-  // A loop nested in the body havocs what it assigns at its own head.
-  for (size_t i = 0; i < body.size(); ++i)
-    for (const auto &t : body[i]->targets)
-      if (
-        const auto f = index.find(&*t);
-        f != index.end() && f->second != 0 && f->second <= i)
-        for (size_t j = f->second; j <= i; ++j)
+/// Adds to \p excluded what a loop nested in the body assigns: it havocs that
+/// at its own head.
+void exclude_nested_loops(
+  const loop_bodyt &loop,
+  const std::vector<irep_idt> &assigned,
+  std::unordered_set<irep_idt, irep_id_hash> &excluded)
+{
+  for (size_t i = 0; i < loop.body.size(); ++i)
+    for (const auto &t : loop.body[i]->targets)
+      if (const auto f = loop.inner(t); f && *f <= i)
+        for (size_t j = *f; j <= i; ++j)
           if (!assigned[j].empty())
             excluded.insert(assigned[j]);
+}
 
-  // Must-assigned since an entry, over the iteration: the back edge to the
-  // head and every edge out of the loop end it.
+/// The body positions control may reach next from position \p i.
+std::vector<size_t> successors(const loop_bodyt &loop, size_t i)
+{
+  std::vector<size_t> next;
+  const instructiont &instr = *loop.body[i];
+  for (const auto &t : instr.targets)
+    if (const auto f = loop.inner(t))
+      next.push_back(*f);
+  if (!(instr.is_goto() && is_true(instr.guard)) && i + 1 < loop.body.size())
+    next.push_back(i + 1);
+  return next;
+}
+
+/// Lowers \p in to its meet with \p out; returns whether it changed.
+bool meet(std::vector<bool> &in, const std::vector<bool> &out)
+{
+  bool changed = false;
+  for (size_t v = 0; v < out.size(); ++v)
+    if (in[v] && !out[v])
+    {
+      in[v] = false;
+      changed = true;
+    }
+  return changed;
+}
+
+/// For each body position, which of \p vars are assigned on every path to it
+/// since an entry. The back edge to the head and every edge out of the loop
+/// end the iteration.
+std::vector<std::vector<bool>> must_assigned(
+  const loop_bodyt &loop,
+  const std::vector<irep_idt> &assigned,
+  const std::unordered_map<irep_idt, size_t, irep_id_hash> &vars,
+  std::vector<size_t> work)
+{
   std::vector<std::vector<bool>> in(
-    body.size(), std::vector<bool>(vars.size(), true));
+    loop.body.size(), std::vector<bool>(vars.size(), true));
   for (size_t entry : work)
     in[entry].assign(vars.size(), false);
   while (!work.empty())
@@ -1483,33 +1528,46 @@ iterationt iteration_of(const goto_functiont &function, const loopst &loop)
     std::vector<bool> out = in[i];
     if (!assigned[i].empty())
       out[vars.at(assigned[i])] = true;
-
-    std::vector<size_t> next;
-    const instructiont &instr = *body[i];
-    for (const auto &t : instr.targets)
-      if (const auto f = index.find(&*t); f != index.end() && f->second != 0)
-        next.push_back(f->second);
-    if (!(instr.is_goto() && is_true(instr.guard)) && i + 1 < body.size())
-      next.push_back(i + 1);
-
-    for (size_t n : next)
-    {
-      bool changed = false;
-      for (size_t v = 0; v < out.size(); ++v)
-        if (in[n][v] && !out[v])
-        {
-          in[n][v] = false;
-          changed = true;
-        }
-      if (changed)
+    for (size_t n : successors(loop, i))
+      if (meet(in[n], out))
         work.push_back(n);
-    }
   }
+  return in;
+}
+
+/// See iterationt. Call it before any loop of \p function is transformed.
+iterationt iteration_of(const goto_functiont &function, const loopst &loop)
+{
+  iterationt iteration;
+  iteration.head = loop.get_original_loop_head()->location_number;
+  iteration.back = loop.get_original_loop_exit()->location_number;
+  const loop_bodyt body(loop);
+
+  // A jump into the body starts an iteration too, havoced only when it is
+  // unconditional (see collect_entry_jumps). Nothing a loop reads past its
+  // exit may be counted: the step can leave the loop right after the havoc.
+  std::vector<size_t> entries{0};
+  std::unordered_set<irep_idt, irep_id_hash> excluded;
+  if (!outside_the_loop(function, body, entries, excluded))
+    return iteration;
+
+  const size_t size = body.body.size();
+  std::vector<std::vector<irep_idt>> reads(size);
+  std::vector<irep_idt> assigned(size);
+  std::unordered_map<irep_idt, size_t, irep_id_hash> vars;
+  for (size_t i = 0; i < size; ++i)
+  {
+    reads_and_assigns(*body.body[i], reads[i], assigned[i]);
+    if (!assigned[i].empty())
+      vars.emplace(assigned[i], vars.size());
+  }
+  exclude_nested_loops(body, assigned, excluded);
+  const auto in = must_assigned(body, assigned, vars, entries);
 
   for (const auto &var : vars)
     if (!excluded.count(var.first))
       iteration.reassigned.insert(var.first);
-  for (size_t i = 0; i < body.size(); ++i)
+  for (size_t i = 0; i < size; ++i)
     for (const irep_idt &name : reads[i])
       if (const auto v = vars.find(name); v != vars.end() && !in[i][v->second])
         iteration.reassigned.erase(name);

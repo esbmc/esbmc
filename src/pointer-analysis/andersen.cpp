@@ -584,101 +584,127 @@ andersent::node_id andersent::allocation(const type2tc &type, unsigned loc)
   return t;
 }
 
-andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
+andersent::node_id
+andersent::eval_address_of(const address_of2t &rhs, unsigned loc)
 {
-  const expr2tc r = strip_casts(rhs);
+  const expr2tc obj = base_object(rhs.ptr_obj);
+  // &*q and &q->f point into whatever q points to.
+  if (is_dereference2t(obj))
+    return eval_rhs(to_dereference2t(obj).value, loc);
+  const node_id t = fresh_node();
+  add_constraint(constraint_kindt::ADDRESS_OF, t, get_node(obj));
+  return t;
+}
 
-  if (is_address_of2t(r))
+std::optional<andersent::node_id>
+andersent::eval_sideeffect(const sideeffect2t &side, unsigned loc)
+{
+  switch (side.kind)
   {
-    const expr2tc obj = base_object(to_address_of2t(r).ptr_obj);
-    // &*q and &q->f point into whatever q points to.
-    if (is_dereference2t(obj))
-      return eval_rhs(to_dereference2t(obj).value, loc);
-    const node_id t = fresh_node();
-    add_constraint(constraint_kindt::ADDRESS_OF, t, get_node(obj));
-    return t;
+  case sideeffect2t::allockind::malloc:
+  case sideeffect2t::allockind::realloc:
+  case sideeffect2t::allockind::alloca:
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
+  {
+    // One node per allocation site, so every object a loop allocates shares
+    // a single abstraction.  Keyed like value_sett's dynamic objects.
+    const node_id t = allocation(
+      is_pointer_type(side.type) ? to_pointer_type(side.type).subtype
+                                 : side.alloctype,
+      loc);
+    if (
+      side.kind != sideeffect2t::allockind::realloc ||
+      is_nil_expr(side.operand))
+      return t;
+    return eval_realloc(t, side.operand, loc);
   }
 
-  if (is_dereference2t(base_object(r)))
-  {
-    const node_id t = fresh_node();
-    add_constraint(
-      constraint_kindt::LOAD,
-      t,
-      eval_rhs(to_dereference2t(base_object(r)).value, loc));
-    return t;
+  case sideeffect2t::allockind::nondet:
+    // Symbolic execution resolves a dereference of an unconstrained pointer
+    // (an uninitialised local, a bodyless call's result) to an invalid
+    // object, never a named one, even under an assumption equating it with
+    // an address. It points at a sentinel rather than nothing, so a
+    // consumer can tell it apart from a set no constraint ever reached.
+    return unconstrained();
+
+  default:
+    return std::nullopt;
   }
+}
 
-  if (is_sideeffect2t(r))
-  {
-    const sideeffect2t &side = to_sideeffect2t(r);
-    switch (side.kind)
-    {
-    case sideeffect2t::allockind::malloc:
-    case sideeffect2t::allockind::realloc:
-    case sideeffect2t::allockind::alloca:
-    case sideeffect2t::allockind::cpp_new:
-    case sideeffect2t::allockind::cpp_new_arr:
-    {
-      // One node per allocation site, so every object a loop allocates shares
-      // a single abstraction.  Keyed like value_sett's dynamic objects.
-      const node_id t = allocation(
-        is_pointer_type(side.type) ? to_pointer_type(side.type).subtype
-                                   : side.alloctype,
-        loc);
-      if (
-        side.kind != sideeffect2t::allockind::realloc ||
-        is_nil_expr(side.operand))
-        return t;
-      // realloc copies the old object into the new one, and on failure
-      // returns the old pointer (goto_symext::symex_realloc).
-      const node_id old = eval_rhs(side.operand, loc);
-      const node_id contents = fresh_node();
-      add_constraint(constraint_kindt::LOAD, contents, old);
-      add_constraint(constraint_kindt::STORE, t, contents);
-      const node_id result = fresh_node();
-      add_constraint(constraint_kindt::COPY, result, t);
-      add_constraint(constraint_kindt::COPY, result, old);
-      return result;
-    }
+andersent::node_id
+andersent::eval_realloc(node_id fresh, const expr2tc &old_ptr, unsigned loc)
+{
+  // realloc copies the old object into the new one, and on failure
+  // returns the old pointer (goto_symext::symex_realloc).
+  const node_id old = eval_rhs(old_ptr, loc);
+  const node_id contents = fresh_node();
+  add_constraint(constraint_kindt::LOAD, contents, old);
+  add_constraint(constraint_kindt::STORE, fresh, contents);
+  const node_id result = fresh_node();
+  add_constraint(constraint_kindt::COPY, result, fresh);
+  add_constraint(constraint_kindt::COPY, result, old);
+  return result;
+}
 
-    case sideeffect2t::allockind::nondet:
-    {
-      // Symbolic execution resolves a dereference of an unconstrained pointer
-      // (an uninitialised local, a bodyless call's result) to an invalid
-      // object, never a named one, even under an assumption equating it with
-      // an address. It points at a sentinel rather than nothing, so a
-      // consumer can tell it apart from a set no constraint ever reached.
-      return unconstrained();
-    }
-
-    default:
-      break;
-    }
-  }
-
-  if (is_if2t(r))
-  {
-    const if2t &branch = to_if2t(r);
-    const node_id t = fresh_node();
-    add_constraint(constraint_kindt::COPY, t, eval_rhs(branch.true_value, loc));
-    add_constraint(
-      constraint_kindt::COPY, t, eval_rhs(branch.false_value, loc));
-    return t;
-  }
-
+std::optional<andersent::node_id>
+andersent::eval_pointer_arithmetic(const expr2tc &r, unsigned loc)
+{
   // Pointer arithmetic keeps pointing into the same object: this analysis is
   // offset-insensitive, so it is a plain copy of the pointer operand.
-  if (is_add2t(r) || is_sub2t(r))
-  {
-    const expr2tc &lhs = *r->get_sub_expr(0);
-    const expr2tc &rhs_op = *r->get_sub_expr(1);
-    if (is_pointer_type(lhs->type))
-      return eval_rhs(lhs, loc);
-    if (is_pointer_type(rhs_op->type))
-      return eval_rhs(rhs_op, loc);
-  }
+  if (!is_add2t(r) && !is_sub2t(r))
+    return std::nullopt;
+  const expr2tc &lhs = *r->get_sub_expr(0);
+  const expr2tc &rhs_op = *r->get_sub_expr(1);
+  if (is_pointer_type(lhs->type))
+    return eval_rhs(lhs, loc);
+  if (is_pointer_type(rhs_op->type))
+    return eval_rhs(rhs_op, loc);
+  return std::nullopt;
+}
 
+andersent::node_id andersent::eval_integer(const expr2tc &r, unsigned loc)
+{
+  // An integer carries the addresses it is computed from: `(long)p + 44`
+  // still points into p's object. A constant operand is an offset and carries
+  // none.
+  std::vector<node_id> carried;
+  r->foreach_operand([this, &carried, loc](const expr2tc &op) {
+    if (!is_nil_expr(op) && !is_constant_int2t(strip_casts(op)))
+      carried.push_back(eval_rhs(op, loc));
+  });
+  // `(long)p + 44` reaches what p does: share its node rather than build a
+  // chain of copies, which CIL emits for every field access.
+  if (carried.size() == 1)
+    return carried.front();
+  const node_id t = fresh_node();
+  for (node_id c : carried)
+    add_constraint(constraint_kindt::COPY, t, c);
+  return t;
+}
+
+andersent::node_id
+andersent::eval_constant_aggregate(const expr2tc &r, unsigned loc)
+{
+  const node_id t = fresh_node();
+  r->foreach_operand([this, &t, loc](const expr2tc &op) {
+    if (!is_nil_expr(op) && may_hold_address(op->type))
+      add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+  });
+  return t;
+}
+
+andersent::node_id andersent::eval_branch(const if2t &branch, unsigned loc)
+{
+  const node_id t = fresh_node();
+  add_constraint(constraint_kindt::COPY, t, eval_rhs(branch.true_value, loc));
+  add_constraint(constraint_kindt::COPY, t, eval_rhs(branch.false_value, loc));
+  return t;
+}
+
+andersent::node_id andersent::eval_value(const expr2tc &r, unsigned loc)
+{
   // NULL names no object, so an empty set is exact. Symex resolves any other
   // integer constant used as a pointer to an invalid object
   // (value_sett::get_value_set_rec), just as it does an unconstrained one.
@@ -695,43 +721,47 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     is_symbol2t(base) || is_dynamic_object2t(base))
     return get_node(base);
 
-  // An integer carries the addresses it is computed from: `(long)p + 44`
-  // still points into p's object. A constant operand is an offset and carries
-  // none.
   if (is_bv_type(r->type) || is_bool_type(r->type))
-  {
-    std::vector<node_id> carried;
-    r->foreach_operand([this, &carried, loc](const expr2tc &op) {
-      if (!is_nil_expr(op) && !is_constant_int2t(strip_casts(op)))
-        carried.push_back(eval_rhs(op, loc));
-    });
-    // `(long)p + 44` reaches what p does: share its node rather than build a
-    // chain of copies, which CIL emits for every field access.
-    if (carried.size() == 1)
-      return carried.front();
-    const node_id t = fresh_node();
-    for (node_id c : carried)
-      add_constraint(constraint_kindt::COPY, t, c);
-    return t;
-  }
+    return eval_integer(r, loc);
 
   if (
     is_constant_struct2t(r) || is_constant_union2t(r) ||
     is_constant_array2t(r) || is_constant_array_of2t(r))
-  {
-    const node_id t = fresh_node();
-    r->foreach_operand([this, &t, loc](const expr2tc &op) {
-      if (!is_nil_expr(op) && may_hold_address(op->type))
-        add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
-    });
-    return t;
-  }
+    return eval_constant_aggregate(r, loc);
 
   // Anything else is a value this frontend does not model.  Leaving the set
   // empty would be an unsound under-approximation; TOP is the safe answer.
   const node_id t = fresh_node();
   points_to_top(t);
   return t;
+}
+
+andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
+{
+  const expr2tc r = strip_casts(rhs);
+
+  if (is_address_of2t(r))
+    return eval_address_of(to_address_of2t(r), loc);
+
+  if (const expr2tc base = base_object(r); is_dereference2t(base))
+  {
+    const node_id t = fresh_node();
+    add_constraint(
+      constraint_kindt::LOAD, t, eval_rhs(to_dereference2t(base).value, loc));
+    return t;
+  }
+
+  if (is_sideeffect2t(r))
+    if (const auto t = eval_sideeffect(to_sideeffect2t(r), loc))
+      return *t;
+
+  if (is_if2t(r))
+    return eval_branch(to_if2t(r), loc);
+
+  if (const auto t = eval_pointer_arithmetic(r, loc))
+    return *t;
+
+  return eval_value(r, loc);
 }
 
 andersent::node_id andersent::unconstrained()

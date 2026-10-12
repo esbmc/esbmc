@@ -1,6 +1,7 @@
 #ifndef CPROVER_POINTER_ANALYSIS_ANDERSEN_H
 #define CPROVER_POINTER_ANALYSIS_ANDERSEN_H
 
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -277,6 +278,22 @@ protected:
   /// \ref fresh_node when the expression is not already a nameable object.
   /// It may be another object's own node, so callers only ever read it.
   node_id eval_rhs(const expr2tc &rhs, unsigned location_number);
+
+  /// The parts of \ref eval_rhs, each for one kind of expression. Those that
+  /// return an optional give nothing when \p rhs is not of their kind.
+  node_id eval_address_of(const address_of2t &rhs, unsigned location_number);
+  std::optional<node_id>
+  eval_sideeffect(const sideeffect2t &rhs, unsigned location_number);
+  node_id
+  eval_realloc(node_id fresh, const expr2tc &old, unsigned location_number);
+  std::optional<node_id>
+  eval_pointer_arithmetic(const expr2tc &rhs, unsigned location_number);
+  node_id eval_branch(const if2t &rhs, unsigned location_number);
+  /// A constant, an l-value read as a value, or an integer or aggregate that
+  /// may carry addresses; TOP for anything else.
+  node_id eval_value(const expr2tc &rhs, unsigned location_number);
+  node_id eval_integer(const expr2tc &rhs, unsigned location_number);
+  node_id eval_constant_aggregate(const expr2tc &rhs, unsigned location_number);
 
   /// Lowers `lhs := rhs` to whichever of the four constraints fits.
   void handle_assign(
