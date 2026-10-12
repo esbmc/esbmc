@@ -411,6 +411,20 @@ protected:
    */
   virtual void assume(const expr2tc &assumption);
 
+  /**
+   *  Hold back the assume that ends a path at a Python assert (#8242).
+   *  A later Python assert fails whether or not an earlier one ended the
+   *  path, so only other claims need it; claim() emits it before them.
+   *  Keeping it out of the equation until then spares each later
+   *  assertion and guard check the earlier assertions' constraints.
+   *  @param assumption The assert's condition.
+   */
+  virtual void defer_assumption(const expr2tc &assumption);
+
+  /** Before a claim that needs them, emit every deferred assumption into
+   *  the target equation. */
+  void flush_deferred_assumptions();
+
   // gotos
   /**
    *  Merge converging states into current state.
@@ -1583,6 +1597,19 @@ protected:
    *  away the originals' assignments and degrades counterexamples.
    */
   std::unordered_map<irep_idt, expr2tc> copy_definitions;
+
+  struct deferred_assumptiont
+  {
+    expr2tc guard;
+    expr2tc cond;
+    symex_targett::sourcet source;
+    unsigned loop_number;
+  };
+  /** Assumptions defer_assumption() holds back, in program order. */
+  std::vector<deferred_assumptiont> deferred_assumptions;
+  /** Set while claim() handles a Python assert's own condition, which needs
+   *  no deferred assumption. */
+  bool claim_skips_deferred = false;
 
   /** The renamed byte size each heap object was allocated with, by symbol.
    *  __ESBMC_alloc_size holds it too, but symex cannot read that array back,

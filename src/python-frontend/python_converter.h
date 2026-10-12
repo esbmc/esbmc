@@ -540,6 +540,15 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  exprt get_binary_operator_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs);
+  exprt
+  keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
   exprt build_division_guarded_binop(
     const std::string &op,
     exprt lhs,

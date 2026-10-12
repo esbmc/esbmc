@@ -4,6 +4,8 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/python-list/python_list.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
@@ -524,18 +526,50 @@ void tuple_handler::handle_tuple_unpacking(
   }
 
   const auto &targets = target["elts"];
+  const size_t n = tuple_type.components().size();
+  const size_t star_idx = starred_target_index(targets);
 
-  if (targets.size() != tuple_type.components().size())
+  if (star_idx == targets.size() && targets.size() != n)
   {
     throw std::runtime_error(
       "Cannot unpack tuple: expected " + std::to_string(targets.size()) +
-      " values, got " + std::to_string(tuple_type.components().size()));
+      " values, got " + std::to_string(n));
+  }
+
+  // A tuple's length is static, so a starred target short of values is a
+  // ValueError known at conversion time.
+  if (n + 1 < targets.size())
+  {
+    codet raise("expression");
+    raise.copy_to_operands(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError",
+        "not enough values to unpack (expected at least " +
+          std::to_string(targets.size() - 1) + ", got " + std::to_string(n) +
+          ")"));
+    raise.location() = converter_.get_location_from_decl(ast_node);
+    target_block.copy_to_operands(raise);
+    return;
   }
 
   // Create assignments: x = temp.element_0, y = temp.element_1, ...
-  for (size_t i = 0; i < targets.size(); i++)
+  for (size_t t = 0; t < targets.size(); t++)
   {
-    const std::string tgt_type = targets[i]["_type"].get<std::string>();
+    if (t == star_idx)
+    {
+      assign_starred_elements(
+        ast_node,
+        targets[t]["value"],
+        rhs,
+        t,
+        n + 1 - targets.size(),
+        target_block);
+      continue;
+    }
+
+    // Targets after the starred one take the tuple's trailing elements
+    const size_t i = t < star_idx ? t : t + n - targets.size();
+    const std::string tgt_type = targets[t]["_type"].get<std::string>();
 
     // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. Resolve the
     // element's (possibly symbol-referenced) type to a concrete struct, build
@@ -555,7 +589,7 @@ void tuple_handler::handle_tuple_unpacking(
       }
       std::string member_name = "element_" + std::to_string(i);
       exprt nested_rhs = build_member(rhs, member_name, resolved);
-      handle_tuple_unpacking(ast_node, targets[i], nested_rhs, target_block);
+      handle_tuple_unpacking(ast_node, targets[t], nested_rhs, target_block);
       continue;
     }
 
@@ -565,35 +599,13 @@ void tuple_handler::handle_tuple_unpacking(
         "Tuple unpacking only supports simple names, not " + tgt_type);
     }
 
-    std::string var_name = targets[i]["id"].get<std::string>();
-    symbol_id var_sid = converter_.create_symbol_id();
-    var_sid.set_object(var_name);
-
-    symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
-    if (!var_symbol)
-    {
-      locationt loc = converter_.get_location_from_decl(targets[i]);
-      const typet &elem_type = tuple_type.components()[i].type();
-
-      symbolt new_symbol = converter_.create_symbol(
-        loc.get_file().as_string(),
-        var_name,
-        var_sid.to_string(),
-        loc,
-        elem_type);
-      new_symbol.lvalue = true;
-      new_symbol.file_local = true;
-      new_symbol.is_extern = false;
-      var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
-    }
-
     // Create member access: temp.element_i
     std::string member_name = "element_" + std::to_string(i);
     const typet &member_type = tuple_type.components()[i].type();
     exprt member_access = build_member(rhs, member_name, member_type);
     const locationt loc = converter_.get_location_from_decl(ast_node);
-    const exprt target = build_symbol(*var_symbol);
+    const exprt target =
+      build_symbol(unpack_target_symbol(targets[t], member_type));
 
     // A tuple held in a list is reached through a dereference, and the
     // dereference layer refuses to build a whole-array rvalue, as C does. A
@@ -622,6 +634,83 @@ void tuple_handler::handle_tuple_unpacking(
     assign.location() = loc;
     target_block.copy_to_operands(assign);
   }
+}
+
+size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const
+{
+  size_t i = 0;
+  while (i < targets.size() && targets[i]["_type"] != "Starred")
+    i++;
+  return i;
+}
+
+symbolt &tuple_handler::unpack_target_symbol(
+  const nlohmann::json &name_node,
+  const typet &type)
+{
+  symbol_id var_sid = converter_.create_symbol_id();
+  var_sid.set_object(name_node["id"].get<std::string>());
+
+  if (symbolt *existing = converter_.find_symbol(var_sid.to_string()))
+    return *existing;
+
+  locationt loc = converter_.get_location_from_decl(name_node);
+  symbolt new_symbol = converter_.create_symbol(
+    loc.get_file().as_string(),
+    name_node["id"].get<std::string>(),
+    var_sid.to_string(),
+    loc,
+    type);
+  new_symbol.lvalue = true;
+  new_symbol.file_local = true;
+  new_symbol.is_extern = false;
+  return *converter_.symbol_table().move_symbol_to_context(new_symbol);
+}
+
+void tuple_handler::assign_starred_elements(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &star_value,
+  const exprt &rhs,
+  size_t first,
+  size_t count,
+  codet &target_block)
+{
+  if (star_value["_type"] != "Name")
+    throw std::runtime_error(
+      "Starred unpacking only supports simple names, not " +
+      star_value["_type"].get<std::string>());
+
+  const struct_typet &tuple_type = to_struct_type(rhs.type());
+  std::vector<exprt> elems;
+  for (size_t k = first; k < first + count; k++)
+    elems.push_back(build_member(
+      rhs, "element_" + std::to_string(k), tuple_type.components()[k].type()));
+
+  // The list's pushes go through add_instruction. Collect them so they land
+  // after what target_block already holds, such as the temporary that a
+  // call on the right-hand side was stored in.
+  code_blockt list_block;
+  code_blockt *const saved_block = converter_.current_block;
+  converter_.current_block = &list_block;
+  const exprt list_expr =
+    python_list(converter_, ast_node).build_list_from_exprs(elems);
+  converter_.current_block = saved_block;
+  for (const exprt &op : list_block.operands())
+    target_block.copy_to_operands(op);
+
+  const exprt star =
+    build_symbol(unpack_target_symbol(star_value, list_expr.type()));
+  // Retyping a symbol in place would corrupt its earlier uses
+  if (star.type() != list_expr.type())
+    throw std::runtime_error(
+      "Starred unpacking into " + star_value["id"].get<std::string>() +
+      ", which already holds a non-list value, is not supported");
+  converter_.get_element_type_registry().assign_from(
+    list_expr.identifier().as_string(), star.identifier().as_string());
+
+  code_assignt assign(star, list_expr);
+  assign.location() = converter_.get_location_from_decl(ast_node);
+  target_block.copy_to_operands(assign);
 }
 
 typet tuple_handler::get_tuple_type_from_annotation(

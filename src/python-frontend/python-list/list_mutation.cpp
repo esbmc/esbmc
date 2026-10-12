@@ -320,6 +320,75 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   return elem_info;
 }
 
+namespace
+{
+/// The PyObject pointer `item` of a list subscript target `*(T *)item->value`,
+/// or nullptr when @p lhs has another shape.
+const exprt *list_item_of_store_target(const exprt &lhs)
+{
+  if (lhs.id() != "dereference" || lhs.op0().id() != "typecast")
+    return nullptr;
+  const exprt &value = lhs.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().id() != "dereference")
+    return nullptr;
+  return &value.op0().op0();
+}
+
+/// The non-negative literal index of a subscript, or SIZE_MAX when the index
+/// is not known statically.
+size_t literal_subscript_index(const nlohmann::json &subscript)
+{
+  const nlohmann::json &slice = subscript["slice"];
+  if (
+    slice.value("_type", "") == "Constant" && slice.contains("value") &&
+    slice["value"].is_number_unsigned())
+    return slice["value"].get<size_t>();
+  return SIZE_MAX;
+}
+} // namespace
+
+void python_list::retype_element_store(exprt &lhs, exprt &rhs)
+{
+  const tuple_handler &tuples = converter_.get_tuple_handler();
+  if (
+    lhs.type() == rhs.type() ||
+    !(tuples.is_tuple_type(lhs.type()) || tuples.is_tuple_type(rhs.type())))
+    return;
+
+  const typet obj_type = converter_.get_type_handler().get_list_element_type();
+  const exprt *item = list_item_of_store_target(lhs);
+  if (!item || item->type() != pointer_typet(obj_type))
+    return;
+
+  // A named element lets compare()'s fast path read the slot's new type.
+  symbolt &stored = converter_.create_tmp_symbol(
+    list_value_, "$list_store$", rhs.type(), exprt());
+  code_declt stored_decl(build_symbol(stored));
+  stored_decl.copy_to_operands(rhs);
+  stored_decl.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(stored_decl);
+  const exprt holder = build_list_from_exprs({build_symbol(stored)});
+  const exprt fresh = build_list_at_call(
+    holder, from_integer(BigInt(0), size_type()), list_value_);
+
+  const nlohmann::json &container = list_value_["value"];
+  if (container.value("_type", "") == "Name")
+  {
+    const exprt list = converter_.get_expr(container);
+    if (list.is_symbol())
+      elem_types().replace(
+        list.identifier().as_string(),
+        literal_subscript_index(list_value_),
+        stored.id.as_string(),
+        rhs.type());
+  }
+
+  lhs = build_dereference(*item, obj_type);
+  rhs = build_dereference(fresh, obj_type);
+}
+
 /// A constructed instance reaches a list literal as a *value* struct
 /// (function_call_expr's no-LHS constructor path), but every element read emits
 /// `*(Cls **)item->value`. Storing the struct's bytes therefore made
@@ -589,13 +658,16 @@ std::optional<exprt> python_list::build_element_replacement(
 {
   const store_kind old_kind = kind_of(lhs.type(), converter_);
   const store_kind new_kind = kind_of(rhs.type(), converter_);
-  const bool same_kind =
-    old_kind == new_kind &&
-    (old_kind != store_kind::tuple || lhs.type() == rhs.type());
+  // retype_element_store() replaces a tuple over an int or another tuple, and
+  // an int over a tuple (#8133).
+  const auto int_or_tuple = [](store_kind kind) {
+    return kind == store_kind::integer || kind == store_kind::tuple;
+  };
   // An int stored into a float slot keeps its value as a float.
   if (
     old_kind == store_kind::other || new_kind == store_kind::other ||
-    same_kind ||
+    old_kind == new_kind ||
+    (int_or_tuple(old_kind) && int_or_tuple(new_kind)) ||
     (old_kind == store_kind::floating && new_kind == store_kind::integer))
     return std::nullopt;
 

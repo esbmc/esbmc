@@ -43,6 +43,26 @@ def _runs_call(node):
     return False
 
 
+def _identifiers(node):
+    """The strings in the fields of `node`."""
+    for _, value in ast.iter_fields(node):
+        yield from (v for v in (value if isinstance(value, list) else [value])
+                    if isinstance(v, str))
+
+
+def _only_called_as_method(module, target):
+    """Whether the name `target` binds occurs in `module` only as the
+    attribute called in `x.name(...)`, or not at all, as for a dunder that only
+    an operator reaches. Any other use, such as comparing the bound method or
+    naming it to getattr, can tell the copy from the original (#8356)."""
+    called = {
+        id(n.func)
+        for n in ast.walk(module) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+    }
+    return all(n is target or id(n) in called or target.id not in _identifiers(n)
+               for n in ast.walk(module))
+
+
 class _QualifyNestedClasses(ast.NodeTransformer):
     """Rewrite `Outer.Inner` to the hoisted class's module-level name."""
 
@@ -115,6 +135,43 @@ class ClassContextMixin:
             return False
         earlier = [*cls.decorator_list, *cls.bases, *cls.keywords, *cls.body[:index]]
         return not (_runs_call(stmt) and any(_runs_call(e) for e in earlier))
+
+    def copy_aliased_methods(self, module):
+        """Replace each class-body `alias = name` that names an earlier def of
+        the same class body with a copy of that def called `alias` (#8356).
+        Python binds the alias to the def's function object, so the copy runs
+        the same body even when a subclass overrides `name`."""
+        for cls in (n for n in ast.walk(module) if isinstance(n, ast.ClassDef)):
+            for index, stmt in enumerate(cls.body):
+                method = self._aliased_method(cls, index)
+                if method and _only_called_as_method(module, stmt.targets[0]):
+                    cls.body[index] = copy.deepcopy(method)
+                    cls.body[index].name = stmt.targets[0].id
+
+    def _aliased_method(self, cls, index):
+        """The def that `cls.body[index]` aliases, when a renamed copy of it is
+        exact, else None."""
+        stmt = cls.body[index]
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Name)):
+            return None
+        method = next((s for s in cls.body[:index]
+                       if isinstance(s, ast.FunctionDef) and s.name == stmt.value.id), None)
+        if method is None or not self._copy_is_exact(cls, method, stmt.targets[0].id):
+            return None
+        return method
+
+    def _copy_is_exact(self, cls, method, alias):
+        """Whether a copy of `method` named `alias` behaves as the alias: the
+        def is undecorated, its defaults are constants, since a copy evaluates
+        them again, and both names are bound once in the class scope."""
+        bound = [
+            b for s in cls.body for n in _class_scope_nodes(s) for b in self._names_bound_by(n)
+        ]
+        defaults = [*method.args.defaults, *filter(None, method.args.kw_defaults)]
+        return (not method.decorator_list and bound.count(alias) == 1
+                and bound.count(method.name) == 1
+                and all(isinstance(d, ast.Constant) for d in defaults))
 
     def visit_ClassDef(self, node):
         """Track class context for method definitions."""
