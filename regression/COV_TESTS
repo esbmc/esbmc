@@ -2490,3 +2490,7 @@ regression/python/github_8369_function_value_fail
 regression/python/github_8369_local_binding_fail
 regression/python/github_8369_rebound
 regression/python/github_8369_str
+regression/ld/ld_counter_output_read_by_contact_safe
+regression/ld/ld_timer_output_read_by_contact_safe
+regression/ld/ld_tp_output_state_kept_safe
+regression/ld/ld_user_fb_output_read_by_contact_safe
