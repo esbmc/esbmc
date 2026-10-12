@@ -240,6 +240,15 @@ symbolt *python_converter::find_method_in_imported_base(
   return symbol_table_.find_symbol(base_id.to_string());
 }
 
+symbolt *python_converter::find_method_in_model_base(
+  const std::string &base_class,
+  const std::string &sym_id) const
+{
+  if (!json_utils::find_class((*ast_json)["body"], base_class).is_null())
+    return nullptr;
+  return find_model_symbol(sym_id);
+}
+
 /// Whether import alias @p alias binds @p name: `import a.b` binds `a`, and
 /// `from m import *` may bind any name.
 static bool
@@ -470,6 +479,9 @@ symbolt *python_converter::find_function_in_base_classes(
     if (
       symbolt *func = find_method_in_imported_base(
         base_class_node, base_class, method_name, is_ctor))
+      return func;
+
+    if (symbolt *func = find_method_in_model_base(base_class, sym_id))
       return func;
 
     // Not defined directly in this base: descend into its own bases so a
