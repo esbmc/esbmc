@@ -2453,6 +2453,8 @@ regression/esbmc-cpp/cpp/aligned_operator_new
 regression/esbmc-cpp/cpp/aligned_operator_new_fail
 regression/esbmc/cbrtl_model
 regression/esbmc/cbrtl_model_fail
+regression/esbmc/cbrtl_double_range
+regression/esbmc/cbrtl_double_range_fail
 regression/esbmc/va_arg_branch_cursor
 regression/esbmc/va_arg_branch_cursor_fail
 regression/esbmc-cpp/cpp/local_class_typeid
