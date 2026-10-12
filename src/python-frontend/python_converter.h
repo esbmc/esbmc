@@ -554,10 +554,13 @@ private:
   exprt get_named_expr(const nlohmann::json &element);
 
   /// True if a walrus operator (NamedExpr) appears anywhere in `node`'s tree.
-  /// Used to refuse a walrus in conditionally / repeatedly evaluated positions
-  /// (while-test, ternary branch, short-circuit operand) where the single
-  /// unconditional binding emitted by get_named_expr would be unsound.
+  /// Used to refuse a walrus in conditionally evaluated positions (ternary
+  /// branch, short-circuit operand) where the unconditional binding emitted by
+  /// get_named_expr would be unsound.
   static bool contains_named_expr(const nlohmann::json &node);
+
+  /// True if a walrus sits inside a lambda or comprehension within `node`.
+  static bool contains_nested_scope_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt get_binary_operator_expr(
@@ -2506,6 +2509,10 @@ private:
   static std::string op_to_rdunder(const std::string &op);
   /// Rewrite @p cond into a call to its class's __bool__ when there is one.
   exprt apply_bool_dunder(exprt cond, const locationt &location);
+
+  /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
+  /// other value comes back unchanged.
+  exprt apply_string_truthiness(const exprt &str, const locationt &location);
 
   /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
   exprt apply_bool_dunder_for_not(
