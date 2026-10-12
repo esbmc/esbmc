@@ -143,13 +143,8 @@ std::string first_evaluated_child(
   const std::string type = node.value("_type", "");
   if (type == "Subscript" || type == "Attribute")
     return "/value";
-  // A constant left operand evaluates nothing.
   if (type == "Compare" || type == "BinOp")
-  {
-    if (node["left"].value("_type", "") != "Constant")
-      return "/left";
-    return type == "BinOp" ? "/right" : "/comparators/0";
-  }
+    return "/left";
   if (type != "Call" || !node.contains("func"))
     return "";
   const nlohmann::json &func = node["func"];
@@ -197,15 +192,16 @@ nlohmann::json python_converter::bind_numpy_view_temporary(
 // first bound to a fresh name, as `t = a[lo:hi]; f(t)`, so the callee writes
 // through the view instead of a temporary. Inside a larger expression this
 // holds only when no call runs before the subscript is evaluated.
-void python_converter::hoist_numpy_view_arguments(
-  const nlohmann::json &statement,
+bool python_converter::hoist_numpy_view_arguments(
   const std::string &key,
   nlohmann::json &rewritten,
   codet &target_block)
 {
+  const nlohmann::json statement = rewritten;
   std::vector<json_pointer> arguments;
   collect_subscript_arguments(
     statement[key], json_pointer("/" + key), arguments);
+  bool changed = false;
   for (const json_pointer &argument : arguments)
   {
     const json_pointer call = argument.parent_pointer().parent_pointer();
@@ -215,11 +211,64 @@ void python_converter::hoist_numpy_view_arguments(
         std::stoul(argument.back())) ||
       is_preceded_by_call(statement[key], statement[argument]))
       continue;
-    if (rewritten.is_null())
-      rewritten = statement;
     rewritten[argument] = bind_numpy_view_temporary(
       statement, statement[argument], "$numpy_view_arg$", target_block);
+    changed = true;
   }
+  return changed;
+}
+
+// Whether `node` holds something that must not run before the operands to
+// its left are read: a call that needs binding, or a call passing a view to
+// a bound view parameter, through which the callee may write.
+bool python_converter::needs_numpy_view_hoist(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (needs_numpy_view_call_binding(node))
+    return true;
+  if (is_named_call(node))
+    for (std::size_t i = 0; i < node["args"].size(); ++i)
+      if (
+        (node["args"][i].value("_type", "") == "Subscript" ||
+         is_name(node["args"][i])) &&
+        is_bound_numpy_view_param(node["func"]["id"].get<std::string>(), i))
+        return true;
+  for (const auto &child : node)
+    if (needs_numpy_view_hoist(child))
+      return true;
+  return false;
+}
+
+// Binds the operand at `path` to a fresh name, so that what follows it in
+// the statement can be moved before the statement without overtaking it.
+// False for an operand a name would not preserve: an array or object, which
+// a later call may change through an alias.
+bool python_converter::freeze_numpy_view_operand(
+  const json_pointer &path,
+  nlohmann::json &rewritten,
+  codet &target_block)
+{
+  const nlohmann::json operand = rewritten[path];
+  const std::string type = operand.value("_type", "");
+  if (type == "Constant")
+    return true;
+  if (type == "Attribute")
+    return false;
+  if (type == "Name")
+  {
+    const std::string id = operand.value("id", "");
+    if (id.rfind("$numpy_view_", 0) == 0)
+      return true;
+    const symbolt *symbol =
+      symbol_table_.find_symbol(resolve_name_symbol_id(id));
+    const typet symbol_type = symbol ? ns.follow(symbol->get_type()) : typet();
+    if (!is_number(symbol_type) && !symbol_type.is_bool())
+      return false;
+  }
+  rewritten[path] = bind_numpy_view_temporary(
+    rewritten, operand, "$numpy_view_tmp$", target_block);
+  return true;
 }
 
 // A call that must be a statement of its own: one returning its view
@@ -235,33 +284,45 @@ bool python_converter::needs_numpy_view_call_binding(const nlohmann::json &node)
 
 // `f(v)[0]`, `len(f(v))`, `f(v).tolist()` where f returns its view
 // parameter: the call is first bound to a fresh name, which then carries the
-// view. Only the call the statement evaluates first is moved.
-void python_converter::hoist_returned_numpy_view_call(
-  const std::string &key,
+// view. Only what the expression at `path` evaluates first is moved; the
+// right operand of a binary operation follows once the left one is bound to
+// a name. `skip` leaves the node at `path` itself in place.
+bool python_converter::hoist_first_evaluated_numpy_view_call(
+  const json_pointer &path,
+  bool skip,
   nlohmann::json &rewritten,
   codet &target_block)
 {
-  // A call that is the whole value of these statements is bound, discarded
-  // or returned where the statement is converted.
-  static const std::set<std::string> handles_root = {
-    "Assign", "AnnAssign", "Expr", "Return"};
-  bool skip = handles_root.count(rewritten.value("_type", "")) != 0;
-  json_pointer path("/" + key);
-  while (rewritten.contains(path) && rewritten[path].is_object())
+  if (!rewritten.contains(path) || !rewritten[path].is_object())
+    return false;
+  const nlohmann::json node = rewritten[path];
+  if (!skip && needs_numpy_view_call_binding(node))
   {
-    const nlohmann::json node = rewritten[path];
-    if (!skip && needs_numpy_view_call_binding(node))
-    {
-      rewritten[path] = bind_numpy_view_temporary(
-        rewritten, node, "$numpy_view_ret$", target_block);
-      return;
-    }
-    skip = false;
-    const std::string step = first_evaluated_child(node, imported_modules);
-    if (step.empty())
-      return;
-    path = json_pointer(path.to_string() + step);
+    rewritten[path] = bind_numpy_view_temporary(
+      rewritten, node, "$numpy_view_ret$", target_block);
+    return true;
   }
+  const std::string step = first_evaluated_child(node, imported_modules);
+  if (step.empty())
+    return false;
+  const json_pointer first(path.to_string() + step);
+  if (
+    hoist_first_evaluated_numpy_view_call(
+      first, false, rewritten, target_block))
+    return true;
+  const std::string type = node.value("_type", "");
+  const bool binary =
+    type == "BinOp" || (type == "Compare" && node["comparators"].size() == 1);
+  const json_pointer second(
+    path.to_string() + (type == "BinOp" ? "/right" : "/comparators/0"));
+  if (!binary || !needs_numpy_view_hoist(rewritten[second]))
+    return false;
+  const nlohmann::json before = rewritten[first];
+  if (!freeze_numpy_view_operand(first, rewritten, target_block))
+    return false;
+  return rewritten[first] != before ||
+         hoist_first_evaluated_numpy_view_call(
+           second, false, rewritten, target_block);
 }
 
 // `x = a if c else f(v[lo:hi])`: the view expression may only be built when
@@ -306,13 +367,23 @@ const nlohmann::json &python_converter::hoist_unnamed_numpy_view_arguments(
   if (split_conditional_numpy_view_assignment(statement, rewritten))
     return rewritten;
   const std::string key = statement_expression_key(statement);
-  if (key.empty())
+  if (key.empty() || !needs_numpy_view_hoist(statement[key]))
     return statement;
-  hoist_numpy_view_arguments(statement, key, rewritten, target_block);
-  nlohmann::json candidate = rewritten.is_null() ? statement : rewritten;
-  const nlohmann::json before = candidate;
-  hoist_returned_numpy_view_call(key, candidate, target_block);
-  if (candidate != before)
-    rewritten = std::move(candidate);
+  // A call that is the whole value of these statements is bound, discarded
+  // or returned where the statement is converted.
+  static const std::set<std::string> handles_root = {
+    "Assign", "AnnAssign", "Expr", "Return"};
+  const bool skip_root = handles_root.count(statement.value("_type", "")) != 0;
+  nlohmann::json work = statement;
+  // Each round moves one thing before the statement, which may let the
+  // next one follow.
+  for (unsigned round = 0; round < 16; ++round)
+    if (
+      !hoist_numpy_view_arguments(key, work, target_block) &&
+      !hoist_first_evaluated_numpy_view_call(
+        json_pointer("/" + key), skip_root, work, target_block))
+      break;
+  if (work != statement)
+    rewritten = std::move(work);
   return rewritten.is_null() ? statement : rewritten;
 }

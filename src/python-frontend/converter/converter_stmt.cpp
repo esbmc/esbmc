@@ -3134,13 +3134,17 @@ void python_converter::reject_numpy_view_slice_assignment(
       "TypeError: slice assignment through a numpy view is not supported");
 }
 
-// An element read out of a view parameter is a scalar, not a view.
+// An element read out of a view parameter, or into the temporary an operand
+// is bound to, is a scalar, not a view.
 bool python_converter::is_scalar_read_of_numpy_view_param(
   const exprt &lhs,
   const std::string &storage_id) const
 {
   const typet &type = lhs.type();
-  return numpy_view_param_symbols_.count(storage_id) != 0 &&
+  const bool operand_temporary =
+    lhs.identifier().as_string().find("$numpy_view_tmp$") != std::string::npos;
+  return (operand_temporary ||
+          numpy_view_param_symbols_.count(storage_id) != 0) &&
          (type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
           type.is_bool());
 }

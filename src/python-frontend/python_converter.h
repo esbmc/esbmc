@@ -1823,8 +1823,7 @@ private:
     const nlohmann::json &value,
     const std::string &prefix,
     codet &target_block);
-  void hoist_numpy_view_arguments(
-    const nlohmann::json &statement,
+  bool hoist_numpy_view_arguments(
     const std::string &key,
     nlohmann::json &rewritten,
     codet &target_block);
@@ -1832,8 +1831,14 @@ private:
   bool split_conditional_numpy_view_assignment(
     const nlohmann::json &statement,
     nlohmann::json &rewritten);
-  void hoist_returned_numpy_view_call(
-    const std::string &key,
+  bool needs_numpy_view_hoist(const nlohmann::json &node);
+  bool freeze_numpy_view_operand(
+    const nlohmann::json::json_pointer &path,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  bool hoist_first_evaluated_numpy_view_call(
+    const nlohmann::json::json_pointer &path,
+    bool skip,
     nlohmann::json &rewritten,
     codet &target_block);
   std::size_t numpy_view_arg_count_ = 0;

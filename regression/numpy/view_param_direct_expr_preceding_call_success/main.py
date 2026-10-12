@@ -13,3 +13,6 @@ def grow():
 
 a = np.array([1, 2, 3, 4])
 x = grow() + setk(a[0:n], 7)
+assert x == 7
+assert a[0] == 7
+assert a[2] == 3

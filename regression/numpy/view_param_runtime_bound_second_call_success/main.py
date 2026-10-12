@@ -9,3 +9,5 @@ n = 3
 v = a[1:n]
 w = a[0:n]
 x = zero_last(w) + zero_last(v)
+assert x == 5
+assert a[2] == 0
