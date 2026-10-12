@@ -658,13 +658,16 @@ std::optional<exprt> python_list::build_element_replacement(
 {
   const store_kind old_kind = kind_of(lhs.type(), converter_);
   const store_kind new_kind = kind_of(rhs.type(), converter_);
-  const bool same_kind =
-    old_kind == new_kind &&
-    (old_kind != store_kind::tuple || lhs.type() == rhs.type());
+  // retype_element_store() replaces a tuple over an int or another tuple, and
+  // an int over a tuple (#8133).
+  const auto int_or_tuple = [](store_kind kind) {
+    return kind == store_kind::integer || kind == store_kind::tuple;
+  };
   // An int stored into a float slot keeps its value as a float.
   if (
     old_kind == store_kind::other || new_kind == store_kind::other ||
-    same_kind ||
+    old_kind == new_kind ||
+    (int_or_tuple(old_kind) && int_or_tuple(new_kind)) ||
     (old_kind == store_kind::floating && new_kind == store_kind::integer))
     return std::nullopt;
 
