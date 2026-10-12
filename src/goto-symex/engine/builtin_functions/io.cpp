@@ -209,6 +209,16 @@ static bool is_literal_string_start(const expr2tc &e)
          to_constant_int2t(to_index2t(obj).index).value.is_zero();
 }
 
+// One past a printf-family call's last argument operand. A v* call's arguments
+// sit behind its va_list, its last operand; leaving it out makes any
+// conversion that needs an argument unbounded.
+static size_t printf_args_end(const code_printf2t &call)
+{
+  const bool takes_va_list =
+    call.kind == printf_kindt::VSPRINTF || call.kind == printf_kindt::VSNPRINTF;
+  return call.operands.size() - (takes_va_list ? 1 : 0);
+}
+
 bool goto_symext::format_printf_output(
   const code_printf2t &call,
   size_t fmt_idx,
@@ -222,8 +232,9 @@ bool goto_symext::format_printf_output(
     return false;
 
   constant_args = true;
+  const size_t end = printf_args_end(call);
   std::list<expr2tc> args;
-  for (size_t i = fmt_idx + 1; i < call.operands.size(); i++)
+  for (size_t i = fmt_idx + 1; i < end; i++)
   {
     expr2tc arg = call.operands[i];
     cur_state->rename(arg);
@@ -301,7 +312,7 @@ expr2tc goto_symext::printf_output_length(
       i++;
     if (
       i == f.size() || std::string("diu").find(f[i]) == std::string::npos ||
-      arg == call.operands.size())
+      arg == printf_args_end(call))
       return expr2tc();
     expr2tc v = call.operands[arg++];
     cur_state->rename(v);
@@ -376,8 +387,11 @@ expr2tc goto_symext::sprintf_output(
 
 expr2tc goto_symext::symex_sprintf_store(const code_printf2t &call)
 {
-  const bool bounded_size = call.kind == printf_kindt::SNPRINTF;
-  if (!bounded_size && call.kind != printf_kindt::SPRINTF)
+  const bool bounded_size =
+    call.kind == printf_kindt::SNPRINTF || call.kind == printf_kindt::VSNPRINTF;
+  if (
+    !bounded_size && call.kind != printf_kindt::SPRINTF &&
+    call.kind != printf_kindt::VSPRINTF)
     return expr2tc();
 
   const expr2tc &dst = call.operands[0];
