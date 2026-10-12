@@ -5311,6 +5311,19 @@ std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
   return "";
 }
 
+std::string python_converter::alias_rhs_class(const nlohmann::json &rhs)
+{
+  const std::string cls = flow_rhs_class(rhs);
+  if (!cls.empty() || rhs.value("_type", "") != "Name")
+    return cls;
+  symbol_id sid = create_symbol_id();
+  sid.set_object(rhs["id"].get<std::string>());
+  const symbolt *symbol = find_symbol(sid.to_string());
+  return symbol && is_user_class_pointer(symbol->get_type())
+           ? class_name_of(symbol->get_type().subtype())
+           : "";
+}
+
 std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 {
   if (
@@ -5788,7 +5801,7 @@ void python_converter::get_var_assign(
       ast_node["value"]["func"].contains("id"))
       cls = ast_node["value"]["func"]["id"].get<std::string>();
     else
-      cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+      cls = alias_rhs_class(ast_node["value"]); // aliasing: `b = a`
     // `y = f(...)` where f returns a class: type y as `Cls*` so the returned
     // reference is bound (not value-copied into a struct local).
     if (cls.empty())
