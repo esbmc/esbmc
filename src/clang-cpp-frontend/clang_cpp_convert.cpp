@@ -990,8 +990,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   // isSatisfied asserts an error.
   case clang::Stmt::RequiresExprClass:
   {
-    const auto &requires_expr =
-      static_cast<const clang::RequiresExpr &>(stmt);
+    const auto &requires_expr = static_cast<const clang::RequiresExpr &>(stmt);
 
     if (requires_expr.isSatisfied())
       new_expr = true_exprt();
