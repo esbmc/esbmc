@@ -2,3 +2,4 @@ CORE
 main.c
 --k-induction --max-inductive-step 3
 ^VERIFICATION SUCCESSFUL$
+Solution found by the inductive step
