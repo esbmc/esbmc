@@ -1580,6 +1580,46 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
 
+  const exprt result =
+    get_binary_operator_expr(element, left, right, op, lhs, rhs);
+  return keep_operand_calls(result, lhs, rhs);
+}
+
+/// A comparison decided from its operand types alone still evaluates its
+/// operands, so a call in one of them must run (#8447).
+exprt python_converter::keep_operand_calls(
+  const exprt &result,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!result.is_constant() || !result.type().is_bool())
+    return result;
+
+  code_blockt block;
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    if (operand->is_function_call())
+      block.copy_to_operands(*operand);
+    else if (has_side_effect(*operand))
+      block.copy_to_operands(code_expressiont(*operand));
+  }
+  if (block.operands().empty())
+    return result;
+
+  block.copy_to_operands(code_expressiont(result));
+  side_effect_exprt kept("statement_expression", result.type());
+  kept.copy_to_operands(block);
+  return kept;
+}
+
+exprt python_converter::get_binary_operator_expr(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))

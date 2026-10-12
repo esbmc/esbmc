@@ -423,6 +423,7 @@ class ModuleRewriteMixin:
         self.expand_unittest_main(node)
         guard_unbound_locals(node)
         self.hoist_nested_classes(node)
+        self.copy_aliased_methods(node)
 
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
