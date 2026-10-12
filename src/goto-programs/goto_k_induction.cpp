@@ -14,6 +14,7 @@
 #include <util/base/i2string.h>
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <iterator>
 #include <memory>
 #include <unordered_map>
@@ -1944,13 +1945,24 @@ bool goto_k_induction(
   // inductive step cannot generalise, so its unsoundness is independent of any
   // loop shape — disable the inductive step up front. See #5593.
   bool disable_inductive_step = calls_nondet_memory(goto_functions);
+  if (disable_inductive_step)
+    log_warning(
+      "k-induction cannot generalise the memory __VERIFIER_nondet_memory "
+      "havocs. Disabling inductive step");
   // The leak check runs at the end of the program over the objects symex
   // allocated. The inductive step starts from a havoced state, so an object an
   // earlier iteration allocated and lost is not among them, and the step would
   // prove the leak absent.
-  if (config.options.get_bool_option("memory-leak-check"))
-    disable_inductive_step |=
-      loop_allocates_heap(goto_functions, shapes, reachable);
+  if (
+    config.options.get_bool_option("memory-leak-check") &&
+    loop_allocates_heap(goto_functions, shapes, reachable))
+  {
+    log_warning(
+      "k-induction cannot check for leaks the objects a loop allocated in "
+      "earlier iterations. Disabling inductive step");
+    disable_inductive_step = true;
+  }
+  bool uncovered_write = false;
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
@@ -1983,8 +1995,12 @@ bool goto_k_induction(
            *iteration++},
           continue_past_failed_assertions) &&
         decides)
-        disable_inductive_step = true;
+        uncovered_write = true;
   }
   goto_functions.update();
-  return disable_inductive_step;
+  if (uncovered_write)
+    log_warning(
+      "k-induction cannot havoc what a loop writes through a pointer. "
+      "Disabling inductive step");
+  return disable_inductive_step || uncovered_write;
 }

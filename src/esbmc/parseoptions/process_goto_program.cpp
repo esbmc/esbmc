@@ -407,18 +407,13 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
-    // goto_k_induction returns true when a loop writes through a pointer to
-    // storage its havoc cannot name. Disable the inductive step then so its
-    // UNSAT is not reported as proof (#5224); base case and forward
-    // condition run.
+    // goto_k_induction returns true, and logs why, when the inductive step
+    // would be unsound: e.g. a loop writes through a pointer to storage its
+    // havoc cannot name (#5224). Disable the step then so its UNSAT is not
+    // reported as proof; base case and forward condition run.
     auto disable_is_if_unsound = [&](bool unsound) {
       if (unsound)
-      {
-        log_warning(
-          "k-induction cannot havoc what a loop writes through a pointer. "
-          "Disabling inductive step");
         options.set_option("disable-inductive-step", true);
-      }
     };
 
     if (cmdline.isset("loop-invariant"))

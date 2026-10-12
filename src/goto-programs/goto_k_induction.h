@@ -12,9 +12,11 @@
 ///
 /// A loop that writes through a pointer also havocs that storage: `*p` while
 /// the loop leaves `p` alone, otherwise the named objects the whole-program
-/// Andersen analysis resolves the pointer to. Returns true when a write in a
-/// reachable user function can be covered neither way; the caller must then
-/// disable the inductive step (issues #5224, #5230).
+/// Andersen analysis resolves the pointer to. Returns true, after logging why,
+/// when the inductive step would be unsound: a write in a reachable user
+/// function can be covered neither way (issues #5224, #5230), a reachable call
+/// to __VERIFIER_nondet_memory (#5593), or a loop that allocates under a leak
+/// check. The caller must then disable the inductive step.
 /// @p continue_past_failed_assertions is set when claims past a violation are
 /// still checked (--multi-property, coverage), so that a path through a failed
 /// assertion still counts as entering the loop (#7900).
