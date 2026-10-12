@@ -194,15 +194,29 @@ static void record_pointer_write(loopst &loop, const expr2tc &lhs)
     loop.set_unnamed_pointer_write();
 }
 
-// Bodyless intrinsics that symex runs, writing through their first argument.
-static bool writes_through_first_argument(const irep_idt &function)
+// Bodyless intrinsics that symex runs, and the arguments they write through:
+// the memory intrinsics their first, the scanf family each one past the format.
+static std::vector<expr2tc>
+written_arguments(const irep_idt &function, const std::vector<expr2tc> &args)
 {
-  static const std::unordered_set<std::string> writers{
-    "c:@F@__ESBMC_memcpy",
-    "c:@F@__ESBMC_memmove",
-    "c:@F@__ESBMC_memset",
-    "c:@F@__ESBMC_init_object"};
-  return writers.count(function.as_string()) != 0;
+  static const std::unordered_map<std::string, size_t> first_written{
+    {"c:@F@__ESBMC_memcpy", 0},
+    {"c:@F@__ESBMC_memmove", 0},
+    {"c:@F@__ESBMC_memset", 0},
+    {"c:@F@__ESBMC_init_object", 0},
+    {"c:@F@scanf", 1},
+    {"c:@F@sscanf", 2},
+    {"c:@F@fscanf", 2}};
+  const auto it = first_written.find(function.as_string());
+  if (it == first_written.end())
+    return {};
+  if (it->second == 0)
+    return {args.begin(), args.begin() + std::min<size_t>(args.size(), 1)};
+  std::vector<expr2tc> written;
+  for (size_t i = it->second; i < args.size(); i++)
+    if (is_pointer_type(args[i]->type))
+      written.push_back(args[i]);
+  return written;
 }
 
 /// A variable whose address the callee takes can be reassigned through that
@@ -406,12 +420,12 @@ bool goto_loopst::summarise_call(
   collect_loop_symbols(call.ret, local.modified);
 
   const irep_idt &callee = to_symbol2t(call.function).thename;
-  if (writes_through_first_argument(callee) && !call.operands.empty())
+  for (const expr2tc &arg : written_arguments(callee, call.operands))
   {
     local.writes_through_pointer = true;
     local.modifies_pointer_array = true;
-    local.written_pointers.insert(call.operands[0]);
-    written_ptrs.push_back(call.operands[0]);
+    local.written_pointers.insert(arg);
+    written_ptrs.push_back(arg);
   }
   // Cycle cut: matches the legacy "do nothing on recursion" behaviour. The
   // result is incomplete so it is not cached — the missing recursive
@@ -577,13 +591,12 @@ void goto_loopst::get_modified_variables(
     add_loop_var(*loop, function_call.ret, true);
 
     const irep_idt &identifier = to_symbol2t(function_call.function).thename;
-    if (
-      writes_through_first_argument(identifier) &&
-      !function_call.operands.empty())
+    for (const expr2tc &arg :
+         written_arguments(identifier, function_call.operands))
     {
       loop->set_writes_through_pointer();
       loop->set_pointer_array_write_unresolvable();
-      loop->add_written_pointer(function_call.operands[0]);
+      loop->add_written_pointer(arg);
     }
 
     // This means recursion, do nothing — matches legacy behaviour.
