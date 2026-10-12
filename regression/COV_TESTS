@@ -2479,3 +2479,7 @@ regression/python/github_8352_shadowed
 regression/python/github_8352_before_binding_fail
 regression/python/github_8352_function_alias
 regression/python/github_8352_local_binding_fail
+regression/ld/ld_counter_output_read_by_contact_safe
+regression/ld/ld_timer_output_read_by_contact_safe
+regression/ld/ld_tp_output_state_kept_safe
+regression/ld/ld_user_fb_output_read_by_contact_safe
