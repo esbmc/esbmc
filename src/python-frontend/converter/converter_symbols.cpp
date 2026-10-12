@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <regex>
+#include <set>
 #include <utility>
 
 void python_converter::update_symbol(const exprt &expr) const
@@ -357,6 +358,222 @@ python_converter::sole_class_binding(const std::string &name) const
     found = &stmt;
   }
   return found;
+}
+
+using scope_bindings = python_converter::scope_bindings;
+
+static bool names_contain(const nlohmann::json &names, const std::string &name)
+{
+  return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+/// Records an import of @p name, or a declaration handing it to an outer
+/// scope. Whether @p node is such a statement.
+static bool record_declaration(
+  const nlohmann::json &node,
+  const std::string &type,
+  const std::string &name,
+  scope_bindings &found)
+{
+  const nlohmann::json names = node.value("names", nlohmann::json::array());
+  if (type == "Import" || type == "ImportFrom")
+  {
+    for (const auto &alias : names)
+      found.by_import = found.by_import || alias_binds_name(alias, name);
+    return true;
+  }
+  if (type == "Global" || type == "Nonlocal")
+  {
+    found.declared_outer = found.declared_outer || names_contain(names, name);
+    return true;
+  }
+  return false;
+}
+
+/// Records how @p node binds @p name in its own scope. Function, class, lambda
+/// and comprehension bodies are scopes of their own and are not entered.
+static void collect_scope_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  scope_bindings &found)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_scope_bindings(child, name, found);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string type = node.value("_type", "");
+  if (record_declaration(node, type, name, found))
+    return;
+  if (type == "Name")
+  {
+    found.by_other = found.by_other || may_bind_within(node, type, name, false);
+    return;
+  }
+  found.by_other = found.by_other || binds_by_name(node, type, name, false);
+  static const std::set<std::string> own_scopes = {
+    "FunctionDef",
+    "AsyncFunctionDef",
+    "ClassDef",
+    "Lambda",
+    "ListComp",
+    "SetComp",
+    "DictComp",
+    "GeneratorExp"};
+  // A bare annotation (`m: int`) records a type and binds nothing.
+  if (
+    own_scopes.count(type) ||
+    (type == "AnnAssign" && node.value("value", nlohmann::json()).is_null()))
+    return;
+  for (const auto &child : node)
+    collect_scope_bindings(child, name, found);
+}
+
+static bool declares_global(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Global" &&
+    names_contain(node["names"], name))
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return declares_global(c, name);
+         });
+}
+
+static std::runtime_error
+undecided_module_binding(const std::string &name, const nlohmann::json &use)
+{
+  return std::runtime_error(
+    fmt::format(
+      "'{}' at line {} is bound both by an import and by another statement, "
+      "and the Python frontend cannot tell which binding it reads",
+      name,
+      use.value("lineno", 0)));
+}
+
+static std::pair<int, int> source_position(const nlohmann::json &node, bool end)
+{
+  return {
+    node.value(end ? "end_lineno" : "lineno", 0),
+    node.value(end ? "end_col_offset" : "col_offset", 0)};
+}
+
+/// Whether the code at @p at, under @p node, runs only when something defined
+/// there is called or iterated, which need not follow the statements before it.
+static bool deferred_at(const nlohmann::json &node, std::pair<int, int> at)
+{
+  static const std::set<std::string> deferring = {
+    "FunctionDef", "AsyncFunctionDef", "ClassDef", "Lambda", "GeneratorExp"};
+  if (
+    node.is_object() && deferring.count(node.value("_type", "")) &&
+    source_position(node, false) <= at && at <= source_position(node, true))
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return deferred_at(c, at);
+         });
+}
+
+/// At module level, with every binding of @p name a plain top-level
+/// statement and @p use run in order, the last binding to complete before
+/// @p use is the one it reads. Whether that is an import; throws otherwise.
+static bool module_level_binding_is_import(
+  const nlohmann::json &body,
+  const std::string &name,
+  const nlohmann::json &use)
+{
+  const std::pair<int, int> at = source_position(use, false);
+  if (deferred_at(body, at))
+    throw undecided_module_binding(name, use);
+  std::optional<bool> is_import;
+  for (const auto &stmt : body)
+  {
+    scope_bindings found;
+    collect_scope_bindings(stmt, name, found);
+    if (!found.by_import && !found.by_other)
+      continue;
+    const std::string type = stmt.value("_type", "");
+    const bool definition =
+      type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef";
+    if (
+      type == "Delete" ||
+      (!definition && (stmt.contains("body") || stmt.contains("cases"))))
+      throw undecided_module_binding(name, use);
+    if (source_position(stmt, true) <= at)
+      is_import = found.by_import;
+  }
+  if (!is_import)
+    throw undecided_module_binding(name, use);
+  return *is_import;
+}
+
+/// How the function being converted binds @p name: as a parameter or local
+/// (true), by an import alone (false), or not at all (empty).
+std::optional<bool> python_converter::function_shadows_module(
+  const std::string &name,
+  const nlohmann::json &use) const
+{
+  const nlohmann::json &function = *enclosing_function_node_;
+  if (may_bind_name(function["args"], name, true))
+    return true;
+  scope_bindings local;
+  collect_scope_bindings(function["body"], name, local);
+  if (local.declared_outer || (!local.by_import && !local.by_other))
+    return std::nullopt;
+  if (local.by_import && local.by_other)
+    throw undecided_module_binding(name, use);
+  return local.by_other;
+}
+
+bool python_converter::name_shadows_module(
+  const nlohmann::json &receiver,
+  const nlohmann::json &use) const
+{
+  if (
+    receiver.value("_type", "") != "Name" ||
+    !receiver.value("id", nlohmann::json()).is_string())
+    return false;
+  const std::string name = receiver["id"].get<std::string>();
+
+  if (enclosing_function_node_)
+    if (const std::optional<bool> local = function_shadows_module(name, use))
+      return *local;
+
+  const scope_bindings &global = module_bindings(name);
+  if (!global.by_other && !global.declared_outer)
+    return false;
+  if (!global.by_import)
+    return true;
+  if (
+    global.declared_outer || enclosing_function_node_ ||
+    !current_class_name_.empty())
+    throw undecided_module_binding(name, use);
+  return !module_level_binding_is_import((*ast_json)["body"], name, use);
+}
+
+const python_converter::scope_bindings &
+python_converter::module_bindings(const std::string &name) const
+{
+  const auto [entry, inserted] =
+    module_bindings_memo_.try_emplace({ast_json, name});
+  if (inserted)
+  {
+    collect_scope_bindings((*ast_json)["body"], name, entry->second);
+    entry->second.declared_outer = declares_global(*ast_json, name);
+  }
+  return entry->second;
+}
+
+bool python_converter::is_module_receiver(
+  const std::string &module_name,
+  const nlohmann::json &receiver,
+  const nlohmann::json &use) const
+{
+  return is_imported_module(module_name) && !name_shadows_module(receiver, use);
 }
 
 std::optional<std::vector<std::string>>

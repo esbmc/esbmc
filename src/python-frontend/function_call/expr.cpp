@@ -398,7 +398,7 @@ void function_call_expr::get_function_type()
   {
     function_type_ = FunctionType::ClassMethod;
   }
-  else if (!converter_.is_imported_module(caller))
+  else if (!converter_.is_module_receiver(caller, func_value, call_))
   {
     // A @staticmethod takes no receiver, so an instance call binds its
     // arguments exactly as a class-name call does. Classifying it as an
