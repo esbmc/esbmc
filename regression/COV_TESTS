@@ -2598,3 +2598,11 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8363
+regression/python/github_8363_fail
+regression/python/str_mod_call_lazy_refused
+regression/python/str_mod_call_once
+regression/python/str_mod_call_once_fail
+regression/python/str_mod_call_once_branch_fail
+regression/python/str_mod_call_str_d_fail
+regression/python/str_mod_optional_refused

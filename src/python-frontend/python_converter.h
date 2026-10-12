@@ -569,6 +569,11 @@ private:
     exprt &rhs);
   exprt
   keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
+  /// The right operand of @p element; a `str %` operand is only probed.
+  exprt get_right_operand_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &right,
+    const exprt &lhs);
   exprt build_division_guarded_binop(
     const std::string &op,
     exprt lhs,
@@ -582,6 +587,9 @@ private:
   /// The static types of the arguments a `str %` right operand supplies.
   std::vector<typet>
   percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
+  /// The f-string @p joined with each formatted operand stored as it is
+  /// evaluated, so its operands run once and in order.
+  exprt get_fstring_in_order(const nlohmann::json &joined);
   /// `str % args` with a literal format: an f-string when an argument is not
   /// constant, otherwise folded to a literal.
   exprt get_percent_format_expr(
