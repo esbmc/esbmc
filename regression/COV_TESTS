@@ -2506,3 +2506,10 @@ regression/ld/ld_counter_output_read_by_contact_safe
 regression/ld/ld_timer_output_read_by_contact_safe
 regression/ld/ld_tp_output_state_kept_safe
 regression/ld/ld_user_fb_output_read_by_contact_safe
+regression/python/github_8455
+regression/python/github_8455_branch_coverage
+regression/python/github_8455_condition_coverage
+regression/python/github_8455_fail
+regression/python/github_8455_or
+regression/python/github_8455_subscript
+regression/python/github_8455_subscript_fail
