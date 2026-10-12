@@ -31,7 +31,6 @@ extern _Thread_local int errno;
       v.d = copysign##suff(v.d, y);                                            \
       break;                                                                   \
     case FP_INFINITE:                                                          \
-      break;                                                                   \
     case FP_NORMAL:                                                            \
     case FP_SUBNORMAL:                                                         \
       v.u += dir;                                                              \

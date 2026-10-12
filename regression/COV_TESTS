@@ -2488,6 +2488,10 @@ regression/python/github_8352_shadowed
 regression/python/github_8352_before_binding_fail
 regression/python/github_8352_function_alias
 regression/python/github_8352_local_binding_fail
+regression/esbmc/nextafter_from_infinity
+regression/esbmc/nextafter_from_infinity_fail
+regression/floats-regression/nextafter-spec
+regression/floats-regression/nextafterf-spec
 regression/python/github_8410_lambda_capture
 regression/python/github_8410_lambda_capture_fail
 regression/python/github_8410_lambda_capture_late_rebind_fail
