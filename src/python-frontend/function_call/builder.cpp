@@ -634,7 +634,7 @@ symbol_id function_call_builder::build_function_id() const
           module_path_candidate = name;
 
           // Skip module names - let the module handling logic deal with them
-          if (converter_.is_imported_module(name))
+          if (converter_.is_module_receiver(name, node, call_))
             return typet();
 
           symbol_id var_sid(
@@ -808,7 +808,7 @@ symbol_id function_call_builder::build_function_id() const
 
     if (
       !json_utils::is_class(obj_name, ast) &&
-      converter_.is_imported_module(obj_name))
+      converter_.is_module_receiver(obj_name, func_json["value"], call_))
     {
       const auto &module_path = converter_.get_imported_module_path(obj_name);
 

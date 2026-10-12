@@ -376,6 +376,26 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// How one scope binds a name: by an import, by anything else, or by a
+  /// `global`/`nonlocal` declaration handing it to an outer scope.
+  struct scope_bindings
+  {
+    bool by_import = false;
+    bool by_other = false;
+    bool declared_outer = false;
+  };
+  /// Whether @p receiver, a Name read by the call at @p use, is bound in its
+  /// scope by something other than an import, so that it is not the module
+  /// of the same name. Throws when the bindings leave that undecided.
+  bool name_shadows_module(
+    const nlohmann::json &receiver,
+    const nlohmann::json &use) const;
+  /// Whether @p receiver of the call at @p use is the imported module
+  /// @p module_name rather than a binding that shadows it.
+  bool is_module_receiver(
+    const std::string &module_name,
+    const nlohmann::json &receiver,
+    const nlohmann::json &use) const;
   std::string current_module_name() const;
 
   const std::string
@@ -1236,6 +1256,16 @@ private:
     const std::string &method_name,
     bool is_ctor) const;
 
+  std::optional<bool> function_shadows_module(
+    const std::string &name,
+    const nlohmann::json &use) const;
+  /// The module's own bindings of @p name, with declared_outer meaning that a
+  /// function rebinds it through `global`. Memoised: a module call reads
+  /// them at every dispatch site, and each read walks the whole module.
+  const scope_bindings &module_bindings(const std::string &name) const;
+  mutable std::
+    map<std::pair<const nlohmann::json *, std::string>, scope_bindings>
+      module_bindings_memo_;
   using mro_memo =
     std::map<std::string, std::optional<std::vector<std::string>>>;
 
