@@ -1,5 +1,6 @@
 import ast
 import copy
+from collections import Counter
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -314,6 +315,85 @@ class ClassContextMixin:
                     method = copy.deepcopy(template)
                     self._rebind_cls_calls(method, heir.name)
                     heir.body.append(method)
+
+    @staticmethod
+    def _is_name_copy(node):
+        """Whether `node` is a plain `x = y` assignment."""
+        return (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Name))
+
+    @staticmethod
+    def _module_level_nodes(module):
+        """The nodes of `module` outside any function or lambda body."""
+        stack = [module]
+        while stack:
+            node = stack.pop()
+            yield node
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                stack.extend(ast.iter_child_nodes(node))
+
+    def _bind_class_alias_calls(self, module):
+        """Rewrite `alias(...)` to `Class(...)` where a top-level `alias = Class`
+        statement is the only binding of `alias`, to a top-level class the
+        module never rebinds: the converter recognises a constructor call only
+        by the class's own name (#8352). A module-level call before the binding
+        stays as written, since CPython raises NameError there."""
+        counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
+        classes = {stmt.name for stmt in module.body if isinstance(stmt, ast.ClassDef)}
+        bindings = {
+            n.targets[0].id: n
+            for n in filter(self._is_name_copy, module.body)
+            if n.value.id in classes and counts[n.targets[0].id] == counts[n.value.id] == 1
+        }
+        module_level = set(map(id, self._module_level_nodes(module)))
+        for n in ast.walk(module):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+                continue
+            binding = bindings.get(n.func.id)
+            if binding is None or (id(n) in module_level and
+                                   (n.lineno, n.col_offset) < (binding.lineno, binding.col_offset)):
+                continue
+            n.func = ast.copy_location(ast.Name(id=binding.value.id, ctx=ast.Load()), n.func)
+
+    @staticmethod
+    def _construction(stmt):
+        """`(o, C)` for a statement `o = C(...)`, else None."""
+        if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Call)
+                and isinstance(stmt.value.func, ast.Name)):
+            return stmt.targets[0].id, stmt.value.func.id
+        return None
+
+    @staticmethod
+    def _assigned_attributes(module):
+        """The attribute names `module` assigns or deletes anywhere."""
+        return {
+            n.attr
+            for n in ast.walk(module)
+            if isinstance(n, ast.Attribute) and not isinstance(n.ctx, ast.Load)
+        }
+
+    def _scan_fixed_receivers(self, module):
+        """Map each `o` of a top-level `o = C(...)` to the methods `C` defines,
+        where `o` and `C` are each bound only once and `C` is a top-level
+        class, less any attribute name the module ever assigns: there `o.m`
+        names the same method wherever it is evaluated (#8354)."""
+        counts = Counter(name for n in ast.walk(module)
+                         for name in ClassContextMixin._names_bound_by(n))
+        stored = self._assigned_attributes(module)
+        methods = {
+            stmt.name: {m.name
+                        for m in stmt.body if isinstance(m, ast.FunctionDef)} - stored
+            for stmt in module.body if isinstance(stmt, ast.ClassDef) and counts[stmt.name] == 1
+        }
+        self.fixed_receivers = {
+            name: methods[cls]
+            for name, cls in filter(None, map(self._construction, module.body))
+            if counts[name] == 1 and cls in methods
+        }
+        self.once_bound_names = {name for name, count in counts.items() if count == 1}
+        # Holding the nodes keeps their ids from being reused.
+        self.module_statements = {id(stmt): stmt for stmt in module.body}
 
     def _record_exit_suppresses_all(self, class_node):
         """Cache classes whose __exit__ unconditionally returns True."""

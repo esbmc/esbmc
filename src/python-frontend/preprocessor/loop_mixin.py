@@ -2671,6 +2671,10 @@ class LoopMixin:
             staged_values = [copy.deepcopy(vn) for _, vn in leaf_pairs]
 
         for (target_node, value_node), staged in zip(leaf_pairs, staged_values):
+            if self._track_bound_method(
+                    target_node, staged,
+                    self._is_resolvable_unpacked_method(target_node, staged, source_node)):
+                continue
             target_copy = copy.deepcopy(target_node)
             individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
             self._update_variable_types_simple(target_copy, value_node)
