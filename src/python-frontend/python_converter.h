@@ -1477,6 +1477,18 @@ private:
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
+  symbolt *find_global_symbol(const symbol_id &sid);
+  exprt
+  module_function_expr(const std::string &name, const nlohmann::json &element);
+  void track_unbound_global(
+    const std::string &id,
+    const nlohmann::json &binding,
+    const typet &type);
+  void guard_unbound_global(
+    const std::string &id,
+    const std::string &name,
+    const nlohmann::json &element);
+  void mark_global_bound(const nlohmann::json &stmt, code_blockt &block);
   /// A parameter default, evaluated where the def is, so a method's default
   /// still sees the class body's names (#8200).
   exprt get_default_expr(const nlohmann::json &node);
@@ -2796,6 +2808,11 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// A module global or function read by code converted before its binding,
+  /// mapped to the flag its binding sets and the type the reads took (#8369).
+  std::unordered_map<std::string, std::pair<std::string, typet>>
+    unbound_global_flags_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
