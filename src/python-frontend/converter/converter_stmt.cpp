@@ -25,6 +25,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/arith/bitvector.h>
+#include <util/lang/c_expr2string.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
@@ -8585,7 +8586,7 @@ exprt python_converter::get_block(
       }
 
       // Attach assertion message if present
-      auto attach_assert_message = [&element](code_assertt &assert_code) {
+      auto attach_assert_message = [this, &element](code_assertt &assert_code) {
         // A failing assert raises AssertionError, which ends the program, so
         // nothing after it runs on that path.
         assert_code.location().set("ends_path", true);
@@ -8607,7 +8608,9 @@ exprt python_converter::get_block(
           }
 
           if (!msg.empty())
-            assert_code.location().comment(msg);
+            assert_code.location().comment(
+              "assertion " + c_expr2string(assert_code.assertion(), ns) + ": " +
+              msg);
         }
       };
 
