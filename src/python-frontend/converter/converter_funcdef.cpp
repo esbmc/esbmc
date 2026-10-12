@@ -2647,13 +2647,12 @@ filled_array_dtype(const std::string &ctor, const nlohmann::json &call)
   }
   if (!keywords.empty())
     return "";
-  // The frontend builds `eye` and `identity` from integer literals.
   return ctor == "linspace" ? "float" : "int";
 }
 
 // Type of the array a numpy constructor other than `np.array` builds from
-// literal arguments: `zeros`, `ones`, `arange`, `linspace`, `eye`,
-// `identity`. `np.full` builds a list, whose slices are copies.
+// literal arguments: `zeros`, `ones`, `arange`, `linspace`. `np.full`,
+// `np.eye` and `np.identity` build a list, whose slices are copies.
 std::optional<typet>
 python_converter::numpy_filled_array_type(const nlohmann::json &value) const
 {
@@ -2671,13 +2670,12 @@ python_converter::numpy_filled_array_type(const nlohmann::json &value) const
   return type;
 }
 
-// Shape of the non-empty array such a constructor builds. A tuple shape is
-// read only for `zeros` and `ones`: the others then build a list.
+// Shape of the non-empty array such a constructor builds.
 std::optional<std::vector<std::size_t>>
 python_converter::numpy_filled_array_shape(const nlohmann::json &value) const
 {
   static const std::set<std::string> filled = {
-    "zeros", "ones", "arange", "linspace", "eye", "identity"};
+    "zeros", "ones", "arange", "linspace"};
   if (!is_numpy_array_constructor_expr(value) || value["args"].empty())
     return std::nullopt;
   const std::string ctor = value["func"].value("attr", "");

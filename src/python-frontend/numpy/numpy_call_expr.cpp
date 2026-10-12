@@ -7389,15 +7389,15 @@ static nlohmann::json resolve_arange_call_args(
   return resolved;
 }
 
-// Whether the literal list a constructor produced is bound to a name as a
-// static array: it must be non-empty, and the shape must not be a tuple,
-// whose results the callers of these constructors still expect as lists.
+// Whether the literal list `np.arange` or `np.linspace` produced is bound
+// to a name as a static array: it must be non-empty and the call must take
+// no keyword, which the list form handles.
 bool numpy_call_expr::binds_static_array(const nlohmann::json &list) const
 {
-  const bool tuple_shape =
-    !call_["args"].empty() && call_["args"][0].value("_type", "") == "Tuple";
+  const bool keywords =
+    call_.contains("keywords") && !call_["keywords"].empty();
   return converter_.current_lhs != nullptr &&
-         converter_.current_lhs->is_symbol() && !tuple_shape &&
+         converter_.current_lhs->is_symbol() && !keywords &&
          list.contains("elts") && !list["elts"].empty();
 }
 
@@ -9460,7 +9460,7 @@ exprt numpy_call_expr::get()
           row.push_back(make_constant(i == j ? 1 : 0));
         out_rows.push_back(make_list(row));
       }
-      return to_array_expr(apply_constructor_dtype(make_list(out_rows)));
+      return to_list_expr(apply_constructor_dtype(make_list(out_rows)));
     }
 
     if (function == "linspace")
