@@ -644,6 +644,13 @@ public:
     const exprt &index,
     const nlohmann::json &element);
 
+  /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
+  /// reads, when `rhs` changes the element's type; nullopt otherwise.
+  std::optional<exprt> build_element_replacement(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &op);
+
   /**
    * @brief Extract and dereference value from a PyObject* expression
    * @param pyobject_expr Expression representing PyObject* (from list_at or

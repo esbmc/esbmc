@@ -485,6 +485,28 @@ bool assignment_target_is_subscript(const nlohmann::json &ast_node)
          (ast_node.contains("target") && is_subscript(ast_node["target"]));
 }
 
+static bool is_array_into_scalar(const typet &lhs_type, const typet &rhs_type)
+{
+  return rhs_type.is_array() && !lhs_type.is_array() && !lhs_type.is_pointer();
+}
+
+static bool emit_list_element_replacement(
+  python_converter &converter,
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  const exprt &rhs,
+  codet &target_block)
+{
+  if (!assignment_target_is_subscript(ast_node))
+    return false;
+  python_list list(converter, ast_node);
+  const std::optional<exprt> replacement =
+    list.build_element_replacement(lhs, rhs, ast_node);
+  if (replacement)
+    target_block.copy_to_operands(*replacement);
+  return replacement.has_value();
+}
+
 bool is_same_name_assignment(
   const nlohmann::json &target,
   const nlohmann::json &ast_node)
@@ -1015,7 +1037,7 @@ void python_converter::handle_assignment_type_adjustments(
   if (assignment_target_is_subscript(ast_node))
     return;
 
-  rhs = wrap_literal_if_optional(rhs, lhs.type());
+  rhs = wrap_stored_if_optional(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -5139,8 +5161,8 @@ void python_converter::preregister_global_variables(
 
     // Skip implicitly inferred annotations (plain Assign converted by the
     // annotator). Only preregister variables that the user explicitly annotated
-    // (e.g., `x: SomeClass = ...`). Inferred globals like `l = [1, 2, 3]`
-    // should not be visible inside functions that don't declare `global l`.
+    // (e.g., `x: SomeClass = ...`). An inferred global like `l = [1, 2, 3]`
+    // is registered only when a read reaches it first (find_global_symbol).
     if (element.value("_inferred_annotation", false))
       continue;
 
@@ -6603,10 +6625,7 @@ void python_converter::get_var_assign(
     // which would coerce rhs type to match lhs, hiding the mismatch.
     // Only enforce when type assertions are enabled (--is-instance-check).
     if (
-      type_assertions_enabled() && lhs.type() != rhs.type() &&
-      !rhs.type().is_code() && !rhs.type().is_empty() &&
-      rhs.type().is_array() && !lhs.type().is_array() &&
-      !lhs.type().is_pointer())
+      type_assertions_enabled() && is_array_into_scalar(lhs.type(), rhs.type()))
     {
       // V.3: build the always-fail assert condition in IREP2.
       code_assertt type_assert(migrate_expr_back(gen_false_expr()));
@@ -6627,6 +6646,12 @@ void python_converter::get_var_assign(
     }
 
     reject_conditional_numpy_alias_rebind(lhs, effective_ast_node);
+
+    if (emit_list_element_replacement(*this, ast_node, lhs, rhs, target_block))
+    {
+      current_lhs = nullptr;
+      return;
+    }
 
     adjust_statement_types(lhs, rhs);
 
@@ -8403,6 +8428,7 @@ exprt python_converter::get_block(
     {
       // Add an assignment to the block
       get_folded_var_assign(element, block);
+      mark_global_bound(element, block);
       break;
     }
     case StatementType::IF_STATEMENT:
@@ -8438,6 +8464,7 @@ exprt python_converter::get_block(
       get_unfolded_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
+      mark_global_bound(element, block);
 
       // Bind the closure's capture cells where the `def` executes (#6256).
       exprt::operandst &bindings = pending_captures_.operands();

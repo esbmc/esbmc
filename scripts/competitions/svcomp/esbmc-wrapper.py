@@ -196,14 +196,22 @@ def classify_python_violation(violated, prop):
 def add_python_module_path(benchmark):
   """Put sv-benchmarks' _sv_verifier module within the task's import reach.
 
-  A Python task sits in python/<project>/ and imports _sv_verifier, which sits
-  one level up in python/. CPython resolves an import against the script's own
-  directory and fails the same way, which is why sv-benchmarks' check-syntax.py
-  sets PYTHONPATH; ESBMC follows CPython here, so the search path is supplied
-  rather than the resolution changed.
+  A Python task sits in python/<project>/, or a directory below it, and imports
+  _sv_verifier, which sits in python/. CPython resolves an import against the
+  script's own directory and fails the same way, which is why sv-benchmarks'
+  check-syntax.py sets PYTHONPATH; ESBMC follows CPython here, so the search
+  path is supplied rather than the resolution changed.
   """
   task_dir = os.path.dirname(os.path.abspath(benchmark))
   paths = [task_dir, os.path.dirname(task_dir)]
+  # A task may sit deeper, as python/<project>/<task>/main.py does, so the
+  # nearest ancestor above the parent holding _sv_verifier.py is added too.
+  ancestor = paths[-1]
+  while os.path.dirname(ancestor) != ancestor:
+    ancestor = os.path.dirname(ancestor)
+    if os.path.isfile(os.path.join(ancestor, "_sv_verifier.py")):
+      paths.append(ancestor)
+      break
   if os.environ.get("PYTHONPATH"):
     paths.append(os.environ["PYTHONPATH"])
   os.environ["PYTHONPATH"] = os.pathsep.join(paths)

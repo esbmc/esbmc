@@ -1,5 +1,7 @@
 import ast
 import copy
+
+from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
 
@@ -419,13 +421,17 @@ class ModuleRewriteMixin:
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         self.expand_unittest_main(node)
+        guard_unbound_locals(node)
         self.hoist_nested_classes(node)
 
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
+        self._scan_fixed_receivers(node)
 
         self._scan_shadowed_nondet_collections(node)
+
+        self.iterator_classes = self._scan_iterator_classes(node)
 
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
@@ -448,6 +454,35 @@ class ModuleRewriteMixin:
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    def _scan_iterator_classes(self, node):
+        """Classes whose instances a for loop iterates through `__iter__`, for visit_For.
+
+        A class qualifies when it defines `__iter__` or inherits it from a
+        module class that does. A class without `__iter__` is not iterable,
+        and CPython's TypeError for it is already reported. The class name
+        must be bound only by its class statement, so a call of it constructs
+        the class."""
+        bind_counts = {}
+        for n in ast.walk(node):
+            for name in self._bound_names(n):
+                bind_counts[name] = bind_counts.get(name, 0) + 1
+        classes = [n for n in ast.walk(node) if isinstance(n, ast.ClassDef)]
+        iterable = set()
+        grew = True
+        while grew:
+            grew = False
+            for c in classes:
+                if c.name not in iterable and self._has_iter(c, iterable):
+                    iterable.add(c.name)
+                    grew = True
+        return {name for name in iterable if bind_counts.get(name) == 1}
+
+    @staticmethod
+    def _has_iter(cls, iterable):
+        return any(isinstance(m, ast.FunctionDef) and m.name == "__iter__"
+                   for m in cls.body) or any(
+                       isinstance(b, ast.Name) and b.id in iterable for b in cls.bases)
 
     def _scan_dict_literal_bindings_and_calls(self, node):
         """Collect evidence for parameter-dict element recovery (#5444).

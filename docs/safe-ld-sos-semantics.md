@@ -593,9 +593,9 @@ winning:
 | 2. Address | `%I` | in H |
 | | `%Q` | program-owned |
 | | `%M` | in H (*shared*), unless `--ld-closed-world` |
-| 3. Usage | read by a contact and written by no coil | in H |
+| 3. Usage | read by a contact and written by no coil and by no block output pin | in H |
 | | written by a coil and read by no contact | program-owned |
-| | both, or neither | program-owned (internal state) |
+| | both, or neither, or written by a block output pin | program-owned (internal state) |
 
 With `--ld-closed-world` the shared variables start from an arbitrary value
 and are afterwards written only by the program. Several tasks, program
@@ -616,9 +616,11 @@ check of §9.1, does not transfer: over-approximating H can make a state reachab
 real environment reaches, so such a result holds for the modeled H only, while an answer
 "proved unreachable" does transfer. Two consequences the classifier accepts: a
 variable that is only read but initialised to a constant (tier 3) is treated
-as free, which can produce a violation the constant would have excluded; and a
-counter value or timer output read by a contact but written by no coil is
-treated as free, which loses its continuity between scans.
+as free, which can produce a violation the constant would have excluded. The output
+pins of a timer, counter, arithmetic block or user function block count as writes, so a
+timer or counter output that a contact reads keeps its value from one scan to the next;
+treating it as free would destroy the state of a TOF or TP, whose `Q` is part of it
+(esbmc/esbmc#8444).
 
 **Unsafe direction.** A SAFE verdict is valid for an environment E only if H
 contains every variable E can change between two scans. A variable the program

@@ -1952,9 +1952,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle identity comparisons
   if (op == "Is")
-    return get_binary_operator_expr_for_is(lhs, rhs);
+    return get_binary_operator_expr_for_is(lhs, rhs, left, right);
   if (op == "IsNot")
-    return get_negated_is_expr(lhs, rhs);
+    return get_negated_is_expr(lhs, rhs, left, right);
 
   // Handle relational operation type mismatches
   if (type_utils::is_relational_op(op))
@@ -2173,7 +2173,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
 exprt python_converter::build_division_guarded_binop(
   const std::string &op,
-  const exprt &lhs,
+  exprt lhs,
   exprt rhs,
   const nlohmann::json &element)
 {
@@ -2193,7 +2193,10 @@ exprt python_converter::build_division_guarded_binop(
   // itself. If it carries a side effect (a call, or a nondet) it would be
   // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
   // a different value than the one divided by. Hoist a side-effecting divisor
-  // into a temporary so it is evaluated exactly once.
+  // into a temporary so it is evaluated exactly once. The integer `//` and `%`
+  // lowerings read the dividend more than once too, and Python evaluates it
+  // before the divisor, so hoist it first.
+  lhs = hoist_side_effecting_operand(lhs, element, "$div_lhs$");
   rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
   exprt is_zero("=", bool_type());
@@ -2275,6 +2278,7 @@ exprt python_converter::resolve_optional_operands(
                             type_utils::is_optional_struct(rhs.type());
   const exprt lhs_none = none_flag(lhs);
   const exprt rhs_none = none_flag(rhs);
+  raise_on_optional_none(op, lhs_none, rhs_none, lhs, rhs, element);
   if (!any_optional || (op != "Eq" && op != "NotEq"))
     return nil_exprt();
 
