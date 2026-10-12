@@ -2479,6 +2479,16 @@ regression/python/github_8352_shadowed
 regression/python/github_8352_before_binding_fail
 regression/python/github_8352_function_alias
 regression/python/github_8352_local_binding_fail
+regression/python/github_8354
+regression/python/github_8354_fail
+regression/python/github_8354_local_target_fail
+regression/python/github_8354_missing_method_fail
+regression/python/github_8354_param_target_fail
+regression/python/github_8354_rebound_receiver_fail
+regression/python/github_8354_rebound_target
+regression/python/github_8354_shapes
+regression/python/github_8354_shapes_fail
+regression/python/github_8354_stored_attr_fail
 regression/python/github_8369
 regression/python/github_8369_bare_annotation_fail
 regression/python/github_8369_before_binding_fail

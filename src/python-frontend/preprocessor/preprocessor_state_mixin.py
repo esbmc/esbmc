@@ -81,6 +81,11 @@ class PreprocessorStateMixin:
         # agrees (see _recover_param_dict_annotation).
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
+        # Filled by _scan_fixed_receivers; empty, an unpacked bound method
+        # is never resolved at its calls.
+        self.fixed_receivers = {}
+        self.once_bound_names = set()
+        self.module_statements = {}
         self.called_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
