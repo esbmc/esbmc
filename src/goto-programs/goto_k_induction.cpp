@@ -611,18 +611,20 @@ void for_each_subexpr(
   e->foreach_operand([&f](const expr2tc &op) { for_each_subexpr(op, f); });
 }
 
-/// Whether \p code allocates.
-bool allocates(const expr2tc &code)
+/// Whether \p code allocates; on the stack too unless \p heap_only.
+bool allocates(const expr2tc &code, bool heap_only = false)
 {
   bool found = false;
-  for_each_subexpr(code, [&found](const expr2tc &e) {
+  for_each_subexpr(code, [&found, heap_only](const expr2tc &e) {
     if (!is_sideeffect2t(e))
       return;
     switch (to_sideeffect2t(e).kind)
     {
+    case sideeffect2t::allockind::alloca:
+      found |= !heap_only;
+      break;
     case sideeffect2t::allockind::malloc:
     case sideeffect2t::allockind::realloc:
-    case sideeffect2t::allockind::alloca:
     case sideeffect2t::allockind::cpp_new:
     case sideeffect2t::allockind::cpp_new_arr:
       found = true;
@@ -1772,6 +1774,26 @@ reachable_functions(const goto_functionst &goto_functions)
   return seen;
 }
 
+/// Whether a loop may allocate heap memory: some reachable function allocates
+/// at an instruction that may run inside a loop, its own or a caller's.
+bool loop_allocates_heap(
+  const goto_functionst &goto_functions,
+  const loop_shapest &shapes,
+  const std::unordered_set<irep_idt, irep_id_hash> &reachable)
+{
+  forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available || reachable.count(it->first) == 0)
+      continue;
+    for (const auto &instr : it->second.body.instructions)
+      if (
+        allocates(instr.code, true) &&
+        shapes.in_loop(it->first, instr.location_number))
+        return true;
+  }
+  return false;
+}
+
 /// The variables whose address the program takes anywhere.
 std::unordered_set<irep_idt, irep_id_hash>
 address_taken_symbols(const goto_functionst &goto_functions)
@@ -1922,6 +1944,13 @@ bool goto_k_induction(
   // inductive step cannot generalise, so its unsoundness is independent of any
   // loop shape — disable the inductive step up front. See #5593.
   bool disable_inductive_step = calls_nondet_memory(goto_functions);
+  // The leak check runs at the end of the program over the objects symex
+  // allocated. The inductive step starts from a havoced state, so an object an
+  // earlier iteration allocated and lost is not among them, and the step would
+  // prove the leak absent.
+  if (config.options.get_bool_option("memory-leak-check"))
+    disable_inductive_step |=
+      loop_allocates_heap(goto_functions, shapes, reachable);
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
