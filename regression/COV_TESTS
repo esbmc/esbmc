@@ -2598,3 +2598,8 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8464
+regression/python/github_8464_chained
+regression/python/github_8464_chained_fail
+regression/python/github_8464_fail
+regression/python/github_8464_loop

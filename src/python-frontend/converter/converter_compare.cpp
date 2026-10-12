@@ -283,6 +283,12 @@ exprt python_converter::handle_type_mismatches(
   return nil_exprt();
 }
 
+static bool either_is_string(const exprt &lhs, const exprt &rhs)
+{
+  return type_utils::is_string_type(lhs.type()) ||
+         type_utils::is_string_type(rhs.type());
+}
+
 exprt python_converter::handle_string_comparison(
   const std::string &op,
   exprt &lhs,
@@ -366,14 +372,16 @@ exprt python_converter::handle_string_comparison(
     bool lhs_is_char_literal = extract_single_char(resolved_lhs, literal_char);
     bool rhs_is_char_literal = extract_single_char(resolved_rhs, literal_char);
 
-    if (
-      lhs_is_char_literal ^ rhs_is_char_literal &&
-      (type_utils::is_string_type(resolved_lhs.type()) ||
-       type_utils::is_string_type(resolved_rhs.type())))
+    const exprt &str_expr = lhs_is_char_literal ? resolved_rhs : resolved_lhs;
+    exprt reread;
+    exprt first_read = lhs_is_char_literal ^ rhs_is_char_literal &&
+                           either_is_string(resolved_lhs, resolved_rhs)
+                         ? bind_operand_read_twice(str_expr, element, reread)
+                         : nil_exprt();
+    if (first_read.is_not_nil())
     {
-      const exprt &str_expr = lhs_is_char_literal ? resolved_rhs : resolved_lhs;
-      expr2tc first_char = char_at_index(str_expr, 0);
-      expr2tc second_char = char_at_index(str_expr, 1);
+      expr2tc first_char = char_at_index(first_read, 0);
+      expr2tc second_char = char_at_index(reread, 1);
 
       expr2tc lit, zero;
       migrate_expr(

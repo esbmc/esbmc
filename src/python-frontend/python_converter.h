@@ -2304,6 +2304,14 @@ private:
     const nlohmann::json &element,
     exprt &reuse);
 
+  /// Prepares \p operand for two reads: returns the first read and sets
+  /// \p reread to the second, binding a side-effecting operand to a
+  /// temporary. Nil when such an operand cannot be bound.
+  exprt bind_operand_read_twice(
+    const exprt &operand,
+    const nlohmann::json &element,
+    exprt &reread);
+
   /**
    * @brief Determines if None comparison setup is needed.
    *
