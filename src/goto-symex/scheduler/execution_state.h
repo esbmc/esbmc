@@ -287,6 +287,9 @@ public:
    */
   void assume(const expr2tc &assumption) override;
 
+  /** As assume(), the deferred assumption reads its condition now. */
+  void defer_assumption(const expr2tc &assumption) override;
+
   /**
    *  Implemented by goto_symext::symex_printf. Overridden only to record the
    *  globals the arguments read: the frontend lowers a printf call to an OTHER

@@ -5,9 +5,13 @@ name some read may reach unbound gets a flag, set at each of its bindings and
 tested before that read. A name is left alone when the analysis cannot see all
 of its bindings (walrus, except-as, del, import, nested def, match capture,
 global/nonlocal) or when a nested scope references it.
+
+Module-level code gets the same check, raising NameError, for a name bound only
+by module-level defs, such as a call placed above the def of its function.
 """
 
 import ast
+import builtins
 # pylint: disable=too-many-return-statements,too-few-public-methods
 
 _NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp,
@@ -50,6 +54,8 @@ def _binding_targets(stmt):
 
 def _bound_ids(stmt):
     """Return the names a statement binds (an AnnAssign without value binds none)."""
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return {stmt.name}
     if isinstance(stmt, ast.AnnAssign) and stmt.value is None:
         return set()
     ids = set()
@@ -187,12 +193,21 @@ def _flag_assign(name, value):
                       value=ast.Constant(value=value))
 
 
-def _guard(name):
-    message = f"cannot access local variable '{name}' where it is not associated with a value"
+def _local_error(name):
+    return ("UnboundLocalError",
+            f"cannot access local variable '{name}' where it is not associated with a value")
+
+
+def _global_error(name):
+    return ("NameError", f"name '{name}' is not defined")
+
+
+def _guard(name, error):
+    exc, message = error(name)
     return ast.If(
         test=ast.UnaryOp(op=ast.Not(), operand=ast.Name(id=_FLAG_PREFIX + name, ctx=ast.Load())),
         body=[
-            ast.Raise(exc=ast.Call(func=ast.Name(id="UnboundLocalError", ctx=ast.Load()),
+            ast.Raise(exc=ast.Call(func=ast.Name(id=exc, ctx=ast.Load()),
                                    args=[ast.Constant(value=message)],
                                    keywords=[]),
                       cause=None)
@@ -211,16 +226,17 @@ def _located(new_nodes, anchor):
 class _Rewriter:
     """Insert the flag updates and guards for the names in `flagged`."""
 
-    def __init__(self, flagged, unsafe_reads):
+    def __init__(self, flagged, unsafe_reads, error):
         self.flagged = flagged
         self.unsafe_reads = unsafe_reads
+        self.error = error
 
     def rewrite(self, stmts):
         """Return `stmts` with the guards before and the flag updates after."""
         out = []
         for stmt in stmts:
             guarded = sorted(self.unsafe_reads.get(id(stmt), set()) & self.flagged)
-            out.extend(_located([_guard(name) for name in guarded], stmt))
+            out.extend(_located([_guard(name, self.error) for name in guarded], stmt))
             out.append(stmt)
             self._rewrite_children(stmt)
             bound = sorted(_bound_ids(stmt) & self.flagged)
@@ -251,7 +267,7 @@ def _guard_function(func):
     flagged = set().union(*analysis.unsafe_reads.values())
     if not flagged:
         return
-    body = _Rewriter(flagged, analysis.unsafe_reads).rewrite(func.body)
+    body = _Rewriter(flagged, analysis.unsafe_reads, _local_error).rewrite(func.body)
     has_docstring = (isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
                      and isinstance(body[0].value.value, str))
     start = 1 if has_docstring else 0
@@ -259,8 +275,56 @@ def _guard_function(func):
     func.body = body
 
 
+def _module_candidates(module):
+    """Return the globals bound only by module-level defs the analysis sees."""
+    if any(isinstance(node, ast.Match) for node in ast.walk(module)):
+        return set()
+    defs, excluded = set(), set()
+    for node in _own_scope_nodes(module):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defs.add(node.name)
+        elif isinstance(node, ast.ClassDef):
+            excluded.add(node.name)
+        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            excluded.add(node.id)
+        elif not isinstance(node, _NESTED_SCOPES):
+            excluded |= _untracked_names(node)
+    hidden = _names_bound_elsewhere(module)
+    if hidden is None:
+        return set()
+    return {name for name in defs - excluded - hidden if not hasattr(builtins, name)}
+
+
+def _names_bound_elsewhere(module):
+    """Return the globals a nested scope may bind, or None if any name may be."""
+    names = set()
+    for node in ast.walk(module):
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+        elif isinstance(node, ast.NamedExpr):
+            names.add(node.target.id)
+        elif isinstance(node, ast.Name) and node.id in ("globals", "vars", "exec", "eval"):
+            return None
+    return names
+
+
+def _guard_module(module):
+    candidates = _module_candidates(module)
+    if not candidates:
+        return
+    analysis = _Analysis(candidates)
+    analysis.flow(module.body, set())
+    flagged = set().union(*analysis.unsafe_reads.values())
+    if not flagged:
+        return
+    body = _Rewriter(flagged, analysis.unsafe_reads, _global_error).rewrite(module.body)
+    module.body = _located([_flag_assign(name, False) for name in sorted(flagged)], body[0]) + body
+
+
 def guard_unbound_locals(module):
-    """Make every function in `module` raise UnboundLocalError on an unbound read."""
+    """Make every function in `module` raise UnboundLocalError on an unbound read,
+    and its module-level code raise NameError on a read of a def not yet run."""
+    _guard_module(module)
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             _guard_function(node)
