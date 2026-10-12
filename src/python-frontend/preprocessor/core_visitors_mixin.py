@@ -487,12 +487,8 @@ class CoreVisitorsMixin:
         elif isinstance(target, ast.Name) and target.id in self.newtype_vars:
             self.newtype_vars.discard(target.id)
 
-        if (isinstance(target, ast.Name) and isinstance(node.value, ast.Attribute)
-                and isinstance(node.value.value, ast.Name) and target.id in self.called_names):
-            self.bound_method_vars[target.id] = node.value
+        if self._track_bound_method(target, node.value):
             return None
-        if isinstance(target, ast.Name) and target.id in self.bound_method_vars:
-            del self.bound_method_vars[target.id]
 
         self._update_variable_types_simple(target, node.value)
 
@@ -674,6 +670,26 @@ class CoreVisitorsMixin:
                 and len(node.args) == 1 and not node.keywords):
             return self.visit(node.args[0])
         return None
+
+    def _track_bound_method(self, target, value, resolvable=True):
+        """Drop `target = obj.attr` when the module calls `target`, so that
+        each later `target(...)` becomes `obj.attr(...)`, and forget a
+        `target` bound to anything else."""
+        if (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Name) and target.id in self.called_names):
+            self.bound_method_vars[target.id] = value
+            return True
+        if isinstance(target, ast.Name):
+            self.bound_method_vars.pop(target.id, None)
+        return False
+
+    def _is_resolvable_unpacked_method(self, target, value, statement):
+        """Whether unpacking `obj.m` into `target` may be resolved at each call
+        of `target`: the statement is top-level, `target` is bound nowhere
+        else, and `obj.m` is a method of a fixed instance (#8354)."""
+        return (id(statement) in self.module_statements and target.id in self.once_bound_names
+                and isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and value.attr in self.fixed_receivers.get(value.value.id, ()))
 
     def _maybe_rewrite_bound_method_call(self, node):
         if isinstance(node.func, ast.Name) and node.func.id in self.bound_method_vars:
