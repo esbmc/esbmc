@@ -764,6 +764,20 @@ private:
     const std::function<exprt(const exprt &)> &truthy,
     const nlohmann::json &element);
 
+  exprt emit_guarded_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const locationt &location);
+
+  /// The and/or test of an if or while as one flat condition, which the
+  /// coverage modes instrument operand by operand. A later operand whose
+  /// conversion plants statements (a walrus binding, a bounds check) is
+  /// guarded by the operands before it instead.
+  exprt get_flat_boolop_test(
+    const nlohmann::json &test_node,
+    const std::function<exprt(const exprt &, const nlohmann::json &)> &to_bool);
+
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
   /**

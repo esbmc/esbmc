@@ -1,0 +1,5 @@
+CORE
+main.py
+--branch-coverage
+^Coverage goals: 1 ✓ 0 reached, - 1 unreached$
+^COVERAGE ANALYSIS COMPLETE$

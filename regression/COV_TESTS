@@ -2546,6 +2546,13 @@ regression/ld/ld_user_fb_output_read_by_contact_safe
 regression/python/github_8412
 regression/python/github_8412_fail
 regression/python/github_8412_rebound
+regression/python/github_8455
+regression/python/github_8455_branch_coverage
+regression/python/github_8455_condition_coverage
+regression/python/github_8455_fail
+regression/python/github_8455_or
+regression/python/github_8455_subscript
+regression/python/github_8455_subscript_fail
 regression/python/list_store_tuple_over_int
 regression/python/list_store_tuple_over_int_fail
 regression/python/github_8356_mul_int
