@@ -2479,3 +2479,11 @@ regression/python/github_8352_shadowed
 regression/python/github_8352_before_binding_fail
 regression/python/github_8352_function_alias
 regression/python/github_8352_local_binding_fail
+regression/esbmc-cpp/cpp/support_for_concepts_fail
+regression/esbmc-cpp/cpp/support_for_requires_expr_fail
+regression/esbmc-cpp/cpp/support_for_concepts_false_branch_fail
+regression/esbmc-cpp/cpp/support_for_requires_expr_false_branch_fail
+regression/esbmc-cpp/cpp/support_for_concepts_false_branch_pass
+regression/esbmc-cpp/cpp/support_for_requires_expr_false_branch_pass
+regression/esbmc-cpp/cpp/support_for_concepts_pass
+regression/esbmc-cpp/cpp/support_for_requires_expr_pass
