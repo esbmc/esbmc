@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --max-inductive-step 3 --memory-leak-check --no-assertions
+^VERIFICATION SUCCESSFUL$
