@@ -158,7 +158,9 @@ public:
       "PermissionError",   "NotImplementedError",
       "ImportError",       "ModuleNotFoundError",
       "RuntimeError",      "StopIteration",
-      "EOFError",          "UnboundLocalError"};
+      "EOFError",          "UnboundLocalError",
+      "ArithmeticError",   "FloatingPointError",
+      "LookupError"};
     return exceptions.count(name) != 0;
   }
 
