@@ -2598,3 +2598,9 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8385
+regression/python/github_8385_fail
+regression/python/github_8385_missing_fail
+regression/python/github_8385_override
+regression/python/github_8385_self_fail
+regression/python/github_8385_starred_fail
