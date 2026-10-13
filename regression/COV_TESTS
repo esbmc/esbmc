@@ -506,6 +506,10 @@ regression/python/assert_cuts_path
 regression/python/assert_ends_path_forward_condition
 regression/python/assert_ends_path_k_induction
 regression/python/assert_list_cuts_path
+regression/python/assert_message_kind
+regression/python/assert_message_kind_fail
+regression/python/assert_message_kind_fstring_fail
+regression/python/assert_no_message_kind_fail
 regression/python/assert_run_cuts_path
 regression/python/bin_builtin
 regression/python/bin_subscript_symbolic
