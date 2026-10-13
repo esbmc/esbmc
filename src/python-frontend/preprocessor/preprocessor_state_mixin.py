@@ -95,6 +95,9 @@ class PreprocessorStateMixin:
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()
+        # Names bound only by a module-level `import`, whose attributes may
+        # name nondet functions as the bare imported names do.
+        self.imported_module_names = set()
         self.list_literal_values = {}
         # Names bound to a dict literal, mapped to that literal; invalidated on
         # any mutation, scoped like list_literal_values.

@@ -2736,8 +2736,21 @@ class LoopMixin:
     # the rewrite always passes the bound explicitly.
     _DEFAULT_NONDET_COLLECTION_SIZE = 8
 
-    @classmethod
-    def _nondet_generator_type(cls, node):
+    def _nondet_callee_name(self, node):
+        """Name of the function `node` refers to, else None.
+
+        A bare name, or an attribute of a module bound only by `import`, so
+        `_sv_verifier.nondet_list(_sv_verifier.nondet_int)` reads as
+        `nondet_list(nondet_int)` does after `from _sv_verifier import ...`.
+        """
+        if isinstance(node, ast.Name):
+            return node.id
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id in self.imported_module_names):
+            return node.attr
+        return None
+
+    def _nondet_generator_type(self, node):
         """Type name behind a scalar nondet generator, else None.
 
         Accepts a call (``nondet_bool()``) and the bare function reference
@@ -2745,23 +2758,19 @@ class LoopMixin:
         an ordinary variable that happens to be named ``nondet_size`` is not
         mistaken for a generator and swallowed as the element type.
         """
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            name = node.func.id
-        elif isinstance(node, ast.Name):
-            name = node.id
-        else:
+        name = self._nondet_callee_name(node.func if isinstance(node, ast.Call) else node)
+        if name is None:
             return None
         for prefix in ("__VERIFIER_nondet_", "nondet_"):
             if name.startswith(prefix):
                 suffix = name[len(prefix):]
-                if suffix in cls._NONDET_SCALAR_SUFFIXES:
+                if suffix in self._NONDET_SCALAR_SUFFIXES:
                     return suffix
         return None
 
-    @classmethod
-    def _resolve_nondet_type(cls, node, allowed, func_name, role):
+    def _resolve_nondet_type(self, node, allowed, func_name, role):
         expected = ", ".join(f"nondet_{t}()" for t in allowed)
-        type_name = cls._nondet_generator_type(node)
+        type_name = self._nondet_generator_type(node)
         if type_name is None:
             raise SyntaxError(f"{func_name}: {role} must be a nondet generator, got "
                               f"{ast.unparse(node)!r}; expected one of {expected}")
@@ -2797,12 +2806,12 @@ class LoopMixin:
         in models/nondet.py that produces the requested element types, or None
         when `call` is not one of these generators.
         """
-        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+        if not isinstance(call, ast.Call):
             return None
-        func_name = call.func.id
+        func_name = self._nondet_callee_name(call.func)
         if func_name not in ("nondet_list", "nondet_dict"):
             return None
-        if func_name in self.shadowed_nondet_collections:
+        if isinstance(call.func, ast.Name) and func_name in self.shadowed_nondet_collections:
             return None
 
         positional = list(call.args)
@@ -2896,11 +2905,10 @@ class LoopMixin:
         Both spellings are handled because the module pre-pass runs before the
         callee rewrite and the per-assignment pass runs after it.
         """
-        if not isinstance(call_node.func, ast.Name):
-            return None
-        annotation = self._nondet_builder_annotation(call_node.func.id)
-        if annotation is not None:
-            return annotation
+        if isinstance(call_node.func, ast.Name):
+            annotation = self._nondet_builder_annotation(call_node.func.id)
+            if annotation is not None:
+                return annotation
         parsed = self._parse_nondet_collection_call(call_node)
         if parsed is None:
             return None
