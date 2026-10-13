@@ -2715,6 +2715,8 @@ regression/python/github_8414_single
 regression/python/github_8414_single_fail
 regression/python/github_8414_tuple
 regression/python/github_8414_tuple_fail
+regression/python/github_8422_join_alias
+regression/python/github_8422_join_escape_fail
 regression/python/starred_call_argument_length_fail
 regression/python/starred_call_argument_length_caught
 regression/python/starred_call_argument_dict_unsupported
