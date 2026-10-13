@@ -212,6 +212,10 @@ static bool populate_module(module &md, const fs::path &json_path)
   return false;
 }
 
+ModulePtr get_module_recursive(
+  const std::vector<std::string> &parts,
+  const ModulesList &current_modules);
+
 void module_manager::load_directory(
   const fs::path &current_path,
   ModulePtr parent_module)
@@ -228,12 +232,12 @@ void module_manager::load_directory(
       if (!parent_module && main_module_ == name)
         continue;
 
-      // find_module is a top-level lookup, so two files sharing a stem merge
-      // into one node even when one of them is a submodule: `import pkg.math`
-      // attaches pkg/math.json to the stdlib `math` model and leaves pkg.math
-      // unresolvable. Pre-existing (the old code merged their functions and
-      // classes the same way); preserved here rather than fixed.
-      auto current_module = find_module(name);
+      // A file inside a package is that package's submodule, even when its
+      // stem names a top-level module: p/p.json is p.p, not p (#8496).
+      auto current_module =
+        parent_module
+          ? get_module_recursive({name}, parent_module->submodules())
+          : find_module(name);
       if (!current_module)
       {
         current_module = std::make_shared<module>(name);

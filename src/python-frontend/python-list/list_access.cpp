@@ -1780,7 +1780,7 @@ constant_element_count(const std::vector<python_list::strided_axis> &axes)
 
 python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const nlohmann::json &slice_node,
-  long long n)
+  const exprt &extent)
 {
   const typet ll_type = signedbv_typet(64);
   const type2tc t = migrate_type(ll_type);
@@ -1837,20 +1837,22 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
 
   // CPython's PySlice_AdjustIndices: a given bound is wrapped once when
   // negative and clamped to [min, max]; an omitted one takes `fallback`.
+  const expr2tc n = to_ll(extent);
+  const expr2tc last = sub2tc(t, n, lit(1));
   auto adjust = [&](
                   const std::optional<expr2tc> &bound,
-                  long long min,
-                  long long max,
-                  long long fallback) {
+                  const expr2tc &min,
+                  const expr2tc &max,
+                  const expr2tc &fallback) {
     if (!bound)
-      return lit(fallback);
+      return fallback;
     const expr2tc wrapped =
-      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, lit(n)), *bound);
+      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, n), *bound);
     return if2tc(
       t,
-      lessthan2tc(wrapped, lit(min)),
-      lit(min),
-      if2tc(t, greaterthan2tc(wrapped, lit(max)), lit(max), wrapped));
+      lessthan2tc(wrapped, min),
+      min,
+      if2tc(t, greaterthan2tc(wrapped, max), max, wrapped));
   };
   const std::optional<expr2tc> lower = bound_temp("lower", "$numpy_lower$");
   const std::optional<expr2tc> upper = bound_temp("upper", "$numpy_upper$");
@@ -1858,10 +1860,17 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const expr2tc start = to_ll(emit_temp(
     "$numpy_slice_start$",
     if2tc(
-      t, forward, adjust(lower, 0, n, 0), adjust(lower, -1, n - 1, n - 1))));
+      t,
+      forward,
+      adjust(lower, lit(0), n, lit(0)),
+      adjust(lower, lit(-1), last, last))));
   const expr2tc stop = to_ll(emit_temp(
     "$numpy_slice_stop$",
-    if2tc(t, forward, adjust(upper, 0, n, n), adjust(upper, -1, n - 1, -1))));
+    if2tc(
+      t,
+      forward,
+      adjust(upper, lit(0), n, n),
+      adjust(upper, lit(-1), last, lit(-1)))));
 
   auto count = [&](const expr2tc &span, const expr2tc &magnitude) {
     return add2tc(t, div2tc(t, sub2tc(t, span, lit(1)), magnitude), lit(1));
@@ -2183,26 +2192,24 @@ std::optional<python_list::strided_axis> python_list::runtime_slice_axis(
   const nlohmann::json &node,
   exprt &offset)
 {
-  if (source.symbolic())
-    return std::nullopt;
   const typet ll_type = signedbv_typet(64);
+  const exprt source_stride = python_list::axis_stride(source);
   const symbolic_slice_params params =
-    emit_symbolic_slice_params(node, source.extent);
+    emit_symbolic_slice_params(node, python_list::axis_extent(source));
   strided_axis axis;
   axis.extent_expr = params.length;
   const slice_step_info step = get_slice_step_info(node);
-  if (step.literal)
+  if (step.literal && source.stride_expr.is_nil())
     axis.stride = source.stride * step.value;
   else
     axis.stride_expr = emit_ll_temp(
       node,
       "$numpy_axis_stride$",
-      build_mul(params.stride, from_integer(source.stride, ll_type), ll_type));
+      build_mul(params.stride, source_stride, ll_type));
   offset = build_add(
     offset,
     build_typecast(
-      build_mul(params.offset, from_integer(source.stride, ll_type), ll_type),
-      size_type()),
+      build_mul(params.offset, source_stride, ll_type), size_type()),
     size_type());
   return axis;
 }
@@ -2984,6 +2991,20 @@ python_list::try_build_ravel_pointer_view(const exprt &array)
     /*readonly=*/false);
 }
 
+// A slice of a pointer view: a view of the same storage when bound to a new
+// name, a copy of its elements otherwise.
+std::optional<exprt> python_list::try_build_numpy_view_subview(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !array.is_symbol() || converter_.numpy_pointer_view_info_.count(
+                            array.identifier().as_string()) == 0)
+    return std::nullopt;
+  return try_build_strided_basic_view(
+    array, {slice_node}, /*allow_plain_array=*/true);
+}
+
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   const exprt &array,
   const typet &elem_type,
@@ -2991,6 +3012,10 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   long long step_val,
   bool literal_step)
 {
+  if (
+    std::optional<exprt> subview =
+      try_build_numpy_view_subview(array, slice_node))
+    return subview;
   if (!literal_step || !array.is_symbol())
     return std::nullopt;
 
@@ -4239,12 +4264,17 @@ void python_list::handle_slice_assignment(
 /// none and neither arithmetic nor equality on it would behave. Recover what
 /// the call sites told us about this parameter, seeded when the function was
 /// converted (#7187). Returns `annotated` unchanged when this is not a
-/// bare-`list` parameter, or nothing was inferred for it.
+/// bare-`list` parameter, or nothing was inferred for it. Call sites that
+/// pass a list beside other types give each position its own type (#8472).
 typet python_list::bare_list_param_elem_type(
   const nlohmann::json &param_node,
   const std::string &param_id,
-  const typet &annotated)
+  const typet &annotated,
+  size_t index)
 {
+  if (mixes_list_and_other(param_id))
+    return elem_types().element_type(param_id, index);
+
   if (
     !param_node.contains("annotation") || !param_node["annotation"].is_object())
     return annotated;
@@ -4258,6 +4288,52 @@ typet python_list::bare_list_param_elem_type(
 
   const typet inferred = elem_types().element_type(param_id, 0);
   return inferred.is_empty() ? annotated : inferred;
+}
+
+bool python_list::mixes_list_and_other(const std::string &id) const
+{
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const auto *recorded = elem_types().find(id);
+  return recorded &&
+         std::any_of(
+           recorded->begin(),
+           recorded->end(),
+           [&](const auto &e) { return e.second == list_type; }) &&
+         elem_types().uniform_element_type(id) == typet();
+}
+
+/// A list whose elements mix a list with another type is read at one
+/// element's type only when the index is a constant and every list element
+/// carries its own id, which the call-site seeding gives a position it
+/// resolved. Any other read would pick one type for elements of several, so
+/// it is refused rather than misread (#8472).
+void python_list::reject_unresolved_element_read(
+  const exprt &array,
+  const nlohmann::json &slice_node) const
+{
+  if (!array.is_symbol())
+    return;
+  const std::string &id = array.identifier().as_string();
+  if (!mixes_list_and_other(id))
+    return;
+
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const auto &recorded = *elem_types().find(id);
+  const bool every_list_resolved =
+    std::none_of(recorded.begin(), recorded.end(), [&](const auto &e) {
+      return e.second == list_type && e.first.empty();
+    });
+  const bool constant_index = slice_node.value("_type", "") == "Constant" &&
+                              slice_node["value"].is_number_unsigned();
+  if (constant_index && every_list_resolved)
+    return;
+
+  const locationt l = converter_.get_location_from_decl(list_value_);
+  throw std::runtime_error(
+    "Reading an element of a list whose elements have different types is "
+    "supported only at a constant index into a list every call passes in one "
+    "shape (" +
+    l.get_file().as_string() + ":" + l.get_line().as_string() + ")");
 }
 
 std::optional<exprt> python_list::resolve_nested_list_element(
@@ -4527,6 +4603,8 @@ exprt python_list::handle_index_access(
     // Handle list types (symbol-based)
     typet elem_type;
 
+    reject_unresolved_element_read(array, slice_node);
+
     if (
       std::optional<exprt> nested =
         resolve_nested_list_element(array, pos_expr, index, elem_type))
@@ -4539,7 +4617,7 @@ exprt python_list::handle_index_access(
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
 
       elem_type = bare_list_param_elem_type(
-        list_node, array.identifier().as_string(), elem_type);
+        list_node, array.identifier().as_string(), elem_type, index);
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||

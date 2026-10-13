@@ -619,6 +619,8 @@ exprt string_builder::build_runtime_str_join_call(
     fn_type.return_type() = char_ptr;
     fn_type.arguments().push_back(code_typet::argumentt(char_ptr));
     fn_type.arguments().push_back(code_typet::argumentt(list_ptr));
+    for (int i = 0; i < 3; ++i)
+      fn_type.arguments().push_back(code_typet::argumentt(size_type()));
     new_symbol.set_type(migrate_type(fn_type));
 
     get_symbol_table().add(new_symbol);
@@ -632,5 +634,13 @@ exprt string_builder::build_runtime_str_join_call(
   if (list_arg.type() != list_ptr)
     list_arg = build_typecast(list_arg, list_ptr);
 
-  return build_call_expr(*fn_symbol, char_ptr, {sep_arg, list_arg});
+  const type_handler &types = get_type_handler();
+  return build_call_expr(
+    *fn_symbol,
+    char_ptr,
+    {sep_arg,
+     list_arg,
+     types.tagged_scalar_type_id(long_long_int_type()),
+     types.tagged_scalar_type_id(double_type()),
+     types.tagged_scalar_type_id(bool_type())});
 }
