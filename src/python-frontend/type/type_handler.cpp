@@ -238,7 +238,7 @@ std::string type_handler::get_python_type_name(const typet &t) const
 std::string type_handler::get_var_type(const std::string &var_name) const
 {
   nlohmann::json ref = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+    var_name, converter_.current_ast_scope(), converter_.ast());
 
   if (ref.empty())
     return std::string();
