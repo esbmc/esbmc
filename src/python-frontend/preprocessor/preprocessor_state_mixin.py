@@ -20,6 +20,7 @@ class PreprocessorStateMixin:
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
+        self._hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
