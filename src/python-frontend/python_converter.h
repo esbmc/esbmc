@@ -1334,9 +1334,11 @@ private:
   class_mro(const std::string &class_name, mro_memo &memo) const;
   static std::optional<std::vector<std::string>>
   c3_merge(std::vector<std::vector<std::string>> seqs);
-  /// The class statement that alone binds @p name in the file being
-  /// converted, or null.
-  const nlohmann::json *sole_class_binding(const std::string &name) const;
+  /// The @p statement (a class or def) that alone binds @p name in the file
+  /// being converted, or null.
+  const nlohmann::json *sole_binding(
+    const std::string &name,
+    const std::string &statement = "ClassDef") const;
   /// The def that alone binds @p method in the body of class @p class_name,
   /// itself bound alone, or null.
   const nlohmann::json *sole_method_def(
@@ -1348,6 +1350,50 @@ private:
   bool overridden_below(
     const std::string &class_name,
     const std::string &method) const;
+
+  /// The functions every store to an attribute assigns it (#8370): module
+  /// functions by name, or methods of the receiver the store is made on
+  /// (`self.a = self.m`), which a call through the attribute binds again.
+  struct attribute_functions
+  {
+    bool bound;
+    std::vector<std::string> ids;
+  };
+  /// What attribute @p attr holds, or null when some store in the file may
+  /// assign it anything else.
+  const attribute_functions *function_attribute(const std::string &attr);
+  static bool same_signature(const code_typet &a, const code_typet &b);
+  void collect_attribute_stores(
+    const nlohmann::json &node,
+    const std::string &owner,
+    const nlohmann::json *method);
+  void record_function_store(
+    const std::string &attr,
+    const std::pair<bool, std::string> &stored);
+  /// @p class_name and every class in the file that derives from it.
+  std::set<std::string> subclasses(const std::string &class_name) const;
+  std::optional<std::pair<bool, std::string>> stored_function(
+    const nlohmann::json &target,
+    const nlohmann::json &value,
+    const std::string &owner,
+    const nlohmann::json *method) const;
+  /// The method `self.m` names in a method of @p owner, when no subclass
+  /// resolves @p m elsewhere and it is a plain instance method.
+  std::optional<std::string>
+  bound_method_id(const std::string &owner, const std::string &m) const;
+  bool try_bound_method_store(const nlohmann::json &ast_node, codet &block);
+  /// An assignment get_var_assign leaves to a dedicated lowering, which
+  /// returns true once it has converted it.
+  bool try_dedicated_assign(const nlohmann::json &ast_node, codet &block);
+  void reject_bound_method_read(const nlohmann::json &element);
+  void reject_method_value(const std::string &class_name, const std::string &m)
+    const;
+  /// Per module, what each attribute holds; nullopt when the module reaches
+  /// attributes by a hook such as setattr.
+  std::map<
+    const nlohmann::json *,
+    std::optional<std::map<std::string, std::optional<attribute_functions>>>>
+    attribute_functions_;
   /// Whether the body of class @p class_name may bind @p name, hiding any
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)

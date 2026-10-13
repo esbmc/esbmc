@@ -5881,14 +5881,59 @@ bool python_converter::rewrite_divergent_conditional_assign(
   return true;
 }
 
+/// `self.a = self.m`, where every store to `a` binds a method of its
+/// receiver: store the method itself, and let a call through `a` pass the
+/// receiver again.
+bool python_converter::try_bound_method_store(
+  const nlohmann::json &ast_node,
+  codet &block)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  const nlohmann::json &value = ast_node.value("value", nlohmann::json());
+  if (
+    target.value("_type", "") != "Attribute" || !value.is_object() ||
+    value.value("_type", "") != "Attribute")
+    return false;
+  const attribute_functions *held =
+    function_attribute(target["attr"].get<std::string>());
+  if (!held || !held->bound)
+    return false;
+
+  const locationt location = get_location_from_decl(ast_node);
+  current_element_type = any_type();
+  const exprt lhs = create_lhs_expression(target, nullptr, location);
+  if (lhs.type() != any_type())
+    throw std::runtime_error(
+      "storing a bound method in typed attribute '" +
+      target["attr"].get<std::string>() + "' is not supported");
+  const std::string id =
+    bound_method_id(current_class_name_, value["attr"].get<std::string>())
+      .value();
+  const symbolt *method = find_symbol(id);
+  const exprt function =
+    method ? symbol_expr(*method) : symbol_exprt(id, code_typet());
+  code_assignt store(
+    lhs, typecast_exprt(address_of_exprt(function), lhs.type()));
+  store.location() = location;
+  block.copy_to_operands(store);
+  return true;
+}
+
+bool python_converter::try_dedicated_assign(
+  const nlohmann::json &ast_node,
+  codet &block)
+{
+  return rewrite_divergent_conditional_assign(ast_node, block) ||
+         try_tagged_var_assign(ast_node, block) ||
+         try_bound_method_store(ast_node, block);
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  if (rewrite_divergent_conditional_assign(ast_node, target_block))
-    return;
-
-  if (try_tagged_var_assign(ast_node, target_block))
+  if (try_dedicated_assign(ast_node, target_block))
     return;
 
   // Extract type information

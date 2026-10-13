@@ -1826,6 +1826,32 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   return list.index(array, normalize_bool_index_node(slice));
 }
 
+/// A field holding a bound method is only called: read as a value it would
+/// lose the receiver a call passes again (#8370).
+void python_converter::reject_bound_method_read(const nlohmann::json &element)
+{
+  const std::string &attr = element["attr"].get_ref<const std::string &>();
+  const attribute_functions *held = function_attribute(attr);
+  if (!is_converting_lhs && held && held->bound)
+    throw std::runtime_error(
+      "reading attribute '" + attr +
+      "', which holds a bound method, as a value is not supported");
+}
+
+/// `obj.m` for a method `m` is a bound method, which has no value here.
+void python_converter::reject_method_value(
+  const std::string &class_name,
+  const std::string &m) const
+{
+  const auto mro = class_mro(class_name);
+  if (mro && std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+        return class_binds_name(cls, m);
+      }))
+    throw std::runtime_error(
+      "using method '" + class_name + "." + m +
+      "' as a value is not supported");
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1933,6 +1959,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (element["_type"] == "Attribute")
     {
+      reject_bound_method_read(element);
       // Resolve `<base>.<attr>` after unwrapping Optional[T] /
       // pointer-to-struct / complex types. Returns nil if the attribute cannot
       // be resolved.
@@ -2796,6 +2823,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             // Instance of a known class but the attribute genuinely does not
             // exist: raise a catchable AttributeError (issue #5904) instead of
             // aborting conversion.
+            reject_method_value(
+              extract_class_name_from_tag(obj_type_name), attr_name);
             expr = get_exception_handler().gen_exception_raise(
               "AttributeError",
               "'" + extract_class_name_from_tag(obj_type_name) +
