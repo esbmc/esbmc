@@ -59,6 +59,13 @@ public:
     const typet &elem_type,
     type_slot slot = type_slot::elements);
 
+  /// Updates the type of the element at @p index.
+  void set_element_type(
+    const std::string &id,
+    size_t index,
+    const typet &elem_type,
+    type_slot slot = type_slot::elements);
+
   /// Replaces @p to's entries with @p from's, leaving @p to untouched when
   /// @p from has nothing recorded.
   void assign_from(

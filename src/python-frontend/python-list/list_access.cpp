@@ -4235,6 +4235,104 @@ void python_list::handle_slice_assignment(
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
 
+void python_list::handle_subscript_assign_none(
+  const exprt &list_expr,
+  const nlohmann::json &slice_node)
+{
+  const symbolt *set_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_at");
+  if (!set_func)
+    return;
+
+  const locationt location = converter_.get_location_from_decl(slice_node);
+
+  exprt idx_expr = converter_.get_expr(slice_node);
+  idx_expr = converter_.unwrap_optional_if_needed(idx_expr);
+  if (idx_expr.type() != size_type())
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (size_func && !idx_expr.type().is_unsignedbv())
+    {
+      symbolt &size_var = converter_.create_tmp_symbol(
+        slice_node, "$list_size$", size_type(), gen_zero(size_type()));
+      code_declt size_decl(build_symbol(size_var));
+      size_decl.location() = location;
+      converter_.add_instruction(size_decl);
+
+      code_function_callt size_call;
+      size_call.function() = build_symbol(*size_func);
+      size_call.arguments().push_back(
+        list_expr.type().is_pointer() ? list_expr
+                                      : build_address_of(list_expr));
+      size_call.lhs() = build_symbol(size_var);
+      size_call.type() = size_type();
+      size_call.location() = location;
+      converter_.add_instruction(size_call);
+
+      exprt index_as_size = build_typecast(idx_expr, size_type());
+      expr2tc index2, index_as_size2, size_var2;
+      migrate_expr(idx_expr, index2);
+      migrate_expr(index_as_size, index_as_size2);
+      migrate_expr(build_symbol(size_var), size_var2);
+
+      expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+      expr2tc positive_index =
+        add2tc(migrate_type(size_type()), size_var2, index_as_size2);
+      expr2tc converted = if2tc(
+        migrate_type(size_type()), is_negative, positive_index, index_as_size2);
+      idx_expr = migrate_expr_back(converted);
+    }
+    else
+    {
+      idx_expr = build_typecast(idx_expr, size_type());
+    }
+  }
+
+  exprt none_val = gen_zero(none_type());
+  list_elem_info elem_info = get_list_element_info(slice_node, none_val);
+
+  exprt call = build_call_expr(
+    *set_func,
+    bool_type(),
+    {list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr),
+     idx_expr,
+     gen_zero(pointer_typet(empty_typet())),
+     build_symbol(*elem_info.elem_type_sym),
+     elem_info.elem_size,
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
+  call.location() = location;
+  converter_.add_instruction(converter_.convert_expression_to_code(call));
+
+  if (list_expr.is_symbol())
+  {
+    const std::string list_id = list_expr.identifier().as_string();
+    if (
+      slice_node.value("_type", "") == "Constant" &&
+      slice_node.contains("value") && slice_node["value"].is_number_integer())
+    {
+      size_t const_idx = slice_node["value"].get<size_t>();
+      elem_types().set_element_type(list_id, const_idx, none_type());
+    }
+    else if (
+      slice_node.value("_type", "") == "UnaryOp" && slice_node.contains("op") &&
+      slice_node["op"].value("_type", "") == "USub" &&
+      slice_node.contains("operand") &&
+      slice_node["operand"].value("_type", "") == "Constant" &&
+      slice_node["operand"]["value"].is_number_integer())
+    {
+      size_t neg_idx = slice_node["operand"]["value"].get<size_t>();
+      const auto *rec = elem_types().find(list_id);
+      if (rec && neg_idx <= rec->size())
+      {
+        size_t const_idx = rec->size() - neg_idx;
+        elem_types().set_element_type(list_id, const_idx, none_type());
+      }
+    }
+  }
+}
+
 /// A bare `list` annotation names no element type, so the read would carry
 /// none and neither arithmetic nor equality on it would behave. Recover what
 /// the call sites told us about this parameter, seeded when the function was
@@ -4533,7 +4631,16 @@ exprt python_list::handle_index_access(
       return *nested;
 
     // Determine element type
-    if (list_node.contains("_type") && list_node["_type"] == "arg")
+    const std::string &list_name = array.identifier().as_string();
+    const auto *recorded = elem_types().find(list_name);
+
+    if (
+      recorded && index < recorded->size() &&
+      (*recorded)[index].second == none_type())
+    {
+      elem_type = none_type();
+    }
+    else if (list_node.contains("_type") && list_node["_type"] == "arg")
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
@@ -4546,9 +4653,6 @@ exprt python_list::handle_index_access(
       (slice_node["_type"] == "UnaryOp" &&
        slice_node["operand"]["_type"] == "Constant"))
     {
-      const std::string &list_name = array.identifier().as_string();
-
-      const auto *recorded = elem_types().find(list_name);
       if (!recorded)
       {
         /* Fall back to annotation for function parameters */

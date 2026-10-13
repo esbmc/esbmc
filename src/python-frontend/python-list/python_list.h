@@ -544,6 +544,10 @@ public:
     const nlohmann::json &slice_node,
     const nlohmann::json &value_node);
 
+  void handle_subscript_assign_none(
+    const exprt &list_expr,
+    const nlohmann::json &slice_node);
+
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
