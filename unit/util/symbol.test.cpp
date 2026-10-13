@@ -410,15 +410,15 @@ TEST_CASE(
 
 namespace
 {
-// Runs `read` on a fresh symbol from several threads released together, the
+// Runs `getter` on a fresh symbol from several threads released together, the
 // way --parallel-solving's solver threads read the shared symbol table.
-template <typename Setup, typename Read>
-void read_concurrently(Setup setup, Read read)
+template <typename Setup, typename Getter>
+void read_concurrently(Setup setup, Getter getter)
 {
   constexpr int threads = 8;
   symbolt reference;
   setup(reference);
-  const auto expected = read(reference);
+  const auto expected = getter(reference);
 
   for (int round = 0; round < 200; ++round)
   {
@@ -431,7 +431,7 @@ void read_concurrently(Setup setup, Read read)
     for (int t = 0; t < threads; ++t)
       pool.emplace_back([&, t] {
         start.arrive_and_wait();
-        seen[t] = read(sym);
+        seen[t] = getter(sym);
       });
     for (auto &t : pool)
       t.join();
