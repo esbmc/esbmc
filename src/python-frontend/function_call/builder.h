@@ -67,6 +67,7 @@ private:
   /// Whether the receiver of `name.method(...)` is a name bound only once, to
   /// None.
   bool receiver_is_bound_to_none() const;
+  bool nested_function_exists(const symbol_id &sid) const;
 
   /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
   /// class-instance reference holding None (a null pointer).

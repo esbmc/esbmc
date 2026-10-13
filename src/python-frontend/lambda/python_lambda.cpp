@@ -781,9 +781,12 @@ std::optional<typet> subscript_element_type(
 }
 } // namespace
 
-std::vector<std::optional<typet>>
-python_lambda::call_site_argument_types(const nlohmann::json &element) const
+std::vector<std::optional<typet>> python_lambda::call_site_argument_types(
+  const nlohmann::json &element,
+  const std::vector<std::optional<typet>> &argument_types) const
 {
+  if (!argument_types.empty())
+    return argument_types;
   std::vector<std::optional<typet>> types;
   if (
     !element.contains("args") || !element["args"].contains("args") ||
@@ -1007,7 +1010,9 @@ exprt python_lambda::process_lambda_body(
   return lambda_block;
 }
 
-exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
+exprt python_lambda::get_lambda_expr(
+  const nlohmann::json &element,
+  const std::vector<std::optional<typet>> &argument_types)
 {
   // Generate unique lambda name
   std::string lambda_name = generate_unique_lambda_name();
@@ -1021,7 +1026,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   // Resolve call-site argument types while the enclosing scope is still
   // current: the names they mention are invisible from the lambda's own scope.
   const std::vector<std::optional<typet>> call_site_types =
-    call_site_argument_types(element);
+    call_site_argument_types(element, argument_types);
 
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);

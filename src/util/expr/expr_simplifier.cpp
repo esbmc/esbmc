@@ -5470,16 +5470,40 @@ static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
   return expr2tc(); // no match
 }
 
+/* Whether a symbol under `&` names one object of its own: a declared
+ * variable or a symex-made dynamic object. Pointer-typed symbols, unions,
+ * types not yet resolved, and the NULL and invalid placeholders are refused,
+ * so a caller treats them as possibly the same as anything. */
+static bool symbol_is_own_object(const symbol2t &s)
+{
+  if (
+    is_pointer_type(s.type) || is_union_type(s.type) || is_symbol_type(s.type))
+    return false;
+  const std::string &name = s.thename.as_string();
+  return name != "NULL" && name != "INVALID" &&
+         name.rfind("symex::invalid_object", 0) != 0;
+}
+
+/* Two such symbols with different names are different objects: each
+ * declaration and each allocation gets its own name, and the SMT pointer
+ * model numbers objects the same way. The same name at different renaming
+ * levels can be one object or two (a recursive call's local), so that case
+ * stays undecided. */
+static bool distinct_named_objects(const symbol2t &a, const symbol2t &b)
+{
+  return a.thename != b.thename && symbol_is_own_object(a) &&
+         symbol_is_own_object(b);
+}
+
 static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 {
   if (is_symbol2t(a) && is_symbol2t(b))
   {
     if (a == b)
       return gen_true_expr();
-    else
-      // In symbolic execution, different symbols could potentially
-      // have the same value, so let the SMT solver decide
-      return expr2tc();
+    if (distinct_named_objects(to_symbol2t(a), to_symbol2t(b)))
+      return gen_false_expr();
+    return expr2tc();
   }
   else if (is_index2t(a) && is_index2t(b))
   {

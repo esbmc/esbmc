@@ -12,6 +12,6 @@ def keep(v):
     return v[1]
 
 
-a = np.zeros((2, 3), dtype=int)
+a = np.zeros((2, 3), dtype=np.int64)
 row = a[0]
 assert keep(row) == 2

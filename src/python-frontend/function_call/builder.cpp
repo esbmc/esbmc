@@ -1353,7 +1353,7 @@ symbol_id function_call_builder::build_function_id() const
       std::string nested_id = ctx + "@F@" + func_name;
       symbol_id sid(python_file, current_class_name, nested_id);
 
-      if (converter_.symbol_table().find_symbol(sid.to_string()))
+      if (nested_function_exists(sid))
       {
         function_id.set_function(nested_id);
         return function_id;
@@ -1365,6 +1365,16 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   return function_id;
+}
+
+bool function_call_builder::nested_function_exists(const symbol_id &sid) const
+{
+  // A sibling defined later in the enclosing body is not converted yet.
+  return converter_.symbol_table().find_symbol(sid.to_string()) ||
+         !json_utils::find_function_by_path(
+            converter_.ast(),
+            json_utils::split_function_path(sid.get_function()))
+            .empty();
 }
 
 exprt function_call_builder::len_of_bitvector_operand(

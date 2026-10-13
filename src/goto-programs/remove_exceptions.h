@@ -1,11 +1,14 @@
 #pragma once
 
 #include <set>
+#include <vector>
 #include <util/irep/irep_idt.h>
 
 class goto_functionst;
 class contextt;
 class namespacet;
+class optionst;
+class exception_typeidt;
 
 /// Lower C++/Python exception dispatch (THROW/CATCH) into ordinary guarded
 /// control flow over the global exception state (issue #5075).
@@ -35,9 +38,23 @@ class namespacet;
 /// corpus (#5075).
 ///
 /// An uncaught exception whose type is in @p unreported ends the run without a
-/// property, as --python-ignore-assertions wants for AssertionError.
+/// property, as --python-ignore-assertions wants for AssertionError. With
+/// @p checked non-empty, so does one whose type is not a subtype of a type in
+/// @p checked, as --python-check-exceptions wants. An operational-model assert
+/// whose comment names such a type ("KeyError: ...") becomes an assume.
 void remove_exceptions(
   goto_functionst &goto_functions,
   contextt &context,
   const namespacet &ns,
-  const std::set<irep_idt> &unreported = {});
+  const std::set<irep_idt> &unreported = {},
+  const std::vector<irep_idt> &checked = {});
+
+/// Whether @p type is a subtype of a type in @p checked, or @p checked is
+/// empty.
+bool checks_exception(
+  const exception_typeidt &types,
+  const irep_idt &type,
+  const std::vector<irep_idt> &checked);
+
+/// The exception types --python-check-exceptions lists, or none without it.
+std::vector<irep_idt> python_checked_exceptions(const optionst &options);
