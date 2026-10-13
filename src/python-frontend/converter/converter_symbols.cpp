@@ -6,6 +6,7 @@
 #include <util/message/message.h>
 
 #include <algorithm>
+#include <functional>
 #include <regex>
 #include <set>
 #include <utility>
@@ -565,6 +566,50 @@ bool python_converter::is_module_receiver(
   const nlohmann::json &use) const
 {
   return is_imported_module(module_name) && !name_shadows_module(receiver, use);
+}
+
+const nlohmann::json *python_converter::sole_method_def(
+  const std::string &class_name,
+  const std::string &method) const
+{
+  const nlohmann::json *cls = sole_class_binding(class_name);
+  if (!cls || !cls->contains("body"))
+    return nullptr;
+  const nlohmann::json *found = nullptr;
+  for (const auto &stmt : cls->at("body"))
+  {
+    if (!may_bind_name(stmt, method, false))
+      continue;
+    if (found || stmt.value("_type", "") != "FunctionDef")
+      return nullptr;
+    found = &stmt;
+  }
+  return found;
+}
+
+bool python_converter::overridden_below(
+  const std::string &class_name,
+  const std::string &method) const
+{
+  std::function<bool(const nlohmann::json &)> visit = [&](
+                                                        const nlohmann::json
+                                                          &node) {
+    if (node.is_array())
+      return std::any_of(node.begin(), node.end(), visit);
+    if (!node.is_object())
+      return false;
+    if (
+      node.value("_type", "") == "ClassDef" &&
+      node.value("name", "") != class_name &&
+      may_bind_name(node.value("body", nlohmann::json()), method, false))
+    {
+      const auto mro = class_mro(node["name"].get<std::string>());
+      if (!mro || std::find(mro->begin(), mro->end(), class_name) != mro->end())
+        return true;
+    }
+    return std::any_of(node.begin(), node.end(), visit);
+  };
+  return visit((*ast_json)["body"]);
 }
 
 std::optional<std::vector<std::string>>

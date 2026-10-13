@@ -1,5 +1,6 @@
 import ast
 import copy
+import keyword
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -28,6 +29,7 @@ class CoreVisitorsMixin:
         "round": ("number", "ndigits"),
         "str": ("object", ),
     }
+    _SHADOW_TRACKED_BUILTINS = set(_BUILTIN_POSITIONAL_PARAMS) | {"getattr"}
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -698,6 +700,27 @@ class CoreVisitorsMixin:
             return node
         return None
 
+    def _maybe_rewrite_getattr_call(self, node):
+        """Call `getattr(o, "m")(...)` as `o.m(...)`, which it is exactly (#8457).
+
+        A name with `__` is left alone: the frontend stores a private `__m`
+        unmangled, so neither `__m` nor `_C__m` would resolve.
+        """
+        getter = node.func
+        if not (isinstance(getter, ast.Call) and isinstance(getter.func, ast.Name)
+                and getter.func.id == "getattr" and len(getter.args) == 2 and not getter.keywords
+                and not isinstance(getter.args[0], ast.Starred)
+                and not self._builtin_is_shadowed("getattr")):
+            return None
+        name = getter.args[1]
+        if not (isinstance(name, ast.Constant) and isinstance(name.value, str)
+                and name.value.isidentifier() and not keyword.iskeyword(name.value)
+                and "__" not in name.value):
+            return None
+        node.func = ast.copy_location(
+            ast.Attribute(value=getter.args[0], attr=name.value, ctx=ast.Load()), getter)
+        return self.visit(node)
+
     def _record_staticmethod(self, node, qualified_name):
         """Note a @staticmethod, whose call binds no receiver (#7546)."""
         if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
@@ -792,7 +815,7 @@ class CoreVisitorsMixin:
                 bound.add(n.name)
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 bound.update(a.asname or a.name.split(".")[0] for a in n.names)
-        return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+        return bound & self._SHADOW_TRACKED_BUILTINS
 
     def _scan_builtin_shadow_names(self, module_node):
         """Builtin names bound at module scope, which every scope inherits."""
@@ -800,7 +823,7 @@ class CoreVisitorsMixin:
         for n in ast.walk(module_node):
             if isinstance(n, ast.Global):
                 # `global int` binds the module-level name from a function.
-                bound.update(set(n.names) & set(self._BUILTIN_POSITIONAL_PARAMS))
+                bound.update(set(n.names) & self._SHADOW_TRACKED_BUILTINS)
         return bound
 
     def _enter_builtin_shadow_scope(self, node):
@@ -1772,6 +1795,10 @@ class CoreVisitorsMixin:
         rewritten_bound = self._maybe_rewrite_bound_method_call(node)
         if rewritten_bound is not None:
             return rewritten_bound
+
+        rewritten_getattr = self._maybe_rewrite_getattr_call(node)
+        if rewritten_getattr is not None:
+            return rewritten_getattr
 
         rewritten_decimal = self._maybe_rewrite_decimal_call(node)
         if rewritten_decimal is not None:

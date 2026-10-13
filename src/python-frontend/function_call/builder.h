@@ -72,6 +72,14 @@ private:
   /// class-instance reference holding None (a null pointer).
   void raise_if_none_receiver() const;
 
+  /// The class an instance expression holds, read from the symbol table so
+  /// that no instruction is emitted; empty when it is not statically known.
+  std::string instance_class_name(const nlohmann::json &node) const;
+
+  /// Whether the receiver of `recv.method(...)` is an instance of a class that
+  /// defines `method`, which then wins over a str method of the same name.
+  bool receiver_class_defines_method() const;
+
   /// For `recv.method(...)`: the AttributeError of a None receiver or the
   /// str-method lowering, or nil when neither applies.
   exprt build_method_call_on_receiver() const;
