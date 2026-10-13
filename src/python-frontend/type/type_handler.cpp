@@ -102,6 +102,18 @@ bool type_handler::is_pointer_free(const typet &t) const
   return true; // primitives
 }
 
+exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
+  const
+{
+  namespacet ns(converter_.symbol_table());
+  const bool payload_is_a_pointer =
+    payload.id() == "address_of" &&
+    ns.follow(payload.op0().type()).is_pointer();
+  return from_integer(
+    payload_is_a_pointer ? 2 : (is_pointer_free(elem_type) ? 1 : 0),
+    int_type());
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -238,7 +250,7 @@ std::string type_handler::get_python_type_name(const typet &t) const
 std::string type_handler::get_var_type(const std::string &var_name) const
 {
   nlohmann::json ref = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+    var_name, converter_.current_ast_scope(), converter_.ast());
 
   if (ref.empty())
     return std::string();

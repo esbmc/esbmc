@@ -102,14 +102,22 @@ exprt python_converter::wrap_in_optional(
   return optional_value;
 }
 
-exprt python_converter::wrap_literal_if_optional(
+exprt python_converter::wrap_stored_if_optional(
   const exprt &value,
   const typet &type)
 {
-  // None keeps the retyping handle_assignment_type_adjustments gives it.
-  return value.is_constant() && value.type() != none_type()
-           ? wrap_if_optional(value, type)
-           : value;
+  if (!type_utils::is_optional_struct(type) || value.is_code())
+    return value;
+  // None and a scalar read are wrapped too: retyping the variable to either
+  // one drops the None flag on the other path (#8248).
+  if (value.type() == none_type())
+    return wrap_in_optional(value, type);
+  if (!type_utils::is_optional_scalar(value.type()))
+    return value;
+  const typet &value_type = to_struct_type(type).get_component("value").type();
+  return wrap_in_optional(
+    value.type() == value_type ? value : typecast_exprt(value, value_type),
+    type);
 }
 
 // Extract non-None type from union
@@ -371,6 +379,27 @@ typet python_converter::get_union_type_from_annotation(
   return narrow_union_to_member(inner_type);
 }
 
+/// Optional[C[...]] for a subscripted container C: a list or set is already
+/// a pointer, so NULL represents None; a tuple or dict is a struct value with
+/// no NULL to spare, so it gets the Optional<T> struct a scalar does (#8017).
+/// Empty for any other C.
+typet python_converter::optional_container_type(const nlohmann::json &slice)
+{
+  if (slice.value("_type", "") != "Subscript")
+    return typet();
+  const std::string container = slice["value"].value("id", "");
+  if (
+    container == "List" || container == "list" || container == "Set" ||
+    container == "set")
+    return type_handler_.get_list_type();
+  if (
+    container == "Tuple" || container == "tuple" || container == "Dict" ||
+    container == "dict")
+    return type_handler_.build_optional_type(
+      get_type_from_annotation(slice, slice));
+  return typet();
+}
+
 typet python_converter::get_optional_type(const nlohmann::json &slice)
 {
   std::string inner_type;
@@ -395,21 +424,13 @@ typet python_converter::get_optional_type(const nlohmann::json &slice)
     // struct `T | None` does, not a T* holding the value (#8016).
     if (type_utils::is_optional_scalar(base_type))
       return type_handler_.build_optional_type(base_type);
+    // A list is already a reference, NULL for None, as in Optional[List[T]].
+    if (base_type == type_handler_.get_list_type())
+      return base_type;
     return gen_pointer_type(base_type);
   }
 
-  // Optional[List[T]] / Optional[Set[T]]: the container is already a
-  // pointer, so NULL represents None.
-  if (slice.value("_type", "") == "Subscript")
-  {
-    const std::string container = slice["value"].value("id", "");
-    if (
-      container == "List" || container == "list" || container == "Set" ||
-      container == "set")
-      return type_handler_.get_list_type();
-  }
-
-  return typet();
+  return optional_container_type(slice);
 }
 
 typet python_converter::get_type_from_annotation(

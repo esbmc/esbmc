@@ -481,6 +481,17 @@ public:
       return result;
     }
 
+    // Overlapping at both ends, the meet is two pieces: keep the smaller
+    // operand, which covers both (#8204).
+    if (t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
+    {
+      if (
+        (s.cardinality() < t.cardinality()) ||
+        (s.cardinality() == t.cardinality() && a <= c))
+        return s;
+      return t;
+    }
+
     if (s.contains(d) && t.contains(a))
     {
       result.lower = a;
@@ -488,22 +499,8 @@ public:
       return result;
     }
 
-    if (t.contains(b) && s.contains(c))
-    {
-      result.lower = c;
-      result.upper = b;
-      return result;
-    }
-
-    if (
-      (s.cardinality() < t.cardinality()) ||
-      (s.cardinality() == t.cardinality() && a <= c))
-    {
-      return s;
-    }
-
     result.lower = c;
-    result.upper = d;
+    result.upper = b;
     return result;
   }
 

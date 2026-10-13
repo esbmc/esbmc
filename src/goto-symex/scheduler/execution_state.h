@@ -238,6 +238,10 @@ public:
    */
   void symex_step(reachability_treet &art) override;
 
+  void symex_end_function(
+    reachability_treet &art,
+    const goto_programt::instructiont &instruction);
+
   /**
    *  Symbolically assign a value.
    *  Entirely handed off to goto_symext::symex_assign. However this method
@@ -282,6 +286,9 @@ public:
    *  @param assumption Expression of the thing we're assuming to be true.
    */
   void assume(const expr2tc &assumption) override;
+
+  /** As assume(), the deferred assumption reads its condition now. */
+  void defer_assumption(const expr2tc &assumption) override;
 
   /**
    *  Implemented by goto_symext::symex_printf. Overridden only to record the
@@ -683,6 +690,8 @@ public:
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
   bool interleaving_unviable;
+  /** True once main has returned and the exit-time code is running. */
+  bool main_returned;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */

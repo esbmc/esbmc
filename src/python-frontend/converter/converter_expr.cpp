@@ -157,6 +157,18 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+// A str value is stored in a member as `char*`, as python_class_builder types
+// string members; the annotation type (char or a sized char array) would not
+// match the literal assigned to it (#8383).
+static typet stored_member_type(const typet &value_type)
+{
+  if (
+    type_utils::is_string_type(value_type) ||
+    type_utils::is_char_type(value_type))
+    return gen_pointer_type(char_type());
+  return value_type;
+}
+
 // True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
 // Used to recognize the two 2-D slicing patterns this frontend supports,
 // `a[:, j]` and `a[i, :]`; any other slice (bounded or stepped) inside a
@@ -210,45 +222,6 @@ public:
 private:
   python_converter &converter;
 };
-
-// True when `method_name` is a method decorated with @property in `class_name`
-// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
-// getter. A same-named non-property method in a derived class shadows a base
-// property (Python MRO), so a match that is not @property stops the search.
-static bool is_property_method(
-  const nlohmann::json &ast_body,
-  const std::string &class_name,
-  const std::string &method_name)
-{
-  const nlohmann::json cls = json_utils::find_class(ast_body, class_name);
-  if (cls.empty() || !cls.contains("body"))
-    return false;
-
-  for (const auto &stmt : cls["body"])
-  {
-    if (
-      stmt.value("_type", std::string()) != "FunctionDef" ||
-      stmt.value("name", std::string()) != method_name)
-      continue;
-    if (stmt.contains("decorator_list"))
-      for (const auto &dec : stmt["decorator_list"])
-        if (
-          dec.value("_type", std::string()) == "Name" &&
-          dec.value("id", std::string()) == "property")
-          return true;
-    return false; // method exists but is not a property: shadows any base
-  }
-
-  if (cls.contains("bases"))
-    for (const auto &base : cls["bases"])
-      if (
-        base.contains("id") &&
-        is_property_method(
-          ast_body, base["id"].template get<std::string>(), method_name))
-        return true;
-
-  return false;
-}
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
@@ -596,6 +569,167 @@ symbolt *python_converter::contract_return_value_symbol(
   ret_symbol.lvalue = true;
   ret_symbol.file_local = true;
   return add_symbol_and_get_ptr(ret_symbol);
+}
+
+/// A bare name a function does not bind: its class scope when the function
+/// is a class body statement, otherwise the module. A class body is not an
+/// enclosing scope for its methods, so a method never sees a class attribute
+/// by its bare name (#8196).
+symbolt *python_converter::find_enclosing_scope_symbol(symbol_id sid) const
+{
+  if (
+    sid.get_class().empty() || sid.get_function().empty() ||
+    converting_defaults_)
+  {
+    sid.set_function("");
+    if (symbolt *symbol = find_symbol(sid.to_string()))
+      return symbol;
+  }
+  return find_symbol(sid.global_to_string());
+}
+
+/// The name \p stmt binds, if it is a def or an annotated assignment to a
+/// name; otherwise empty.
+static std::string module_binding_name(const nlohmann::json &stmt)
+{
+  const std::string kind = stmt.value("_type", "");
+  if (kind == "FunctionDef")
+    return stmt["name"].get<std::string>();
+  if (kind == "AnnAssign")
+    return stmt["target"].value("id", "");
+  return "";
+}
+
+/// The top-level statement of \p module binding \p name when that is the
+/// one binding of the name anywhere in the module, or nullptr. Any other
+/// binding (a second one, a local) leaves the name's value at a read
+/// depending on which binding ran.
+static const nlohmann::json *
+sole_module_binding(const nlohmann::json &module, const std::string &name)
+{
+  if (json_utils::count_name_bindings(module, name) != 1)
+    return nullptr;
+  for (const auto &stmt : module["body"])
+    if (module_binding_name(stmt) == name)
+      return &stmt;
+  return nullptr;
+}
+
+/// The module global \p sid names for a read in an enclosing scope. Code
+/// converted before the module binds the global, as a function body is, finds
+/// no symbol yet (#8369). Python resolves the name when the read runs, so
+/// register the global from its binding and let a flag tell the read whether
+/// that binding has run yet.
+symbolt *python_converter::find_global_symbol(const symbol_id &sid)
+{
+  if (symbolt *symbol = find_enclosing_scope_symbol(sid))
+    return symbol;
+  const nlohmann::json *binding =
+    sole_module_binding(*ast_json, sid.get_object());
+  if (!binding || binding->value("_type", "") != "AnnAssign")
+    return nullptr;
+  nlohmann::json annotated = *binding;
+  annotated.erase("_inferred_annotation");
+  preregister_global_variables(nlohmann::json::array({annotated}));
+  symbol_id global(current_python_file, "", "");
+  global.set_object(sid.get_object());
+  symbolt *symbol = symbol_table_.find_symbol(global.to_string());
+  if (symbol)
+    track_unbound_global(global.to_string(), *binding, symbol->get_type());
+  return symbol;
+}
+
+/// The module function \p name as a value, or nil. A function the module
+/// defines after this read is tracked like a global (find_global_symbol).
+exprt python_converter::module_function_expr(
+  const std::string &name,
+  const nlohmann::json &element)
+{
+  symbol_id sid(current_python_file, "", name);
+  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+  if (symbol && symbol->get_type().is_code())
+    return symbol_expr(*symbol);
+  const nlohmann::json *binding = sole_module_binding(*ast_json, name);
+  if (!binding || binding->value("_type", "") != "FunctionDef")
+    return nil_exprt();
+  track_unbound_global(sid.to_string(), element, typet());
+  guard_unbound_global(sid.to_string(), name, element);
+  return symbol_exprt(sid.to_string(), code_typet());
+}
+
+void python_converter::track_unbound_global(
+  const std::string &id,
+  const nlohmann::json &binding,
+  const typet &type)
+{
+  if (unbound_global_flags_.count(id))
+    return;
+  const std::string flag_id = id + "$bound";
+  symbolt flag = create_symbol(
+    current_python_file,
+    flag_id,
+    flag_id,
+    get_location_from_decl(binding),
+    bool_type());
+  flag.lvalue = true;
+  flag.static_lifetime = true;
+  flag.set_value(migrate_expr(false_exprt()));
+  symbol_table_.add(flag);
+  unbound_global_flags_.emplace(id, std::make_pair(flag_id, type));
+}
+
+/// Raises NameError at a read of \p id while its binding has not run.
+void python_converter::guard_unbound_global(
+  const std::string &id,
+  const std::string &name,
+  const nlohmann::json &element)
+{
+  const auto flag = unbound_global_flags_.find(id);
+  if (flag == unbound_global_flags_.end())
+    return;
+  emit_guarded_raise(
+    not_exprt(symbol_expr(*symbol_table_.find_symbol(flag->second.first))),
+    "NameError",
+    "name '" + name + "' is not defined",
+    get_location_from_decl(element));
+}
+
+/// Sets the flag of the global \p stmt binds, once it has run. Later reads
+/// need no guard, so the global stops being tracked. Reads converted earlier
+/// took the global's type from its annotation, so refuse a binding that gave
+/// it another.
+void python_converter::mark_global_bound(
+  const nlohmann::json &stmt,
+  code_blockt &block)
+{
+  const std::string name = module_binding_name(stmt);
+  const bool is_def = stmt.value("_type", "") == "FunctionDef";
+  symbol_id sid(current_python_file, "", is_def ? name : "");
+  if (!is_def)
+    sid.set_object(name);
+  const auto flag = unbound_global_flags_.find(sid.to_string());
+  if (name.empty() || flag == unbound_global_flags_.end())
+    return;
+  if (
+    !is_def && symbol_table_.find_symbol(sid.to_string())->get_type() !=
+                 flag->second.second)
+    throw std::runtime_error(
+      fmt::format(
+        "Variable '{}' is read before its binding at line {} as a different "
+        "type than that binding gives it",
+        name,
+        get_location_from_decl(stmt).get_line().as_string()));
+  block.copy_to_operands(code_assignt(
+    symbol_expr(*symbol_table_.find_symbol(flag->second.first)), true_exprt()));
+  unbound_global_flags_.erase(flag);
+}
+
+exprt python_converter::get_default_expr(const nlohmann::json &node)
+{
+  converting_defaults_ = true;
+  exprt default_expr = get_expr(node);
+  converting_defaults_ = false;
+  return default_expr;
 }
 
 /// The "variable is not defined" diagnostic for a Name that resolved to no
@@ -2103,16 +2237,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Fallback for global variables accessed inside functions or class
       // methods
       if (!is_class_attr && element["_type"] == "Name")
-      {
-        sid.set_function(""); // remove function scope
-        sid_str = sid.to_string();
-        symbol = find_symbol(sid_str);
-        if (!symbol)
-        {
-          // also try module-level global (strips class scope too)
-          symbol = find_symbol(sid.global_to_string());
-        }
-      }
+        symbol = find_global_symbol(sid);
       if (!symbol)
       {
         // Check if this Name refers to a function
@@ -2125,12 +2250,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
 
-          symbol_id func_sid(current_python_file, "", var_name);
-          symbolt *func_symbol =
-            symbol_table_.find_symbol(func_sid.to_string());
-          if (func_symbol && func_symbol->get_type().is_code())
+          if (
+            exprt func = module_function_expr(var_name, element);
+            func.is_not_nil())
           {
-            expr = symbol_expr(*func_symbol);
+            expr = func;
             break;
           }
 
@@ -2166,6 +2290,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           var_name, current_func_name_, get_location_from_decl(element)));
       }
     }
+    guard_unbound_global(symbol->id.as_string(), var_name, element);
 
     // Straight-line dynamic retyping (#4770, #4774): if this variable was
     // reassigned across the numeric<->string boundary, get_var_assign minted a
@@ -2554,7 +2679,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (!class_type.has_component(attr_name))
         {
           struct_typet::componentt comp = python_frontend::build_component(
-            class_type.tag().as_string(), attr_name, current_element_type);
+            class_type.tag().as_string(),
+            attr_name,
+            stored_member_type(current_element_type));
           class_type.components().push_back(comp);
           // Persist the mutation back to the symbol (read-modify-set).
           class_symbol->set_type(migrate_type(class_symbol_type));
@@ -2644,7 +2771,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr = build_member_expr_from_class(attr_type);
           }
           else if (
-            is_property_method(
+            json_utils::is_property_method(
               (*ast_json)["body"],
               extract_class_name_from_tag(obj_type_name),
               attr_name))
@@ -2658,6 +2785,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             call_node["func"] = element;
             call_node["args"] = nlohmann::json::array();
             call_node["keywords"] = nlohmann::json::array();
+            call_node["_property_getter"] = true;
             copy_location_fields_from_decl(element, call_node);
             expr = get_expr(call_node);
           }

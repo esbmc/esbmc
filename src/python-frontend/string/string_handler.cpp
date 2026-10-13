@@ -11,6 +11,7 @@
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -376,6 +377,34 @@ list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
   }
 
   return false;
+}
+
+bool is_list_or_tuple_literal(const nlohmann::json &node)
+{
+  return node.contains("_type") &&
+         (node["_type"] == "List" || node["_type"] == "Tuple");
+}
+
+bool is_none_constant(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+// A char-typed value is a 1-char str, and a value of unknown type may still
+// hold a str at run time, so only these are known to make join() raise.
+bool is_non_str_join_item(const nlohmann::json &elem, const typet &type)
+{
+  return is_none_constant(elem) || type.is_bool() || type.is_floatbv() ||
+         (type_utils::is_integer_type(type) && !type_utils::is_char_type(type));
+}
+
+bool is_nonempty_constants(const nlohmann::json &elements)
+{
+  return !elements.empty() &&
+         std::all_of(elements.begin(), elements.end(), [](const auto &elem) {
+           return elem.value("_type", "") == "Constant";
+         });
 }
 
 } // namespace
@@ -1486,6 +1515,15 @@ exprt string_handler::format_fstring_part(const nlohmann::json &value)
     (value.contains("conversion") && value["conversion"].is_number())
       ? value["conversion"].get<int>()
       : -1;
+
+  // A format spec or conversion may render a nondet string that drops the
+  // operand, so a call there runs as its own statement first. Elsewhere it
+  // becomes a side effect, hoisted when the enclosing statement is emitted
+  // rather than during the RHS type probe.
+  if ((has_spec || conversion != -1) && converter_.can_emit_runtime_guard())
+    expr = converter_.store_call_result(expr, expr.location(), "fstring_arg");
+  converter_.convert_function_call_to_side_effect(expr);
+
   if (conversion != -1 && conversion != 's')
     return has_spec ? build_nondet_string_fallback(expr.location())
                     : build_fstring_conversion(
@@ -2754,6 +2792,20 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   return nil_exprt();
 }
 
+/// Whether @p receiver is a Name for a module the program imported, and no
+/// binding in scope at the call @p use shadows it.
+static bool names_imported_module(
+  const python_converter &converter,
+  const nlohmann::json &receiver,
+  const nlohmann::json &use)
+{
+  return receiver.value("_type", "") == "Name" &&
+         receiver.value("id", nlohmann::json()).is_string() &&
+         !converter.get_imported_module_path(receiver["id"].get<std::string>())
+            .empty() &&
+         !converter.name_shadows_module(receiver, use);
+}
+
 exprt string_handler::handle_string_attribute_call(
   const nlohmann::json &call_json)
 {
@@ -2787,17 +2839,14 @@ exprt string_handler::handle_string_attribute_call(
   // true when a model .py file merely exists. The latter would misfire for a
   // local variable that shares a module's name (e.g. a parameter named
   // `string`), wrongly diverting `string.lower()` away from the str handler.
-  if (
-    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
-    receiver_json.contains("id") && receiver_json["id"].is_string() &&
-    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
-       .empty())
+  if (names_imported_module(converter_, receiver_json, call_json))
     return nil_exprt();
 
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr = converter_.get_expr(receiver_json);
+      cached_receiver_expr =
+        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
     return *cached_receiver_expr;
   };
 
@@ -3404,6 +3453,31 @@ exprt string_handler::handle_string_attribute_call(
   return nil_exprt();
 }
 
+exprt string_handler::convert_join_items(
+  const nlohmann::json &elements,
+  std::vector<exprt> &elem_exprs)
+{
+  // Raising here would drop the calls in the other elements, which CPython
+  // evaluates before join() sees a bad item.
+  const bool may_raise = !json_utils::ast_contains_call(elements);
+  for (const auto &elem : elements)
+  {
+    exprt elem_expr = converter_.get_expr(elem);
+    if (may_raise && is_non_str_join_item(elem, elem_expr.type()))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "sequence item " + std::to_string(elem_exprs.size()) +
+          ": expected str instance, " +
+          (is_none_constant(elem)
+             ? std::string("NoneType")
+             : type_handler_.get_python_type_name(elem_expr.type())) +
+          " found");
+    ensure_string_array(elem_expr);
+    elem_exprs.push_back(elem_expr);
+  }
+  return nil_exprt();
+}
+
 exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 {
   // Validate JSON structure: ensure we have the required keys
@@ -3491,7 +3565,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
     list_node = &var_decl["value"];
   }
-  else if (list_arg.contains("_type") && list_arg["_type"] == "List")
+  else if (is_list_or_tuple_literal(list_arg))
   {
     list_node = &list_arg;
   }
@@ -3578,7 +3652,8 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
   if (
     !list_node || !list_node->contains("_type") ||
-    (*list_node)["_type"] != "List" || !list_node->contains("elts"))
+    ((*list_node)["_type"] != "List" && list_node != &list_arg) ||
+    !list_node->contains("elts"))
   {
     // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
     // a `sorted(...)`, list comprehension, or unannotated parameter).
@@ -3595,63 +3670,50 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
 
+  // A Name variable whose declared initialiser is an empty list may still be
+  // populated at runtime. The preprocessor lowers ''.join(<generator>) and
+  // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
+  // the empty initialiser here would wrongly yield "". An element that is not
+  // a literal must be read where the list was built, not here, where
+  // the names it refers to may since have been rebound. Dispatch both to the
+  // runtime __python_str_join model, which reads the list's runtime contents
+  // (and still returns "" for a genuinely empty list).
+  if (list_arg.value("_type", "") == "Name" && !is_nonempty_constants(elements))
+  {
+    log_debug(
+      "python-string",
+      "join() iterable is a runtime-built list: runtime dispatch");
+    exprt list_expr = converter_.get_expr(list_arg);
+    return string_builder_->build_runtime_str_join_call(separator, list_expr);
+  }
+
   // Edge case: empty list literal
   if (elements.empty())
   {
-    // A Name variable whose declared initialiser is an empty list may still be
-    // populated at runtime. The preprocessor lowers ''.join(<generator>) and
-    // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
-    // the empty initialiser here would wrongly yield "". Dispatch to the
-    // runtime __python_str_join model, which reads the list's runtime contents
-    // (and still returns "" for a genuinely empty list).
-    if (list_arg.contains("_type") && list_arg["_type"] == "Name")
-    {
-      log_debug(
-        "python-string",
-        "join() iterable is a runtime-built list: runtime dispatch");
-      exprt list_expr = converter_.get_expr(list_arg);
-      return string_builder_->build_runtime_str_join_call(separator, list_expr);
-    }
-
     typet empty_string_type = type_handler_.build_array(char_type(), 1);
     exprt empty_str = gen_zero(empty_string_type);
     empty_str.operands().at(0) = from_integer(0, char_type());
     return empty_str;
   }
 
-  // Convert JSON elements to ESBMC expressions
   std::vector<exprt> elem_exprs;
-  for (const auto &elem : elements)
-  {
-    exprt elem_expr = converter_.get_expr(elem);
-    ensure_string_array(elem_expr);
-    elem_exprs.push_back(elem_expr);
-  }
+  const exprt raise = convert_join_items(elements, elem_exprs);
+  if (raise.is_not_nil())
+    return raise;
 
   // Edge case: single element returns the element itself (no separator)
   if (elem_exprs.size() == 1)
     return elem_exprs[0];
 
-  // Build the joined string by extracting characters from all elements
-  // and separators, then constructing a single string.
-  std::vector<exprt> all_chars;
-
-  std::vector<exprt> first_chars =
-    string_builder_->extract_string_chars(elem_exprs[0]);
-  all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
+  // Concatenate pairwise: concatenate_strings folds constant operands and
+  // falls back to the runtime model for an element whose characters are not
+  // known here (a parameter, a call result), which would otherwise be dropped.
+  exprt joined = elem_exprs[0];
   for (size_t i = 1; i < elem_exprs.size(); ++i)
-  {
-    std::vector<exprt> sep_chars =
-      string_builder_->extract_string_chars(separator);
-    all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+    joined = string_builder_->concatenate_strings(
+      string_builder_->concatenate_strings(joined, separator), elem_exprs[i]);
 
-    std::vector<exprt> elem_chars =
-      string_builder_->extract_string_chars(elem_exprs[i]);
-    all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-  }
-
-  return string_builder_->build_null_terminated_string(all_chars);
+  return joined;
 }
 
 exprt string_handler::create_char_comparison_expr(

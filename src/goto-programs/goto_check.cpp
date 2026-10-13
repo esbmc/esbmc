@@ -391,6 +391,16 @@ void goto_checkt::cast_overflow_check(
     cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
 }
 
+static expr2tc overflow_expr(const expr2tc &expr)
+{
+  if (is_neg2t(expr))
+    return overflow_neg2tc(to_neg2t(expr).value);
+  // abs overflows exactly when negating its operand does (C11 7.22.6.1p2).
+  if (is_abs2t(expr))
+    return overflow_neg2tc(to_abs2t(expr).value);
+  return overflow2tc(expr);
+}
+
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -437,8 +447,7 @@ void goto_checkt::overflow_check(
     return;
 
   // add overflow subgoal
-  expr2tc overflow =
-    is_neg2t(expr) ? overflow_neg2tc(to_neg2t(expr).value) : overflow2tc(expr);
+  expr2tc overflow = overflow_expr(expr);
   make_not(overflow);
 
   add_guarded_claim(
@@ -1306,6 +1315,7 @@ void goto_checkt::check_rec(
     /* fallthrough */
 
   case expr2t::neg_id:
+  case expr2t::abs_id:
   case expr2t::add_id:
   case expr2t::sub_id:
   case expr2t::mul_id:

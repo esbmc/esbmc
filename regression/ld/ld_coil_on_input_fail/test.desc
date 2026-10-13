@@ -1,0 +1,4 @@
+CORE
+coil.ld
+--ld-props props.yaml
+^ERROR: .*coil on input 'x'

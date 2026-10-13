@@ -18,6 +18,76 @@ static bool null_is_none(const type2tc &subt, const namespacet &ns)
          ns.follow(migrate_type_back(subt)).id() == "struct";
 }
 
+/// Whether the Python class @p tag, or one of its bases, defines a method
+/// @p name. The class type does not keep its method list, so this looks for
+/// the method's function symbol, which the frontend names
+/// py:<module>@C@<class>@F@<method>. The constructor is named after the class.
+static bool class_has_method(
+  const irep_idt &tag,
+  const std::string &name,
+  const namespacet &ns)
+{
+  const symbolt *cls = ns.lookup(tag);
+  if (!cls || !cls->get_type().is_struct())
+    return false;
+  const std::string class_name = cls->name.as_string();
+  if (name != class_name)
+  {
+    const symbolt *method = ns.lookup(
+      "py:" + cls->module.as_string() + "@C@" + class_name + "@F@" + name);
+    if (method && method->get_type().is_code())
+      return true;
+  }
+  forall_irep (base, cls->get_type().find("bases").get_sub())
+    if (class_has_method(base->id(), name, ns))
+      return true;
+  return false;
+}
+
+/// Whether an object of type @p type has the attribute @p name: an instance
+/// member or a method of its class.
+static bool has_python_attribute(
+  type2tc type,
+  const std::string &name,
+  const namespacet &ns)
+{
+  if (is_pointer_type(type))
+    type = to_pointer_type(type).subtype;
+  if (!is_struct_type(type))
+    return false;
+  const auto &members = struct_union_member_names(type);
+  return std::any_of(
+           members.begin(),
+           members.end(),
+           [&](const irep_idt &memb) { return memb.as_string() == name; }) ||
+         class_has_method(
+           "tag-" + to_struct_type(type).name.as_string(), name, ns);
+}
+
+/// Whether @p value is exactly class @p expected. Classes are told apart by
+/// name, as two distinct classes may share a layout (both empty, say).
+static bool
+same_class(const type2tc &expected, const type2tc &value, const namespacet &ns)
+{
+  if (is_struct_type(expected))
+    return to_struct_type(expected).name == to_struct_type(value).name;
+  return base_type_eq(expected, value, ns);
+}
+
+// An untyped (`void *`) operand that neither constant propagation nor the
+// value set traced back to its object carries no Python type, so no answer is
+// sound: comparing `void *` itself would say "no" to every type. Fail only if
+// this path is reachable, and end it so no check after it relies on the guess.
+void goto_symext::reject_untyped_isinstance(const expr2tc &value)
+{
+  if (
+    !is_symbol2t(value) || !is_pointer_type(value->type) ||
+    !is_empty_type(to_pointer_type(value->type).subtype))
+    return;
+  claim(gen_false_expr(), "isinstance() on a value whose type was lost");
+  assume(gen_false_expr());
+}
+
 void goto_symext::simplify_python_builtins(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
@@ -80,6 +150,8 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     if (is_address_of2t(value))
       value = to_address_of2t(value).ptr_obj;
 
+    reject_untyped_isinstance(value);
+
     if (is_struct_type(value))
     {
       // Check if this is a tuple by examining the tag
@@ -96,7 +168,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
 
       // Check sub class
-      if (base_type_eq(expect_type->type, value->type, ns))
+      if (same_class(expect_type->type, value->type, ns))
         expr = gen_true_expr();
       else if (
         is_struct_type(expect_type->type) &&
@@ -167,22 +239,8 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     if (is_address_of2t(value))
       value = to_address_of2t(value).ptr_obj;
 
-    type2tc obj_type = value->type;
-    if (is_pointer_type(obj_type))
-      obj_type = to_pointer_type(obj_type).subtype;
-
-    if (is_struct_type(obj_type))
-    {
-      const auto &members = struct_union_member_names(obj_type);
-      const bool has_member =
-        std::any_of(members.begin(), members.end(), [&](const irep_idt &memb) {
-          return memb.as_string() == attr_name;
-        });
-      expr = has_member ? gen_true_expr() : gen_false_expr();
-    }
-    else
-      expr = gen_false_expr();
-
+    expr = has_python_attribute(value->type, attr_name, ns) ? gen_true_expr()
+                                                            : gen_false_expr();
     return;
   }
   else if (is_isnone2t(expr))

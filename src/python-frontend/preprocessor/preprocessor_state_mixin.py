@@ -14,12 +14,17 @@ class PreprocessorStateMixin:
         self.range_loop_counter = 0
         self.iterable_loop_counter = 0
         self.enumerate_loop_counter = 0
+        self._iter_counter = 0
+        self.iterator_classes = set()
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
+        self._hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
+        self._closed_lambda_bindings = {}
+        self._fixed_length_starred = {}
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
@@ -77,6 +82,13 @@ class PreprocessorStateMixin:
         # agrees (see _recover_param_dict_annotation).
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
+        # Filled by _scan_fixed_receivers; empty, an unpacked bound method
+        # is never resolved at its calls.
+        self.fixed_receivers = {}
+        self.once_bound_names = set()
+        self.module_statements = {}
+        self.variable_names = set()
+        self.scope_binding_counts = {}
         self.called_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
@@ -124,3 +136,4 @@ class PreprocessorStateMixin:
         self.exported_range_wrappers = {}
         self.module_dunder_all = None
         self._pending_method_default_inits = []
+        self._class_stack = []

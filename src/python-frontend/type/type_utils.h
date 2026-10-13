@@ -147,15 +147,19 @@ public:
 
   static bool is_python_exceptions(const std::string &name)
   {
-    return (
-      name == "BaseException" || name == "Exception" || name == "ValueError" ||
-      name == "TypeError" || name == "AttributeError" || name == "IndexError" ||
-      name == "KeyError" || name == "ZeroDivisionError" ||
-      name == "AssertionError" || name == "NameError" || name == "OSError" ||
-      name == "FileNotFoundError" || name == "FileExistsError" ||
-      name == "PermissionError" || name == "NotImplementedError" ||
-      name == "ImportError" || name == "ModuleNotFoundError" ||
-      name == "RuntimeError" || name == "StopIteration" || name == "EOFError");
+    static const std::unordered_set<std::string> exceptions = {
+      "BaseException",     "Exception",
+      "ValueError",        "TypeError",
+      "AttributeError",    "IndexError",
+      "KeyError",          "ZeroDivisionError",
+      "OverflowError",     "AssertionError",
+      "NameError",         "OSError",
+      "FileNotFoundError", "FileExistsError",
+      "PermissionError",   "NotImplementedError",
+      "ImportError",       "ModuleNotFoundError",
+      "RuntimeError",      "StopIteration",
+      "EOFError",          "UnboundLocalError"};
+    return exceptions.count(name) != 0;
   }
 
   static bool is_c_model_func(const std::string &func_name)
@@ -336,6 +340,25 @@ public:
     }
 
     return flags;
+  }
+
+  // Whether an annotation spells a union with None (`T | None`,
+  // `Union[T, None]`).
+  static bool annotation_admits_none(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return false;
+    if (ann.value("_type", "") == "BinOp")
+      return type_utils::extract_binop_union_types(ann).has_none;
+    if (
+      ann.value("_type", "") != "Subscript" ||
+      ann["value"].value("id", "") != "Union")
+      return false;
+    const nlohmann::json &slice = ann["slice"];
+    for (const auto &elt : slice.value("elts", nlohmann::json::array()))
+      if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+        return true;
+    return false;
   }
 
   static bool is_integer_type(const typet &type)

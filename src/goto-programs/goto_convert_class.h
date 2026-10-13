@@ -3,6 +3,7 @@
 
 #include <goto-programs/goto_program.h>
 #include <list>
+#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
@@ -73,7 +74,6 @@ protected:
   /// Lowers the condition of an if, loop, for or switch statement, a
   /// full-expression whose temporaries are destroyed before the branch
   /// ([class.temporary]/4).
-  /// The operands of a short-circuit operator keep block scope.
   void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
   bool in_short_circuit = false;
 
@@ -96,7 +96,9 @@ protected:
   // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
   // sideeffect2t node, mirroring the legacy exprt overload above.
   bool has_sideeffect(const expr2tc &expr);
-  bool has_short_circuit_sideeffect(const exprt &expr);
+  /// True if lowering expr may create a temporary with a destructor.
+  bool has_destructible_sideeffect(const exprt &expr);
+  bool splits_and_condition(const exprt &cond);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
@@ -171,6 +173,7 @@ protected:
     const exprt &offset,
     const exprt &init,
     const locationt &location,
+    const exprt &built,
     code_blockt &out);
 
   bool cpp_new_init_list(
@@ -178,7 +181,17 @@ protected:
     const exprt &rhs,
     const exprt &init,
     const exprt &elem_count,
+    const exprt &built,
+    code_blockt &out);
+
+  void convert_cpp_new_elements(
+    const exprt &base,
+    const exprt &built,
+    const codet &construction,
     goto_programt &dest);
+
+  bool user_code_throws();
+  std::optional<bool> user_code_throws_cache;
 
   //
   // function calls
@@ -220,6 +233,14 @@ protected:
   void convert_block(const codet &code, goto_programt &dest);
   void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void discard_comma_operands(exprt &initializer, goto_programt &dest);
+  void remove_comma_operand(exprt &operand, goto_programt &dest);
+  void destroy_comma_operand_temporaries(
+    std::size_t stack_size,
+    const locationt &location,
+    goto_programt &dest);
+  /// Temporaries created by a comma's discarded operands.
+  std::set<irep_idt> comma_operand_temporaries;
   void convert_decl_initializer(
     const exprt &var,
     exprt &initializer,
@@ -265,6 +286,11 @@ protected:
   void convert_dowhile(const codet &code, goto_programt &dest);
   void convert_assume(const codet &code, goto_programt &dest);
   void convert_assert(const codet &code, goto_programt &dest);
+  bool emits_assert(const locationt &location) const;
+  void assume_if_ends_path(
+    const expr2tc &guard,
+    const locationt &location,
+    goto_programt &dest);
   void convert_switch(const codet &code, goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);

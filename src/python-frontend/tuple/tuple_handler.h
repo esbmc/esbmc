@@ -153,6 +153,26 @@ private:
    */
   exprt pad_string_element(const exprt &elem) const;
 
+  /// Index of the Starred node in @p targets, or targets.size() if none.
+  size_t starred_target_index(const nlohmann::json &targets) const;
+
+  /// The symbol a Name unpacking target denotes, created with @p type if new.
+  symbolt &
+  unpack_target_symbol(const nlohmann::json &name_node, const typet &type);
+
+  /// Bind a starred target to a list of elements [first, first + count) of
+  /// the tuple @p rhs, as CPython always makes a list.
+  void assign_starred_elements(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &star_value,
+    const exprt &rhs,
+    size_t first,
+    size_t count,
+    codet &target_block);
+
+  /// The member type a tuple[...] annotation element @p node denotes.
+  typet tuple_member_type_from_annotation(const nlohmann::json &node);
+
   python_converter &converter_;
   type_handler &type_handler_;
 };

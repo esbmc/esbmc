@@ -44,6 +44,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
+#include <goto-programs/lower_longjmp.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
@@ -212,6 +213,14 @@ static void apply_gcse(
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+// Exceptions whose escape is not reported as a failed property.
+static std::set<irep_idt> unreported_exceptions(const optionst &options)
+{
+  if (options.get_bool_option("python-ignore-assertions"))
+    return {"AssertionError"};
+  return {};
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -346,12 +355,19 @@ bool esbmc_parseoptionst::process_goto_program(
           adv.comment,
           format_cwe_list(cwe_for(adv.comment)));
 
+    lower_longjmp(goto_functions, context, options);
+
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This
     // is now the only exception path: a program the pass cannot lower is
     // reported as an error rather than silently miscompiled (the legacy
     // imperative path in symex was removed once the lowered subset covered it).
-    remove_exceptions(goto_functions, context, ns);
+    remove_exceptions(
+      goto_functions,
+      context,
+      ns,
+      unreported_exceptions(options),
+      python_checked_exceptions(options));
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
@@ -407,18 +423,13 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
-    // goto_k_induction returns true when a loop writes an array element
-    // through a pointer, which the inductive-step havoc cannot soundly
-    // generalise. Disable the inductive step in that case so its UNSAT is
-    // not reported as proof (#5224); base case and forward condition run.
+    // goto_k_induction returns true, and logs why, when the inductive step
+    // would be unsound: e.g. a loop writes through a pointer to storage its
+    // havoc cannot name (#5224). Disable the step then so its UNSAT is not
+    // reported as proof; base case and forward condition run.
     auto disable_is_if_unsound = [&](bool unsound) {
       if (unsound)
-      {
-        log_warning(
-          "k-induction does not support loops that write array elements "
-          "through a pointer yet. Disabling inductive step");
         options.set_option("disable-inductive-step", true);
-      }
     };
 
     if (cmdline.isset("loop-invariant"))

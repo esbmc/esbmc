@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!Q1 || H1 || H2"
+    description: "A pulse only follows an input that was high within the last two scans"

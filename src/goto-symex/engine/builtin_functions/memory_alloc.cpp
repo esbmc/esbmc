@@ -236,16 +236,21 @@ void goto_symext::symex_realloc(
   }
 
   // ===== determine element type and old object info =====
-  type2tc elem_type;
-  expr2tc old_base_array;
-  bool old_is_array = false;
-  expr2tc old_elem_count;
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_uint8_type(), src_ptr);
+  dereference(deref, dereferencet::INTERNAL);
+  const std::list<dereference_callbackt::internal_item> old_objects =
+    internal_deref_items;
 
-  if (!analyze_old_object(
-        src_ptr, elem_type, old_base_array, old_is_array, old_elem_count))
-  {
-    // Fallback element type determination
+  type2tc elem_type;
+  if (old_objects.empty())
     elem_type = determine_fallback_element_type(code, lhs);
+  else
+  {
+    expr2tc old_base_array;
+    bool old_is_array;
+    analyze_old_object(
+      old_objects.front().object, elem_type, old_base_array, old_is_array);
   }
 
   // calculate new element count
@@ -259,15 +264,7 @@ void goto_symext::symex_realloc(
   expr2tc new_array =
     create_dynamic_memory_symbol(elem_type, realloc_size, "realloc");
 
-  // copy data
-  copy_memory_content(
-    old_base_array,
-    new_array,
-    old_elem_count,
-    new_elem_count,
-    elem_type,
-    old_is_array,
-    guard);
+  copy_old_objects(old_objects, new_array, new_elem_count, elem_type, guard);
 
   // create result and handle failure modelling
   expr2tc result = create_result_pointer(new_array, lhs->type);
@@ -299,23 +296,12 @@ bool goto_symext::handle_realloc_zero_size(
   return false;
 }
 
-bool goto_symext::analyze_old_object(
-  const expr2tc &src_ptr,
+void goto_symext::analyze_old_object(
+  const expr2tc &old_obj,
   type2tc &elem_type,
   expr2tc &old_base_array,
-  bool &old_is_array,
-  expr2tc &old_elem_count)
+  bool &old_is_array)
 {
-  internal_deref_items.clear();
-  expr2tc deref = dereference2tc(get_uint8_type(), src_ptr);
-  dereference(deref, dereferencet::INTERNAL);
-
-  if (internal_deref_items.empty())
-    return false;
-
-  expr2tc old_obj = internal_deref_items.front().object;
-
-  // Determine element type and base array from old object
   if (is_index2t(old_obj))
   {
     old_base_array = to_index2t(old_obj).source_value;
@@ -323,24 +309,45 @@ bool goto_symext::analyze_old_object(
     elem_type = old_is_array ? to_array_type(old_base_array->type).subtype
                              : old_base_array->type;
   }
-  else if (is_array_type(old_obj->type))
-  {
-    old_base_array = old_obj;
-    old_is_array = true;
-    elem_type = to_array_type(old_obj->type).subtype;
-  }
   else
   {
     old_base_array = old_obj;
-    old_is_array = false;
-    elem_type = old_obj->type;
+    old_is_array = is_array_type(old_obj->type);
+    elem_type =
+      old_is_array ? to_array_type(old_obj->type).subtype : old_obj->type;
   }
+}
 
-  // Calculate old element count
-  old_elem_count =
-    calculate_old_element_count(old_base_array, elem_type, old_is_array);
+void goto_symext::copy_old_objects(
+  const std::list<dereference_callbackt::internal_item> &old_objects,
+  const expr2tc &new_array,
+  const expr2tc &new_elem_count,
+  const type2tc &elem_type,
+  const guard2tc &guard)
+{
+  for (const auto &item : old_objects)
+  {
+    type2tc old_elem_type;
+    expr2tc old_base_array;
+    bool old_is_array;
+    analyze_old_object(
+      item.object, old_elem_type, old_base_array, old_is_array);
+    // The new object takes the first object's element type; an object of
+    // another element type is not copied, leaving the new contents nondet.
+    if (old_elem_type != elem_type)
+      continue;
 
-  return true;
+    guard2tc copy_guard = guard;
+    copy_guard.add(item.guard);
+    copy_memory_content(
+      old_base_array,
+      new_array,
+      calculate_old_element_count(old_base_array, elem_type, old_is_array),
+      new_elem_count,
+      elem_type,
+      old_is_array,
+      copy_guard);
+  }
 }
 
 type2tc goto_symext::determine_fallback_element_type(

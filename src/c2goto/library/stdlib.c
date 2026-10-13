@@ -485,6 +485,60 @@ __ESBMC_HIDE:;
   return r;
 }
 
+static void __ESBMC_swap_elements(char *x, char *y, size_t size)
+{
+__ESBMC_HIDE:;
+  char tmp[size];
+  memcpy(tmp, x, size);
+  memcpy(x, y, size);
+  memcpy(y, tmp, size);
+}
+
+/* C11 7.22.5.2 leaves the algorithm and the order of equal elements
+ * unspecified. Whole-element copies keep a floating-point element from
+ * passing through a mix of two elements' bytes. */
+void qsort(
+  void *base,
+  size_t nmemb,
+  size_t size,
+  int (*compar)(const void *, const void *))
+{
+__ESBMC_HIDE:;
+  char *a = base;
+  for (size_t i = 1; i < nmemb; ++i)
+    for (size_t j = i; j > 0 && compar(a + (j - 1) * size, a + j * size) > 0;
+         --j)
+      __ESBMC_swap_elements(a + (j - 1) * size, a + j * size, size);
+}
+
+void *bsearch(
+  const void *key,
+  const void *base,
+  size_t nmemb,
+  size_t size,
+  int (*compar)(const void *, const void *))
+{
+__ESBMC_HIDE:;
+  const char *a = base;
+  /* nmemb at least halves each step, so a halving copy of it, which stays
+   * concrete when the comparisons are symbolic, bounds the loop. */
+  for (size_t steps = nmemb; steps > 0 && nmemb > 0; steps /= 2)
+  {
+    const char *mid = a + nmemb / 2 * size;
+    int c = compar(key, mid);
+    if (c == 0)
+      return (void *)mid;
+    if (c > 0)
+    {
+      a = mid + size;
+      nmemb -= nmemb / 2 + 1;
+    }
+    else
+      nmemb /= 2;
+  }
+  return NULL;
+}
+
 int rand(void)
 {
 __ESBMC_HIDE:;

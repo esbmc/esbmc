@@ -368,6 +368,14 @@ public:
    */
   exprt
   handle_divmod(exprt dividend, exprt divisor, const nlohmann::json &element);
+  exprt handle_numeric_divmod(
+    exprt dividend,
+    exprt divisor,
+    const nlohmann::json &element);
+  exprt raise_divmod_type_error(
+    const typet &dividend_type,
+    const typet &divisor_type,
+    const nlohmann::json &element);
 
   /**
    * @brief Handle exponential function (math.exp)

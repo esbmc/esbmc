@@ -1,5 +1,6 @@
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/type/type_utils.h>
@@ -955,7 +956,71 @@ exprt python_math::handle_sqrt(exprt operand, const nlohmann::json &element)
     "c:@F@sqrt", "sqrt", std::move(operand), element);
 }
 
+/// The built-in types divmod rejects. A class instance may define __divmod__,
+/// and an unannotated any_type is unknown here, so neither is rejected.
+static bool rejected_by_divmod(const typet &t, const typet &list_type)
+{
+  return type_utils::is_string_type(t) || type_utils::is_char_type(t) ||
+         t.is_array() || t == list_type || t == none_type() ||
+         is_complex_type(t);
+}
+
+/// The TypeError is planted as a statement ahead of the call, and an (int,
+/// int) tuple stands in for the result so a caller that unpacks it still
+/// converts.
+exprt python_math::raise_divmod_type_error(
+  const typet &dividend_type,
+  const typet &divisor_type,
+  const nlohmann::json &element)
+{
+  exprt raise = converter.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for divmod(): '" +
+      type_handler_.get_python_type_name(dividend_type) + "' and '" +
+      type_handler_.get_python_type_name(divisor_type) + "'");
+  raise.location() = converter.get_location_from_decl(element);
+  converter.add_instruction(code_expressiont(raise));
+  const typet int_t = type_handler_.get_typet(std::string("int"));
+  exprt tuple(
+    "struct",
+    converter.get_tuple_handler().create_tuple_struct_type({int_t, int_t}));
+  tuple.copy_to_operands(gen_zero(int_t), gen_zero(int_t));
+  return tuple;
+}
+
 exprt python_math::handle_divmod(
+  exprt dividend,
+  exprt divisor,
+  const nlohmann::json &element)
+{
+  // A lambda body or the type-probe pass cannot take the planted raise.
+  const typet list_type = type_handler_.get_list_type();
+  if (
+    converter.safe_to_emit_side_effecting_statement() &&
+    (rejected_by_divmod(dividend.type(), list_type) ||
+     rejected_by_divmod(divisor.type(), list_type)))
+    return raise_divmod_type_error(dividend.type(), divisor.type(), element);
+
+  // An unannotated parameter no call site types is a void* carrier. Read it
+  // as an int, as binary arithmetic does, so the divmod lowering stays typed.
+  auto is_any_ptr = [](const exprt &e) {
+    return e.type().is_pointer() && e.type().subtype().is_empty();
+  };
+  auto int_like = [this](const exprt &other) {
+    const typet &t = other.type();
+    return t.is_signedbv() || t.is_unsignedbv()
+             ? t
+             : type_handler_.get_typet(std::string("int"));
+  };
+  if (is_any_ptr(dividend))
+    dividend = typecast_exprt(dividend, int_like(divisor));
+  if (is_any_ptr(divisor))
+    divisor = typecast_exprt(divisor, int_like(dividend));
+  return handle_numeric_divmod(
+    std::move(dividend), std::move(divisor), element);
+}
+
+exprt python_math::handle_numeric_divmod(
   exprt dividend,
   exprt divisor,
   const nlohmann::json &element)
@@ -1240,6 +1305,7 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
       return from_integer(static_cast<long long>(truncated), int_type());
   }
 
+  operand = converter.guard_nonfinite_float_to_int(std::move(operand), element);
   exprt trunc_call =
     build_unary_c_math_call("c:@F@trunc", "trunc", std::move(operand), element);
   exprt to_int("typecast", int_type());

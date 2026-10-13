@@ -1,5 +1,6 @@
 #pragma once
 
+#include <irep2/irep2.h>
 #include <nlohmann/json.hpp>
 #include <python-frontend/type/element_type_registry.h>
 #include <util/irep/type.h>
@@ -79,11 +80,14 @@ public:
    * @param size     Expression giving the number of elements (often symbolic).
    * @param fill_value Element value pushed on each iteration.
    * @param elem_type  IRep2 type of @p fill_value, recorded in the registry.
+   * @param index_base When non-null, each element is @p index_base plus the
+   *        loop index rather than @p fill_value, which is what a range needs.
    */
   exprt build_symbolic_fill_list(
     const exprt &size,
     const exprt &fill_value,
-    const typet &elem_type);
+    const typet &elem_type,
+    const exprt *index_base = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
@@ -558,6 +562,27 @@ public:
     const exprt &lhs,
     const exprt &rhs);
 
+  /**
+   * @brief Turn the store @p lhs = @p rhs into a replacement of the element
+   * record when the value cannot be written through the element's type.
+   *
+   * @p lhs is the subscript target `*(T *)item->value` of the list subscript
+   * this handler was built for. When @p rhs is a tuple of another type than T
+   * (or T is a tuple and @p rhs is not), the pair is rewritten into
+   * `*item = *list_at(tmp, 0)`, with tmp a list holding @p rhs, so the slot
+   * gets the new value, type_id and size. Otherwise both are left unchanged.
+   */
+  void retype_element_store(exprt &lhs, exprt &rhs);
+
+  /// Equality of two list elements read as @p lhs_type and @p rhs_type for
+  /// compare()'s fast path, or nullopt when it cannot relate them. Both types
+  /// are numeric, bool or tuple.
+  std::optional<expr2tc> fast_elem_equality(
+    exprt lhs_val,
+    exprt rhs_val,
+    const typet &lhs_type,
+    const typet &rhs_type) const;
+
   exprt build_push_list_call(
     const symbolt &list,
     const nlohmann::json &op,
@@ -622,6 +647,13 @@ public:
     const symbolt &list,
     const exprt &index,
     const nlohmann::json &element);
+
+  /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
+  /// reads, when `rhs` changes the element's type; nullopt otherwise.
+  std::optional<exprt> build_element_replacement(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &op);
 
   /**
    * @brief Extract and dereference value from a PyObject* expression
@@ -692,7 +724,8 @@ public:
   static exprt build_list_from_range(
     python_converter &converter,
     const nlohmann::json &range_args,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool materialise_elements = true);
 
   /**
    * @brief Materialise a tuple value into a fresh list, pushing each component
@@ -870,6 +903,40 @@ public:
     codet &target_block);
 
 private:
+  /// Emits `size = len(list_expr)` and a ValueError unless it fits @p fixed
+  /// targets (at least @p fixed when @p starred); returns the size.
+  exprt check_unpack_length(
+    const exprt &list_expr,
+    size_t fixed,
+    bool starred,
+    const locationt &loc,
+    codet &target_block);
+
+  typet unpack_elem_type(
+    const std::string &list_id,
+    size_t i,
+    const typet &fallback) const;
+
+  /// The recorded index @p from_end entries from the end, or SIZE_MAX.
+  size_t
+  recorded_index_from_end(const std::string &list_id, size_t from_end) const;
+
+  void record_starred_elem_types(
+    const std::string &list_id,
+    const std::string &star_id,
+    size_t before_star,
+    size_t after_star,
+    const typet &elem_type);
+
+  /// Binds @p val, element @p i of the list @p list_id, to @p tgt_node.
+  void assign_unpack_target(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &tgt_node,
+    const std::string &list_id,
+    size_t i,
+    const exprt &val,
+    codet &target_block);
+
   friend class python_dict_handler;
 
   // Evaluates value_node once and snapshots it into a fresh temporary, so a
@@ -1126,18 +1193,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handle symbolic (non-constant) range arguments
-   * @param converter The python converter instance
-   * @param range_args The range arguments from the AST
-   * @param element The AST element for location tracking
-   * @return Expression representing the symbolic range list
-   */
-  static exprt handle_symbolic_range(
-    python_converter &converter,
-    const nlohmann::json &range_args,
-    const nlohmann::json &element);
-
-  /**
    * @brief Set symbolic size on a list structure
    * @param converter The python converter instance
    * @param list_expr The list expression to modify
@@ -1149,6 +1204,25 @@ private:
     exprt &list_expr,
     const exprt &size_expr,
     const nlohmann::json &element);
+
+  /**
+   * @brief Handle symbolic (non-constant) range arguments
+   * @param converter The python converter instance
+   * @param range_args The range arguments from the AST
+   * @param element The AST element for location tracking
+   * @param materialise_elements Write each element, which a `list(range(...))`
+   *        needs because its elements are read. A bare `range(...)` passes
+   *        false and keeps the size-only list it has always produced: its
+   *        elements are read by `x in range(...)` but materialising them
+   *        costs unwinding that `len(range(n))` cannot afford under a fixed
+   *        `--unwind`.
+   * @return Expression representing the symbolic range list
+   */
+  static exprt handle_symbolic_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element,
+    bool materialise_elements);
 
   /**
    * @brief Build a concrete range with constant bounds

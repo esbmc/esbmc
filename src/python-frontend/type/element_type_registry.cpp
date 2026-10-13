@@ -102,6 +102,23 @@ void element_type_registry::reverse(const std::string &id, type_slot slot)
   std::reverse(it->second.begin(), it->second.end());
 }
 
+void element_type_registry::replace(
+  const std::string &id,
+  size_t index,
+  const std::string &elem_id,
+  const typet &elem_type,
+  type_slot slot)
+{
+  slot_map &m = map_for(slot);
+  auto it = m.find(id);
+  if (it == m.end())
+    return;
+  if (index < it->second.size())
+    it->second[index] = {elem_id, elem_type};
+  else
+    m.erase(it);
+}
+
 const element_type_registry::entries *
 element_type_registry::find(const std::string &id, type_slot slot) const
 {

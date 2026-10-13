@@ -24,6 +24,7 @@
 #include <util/irep/std_code.h>
 #include <util/expr/symbolic_types.h>
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <optional>
@@ -214,6 +215,33 @@ void count_bindings(
   for (const auto &child : node.items())
     count_bindings(child.value(), writes, nested || enters_scope);
 }
+
+/// Whether @p node, outside any nested scope, holds `return <lambda>`.
+bool returned_by(const nlohmann::json &node, const nlohmann::json &lambda)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &item) {
+      return returned_by(item, lambda);
+    });
+  if (!node.is_object())
+    return false;
+
+  const std::string kind = node.value("_type", "");
+  if (kind == "Return")
+  {
+    const nlohmann::json &value = field(node, "value");
+    return value.is_object() && value.value("_type", "") == "Lambda" &&
+           value.value("lineno", -1) == lambda.value("lineno", -2) &&
+           value.value("col_offset", -1) == lambda.value("col_offset", -2);
+  }
+  if (scope_kinds.count(kind))
+    return false;
+
+  for (const auto &child : node.items())
+    if (returned_by(child.value(), lambda))
+      return true;
+  return false;
+}
 } // namespace
 
 code_blockt python_converter::create_capture_cells(
@@ -221,8 +249,6 @@ code_blockt python_converter::create_capture_cells(
   const symbol_id &id,
   const locationt &location)
 {
-  code_blockt bindings;
-
   // Only a function nested directly in another function has an enclosing frame
   // to capture from. A top-level function would cut back to the module scope
   // (its globals need no cell), and a method's id carries an @C@ component the
@@ -230,10 +256,50 @@ code_blockt python_converter::create_capture_cells(
   if (
     current_func_name_.find("@F@") == std::string::npos ||
     !current_class_name_.empty())
-    return bindings;
+    return code_blockt();
 
   const std::string func_id = id.to_string();
-  const std::string enclosing_scope = func_id.substr(0, func_id.rfind("@F@"));
+  return bind_capture_cells(
+    free_variables(function_node),
+    func_id.substr(0, func_id.rfind("@F@")),
+    func_id,
+    location);
+}
+
+void python_converter::capture_lambda_free_variables(
+  const nlohmann::json &lambda_node,
+  const std::string &lambda_id,
+  const locationt &location)
+{
+  // A lambda is converted to a module-level function, so a free variable it
+  // reads resolves to the enclosing function's local, which is gone once the
+  // lambda is returned out of the frame (#8410). A lambda used inside the frame
+  // keeps reading that local: a cell would be poisoned as soon as the function
+  // runs twice with different values. can_emit_runtime_guard() would refuse
+  // here, as converting_lambda_body_ is already set for the whole lambda.
+  if (
+    current_func_name_.empty() || !current_class_name_.empty() ||
+    enclosing_function_node_ == nullptr || !current_block ||
+    in_rhs_type_probe_ || in_contract_clause_ || in_lazy_operand_ ||
+    !returned_by(field(*enclosing_function_node_, "body"), lambda_node))
+    return;
+
+  code_blockt bindings = bind_capture_cells(
+    free_variables(lambda_node),
+    create_symbol_id().to_string(),
+    lambda_id,
+    location);
+  for (const exprt &binding : bindings.operands())
+    add_instruction(binding);
+}
+
+code_blockt python_converter::bind_capture_cells(
+  const std::set<std::string> &free_names,
+  const std::string &enclosing_scope,
+  const std::string &func_id,
+  const locationt &location)
+{
+  code_blockt bindings;
 
   // A Python closure reads the enclosing binding, not a def-time copy, so the
   // cell is only faithful while nothing rebinds the name after the `def`. The
@@ -262,7 +328,7 @@ code_blockt python_converter::create_capture_cells(
     return symbol_expr(*symbol_table_.find_symbol(sym_id));
   };
 
-  for (const std::string &name : free_variables(function_node))
+  for (const std::string &name : free_names)
   {
     symbolt *source = symbol_table_.find_symbol(enclosing_scope + "@" + name);
     if (source == nullptr || writes[name] > (source->is_parameter ? 0u : 1u))
@@ -2106,6 +2172,417 @@ static std::string assignment_target_name(const nlohmann::json &stmt)
   return "";
 }
 
+// Bindings of `name` in the scope whose statements are `node`. A nested
+// function or class is a scope of its own and counts only for its name.
+static std::size_t
+count_scope_stores(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object() && !node.is_array())
+    return 0;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (scope_kinds.count(kind) != 0)
+    return node.value("name", "") == name ? 1 : 0;
+  if (kind == "Name")
+  {
+    const std::string ctx =
+      node.contains("ctx") ? node["ctx"].value("_type", "") : "";
+    return node.value("id", "") == name && ctx != "Load" ? 1 : 0;
+  }
+  std::size_t stores = 0;
+  for (const auto &child : node)
+    stores += count_scope_stores(child, name);
+  return stores;
+}
+
+// Whether some scope declares `name` global or nonlocal, and so may rebind
+// it from outside the scope that owns it.
+static bool
+declared_global_or_nonlocal(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (kind == "Global" || kind == "Nonlocal")
+  {
+    for (const auto &declared : node["names"])
+      if (declared == name)
+        return true;
+    return false;
+  }
+  for (const auto &child : node)
+    if (declared_global_or_nonlocal(child, name))
+      return true;
+  return false;
+}
+
+// The function whose scope binds `name` for code in `enclosing_function`,
+// "" for the module. nullopt when that cannot be read from the AST:
+// `enclosing_function` is not a module-level function, or `name` is one of
+// its parameters.
+static std::optional<std::string> binding_function(
+  const nlohmann::json &module_body,
+  const std::string &enclosing_function,
+  const std::string &name)
+{
+  if (enclosing_function.empty())
+    return std::string();
+  const nlohmann::json *def =
+    find_function_def(module_body, enclosing_function);
+  if (def == nullptr || !def->contains("args") || !def->contains("body"))
+    return std::nullopt;
+  for (const auto &param : (*def)["args"]["args"])
+    if (param.value("arg", "") == name)
+      return std::nullopt;
+  return count_scope_stores((*def)["body"], name) != 0 ? enclosing_function
+                                                       : std::string();
+}
+
+// The value of the one statement that binds `name` in the scope of
+// `function`. nullptr when the name is bound more than once, by anything
+// other than a top-level assignment, or may be rebound from another scope:
+// the value would then depend on the path taken to the use.
+static const nlohmann::json *single_assigned_value(
+  const nlohmann::json &module_body,
+  const std::string &function,
+  const std::string &name)
+{
+  const nlohmann::json &body =
+    function.empty() ? module_body
+                     : (*find_function_def(module_body, function))["body"];
+  if (
+    count_scope_stores(body, name) != 1 ||
+    declared_global_or_nonlocal(module_body, name))
+    return nullptr;
+  for (const auto &stmt : body)
+    if (
+      assignment_target_name(stmt) == name && stmt.contains("value") &&
+      !stmt["value"].is_null())
+      return &stmt["value"];
+  return nullptr;
+}
+
+// The subscript a call argument denotes for code in `function`: the argument
+// itself, or the value of the name it is, followed through single
+// assignments. `function` becomes the scope the subscript is evaluated in.
+static const nlohmann::json *resolve_view_subscript(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  std::string &function,
+  unsigned depth = 0)
+{
+  const std::string kind = arg.value("_type", "");
+  if (kind == "Subscript")
+    return &arg;
+  if (kind != "Name" || depth > 8)
+    return nullptr;
+  const std::string name = arg.value("id", "");
+  const std::optional<std::string> scope =
+    binding_function(module_body, function, name);
+  if (!scope)
+    return nullptr;
+  function = *scope;
+  const nlohmann::json *value =
+    single_assigned_value(module_body, function, name);
+  return value == nullptr
+           ? nullptr
+           : resolve_view_subscript(*value, module_body, function, depth + 1);
+}
+
+// Returns (shape, elem_type) for a nested array type; nullopt when any
+// dimension is not a constant or the type contains no array nesting.
+static std::optional<std::pair<std::vector<std::size_t>, typet>>
+array_type_shape_and_elem(const typet &arr_type)
+{
+  std::vector<std::size_t> shape;
+  typet cur = arr_type;
+  while (cur.is_array())
+  {
+    const array_typet &at = to_array_type(cur);
+    if (!at.size().is_constant())
+      return std::nullopt;
+    shape.push_back(
+      static_cast<std::size_t>(
+        binary2integer(at.size().value().c_str(), false).to_int64()));
+    cur = at.subtype();
+  }
+  if (shape.empty())
+    return std::nullopt;
+  return std::make_pair(shape, cur);
+}
+
+// Index of the parameter of `function_name` that `arg` forwards unchanged:
+// a bare `Name` naming a parameter the function body never rebinds.
+static std::optional<std::size_t> forwarded_param_index(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  const std::string &function_name)
+{
+  const nlohmann::json *def = find_function_def(module_body, function_name);
+  if (
+    def == nullptr || arg.value("_type", "") != "Name" ||
+    !def->contains("args") || !def->contains("body"))
+    return std::nullopt;
+
+  const std::string name = arg.value("id", "");
+  std::set<std::string> loads, bound, rebound;
+  collect_scope_names((*def)["body"], loads, bound, rebound);
+  if (bound.count(name) != 0 || rebound.count(name) != 0)
+    return std::nullopt;
+
+  const nlohmann::json &params = (*def)["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      return i;
+  return std::nullopt;
+}
+
+// `a[lo:hi:step]` on a 1-D array of `length` elements.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::slice_view_info(
+  std::size_t length,
+  const nlohmann::json &slice_node)
+{
+  const std::optional<std::size_t> len =
+    python_frontend::literal_slice_length(length, slice_node);
+  const std::optional<long long> step =
+    python_frontend::literal_slice_step(slice_node);
+  if (!len || !step || *step == 0)
+    return std::nullopt;
+  numpy_scalar_pointer_view_infot info{};
+  info.length = *len;
+  info.stride = *step;
+  info.shape = {*len};
+  if (*step != 1)
+    info.strides = {*step};
+  return info;
+}
+
+static bool is_index_node(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  return type == "Constant" || type == "UnaryOp" || type == "Name";
+}
+
+// `a[lo:hi:step, k]` on a rows x cols array: the selected rows of a column,
+// one element every `step * cols`.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::column_view_info(
+  std::size_t rows,
+  std::size_t cols,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !slice_node.contains("elts") || slice_node["elts"].size() != 2 ||
+    slice_node["elts"][0].value("_type", "") != "Slice" ||
+    !is_index_node(slice_node["elts"][1]))
+    return std::nullopt;
+  std::optional<numpy_scalar_pointer_view_infot> info =
+    slice_view_info(rows, slice_node["elts"][0]);
+  if (!info)
+    return std::nullopt;
+  info->stride *= static_cast<long long>(cols);
+  info->strides = {info->stride};
+  return info;
+}
+
+// Length, stride and shape of the view a subscript takes of an array of
+// `src_shape`: a 1-D slice, or a row or a column of a 2-D array. nullopt for
+// non-literal bounds and any other form.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::view_info_from_subscript(
+  const std::vector<std::size_t> &src_shape,
+  const nlohmann::json &slice_node)
+{
+  const std::string slice_type = slice_node.value("_type", "");
+  if (slice_type == "Slice" && src_shape.size() == 1)
+    return slice_view_info(src_shape[0], slice_node);
+  if (src_shape.size() != 2)
+    return std::nullopt;
+  if (slice_type == "Tuple")
+    return column_view_info(src_shape[0], src_shape[1], slice_node);
+  if (!is_index_node(slice_node))
+    return std::nullopt;
+  numpy_scalar_pointer_view_infot info{};
+  info.length = src_shape[1];
+  info.stride = 1;
+  info.shape = {src_shape[1]};
+  return info;
+}
+
+bool python_converter::same_view_layout(
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &b)
+{
+  return a.first == b.first && a.second.shape == b.second.shape &&
+         a.second.stride == b.second.stride &&
+         a.second.strides == b.second.strides;
+}
+
+// The argument a call passes for parameter `param_index` of `func_name`,
+// positionally or by keyword. nullptr when the call is to another function
+// or leaves the parameter to its default.
+static const nlohmann::json *call_site_argument(
+  const nlohmann::json &call,
+  const nlohmann::json &module_body,
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  if (
+    call.value("func", nlohmann::json::object()).value("_type", "") != "Name" ||
+    call["func"].value("id", "") != func_name || !call.contains("args"))
+    return nullptr;
+  if (call["args"].size() > param_index)
+    return &call["args"][param_index];
+  const nlohmann::json *def = find_function_def(module_body, func_name);
+  if (
+    def == nullptr || !call.contains("keywords") ||
+    (*def)["args"]["args"].size() <= param_index)
+    return nullptr;
+  const std::string param =
+    (*def)["args"]["args"][param_index].value("arg", "");
+  for (const auto &keyword : call["keywords"])
+    if (keyword.value("arg", "") == param)
+      return &keyword["value"];
+  return nullptr;
+}
+
+static std::string
+view_param_key(const std::string &func_name, std::size_t param_index)
+{
+  return func_name + "#" + std::to_string(param_index);
+}
+
+// Whether `arg` forwards a parameter whose inference is already in progress:
+// a recursive call, whose layout the other call sites determine.
+static bool forwards_param_being_inferred(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  const std::string &enclosing_function,
+  const std::set<std::string> &visiting)
+{
+  const std::optional<std::size_t> forwarded =
+    forwarded_param_index(arg, module_body, enclosing_function);
+  return forwarded &&
+         visiting.count(view_param_key(enclosing_function, *forwarded)) != 0;
+}
+
+// Type of the literal `np.array(...)` bound to `arr_name` for code in
+// `function`.
+std::optional<typet> python_converter::numpy_literal_array_type(
+  const std::string &arr_name,
+  const std::string &function) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const std::optional<std::string> scope =
+    binding_function(module_body, function, arr_name);
+  const nlohmann::json *value =
+    scope ? single_assigned_value(module_body, *scope, arr_name) : nullptr;
+  if (value == nullptr || !is_numpy_array_literal_call(*value))
+    return std::nullopt;
+  return type_handler_.get_typet((*value)["args"][0]);
+}
+
+// Element type and layout of the view one call site passes as `arg`:
+// a parameter of the enclosing function forwarded unchanged, or a subscript
+// of a literal array, both resolved in the scope of the call.
+std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
+python_converter::infer_numpy_view_argument(
+  const numpy_param_call_site &site,
+  const nlohmann::json &arg,
+  std::set<std::string> &visiting) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  if (
+    const std::optional<std::size_t> forwarded =
+      forwarded_param_index(arg, module_body, site.enclosing_function))
+  {
+    std::pair<typet, numpy_scalar_pointer_view_infot> result;
+    if (!try_infer_numpy_view_param(
+          site.enclosing_function,
+          *forwarded,
+          result.first,
+          result.second,
+          visiting))
+      return std::nullopt;
+    return result;
+  }
+
+  std::string scope = site.enclosing_function;
+  const nlohmann::json *subscript =
+    resolve_view_subscript(arg, module_body, scope);
+  if (
+    subscript == nullptr || !subscript->contains("slice") ||
+    (*subscript)["value"].value("_type", "") != "Name")
+    return std::nullopt;
+  const std::optional<typet> arr_type =
+    numpy_literal_array_type((*subscript)["value"].value("id", ""), scope);
+  if (!arr_type)
+    return std::nullopt;
+  const auto shape_elem = array_type_shape_and_elem(*arr_type);
+  if (!shape_elem)
+    return std::nullopt;
+  const std::optional<numpy_scalar_pointer_view_infot> info =
+    view_info_from_subscript(shape_elem->first, (*subscript)["slice"]);
+  if (!info)
+    return std::nullopt;
+  return std::make_pair(shape_elem->second, *info);
+}
+
+bool python_converter::try_infer_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index,
+  typet &out_elem_type,
+  numpy_scalar_pointer_view_infot &out_info) const
+{
+  std::set<std::string> visiting;
+  return try_infer_numpy_view_param(
+    func_name, param_index, out_elem_type, out_info, visiting);
+}
+
+// `visiting` holds the parameters on the current forwarding path. Every call
+// site must pass a view whose layout can be read and all must agree: a site
+// left out would run the callee with another site's length.
+bool python_converter::try_infer_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index,
+  typet &out_elem_type,
+  numpy_scalar_pointer_view_infot &out_info,
+  std::set<std::string> &visiting) const
+{
+  const std::string key = view_param_key(func_name, param_index);
+  if (!visiting.insert(key).second)
+    return false;
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> result;
+  bool analyzable = true;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json *arg =
+      call_site_argument(*site.call, module_body, func_name, param_index);
+    if (
+      arg == nullptr || forwards_param_being_inferred(
+                          *arg, module_body, site.enclosing_function, visiting))
+      continue;
+    const auto candidate = infer_numpy_view_argument(site, *arg, visiting);
+    analyzable =
+      candidate && (!result || same_view_layout(*result, *candidate));
+    if (!analyzable)
+      break;
+    result = candidate;
+  }
+
+  visiting.erase(key);
+  if (!analyzable || !result)
+    return false;
+  out_elem_type = result->first;
+  out_info = result->second;
+  return true;
+}
+
 // `visited` guards against a name-aliasing cycle (e.g. `x = y` followed by
 // `y = x` in the same scope): resolve_bytes_expr_size would otherwise recurse
 // between the two assignments forever, since scope_body's statements are
@@ -2279,6 +2756,116 @@ static bool is_bare_callable_annotation(const nlohmann::json &ann)
   if (kind == "Attribute")
     return ann.value("attr", "") == "Callable";
   return false;
+}
+
+/// The name a single AST node binds, or "" when it binds none.
+static std::string bound_name(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+    return node.value("name", "");
+  if (kind == "arg")
+    return node.value("arg", "");
+  if (kind == "alias")
+    return node.contains("asname") && node["asname"].is_string()
+             ? node["asname"].get<std::string>()
+             : node.value("name", "");
+  if (kind == "Name" && node.contains("ctx"))
+    return node["ctx"].value("_type", "") == "Store" ? node.value("id", "")
+                                                     : "";
+  return "";
+}
+
+/// Whether `node` binds `name` (a parameter, nested definition, import or
+/// assignment target), which would shadow the module-level function.
+static bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+      return binds_name(child, name);
+    });
+  if (!node.is_object())
+    return false;
+  if (bound_name(node) == name)
+    return true;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return binds_name(child, name);
+  });
+}
+
+/// The functions a body returns by name, through conditional expressions.
+/// Empty when any return value is something else.
+static std::vector<std::string>
+returned_function_names(const nlohmann::json &function_node)
+{
+  std::vector<nlohmann::json> values;
+  collect_return_values(function_node["body"], values);
+  std::vector<std::string> names;
+  while (!values.empty())
+  {
+    const nlohmann::json value = values.back();
+    values.pop_back();
+    const std::string kind = value.value("_type", "");
+    if (kind == "Name")
+    {
+      const std::string name = value["id"].get<std::string>();
+      if (
+        binds_name(function_node["args"], name) ||
+        binds_name(function_node["body"], name))
+        return {};
+      names.push_back(name);
+    }
+    else if (kind == "IfExp")
+    {
+      values.push_back(value["body"]);
+      values.push_back(value["orelse"]);
+    }
+    else
+      return {};
+  }
+  return names;
+}
+
+static bool same_signature(const code_typet &a, const code_typet &b)
+{
+  if (
+    a.return_type() != b.return_type() ||
+    a.arguments().size() != b.arguments().size())
+    return false;
+  for (std::size_t i = 0; i < a.arguments().size(); ++i)
+    if (a.arguments()[i].type() != b.arguments()[i].type())
+      return false;
+  return true;
+}
+
+typet python_converter::returned_function_type(
+  const nlohmann::json &function_node)
+{
+  const typet callable = type_handler_.get_typet(std::string("Callable"));
+  std::optional<code_typet> signature;
+  for (const std::string &name : returned_function_names(function_node))
+  {
+    const symbolt *fn =
+      find_symbol(symbol_id(current_python_file, "", name).to_string());
+    if (!fn || !fn->get_type().is_code())
+      return callable;
+    const code_typet &fn_type = to_code_type(fn->get_type());
+    if (!signature)
+      signature = fn_type;
+    else if (!same_signature(*signature, fn_type))
+      return callable;
+  }
+  return signature ? gen_pointer_type(*signature) : callable;
+}
+
+typet python_converter::named_return_type(
+  const std::string &name,
+  const nlohmann::json &return_node,
+  const nlohmann::json &function_node)
+{
+  if (is_bare_callable_annotation(return_node))
+    return returned_function_type(function_node);
+  return resolve_generic_return_type(name, function_node, type_handler_);
 }
 
 /// Whether the parameter takes the Any (void*) default: no annotation at all,
@@ -2456,6 +3043,45 @@ std::optional<typet> python_converter::try_infer_bytes_param_size(
   return type_handler_.get_typet("bytes", inferred_size);
 }
 
+// A parameter no numpy array was inferred for may receive a scalar-pointer
+// view (ADR-NP-003 etapa 2): on success `arg_type` becomes a pointer to the
+// element type and the view layout is returned.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::infer_numpy_view_param_type(
+  const std::string &func_name,
+  std::size_t param_index,
+  const std::string &arg_name,
+  bool numpy_array_param,
+  typet &arg_type) const
+{
+  if (
+    numpy_array_param || arg_name == "self" || arg_name == "cls" ||
+    (arg_type != any_type() && arg_type != type_handler_.get_list_type()))
+    return std::nullopt;
+  typet elem_type;
+  numpy_scalar_pointer_view_infot info;
+  if (!try_infer_numpy_view_param(func_name, param_index, elem_type, info))
+    return std::nullopt;
+  arg_type = gen_pointer_type(elem_type);
+  return info;
+}
+
+void python_converter::register_numpy_view_param(
+  const std::optional<numpy_scalar_pointer_view_infot> &view_param,
+  const std::string &arg_id,
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  if (!view_param)
+    return;
+  numpy_scalar_pointer_view_infot info = *view_param;
+  info.source_id = arg_id;
+  numpy_pointer_view_info_[arg_id] = info;
+  numpy_array_symbols_.insert(arg_id);
+  numpy_view_param_symbols_.insert(arg_id);
+  numpy_view_params_.insert(func_name + "#" + std::to_string(param_index));
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -2533,6 +3159,14 @@ size_t python_converter::register_function_argument(
     id.get_function(),
     type.arguments().size(),
     arg_name);
+
+  const std::optional<numpy_scalar_pointer_view_infot> view_param =
+    infer_numpy_view_param_type(
+      id.get_function(),
+      type.arguments().size(),
+      arg_name,
+      numpy_array_param,
+      arg_type);
 
   // Same idea, but for a parameter fed a dynamically-typed local variable.
   if (
@@ -2626,6 +3260,10 @@ size_t python_converter::register_function_argument(
   param_symbol.static_lifetime = false;
   param_symbol.is_extern = false;
   symbol_table_.add(param_symbol);
+
+  register_numpy_view_param(
+    view_param, arg_id, id.get_function(), inserted_index);
+
   symbolt *stored_param = symbol_table_.find_symbol(arg_id);
   if (
     stored_param != nullptr && element.contains("annotation") &&
@@ -2715,7 +3353,7 @@ void python_converter::process_function_arguments(
           positional_indices[positional_indices.size() - defaults_count + i];
         if (!defaults[i].is_null())
         {
-          exprt default_expr = get_expr(defaults[i]);
+          exprt default_expr = get_default_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
           upgrade_param_type_from_default(
             type.arguments()[positional_index], default_expr);
@@ -2733,7 +3371,7 @@ void python_converter::process_function_arguments(
     {
       if (!kw_defaults[i].is_null())
       {
-        exprt default_expr = get_expr(kw_defaults[i]);
+        exprt default_expr = get_default_expr(kw_defaults[i]);
         type.arguments()[kwonly_indices[i]].default_value() = default_expr;
         upgrade_param_type_from_default(
           type.arguments()[kwonly_indices[i]], default_expr);
@@ -3231,25 +3869,6 @@ static bool any_return(
   return false;
 }
 
-/// Whether a return annotation spells a union with None (`T | None`,
-/// `Union[T, None]`).
-static bool annotation_admits_none(const nlohmann::json &returns)
-{
-  if (!returns.is_object())
-    return false;
-  if (returns.value("_type", "") == "BinOp")
-    return type_utils::extract_binop_union_types(returns).has_none;
-  if (
-    returns.value("_type", "") != "Subscript" ||
-    returns["value"].value("id", "") != "Union")
-    return false;
-  const nlohmann::json &slice = returns["slice"];
-  for (const auto &elt : slice.value("elts", nlohmann::json::array()))
-    if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
-      return true;
-  return false;
-}
-
 /// Whether a return in \p body yields None: a bare `return`, `return None`, or
 /// a conditional expression with a None arm.
 static bool returns_none(const nlohmann::json &body)
@@ -3280,7 +3899,9 @@ typet python_converter::optional_return_type(
   const bool unannotated = !returns.is_object() ||
                            returns.value("_inferred_annotation", false) ||
                            declared.is_empty();
-  if (!returns_none(function_node["body"]) && !annotation_admits_none(returns))
+  if (
+    !returns_none(function_node["body"]) &&
+    !type_utils::annotation_admits_none(returns))
     return typet();
   if (!unannotated)
     return type_handler_.build_optional_type(declared);
@@ -3291,6 +3912,149 @@ typet python_converter::optional_return_type(
     return typet();
   return type_handler_.build_optional_type(
     type_utils::select_widest_type(flags, long_long_int_type()));
+}
+
+// Names through which a program can reach any function without naming it.
+static bool is_dynamic_lookup(const nlohmann::json &node)
+{
+  static const std::set<std::string> lookups = {
+    "globals", "locals", "vars", "eval", "exec"};
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return lookups.count(node.value("id", "")) != 0;
+  if (type != "Call" || node["func"].value("id", "") != "getattr")
+    return false;
+  const nlohmann::json &args = node["args"];
+  return args.size() < 2 || !args[1].contains("value") ||
+         !args[1]["value"].is_string();
+}
+
+// Conservative and syntactic: any string in the AST equal to @p name, other
+// than a definition's own name, may reach it -- a Name, an attribute, an
+// import alias, a string constant such as getattr's -- and so does a dynamic
+// lookup.
+static bool json_mentions(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_string())
+    return node.get_ref<const std::string &>() == name;
+  if (!node.is_structured())
+    return false;
+  if (node.is_object() && is_dynamic_lookup(node))
+    return true;
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  const bool is_def =
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef";
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (!(is_def && it.key() == "name") && json_mentions(it.value(), name))
+      return true;
+  return false;
+}
+
+// Options that name a function on the command line, or select functions by
+// their contracts, rather than in the program.
+static bool options_name_functions()
+{
+  static const char *const named[] = {
+    "function",
+    "enforce-contract",
+    "replace-call-with-contract",
+    "enforce-all-contracts",
+    "replace-all-contracts"};
+  return std::any_of(std::begin(named), std::end(named), [](const char *o) {
+    return !config.options.get_option(o).empty();
+  });
+}
+
+// A dunder is called implicitly, a decorator may call or register what it
+// wraps and an option may name a function on the command line, so none of
+// them needs the name to appear in the program.
+bool python_converter::function_may_be_called(
+  const nlohmann::json &function_node) const
+{
+  const std::string name = function_node["name"].get<std::string>();
+  if (
+    options_name_functions() ||
+    (name.size() > 4 && name.rfind("__", 0) == 0 &&
+     name.compare(name.size() - 2, 2, "__") == 0) ||
+    !function_node.value("decorator_list", nlohmann::json::array()).empty())
+    return true;
+  std::vector<const nlohmann::json *> programs = {entry_ast_, ast_json};
+  if (extra_asts_)
+    for (const nlohmann::json &extra : *extra_asts_)
+      programs.push_back(&extra);
+  for (const auto &module : module_ast_pool_)
+    programs.push_back(&module.second);
+  return std::any_of(
+    programs.begin(), programs.end(), [&](const nlohmann::json *ast) {
+      return ast && json_mentions(*ast, name);
+    });
+}
+
+// A function whose body cannot be converted must not stop the conversion of
+// a program that never refers to it (#8391). Its body becomes the failing
+// assertion an unmodelled function gets at its call sites, and then an
+// assumption that ends the path. A function the program may call keeps the
+// conversion error, as do model bodies, where a failure is a frontend bug.
+exprt python_converter::get_function_body_or_unsupported(
+  const nlohmann::json &function_node)
+{
+  // A failure leaves the conversion context wherever it was thrown; put back
+  // what the enclosing code reads after this function's definition.
+  auto context = std::tie(
+    current_block,
+    current_func_name_,
+    current_class_name_,
+    current_element_type,
+    current_func_return_type_,
+    ternary_return_target_,
+    scope_stack_,
+    global_declarations,
+    local_loads,
+    enclosing_function_node_,
+    pending_captures_,
+    current_lhs,
+    lhs_store_target_,
+    asserted_test_,
+    is_converting_lhs,
+    is_converting_rhs,
+    is_right,
+    converting_defaults_,
+    converting_lambda_body_,
+    in_rhs_type_probe_,
+    in_scratch_probe_,
+    in_contract_clause_,
+    in_lazy_operand_,
+    build_static_lists,
+    base_ctor_called);
+  const auto saved =
+    std::apply([](const auto &...v) { return std::make_tuple(v...); }, context);
+  try
+  {
+    return get_block(function_node["body"], /*is_function_body=*/true);
+  }
+  catch (const std::runtime_error &e)
+  {
+    if (is_loading_models || function_may_be_called(function_node))
+      throw;
+    context = saved;
+    const std::string name = function_node["name"].get<std::string>();
+    log_warning(
+      "Cannot convert the body of function '{}': {}; any call to it fails",
+      name,
+      e.what());
+    locationt location = get_location_from_decl(function_node);
+    location.user_provided(true);
+    location.comment("Unsupported function '" + name + "' is reached");
+    // Not the constant false: CFG cleanup treats an assertion of that as
+    // the end of the function and drops the assume, so the caller would
+    // carry on with an unconstrained result.
+    const exprt never = not_exprt(true_exprt());
+    code_assertt reached(never);
+    reached.location() = location;
+    code_blockt body;
+    body.copy_to_operands(reached, code_assumet(never));
+    return body;
+  }
 }
 
 void python_converter::get_function_definition(
@@ -3315,7 +4079,7 @@ void python_converter::get_function_definition(
     // tagged return type instead of the post-hoc scan below narrowing to
     // whichever branch it sees first.
     type.return_type() =
-      dynamic_type_handler_.detect_dynamic_return_type(function_node["body"])
+      dynamic_type_handler_.detect_dynamic_return_type(function_node)
         ? type_handler_.get_tagged_object_type()
         : empty_typet();
   }
@@ -3402,8 +4166,8 @@ void python_converter::get_function_definition(
     }
     else
     {
-      type.return_type() = resolve_generic_return_type(
-        return_type.get<std::string>(), function_node, type_handler_);
+      type.return_type() = named_return_type(
+        return_type.get<std::string>(), return_node, function_node);
     }
   }
   else if (return_node["_type"] == "BinOp")
@@ -3615,7 +4379,7 @@ void python_converter::get_function_definition(
     // Process function body. Mark it as a function body (not a conditional one)
     // so straight-line retyping (#4770/#4774) is permitted on the function's
     // own unconditional statements — see the retype gate in get_var_assign.
-    function_body = get_block(function_node["body"], /*is_function_body=*/true);
+    function_body = get_function_body_or_unsupported(function_node);
   }
 
   // Restore saved function return type (for nested function defs)

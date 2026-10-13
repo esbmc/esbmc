@@ -90,6 +90,16 @@ public:
   /// A no-op for an unknown or single-element instance.
   void reverse(const std::string &id, type_slot slot = type_slot::elements);
 
+  /// Mirrors a store of @p elem_id, of type @p elem_type, into element
+  /// @p index. An index outside the recorded entries (e.g. one not known
+  /// statically) erases the instance, since no single entry can be updated.
+  void replace(
+    const std::string &id,
+    size_t index,
+    const std::string &elem_id,
+    const typet &elem_type,
+    type_slot slot = type_slot::elements);
+
   size_t
   size(const std::string &id, type_slot slot = type_slot::elements) const;
 

@@ -5,6 +5,8 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/irep/expr.h>
+#include <map>
+#include <set>
 #include <unordered_map>
 
 enum class FunctionType
@@ -135,6 +137,24 @@ private:
   /// An opaque nondet int, standing in for Python's real hash() on a
   /// non-bytes argument.
   exprt handle_generic_hash();
+
+  /// The first abstract method the abc.ABC subclass that @p ctor_call
+  /// constructs leaves unimplemented, or "" when it constructs nothing
+  /// abstract.
+  std::string
+  unimplemented_abstract_method(const nlohmann::json &ctor_call) const;
+
+  bool is_abstract_instantiation() const;
+
+  /// The TypeError CPython raises on instantiating an abstract class.
+  exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
+
+  static void collect_method_abstractness(
+    const python_converter &converter,
+    const std::string &class_name,
+    std::map<std::string, bool> &methods,
+    std::set<std::string> &visited,
+    bool &is_abc);
 
   bool is_input_call() const;
 
@@ -285,6 +305,12 @@ private:
 
   exprt handle_hasattr() const;
 
+  /// getattr(obj, "name"[, default]) with a literal name, lowered to the
+  /// attribute read or the default when every instance of obj's class is
+  /// known to have, or to lack, the attribute; refused otherwise.
+  bool is_getattr_call() const;
+  exprt handle_getattr();
+
   /*
    * hasattr()'s first argument when it names an imported module. A module is
    * not a first-class value here, so it has no symbol of its own; resolve the
@@ -309,19 +335,30 @@ private:
   exprt handle_callable() const;
 
   exprt handle_type_call() const;
+  std::string
+  exact_instance_class(const nlohmann::json &arg, const exprt &expr) const;
 
   /*
-   * Handles str-to-int conversions (e.g., int('65')) by reconstructing
-   * the string value from a symbol's internal representation and
-   * converting it to an integer expression.
+   * Whether a string symbol's stored constant is the only value it can hold
+   * at this call: it is assigned exactly once in scope. The stored value is
+   * only its last static assignment, so a rebound name must not be folded.
    */
-  exprt handle_str_symbol_to_int(const symbolt *sym) const;
+  bool is_single_assignment_str_symbol(
+    const symbolt *sym,
+    const std::string &name) const;
 
   /*
-   * Handles str-to-float conversions (e.g., float("3.14")) by reconstructing
-   * the string value from the symbol and converting it to a float expression.
+   * Folds int() of a single-assignment string symbol (e.g. s = '65';
+   * int(s)). Returns std::nullopt when the string is not a valid literal, so
+   * the caller emits the runtime conversion that raises ValueError.
    */
-  exprt handle_str_symbol_to_float(const symbolt *sym) const;
+  std::optional<exprt> handle_str_symbol_to_int(const symbolt *sym) const;
+
+  /*
+   * Folds float() of a single-assignment string symbol. Returns std::nullopt
+   * when the string does not parse as a float (see handle_str_symbol_to_int).
+   */
+  std::optional<exprt> handle_str_symbol_to_float(const symbolt *sym) const;
 
   /*
    * Handles float-to-str conversions (e.g., str(5.5)) by converting
@@ -347,6 +384,12 @@ private:
    * the appropriate cast expression.
    */
   void handle_float_to_int(nlohmann::json &arg) const;
+
+  /*
+   * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
+   * a float @p operand given without a @p base; returns the operand to convert.
+   */
+  exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
 
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
@@ -512,6 +555,7 @@ private:
    * validation passes
    */
   exprt validate_re_module_args() const;
+  void route_re_flags_call();
 
   bool is_any_call() const;
   bool is_all_call() const;
@@ -857,7 +901,8 @@ private:
    *  - bind_call_receiver: prepends self/cls for ctor/instance/class methods
    *    and returns the parameter offset for subsequent positional binding;
    *  - build_positional_arguments: converts and appends positional args
-   *    (returns early for the __ESBMC_get_object_size/strlen list-size case);
+   *    (returns early for the __ESBMC_get_object_size/strlen list-size case,
+   *    or with the TypeError a surplus positional argument raises);
    *  - finalize_call: forwards keyword args, fills defaults, and adds the
    *    constructor temp-self, returning the final call (or an early result).
    */
@@ -886,6 +931,8 @@ private:
     size_t param_offset,
     const locationt &location,
     const symbolt *func_symbol);
+  std::optional<exprt>
+  raise_positional_oversupply(const symbolt &func_symbol) const;
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,

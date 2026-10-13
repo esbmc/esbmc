@@ -104,6 +104,75 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
   return count;
 }
 
+/// Value of a __builtin_rotateleft{8,16,32,64}/__builtin_rotateright* call.
+/// The distance is taken modulo the width, and so is its complement, so a zero
+/// distance gives (x << 0) | (x >> 0) == x rather than a full-width shift.
+static expr2tc build_rotate(const code_function_call2t &func_call, bool left)
+{
+  const expr2tc &x = func_call.operands[0];
+  const type2tc &t = x->type;
+  const unsigned width = t->get_width();
+  const expr2tc mask = constant_int2tc(t, width - 1);
+  const expr2tc d = bitand2tc(t, typecast2tc(t, func_call.operands[1]), mask);
+  const expr2tc co =
+    bitand2tc(t, sub2tc(t, constant_int2tc(t, width), d), mask);
+  return left ? bitor2tc(t, shl2tc(t, x, d), lshr2tc(t, x, co))
+              : bitor2tc(t, lshr2tc(t, x, d), shl2tc(t, x, co));
+}
+
+/// Value of a __builtin_bitreverse{8,16,32,64} call: swap adjacent bits, then
+/// 2-bit groups, then 4-bit groups, doubling until the halves are swapped.
+static expr2tc build_bitreverse(const code_function_call2t &func_call)
+{
+  expr2tc acc = func_call.operands[0];
+  const type2tc &t = acc->type;
+  const unsigned width = t->get_width();
+  for (unsigned k = 1; k < width; k <<= 1)
+  {
+    // The low k bits of every 2k-bit block.
+    BigInt m = 0;
+    for (unsigned pos = 0; pos < width; pos += 2 * k)
+      m += BigInt::power2m1(k) * BigInt::power2(pos);
+    const expr2tc mask = constant_int2tc(t, m);
+    const expr2tc shift = constant_int2tc(t, k);
+    acc = bitor2tc(
+      t,
+      shl2tc(t, bitand2tc(t, acc, mask), shift),
+      bitand2tc(t, lshr2tc(t, acc, shift), mask));
+  }
+  return acc;
+}
+
+/// Value of a bit-counting, rotating or bit-reversing builtin call, or nil if
+/// \p symname is not one.
+static expr2tc build_bit_builtin(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  if (
+    const bit_scan_endt end = bit_scan_builtin(symname);
+    end != bit_scan_endt::none)
+  {
+    assert(
+      !func_call.operands.empty() && func_call.operands.size() <= 2 &&
+      "__builtin_clz*/__builtin_ctz* take one or two arguments");
+    return build_bit_scan(func_call, end);
+  }
+
+  for (const bool left : {true, false})
+    for (const char *width : {"8", "16", "32", "64"})
+      if (
+        symname == std::string("c:@F@__builtin_rotate") +
+                     (left ? "left" : "right") + width)
+        return build_rotate(func_call, left);
+
+  for (const char *width : {"8", "16", "32", "64"})
+    if (symname == std::string("c:@F@__builtin_bitreverse") + width)
+      return build_bitreverse(func_call);
+
+  return expr2tc();
+}
+
 bool goto_symext::run_builtin(
   const code_function_call2t &func_call,
   const std::string &symname)
@@ -172,17 +241,12 @@ bool goto_symext::run_builtin(
   }
 
   if (
-    const bit_scan_endt end = bit_scan_builtin(symname);
-    end != bit_scan_endt::none)
+    const expr2tc value = build_bit_builtin(func_call, symname);
+    !is_nil_expr(value))
   {
-    assert(
-      !func_call.operands.empty() && func_call.operands.size() <= 2 &&
-      "__builtin_clz*/__builtin_ctz* take one or two arguments");
-
     const expr2tc &ret = func_call.ret;
     if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(
-        ret, typecast2tc(ret->type, build_bit_scan(func_call, end))));
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, value)));
 
     return true;
   }
@@ -192,8 +256,7 @@ bool goto_symext::run_builtin(
   // va_arg on an unstarted va_list is then flagged in symex_va_arg.
   if (symname == "c:@F@__builtin_va_start" && !func_call.operands.empty())
   {
-    va_list_mark_started(
-      func_call.operands[0], true, cur_state->top().va_index);
+    va_list_start(func_call.operands[0]);
     return true;
   }
 

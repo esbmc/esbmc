@@ -1,0 +1,4 @@
+CORE
+ctr.ld
+--ld-props props.yaml
+^ERROR: .*PV and CV ports must be distinct variables

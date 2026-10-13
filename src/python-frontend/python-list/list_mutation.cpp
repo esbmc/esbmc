@@ -320,6 +320,75 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   return elem_info;
 }
 
+namespace
+{
+/// The PyObject pointer `item` of a list subscript target `*(T *)item->value`,
+/// or nullptr when @p lhs has another shape.
+const exprt *list_item_of_store_target(const exprt &lhs)
+{
+  if (lhs.id() != "dereference" || lhs.op0().id() != "typecast")
+    return nullptr;
+  const exprt &value = lhs.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().id() != "dereference")
+    return nullptr;
+  return &value.op0().op0();
+}
+
+/// The non-negative literal index of a subscript, or SIZE_MAX when the index
+/// is not known statically.
+size_t literal_subscript_index(const nlohmann::json &subscript)
+{
+  const nlohmann::json &slice = subscript["slice"];
+  if (
+    slice.value("_type", "") == "Constant" && slice.contains("value") &&
+    slice["value"].is_number_unsigned())
+    return slice["value"].get<size_t>();
+  return SIZE_MAX;
+}
+} // namespace
+
+void python_list::retype_element_store(exprt &lhs, exprt &rhs)
+{
+  const tuple_handler &tuples = converter_.get_tuple_handler();
+  if (
+    lhs.type() == rhs.type() ||
+    !(tuples.is_tuple_type(lhs.type()) || tuples.is_tuple_type(rhs.type())))
+    return;
+
+  const typet obj_type = converter_.get_type_handler().get_list_element_type();
+  const exprt *item = list_item_of_store_target(lhs);
+  if (!item || item->type() != pointer_typet(obj_type))
+    return;
+
+  // A named element lets compare()'s fast path read the slot's new type.
+  symbolt &stored = converter_.create_tmp_symbol(
+    list_value_, "$list_store$", rhs.type(), exprt());
+  code_declt stored_decl(build_symbol(stored));
+  stored_decl.copy_to_operands(rhs);
+  stored_decl.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(stored_decl);
+  const exprt holder = build_list_from_exprs({build_symbol(stored)});
+  const exprt fresh = build_list_at_call(
+    holder, from_integer(BigInt(0), size_type()), list_value_);
+
+  const nlohmann::json &container = list_value_["value"];
+  if (container.value("_type", "") == "Name")
+  {
+    const exprt list = converter_.get_expr(container);
+    if (list.is_symbol())
+      elem_types().replace(
+        list.identifier().as_string(),
+        literal_subscript_index(list_value_),
+        stored.id.as_string(),
+        rhs.type());
+  }
+
+  lhs = build_dereference(*item, obj_type);
+  rhs = build_dereference(fresh, obj_type);
+}
+
 /// A constructed instance reaches a list literal as a *value* struct
 /// (function_call_expr's no-LHS constructor path), but every element read emits
 /// `*(Cls **)item->value`. Storing the struct's bytes therefore made
@@ -460,14 +529,9 @@ exprt python_list::build_push_list_call(
       : from_integer(BigInt(0), size_type());
   push_func_call.arguments().push_back(float_type_id_arg); // float_type_id
 
-  // ptr_free gates the uint64 fast paths in __ESBMC_copy_value.
-  push_func_call.arguments().push_back(from_integer(
-    BigInt(
-      converter_.get_type_handler().is_pointer_free(
-        elem_info.elem_symbol->get_type())
-        ? 1
-        : 0),
-    int_type()));
+  push_func_call.arguments().push_back(
+    converter_.get_type_handler().ptr_free_arg(
+      element_arg, elem_info.elem_symbol->get_type()));
 
   push_func_call.type() = bool_type();
   push_func_call.location() = elem_info.location;
@@ -526,17 +590,111 @@ exprt python_list::build_insert_list_call(
     build_symbol(*elem_info.elem_type_sym));
   insert_func_call.arguments().push_back(elem_info.elem_size);
   insert_func_call.arguments().push_back(float_type_id_arg);
-  insert_func_call.arguments().push_back(from_integer(
-    BigInt(
-      converter_.get_type_handler().is_pointer_free(
-        elem_info.elem_symbol->get_type())
-        ? 1
-        : 0),
-    int_type()));
+  insert_func_call.arguments().push_back(
+    converter_.get_type_handler().ptr_free_arg(
+      insert_func_call.arguments()[2], elem_info.elem_symbol->get_type()));
   insert_func_call.type() = bool_type();
   insert_func_call.location() = elem_info.location;
 
   return converter_.convert_expression_to_code(insert_func_call);
+}
+
+namespace
+{
+enum class store_kind
+{
+  other,
+  integer,
+  floating,
+  string,
+  tuple
+};
+
+store_kind kind_of(const typet &type, const python_converter &converter)
+{
+  if (type.is_signedbv() || type.is_unsignedbv() || type.is_bool())
+    return store_kind::integer;
+  if (type.is_floatbv())
+    return store_kind::floating;
+  if ((type.is_array() || type.is_pointer()) && type.subtype() == char_type())
+    return store_kind::string;
+  if (converter.get_tuple_handler().is_tuple_type(type))
+    return store_kind::tuple;
+  return store_kind::other;
+}
+
+const side_effect_expr_function_callt *find_list_at_call(const exprt &expr)
+{
+  if (expr.id() == "sideeffect" && expr.statement() == "function_call")
+  {
+    const auto &call = to_side_effect_expr_function_call(expr);
+    if (
+      call.function().is_symbol() &&
+      call.function().identifier() == "c:@F@__ESBMC_list_at")
+      return &call;
+  }
+  for (const exprt &op : expr.operands())
+    if (const side_effect_expr_function_callt *call = find_list_at_call(op))
+      return call;
+  return nullptr;
+}
+} // namespace
+
+// Writing through the slot reinterprets `rhs` as the old element's type, so a
+// store that changes the element's type replaces the element instead (#8131).
+std::optional<exprt> python_list::build_element_replacement(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &op)
+{
+  const store_kind old_kind = kind_of(lhs.type(), converter_);
+  const store_kind new_kind = kind_of(rhs.type(), converter_);
+  // retype_element_store() replaces a tuple over an int or another tuple, and
+  // an int over a tuple (#8133).
+  const auto int_or_tuple = [](store_kind kind) {
+    return kind == store_kind::integer || kind == store_kind::tuple;
+  };
+  // An int stored into a float slot keeps its value as a float.
+  if (
+    old_kind == store_kind::other || new_kind == store_kind::other ||
+    old_kind == new_kind ||
+    (int_or_tuple(old_kind) && int_or_tuple(new_kind)) ||
+    (old_kind == store_kind::floating && new_kind == store_kind::integer))
+    return std::nullopt;
+
+  const side_effect_expr_function_callt *list_at = find_list_at_call(lhs);
+  if (!list_at || list_at->arguments().size() != 2)
+    return std::nullopt;
+
+  const symbolt *set_at_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_at");
+  if (!set_at_sym)
+    throw std::runtime_error("__ESBMC_list_set_at not found in the list model");
+
+  const list_elem_info info = get_list_element_info(op, rhs);
+  const typet &value_type = info.elem_symbol->get_type();
+  const exprt value_arg =
+    value_type.is_pointer() && value_type.subtype() == char_type()
+      ? build_symbol(*info.elem_symbol)
+      : build_address_of(build_symbol(*info.elem_symbol));
+  const exprt float_type_id =
+    value_type.is_floatbv()
+      ? static_cast<exprt>(build_symbol(*info.elem_type_sym))
+      : from_integer(BigInt(0), size_type());
+
+  code_function_callt set_at;
+  set_at.function() = build_symbol(*set_at_sym);
+  set_at.arguments() = {
+    list_at->arguments()[0],
+    list_at->arguments()[1],
+    value_arg,
+    build_symbol(*info.elem_type_sym),
+    info.elem_size,
+    float_type_id,
+    converter_.get_type_handler().ptr_free_arg(value_arg, value_type)};
+  set_at.type() = bool_type();
+  set_at.location() = info.location;
+  return set_at;
 }
 
 void python_list::emit_list_copy(

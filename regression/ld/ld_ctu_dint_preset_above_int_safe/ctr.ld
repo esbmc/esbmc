@@ -11,7 +11,7 @@
         </inputVars>
         <localVars>
           <variable name="PV"><type><DINT/></type><initialValue><simpleValue value="40000"/></initialValue></variable>
-          <variable name="CV"><type><INT/></type></variable>
+          <variable name="CV"><type><DINT/></type></variable>
           <variable name="Q"><type><BOOL/></type></variable>
         </localVars>
       </interface>

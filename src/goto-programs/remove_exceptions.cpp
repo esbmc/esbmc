@@ -14,11 +14,13 @@
 #include <util/irep/std_types.h>
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
+#include <util/config/options.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 #include <optional>
+#include <sstream>
 #include <tuple>
 
 #include <algorithm>
@@ -107,9 +109,15 @@ struct sitet
 class exception_loweringt
 {
 public:
-  exception_loweringt(contextt &context, const namespacet &ns)
+  exception_loweringt(
+    contextt &context,
+    const namespacet &ns,
+    const std::set<irep_idt> &unreported,
+    const std::vector<irep_idt> &checked)
     : context(context),
       ns(ns),
+      unreported(unreported),
+      checked(checked),
       registry(ns),
       thrown(mk_global(exception_globals::thrown_id)),
       type_id(mk_global(exception_globals::typeid_id)),
@@ -438,6 +446,8 @@ public:
 private:
   contextt &context;
   const namespacet &ns;
+  const std::set<irep_idt> &unreported;
+  const std::vector<irep_idt> &checked;
   exception_typeidt registry;
   expr2tc thrown, type_id, value, uncaught_count, terminate_reason, site;
   std::set<irep_idt> may_throw;
@@ -1565,6 +1575,13 @@ private:
     return first;
   }
 
+  /// Whether an escaping exception of type @p name is a property. One that is
+  /// not still ends the run, so nothing after its raise is reached.
+  bool reports_escape(const irep_idt &name) const
+  {
+    return !unreported.count(name) && checks_exception(registry, name, checked);
+  }
+
   /// The uncaught-exception check at a program-entry epilogue, partitioned by
   /// the escaping exception's dynamic type. Each throwable type T gets its own
   /// property `assert(!(thrown && typeid == id(T)))` with a comment naming T,
@@ -1613,6 +1630,8 @@ private:
     {
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+      if (!reports_escape(name))
+        continue;
       const expr2tc t_escapes = and2tc(thrown, eq);
       const std::vector<throw_sitet> &sites = throw_sites(name);
 
@@ -1963,10 +1982,55 @@ private:
 };
 } // namespace
 
+bool checks_exception(
+  const exception_typeidt &types,
+  const irep_idt &type,
+  const std::vector<irep_idt> &checked)
+{
+  return checked.empty() ||
+         std::any_of(checked.begin(), checked.end(), [&](const irep_idt &c) {
+           return types.is_subtype(type, c);
+         });
+}
+
+namespace
+{
+// An operational model raises a Python exception it cannot throw as an assert
+// whose comment reads "<Type>: <message>", e.g. "KeyError: key not found".
+// When no checked type covers <Type>, assume the condition instead, so the
+// path ends there unreported, as an unchecked raise does. No assert precedes
+// the assume, so it is a plain one, which the forward condition sees. A Python
+// assert, whose message may look the same, raises AssertionError instead.
+void assume_unchecked_model_exceptions(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  const std::vector<irep_idt> &checked)
+{
+  const exception_typeidt types(ns);
+  for (auto &[id, fn] : goto_functions.function_map)
+    for (goto_programt::instructiont &i : fn.body.instructions)
+    {
+      const std::string &comment = i.location.comment().as_string();
+      const std::size_t colon = comment.find(':');
+      if (
+        !i.is_assert() || colon == std::string::npos ||
+        i.location.get_bool("ends_path"))
+        continue;
+      const irep_idt type = comment.substr(0, colon);
+      if (
+        types.is_subtype(type, "BaseException") &&
+        !checks_exception(types, type, checked))
+        i.make_assumption(expr2tc(i.guard));
+    }
+}
+} // namespace
+
 void remove_exceptions(
   goto_functionst &goto_functions,
   contextt &context,
-  const namespacet &ns)
+  const namespacet &ns,
+  const std::set<irep_idt> &unreported,
+  const std::vector<irep_idt> &checked)
 {
   // A program with no throw/catch needs no exception machinery. Skip entirely
   // so the pass is a true no-op for exception-free programs — otherwise it
@@ -1974,8 +2038,19 @@ void remove_exceptions(
   // that inspect program state on programs that have nothing to do with
   // exceptions (e.g. termination's recurrent-set search, function-contract
   // frames).
+  if (!checked.empty())
+    assume_unchecked_model_exceptions(goto_functions, ns, checked);
   if (!exception_loweringt::program_uses_exceptions(goto_functions))
     return;
   create_exception_state_symbols(context);
-  exception_loweringt(context, ns).run(goto_functions);
+  exception_loweringt(context, ns, unreported, checked).run(goto_functions);
+}
+
+std::vector<irep_idt> python_checked_exceptions(const optionst &options)
+{
+  std::vector<irep_idt> checked;
+  std::istringstream listed(options.get_option("python-check-exceptions"));
+  for (std::string name; std::getline(listed, name, ',');)
+    checked.emplace_back(name);
+  return checked;
 }

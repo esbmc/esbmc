@@ -10,6 +10,7 @@
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -28,10 +29,12 @@
 #include <util/irep/migrate.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <optional>
+#include <set>
 #include <limits>
 #include <stdexcept>
 
@@ -304,18 +307,32 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
-// Whether a class object is an instance of isinstance's second argument: only
-// `type` and `object` admit one, alone or in a tuple.
-static bool admits_class_object(const nlohmann::json &type_arg)
+// The types named by an isinstance/issubclass classinfo: a type, a (nested)
+// tuple of classinfos, or a union X | Y. A union operand cannot be a tuple, so
+// one is kept whole and rejected as a type.
+static void
+collect_classinfo(const nlohmann::json &node, std::vector<nlohmann::json> &out)
 {
-  auto admits = [](const nlohmann::json &node) {
-    return node["_type"] == "Name" &&
-           (node["id"] == "type" || node["id"] == "object");
-  };
-  if (type_arg["_type"] != "Tuple")
-    return admits(type_arg);
-  const auto &elts = type_arg["elts"];
-  return std::any_of(elts.begin(), elts.end(), admits);
+  if (node["_type"] == "Tuple")
+    for (const auto &e : node["elts"])
+      collect_classinfo(e, out);
+  else if (node["_type"] == "BinOp" && node["op"]["_type"] == "BitOr")
+    for (const auto *side : {&node["left"], &node["right"]})
+      if ((*side)["_type"] == "Tuple")
+        out.push_back(*side);
+      else
+        collect_classinfo(*side, out);
+  else
+    out.push_back(node);
+}
+
+// Whether a class object is an instance of isinstance's second argument: only
+// `type` and `object` admit one.
+static bool admits_class_object(const std::vector<nlohmann::json> &types)
+{
+  return std::any_of(types.begin(), types.end(), [](const nlohmann::json &n) {
+    return n["_type"] == "Name" && (n["id"] == "type" || n["id"] == "object");
+  });
 }
 
 exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
@@ -339,7 +356,8 @@ exprt function_call_expr::handle_isinstance() const
   // Convert the first argument (the object being checked) into an expression
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &obj_arg = args[0];
-  const auto &type_arg = args[1];
+  std::vector<nlohmann::json> types;
+  collect_classinfo(args[1], types);
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x,
   // str)) Type objects themselves are not instances of other types (except
@@ -349,7 +367,7 @@ exprt function_call_expr::handle_isinstance() const
     const std::string *name =
       converter_.class_object_name(obj_expr.identifier());
     if (name && type_utils::is_type_identifier(*name))
-      return gen_boolean(admits_class_object(type_arg));
+      return gen_boolean(admits_class_object(types));
   }
 
   // Extract type name from various AST node formats
@@ -514,32 +532,18 @@ exprt function_call_expr::handle_isinstance() const
     return migrate_expr_back(isinstance2tc(obj2, t2));
   };
 
-  // Handle tuple of types: isinstance(v, (int, str, type(None)))
-  if (type_arg["_type"] == "Tuple")
+  if (types.empty())
+    throw std::runtime_error("isinstance() tuple cannot be empty");
+
+  exprt result = build_isinstance(extract_type_name(types[0]));
+  for (size_t i = 1; i < types.size(); ++i)
   {
-    const auto &elts = type_arg["elts"];
-    if (elts.empty())
-      throw std::runtime_error("isinstance() tuple cannot be empty");
-
-    // Build isinstance check for first element
-    exprt result = build_isinstance(extract_type_name(elts[0]));
-
-    // Chain OR expressions for remaining elements
-    for (size_t i = 1; i < elts.size(); ++i)
-    {
-      exprt next_check = build_isinstance(extract_type_name(elts[i]));
-
-      exprt or_expr("or", typet("bool"));
-      or_expr.move_to_operands(result);
-      or_expr.move_to_operands(next_check);
-      result = or_expr;
-    }
-
-    return result;
+    exprt or_expr("or", typet("bool"));
+    or_expr.move_to_operands(result);
+    or_expr.copy_to_operands(build_isinstance(extract_type_name(types[i])));
+    result = or_expr;
   }
-
-  // Handle single type: isinstance(v, int) or isinstance(v, type(None))
-  return build_isinstance(extract_type_name(type_arg));
+  return result;
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -613,6 +617,337 @@ exprt function_call_expr::handle_hasattr() const
   return hasattr;
 }
 
+// getattr()'s receiver must be evaluated once: the call is lowered to an
+// attribute read, which re-reads it.
+static bool is_plain_receiver(const nlohmann::json &node)
+{
+  if (node["_type"] == "Name")
+    return true;
+  return node["_type"] == "Attribute" && is_plain_receiver(node["value"]);
+}
+
+/// A plain identifier with no `__`: dunder attributes come from `object`, and
+/// a private `__x` is stored unmangled, so neither matches the class struct.
+static bool is_plain_identifier(const std::string &name)
+{
+  auto word = [](char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  };
+  return !name.empty() && !std::isdigit(static_cast<unsigned char>(name[0])) &&
+         std::all_of(name.begin(), name.end(), word) &&
+         name.find("__") == std::string::npos;
+}
+
+/// Whether @p node, a single AST node, could bind @p name: an attribute or
+/// name store, any named binder (def, class, import alias, except or match
+/// capture), or a generic hook (setattr, __dict__) that binds any attribute.
+static bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  static const std::set<std::string> hooks{
+    "setattr", "__setattr__", "__dict__", "__getattr__", "__getattribute__"};
+  const std::string type = node.value("_type", "");
+  const bool stores =
+    node.contains("ctx") && node["ctx"].value("_type", "") != "Load";
+  if (type == "Attribute")
+    return hooks.count(node["attr"].get<std::string>()) ||
+           (stores && node["attr"] == name);
+  if (type == "Name")
+    return hooks.count(node["id"].get<std::string>()) ||
+           (stores && node["id"] == name);
+  for (const char *key : {"name", "asname", "rest"})
+    if (
+      node.contains(key) && node[key].is_string() &&
+      (node[key] == name || hooks.count(node[key].get<std::string>())))
+      return true;
+  return false;
+}
+
+static bool may_bind(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object() && binds_name(node, name))
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return may_bind(child, name);
+  });
+}
+
+static bool may_delete(const nlohmann::json &node, const std::string &attr)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    (node["attr"] == "__delattr__" ||
+     (node["attr"] == attr && node["ctx"].value("_type", "") == "Del")))
+    return true;
+  if (node.is_object() && node.value("id", "") == "delattr")
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return may_delete(child, attr);
+  });
+}
+
+bool function_call_expr::is_getattr_call() const
+{
+  if (
+    function_id_.get_function() != "getattr" ||
+    call_["func"]["_type"] != "Name" ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    return false;
+
+  const auto &args = call_["args"];
+  if (args.size() != 2 && args.size() != 3)
+    return false;
+  const auto &name = args[1];
+  // CPython evaluates the default even when the attribute exists, so it may
+  // only be dropped when evaluating it cannot fail.
+  return name["_type"] == "Constant" && name["value"].is_string() &&
+         is_plain_identifier(name["value"].get<std::string>()) &&
+         is_plain_receiver(args[0]) &&
+         (args.size() == 2 || args[2]["_type"] == "Constant" ||
+          args[2]["_type"] == "Name") &&
+         !may_bind(converter_.ast(), "getattr");
+}
+
+static const nlohmann::json *
+find_user_class(const std::string &name, const nlohmann::json &ast)
+{
+  for (const auto &node : ast["body"])
+    if (node.value("_type", "") == "ClassDef" && node["name"] == name)
+      return &node;
+  return nullptr;
+}
+
+/// The program's ClassDef for @p type when it and every base are defined in
+/// the program; null otherwise. A builtin type or base has attributes the
+/// program never binds.
+static const nlohmann::json *
+user_class_of(const typet &type, const nlohmann::json &ast)
+{
+  if (type.id() != "symbol")
+    return nullptr;
+  const std::string tag = type.identifier().as_string();
+  if (tag.rfind("tag-", 0) != 0)
+    return nullptr;
+  const nlohmann::json *cls = find_user_class(tag.substr(4), ast);
+  if (!cls)
+    return nullptr;
+  for (const auto &base : (*cls)["bases"])
+    if (
+      base["_type"] != "Name" ||
+      (base["id"] != "object" &&
+       !user_class_of(
+         symbol_typet("tag-" + base["id"].get<std::string>()), ast)))
+      return nullptr;
+  return cls;
+}
+
+static bool is_self_attribute(
+  const nlohmann::json &target,
+  const std::string &self,
+  const std::string &attr)
+{
+  return target.value("_type", "") == "Attribute" && target["attr"] == attr &&
+         target["value"].value("_type", "") == "Name" &&
+         target["value"]["id"] == self;
+}
+
+static bool is_super_init_call(const nlohmann::json &stmt)
+{
+  if (stmt.value("_type", "") != "Expr")
+    return false;
+  const auto &call = stmt["value"];
+  return call.value("_type", "") == "Call" &&
+         call["func"].value("_type", "") == "Attribute" &&
+         call["func"]["attr"] == "__init__" &&
+         call["func"]["value"].value("_type", "") == "Call" &&
+         call["func"]["value"]["func"].value("id", "") == "super";
+}
+
+static bool assigns_self_attribute(
+  const nlohmann::json &stmt,
+  const std::string &self,
+  const std::string &attr)
+{
+  const std::string type = stmt.value("_type", "");
+  if (type == "AnnAssign")
+    return stmt.contains("value") && !stmt["value"].is_null() &&
+           is_self_attribute(stmt["target"], self, attr);
+  return type == "Assign" &&
+         std::any_of(
+           stmt["targets"].begin(), stmt["targets"].end(), [&](const auto &t) {
+             return is_self_attribute(t, self, attr);
+           });
+}
+
+static bool init_binds(
+  const nlohmann::json &cls,
+  const std::string &attr,
+  const nlohmann::json &ast);
+
+static bool base_init_binds(
+  const nlohmann::json &cls,
+  const std::string &attr,
+  const nlohmann::json &ast)
+{
+  const auto &bases = cls["bases"];
+  if (bases.size() != 1 || bases[0]["id"] == "object")
+    return false;
+  const nlohmann::json *base = find_user_class(bases[0]["id"], ast);
+  return base && init_binds(*base, attr, ast);
+}
+
+/// Whether every constructed instance of @p cls has @p attr: its __init__
+/// (or the one it inherits or delegates to through super().__init__())
+/// assigns self.attr in straight-line code before any return.
+static bool init_binds(
+  const nlohmann::json &cls,
+  const std::string &attr,
+  const nlohmann::json &ast)
+{
+  for (const auto &def : cls["body"])
+  {
+    if (def.value("_type", "") != "FunctionDef" || def["name"] != "__init__")
+      continue;
+    const auto &params = def["args"]["args"];
+    if (params.empty())
+      return false;
+    const std::string self = params[0]["arg"];
+    for (const auto &stmt : def["body"])
+    {
+      if (stmt.value("_type", "") == "Return")
+        return false;
+      if (
+        (is_super_init_call(stmt) && base_init_binds(cls, attr, ast)) ||
+        assigns_self_attribute(stmt, self, attr))
+        return true;
+    }
+    return false;
+  }
+  return base_init_binds(cls, attr, ast);
+}
+
+static bool has_subclass(const std::string &name, const nlohmann::json &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == name)
+        return true;
+  if (!ast.is_object() && !ast.is_array())
+    return false;
+  return std::any_of(ast.begin(), ast.end(), [&](const auto &child) {
+    return has_subclass(name, child);
+  });
+}
+
+/// An imported module can subclass a class or bind attributes that the scan
+/// of this module does not see; typing and __future__ bind neither.
+static bool imports_other_modules(const nlohmann::json &ast)
+{
+  return std::any_of(ast["body"].begin(), ast["body"].end(), [](const auto &n) {
+    const std::string type = n.value("_type", "");
+    if (type == "ImportFrom")
+      return n["module"] != "typing" && n["module"] != "__future__";
+    return type == "Import";
+  });
+}
+
+/// Whether @p attr is decided for every instance whose static type is @p type:
+/// sets @p present to whether it exists. Undecided when a path, a subclass,
+/// a `del` or another module can change it.
+static bool attribute_decided(
+  const typet &type,
+  const std::string &attr,
+  const nlohmann::json &ast,
+  bool &present)
+{
+  const nlohmann::json *cls = user_class_of(type, ast);
+  if (!cls || imports_other_modules(ast))
+    return false;
+  if (!may_bind(ast, attr))
+  {
+    present = false;
+    return true;
+  }
+  present = true;
+  return !has_subclass((*cls)["name"], ast) && !may_delete(ast, attr) &&
+         init_binds(*cls, attr, ast);
+}
+
+exprt function_call_expr::handle_getattr()
+{
+  const auto &args = call_["args"];
+  const std::string attr = args[1]["value"].get<std::string>();
+
+  typet type = converter_.get_expr(args[0]).type();
+  if (type.is_pointer())
+    type = type.subtype();
+  bool present = false;
+  if (!attribute_decided(type, attr, converter_.ast(), present))
+    return handle_general_function_call();
+
+  if (!present && args.size() == 3)
+    return converter_.get_expr(args[2]);
+
+  // An absent attribute is read too, which raises AttributeError.
+  nlohmann::json access = call_;
+  access.erase("func");
+  access.erase("args");
+  access.erase("keywords");
+  access["_type"] = "Attribute";
+  access["value"] = args[0];
+  access["attr"] = attr;
+  access["ctx"] = {{"_type", "Load"}};
+  return converter_.get_expr(access);
+}
+
+// Whether @p body binds @p name, as one of its own statements, to a call of
+// @p cls.
+static bool body_constructs(
+  const nlohmann::json &body,
+  const std::string &name,
+  const std::string &cls)
+{
+  return std::any_of(body.begin(), body.end(), [&](const nlohmann::json &s) {
+    const nlohmann::json *target = binding_target(s);
+    return target && target->value("id", "") == name &&
+           s["value"].is_object() && s["value"]["_type"] == "Call" &&
+           s["value"]["func"].value("id", "") == cls;
+  });
+}
+
+// The class of the instance named by @p arg, or "" when its runtime class
+// can differ from the class @p expr is statically typed as. A variable bound
+// once, by its scope's own statement calling a class bound only by its
+// definition, holds an instance of exactly that class wherever it is bound.
+std::string function_call_expr::exact_instance_class(
+  const nlohmann::json &arg,
+  const exprt &expr) const
+{
+  if (
+    arg["_type"] != "Name" || !expr.type().is_pointer() ||
+    !expr.type().subtype().is_symbol())
+    return "";
+  const std::string name = arg["id"].get<std::string>();
+  const std::string cls =
+    type_handler_.get_python_type_name(expr.type().subtype());
+  const nlohmann::json &ast = converter_.get_ast_json();
+  const std::string &function = converter_.get_current_func_name();
+  const nlohmann::json scope =
+    function.empty()
+      ? nlohmann::json()
+      : find_function_by_path(ast, split_function_path(function));
+  const bool constructed =
+    body_constructs(ast["body"], name, cls) ||
+    (scope.contains("body") && body_constructs(scope["body"], name, cls));
+  return constructed && count_bindings(ast, name) == 1 &&
+             count_bindings(ast, cls) == 1
+           ? cls
+           : "";
+}
+
 exprt function_call_expr::handle_type_call() const
 {
   const auto &args = call_["args"];
@@ -620,6 +955,10 @@ exprt function_call_expr::handle_type_call() const
     throw std::runtime_error("type() requires exactly 1 argument");
 
   exprt arg_expr = converter_.get_expr(args[0]);
+  const std::string instance_class = exact_instance_class(args[0], arg_expr);
+  if (!instance_class.empty())
+    return converter_.make_class_object(instance_class);
+
   std::string type_name = type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
@@ -653,18 +992,16 @@ exprt function_call_expr::handle_issubclass() const
       "TypeError", "issubclass() arg 1 must be a class");
   const std::string cls = args[0]["id"].get<std::string>();
 
-  // arg 2 is a single class or a tuple of classes.
+  // arg 2 is a class, a tuple of classes or a union of classes.
+  std::vector<nlohmann::json> info;
+  collect_classinfo(args[1], info);
   std::vector<std::string> targets;
-  const auto &info = args[1];
-  auto add_name = [&targets](const nlohmann::json &n) {
+  for (const auto &n : info)
     if (n["_type"] == "Name")
       targets.push_back(n["id"].get<std::string>());
-  };
-  if (info["_type"] == "Tuple")
-    for (const auto &e : info["elts"])
-      add_name(e);
-  else
-    add_name(info);
+    else if (n["_type"] == "Tuple")
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "unsupported operand type(s) for |");
 
   if (targets.empty())
     return converter_.get_exception_handler().gen_exception_raise(
@@ -836,6 +1173,8 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // - delegate to the complex handler when the operand is complex,
   // - otherwise emit a symbolic abs() expression preserving the type.
   auto build_abs = [this](exprt operand) -> exprt {
+    // A statement-form call left under abs() crashes the solver.
+    operand = to_value_expr(operand, converter_.ns);
     // bool is an int subclass in Python; abs() of a bool yields an int
     // (abs(True) == 1, abs(False) == 0). Cast before building the abs node so
     // its `>= 0` comparison does not mix a bool and a signed-bitvector sort
@@ -893,17 +1232,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Try to infer type for composite expressions such as BinOp
   if (!arg.contains("type"))
-  {
-    try
-    {
-      return build_abs(converter_.get_expr(arg));
-    }
-    catch (const std::exception &e)
-    {
-      return converter_.get_exception_handler().gen_exception_raise(
-        "TypeError", "failed to infer operand type for abs()");
-    }
-  }
+    return build_abs(converter_.get_expr(arg));
 
   // Handle variable references
   if (arg["_type"] == "Name" && arg.contains("id"))
@@ -1036,23 +1365,16 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
   // Symbolic: try to build an expression for round(x)
   if (!has_ndigits)
   {
-    try
-    {
-      exprt operand_expr = converter_.get_expr(arg);
-      typet float_type = type_handler_.get_typet("float", 0);
-      typet int_type = type_handler_.get_typet("int", 0);
+    exprt operand_expr =
+      converter_.guard_nonfinite_float_to_int(converter_.get_expr(arg), call_);
+    typet float_type = type_handler_.get_typet("float", 0);
+    typet int_type = type_handler_.get_typet("int", 0);
 
-      // Use nearbyint (round-to-nearest-even) on the float operand,
-      // then typecast to int — matching Python's round() semantics.
-      exprt nearbyint_expr("nearbyint", float_type);
-      nearbyint_expr.copy_to_operands(operand_expr);
-      return build_typecast(nearbyint_expr, int_type);
-    }
-    catch (const std::exception &)
-    {
-      return converter_.get_exception_handler().gen_exception_raise(
-        "TypeError", "failed to infer operand type for round()");
-    }
+    // Use nearbyint (round-to-nearest-even) on the float operand,
+    // then typecast to int — matching Python's round() semantics.
+    exprt nearbyint_expr("nearbyint", float_type);
+    nearbyint_expr.copy_to_operands(operand_expr);
+    return build_typecast(nearbyint_expr, int_type);
   }
 
   log_warning("round() with symbolic arguments not fully supported");

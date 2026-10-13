@@ -3,4 +3,4 @@ properties:
   - id: P1
     kind: invariant
     expression: "!Q"
-    justification: "PV is 40000 and CV starts at 0, so Q is false; a PV narrowed to INT would read as -25536 and set Q."
+    justification: "PV is 40000, outside the INT range, and CV is a DINT that starts at 0, so Q is false."

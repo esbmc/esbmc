@@ -16,6 +16,7 @@
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
+class printf_formattert;
 
 // Thrown by symex when the inductive step encounters a construct it cannot
 // soundly encode (recursion, threads, function-pointer calls). The thrower
@@ -410,6 +411,20 @@ protected:
    */
   virtual void assume(const expr2tc &assumption);
 
+  /**
+   *  Hold back the assume that ends a path at a Python assert (#8242).
+   *  A later Python assert fails whether or not an earlier one ended the
+   *  path, so only other claims need it; claim() emits it before them.
+   *  Keeping it out of the equation until then spares each later
+   *  assertion and guard check the earlier assertions' constraints.
+   *  @param assumption The assert's condition.
+   */
+  virtual void defer_assumption(const expr2tc &assumption);
+
+  /** Before a claim that needs them, emit every deferred assumption into
+   *  the target equation. */
+  void flush_deferred_assumptions();
+
   // gotos
   /**
    *  Merge converging states into current state.
@@ -575,6 +590,13 @@ protected:
    */
   bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
+  /** Convert an actual argument to its parameter's type, claiming the call
+   *  undefined when the two are incompatible. */
+  expr2tc argument_value(
+    const type2tc &arg_type,
+    const expr2tc &rhs,
+    const irep_idt &identifier);
+
   /**
    *  Join up function arguments.
    *  Assigns the value of arguments to a function to the actual argument
@@ -646,6 +668,10 @@ protected:
     reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
+  /** Perform havoc_object; assign nondet to every object the argument may
+   *  point to, whole and of any size. k-induction emits it at a loop head for
+   *  a pointer the loop writes through at offsets it cannot bound. */
+  void intrinsic_havoc_object(const code_function_call2t &call);
   /** Perform init_thread_local; seeds each `__thread`-qualified global
    *  to its static initializer in the active thread's renaming scope. */
   void intrinsic_init_thread_local(reachability_treet &art);
@@ -814,6 +840,7 @@ protected:
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
+  void reject_untyped_isinstance(const expr2tc &value);
 
   void volatile_check(expr2tc &expr);
 
@@ -922,22 +949,33 @@ protected:
   determine_fallback_element_type(const sideeffect2t &code, const expr2tc &lhs);
 
   /**
-   *  Analyze the old object being reallocated.
-   *  Examines the source pointer to extract information about the existing
-   *  allocation, including element type, base array, array status, and count.
-   *  @param src_ptr The source pointer being reallocated.
+   *  Analyze an object a reallocated pointer may point to.
+   *  @param old_obj The object, as found by an internal dereference.
    *  @param elem_type Output parameter for the element type.
    *  @param old_base_array Output parameter for the base array symbol.
    *  @param old_is_array Output parameter indicating if it's a typed array.
-   *  @param old_elem_count Output parameter for the element count.
-   *  @return True if analysis succeeded and old object information was found.
    */
-  bool analyze_old_object(
-    const expr2tc &src_ptr,
+  void analyze_old_object(
+    const expr2tc &old_obj,
     type2tc &elem_type,
     expr2tc &old_base_array,
-    bool &old_is_array,
-    expr2tc &old_elem_count);
+    bool &old_is_array);
+
+  /**
+   *  Copy each object a reallocated pointer may point to into the new
+   *  allocation, guarded by the pointer pointing to it.
+   *  @param old_objects The objects found by an internal dereference.
+   *  @param new_array The destination array for copied data.
+   *  @param new_elem_count Number of elements in the new allocation.
+   *  @param elem_type Element type of the new allocation.
+   *  @param guard Guard condition for the copy operations.
+   */
+  void copy_old_objects(
+    const std::list<dereference_callbackt::internal_item> &old_objects,
+    const expr2tc &new_array,
+    const expr2tc &new_elem_count,
+    const type2tc &elem_type,
+    const guard2tc &guard);
 
   /**
    *  Handle realloc with zero size parameter.
@@ -1390,6 +1428,36 @@ protected:
     const guard2tc &guard);
   /** Symbolic implementation of printf */
   virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
+  /** Store an unrenamed sprintf or snprintf call's output in its
+   *  destination buffer, when the format bounds that output's length.
+   *  Returns the output's length, nil when nothing is stored. */
+  expr2tc symex_sprintf_store(const code_printf2t &call);
+  /** The output of an unrenamed sprintf or snprintf call: its characters
+   *  before the NUL in `chars`, and its length, nil when unknown. */
+  expr2tc sprintf_output(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    const type2tc &char_type,
+    std::vector<expr2tc> &chars);
+  /** The length of an unrenamed printf-family call's output whose constant
+   *  format holds only text and %d, %i or %u conversions without flags,
+   *  width or precision, with its largest value in `max_len`; nil for any
+   *  other format. */
+  expr2tc printf_output_length(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    size_t &max_len);
+  /** Assume a printf-family call's return value equals the length of the
+   *  output stored, when both are known. */
+  void assume_printf_length(const expr2tc &retval, const expr2tc &len);
+  /** Run `formatter` over an unrenamed printf-family call; false when the
+   *  format is not a constant. `constant_args` is set when every argument
+   *  is a constant. */
+  bool format_printf_output(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    printf_formattert &formatter,
+    bool &constant_args);
   /** Recover the variadic arguments hidden behind a va_list operand of a
    *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
    *  Succeeds only under conservative conditions guaranteeing the mapping is
@@ -1417,23 +1485,41 @@ protected:
    *  variable backing it; nullopt when it cannot be pinned down to one. */
   std::optional<renaming::level2t::name_record>
   va_list_l1_record(const expr2tc &va_list_expr) const;
+  /** The l1 identity records of the local va_lists a pointer-valued
+   *  expression may point to. */
+  std::vector<renaming::level2t::name_record>
+  va_list_pointee_records(const expr2tc &va_list_expr) const;
   /** Whether the va_list denoted by this expression is known (or assumed)
    *  to have been initialised by va_start/va_copy. va_lists whose base
    *  cannot be resolved to a local variable's symbol are conservatively
    *  assumed started. */
   bool va_list_is_started(const expr2tc &va_list_expr) const;
   /** Record the started-by-va_start state of the va_list denoted by this
-   *  expression, and the va_arg index it reads next, if known. No-op if the
-   *  base cannot be resolved to a local variable's symbol. */
+   *  expression, and the va_arg index it reads next, if known (nil if not).
+   *  No-op if the base cannot be resolved to a local variable's symbol. */
   void va_list_mark_started(
     const expr2tc &va_list_expr,
     bool started,
-    std::optional<unsigned> cursor);
-  /** The va_arg index a started local va_list reads next; nullptr when it is
+    const expr2tc &cursor);
+  /** va_start: the va_list reads this frame's first variadic argument next. */
+  void va_list_start(const expr2tc &va_list_expr);
+  /** The l1 symbol holding the va_arg index a local va_list reads next. It is
+   *  an SSA variable so that a va_arg on one branch moves it on that branch
+   *  only. */
+  expr2tc va_list_cursor_symbol(const renaming::level2t::name_record &rec);
+  /** The cursor symbol of a started local va_list; nil when its cursor is
    *  not known, and the frame's cursor applies. */
-  unsigned *va_list_cursor(const expr2tc &va_list_expr);
+  expr2tc va_list_cursor(const expr2tc &va_list_expr);
+  /** The records va_list_frame looks for: a va_copy destination's are those
+   *  of the va_list it was copied from. */
+  std::vector<renaming::level2t::name_record>
+  va_list_owner_records(const expr2tc &va_list_expr) const;
   /** va_copy: start dst as src is, reading where src reads next. */
   void va_list_copy(const expr2tc &dst, const expr2tc &src);
+  /** The frame whose variadic arguments a va_list reads: the activation that
+   *  declared it, which is a caller's when the va_list was passed down.
+   *  Falls back to the current frame when that cannot be pinned down. */
+  goto_symex_statet::framet &va_list_frame(const expr2tc &va_list_expr);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1516,6 +1602,19 @@ protected:
    */
   std::unordered_map<irep_idt, expr2tc> copy_definitions;
 
+  struct deferred_assumptiont
+  {
+    expr2tc guard;
+    expr2tc cond;
+    symex_targett::sourcet source;
+    unsigned loop_number;
+  };
+  /** Assumptions defer_assumption() holds back, in program order. */
+  std::vector<deferred_assumptiont> deferred_assumptions;
+  /** Set while claim() handles a Python assert's own condition, which needs
+   *  no deferred assumption. */
+  bool claim_skips_deferred = false;
+
   /** The renamed byte size each heap object was allocated with, by symbol.
    *  __ESBMC_alloc_size holds it too, but symex cannot read that array back,
    *  so a DYNAMIC_SIZE loop bound would never become constant. */
@@ -1589,8 +1688,8 @@ protected:
     const type2tc &ret_type);
 
   /** Level-1 identities (base name, activation, thread) of va_list objects
-   *  initialised by va_start, or by va_copy from a started source, with the
-   *  va_arg index each reads next where it is known. Keyed on
+   *  initialised by va_start, or by va_copy from a started source, and
+   *  whether each has a cursor symbol of its own. Keyed on
    *  the l1 renaming so the same object is recognised across frames (a
    *  va_list reached through a pointer dereferences to the owning
    *  activation's l1 name) and across recursion or loop re-declaration (each
@@ -1599,9 +1698,16 @@ protected:
    *  so a conditional va_start can never yield a false positive. */
   std::unordered_map<
     renaming::level2t::name_record,
-    std::optional<unsigned>,
+    bool,
     renaming::level2t::name_rec_hash>
     va_started;
+  /** For each va_copy destination, the local va_list whose frame's variadic
+   *  arguments it reads, so a copy made in a callee reads the caller's. */
+  std::unordered_map<
+    renaming::level2t::name_record,
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_copied_from;
 
   /** Disable return value optimization */
   bool no_return_value_opt;

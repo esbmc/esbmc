@@ -218,11 +218,66 @@ class LoopMixin:
         remember to preserve the original `orelse`.
         """
         self._update_assignment_call_origins([node.target], None)
+        lowered = self._lower_iterator_protocol_for(node)
+        if lowered is not None:
+            return lowered
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
             result = [result]
         return for_else_pre + result + for_else_post
+
+    def _lower_iterator_protocol_for(self, node):
+        """Lower `for x in Obj(...)` over a class with `__iter__`.
+
+        The sequence lowering below indexes the iterable by position, which a
+        user iterator does not support, so the loop reported a TypeError on a
+        correct program. Spell out the protocol instead:
+
+            it = <iterable>.__iter__()
+            while True:
+                try:
+                    x = it.__next__()
+                except StopIteration:
+                    break
+                <body>
+
+        Only for a constructor call of such a class, the one shape whose
+        class is known here, and without a for-else.
+        """
+        it_expr = node.iter
+        if not (isinstance(it_expr, ast.Call) and isinstance(it_expr.func, ast.Name)
+                and it_expr.func.id in self.iterator_classes) or node.orelse:
+            return None
+        self._iter_counter += 1
+        it_name = f"ESBMC_iter_{self._iter_counter}"
+        init = ast.Assign(targets=[ast.Name(id=it_name, ctx=ast.Store())],
+                          value=ast.Call(func=ast.Attribute(value=it_expr,
+                                                            attr="__iter__",
+                                                            ctx=ast.Load()),
+                                         args=[],
+                                         keywords=[]))
+        fetch = ast.Try(body=[
+            ast.Assign(targets=[node.target],
+                       value=ast.Call(func=ast.Attribute(value=ast.Name(id=it_name, ctx=ast.Load()),
+                                                         attr="__next__",
+                                                         ctx=ast.Load()),
+                                      args=[],
+                                      keywords=[]))
+        ],
+                        handlers=[
+                            ast.ExceptHandler(type=ast.Name(id="StopIteration", ctx=ast.Load()),
+                                              name=None,
+                                              body=[ast.Break()])
+                        ],
+                        orelse=[],
+                        finalbody=[])
+        loop = ast.While(test=ast.Constant(value=True), body=[fetch] + node.body, orelse=[])
+        for new in (init, loop):
+            ast.copy_location(new, node)
+        ast.fix_missing_locations(init)
+        ast.fix_missing_locations(loop)
+        return [self.visit(init), self.visit(loop)]
 
     def _lower_for_else(self, node):
         """Lower `for ... else: <orelse>` into a did-not-break flag.
@@ -463,6 +518,11 @@ class LoopMixin:
             return False
         return True
 
+    @staticmethod
+    def _is_constant_element(elt):
+        return isinstance(elt, ast.Constant) or (isinstance(elt, ast.UnaryOp) and isinstance(
+            elt.op, (ast.UAdd, ast.USub)) and isinstance(elt.operand, ast.Constant))
+
     def _unroll_list_literal_for(self, node, list_literal):
         """Unroll `for` over a tracked list literal variable into straight-line code.
 
@@ -492,10 +552,30 @@ class LoopMixin:
             for idx, elt in enumerate(list_literal.elts):
                 temp_name = f"__esbmc_unrolled_item_{counter}_{idx}"
                 temp_names.append(temp_name)
-                snap_assign = ast.Assign(
-                    targets=[ast.Name(id=temp_name, ctx=ast.Store())],
-                    value=copy.deepcopy(elt),
-                )
+                if not any(isinstance(n, ast.Call) for n in ast.walk(elt)):
+                    snap_assign = ast.Assign(
+                        targets=[ast.Name(id=temp_name, ctx=ast.Store())],
+                        value=copy.deepcopy(elt),
+                    )
+                else:
+                    # Read the bound list: re-evaluating the element would
+                    # repeat its calls (#8416). Inference types `xs[i]` as it
+                    # would a user-written read, but refuses a literal mixing
+                    # constants with other elements, so annotate that one Any,
+                    # as the generic iteration path does.
+                    snap_assign = ast.Assign(
+                        targets=[ast.Name(id=temp_name, ctx=ast.Store())],
+                        value=ast.Subscript(value=ast.Name(id=node.iter.id, ctx=ast.Load()),
+                                            slice=ast.Constant(value=idx),
+                                            ctx=ast.Load()),
+                    )
+                    if any(map(self._is_constant_element, list_literal.elts)):
+                        snap_assign = ast.AnnAssign(
+                            target=snap_assign.targets[0],
+                            annotation=ast.Name(id="Any", ctx=ast.Load()),
+                            value=snap_assign.value,
+                            simple=1,
+                        )
                 self.ensure_all_locations(snap_assign, node)
                 unrolled.append(snap_assign)
 
@@ -2360,10 +2440,15 @@ class LoopMixin:
                 unpack_assigns.append(unpack_assign)
             else:
                 for i, elt in enumerate(node.target.elts):
-                    if not isinstance(elt, ast.Name):
+                    # A nested tuple/list element unpacks its own item (#8226).
+                    if isinstance(elt, (ast.Tuple, ast.List)):
+                        elt_target = copy.deepcopy(elt)
+                    elif isinstance(elt, ast.Name):
+                        elt_target = ast.Name(id=elt.id, ctx=ast.Store())
+                    else:
                         continue
                     unpack_assign = ast.Assign(
-                        targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                        targets=[elt_target],
                         value=ast.Subscript(
                             value=ast.Name(id=target_var_name, ctx=ast.Load()),
                             slice=ast.Constant(value=i),
@@ -2611,6 +2696,12 @@ class LoopMixin:
             staged_values = [copy.deepcopy(vn) for _, vn in leaf_pairs]
 
         for (target_node, value_node), staged in zip(leaf_pairs, staged_values):
+            captured = self._track_bound_method(
+                target_node, staged,
+                self._is_resolvable_unpacked_method(target_node, staged, source_node))
+            if captured is not None:
+                assignments.extend(captured)
+                continue
             target_copy = copy.deepcopy(target_node)
             individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
             self._update_variable_types_simple(target_copy, value_node)

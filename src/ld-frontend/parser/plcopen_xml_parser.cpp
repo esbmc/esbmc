@@ -13,6 +13,7 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
+#include <optional>
 #include <set>
 
 // -----------------------------------------------------------------------
@@ -50,7 +51,8 @@ static std::string text_or_attr(
 // PlcopenXmlParser
 // -----------------------------------------------------------------------
 
-VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
+VarKind
+PlcopenXmlParser::var_kind_from_string(const std::string &s, bool derived)
 {
   static const std::unordered_map<std::string, VarKind> table = {
     {"BOOL", VarKind::BOOL},
@@ -60,26 +62,40 @@ VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
     {"REAL", VarKind::REAL},
     {"LREAL", VarKind::REAL},
   };
-  // No unsigned, 8-bit or 64-bit kind exists; a 32-bit stand-in would miss
-  // their wrap.
-  static const std::unordered_set<std::string> unmodeled = {
-    "UINT", "SINT", "LINT", "WORD"};
-  if (unmodeled.count(s))
-    throw UnsupportedConstructError("type " + s, 2);
   auto it = table.find(s);
-  if (it == table.end())
-    return VarKind::BOOL; // default; type checker will flag unsupported types
-  return it->second;
+  if (it != table.end())
+    return it->second;
+  // A derived type names a function-block instance. Any other type the table
+  // lacks (unsigned, 8-bit or 64-bit integers, bit strings, strings, arrays,
+  // structures) has no kind; reading it as BOOL would verify a different
+  // program.
+  if (!derived)
+    throw UnsupportedConstructError("type " + s, 2);
+  return VarKind::BOOL;
+}
+
+// Whether a negated="..." attribute negates. Vendors spell it "true"/"false",
+// as xs:boolean "1"/"0", or repeat the attribute name; anything else is refused
+// rather than read as "not negated".
+static bool negation_from_attribute(const std::string &s)
+{
+  if (s == "negated" || s == "true" || s == "1")
+    return true;
+  if (s.empty() || s == "false" || s == "0")
+    return false;
+  throw UnsupportedConstructError("negated=\"" + s + "\"", 2);
 }
 
 // Accepts both the element name (NormallyClosedContact) and the value of a
-// negated="..." attribute. Vendors spell the attribute "true"/"false" or
-// repeat the attribute name, so "false" must not be read as negation.
+// negated="..." attribute.
 ContactKind PlcopenXmlParser::contact_kind_from_string(const std::string &s)
 {
-  if (s == "negated" || s == "true" || s == "NormallyClosedContact")
+  if (s == "NormallyClosedContact")
     return ContactKind::NormallyClosed;
-  return ContactKind::NormallyOpen;
+  if (s == "NormallyOpenContact" || s == "contact" || s == "Contact")
+    return ContactKind::NormallyOpen;
+  return negation_from_attribute(s) ? ContactKind::NormallyClosed
+                                    : ContactKind::NormallyOpen;
 }
 
 // PLCopen writes the transition-sensing kind as edge="rising|falling"; some
@@ -90,19 +106,98 @@ static ContactEdge contact_edge_from_string(const std::string &s)
     return ContactEdge::Rising;
   if (s == "falling" || s == "negative" || s == "F" || s == "N")
     return ContactEdge::Falling;
-  return ContactEdge::None;
+  if (s.empty() || s == "none")
+    return ContactEdge::None;
+  throw UnsupportedConstructError("edge=\"" + s + "\"", 2);
 }
 
-CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
+static CoilKind coil_kind_of(const std::string &s)
 {
   if (s == "set" || s == "SetCoil")
     return CoilKind::Set;
   if (s == "reset" || s == "ResetCoil")
     return CoilKind::Reset;
-  return CoilKind::Output;
+  if (s == "coil" || s == "Coil" || s == "none")
+    return CoilKind::Output;
+  throw UnsupportedConstructError("coil kind \"" + s + "\"", 2);
+}
+
+CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
+{
+  return coil_kind_of(s);
+}
+
+static std::string coil_kind_attribute(const pugi::xml_node &n)
+{
+  std::string kind = text_or_attr(n, "kind", nullptr);
+  if (kind.empty())
+    kind = text_or_attr(n, "storage", nullptr);
+  return kind == "none" ? std::string() : kind;
+}
+
+static void note_derived_type(VarDecl &v, bool derived, const std::string &type)
+{
+  if (derived)
+    v.derived_type = type;
+}
+
+// A negated or transition-sensing coil (IEC 61131-3 Table 76) is not modeled;
+// reading it as a plain coil would store the opposite value or the wrong edge.
+static void
+require_plain_coil(bool negated, ContactEdge edge, const std::string &var)
+{
+  if (negated || edge != ContactEdge::None)
+    throw UnsupportedConstructError(
+      "coil (var=" + var + ") with a negated or edge attribute", 2);
+}
+
+// std::stable_sort needs a strict weak ordering. The sink order compares
+// coordinates within a tolerance, which is not transitive when rows lie less
+// than 10 apart in a chain, so the sort would be undefined. Such a layout has
+// no defined sink order and is refused.
+template <typename Less>
+static void require_total_order(const std::vector<int> &items, Less before)
+{
+  for (int a : items)
+    for (int b : items)
+      for (int c : items)
+      {
+        const bool less_chain = before(a, b) && before(b, c) && !before(a, c);
+        const bool equal_chain = !before(a, b) && !before(b, a) &&
+                                 !before(b, c) && !before(c, b) &&
+                                 (before(a, c) || before(c, a));
+        if (less_chain || equal_chain)
+          throw UnsupportedConstructError(
+            "coils in rows less than 10 units apart in a chain", 2);
+      }
+}
+
+// Appends the variables the resolver invented, refusing one that a declared
+// variable already uses.
+static void append_synthesized(
+  std::vector<VarDecl> &variables,
+  std::vector<VarDecl> &synthesized)
+{
+  std::set<std::string> declared;
+  for (const auto &v : variables)
+    declared.insert(v.name);
+  for (auto &v : synthesized)
+  {
+    if (declared.count(v.name))
+      throw UnsupportedConstructError(
+        "variable " + v.name + " clashes with a name the resolver generates",
+        2);
+    variables.push_back(std::move(v));
+  }
+  synthesized.clear();
 }
 
 static FBKind fb_kind_of(const std::string &s);
+static void check_known_pins(
+  const pugi::xml_node &block,
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance);
 static bool
 literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out);
 
@@ -141,14 +236,17 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   // <type><BOOL/>, <INT/>, etc. or <type><derived name="MyType"/>.
   auto type_node = n.child("type");
   std::string type_str;
+  bool derived = false;
   if (auto first = type_node.first_child(); !first.empty())
   {
     std::string tag = first.name();
     type_str = (tag == "derived") ? first.attribute("name").as_string() : tag;
+    derived = tag == "derived";
   }
   if (type_str.empty())
     type_str = "BOOL";
-  v.kind = var_kind_from_string(type_str);
+  v.kind = var_kind_from_string(type_str, derived);
+  note_derived_type(v, derived, type_str);
   v.loc = loc_from_node(n, source_file_);
 
   // <initialValue><simpleValue value="2"/></initialValue>. Without this a
@@ -225,14 +323,17 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
     elem.kind = RungElementKind::Coil;
     // PLCopen XML encodes coil kind either as the tag name (SetCoil/ResetCoil)
     // or as a "kind" attribute on a generic <coil kind="set|reset"/> element.
-    std::string kind_str = text_or_attr(n, "kind", nullptr);
-    elem.coil.kind = kind_str.empty() ? coil_kind_from_string(tag)
-                                      : coil_kind_from_string(kind_str);
+    const std::string kind_str = coil_kind_attribute(n);
+    elem.coil.kind = coil_kind_from_string(kind_str.empty() ? tag : kind_str);
     if (auto var_node = n.child("variable"))
       elem.coil.variable = var_node.child_value();
     else
       elem.coil.variable = text_or_attr(n, "variable", "variable");
     elem.coil.loc = elem.loc;
+    require_plain_coil(
+      negation_from_attribute(text_or_attr(n, "negated", nullptr)),
+      contact_edge_from_string(text_or_attr(n, "edge", nullptr)),
+      elem.coil.variable);
     return elem;
   }
 
@@ -241,6 +342,7 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
     const std::string fb_type = text_or_attr(n, "typeName", "typeName");
     FBKind kind = fb_kind_from_string(fb_type);
     const std::string inst = text_or_attr(n, "instanceName", "instanceName");
+    check_known_pins(n, kind, fb_type, inst);
 
     auto get_var = [&](const char *port) -> std::string {
       for (auto var : n.children("variable"))
@@ -347,6 +449,34 @@ struct GNode
   int document_order = 0; // index among the body's children
 };
 
+static bool steps_every_scan(const std::string &type_name);
+
+// A wire into a sink from an element the resolver does not model (a
+// continuation, a Boolean inVariable, a vendor element, a block whose output
+// is not a timer's or counter's Q) would otherwise be dropped as carrying no
+// power, leaving the sink driven by fewer paths than the file wires.
+static void require_modeled_source(const GNode &g)
+{
+  const bool block = g.tag == "block" || g.tag == "Block";
+  if (block ? !steps_every_scan(g.type_name) : g.tag != "contact")
+    throw UnsupportedConstructError(
+      block ? g.type_name
+            : g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"),
+      2);
+}
+
+static std::vector<int>
+ids_in_document_order(const std::unordered_map<int, GNode> &nodes)
+{
+  std::vector<int> ids;
+  for (const auto &entry : nodes)
+    ids.push_back(entry.first);
+  std::sort(ids.begin(), ids.end(), [&](int a, int b) {
+    return nodes.at(a).document_order < nodes.at(b).document_order;
+  });
+  return ids;
+}
+
 static const std::string &label(const GNode &g)
 {
   return g.type_name.empty() ? g.tag : g.type_name;
@@ -408,6 +538,19 @@ static long long parse_duration_ms(const std::string &text)
     any = true;
   }
   return any ? total : -1;
+}
+
+// The period of a task's interval attribute: IEC `T#...`, or the xs:duration
+// `PT0S` some tools write for no period. Any other spelling is refused; reading
+// it as 1 ms would shorten every timer preset.
+static long long task_interval_ms(const std::string &text)
+{
+  if (text == "PT0S")
+    return 0;
+  const long long ms = parse_duration_ms(text);
+  if (ms < 0)
+    throw UnsupportedConstructError("task interval '" + text + "'", 2);
+  return ms;
 }
 
 // Resolve an <inVariable> literal to the value the fixed-tick model expects.
@@ -480,6 +623,92 @@ static FBKind fb_kind_of(const std::string &s)
   return it->second;
 }
 
+// fb_kind_of without the throw, for a caller for which an unrecognised type
+// name is a legitimate case (a user-defined FB) rather than a parse error.
+static std::optional<FBKind> fb_kind_of_std(const std::string &s)
+{
+  try
+  {
+    return fb_kind_of(s);
+  }
+  catch (const LdParseError &)
+  {
+    return std::nullopt;
+  }
+}
+
+// The formalParameter names each block kind declares (IEC 61131-3 §2.5.2.3's
+// standard FBs, plus CODESYS's LD/LOAD alias for CTD). A wire whose
+// formalParameter is not in this set is otherwise never read, so it is
+// rejected here rather than silently dropped.
+//
+// EN/ENO (the EN/ENO extension IEC 61131-3 §2.5.1.2 allows on any FB call)
+// are accepted on every kind but not modelled: a wired EN does not gate
+// execution and ENO is never set, same as before this check existed. Listing
+// them avoids rejecting a legitimate program over an unrelated typo; the gap
+// is unmodelled EN/ENO semantics, not an unrecognised pin.
+static const std::unordered_map<FBKind, std::set<std::string>> &
+known_pins_table()
+{
+  static const std::unordered_map<FBKind, std::set<std::string>> table = {
+    {FBKind::TON, {"EN", "ENO", "IN", "PT", "Q", "ET"}},
+    {FBKind::TOF, {"EN", "ENO", "IN", "PT", "Q", "ET"}},
+    {FBKind::TP, {"EN", "ENO", "IN", "PT", "Q", "ET"}},
+    {FBKind::CTU, {"EN", "ENO", "CU", "R", "PV", "Q", "CV"}},
+    {FBKind::CTD, {"EN", "ENO", "CD", "LD", "LOAD", "PV", "Q", "CV"}},
+    {FBKind::ADD, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::SUB, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::MUL, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::DIV, {"EN", "ENO", "IN1", "IN2", "OUT"}},
+    {FBKind::MOVE, {"EN", "ENO", "IN1", "OUT"}},
+  };
+  return table;
+}
+
+// Rejects a formalParameter this block kind does not declare, so a
+// misspelled or vendor-specific pin name is diagnosed rather than silently
+// never read.
+static void check_known_pin(
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance,
+  const std::string &pin)
+{
+  if (known_pins_table().at(kind).count(pin))
+    return;
+  throw UnsupportedConstructError(
+    type_name + " " + instance + " pin " + pin, 2);
+}
+
+// Validates every formalParameter a textual block's <variable> children
+// name, out of line so the branches this adds do not inflate its much
+// larger callers' own cyclomatic complexity.
+static void check_known_pins(
+  const pugi::xml_node &block,
+  FBKind kind,
+  const std::string &type_name,
+  const std::string &instance)
+{
+  for (auto var : block.children("variable"))
+  {
+    const std::string formal = var.attribute("formalParameter").as_string();
+    if (!formal.empty())
+      check_known_pin(kind, type_name, instance, formal);
+  }
+}
+
+// As check_known_pin, for a graphical block whose FBKind may be absent (a
+// user-defined FB, which this validation does not cover); a no-op then.
+static void check_known_pin_if_std(
+  const std::optional<FBKind> &kind,
+  const std::string &type_name,
+  const std::string &instance,
+  const std::string &pin)
+{
+  if (kind && !pin.empty())
+    check_known_pin(*kind, type_name, instance, pin);
+}
+
 static std::string trim(const std::string &text)
 {
   const auto first = text.find_first_not_of(" \t\r\n");
@@ -530,6 +759,15 @@ static bool is_identifier(const std::string &text)
 static bool is_coil_tag(const std::string &t)
 {
   return t == "coil" || t == "SetCoil" || t == "ResetCoil";
+}
+
+// A coil's storage attribute must name a kind the converter models.
+static std::string
+checked_storage(const std::string &tag, const std::string &storage)
+{
+  if (is_coil_tag(tag) && !storage.empty() && storage != "none")
+    coil_kind_of(storage);
+  return storage;
 }
 
 // Only a timer or counter step assigns the Q a block's power flow is named
@@ -630,7 +868,7 @@ static bool parse_graphical_ld(
     if (auto v = child.child("variable"))
       g.var = v.child_value();
     std::string neg_attr = child.attribute("negated").as_string("");
-    g.negated = (neg_attr == "true" || neg_attr == "negated");
+    g.negated = negation_from_attribute(neg_attr);
     g.edge = contact_edge_from_string(child.attribute("edge").as_string(""));
 
     std::string storage_attr = child.attribute("storage").as_string("");
@@ -641,7 +879,7 @@ static bool parse_graphical_ld(
       if (t == "ResetCoil")
         storage_attr = "reset";
     }
-    g.storage = storage_attr;
+    g.storage = checked_storage(t, storage_attr);
     g.x = child.child("position").attribute("x").as_int(0);
     g.y = child.child("position").attribute("y").as_int(0);
 
@@ -649,12 +887,17 @@ static bool parse_graphical_ld(
     {
       g.type_name = child.attribute("typeName").as_string("");
       g.instance_name = child.attribute("instanceName").as_string("");
+      // A user-defined FB's type name is not in FBKind; its std_kind is
+      // empty and check_known_pin skips it, since its pins are validated
+      // from its own interface via the ST body translator, not this table.
+      std::optional<FBKind> std_kind = fb_kind_of_std(g.type_name);
       // Record each input pin's source so data pins (PT, PV) can be resolved
       // without turning them into power-flow edges.
       for (auto pin : child.child("inputVariables").children("variable"))
       {
         const std::string formal =
           pin.attribute("formalParameter").as_string("");
+        check_known_pin_if_std(std_kind, g.type_name, g.instance_name, formal);
         auto conn = pin.select_node(".//connection").node();
         const int src = conn.attribute("refLocalId").as_int(-1);
         if (!formal.empty() && src >= 0)
@@ -720,9 +963,13 @@ static bool parse_graphical_ld(
     if (g.tag == "leftPowerRail")
       left_rails.push_back(lid);
 
+  // `nodes` is unordered, so the predecessor order and the order of the blocks
+  // no sink consumes would otherwise depend on hashing.
+  const std::vector<int> by_document = ids_in_document_order(nodes);
+
   std::map<int, std::vector<int>> preds;
-  for (auto &[lid, g] : nodes)
-    for (int succ : g.feeds)
+  for (int lid : by_document)
+    for (int succ : nodes.at(lid).feeds)
       preds[succ].push_back(lid);
 
   std::set<int> rail_reaches;
@@ -747,8 +994,12 @@ static bool parse_graphical_ld(
     auto it = preds.find(lid);
     if (it != preds.end())
       for (int p : it->second)
+      {
         if (rail_reaches.count(p))
           live.push_back(p);
+        else
+          require_modeled_source(nodes.at(p));
+      }
     return live;
   };
 
@@ -905,12 +1156,15 @@ static bool parse_graphical_ld(
   // network into a diagnostic rather than a stack overflow.
   ensure_pf = [&](int lid) {
     const GNode &g = nodes.at(lid);
-    if (g.tag == "leftPowerRail" || !pf_emitted.insert(lid).second)
+    if (g.tag == "leftPowerRail")
       return;
-    if (!pf_in_progress.insert(lid).second)
+    if (pf_in_progress.count(lid))
       throw LdParseError(
         "graphical LD: power flow into localId " + std::to_string(lid) +
         " is cyclic");
+    if (!pf_emitted.insert(lid).second)
+      return;
+    pf_in_progress.insert(lid);
 
     for (int p : live_preds(lid))
       ensure_pf(p);
@@ -1085,10 +1339,12 @@ static bool parse_graphical_ld(
   std::sort(coils.begin(), coils.end(), [&](int a, int b) {
     return nodes.at(a).document_order < nodes.at(b).document_order;
   });
-  std::stable_sort(coils.begin(), coils.end(), [&](int a, int b) {
+  const auto coil_before = [&](int a, int b) {
     const GNode &ga = nodes.at(a), &gb = nodes.at(b);
     return std::abs(ga.y - gb.y) < 10 ? ga.x < gb.x : ga.y < gb.y;
-  });
+  };
+  require_total_order(coils, coil_before);
+  std::stable_sort(coils.begin(), coils.end(), coil_before);
 
   // Step 7: emit the coils. Evaluation is sequential, as in the ST Beremiz
   // generates for MATIEC: each coil re-reads its contacts after every earlier
@@ -1097,6 +1353,7 @@ static bool parse_graphical_ld(
   for (int coil : coils)
   {
     const GNode &g = nodes.at(coil);
+    require_plain_coil(g.negated, g.edge, g.var);
     pf_emitted.clear();
     CoilKind kind = CoilKind::Output;
     if (g.storage == "set")
@@ -1110,8 +1367,8 @@ static bool parse_graphical_ld(
   // every scan, so they are emitted even when no coil consumes them, after
   // every coil and reading the values the coils left, as Beremiz orders them.
   pf_emitted.clear();
-  for (auto &[lid, g] : nodes)
-    if (g.tag == "block" || g.tag == "Block")
+  for (int lid : by_document)
+    if (nodes.at(lid).tag == "block" || nodes.at(lid).tag == "Block")
       emit_block(lid);
 
   return true;
@@ -1339,6 +1596,198 @@ static void reject_concurrent_programs(const pugi::xml_node &root)
     throw UnsupportedConstructError("more than one program POU", 2);
 }
 
+struct VariableUses
+{
+  std::set<std::string> contact, coil, block_out, pin_in;
+};
+
+static VariableUses collect_uses(const LdAst &ast)
+{
+  VariableUses u;
+  for (const auto &net : ast.networks)
+    for (const auto &rung : net.rungs)
+      for (const auto &elem : rung.elements)
+        switch (elem.kind)
+        {
+        case RungElementKind::Contact:
+          u.contact.insert(elem.contact.variable);
+          break;
+        case RungElementKind::Coil:
+          u.coil.insert(elem.coil.variable);
+          break;
+        case RungElementKind::TimerFB:
+          u.block_out.insert({elem.timer_fb.Q_var, elem.timer_fb.ET_var});
+          u.pin_in.insert(elem.timer_fb.IN_var);
+          break;
+        case RungElementKind::CounterFB:
+          u.block_out.insert({elem.counter_fb.Q_var, elem.counter_fb.CV_var});
+          u.pin_in.insert(
+            {elem.counter_fb.CU_var,
+             elem.counter_fb.CD_var,
+             elem.counter_fb.R_var,
+             elem.counter_fb.LD_var});
+          break;
+        case RungElementKind::ArithFB:
+          u.block_out.insert(elem.arith_fb.OUT_var);
+          break;
+        }
+  for (const auto &fb : ast.user_fb_instances)
+    for (const auto &wire : fb.out_wires)
+      u.block_out.insert(wire.prog_var);
+  return u;
+}
+
+// Heuristic I/O inference for programs whose variables have neither a hardware
+// address nor an interface direction (tutorial and simulation programs that
+// declare everything in <localVars>). A variable that appears only as a contact
+// is an input and one that appears only as a coil is an output. A variable that
+// a timer, counter, arithmetic block or user function block writes is driven by
+// the program, so reading it through a contact does not make it an input.
+static void infer_io_directions(LdAst &ast)
+{
+  const VariableUses u = collect_uses(ast);
+  for (auto &v : ast.variables)
+  {
+    if (v.is_input || v.is_output)
+      continue;
+    const bool read = u.contact.count(v.name);
+    const bool coiled = u.coil.count(v.name);
+    const bool pin_read = !v.synthesized && u.pin_in.count(v.name);
+    if ((read || pin_read) && !coiled && !u.block_out.count(v.name))
+      v.is_input = true;
+    else if (coiled && !read)
+      v.is_output = true;
+  }
+}
+
+static void reject_derived_operands(const LdAst &ast)
+{
+  const VariableUses u = collect_uses(ast);
+  for (const auto &v : ast.variables)
+    if (
+      !v.derived_type.empty() &&
+      (u.contact.count(v.name) || u.coil.count(v.name) ||
+       u.pin_in.count(v.name)))
+      throw UnsupportedConstructError(
+        "variable " + v.name + " of type " + v.derived_type +
+          " used as a Boolean operand",
+        2);
+}
+
+// The shadow of a timer or counter is named after its instance, or after its Q
+// variable when it has none; two blocks must not share one.
+static void reject_shared_shadow_keys(const LdAst &ast)
+{
+  std::set<std::string> timers, counters;
+  for (const auto &net : ast.networks)
+    for (const auto &rung : net.rungs)
+      for (const auto &elem : rung.elements)
+      {
+        std::set<std::string> *seen = nullptr;
+        std::string key;
+        if (elem.kind == RungElementKind::TimerFB)
+        {
+          seen = &timers;
+          key = elem.timer_fb.instance_name.empty()
+                  ? elem.timer_fb.Q_var
+                  : elem.timer_fb.instance_name;
+        }
+        else if (elem.kind == RungElementKind::CounterFB)
+        {
+          seen = &counters;
+          key = elem.counter_fb.instance_name.empty()
+                  ? elem.counter_fb.Q_var
+                  : elem.counter_fb.instance_name;
+        }
+        if (seen && !seen->insert(key).second)
+          throw UnsupportedConstructError(
+            "two blocks (key " + key + ") share one previous-input shadow", 2);
+      }
+}
+
+static bool plain_pin(const pugi::xml_node &v)
+{
+  const std::string neg = v.attribute("negated").as_string();
+  const std::string edge = v.attribute("edge").as_string();
+  return (neg.empty() || neg == "false" || neg == "0") &&
+         (edge.empty() || edge == "none");
+}
+
+static void
+check_textual_enable_pins(const pugi::xml_node &blk, const std::string &what)
+{
+  for (auto v : blk.children("variable"))
+  {
+    const std::string pin = v.attribute("formalParameter").as_string();
+    const std::string text = trim(v.child_value());
+    if (
+      (pin == "EN" && ((!text.empty() && text != "TRUE") || !plain_pin(v))) ||
+      (pin == "ENO" && !text.empty()))
+      throw UnsupportedConstructError("wired " + pin + " on block " + what, 2);
+  }
+}
+
+static void
+check_graphical_en(const pugi::xml_node &blk, const std::string &what)
+{
+  for (auto v : blk.child("inputVariables").children("variable"))
+  {
+    if (std::string(v.attribute("formalParameter").as_string()) != "EN")
+      continue;
+    bool wired = !plain_pin(v);
+    for (auto c : v.select_nodes(".//connection"))
+    {
+      auto src = blk.parent().find_child_by_attribute(
+        "localId", c.node().attribute("refLocalId").as_string("-"));
+      wired |= std::string(src.name()) != "leftPowerRail";
+    }
+    if (wired)
+      throw UnsupportedConstructError("wired EN on block " + what, 2);
+  }
+}
+
+static void
+check_eno_consumers(const pugi::xml_node &blk, const std::string &what)
+{
+  const std::string id = blk.attribute("localId").as_string("-");
+  for (auto c :
+       blk.parent().select_nodes(".//connection[@formalParameter='ENO']"))
+    if (
+      std::string(c.node().attribute("refLocalId").as_string()) == id &&
+      std::string(c.node().parent().parent().name()) != "rightPowerRail")
+      throw UnsupportedConstructError("wired ENO on block " + what, 2);
+}
+
+// EN and ENO of a standard block are not modeled. An EN wired to the left power
+// rail (always true) is accepted; any other EN is refused, and so is an ENO
+// that feeds anything but the right power rail.
+static void reject_wired_enable_pins(const pugi::xml_node &root)
+{
+  for (auto sel : root.select_nodes(
+         "//pou[@pouType='program']//block | //pou[@pouType='program']//Block"))
+  {
+    const pugi::xml_node blk = sel.node();
+    const std::string type = blk.attribute("typeName").as_string();
+    if (!fb_kind_of_std(type))
+      continue;
+    const std::string what =
+      type + " (" + blk.attribute("instanceName").as_string() + ")";
+    check_textual_enable_pins(blk, what);
+    check_graphical_en(blk, what);
+    check_eno_consumers(blk, what);
+  }
+}
+
+static void check_declaration(std::set<std::string> &seen, const VarDecl &v)
+{
+  for (const char *prefix : {"__edge_prev_", "__timer_prev_", "__ctr_prev_"})
+    if (v.name.rfind(prefix, 0) == 0)
+      throw LdParseError(
+        "variable " + v.name + " uses the reserved prefix " + prefix);
+  if (!seen.insert(v.name).second)
+    throw LdParseError("variable " + v.name + " is declared more than once");
+}
+
 LdAst PlcopenXmlParser::parse(const std::string &path)
 {
   source_file_ = path;
@@ -1376,7 +1825,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   for (auto xpath : root.select_nodes("//task[@interval]"))
   {
     const long long ms =
-      parse_duration_ms(xpath.node().attribute("interval").as_string(""));
+      task_interval_ms(xpath.node().attribute("interval").as_string(""));
     if (ms > 0)
     {
       scan_interval_ms_ = static_cast<unsigned>(ms);
@@ -1384,6 +1833,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
+  std::set<std::string> declared_names;
   // Program variables. A function block's interface is its own: each
   // instance gets it from the definition, under the instance's prefix (#7581).
   for (auto xpath_var : root.select_nodes(
@@ -1398,6 +1848,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     for (auto var_node : vars_node.children("variable"))
     {
       VarDecl v = parse_var_decl(&var_node);
+      check_declaration(declared_names, v);
       v.is_input |= input;
       v.shared |= shared;
       if (vars_tag.find("output") != std::string::npos)
@@ -1450,36 +1901,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // Declare the pins and path accumulators the graphical resolver invented.
   // They are already marked as driven, so the inference below leaves them
   // alone rather than havocking them as physical inputs.
-  for (auto &v : synth_vars_)
-    ast.variables.push_back(std::move(v));
-  synth_vars_.clear();
-
-  // Heuristic I/O inference for graphical LD programs without hardware
-  // addresses (%IX/%QX). Variables that appear only as contacts across all
-  // networks are treated as inputs; variables that appear only as coils are
-  // treated as outputs. This covers tutorial and simulation programs that
-  // declare all variables as <localVars> without address attributes.
-  {
-    std::set<std::string> contact_vars, coil_vars;
-    for (const auto &net : ast.networks)
-      for (const auto &rung : net.rungs)
-        for (const auto &elem : rung.elements)
-        {
-          if (elem.kind == RungElementKind::Contact)
-            contact_vars.insert(elem.contact.variable);
-          if (elem.kind == RungElementKind::Coil)
-            coil_vars.insert(elem.coil.variable);
-        }
-    for (auto &v : ast.variables)
-    {
-      if (v.is_input || v.is_output)
-        continue;
-      if (contact_vars.count(v.name) && !coil_vars.count(v.name))
-        v.is_input = true;
-      else if (coil_vars.count(v.name) && !contact_vars.count(v.name))
-        v.is_output = true;
-    }
-  }
+  append_synthesized(ast.variables, synth_vars_);
 
   // -------------------------------------------------------------------
   // User-defined function-block bodies (e.g. EQ_0/GT_0/SUB_0 wrappers that
@@ -1519,7 +1941,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       std::string tag = first.name();
       std::string type_str =
         (tag == "derived") ? first.attribute("name").as_string() : tag;
-      return var_kind_from_string(type_str);
+      return var_kind_from_string(type_str, tag == "derived");
     };
     auto collect = [&](const std::string &section) {
       std::vector<FBVarDecl> out;
@@ -1568,6 +1990,11 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       }
     }
   }
+
+  reject_wired_enable_pins(root);
+  reject_shared_shadow_keys(ast);
+  reject_derived_operands(ast);
+  infer_io_directions(ast);
 
   // Last, so the function-block definitions above are already registered.
   reject_untranslated_bodies(root, ast);

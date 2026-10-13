@@ -229,6 +229,17 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"python-ignore-assertions",
+      NULL,
+      "Treat the program's own assert statements as assumptions, keeping the "
+      "frontend's and the operational model's exception checks (unlike "
+      "--no-assertions, which drops those too)"},
+     {"python-check-exceptions",
+      boost::program_options::value<std::string>()->value_name("types"),
+      "Report only an uncaught exception whose type is one of the "
+      "comma-separated types or a subclass of one. Any other uncaught "
+      "exception ends its path unreported, and the program's assert "
+      "statements become assumptions unless AssertionError is covered"},
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
@@ -883,6 +894,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
+    {"reserve-first-page",
+     NULL,
+     "Place no object below address 4096, as CBMC does, so a pointer made "
+     "from a small integer never aliases one"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "

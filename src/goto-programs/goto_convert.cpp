@@ -1039,6 +1039,50 @@ static void elide_prvalue_temporary(exprt &initializer)
   }
 }
 
+/// A comma's left operands are discarded-value expressions and its right
+/// operand is its result ([expr.comma]/1), so that operand initialises the
+/// variable: a class prvalue there is the variable, not a copied temporary.
+void goto_convertt::discard_comma_operands(
+  exprt &initializer,
+  goto_programt &dest)
+{
+  while (initializer.id() == "comma")
+  {
+    exprt::operandst &operands = initializer.operands();
+    for (auto it = operands.begin(); std::next(it) != operands.end(); ++it)
+      remove_comma_operand(*it, dest);
+    exprt result = operands.back();
+    initializer.swap(result);
+  }
+}
+
+/// A comma's operand is a discarded-value expression ([expr.comma]/1), but a
+/// temporary object it creates lives until the end of the enclosing
+/// full-expression ([class.temporary]/4). Lowering it as a used value leaves
+/// its scope-exit entries for the full-expression to emit.
+void goto_convertt::remove_comma_operand(exprt &operand, goto_programt &dest)
+{
+  const exprt *value = &operand;
+  while (value->id() == "typecast")
+    value = &value->op0();
+  const bool is_temporary =
+    value->id() == "sideeffect" && value->statement() == "temporary_object";
+  const auto &stack = targets.destructor_stack;
+  const std::size_t stack_size = stack.size();
+  remove_sideeffects(operand, dest, is_temporary);
+  for (auto it = stack.begin() + stack_size; it != stack.end(); ++it)
+    if (const irep_idt id = destructor_entry_symbol(*it); !id.empty())
+      comma_operand_temporaries.insert(id);
+
+  // remember as expression statement for later checks
+  if (operand.is_not_nil())
+  {
+    code_expressiont discarded(operand);
+    discarded.location() = operand.location();
+    convert(discarded, dest);
+  }
+}
+
 /// Lower the initializer of a declaration into @p dest. Kept out of
 /// convert_decl so that neither exceeds the complexity gate.
 void goto_convertt::convert_decl_initializer(
@@ -1048,6 +1092,8 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
+  const std::size_t stack_size = targets.destructor_stack.size();
+  discard_comma_operands(initializer, dest);
   elide_prvalue_temporary(initializer);
 
   // `T t;`, `T t = T(...)` and `T t = f(...)` construct `t` itself.
@@ -1057,8 +1103,6 @@ void goto_convertt::convert_decl_initializer(
   // that path is a separate, pre-existing gap.
   if (!construct_in_place(var, initializer, dest))
   {
-    std::size_t stack_size = targets.destructor_stack.size();
-
     goto_programt sideeffects;
     // the side effect is not just removed. Actually, it's converted and
     // removed.
@@ -1068,20 +1112,39 @@ void goto_convertt::convert_decl_initializer(
     code_assignt assign(var, initializer);
     assign.location() = new_code.location();
     copy(assign, ASSIGN, dest);
-
-    // Temporaries materialized while lowering the initializer die at the
-    // end of the full expression (C++ [class.temporary]/4, github #6075):
-    // emit their pending scope-exit entries (destructor then DEAD) right
-    // after the assignment. A reference declaration extends its
-    // temporary's lifetime to the scope ([class.temporary]/6) and a
-    // destructor-free tail (plain DEADs of C-style temps) keeps
-    // block-level scope, so both retain the old shape.
-    if (!is_lvalue_or_rvalue_reference(s.get_type()))
-      destroy_full_expression_temporaries(
-        keep_reference_member_temporaries(initializer, stack_size),
-        new_code.location(),
-        dest);
   }
+
+  // Temporaries materialized while lowering the initializer, including a
+  // constructor's or a call's arguments, die at the end of the full
+  // expression (C++ [class.temporary]/4, github #6075): emit their pending
+  // scope-exit entries (destructor then DEAD) right after the
+  // initialization. A reference declaration extends its temporary's
+  // lifetime to the scope ([class.temporary]/6) and a destructor-free tail
+  // (plain DEADs of C-style temps) keeps block-level scope, so both retain
+  // the old shape.
+  if (!is_lvalue_or_rvalue_reference(s.get_type()))
+    destroy_full_expression_temporaries(
+      keep_reference_member_temporaries(initializer, stack_size),
+      new_code.location(),
+      dest);
+  else
+    destroy_comma_operand_temporaries(stack_size, new_code.location(), dest);
+}
+
+/// A reference declaration keeps its initializer's temporaries to the end of
+/// the scope, but those of a discarded comma operand still die with it.
+void goto_convertt::destroy_comma_operand_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  auto &stack = targets.destructor_stack;
+  const auto kept = std::stable_partition(
+    stack.begin() + stack_size, stack.end(), [&](const codet &entry) {
+      return comma_operand_temporaries.count(destructor_entry_symbol(entry)) ==
+             0;
+    });
+  destroy_full_expression_temporaries(kept - stack.begin(), location, dest);
 }
 
 /// The temporaries a braced aggregate initialiser binds to reference members,
@@ -1606,11 +1669,15 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     call.arguments().back().make_typecast(params[0].type());
 
     // The C++14 sized form takes the object's byte count as its second
-    // argument ([basic.stc.dynamic.deallocation]).
-    if (params.size() == 2)
+    // argument ([basic.stc.dynamic.deallocation]), before any alignment.
+    const exprt &alignment =
+      static_cast<const exprt &>(code.find("dealloc_alignment"));
+    if (params.size() == (alignment.is_nil() ? 2 : 3))
       call.arguments().push_back(from_integer(
         type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
         params[1].type()));
+    if (alignment.is_not_nil())
+      call.arguments().push_back(alignment);
 
     call.location() = code.location();
 
@@ -1642,16 +1709,47 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
 
   remove_sideeffects(cond, dest);
 
-  if (options.get_bool_option("no-assertions"))
-    return;
-
-  goto_programt::targett t = dest.add_instruction(ASSERT);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
-  t->guard = tmp_cond;
-  t->location = code.location();
-  t->location.property("assertion");
-  t->location.user_provided(true);
+
+  if (emits_assert(code.location()))
+  {
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = tmp_cond;
+    t->location = code.location();
+    t->location.property("assertion");
+    t->location.user_provided(true);
+  }
+
+  assume_if_ends_path(tmp_cond, code.location(), dest);
+}
+
+// --no-assertions drops every assert. --python-ignore-assertions drops only a
+// Python program's own, which still end the path through the assume below.
+bool goto_convertt::emits_assert(const locationt &location) const
+{
+  if (options.get_bool_option("no-assertions"))
+    return false;
+  return !location.get_bool("ends_path") ||
+         !options.get_bool_option("python-ignore-assertions");
+}
+
+// A Python assert raises AssertionError, which ends the program, so nothing
+// after a failing assert runs. Assume the already evaluated guard, so the
+// condition's calls run once.
+void goto_convertt::assume_if_ends_path(
+  const expr2tc &guard,
+  const locationt &location,
+  goto_programt &dest)
+{
+  if (!location.get_bool("ends_path"))
+    return;
+  goto_programt::targett t = dest.add_instruction(ASSUME);
+  t->guard = guard;
+  t->location = location;
+  // With no assert to check the guard first, this is a plain assume.
+  if (!emits_assert(location))
+    t->location.remove("ends_path");
 }
 
 void goto_convertt::convert_skip(const codet &code, goto_programt &dest)
@@ -2409,6 +2507,13 @@ void goto_convertt::generate_ifthenelse(
   dest.destructive_append(tmp_z);
 }
 
+bool goto_convertt::splits_and_condition(const exprt &cond)
+{
+  return cond.is_and() && cond.operands().size() == 2 &&
+         (has_sideeffect(cond.op0()) || has_sideeffect(cond.op1())) &&
+         !has_destructible_sideeffect(cond);
+}
+
 void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 {
   const code_ifthenelset &code = to_code_ifthenelse(c);
@@ -2425,10 +2530,7 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 
   // We do a bit of special treatment for && in the condition
   // in case cleaning would be needed otherwise.
-  if (
-    code.cond().is_and() && code.cond().operands().size() == 2 &&
-    (has_sideeffect(code.cond().op0()) || has_sideeffect(code.cond().op1())) &&
-    !has_else)
+  if (!has_else && splits_and_condition(code.cond()))
   {
     // if(a && b) XX --> if(a) if(b) XX
     code_ifthenelset new_if0, new_if1;
@@ -2551,7 +2653,11 @@ void goto_convertt::generate_conditional_branch(
     return;
   }
 
-  if (guard.is_and())
+  // Splitting would leave the temporaries of a short-circuit operand alive
+  // past the condition, which is one full-expression ([class.temporary]/4).
+  const bool split = !has_destructible_sideeffect(guard);
+
+  if (split && guard.is_and())
   {
     // turn
     //   if(a && b) goto target_true; else goto target_false;
@@ -2576,7 +2682,7 @@ void goto_convertt::generate_conditional_branch(
 
     return;
   }
-  if (guard.id() == "or")
+  if (split && guard.id() == "or")
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;
