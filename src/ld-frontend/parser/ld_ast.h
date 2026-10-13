@@ -188,6 +188,7 @@ struct VarDecl
   bool shared = false;
   bool synthesized =
     false; // invented by the graphical resolver (pins, power flow)
+  std::string derived_type; // type name when declared <derived>, else empty
   // Initial value for numeric variables. Graphical LD wires FB presets from
   // <inVariable> literals rather than declared variables, so the synthesised
   // preset symbol carries the literal here.

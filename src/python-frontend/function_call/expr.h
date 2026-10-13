@@ -881,7 +881,8 @@ private:
    *  - bind_call_receiver: prepends self/cls for ctor/instance/class methods
    *    and returns the parameter offset for subsequent positional binding;
    *  - build_positional_arguments: converts and appends positional args
-   *    (returns early for the __ESBMC_get_object_size/strlen list-size case);
+   *    (returns early for the __ESBMC_get_object_size/strlen list-size case,
+   *    or with the TypeError a surplus positional argument raises);
    *  - finalize_call: forwards keyword args, fills defaults, and adds the
    *    constructor temp-self, returning the final call (or an early result).
    */
@@ -910,6 +911,8 @@ private:
     size_t param_offset,
     const locationt &location,
     const symbolt *func_symbol);
+  std::optional<exprt>
+  raise_positional_oversupply(const symbolt &func_symbol) const;
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,
