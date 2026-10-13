@@ -64,6 +64,16 @@ static bool has_python_attribute(
            "tag-" + to_struct_type(type).name.as_string(), name, ns);
 }
 
+/// Whether @p value is exactly class @p expected. Classes are told apart by
+/// name, as two distinct classes may share a layout (both empty, say).
+static bool
+same_class(const type2tc &expected, const type2tc &value, const namespacet &ns)
+{
+  if (is_struct_type(expected))
+    return to_struct_type(expected).name == to_struct_type(value).name;
+  return base_type_eq(expected, value, ns);
+}
+
 // An untyped (`void *`) operand that neither constant propagation nor the
 // value set traced back to its object carries no Python type, so no answer is
 // sound: comparing `void *` itself would say "no" to every type. Fail only if
@@ -158,7 +168,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
 
       // Check sub class
-      if (base_type_eq(expect_type->type, value->type, ns))
+      if (same_class(expect_type->type, value->type, ns))
         expr = gen_true_expr();
       else if (
         is_struct_type(expect_type->type) &&

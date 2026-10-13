@@ -184,10 +184,17 @@ static exprt
 dunder_other_arg(const exprt &operand, const code_typet &method_type)
 {
   const auto &params = method_type.arguments();
+  if (params.size() < 2 || !is_number(operand.type()))
+    return dunder_ref_arg(operand);
+  const typet &param_type = params[1].type();
+  if (is_number(param_type))
+    return typecast_exprt(operand, param_type);
+  // An unannotated parameter is `Any`; a plain method call passes an int to it
+  // by value too. A float would be truncated, so it is not passed this way.
   if (
-    params.size() > 1 && is_number(params[1].type()) &&
-    is_number(operand.type()))
-    return typecast_exprt(operand, params[1].type());
+    param_type == any_type() &&
+    (operand.type().is_signedbv() || operand.type().is_unsignedbv()))
+    return typecast_exprt(operand, param_type);
   return dunder_ref_arg(operand);
 }
 

@@ -170,6 +170,9 @@ private:
     size_t count,
     codet &target_block);
 
+  /// The member type a tuple[...] annotation element @p node denotes.
+  typet tuple_member_type_from_annotation(const nlohmann::json &node);
+
   python_converter &converter_;
   type_handler &type_handler_;
 };

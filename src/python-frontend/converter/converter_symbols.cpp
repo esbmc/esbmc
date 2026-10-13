@@ -242,6 +242,15 @@ symbolt *python_converter::find_method_in_imported_base(
   return symbol_table_.find_symbol(base_id.to_string());
 }
 
+symbolt *python_converter::find_method_in_model_base(
+  const std::string &base_class,
+  const std::string &sym_id) const
+{
+  if (!json_utils::find_class((*ast_json)["body"], base_class).is_null())
+    return nullptr;
+  return find_model_symbol(sym_id);
+}
+
 /// Whether import alias @p alias binds @p name: `import a.b` binds `a`, and
 /// `from m import *` may bind any name.
 static bool
@@ -734,6 +743,9 @@ symbolt *python_converter::find_function_in_base_classes(
         base_class_node, base_class, method_name, is_ctor))
       return func;
 
+    if (symbolt *func = find_method_in_model_base(base_class, sym_id))
+      return func;
+
     // Not defined directly in this base: descend into its own bases so a
     // method inherited from a grandparent (or higher) still resolves.
     if (
@@ -1045,6 +1057,25 @@ bool python_converter::is_imported_module(const std::string &module_name) const
 std::string python_converter::current_module_name() const
 {
   return std::filesystem::path(current_python_file).stem().string();
+}
+
+std::string python_converter::current_ast_scope() const
+{
+  if (
+    current_class_name_.empty() || current_func_name_.empty() ||
+    current_func_name_.find("@C@") != std::string::npos)
+    return current_func_name_;
+
+  const std::string outer =
+    json_utils::split_function_path(current_func_name_).front();
+  // __init__ is converted under its class's name.
+  const std::string method =
+    current_class_name_ + "@C@" +
+    (outer == current_class_name_ ? "__init__" : outer);
+  // A class nested in a function or class is not reachable as Cls@C@m.
+  if (json_utils::find_function_by_path(*ast_json, {method}).empty())
+    return current_func_name_;
+  return method + current_func_name_.substr(outer.size());
 }
 
 symbolt &python_converter::create_tmp_symbol(

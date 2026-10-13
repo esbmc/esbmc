@@ -263,6 +263,10 @@ public:
     return current_class_name_;
   }
 
+  /// The current function as the AST lookups in json_utils name it: a method
+  /// is "Cls@C@m", so a same-named method of another class is not found.
+  std::string current_ast_scope() const;
+
   const namespacet &name_space() const
   {
     return ns;
@@ -1293,6 +1297,12 @@ private:
     const std::string &base_class,
     const std::string &method_name,
     bool is_ctor) const;
+
+  /// @p sym_id retried under the operational models' namespaces, for a base
+  /// such as Exception that a model defines and this file does not.
+  symbolt *find_method_in_model_base(
+    const std::string &base_class,
+    const std::string &sym_id) const;
 
   std::optional<bool> function_shadows_module(
     const std::string &name,

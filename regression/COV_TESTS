@@ -506,6 +506,10 @@ regression/python/assert_cuts_path
 regression/python/assert_ends_path_forward_condition
 regression/python/assert_ends_path_k_induction
 regression/python/assert_list_cuts_path
+regression/python/assert_message_kind
+regression/python/assert_message_kind_fail
+regression/python/assert_message_kind_fstring_fail
+regression/python/assert_no_message_kind_fail
 regression/python/assert_run_cuts_path
 regression/python/bin_builtin
 regression/python/bin_subscript_symbolic
@@ -2568,6 +2572,8 @@ regression/python/github_8454_else_continue_fail
 regression/python/github_8454_fail
 regression/python/github_8454_listcomp
 regression/python/github_8454_listcomp_fail
+regression/python/github_8402
+regression/python/github_8402_fail
 regression/python/list_store_tuple_over_int
 regression/python/list_store_tuple_over_int_fail
 regression/python/github_8356_mul_int
@@ -2629,6 +2635,14 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8395_empty_classes
+regression/python/github_8395_empty_classes_fail
+regression/python/github_8395_empty_subclass
+regression/python/github_8395_empty_subclass_fail
+regression/python/github_8395_same_layout
+regression/python/github_8395_same_layout_fail
+regression/python/github_8395_subclass
+regression/python/github_8395_subclass_fail
 regression/python/github_8401
 regression/python/github_8401_annotated_fail
 regression/python/github_8401_class_rebound

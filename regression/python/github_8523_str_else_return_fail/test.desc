@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+^\*\* 1 of [0-9]+ properties failed, [0-9]+ passed$
+FAILED .* line +11 +assertion

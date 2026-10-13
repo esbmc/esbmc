@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 1
+^  assertion x != 3: x must not be 3$
+^  FAILED\s+\[check\.assertion\.1\]\s+line 2\s+assertion x != 3: x must not be 3$
+^VERIFICATION FAILED$

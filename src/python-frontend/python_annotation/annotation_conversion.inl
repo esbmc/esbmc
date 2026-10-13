@@ -2676,9 +2676,10 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
 
 // Method to infer type from conditional expressions (IfExp)
 template <class Json>
-std::string python_annotation<Json>::get_type_from_ifexp(
+InferResult python_annotation<Json>::infer_type_from_ifexp(
   const Json &ifexp_node,
-  const Json &body)
+  const Json &body,
+  std::string &inferred_type)
 {
   // For conditional expressions like "x + y if x > y else x * y"
   // We need to infer the type from both the body and orelse branches
@@ -2706,13 +2707,19 @@ std::string python_annotation<Json>::get_type_from_ifexp(
   if (body_result == InferResult::OK && orelse_result == InferResult::OK)
   {
     if (body_type == orelse_type)
-      return body_type;
+    {
+      inferred_type = body_type;
+      return InferResult::OK;
+    }
 
     // Handle numeric type promotion: if one is int and other is float, result is float
     if (
       (body_type == "int" && orelse_type == "float") ||
       (body_type == "float" && orelse_type == "int"))
-      return "float";
+    {
+      inferred_type = "float";
+      return InferResult::OK;
+    }
 
     // For different types, use a safe fallback
     log_warning(
@@ -2722,17 +2729,25 @@ std::string python_annotation<Json>::get_type_from_ifexp(
       orelse_type,
       python_filename_,
       current_line_);
-    return "Any";
+    inferred_type = "Any";
+    return InferResult::OK;
   }
 
   // If only one branch succeeded, use that type
   if (body_result == InferResult::OK)
-    return body_type;
+  {
+    inferred_type = body_type;
+    return InferResult::OK;
+  }
   if (orelse_result == InferResult::OK)
-    return orelse_type;
+  {
+    inferred_type = orelse_type;
+    return InferResult::OK;
+  }
 
-  // If neither branch could be inferred, return empty string
-  return "";
+  // Neither arm known (e.g. attributes of unannotated parameters): leave the
+  // assignment to the converter, as for a bare attribute.
+  return InferResult::UNKNOWN;
 }
 
 template <class Json>
@@ -3023,7 +3038,7 @@ InferResult python_annotation<Json>::infer_type(
 
   // Get type from conditional expressions (ternary operator)
   else if (value_type == "IfExp")
-    inferred_type = get_type_from_ifexp(stmt["value"], body);
+    return infer_type_from_ifexp(stmt["value"], body, inferred_type);
 
   // Get type from top-level functions
   else if (
