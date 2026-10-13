@@ -207,6 +207,8 @@ private:
   std::optional<exprt>
   build_post_init_forward_call(const std::string &func_symbol_id);
 
+  exprt forward_constant_return(const nlohmann::json &func_node) const;
+
   /*
    * Retrieves the object (caller) name from the AST.
    */

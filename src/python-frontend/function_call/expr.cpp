@@ -5886,6 +5886,39 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   return exprt(call);
 }
 
+/// The FunctionDef for a call's callee: a module-level name, or a nested path
+/// such as "outer@F@b" for a sibling the enclosing body defines later.
+static nlohmann::json
+forward_function_node(const nlohmann::json &ast, const std::string &name)
+{
+  if (name.find("@F@") == std::string::npos)
+    return json_utils::try_find_function(ast["body"], name);
+  return json_utils::find_function_by_path(
+    ast, json_utils::split_function_path(name));
+}
+
+/// The constant a forward-referenced function always returns, or nil. Only a
+/// body that is a lone `return <constant>` is converted: the callee's
+/// statements would otherwise be converted in the caller's scope.
+exprt function_call_expr::forward_constant_return(
+  const nlohmann::json &func_node) const
+{
+  const nlohmann::json &body = func_node["body"];
+  if (
+    body.size() != 1 || body[0].value("_type", "") != "Return" ||
+    !body[0]["value"].is_object() ||
+    body[0]["value"].value("_type", "") != "Constant")
+    return nil_exprt();
+  return converter_.get_function_constant_return(converter_.get_block(body));
+}
+
+static bool defines_function(const nlohmann::json &ast, const std::string &name)
+{
+  if (name.find("@F@") == std::string::npos)
+    return json_utils::search_function_in_ast(ast, name);
+  return !forward_function_node(ast, name).empty();
+}
+
 std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
   const symbolt *&func_symbol,
   const std::string &func_symbol_id,
@@ -6119,8 +6152,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
       // module attribute is unresolved, not user code (#6742).
       const bool is_forward_reference =
         function_id_.get_filename() == converter_.python_file() &&
-        json_utils::search_function_in_ast(
-          converter_.ast(), function_id_.get_function());
+        defines_function(converter_.ast(), function_id_.get_function());
 
       if (is_forward_reference)
       {
@@ -6136,8 +6168,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
 
         // Extract return type from function definition in AST
         typet return_type = empty_typet();
-        const auto &func_node = try_find_function(
-          converter_.ast()["body"], function_id_.get_function());
+        const nlohmann::json func_node =
+          forward_function_node(converter_.ast(), function_id_.get_function());
         if (!func_node.empty())
         {
           if (func_node.contains("returns") && !func_node["returns"].is_null())
@@ -6161,8 +6193,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
                 return_type = gen_pointer_type(return_type);
             }
           }
-          exprt body = converter_.get_block(func_node["body"]);
-          exprt const_return = converter_.get_function_constant_return(body);
+          exprt const_return = forward_constant_return(func_node);
           if (!const_return.is_nil())
             return const_return;
         }
