@@ -3110,7 +3110,13 @@ size_t python_converter::register_function_argument(
       arg_type = any_type();
     }
     else
+    {
+      // The annotation may name a class defined later in the file; build it
+      // first so the copy of its instance attributes below finds its symbol.
+      code_blockt class_block;
+      process_forward_reference(element["annotation"], class_block);
       arg_type = get_type_from_annotation(element["annotation"], element);
+    }
   }
 
   // A bare `bytes` annotation carries no length (Python's type syntax has no
