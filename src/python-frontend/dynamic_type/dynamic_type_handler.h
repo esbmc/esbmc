@@ -107,9 +107,10 @@ public:
   /**
    * @brief True if a function's top-level if/elif/else chain -- including
    * an early return with no else, falling through to the next statement --
-   * can return genuinely incompatible literal kinds (num vs str)
+   * can return genuinely incompatible kinds (num vs str) of literals or
+   * scalar-annotated parameters
    */
-  bool detect_dynamic_return_type(const nlohmann::json &function_body) const;
+  bool detect_dynamic_return_type(const nlohmann::json &function_node) const;
 
   /**
    * @brief True if some top-level `If` in `scope_body` (a function body or
