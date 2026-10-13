@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!x || a"
+    description: "A TON output is on only while its input is"
