@@ -3,6 +3,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -206,6 +207,16 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
       "operator '" + unary_op +
       "' on a dynamically-typed variable is not yet supported");
   }
+
+  // A plain str has no unary minus; reaching the generic arithmetic builder
+  // below asserts internally instead of raising.
+  if (
+    element["op"]["_type"] == "USub" &&
+    type_utils::is_string_type(unary_sub.type()))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "bad operand type for unary -: '" +
+        type_handler_.get_python_type_name(unary_sub.type()) + "'");
 
   // An unresolved method call yields a placeholder null (see
   // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
