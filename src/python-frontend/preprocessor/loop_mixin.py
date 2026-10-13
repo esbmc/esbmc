@@ -518,6 +518,11 @@ class LoopMixin:
             return False
         return True
 
+    @staticmethod
+    def _is_constant_element(elt):
+        return isinstance(elt, ast.Constant) or (isinstance(elt, ast.UnaryOp) and isinstance(
+            elt.op, (ast.UAdd, ast.USub)) and isinstance(elt.operand, ast.Constant))
+
     def _unroll_list_literal_for(self, node, list_literal):
         """Unroll `for` over a tracked list literal variable into straight-line code.
 
@@ -547,10 +552,30 @@ class LoopMixin:
             for idx, elt in enumerate(list_literal.elts):
                 temp_name = f"__esbmc_unrolled_item_{counter}_{idx}"
                 temp_names.append(temp_name)
-                snap_assign = ast.Assign(
-                    targets=[ast.Name(id=temp_name, ctx=ast.Store())],
-                    value=copy.deepcopy(elt),
-                )
+                if not any(isinstance(n, ast.Call) for n in ast.walk(elt)):
+                    snap_assign = ast.Assign(
+                        targets=[ast.Name(id=temp_name, ctx=ast.Store())],
+                        value=copy.deepcopy(elt),
+                    )
+                else:
+                    # Read the bound list: re-evaluating the element would
+                    # repeat its calls (#8416). Inference types `xs[i]` as it
+                    # would a user-written read, but refuses a literal mixing
+                    # constants with other elements, so annotate that one Any,
+                    # as the generic iteration path does.
+                    snap_assign = ast.Assign(
+                        targets=[ast.Name(id=temp_name, ctx=ast.Store())],
+                        value=ast.Subscript(value=ast.Name(id=node.iter.id, ctx=ast.Load()),
+                                            slice=ast.Constant(value=idx),
+                                            ctx=ast.Load()),
+                    )
+                    if any(map(self._is_constant_element, list_literal.elts)):
+                        snap_assign = ast.AnnAssign(
+                            target=snap_assign.targets[0],
+                            annotation=ast.Name(id="Any", ctx=ast.Load()),
+                            value=snap_assign.value,
+                            simple=1,
+                        )
                 self.ensure_all_locations(snap_assign, node)
                 unrolled.append(snap_assign)
 
