@@ -2785,8 +2785,12 @@ private:
     const std::string &function,
     int line,
     unsigned depth = 0) const;
-  std::optional<typet>
-  numpy_filled_array_type(const nlohmann::json &value) const;
+  std::optional<typet> numpy_filled_array_type(
+    const nlohmann::json &value,
+    const std::string &function) const;
+  std::optional<typet> numpy_arange_array_type(
+    const nlohmann::json &value,
+    const std::string &function) const;
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

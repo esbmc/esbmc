@@ -7372,21 +7372,28 @@ exprt numpy_call_expr::create_expr_from_call()
 // materialize_arange() afterwards.
 static nlohmann::json resolve_arange_call_args(
   const nlohmann::json &args,
-  python_converter &converter)
+  const std::string &function,
+  const nlohmann::json &ast)
 {
   nlohmann::json resolved = args;
   for (auto &arg : resolved)
   {
     if (!arg.is_object() || arg.value("_type", std::string()) != "Name")
       continue;
-    const nlohmann::json decl = json_utils::find_var_decl(
-      arg["id"].get<std::string>(),
-      converter.current_function_name(),
-      converter.ast());
+    const nlohmann::json decl =
+      json_utils::find_var_decl(arg["id"].get<std::string>(), function, ast);
     if (decl.contains("value") && decl["value"].is_object())
       arg = decl["value"];
   }
   return resolved;
+}
+
+std::optional<nlohmann::json> numpy_call_expr::arange_literal(
+  const nlohmann::json &args,
+  const std::string &function,
+  const nlohmann::json &ast)
+{
+  return materialize_arange(resolve_arange_call_args(args, function, ast));
 }
 
 // Whether the literal list `np.arange` or `np.linspace` produced is bound
@@ -7423,8 +7430,10 @@ exprt numpy_call_expr::get_arange_expr()
     return function_call_expr::get();
 
   const nlohmann::json resolved_args =
-    call_.contains("args") ? resolve_arange_call_args(call_["args"], converter_)
-                           : nlohmann::json::array();
+    call_.contains("args")
+      ? resolve_arange_call_args(
+          call_["args"], converter_.current_function_name(), converter_.ast())
+      : nlohmann::json::array();
 
   // np.arange(...) with constant, small arguments is materialized to a
   // literal list directly, avoiding the operational model's while-loop

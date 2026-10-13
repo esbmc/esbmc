@@ -71,6 +71,17 @@ private:
   // arguments (see numpy_call_expr.cpp for the full rationale). Split out of
   // get() to keep that function's own decision count from growing further.
   exprt get_arange_expr();
+
+public:
+  /// The literal list `np.arange` builds from @p args, a Name among them
+  /// read from its declaration for code in @p function; nullopt when the
+  /// arguments are not constants.
+  static std::optional<nlohmann::json> arange_literal(
+    const nlohmann::json &args,
+    const std::string &function,
+    const nlohmann::json &ast);
+
+private:
   bool binds_static_array(const nlohmann::json &list) const;
   exprt literal_constructor_expr(const nlohmann::json &list);
 

@@ -6,6 +6,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <util/base/encoding.h>
@@ -2598,38 +2599,6 @@ static bool forwards_param_being_inferred(
          visiting.count(view_param_key(enclosing_function, *forwarded)) != 0;
 }
 
-static std::optional<long long> int_constant(const nlohmann::json &node)
-{
-  if (
-    node.value("_type", "") != "Constant" || !node.contains("value") ||
-    !node["value"].is_number_integer())
-    return std::nullopt;
-  return node["value"].get<long long>();
-}
-
-// Length of `np.arange` over one to three integer literals.
-static std::optional<std::size_t> arange_length(const nlohmann::json &args)
-{
-  std::vector<long long> values;
-  for (const auto &arg : args)
-  {
-    const std::optional<long long> value = int_constant(arg);
-    if (!value)
-      return std::nullopt;
-    values.push_back(*value);
-  }
-  if (values.empty() || values.size() > 3)
-    return std::nullopt;
-  const long long start = values.size() == 1 ? 0 : values[0];
-  const long long stop = values.size() == 1 ? values[0] : values[1];
-  const long long step = values.size() == 3 ? values[2] : 1;
-  if (step == 0)
-    return std::nullopt;
-  const long long span = step > 0 ? stop - start : start - stop;
-  const long long magnitude = step > 0 ? step : -step;
-  return span <= 0 ? 0 : static_cast<std::size_t>((span - 1) / magnitude + 1);
-}
-
 // Element kind ("int" or "float") of the array a numpy constructor with
 // literal arguments builds; "" when it is not read here.
 static std::string
@@ -2647,15 +2616,20 @@ filled_array_dtype(const std::string &ctor, const nlohmann::json &call)
   }
   if (!keywords.empty())
     return "";
-  return ctor == "linspace" ? "float" : "int";
+  return "float";
 }
 
 // Type of the array a numpy constructor other than `np.array` builds from
 // literal arguments: `zeros`, `ones`, `arange`, `linspace`. `np.full`,
 // `np.eye` and `np.identity` build a list, whose slices are copies.
-std::optional<typet>
-python_converter::numpy_filled_array_type(const nlohmann::json &value) const
+std::optional<typet> python_converter::numpy_filled_array_type(
+  const nlohmann::json &value,
+  const std::string &function) const
 {
+  if (
+    const std::optional<typet> arange =
+      numpy_arange_array_type(value, function))
+    return arange;
   const std::optional<std::vector<std::size_t>> shape =
     numpy_filled_array_shape(value);
   if (!shape)
@@ -2670,12 +2644,30 @@ python_converter::numpy_filled_array_type(const nlohmann::json &value) const
   return type;
 }
 
-// Shape of the non-empty array such a constructor builds.
+// Type of the array `np.arange` builds when bound to a name in `function`:
+// that of the literal its constant arguments materialize to, read the way
+// the conversion reads them.
+std::optional<typet> python_converter::numpy_arange_array_type(
+  const nlohmann::json &value,
+  const std::string &function) const
+{
+  if (
+    !is_numpy_array_constructor_expr(value) ||
+    value["func"].value("attr", "") != "arange" ||
+    !value.value("keywords", nlohmann::json::array()).empty())
+    return std::nullopt;
+  const std::optional<nlohmann::json> list =
+    numpy_call_expr::arange_literal(value["args"], function, *ast_json);
+  if (!list || !list->contains("elts") || (*list)["elts"].empty())
+    return std::nullopt;
+  return type_handler_.get_typet(*list);
+}
+
+// Shape of the non-empty array `zeros`, `ones` or `linspace` builds.
 std::optional<std::vector<std::size_t>>
 python_converter::numpy_filled_array_shape(const nlohmann::json &value) const
 {
-  static const std::set<std::string> filled = {
-    "zeros", "ones", "arange", "linspace"};
+  static const std::set<std::string> filled = {"zeros", "ones", "linspace"};
   if (!is_numpy_array_constructor_expr(value) || value["args"].empty())
     return std::nullopt;
   const std::string ctor = value["func"].value("attr", "");
@@ -2685,11 +2677,8 @@ python_converter::numpy_filled_array_shape(const nlohmann::json &value) const
     filled.count(ctor) == 0 || (tuple_shape && !zeros_or_ones) ||
     (zeros_or_ones && value["args"].size() != 1))
     return std::nullopt;
-  std::optional<std::vector<std::size_t>> shape;
-  if (ctor != "arange")
-    shape = get_numpy_constructor_shape(value);
-  else if (const auto length = arange_length(value["args"]))
-    shape = std::vector<std::size_t>{*length};
+  const std::optional<std::vector<std::size_t>> shape =
+    get_numpy_constructor_shape(value);
   const bool empty = !shape || shape->empty() ||
                      std::find(shape->begin(), shape->end(), 0) != shape->end();
   return empty ? std::nullopt : shape;
@@ -2725,7 +2714,7 @@ std::optional<typet> python_converter::numpy_literal_array_type(
     const std::optional<typet> type =
       try_infer_numpy_array_arg_type(*value, module_body))
     return type;
-  return numpy_filled_array_type(*value);
+  return numpy_filled_array_type(*value, *scope);
 }
 
 // `view[lo:hi:step]` on a 1-D view with constant length and stride.
