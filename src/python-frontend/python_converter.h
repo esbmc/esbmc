@@ -151,8 +151,13 @@ public:
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
+  std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
+  /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
   std::optional<exprt> call_returned_function(const nlohmann::json &element);
+  void convert_lambda_call(
+    const nlohmann::json &element,
+    side_effect_expr_function_callt &call);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
@@ -649,7 +654,9 @@ private:
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
 
-  exprt get_lambda_expr(const nlohmann::json &element);
+  exprt get_lambda_expr(
+    const nlohmann::json &element,
+    const std::vector<std::optional<typet>> &argument_types = {});
 
   codet convert_expression_to_code(exprt &expr);
 

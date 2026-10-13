@@ -8370,7 +8370,8 @@ void python_converter::get_return_statements(
   if (reject_or_defer_numpy_view_name_return(ast_node, target_block))
     return;
 
-  exprt return_value = get_return_value(ast_node["value"]);
+  exprt return_value =
+    python_expr::decay_function_to_pointer(get_return_value(ast_node["value"]));
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
