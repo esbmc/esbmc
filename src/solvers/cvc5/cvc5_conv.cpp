@@ -72,7 +72,8 @@ smt_resultt cvc5_convt::dec_solve_assuming(const ast_vec &assumptions)
 
 bool cvc5_convt::is_unsat_assumption(smt_astt a)
 {
-  return unsat_assumption_ids.count(to_solver_smt_ast<cvc5_smt_ast>(a)->a.getId());
+  return unsat_assumption_ids.count(
+    to_solver_smt_ast<cvc5_smt_ast>(a)->a.getId());
 }
 
 tvt cvc5_convt::get_bool(smt_astt a)
