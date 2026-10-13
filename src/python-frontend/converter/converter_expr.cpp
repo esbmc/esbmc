@@ -661,9 +661,9 @@ sole_module_binding(const nlohmann::json &module, const std::string &name)
   const nlohmann::json *binding = find_module_binding(module["body"], name);
   if (!binding)
     return nullptr;
-  const std::string type =
-    binding->contains("annotation") ? (*binding)["annotation"].value("id", "")
-                                    : "";
+  const std::string type = binding->contains("annotation")
+                             ? (*binding)["annotation"].value("id", "")
+                             : "";
   if (
     json_utils::count_name_bindings(module, name) -
       count_type_keeping_aug_assigns(module, name, type) !=
