@@ -44,6 +44,17 @@ static bool class_has_method(
   return false;
 }
 
+/// Whether a scalar of type @p type is an instance of the Python type that
+/// @p expected represents. bool is a subclass of int.
+static bool is_python_scalar_instance(
+  const type2tc &type,
+  const type2tc &expected,
+  const namespacet &ns)
+{
+  return base_type_eq(type, expected, ns) ||
+         (is_bool_type(type) && expected == long_long_int_type2());
+}
+
 /// Whether an object of type @p type has the attribute @p name: an instance
 /// member or a method of its class.
 static bool has_python_attribute(
@@ -202,7 +213,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     else
       t = value->type;
 
-    if (base_type_eq(t, expect_type->type, ns))
+    if (is_python_scalar_instance(t, expect_type->type, ns))
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
