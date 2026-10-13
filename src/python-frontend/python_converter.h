@@ -2156,6 +2156,17 @@ private:
     const nlohmann::json &target,
     codet &target_block);
 
+  bool unpack_record_is_trusted(const nlohmann::json &value) const;
+
+  /// Unpacks @p value, an element of an enclosing unpacking, into the nested
+  /// Tuple or List @p target. A list must be a symbol with element types
+  /// recorded exactly; any other value or target is refused.
+  void unpack_nested_target(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &value,
+    codet &target_block);
+
   /**
    * Desugar a tuple/list unpacking whose targets include lvalues (a[i],
    * obj.attr) into temp-mediated single assignments routed through the normal
@@ -2675,6 +2686,10 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
+
+  /// Whether the element types recorded for the lists the current unpacking
+  /// reaches are exact; see unpack_record_is_trusted.
+  bool unpack_record_trusted_ = false;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
   // A pointer-backed numpy view's logical shape (ADR-NP-003 etapa 2 scalar
