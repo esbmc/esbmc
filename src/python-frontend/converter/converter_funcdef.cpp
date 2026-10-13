@@ -3914,6 +3914,149 @@ typet python_converter::optional_return_type(
     type_utils::select_widest_type(flags, long_long_int_type()));
 }
 
+// Names through which a program can reach any function without naming it.
+static bool is_dynamic_lookup(const nlohmann::json &node)
+{
+  static const std::set<std::string> lookups = {
+    "globals", "locals", "vars", "eval", "exec"};
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return lookups.count(node.value("id", "")) != 0;
+  if (type != "Call" || node["func"].value("id", "") != "getattr")
+    return false;
+  const nlohmann::json &args = node["args"];
+  return args.size() < 2 || !args[1].contains("value") ||
+         !args[1]["value"].is_string();
+}
+
+// Conservative and syntactic: any string in the AST equal to @p name, other
+// than a definition's own name, may reach it -- a Name, an attribute, an
+// import alias, a string constant such as getattr's -- and so does a dynamic
+// lookup.
+static bool json_mentions(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_string())
+    return node.get_ref<const std::string &>() == name;
+  if (!node.is_structured())
+    return false;
+  if (node.is_object() && is_dynamic_lookup(node))
+    return true;
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  const bool is_def =
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef";
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (!(is_def && it.key() == "name") && json_mentions(it.value(), name))
+      return true;
+  return false;
+}
+
+// Options that name a function on the command line, or select functions by
+// their contracts, rather than in the program.
+static bool options_name_functions()
+{
+  static const char *const named[] = {
+    "function",
+    "enforce-contract",
+    "replace-call-with-contract",
+    "enforce-all-contracts",
+    "replace-all-contracts"};
+  return std::any_of(std::begin(named), std::end(named), [](const char *o) {
+    return !config.options.get_option(o).empty();
+  });
+}
+
+// A dunder is called implicitly, a decorator may call or register what it
+// wraps and an option may name a function on the command line, so none of
+// them needs the name to appear in the program.
+bool python_converter::function_may_be_called(
+  const nlohmann::json &function_node) const
+{
+  const std::string name = function_node["name"].get<std::string>();
+  if (
+    options_name_functions() ||
+    (name.size() > 4 && name.rfind("__", 0) == 0 &&
+     name.compare(name.size() - 2, 2, "__") == 0) ||
+    !function_node.value("decorator_list", nlohmann::json::array()).empty())
+    return true;
+  std::vector<const nlohmann::json *> programs = {entry_ast_, ast_json};
+  if (extra_asts_)
+    for (const nlohmann::json &extra : *extra_asts_)
+      programs.push_back(&extra);
+  for (const auto &module : module_ast_pool_)
+    programs.push_back(&module.second);
+  return std::any_of(
+    programs.begin(), programs.end(), [&](const nlohmann::json *ast) {
+      return ast && json_mentions(*ast, name);
+    });
+}
+
+// A function whose body cannot be converted must not stop the conversion of
+// a program that never refers to it (#8391). Its body becomes the failing
+// assertion an unmodelled function gets at its call sites, and then an
+// assumption that ends the path. A function the program may call keeps the
+// conversion error, as do model bodies, where a failure is a frontend bug.
+exprt python_converter::get_function_body_or_unsupported(
+  const nlohmann::json &function_node)
+{
+  // A failure leaves the conversion context wherever it was thrown; put back
+  // what the enclosing code reads after this function's definition.
+  auto context = std::tie(
+    current_block,
+    current_func_name_,
+    current_class_name_,
+    current_element_type,
+    current_func_return_type_,
+    ternary_return_target_,
+    scope_stack_,
+    global_declarations,
+    local_loads,
+    enclosing_function_node_,
+    pending_captures_,
+    current_lhs,
+    lhs_store_target_,
+    asserted_test_,
+    is_converting_lhs,
+    is_converting_rhs,
+    is_right,
+    converting_defaults_,
+    converting_lambda_body_,
+    in_rhs_type_probe_,
+    in_scratch_probe_,
+    in_contract_clause_,
+    in_lazy_operand_,
+    build_static_lists,
+    base_ctor_called);
+  const auto saved =
+    std::apply([](const auto &...v) { return std::make_tuple(v...); }, context);
+  try
+  {
+    return get_block(function_node["body"], /*is_function_body=*/true);
+  }
+  catch (const std::runtime_error &e)
+  {
+    if (is_loading_models || function_may_be_called(function_node))
+      throw;
+    context = saved;
+    const std::string name = function_node["name"].get<std::string>();
+    log_warning(
+      "Cannot convert the body of function '{}': {}; any call to it fails",
+      name,
+      e.what());
+    locationt location = get_location_from_decl(function_node);
+    location.user_provided(true);
+    location.comment("Unsupported function '" + name + "' is reached");
+    // Not the constant false: CFG cleanup treats an assertion of that as
+    // the end of the function and drops the assume, so the caller would
+    // carry on with an unconstrained result.
+    const exprt never = not_exprt(true_exprt());
+    code_assertt reached(never);
+    reached.location() = location;
+    code_blockt body;
+    body.copy_to_operands(reached, code_assumet(never));
+    return body;
+  }
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -4236,7 +4379,7 @@ void python_converter::get_function_definition(
     // Process function body. Mark it as a function body (not a conditional one)
     // so straight-line retyping (#4770/#4774) is permitted on the function's
     // own unconditional statements — see the retype gate in get_var_assign.
-    function_body = get_block(function_node["body"], /*is_function_body=*/true);
+    function_body = get_function_body_or_unsupported(function_node);
   }
 
   // Restore saved function return type (for nested function defs)
