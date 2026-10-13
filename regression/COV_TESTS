@@ -2584,6 +2584,12 @@ regression/python/github_8455_fail
 regression/python/github_8455_or
 regression/python/github_8455_subscript
 regression/python/github_8455_subscript_fail
+regression/python/github_8454
+regression/python/github_8454_else_continue
+regression/python/github_8454_else_continue_fail
+regression/python/github_8454_fail
+regression/python/github_8454_listcomp
+regression/python/github_8454_listcomp_fail
 regression/python/github_8402
 regression/python/github_8402_fail
 regression/python/list_store_tuple_over_int
