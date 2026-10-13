@@ -93,3 +93,16 @@ TEST_CASE("&(*p)[i] + k == NULL must not fold", "[irep2][simplify]")
   if (!is_nil_expr(s))
     REQUIRE(!is_constant_bool2t(s));
 }
+
+TEST_CASE("&obj != (T *)NULL folds", "[irep2][simplify]")
+{
+  // `p != NULL` against a `T *`: the `void *` NULL symbol is cast to `T *`.
+  expr2tc obj = symbol2tc(get_int32_type(), irep_idt("obj"));
+  type2tc void_ptr = pointer_type2tc(get_empty_type());
+  expr2tc null_t =
+    typecast2tc(int_ptr(), symbol2tc(void_ptr, irep_idt("NULL")));
+  expr2tc ne = notequal2tc(address_of2tc(int_ptr(), obj), null_t);
+  expr2tc s = ne->simplify();
+  REQUIRE(is_constant_bool2t(s));
+  REQUIRE(to_constant_bool2t(s).value);
+}

@@ -3494,6 +3494,9 @@ static bool address_of_is_provably_non_null(const expr2tc &e)
  * to a pointer; a null-guard rule has to accept either. */
 static bool is_null_pointer_value(const expr2tc &expr)
 {
+  // `p != NULL` against a `T *` reaches here as (T *)NULL.
+  if (is_typecast2t(expr) && is_pointer_type(expr->type))
+    return is_null_pointer_value(to_typecast2t(expr).from);
   return is_null_pointer(expr) || is_null_pointer_constant(expr);
 }
 
