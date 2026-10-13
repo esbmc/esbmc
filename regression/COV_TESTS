@@ -2623,6 +2623,17 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/github_8409
+regression/python/github_8409_classmethod
+regression/python/github_8409_classmethod_fail
+regression/python/github_8409_fail
+regression/python/github_8409_inherited
+regression/python/github_8409_inherited_fail
+regression/python/github_8409_nondet
+regression/python/github_8409_override
+regression/python/github_8409_override_fail
+regression/python/github_8409_receivers
+regression/python/github_8409_receivers_fail
 regression/python/github_8414
 regression/python/github_8414_elements
 regression/python/github_8414_elements_fail
