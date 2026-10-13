@@ -701,16 +701,17 @@ class CoreVisitorsMixin:
 
     def _captures_receiver(self, target, value):
         """Whether `target = obj.attr` stores `obj` for the calls of `target`:
-        nothing else binds `target` in the scope being visited, so every call
-        sees this binding, and `obj` is a call or a name that is not only
-        bound by an import, a definition or a builtin."""
+        nothing else binds `target` in the scope being visited, or its bindings
+        run in source order (#8467), so each call sees the last binding above
+        it, and `obj` is a call or a name that is not only bound by an import,
+        a definition or a builtin."""
         if not (isinstance(target, ast.Name) and isinstance(value, ast.Attribute)):
             return False
         scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
         _, counts = self.scope_binding_counts.get(scope, (None, {}))
-        return counts.get(target.id) == 1 and (isinstance(value.value, ast.Call) or
-                                               (isinstance(value.value, ast.Name)
-                                                and value.value.id in self.variable_names))
+        return (counts.get(target.id) == 1 or (scope, target.id) in self.in_order_bindings) and (
+            isinstance(value.value, ast.Call) or
+            (isinstance(value.value, ast.Name) and value.value.id in self.variable_names))
 
     def _is_resolvable_unpacked_method(self, target, value, statement):
         """Whether unpacking `obj.m` into `target` may be resolved at each call
