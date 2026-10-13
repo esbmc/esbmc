@@ -3365,7 +3365,12 @@ InferResult python_annotation<Json>::infer_type(
 
   // Get type from conditional expressions (ternary operator)
   else if (value_type == "IfExp")
+  {
+    // A choice between functions is typed by the converter, as `g = f` is.
+    if (!function_value_return_type(stmt["value"]).empty())
+      return InferResult::UNKNOWN;
     return infer_type_from_ifexp(stmt["value"], body, inferred_type);
+  }
 
   // Get type from top-level functions
   else if (
