@@ -268,10 +268,13 @@ void goto_symext::symex_realloc(
 
   // create result and handle failure modelling
   expr2tc result = create_result_pointer(new_array, lhs->type);
-  result = model_allocation_failure(result, code.operand, guard, over_cap);
+  expr2tc alloc_fail;
+  result =
+    model_allocation_failure(result, code.operand, guard, over_cap, alloc_fail);
 
   // finalize assignment and tracking
-  finalize_realloc_result(lhs, result, new_array, guard, realloc_size);
+  finalize_realloc_result(
+    lhs, result, new_array, guard, realloc_size, alloc_fail);
 }
 
 bool goto_symext::handle_realloc_zero_size(
@@ -432,11 +435,12 @@ expr2tc goto_symext::model_allocation_failure(
   const expr2tc &result,
   const expr2tc &old_ptr,
   const guard2tc &guard,
-  const expr2tc &over_cap)
+  const expr2tc &over_cap,
+  expr2tc &alloc_fail)
 {
   if (!options.get_bool_option("force-realloc-success"))
   {
-    expr2tc alloc_fail = sideeffect2tc(
+    alloc_fail = sideeffect2tc(
       get_bool_type(),
       expr2tc(),
       expr2tc(),
@@ -494,7 +498,8 @@ void goto_symext::finalize_realloc_result(
   const expr2tc &result,
   const expr2tc &new_array,
   const guard2tc &guard,
-  const expr2tc &realloc_size)
+  const expr2tc &realloc_size,
+  const expr2tc &alloc_fail)
 {
   expr2tc result_copy(result);
 
@@ -506,12 +511,17 @@ void goto_symext::finalize_realloc_result(
   track_new_pointer(ptr_obj, new_array->type, guard, realloc_size);
 
   // Add to dynamic memory tracking
+  // The leak claim must only cover a successful realloc (#8554).
   guard2tc alloc_guard = cur_state->guard;
+  if (!is_nil_expr(alloc_fail))
+    alloc_guard.add(not2tc(alloc_fail));
   alloc_guard.append(guard);
 
-  unsigned int dynamic_counter = get_dynamic_counter();
-  std::string symbol_name = "dynamic_" + i2string(dynamic_counter) + "_array";
-  dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
+  dynamic_memory.emplace_back(
+    result_copy,
+    alloc_guard,
+    false,
+    new_context.find_symbol(to_symbol2t(new_array).thename)->name.as_string());
 }
 
 expr2tc goto_symext::symex_mem_inf(
