@@ -7293,6 +7293,30 @@ code_blockt *python_converter::while_condition_block(
            : current_block;
 }
 
+exprt python_converter::get_flat_boolop_test(
+  const nlohmann::json &test_node,
+  const std::function<exprt(const exprt &, const nlohmann::json &)> &to_bool)
+{
+  exprt boolop_expr(
+    python_frontend::map_operator(test_node["op"]["_type"], bool_type()),
+    bool_type());
+  std::vector<code_blockt> effects;
+  for (const auto &operand : test_node["values"])
+    boolop_expr.copy_to_operands(
+      to_bool(get_boolop_operand(operand, effects), operand));
+
+  const auto planted = [](const code_blockt &b) {
+    return !b.operands().empty();
+  };
+  if (std::none_of(effects.begin(), effects.end(), planted))
+    return boolop_expr;
+  return emit_guarded_boolop(
+    boolop_expr,
+    effects,
+    [](const exprt &e) { return e; },
+    get_location_from_decl(test_node));
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
@@ -7586,16 +7610,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     }
   }
   else if (test_type == "BoolOp" && !model_mode)
-  {
-    exprt boolop_expr(
-      python_frontend::map_operator(
-        ast_node["test"]["op"]["_type"], bool_type()),
-      bool_type());
-    for (const auto &operand : ast_node["test"]["values"])
-      boolop_expr.copy_to_operands(
-        to_bool_condition(get_expr(operand), operand));
-    cond = boolop_expr;
-  }
+    cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {
     locationt location = get_location_from_decl(call_node);
