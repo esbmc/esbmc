@@ -2966,6 +2966,12 @@ private:
   /// a known class, or a Name already tracked in flow_class_map_. Else "".
   std::string flow_rhs_class(const nlohmann::json &rhs) const;
 
+  /// Class name of the instance an assignment RHS refers to: flow_rhs_class,
+  /// else that of a Name whose symbol holds an instance reference, which the
+  /// flow map forgets on converting a nested body, an `if` or a `def` (#8468).
+  /// Else "".
+  std::string alias_rhs_class(const nlohmann::json &rhs);
+
   /// User-class name returned by a non-constructor call RHS (`y = f(...)` where
   /// `f` is annotated `-> Cls`), so the LHS can be typed as a `Cls*` reference.
   /// Returns "" for constructor calls, unannotated returns, or non-class types.
