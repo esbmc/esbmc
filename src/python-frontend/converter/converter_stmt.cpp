@@ -3134,13 +3134,17 @@ void python_converter::reject_numpy_view_slice_assignment(
       "TypeError: slice assignment through a numpy view is not supported");
 }
 
-// An element read out of a view parameter is a scalar, not a view.
+// An element read out of a view parameter, or into the temporary an operand
+// is bound to, is a scalar, not a view.
 bool python_converter::is_scalar_read_of_numpy_view_param(
   const exprt &lhs,
   const std::string &storage_id) const
 {
   const typet &type = lhs.type();
-  return numpy_view_param_symbols_.count(storage_id) != 0 &&
+  const bool operand_temporary =
+    lhs.identifier().as_string().find("$numpy_view_tmp$") != std::string::npos;
+  return (operand_temporary ||
+          numpy_view_param_symbols_.count(storage_id) != 0) &&
          (type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
           type.is_bool());
 }
@@ -3213,7 +3217,8 @@ void python_converter::record_numpy_view_copy(
     // A pointer view aliases its source through the pointer itself, so it is
     // not a copy to mirror writes into; the source is kept to detach it when
     // the source name is rebound.
-    pointer_view->second.source_id = storage_id;
+    pointer_view->second.source_id = numpy_view_source_of(storage_id);
+    record_numpy_view_layout(lhs_id, storage_id);
     numpy_view_copy_sources_.erase(lhs_id);
     numpy_array_symbols_.insert(lhs_id);
     return;
@@ -3221,6 +3226,18 @@ void python_converter::record_numpy_view_copy(
 
   numpy_view_copy_sources_[lhs_id] = storage_id;
   numpy_array_symbols_.insert(lhs_id);
+}
+
+// A view of a view is detached together with its parent, so it records the
+// storage the parent views.
+std::string
+python_converter::numpy_view_source_of(const std::string &storage_id) const
+{
+  const auto parent = numpy_pointer_view_info_.find(storage_id);
+  return parent != numpy_pointer_view_info_.end() &&
+             !parent->second.source_id.empty()
+           ? parent->second.source_id
+           : storage_id;
 }
 
 symbolt *
@@ -3276,8 +3293,16 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   {
     const std::string view_source_id =
       resolve_numpy_array_storage_alias_id(entry.second.source_id);
+    const bool other_source = std::any_of(
+      entry.second.other_sources.begin(),
+      entry.second.other_sources.end(),
+      [&](const std::string &other) {
+        return same_numpy_storage_id(
+          resolve_numpy_array_storage_alias_id(other), rebound_storage_id);
+      });
     if (
-      same_numpy_storage_id(view_source_id, rebound_storage_id) &&
+      (other_source ||
+       same_numpy_storage_id(view_source_id, rebound_storage_id)) &&
       !is_local_to_other_function(entry.first, current_func_name_))
       view_ids.push_back(entry.first);
   }
@@ -4081,8 +4106,10 @@ bool python_converter::is_numpy_param_slice(
        slice["elts"].begin(), slice["elts"].end(), [](const auto &axis) {
          return axis.value("_type", "") == "Slice";
        }));
-  return has_slice_axis && numpy_param_shapes_.count(resolve_name_symbol_id(
-                             subscript["value"].value("id", ""))) != 0;
+  const std::string id =
+    resolve_name_symbol_id(subscript["value"].value("id", ""));
+  return has_slice_axis && (numpy_param_shapes_.count(id) != 0 ||
+                            numpy_pointer_view_info_.count(id) != 0);
 }
 
 typet python_converter::resolve_any_subscript_array_type(
@@ -7512,6 +7539,23 @@ exprt python_converter::get_flat_boolop_test(
     get_location_from_decl(test_node));
 }
 
+namespace
+{
+struct loop_depth_guard
+{
+  unsigned &depth;
+  const bool active;
+  loop_depth_guard(unsigned &d, bool a) : depth(d), active(a)
+  {
+    depth += active;
+  }
+  ~loop_depth_guard()
+  {
+    depth -= active;
+  }
+};
+} // namespace
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -7525,6 +7569,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     contains_nested_scope_named_expr(ast_node["test"]))
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
+
+  const loop_depth_guard loop_guard(
+    numpy_loop_depth_, ast_node.value("_type", "") == "While");
 
   // Copy current type
   typet t = current_element_type;
@@ -8615,6 +8662,7 @@ exprt python_converter::get_block(
       hoisted_element,
       block);
     check_numpy_view_statement(element);
+    bind_runtime_numpy_view_arguments(element, block);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)
