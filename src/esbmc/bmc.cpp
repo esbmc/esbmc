@@ -2005,6 +2005,10 @@ void bmct::report_result(smt_resultt &res)
         // verdict once the search becomes exhaustive.
         if (options.get_bool_option("suppress-bounded-success"))
           log_status("No violation found within the current context bound");
+        else if (fc && cs_bound_pruned)
+          log_status(
+            "The context bound cut schedules short, so the forward condition "
+            "cannot show that every state was reached");
         else if (!proves_the_program())
           report_unknown();
         else
@@ -2053,6 +2057,8 @@ smt_resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
   smt_resultt res = run(eq);
+  if (symex)
+    cs_bound_pruned = symex->cs_bound_pruned;
 
   // The dead-code advisory is emitted here, once, rather than from
   // report_coverage inside multi_property_check: that runs per thread
@@ -2120,10 +2126,7 @@ smt_resultt bmct::start_bmc()
   }
 
   if (symex)
-  {
-    cs_bound_pruned = symex->cs_bound_pruned;
     symex->report_reduction_stats();
-  }
 
   // The run's result doubles as the process exit code, and smt_resultt has no
   // unknown value. Every other path that prints UNKNOWN -- vacuity here, the

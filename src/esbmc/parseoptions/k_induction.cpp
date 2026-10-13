@@ -595,7 +595,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         return false;
       }
 
-      if (options.get_bool_option("disable-forward-condition"))
+      if (
+        options.get_bool_option("disable-forward-condition") ||
+        bmc.cs_bound_pruned)
         break;
 
       // Send information to parent if no bug was found
@@ -806,6 +808,13 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
     break;
 
   case P_UNSATISFIABLE:
+    // The pruning recurs at every k, so the forward condition can never prove
+    // the program under this bound; only the base case is left (#8555).
+    if (bmc.cs_bound_pruned)
+    {
+      options.set_option("disable-forward-condition", true);
+      break;
+    }
     log_result(
       "\nSolution found by the forward condition; "
       "all states are reachable (k = {:d})",
