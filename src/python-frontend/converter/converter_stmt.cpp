@@ -1401,11 +1401,15 @@ void python_converter::handle_list_literal_unpacking(
   // Assign targets before the star
   for (size_t i = 0; i < before_star; i++)
   {
+    is_converting_rhs = true;
+    // A call is a statement until it is turned into the value it returns
+    exprt elem_expr = to_value_expr(get_expr(elements[i]), ns);
+    is_converting_rhs = false;
+
     if (targets[i]["_type"] != "Name")
     {
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        targets[i]["_type"].get<std::string>());
+      unpack_nested_target(ast_node, targets[i], elem_expr, target_block);
+      continue;
     }
 
     std::string var_name = targets[i]["id"].get<std::string>();
@@ -1413,10 +1417,6 @@ void python_converter::handle_list_literal_unpacking(
     var_sid.set_object(var_name);
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    is_converting_rhs = true;
-    exprt elem_expr = get_expr(elements[i]);
-    is_converting_rhs = false;
 
     if (!var_symbol)
     {
@@ -1495,11 +1495,16 @@ void python_converter::handle_list_literal_unpacking(
     size_t target_idx = static_cast<size_t>(star_idx) + 1 + i;
     size_t elem_idx = elements.size() - after_star + i;
 
+    is_converting_rhs = true;
+    // A call is a statement until it is turned into the value it returns
+    exprt elem_expr = to_value_expr(get_expr(elements[elem_idx]), ns);
+    is_converting_rhs = false;
+
     if (targets[target_idx]["_type"] != "Name")
     {
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        targets[target_idx]["_type"].get<std::string>());
+      unpack_nested_target(
+        ast_node, targets[target_idx], elem_expr, target_block);
+      continue;
     }
 
     std::string var_name = targets[target_idx]["id"].get<std::string>();
@@ -1507,10 +1512,6 @@ void python_converter::handle_list_literal_unpacking(
     var_sid.set_object(var_name);
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    is_converting_rhs = true;
-    exprt elem_expr = get_expr(elements[elem_idx]);
-    is_converting_rhs = false;
 
     if (!var_symbol)
     {
@@ -4308,6 +4309,25 @@ bool python_converter::handle_unpacking_assignment(
     }
   }
 
+  // Restored on return: converting the RHS may unpack in turn
+  struct restore_trust
+  {
+    bool &flag;
+    const bool saved;
+    ~restore_trust()
+    {
+      flag = saved;
+    }
+  } restore{unpack_record_trusted_, unpack_record_trusted_};
+  unpack_record_trusted_ = unpack_record_is_trusted(ast_node["value"]);
+
+  // The literal path evaluates each element once, so the RHS is not built
+  if (ast_node["value"]["_type"] == "List")
+  {
+    handle_list_literal_unpacking(ast_node, target, target_block);
+    return true;
+  }
+
   // Get RHS
   is_converting_rhs = true;
   exprt rhs = get_expr(ast_node["value"]);
@@ -4342,12 +4362,6 @@ bool python_converter::handle_unpacking_assignment(
       return true;
     }
 
-    const auto &value_node = ast_node["value"];
-    if (value_node["_type"] == "List")
-    {
-      handle_list_literal_unpacking(ast_node, target, target_block);
-      return true;
-    }
     if (rhs.type() == get_type_handler().get_list_type())
     {
       python_list list(*this, ast_node["value"]);
@@ -4359,6 +4373,115 @@ bool python_converter::handle_unpacking_assignment(
   throw std::runtime_error(
     "Cannot unpack " + rhs.type().id_string() +
     " - only tuples and arrays can be unpacked");
+}
+
+namespace
+{
+// A literal whose every element is a literal or a constant: no list it
+// builds can be reached from anywhere else.
+bool is_plain_literal(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return is_plain_literal(node["operand"]);
+  if (kind != "List" && kind != "Tuple")
+    return false;
+  for (const auto &elt : node["elts"])
+    if (!is_plain_literal(elt))
+      return false;
+  return true;
+}
+
+// The names @p node reads, other than the callee of a call.
+void collect_read_names(
+  const nlohmann::json &node,
+  std::vector<std::string> &names)
+{
+  if (node.is_object() && node.value("_type", "") == "Name")
+    names.push_back(node.value("id", ""));
+  for (const auto &[key, child] : node.items())
+    if (child.is_structured() && !(key == "func" && node.is_object()))
+      collect_read_names(child, names);
+}
+
+std::size_t
+count_name_nodes(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
+                  node.value("id", "") == name;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_nodes(child, name);
+  return n;
+}
+} // namespace
+
+// The registry records types flow-insensitively, and a store through an alias
+// does not update it. Trust it only for lists the right-hand side builds
+// itself or reads from a variable bound once, to a plain literal, and named
+// nowhere else, so no branch, loop or alias can have changed its elements.
+bool python_converter::unpack_record_is_trusted(
+  const nlohmann::json &value) const
+{
+  std::vector<std::string> names;
+  collect_read_names(value, names);
+  for (const std::string &name : names)
+  {
+    const nlohmann::json decl =
+      json_utils::find_var_decl(name, current_function_name(), ast());
+    if (
+      json_utils::count_name_bindings(ast(), name) != 1 ||
+      count_name_nodes(ast(), name) != 2 || !decl.contains("value") ||
+      !is_plain_literal(decl["value"]))
+      return false;
+  }
+  return true;
+}
+
+void python_converter::unpack_nested_target(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const exprt &value,
+  codet &target_block)
+{
+  const std::string &tgt_type = target["_type"].get<std::string>();
+  if (tgt_type != "Tuple" && tgt_type != "List")
+    throw std::runtime_error(
+      "List unpacking only supports simple names, not " + tgt_type);
+
+  exprt rhs = value;
+  // A call is read once per element unless its result is held
+  if (value.id() == "sideeffect")
+  {
+    symbolt &tmp =
+      create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.copy_to_operands(value);
+    target_block.copy_to_operands(decl);
+    rhs = symbol_expr(tmp);
+  }
+  rhs.type() = ns.follow(value.type());
+  if (tuple_handler_->is_tuple_type(rhs.type()))
+  {
+    tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+    return;
+  }
+
+  // Without exactly recorded element types the targets could not be typed
+  if (
+    unpack_record_trusted_ && value.is_symbol() &&
+    value.type() == get_type_handler().get_list_type() &&
+    element_type_registry_.find(value.identifier().as_string()))
+  {
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(ast_node, target, value, target_block);
+    return;
+  }
+
+  throw std::runtime_error(
+    "Cannot unpack non-tuple element into nested target");
 }
 
 void python_converter::desugar_unpacking_with_lvalue_targets(
