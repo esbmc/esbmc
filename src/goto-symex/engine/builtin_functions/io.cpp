@@ -247,15 +247,14 @@ bool goto_symext::format_printf_output(
   return true;
 }
 
-// The characters a %d, %i or %u conversion prints for `v`: C11 7.21.6.1p8
-// gives no leading zeros and a '-' only for a negative value.
-static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
+// The characters a %d, %i or %u conversion prints for `v`, already converted
+// to the conversion's type: C11 7.21.6.1p8 gives no leading zeros and a '-'
+// only for a negative value.
+static expr2tc decimal_length(expr2tc v, size_t &max_len)
 {
   if (v->type->get_width() < int_type2()->get_width())
     v = typecast2tc(int_type2(), v);
   const unsigned width = v->type->get_width();
-  if (as_unsigned && is_signedbv_type(v))
-    v = typecast2tc(unsignedbv_type2tc(width), v);
   const bool is_signed = is_signedbv_type(v);
   const BigInt top = power(2, is_signed ? width - 1 : width) - 1;
 
@@ -308,17 +307,24 @@ expr2tc goto_symext::printf_output_length(
       text++;
       continue;
     }
+    const size_t conv = i;
     while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
       i++;
     if (
       i == f.size() || std::string("diu").find(f[i]) == std::string::npos ||
       arg == printf_args_end(call))
       return expr2tc();
+    // Measure the value the formatter prints: the argument converted to the
+    // conversion's type, whatever type was passed (C11 7.21.6.1p9).
+    const bool is_signed = f[i] != 'u';
+    const type2tc target = printf_int_type(is_signed, f.substr(conv, i - conv));
     expr2tc v = call.operands[arg++];
     cur_state->rename(v);
-    if (!is_bv_type(v))
+    if (
+      is_nil_type(target) || is_signedbv_type(target) != is_signed ||
+      !is_bv_type(v))
       return expr2tc();
-    len = add2tc(len->type, len, decimal_length(v, f[i] == 'u', max_len));
+    len = add2tc(len->type, len, decimal_length(typecast2tc(target, v), max_len));
   }
   max_len += text;
   len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));

@@ -17,5 +17,6 @@ int main(void)
   unsigned u = nondet_uint();
   __ESBMC_assume(u >= 10000u && u < 100000u);
   assert(dprintf(1, "[%u]", u) == 7);
+  assert(printf("%d", 4294967295u) == 2);
   return 0;
 }
