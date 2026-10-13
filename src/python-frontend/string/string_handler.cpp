@@ -11,6 +11,7 @@
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -376,6 +377,20 @@ list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
   }
 
   return false;
+}
+
+bool is_list_or_tuple_literal(const nlohmann::json &node)
+{
+  return node.contains("_type") &&
+         (node["_type"] == "List" || node["_type"] == "Tuple");
+}
+
+bool is_nonempty_constants(const nlohmann::json &elements)
+{
+  return !elements.empty() &&
+         std::all_of(elements.begin(), elements.end(), [](const auto &elem) {
+           return elem.value("_type", "") == "Constant";
+         });
 }
 
 } // namespace
@@ -2763,6 +2778,20 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   return nil_exprt();
 }
 
+/// Whether @p receiver is a Name for a module the program imported, and no
+/// binding in scope at the call @p use shadows it.
+static bool names_imported_module(
+  const python_converter &converter,
+  const nlohmann::json &receiver,
+  const nlohmann::json &use)
+{
+  return receiver.value("_type", "") == "Name" &&
+         receiver.value("id", nlohmann::json()).is_string() &&
+         !converter.get_imported_module_path(receiver["id"].get<std::string>())
+            .empty() &&
+         !converter.name_shadows_module(receiver, use);
+}
+
 exprt string_handler::handle_string_attribute_call(
   const nlohmann::json &call_json)
 {
@@ -2796,17 +2825,14 @@ exprt string_handler::handle_string_attribute_call(
   // true when a model .py file merely exists. The latter would misfire for a
   // local variable that shares a module's name (e.g. a parameter named
   // `string`), wrongly diverting `string.lower()` away from the str handler.
-  if (
-    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
-    receiver_json.contains("id") && receiver_json["id"].is_string() &&
-    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
-       .empty())
+  if (names_imported_module(converter_, receiver_json, call_json))
     return nil_exprt();
 
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr = converter_.get_expr(receiver_json);
+      cached_receiver_expr =
+        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
     return *cached_receiver_expr;
   };
 
@@ -3500,7 +3526,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
     list_node = &var_decl["value"];
   }
-  else if (list_arg.contains("_type") && list_arg["_type"] == "List")
+  else if (is_list_or_tuple_literal(list_arg))
   {
     list_node = &list_arg;
   }
@@ -3587,7 +3613,8 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
   if (
     !list_node || !list_node->contains("_type") ||
-    (*list_node)["_type"] != "List" || !list_node->contains("elts"))
+    ((*list_node)["_type"] != "List" && list_node != &list_arg) ||
+    !list_node->contains("elts"))
   {
     // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
     // a `sorted(...)`, list comprehension, or unannotated parameter).
@@ -3604,24 +3631,26 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
 
+  // A Name variable whose declared initialiser is an empty list may still be
+  // populated at runtime. The preprocessor lowers ''.join(<generator>) and
+  // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
+  // the empty initialiser here would wrongly yield "". An element that is not
+  // a literal must be read where the list was built, not here, where
+  // the names it refers to may since have been rebound. Dispatch both to the
+  // runtime __python_str_join model, which reads the list's runtime contents
+  // (and still returns "" for a genuinely empty list).
+  if (list_arg.value("_type", "") == "Name" && !is_nonempty_constants(elements))
+  {
+    log_debug(
+      "python-string",
+      "join() iterable is a runtime-built list: runtime dispatch");
+    exprt list_expr = converter_.get_expr(list_arg);
+    return string_builder_->build_runtime_str_join_call(separator, list_expr);
+  }
+
   // Edge case: empty list literal
   if (elements.empty())
   {
-    // A Name variable whose declared initialiser is an empty list may still be
-    // populated at runtime. The preprocessor lowers ''.join(<generator>) and
-    // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
-    // the empty initialiser here would wrongly yield "". Dispatch to the
-    // runtime __python_str_join model, which reads the list's runtime contents
-    // (and still returns "" for a genuinely empty list).
-    if (list_arg.contains("_type") && list_arg["_type"] == "Name")
-    {
-      log_debug(
-        "python-string",
-        "join() iterable is a runtime-built list: runtime dispatch");
-      exprt list_expr = converter_.get_expr(list_arg);
-      return string_builder_->build_runtime_str_join_call(separator, list_expr);
-    }
-
     typet empty_string_type = type_handler_.build_array(char_type(), 1);
     exprt empty_str = gen_zero(empty_string_type);
     empty_str.operands().at(0) = from_integer(0, char_type());
@@ -3641,26 +3670,15 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   if (elem_exprs.size() == 1)
     return elem_exprs[0];
 
-  // Build the joined string by extracting characters from all elements
-  // and separators, then constructing a single string.
-  std::vector<exprt> all_chars;
-
-  std::vector<exprt> first_chars =
-    string_builder_->extract_string_chars(elem_exprs[0]);
-  all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
+  // Concatenate pairwise: concatenate_strings folds constant operands and
+  // falls back to the runtime model for an element whose characters are not
+  // known here (a parameter, a call result), which would otherwise be dropped.
+  exprt joined = elem_exprs[0];
   for (size_t i = 1; i < elem_exprs.size(); ++i)
-  {
-    std::vector<exprt> sep_chars =
-      string_builder_->extract_string_chars(separator);
-    all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+    joined = string_builder_->concatenate_strings(
+      string_builder_->concatenate_strings(joined, separator), elem_exprs[i]);
 
-    std::vector<exprt> elem_chars =
-      string_builder_->extract_string_chars(elem_exprs[i]);
-    all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-  }
-
-  return string_builder_->build_null_terminated_string(all_chars);
+  return joined;
 }
 
 exprt string_handler::create_char_comparison_expr(

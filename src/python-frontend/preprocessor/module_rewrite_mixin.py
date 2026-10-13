@@ -423,6 +423,7 @@ class ModuleRewriteMixin:
         self.expand_unittest_main(node)
         guard_unbound_locals(node)
         self.hoist_nested_classes(node)
+        self.copy_aliased_methods(node)
 
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
@@ -450,6 +451,7 @@ class ModuleRewriteMixin:
         self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
         self._scan_sequence_iterators(node)
+        self._scan_starred_calls(node)
         self._scan_module_vararg_defs(node)
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)

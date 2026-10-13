@@ -1,5 +1,6 @@
 import ast
 import copy
+import keyword
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -28,6 +29,7 @@ class CoreVisitorsMixin:
         "round": ("number", "ndigits"),
         "str": ("object", ),
     }
+    _SHADOW_TRACKED_BUILTINS = set(_BUILTIN_POSITIONAL_PARAMS) | {"getattr"}
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -698,6 +700,27 @@ class CoreVisitorsMixin:
             return node
         return None
 
+    def _maybe_rewrite_getattr_call(self, node):
+        """Call `getattr(o, "m")(...)` as `o.m(...)`, which it is exactly (#8457).
+
+        A name with `__` is left alone: the frontend stores a private `__m`
+        unmangled, so neither `__m` nor `_C__m` would resolve.
+        """
+        getter = node.func
+        if not (isinstance(getter, ast.Call) and isinstance(getter.func, ast.Name)
+                and getter.func.id == "getattr" and len(getter.args) == 2 and not getter.keywords
+                and not isinstance(getter.args[0], ast.Starred)
+                and not self._builtin_is_shadowed("getattr")):
+            return None
+        name = getter.args[1]
+        if not (isinstance(name, ast.Constant) and isinstance(name.value, str)
+                and name.value.isidentifier() and not keyword.iskeyword(name.value)
+                and "__" not in name.value):
+            return None
+        node.func = ast.copy_location(
+            ast.Attribute(value=getter.args[0], attr=name.value, ctx=ast.Load()), getter)
+        return self.visit(node)
+
     def _record_staticmethod(self, node, qualified_name):
         """Note a @staticmethod, whose call binds no receiver (#7546)."""
         if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
@@ -739,10 +762,6 @@ class CoreVisitorsMixin:
                 function_name = qualified_name
                 expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
-            elif method_name in self.functionParams:
-                function_name = method_name
-                expected_args = self._params_without_implicit_self(method_name)
-                kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"
@@ -796,7 +815,7 @@ class CoreVisitorsMixin:
                 bound.add(n.name)
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 bound.update(a.asname or a.name.split(".")[0] for a in n.names)
-        return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+        return bound & self._SHADOW_TRACKED_BUILTINS
 
     def _scan_builtin_shadow_names(self, module_node):
         """Builtin names bound at module scope, which every scope inherits."""
@@ -804,7 +823,7 @@ class CoreVisitorsMixin:
         for n in ast.walk(module_node):
             if isinstance(n, ast.Global):
                 # `global int` binds the module-level name from a function.
-                bound.update(set(n.names) & set(self._BUILTIN_POSITIONAL_PARAMS))
+                bound.update(set(n.names) & self._SHADOW_TRACKED_BUILTINS)
         return bound
 
     def _enter_builtin_shadow_scope(self, node):
@@ -1777,6 +1796,10 @@ class CoreVisitorsMixin:
         if rewritten_bound is not None:
             return rewritten_bound
 
+        rewritten_getattr = self._maybe_rewrite_getattr_call(node)
+        if rewritten_getattr is not None:
+            return rewritten_getattr
+
         rewritten_decimal = self._maybe_rewrite_decimal_call(node)
         if rewritten_decimal is not None:
             return rewritten_decimal
@@ -1788,10 +1811,150 @@ class CoreVisitorsMixin:
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
+        guard = self._lower_starred_call_argument(node)
         self._apply_call_signature_defaults(node)
         self._specialize_vararg_call(node)
         self.generic_visit(node)
-        return node
+        if guard is None:
+            return node
+        guard.test = self.visit(guard.test)
+        guard.orelse = self.visit(guard.orelse)
+        return guard
+
+    def _lower_starred_call_argument(self, node):
+        """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1]) if len(xs) == k else e()`.
+
+        Only for a call _scan_starred_calls marked, to a known function with a
+        fixed positional signature (no *args, no defaults among the starred
+        slots). CPython raises TypeError when len(xs) does not fill the k
+        remaining parameters; _starred_arity_error raises it before any
+        element is read. The frontend has no Starred expression, so without
+        this every such call was refused. Constant indices let the frontend
+        type each element on its own (#8472). Returns the guarding IfExp,
+        whose body is `node`, or None.
+        """
+        if not getattr(node, "esbmc_starred_sequence", False):
+            return None
+        operand = node.args[-1].value
+        function_name, expected_args, _ = self._resolve_function_signature(node)
+        if function_name in (None, "__unknown__") or expected_args is None:
+            return None
+        if function_name in self.functionVarargs:
+            return None
+        fixed = len(node.args) - 1
+        slots = expected_args[fixed:]
+        if not slots or any((function_name, arg) in self.functionDefaults for arg in slots):
+            return None
+        length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                              args=[ast.Name(id=operand.id, ctx=ast.Load())],
+                                              keywords=[]),
+                                ops=[ast.Eq()],
+                                comparators=[ast.Constant(value=len(slots))])
+        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
+                               args=[],
+                               keywords=[])
+        node.args = node.args[:-1] + [
+            ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
+                          slice=ast.Constant(value=i),
+                          ctx=ast.Load()) for i in range(len(slots))
+        ]
+        ast.copy_location(length_ok, node)
+        ast.fix_missing_locations(node)
+        # The raising arm reads as `(e(), f(...))[1]` so both arms carry
+        # f's result type; e() raises before f is reached.
+        unreached = copy.deepcopy(node)
+        unreached.esbmc_starred_sequence = False
+        raising = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
+                                slice=ast.Constant(value=1),
+                                ctx=ast.Load())
+        guard = ast.IfExp(test=length_ok, body=node, orelse=raising)
+        ast.copy_location(guard, node)
+        ast.fix_missing_locations(guard)
+        return guard
+
+    def _scan_starred_calls(self, node):
+        """Mark each `f(..., *xs)` on a parameter xs that _lower_starred_call_argument
+        may spell out.
+
+        _expand_starred_call_args already splices a name of statically known
+        length; a parameter's length is not known, so the lowering checks it at
+        run time. Indexing spells out a list or tuple, not a dict or set, so xs
+        must be annotated as one, or every call of its function must pass a
+        list or tuple display, and xs must not be rebound. A callee bound in the
+        calling scope is not the global function whose signature the lowering
+        reads."""
+        calls_to, loads = {}, {}
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls_to.setdefault(n.func.id, []).append(n)
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                loads[n.id] = loads.get(n.id, 0) + 1
+        methods = {id(m) for c in ast.walk(node) if isinstance(c, ast.ClassDef) for m in c.body}
+        for scope in ast.walk(node):
+            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self._mark_starred_calls(scope, id(scope) in methods, calls_to, loads)
+
+    def _mark_starred_calls(self, scope, is_method, calls_to, loads):
+        positional = {a.arg: i for i, a in enumerate(scope.args.args)}
+        annotations = {
+            a.arg: a.annotation
+            for a in scope.args.posonlyargs + scope.args.args + scope.args.kwonlyargs
+        }
+        stored = {
+            n.id
+            for n in self._own_scope(scope)
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+        }
+        sequence_params = {
+            xs
+            for xs, ann in annotations.items()
+            if xs not in stored and (self._is_sequence_annotation(ann) or (
+                xs in positional and not is_method
+                and self._passed_sequence(scope.name, positional[xs], calls_to, loads)))
+        }
+        shadowed = stored | annotations.keys()
+        for n in self._own_scope(scope):
+            if self._starred_name_operand(n) in sequence_params and n.func.id not in shadowed:
+                n.esbmc_starred_sequence = True
+
+    @staticmethod
+    def _own_scope(root):
+        """Unlike _iter_own_scope_nodes, this skips lambdas and class bodies,
+        whose own names may shadow a parameter."""
+        nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        todo = list(ast.iter_child_nodes(root))
+        while todo:
+            n = todo.pop()
+            yield n
+            if not isinstance(n, nested):
+                todo.extend(ast.iter_child_nodes(n))
+
+    @staticmethod
+    def _starred_name_operand(n):
+        """The name xs in a call `f(..., *xs)` with no other star or keyword."""
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.args and not n.keywords
+                and isinstance(n.args[-1], ast.Starred) and isinstance(n.args[-1].value, ast.Name)
+                and not any(isinstance(a, ast.Starred) for a in n.args[:-1])):
+            return n.args[-1].value.id
+        return None
+
+    @staticmethod
+    def _is_sequence_annotation(ann):
+        if isinstance(ann, ast.Subscript):
+            ann = ann.value
+        return isinstance(ann, ast.Name) and ann.id in ("list", "tuple", "List", "Tuple")
+
+    @staticmethod
+    def _passed_sequence(func_name, index, calls_to, loads):
+        calls = calls_to.get(func_name, [])
+        # Every load of the name must be one of these calls, so the
+        # function is never called through another name. A list at one
+        # call and a tuple at another give the parameter no single type.
+        kinds = {
+            type(c.args[index]) if not c.keywords and index < len(c.args) else None
+            for c in calls
+        }
+        return loads.get(func_name, 0) == len(calls) and kinds in ({ast.List}, {ast.Tuple})
 
     def _locally_bound_names(self, node):
         """Names this function scope binds, ignoring nested scopes and globals."""

@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^ERROR: Module 'nosuchmodule' not found\.$
+Could not resolve type of receiver in member call

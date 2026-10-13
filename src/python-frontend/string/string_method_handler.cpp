@@ -2650,21 +2650,16 @@ exprt string_handler::handle_string_replace(
       return str_expr;
   }
 
-  // Try to extract constant string values for compile-time replacement
-  std::string src_str = extract_string_from_array_operands(str_expr);
-  std::string old_str = extract_string_from_array_operands(old_expr);
-  std::string new_str = extract_string_from_array_operands(new_expr);
+  auto is_literal = [](const exprt &e) {
+    return e.is_constant() && e.type().is_array();
+  };
 
-  // If we can extract all strings as constants, do replacement at compile time
-  if (!src_str.empty() || str_expr.operands().size() > 0)
+  if (is_literal(str_expr) && is_literal(old_expr) && is_literal(new_expr))
   {
-    // Handle the case where source string might be empty but valid
-    if (str_expr.type().is_array() && str_expr.operands().size() > 0)
-    {
-      src_str = extract_string_from_array_operands(str_expr);
-    }
+    const std::string src_str = extract_string_from_array_operands(str_expr);
+    const std::string old_str = extract_string_from_array_operands(old_expr);
+    const std::string new_str = extract_string_from_array_operands(new_expr);
 
-    // Perform the replacement
     std::string result;
     int64_t replacements_done = 0;
 

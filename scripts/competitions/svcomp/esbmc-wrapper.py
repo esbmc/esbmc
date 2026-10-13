@@ -196,14 +196,22 @@ def classify_python_violation(violated, prop):
 def add_python_module_path(benchmark):
   """Put sv-benchmarks' _sv_verifier module within the task's import reach.
 
-  A Python task sits in python/<project>/ and imports _sv_verifier, which sits
-  one level up in python/. CPython resolves an import against the script's own
-  directory and fails the same way, which is why sv-benchmarks' check-syntax.py
-  sets PYTHONPATH; ESBMC follows CPython here, so the search path is supplied
-  rather than the resolution changed.
+  A Python task sits in python/<project>/, or a directory below it, and imports
+  _sv_verifier, which sits in python/. CPython resolves an import against the
+  script's own directory and fails the same way, which is why sv-benchmarks'
+  check-syntax.py sets PYTHONPATH; ESBMC follows CPython here, so the search
+  path is supplied rather than the resolution changed.
   """
   task_dir = os.path.dirname(os.path.abspath(benchmark))
   paths = [task_dir, os.path.dirname(task_dir)]
+  # A task may sit deeper, as python/<project>/<task>/main.py does, so the
+  # nearest ancestor above the parent holding _sv_verifier.py is added too.
+  ancestor = paths[-1]
+  while os.path.dirname(ancestor) != ancestor:
+    ancestor = os.path.dirname(ancestor)
+    if os.path.isfile(os.path.join(ancestor, "_sv_verifier.py")):
+      paths.append(ancestor)
+      break
   if os.environ.get("PYTHONPATH"):
     paths.append(os.environ["PYTHONPATH"])
   os.environ["PYTHONPATH"] = os.pathsep.join(paths)
@@ -337,7 +345,9 @@ esbmc_path = "./esbmc "
 # suppresses GCC-acceptable frontend diagnostics, treats __builtin_unreachable
 # as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
 # in the fopen/fclose models.
-esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
+# No --force-malloc-success / --force-realloc-success: SV-COMP lets an
+# allocation fail (sv-benchmarks !1686).
+esbmc_dargs = "--sv-comp --no-div-by-zero-check --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
@@ -435,10 +445,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     command_line += "--no-abnormal-memory-leak "
     # many benchmarks assume malloc(0) == NULL and alloca(0) == NULL
     command_line += "--malloc-zero-is-null "
-    strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
-    strat = "incr"
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
     if concurrency:

@@ -111,13 +111,34 @@ static ContactEdge contact_edge_from_string(const std::string &s)
   throw UnsupportedConstructError("edge=\"" + s + "\"", 2);
 }
 
-CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
+static CoilKind coil_kind_of(const std::string &s)
 {
   if (s == "set" || s == "SetCoil")
     return CoilKind::Set;
   if (s == "reset" || s == "ResetCoil")
     return CoilKind::Reset;
-  return CoilKind::Output;
+  if (s == "coil" || s == "Coil" || s == "none")
+    return CoilKind::Output;
+  throw UnsupportedConstructError("coil kind \"" + s + "\"", 2);
+}
+
+CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
+{
+  return coil_kind_of(s);
+}
+
+static std::string coil_kind_attribute(const pugi::xml_node &n)
+{
+  std::string kind = text_or_attr(n, "kind", nullptr);
+  if (kind.empty())
+    kind = text_or_attr(n, "storage", nullptr);
+  return kind == "none" ? std::string() : kind;
+}
+
+static void note_derived_type(VarDecl &v, bool derived, const std::string &type)
+{
+  if (derived)
+    v.derived_type = type;
 }
 
 // A negated or transition-sensing coil (IEC 61131-3 Table 76) is not modeled;
@@ -225,6 +246,7 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   if (type_str.empty())
     type_str = "BOOL";
   v.kind = var_kind_from_string(type_str, derived);
+  note_derived_type(v, derived, type_str);
   v.loc = loc_from_node(n, source_file_);
 
   // <initialValue><simpleValue value="2"/></initialValue>. Without this a
@@ -301,9 +323,8 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
     elem.kind = RungElementKind::Coil;
     // PLCopen XML encodes coil kind either as the tag name (SetCoil/ResetCoil)
     // or as a "kind" attribute on a generic <coil kind="set|reset"/> element.
-    std::string kind_str = text_or_attr(n, "kind", nullptr);
-    elem.coil.kind = kind_str.empty() ? coil_kind_from_string(tag)
-                                      : coil_kind_from_string(kind_str);
+    const std::string kind_str = coil_kind_attribute(n);
+    elem.coil.kind = coil_kind_from_string(kind_str.empty() ? tag : kind_str);
     if (auto var_node = n.child("variable"))
       elem.coil.variable = var_node.child_value();
     else
@@ -740,6 +761,15 @@ static bool is_coil_tag(const std::string &t)
   return t == "coil" || t == "SetCoil" || t == "ResetCoil";
 }
 
+// A coil's storage attribute must name a kind the converter models.
+static std::string
+checked_storage(const std::string &tag, const std::string &storage)
+{
+  if (is_coil_tag(tag) && !storage.empty() && storage != "none")
+    coil_kind_of(storage);
+  return storage;
+}
+
 // Only a timer or counter step assigns the Q a block's power flow is named
 // after.
 static bool steps_every_scan(const std::string &type_name)
@@ -849,7 +879,7 @@ static bool parse_graphical_ld(
       if (t == "ResetCoil")
         storage_attr = "reset";
     }
-    g.storage = storage_attr;
+    g.storage = checked_storage(t, storage_attr);
     g.x = child.child("position").attribute("x").as_int(0);
     g.y = child.child("position").attribute("y").as_int(0);
 
@@ -1566,6 +1596,47 @@ static void reject_concurrent_programs(const pugi::xml_node &root)
     throw UnsupportedConstructError("more than one program POU", 2);
 }
 
+struct VariableUses
+{
+  std::set<std::string> contact, coil, block_out, pin_in;
+};
+
+static VariableUses collect_uses(const LdAst &ast)
+{
+  VariableUses u;
+  for (const auto &net : ast.networks)
+    for (const auto &rung : net.rungs)
+      for (const auto &elem : rung.elements)
+        switch (elem.kind)
+        {
+        case RungElementKind::Contact:
+          u.contact.insert(elem.contact.variable);
+          break;
+        case RungElementKind::Coil:
+          u.coil.insert(elem.coil.variable);
+          break;
+        case RungElementKind::TimerFB:
+          u.block_out.insert({elem.timer_fb.Q_var, elem.timer_fb.ET_var});
+          u.pin_in.insert(elem.timer_fb.IN_var);
+          break;
+        case RungElementKind::CounterFB:
+          u.block_out.insert({elem.counter_fb.Q_var, elem.counter_fb.CV_var});
+          u.pin_in.insert(
+            {elem.counter_fb.CU_var,
+             elem.counter_fb.CD_var,
+             elem.counter_fb.R_var,
+             elem.counter_fb.LD_var});
+          break;
+        case RungElementKind::ArithFB:
+          u.block_out.insert(elem.arith_fb.OUT_var);
+          break;
+        }
+  for (const auto &fb : ast.user_fb_instances)
+    for (const auto &wire : fb.out_wires)
+      u.block_out.insert(wire.prog_var);
+  return u;
+}
+
 // Heuristic I/O inference for programs whose variables have neither a hardware
 // address nor an interface direction (tutorial and simulation programs that
 // declare everything in <localVars>). A variable that appears only as a contact
@@ -1574,43 +1645,147 @@ static void reject_concurrent_programs(const pugi::xml_node &root)
 // the program, so reading it through a contact does not make it an input.
 static void infer_io_directions(LdAst &ast)
 {
-  std::set<std::string> contact_vars, coil_vars, block_vars;
-  for (const auto &net : ast.networks)
-    for (const auto &rung : net.rungs)
-      for (const auto &elem : rung.elements)
-        switch (elem.kind)
-        {
-        case RungElementKind::Contact:
-          contact_vars.insert(elem.contact.variable);
-          break;
-        case RungElementKind::Coil:
-          coil_vars.insert(elem.coil.variable);
-          break;
-        case RungElementKind::TimerFB:
-          block_vars.insert({elem.timer_fb.Q_var, elem.timer_fb.ET_var});
-          break;
-        case RungElementKind::CounterFB:
-          block_vars.insert({elem.counter_fb.Q_var, elem.counter_fb.CV_var});
-          break;
-        case RungElementKind::ArithFB:
-          block_vars.insert(elem.arith_fb.OUT_var);
-          break;
-        }
-  for (const auto &fb : ast.user_fb_instances)
-    for (const auto &wire : fb.out_wires)
-      block_vars.insert(wire.prog_var);
-
+  const VariableUses u = collect_uses(ast);
   for (auto &v : ast.variables)
   {
     if (v.is_input || v.is_output)
       continue;
-    const bool read = contact_vars.count(v.name);
-    const bool coiled = coil_vars.count(v.name);
-    if (read && !coiled && !block_vars.count(v.name))
+    const bool read = u.contact.count(v.name);
+    const bool coiled = u.coil.count(v.name);
+    const bool pin_read = !v.synthesized && u.pin_in.count(v.name);
+    if ((read || pin_read) && !coiled && !u.block_out.count(v.name))
       v.is_input = true;
     else if (coiled && !read)
       v.is_output = true;
   }
+}
+
+static void reject_derived_operands(const LdAst &ast)
+{
+  const VariableUses u = collect_uses(ast);
+  for (const auto &v : ast.variables)
+    if (
+      !v.derived_type.empty() &&
+      (u.contact.count(v.name) || u.coil.count(v.name) ||
+       u.pin_in.count(v.name)))
+      throw UnsupportedConstructError(
+        "variable " + v.name + " of type " + v.derived_type +
+          " used as a Boolean operand",
+        2);
+}
+
+// The shadow of a timer or counter is named after its instance, or after its Q
+// variable when it has none; two blocks must not share one.
+static void reject_shared_shadow_keys(const LdAst &ast)
+{
+  std::set<std::string> timers, counters;
+  for (const auto &net : ast.networks)
+    for (const auto &rung : net.rungs)
+      for (const auto &elem : rung.elements)
+      {
+        std::set<std::string> *seen = nullptr;
+        std::string key;
+        if (elem.kind == RungElementKind::TimerFB)
+        {
+          seen = &timers;
+          key = elem.timer_fb.instance_name.empty()
+                  ? elem.timer_fb.Q_var
+                  : elem.timer_fb.instance_name;
+        }
+        else if (elem.kind == RungElementKind::CounterFB)
+        {
+          seen = &counters;
+          key = elem.counter_fb.instance_name.empty()
+                  ? elem.counter_fb.Q_var
+                  : elem.counter_fb.instance_name;
+        }
+        if (seen && !seen->insert(key).second)
+          throw UnsupportedConstructError(
+            "two blocks (key " + key + ") share one previous-input shadow", 2);
+      }
+}
+
+static bool plain_pin(const pugi::xml_node &v)
+{
+  const std::string neg = v.attribute("negated").as_string();
+  const std::string edge = v.attribute("edge").as_string();
+  return (neg.empty() || neg == "false" || neg == "0") &&
+         (edge.empty() || edge == "none");
+}
+
+static void
+check_textual_enable_pins(const pugi::xml_node &blk, const std::string &what)
+{
+  for (auto v : blk.children("variable"))
+  {
+    const std::string pin = v.attribute("formalParameter").as_string();
+    const std::string text = trim(v.child_value());
+    if (
+      (pin == "EN" && ((!text.empty() && text != "TRUE") || !plain_pin(v))) ||
+      (pin == "ENO" && !text.empty()))
+      throw UnsupportedConstructError("wired " + pin + " on block " + what, 2);
+  }
+}
+
+static void
+check_graphical_en(const pugi::xml_node &blk, const std::string &what)
+{
+  for (auto v : blk.child("inputVariables").children("variable"))
+  {
+    if (std::string(v.attribute("formalParameter").as_string()) != "EN")
+      continue;
+    bool wired = !plain_pin(v);
+    for (auto c : v.select_nodes(".//connection"))
+    {
+      auto src = blk.parent().find_child_by_attribute(
+        "localId", c.node().attribute("refLocalId").as_string("-"));
+      wired |= std::string(src.name()) != "leftPowerRail";
+    }
+    if (wired)
+      throw UnsupportedConstructError("wired EN on block " + what, 2);
+  }
+}
+
+static void
+check_eno_consumers(const pugi::xml_node &blk, const std::string &what)
+{
+  const std::string id = blk.attribute("localId").as_string("-");
+  for (auto c :
+       blk.parent().select_nodes(".//connection[@formalParameter='ENO']"))
+    if (
+      std::string(c.node().attribute("refLocalId").as_string()) == id &&
+      std::string(c.node().parent().parent().name()) != "rightPowerRail")
+      throw UnsupportedConstructError("wired ENO on block " + what, 2);
+}
+
+// EN and ENO of a standard block are not modeled. An EN wired to the left power
+// rail (always true) is accepted; any other EN is refused, and so is an ENO
+// that feeds anything but the right power rail.
+static void reject_wired_enable_pins(const pugi::xml_node &root)
+{
+  for (auto sel : root.select_nodes(
+         "//pou[@pouType='program']//block | //pou[@pouType='program']//Block"))
+  {
+    const pugi::xml_node blk = sel.node();
+    const std::string type = blk.attribute("typeName").as_string();
+    if (!fb_kind_of_std(type))
+      continue;
+    const std::string what =
+      type + " (" + blk.attribute("instanceName").as_string() + ")";
+    check_textual_enable_pins(blk, what);
+    check_graphical_en(blk, what);
+    check_eno_consumers(blk, what);
+  }
+}
+
+static void check_declaration(std::set<std::string> &seen, const VarDecl &v)
+{
+  for (const char *prefix : {"__edge_prev_", "__timer_prev_", "__ctr_prev_"})
+    if (v.name.rfind(prefix, 0) == 0)
+      throw LdParseError(
+        "variable " + v.name + " uses the reserved prefix " + prefix);
+  if (!seen.insert(v.name).second)
+    throw LdParseError("variable " + v.name + " is declared more than once");
 }
 
 LdAst PlcopenXmlParser::parse(const std::string &path)
@@ -1658,6 +1833,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
+  std::set<std::string> declared_names;
   // Program variables. A function block's interface is its own: each
   // instance gets it from the definition, under the instance's prefix (#7581).
   for (auto xpath_var : root.select_nodes(
@@ -1672,6 +1848,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     for (auto var_node : vars_node.children("variable"))
     {
       VarDecl v = parse_var_decl(&var_node);
+      check_declaration(declared_names, v);
       v.is_input |= input;
       v.shared |= shared;
       if (vars_tag.find("output") != std::string::npos)
@@ -1814,6 +1991,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
+  reject_wired_enable_pins(root);
+  reject_shared_shadow_keys(ast);
+  reject_derived_operands(ast);
   infer_io_directions(ast);
 
   // Last, so the function-block definitions above are already registered.

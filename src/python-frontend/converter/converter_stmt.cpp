@@ -6732,6 +6732,7 @@ void python_converter::get_var_assign(
       return;
     }
 
+    python_list(*this, target).retype_element_store(lhs, rhs);
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
@@ -7129,6 +7130,46 @@ bool python_converter::contains_named_expr(const nlohmann::json &node)
   return false;
 }
 
+bool python_converter::contains_nested_scope_named_expr(
+  const nlohmann::json &node)
+{
+  static const std::set<std::string> scopes = {
+    "Lambda", "ListComp", "SetComp", "DictComp", "GeneratorExp"};
+  if (node.is_object() && scopes.count(node.value("_type", "")))
+    return contains_named_expr(node);
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (contains_nested_scope_named_expr(child))
+        return true;
+  return false;
+}
+
+exprt python_converter::apply_string_truthiness(
+  const exprt &str,
+  const locationt &location)
+{
+  if (!type_utils::is_string_type(str.type()))
+    return str;
+
+  const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
+  if (!strlen_sym)
+    throw std::runtime_error("strlen not found for string truthiness check");
+
+  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors the
+  // string-truthiness path at converter_unop.cpp). The call is built directly
+  // in IREP2; it carries no IREP2 location, so the location is re-attached to
+  // the back-migrated operand below.
+  expr2tc strlen_arg2;
+  migrate_expr(string_handler_.get_array_base_address(str), strlen_arg2);
+  expr2tc strlen_call2 = side_effect_function_call2tc(
+    migrate_type(size_type()), symbol_expr2tc(*strlen_sym), {strlen_arg2});
+  exprt cond = migrate_expr_back(
+    notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
+  cond.location() = location;
+  cond.op0().location() = location;
+  return cond;
+}
+
 /// Truth-testing an object calls its __bool__ when the class defines one. The
 /// caller has already resolved @p value_type to the struct behind @p cond
 /// (following a pointer if need be); a non-struct or a class without the dunder
@@ -7292,18 +7333,41 @@ code_blockt *python_converter::while_condition_block(
            : current_block;
 }
 
+exprt python_converter::get_flat_boolop_test(
+  const nlohmann::json &test_node,
+  const std::function<exprt(const exprt &, const nlohmann::json &)> &to_bool)
+{
+  exprt boolop_expr(
+    python_frontend::map_operator(test_node["op"]["_type"], bool_type()),
+    bool_type());
+  std::vector<code_blockt> effects;
+  for (const auto &operand : test_node["values"])
+    boolop_expr.copy_to_operands(
+      to_bool(get_boolop_operand(operand, effects), operand));
+
+  const auto planted = [](const code_blockt &b) {
+    return !b.operands().empty();
+  };
+  if (std::none_of(effects.begin(), effects.end(), planted))
+    return boolop_expr;
+  return emit_guarded_boolop(
+    boolop_expr,
+    effects,
+    [](const exprt &e) { return e; },
+    get_location_from_decl(test_node));
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
-  // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
-  // emits the binding once into the enclosing block (it would go stale). Refuse
-  // with a clean diagnostic rather than return an unsound verdict. A plain `if`
-  // condition and a comprehension filter evaluate the walrus exactly once, so
-  // they remain supported. (Ternary-branch and short-circuit-operand walrus are
-  // refused at their own lowering sites: get_expr and
-  // get_logical_operator_expr.)
+  // A walrus in a `while` test binds into the condition prelude, which runs
+  // before every evaluation of the test. One inside a lambda or comprehension
+  // there is deferred or hoisted out of the loop, so it is refused with a
+  // clean diagnostic rather than given an unsound verdict. (Ternary-branch and
+  // nested short-circuit-operand walrus are refused at their own lowering
+  // sites: get_expr and get_logical_operator_expr.)
   if (
     ast_node.value("_type", "") == "While" && ast_node.contains("test") &&
-    contains_named_expr(ast_node["test"]))
+    contains_nested_scope_named_expr(ast_node["test"]))
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
 
@@ -7468,6 +7532,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       value_expr = side_effect;
     }
 
+    value_expr =
+      apply_string_truthiness(value_expr, get_location_from_decl(value_node));
     if (value_expr.type().is_bool())
       return value_expr;
 
@@ -7584,17 +7650,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       cond = result_expr;
     }
   }
-  else if (test_type == "BoolOp" && !model_mode)
-  {
-    exprt boolop_expr(
-      python_frontend::map_operator(
-        ast_node["test"]["op"]["_type"], bool_type()),
-      bool_type());
-    for (const auto &operand : ast_node["test"]["values"])
-      boolop_expr.copy_to_operands(
-        to_bool_condition(get_expr(operand), operand));
-    cond = boolop_expr;
-  }
+  // An operand converted here is not guarded by the while test's prelude, so
+  // a walrus in a `while` test takes the general path, whose and/or lowering
+  // refuses it.
+  else if (
+    test_type == "BoolOp" && !model_mode &&
+    !(type == "While" && contains_named_expr(ast_node["test"])))
+    cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {
     locationt location = get_location_from_decl(call_node);
@@ -7707,28 +7769,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       }
 
       // Python treats strings in conditions by their length: "" is falsy.
-      if (type_utils::is_string_type(cond.type()))
-      {
-        const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
-        if (!strlen_sym)
-          throw std::runtime_error(
-            "strlen not found for string truthiness check");
-
-        // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors
-        // the string-truthiness path at converter_unop.cpp). The call is built
-        // directly in IREP2; it carries no IREP2 location, so the location is
-        // re-attached to the back-migrated operand below.
-        expr2tc strlen_arg2;
-        migrate_expr(string_handler_.get_array_base_address(cond), strlen_arg2);
-        expr2tc strlen_call2 = side_effect_function_call2tc(
-          migrate_type(size_type()),
-          symbol_expr2tc(*strlen_sym),
-          {strlen_arg2});
-        cond = migrate_expr_back(
-          notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
-        cond.location() = location;
-        cond.op0().location() = location;
-      }
+      cond = apply_string_truthiness(cond, location);
     }
   }
 
@@ -8570,6 +8611,9 @@ exprt python_converter::get_block(
 
       // Attach assertion message if present
       auto attach_assert_message = [&element](code_assertt &assert_code) {
+        // A failing assert raises AssertionError, which ends the program, so
+        // nothing after it runs on that path.
+        assert_code.location().set("ends_path", true);
         if (element.contains("msg") && !element["msg"].is_null())
         {
           std::string msg;
