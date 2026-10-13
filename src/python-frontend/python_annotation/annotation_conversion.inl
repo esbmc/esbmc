@@ -587,6 +587,64 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   return "Any";
 }
 
+/// The type a subscript of a `container`-typed value yields, or empty.
+inline std::string
+subscript_result_type(const std::string &container, bool is_slice)
+{
+  // The trailing ']' is redundant against every current producer, and is
+  // kept only to hold the invariant the substr calls rely on.
+  if (container.size() < 6 || container.back() != ']')
+    return "";
+  const std::string params = container.substr(5, container.size() - 6);
+  if (container.rfind("list[", 0) == 0)
+    return is_slice ? container : params;
+  // A dict lookup yields the value type (GitHub #8358).
+  const auto kv = json_utils::split_top_level_params(params);
+  if (container.rfind("dict[", 0) == 0 && !is_slice && kv.size() == 2)
+    return kv[1];
+  return "";
+}
+
+/// True when `type` spells a tuple without its element types anywhere. A
+/// later round of call-site inference may still resolve the elements.
+inline bool has_bare_tuple(const std::string &type)
+{
+  for (size_t pos = type.find("tuple"); pos != std::string::npos;
+       pos = type.find("tuple", pos + 1))
+  {
+    const size_t end = pos + 5;
+    const bool starts = pos == 0 || type[pos - 1] == '[' ||
+                        type[pos - 1] == ' ' || type[pos - 1] == ',';
+    if (starts && (end == type.size() || type[end] == ']' || type[end] == ','))
+      return true;
+  }
+  return false;
+}
+
+/// True when an argument type says too little to annotate a parameter with
+/// (see collect_function_call_arg_types).
+inline bool is_unresolved_arg_type(const std::string &type)
+{
+  return type.empty() || type == "NoneType" || type == "Any" ||
+         has_bare_tuple(type);
+}
+
+/// list(x) copies an iterable into the list model, so the call has type
+/// list[T] for an iterable of T. Empty when the iterable's element type is
+/// unknown (GitHub #8358).
+template <class Json>
+std::string python_annotation<Json>::list_copy_type(
+  const std::string &func_name,
+  const Json &call)
+{
+  if (func_name != "list" || !call.contains("args") || call["args"].size() != 1)
+    return "";
+  const std::string source = get_argument_type(call["args"][0]);
+  if (source == "range")
+    return "list[int]";
+  return source.rfind("list[", 0) == 0 ? source : "";
+}
+
 // ---------- dispatchers ----------
 
 template <class Json>
@@ -675,15 +733,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        const std::string base_type = get_argument_type(var_node["value"]);
         const bool is_slice =
           arg.contains("slice") && arg["slice"].value("_type", "") == "Slice";
-
-        // The trailing ']' is redundant against every current producer, and
-        // is kept only to hold the invariant the substr below relies on.
-        if (base_type.rfind("list[", 0) == 0 && base_type.back() == ']')
-          return is_slice ? base_type
-                          : base_type.substr(5, base_type.size() - 6);
+        return subscript_result_type(
+          get_argument_type(var_node["value"]), is_slice);
       }
     }
     return "";
@@ -893,6 +946,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
         get_argument_type(arg["args"][0]) != "bytes")
         return "int";
+
+      const std::string copied = list_copy_type(func_name, arg);
+      if (!copied.empty())
+        return copied;
 
       // Check built-in functions first
       auto it = builtin_functions().find(func_name);
@@ -4576,7 +4633,7 @@ void python_annotation<Json>::collect_function_call_arg_types(
           // a parameter is annotated only once *every* call site resolves —
           // an iterating pass must not commit to a type a later round
           // contradicts (GitHub #7254).
-          if (arg_type.empty() || arg_type == "NoneType" || arg_type == "Any")
+          if (is_unresolved_arg_type(arg_type))
             arg_type = unresolved_arg_type();
           param_types[{func_name, i}].insert(arg_type);
         }
