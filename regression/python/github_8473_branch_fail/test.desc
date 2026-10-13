@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+13\s+assertion
+^VERIFICATION FAILED$
