@@ -431,7 +431,7 @@ static bool list_var_may_change(const nlohmann::json &node, list_use_scan &scan)
 static bool
 list_var_may_change(const std::string &var_name, python_converter &converter)
 {
-  list_use_scan scan{var_name};
+  list_use_scan scan{var_name, 0, {}};
   return list_var_may_change(converter.get_ast_json()["body"], scan);
 }
 
