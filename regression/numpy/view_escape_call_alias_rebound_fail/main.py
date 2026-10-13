@@ -15,6 +15,6 @@ def pick(v):
     return v[n]
 
 
-a = np.zeros((2, 3), dtype=int)
+a = np.zeros((2, 3), dtype=np.int64)
 row = a[0]
 assert pick(row) == 3

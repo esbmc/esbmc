@@ -1056,6 +1056,10 @@ private:
     const exprt &array,
     const nlohmann::json &col_index_node);
 
+  std::optional<exprt> try_build_numpy_view_subview(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
   std::optional<exprt> try_copy_numpy_pointer_view_slice(
     const exprt &array,
     const typet &elem_type,
@@ -1088,8 +1092,9 @@ private:
 
   /// Emits the runtime offset/stride/length of a[lo:hi:st] over a length-n
   /// axis, raising ValueError for st == 0.
-  symbolic_slice_params
-  emit_symbolic_slice_params(const nlohmann::json &slice_node, long long n);
+  symbolic_slice_params emit_symbolic_slice_params(
+    const nlohmann::json &slice_node,
+    const exprt &extent);
 
   /**
    * @brief a[lo:hi:st] with a non-literal step st. Assigned to a bare name it
