@@ -121,7 +121,17 @@ size_t __ESBMC_list_size(const PyListObject *l)
 // ptr_free=1: payload has no pointer field, so we can reinterpret it as
 // uint64_t and use the 16/24/32-byte fast paths below. Pass 0 for opaque or
 // pointer-bearing structs — writing through a uint64_t lvalue would lose the
-// pointer object under ESBMC's byte-encoding.
+// pointer object under ESBMC's byte-encoding. ptr_free=2: the payload is one
+// pointer (a nested list or an object reference), copied as a pointer so the
+// element still names its object; an 8-byte integer copy would rebuild it
+// from bytes and every later read through it would range over all objects.
+// The storage of a pointer payload. A struct, not a bare `void *`, so the cell
+// is an object of its own kind and a SAME-OBJECT test between two cells folds.
+struct __ESBMC_pointer_cell
+{
+  void *ptr;
+};
+
 static inline void *__ESBMC_copy_value(
   const void *value,
   size_t size,
@@ -151,6 +161,14 @@ static inline void *__ESBMC_copy_value(
     return (void *)&__ESBMC_float_buf[idx];
   }
 
+  if (ptr_free == 2 && size == sizeof(void *))
+  {
+    struct __ESBMC_pointer_cell *cell =
+      __ESBMC_alloca(sizeof(struct __ESBMC_pointer_cell));
+    cell->ptr = *(void *const *)value;
+    return cell;
+  }
+
   void *copied = __ESBMC_alloca(size);
 
   // Branch-free 8-byte-aligned fast paths for the common small sizes. These
@@ -170,13 +188,13 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
-  else if (ptr_free && size == 24)
+  else if (ptr_free == 1 && size == 24)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
   }
-  else if (ptr_free && size == 32)
+  else if (ptr_free == 1 && size == 32)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
