@@ -416,27 +416,28 @@ template <typename Setup, typename Read>
 void read_concurrently(Setup setup, Read read)
 {
   constexpr int threads = 8;
+  symbolt reference;
+  setup(reference);
+  const auto expected = read(reference);
+
   for (int round = 0; round < 200; ++round)
   {
     symbolt sym;
-    sym.id = sym.name = "s";
-    sym.mode = "C";
     setup(sym);
 
-    using result_t = std::decay_t<decltype(read(sym))>;
-    std::vector<const result_t *> seen(threads);
+    std::vector<std::decay_t<decltype(expected)>> seen(threads);
     std::barrier start(threads);
     std::vector<std::thread> pool;
     for (int t = 0; t < threads; ++t)
       pool.emplace_back([&, t] {
         start.arrive_and_wait();
-        seen[t] = &read(sym);
+        seen[t] = read(sym);
       });
     for (auto &t : pool)
       t.join();
 
-    for (const result_t *r : seen)
-      REQUIRE(*r == *seen.front());
+    for (const auto &r : seen)
+      REQUIRE(r == expected);
   }
 }
 

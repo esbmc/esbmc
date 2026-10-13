@@ -12,6 +12,7 @@ namespace
 // the first read of a lazy cache fills it under a lock and publishes it
 // (#8565). Recursive: a migration may read another symbol's cache.
 std::recursive_mutex lazy_cache_mutex;
+static_assert(std::atomic_ref<bool>::is_always_lock_free);
 
 template <typename Fill>
 void fill_once(bool &valid, Fill fill)
