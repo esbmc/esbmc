@@ -896,6 +896,10 @@ void python_converter::process_forward_reference(
   {
     std::string saved_class = current_class_name_;
     std::string saved_func = current_func_name_;
+    // find_class only searches the module body, so build the class in module
+    // scope; otherwise its class attributes get the referencing function's id.
+    current_class_name_.clear();
+    current_func_name_.clear();
     get_class_definition(ref_class_node, target_block);
     current_class_name_ = saved_class;
     current_func_name_ = saved_func;

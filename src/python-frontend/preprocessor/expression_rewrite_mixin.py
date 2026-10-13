@@ -406,13 +406,27 @@ class ExpressionRewriteMixin:
         # no orelse and clears node.orelse otherwise.
         while_else_pre, while_else_post = self._lower_for_else(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
-        node.test = new_test
-        node.test = self._transform_list_truthiness(node.test, node)
-        result = (prefix or []) + [node]
+        node.test = self._transform_list_truthiness(new_test, node)
+        if prefix:
+            self._move_test_prefix_into_body(node, prefix)
+        result = [node]
         if while_else_pre or while_else_post:
             result = while_else_pre + result + while_else_post
         result = gen_pre_stmts + result
         return result if len(result) > 1 else node
+
+    def _move_test_prefix_into_body(self, node, prefix):
+        """Rewrite `while <test>` as `while True` whose body starts with
+        `<prefix>; if not <test>: break`, so the statements a comprehension in
+        the test lowers to run before every evaluation of the test, not once
+        before the loop. Breaks were already rewritten for while-else, so this
+        one still lets the else clause run."""
+        exit_test = ast.If(test=ast.UnaryOp(op=ast.Not(), operand=node.test),
+                           body=[ast.Break()],
+                           orelse=[])
+        self.ensure_all_locations(exit_test, node)
+        node.body = prefix + [exit_test] + node.body
+        node.test = self.create_constant_node(True, node)
 
     def _simplify_isinstance(self, node):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
