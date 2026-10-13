@@ -1,5 +1,5 @@
-# KNOWNBUG until #8385: extra arguments to a method on an untracked receiver
-# are dropped. CPython raises TypeError at the call below.
+# CPython raises TypeError at the call below: size() takes 2 positional
+# arguments but 3 were given.
 class P:
     def size(self, k: int) -> int:
         return k
