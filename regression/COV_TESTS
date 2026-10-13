@@ -2606,3 +2606,9 @@ regression/python/str_mod_call_once_fail
 regression/python/str_mod_call_once_branch_fail
 regression/python/str_mod_call_str_d_fail
 regression/python/str_mod_optional_refused
+regression/python/github_8385
+regression/python/github_8385_fail
+regression/python/github_8385_missing_fail
+regression/python/github_8385_override
+regression/python/github_8385_self_fail
+regression/python/github_8385_starred_fail
