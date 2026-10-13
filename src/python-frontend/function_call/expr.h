@@ -5,6 +5,8 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/irep/expr.h>
+#include <map>
+#include <set>
 #include <unordered_map>
 
 enum class FunctionType
@@ -135,6 +137,24 @@ private:
   /// An opaque nondet int, standing in for Python's real hash() on a
   /// non-bytes argument.
   exprt handle_generic_hash();
+
+  /// The first abstract method the abc.ABC subclass that @p ctor_call
+  /// constructs leaves unimplemented, or "" when it constructs nothing
+  /// abstract.
+  std::string
+  unimplemented_abstract_method(const nlohmann::json &ctor_call) const;
+
+  bool is_abstract_instantiation() const;
+
+  /// The TypeError CPython raises on instantiating an abstract class.
+  exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
+
+  static void collect_method_abstractness(
+    const python_converter &converter,
+    const std::string &class_name,
+    std::map<std::string, bool> &methods,
+    std::set<std::string> &visited,
+    bool &is_abc);
 
   bool is_input_call() const;
 
