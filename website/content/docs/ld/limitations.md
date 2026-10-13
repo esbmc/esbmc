@@ -85,6 +85,16 @@ supported and the known restrictions.
   pin fed by anything other than power flow or a block's `Q`, and an
   unparsable literal or initial value (`"1.5"` for an integer) are rejected
   with `UnsupportedConstruct` rather than read as 0.
+- **Declarations and block pins.** The parser refuses, rather than reads as
+  something else: a name declared twice in one interface, a name that starts
+  with `__edge_prev_`, `__timer_prev_` or `__ctr_prev_`, a variable of a derived
+  type used as a contact, coil or block pin, a coil `kind` or `storage` other
+  than `set`, `reset` or `none`, two timers or two counters that resolve to one
+  instance name (an unnamed block takes the name of its `Q` variable), an `EN`
+  of a standard block wired to anything but the left power rail, and an `ENO`
+  that feeds anything but the right power rail. A Boolean variable that only a
+  block pin reads (`IN`, `CU`, `CD`, `R`, `LD`) and nothing writes is a free
+  input, as one that only a contact reads is.
 - **`TP` pulse timers.** `TP` blocks are modelled with `TON` (on-delay)
   semantics: `Q` rises after `IN` has been held for `PT` ticks, rather than
   emitting a fixed-width pulse on a rising edge of `IN`. Properties that depend

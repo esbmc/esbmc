@@ -1610,9 +1610,9 @@ bool goto_convert_functionst::convert_native_rec(
     const expr2tc guard = normalise_native_code(
       a.guard, effective_location(a.location, inherited), ns);
 
-    // --no-assertions: convert_assert removes side effects (a no-op here)
-    // and emits no ASSERT — match that exactly.
-    if (!options.get_bool_option("no-assertions"))
+    // Match convert_assert, which removes side effects (a no-op here) and
+    // emits the ASSERT only when emits_assert says so.
+    if (emits_assert(a.location))
     {
       goto_programt::targett t = dest.add_instruction(ASSERT);
       t->guard = guard;

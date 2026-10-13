@@ -277,6 +277,8 @@ bool same_position(const nlohmann::json &a, const nlohmann::json &b)
          a.value("col_offset", -1) == b.value("col_offset", -2);
 }
 
+} // namespace
+
 /// The one name target a plain `x = v` or `x: T = v` statement binds, or null.
 const nlohmann::json *binding_target(const nlohmann::json &stmt)
 {
@@ -291,6 +293,8 @@ const nlohmann::json *binding_target(const nlohmann::json &stmt)
   return target != nullptr && target->is_object() ? target : nullptr;
 }
 
+namespace
+{
 // A lambda is lowered eagerly at its assignment, so the statement list holding
 // that assignment is the only place a later call through the bound name is
 // still visible (#7328).
@@ -615,6 +619,8 @@ bool binds_by_field(const nlohmann::json &node, const std::string &name)
            : field == name;
 }
 
+} // namespace
+
 /// Every construct under @p node that binds @p name, in any nested scope too.
 size_t count_bindings(const nlohmann::json &node, const std::string &name)
 {
@@ -630,6 +636,8 @@ size_t count_bindings(const nlohmann::json &node, const std::string &name)
   return n;
 }
 
+namespace
+{
 /// The function, lambda, class or module whose names the code at @p lambda
 /// resolves: Python scoping follows these, not the statement list (an `if`
 /// body, say) the lambda happens to be bound in.
