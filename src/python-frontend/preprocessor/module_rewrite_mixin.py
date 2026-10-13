@@ -1,6 +1,7 @@
 import ast
 import copy
 
+from preprocessor.bound_method_dispatch import dispatch_rebound_methods
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -422,6 +423,9 @@ class ModuleRewriteMixin:
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         self.expand_unittest_main(node)
         guard_unbound_locals(node)
+        self.in_order_bindings.update(
+            dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
+                                     self._next_unpack_tmp_id, self.module_name))
         self.hoist_nested_classes(node)
         self.copy_aliased_methods(node)
 

@@ -35,6 +35,7 @@
 #include <goto-programs/lift_call_expressions.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_convert_functions.h>
+#include <goto-programs/exception_typeid.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_termination.h>
@@ -739,6 +740,25 @@ expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
   options.set_option("no-bounds-check", true);
 }
 
+// --python-check-exceptions reports only the listed exception types and their
+// subtypes. A Python assert raises AssertionError, so when no listed type
+// covers it, the asserts become assumptions as under
+// --python-ignore-assertions. Run before goto_convert, which decides whether an
+// assert is emitted.
+static void
+expand_python_check_exceptions(const contextt &context, optionst &options)
+{
+  const std::vector<irep_idt> checked = python_checked_exceptions(options);
+  if (checked.empty())
+    return;
+  const exception_typeidt types{namespacet(context)};
+  for (const irep_idt &name : checked)
+    if (!types.is_registered(name))
+      throw "--python-check-exceptions: no type named " + name.as_string();
+  if (!checks_exception(types, "AssertionError", checked))
+    options.set_option("python-ignore-assertions", true);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -783,6 +803,7 @@ bool esbmc_parseoptionst::parse_goto_program(
     }
 
     expand_no_standard_checks(cmdline, options);
+    expand_python_check_exceptions(context, options);
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);

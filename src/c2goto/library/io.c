@@ -8,11 +8,6 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#ifdef _MSVC
-#  include <BaseTsd.h>
-#  define ssize_t SSIZE_T
-#endif
-
 #ifdef _MINGW
 #  undef feof
 #  undef ferror

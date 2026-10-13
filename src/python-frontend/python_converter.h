@@ -1424,6 +1424,12 @@ private:
     size_t param_index,
     typet &elem_type) const;
 
+  /// Types an unannotated parameter filled with constant list elements.
+  void refine_any_param_from_elements(
+    code_typet::argumentt &param_arg,
+    const std::string &func_name,
+    size_t param_index);
+
   /// Records a list-annotated parameter's element type for subscript reads.
   void seed_list_param_element_type(
     const nlohmann::json &element,
@@ -1440,6 +1446,36 @@ private:
     const std::string &func_name,
     size_t param_index,
     typet &out) const;
+  bool param_keeps_positions(
+    const std::string &func_name,
+    size_t param_index,
+    bool any_index = false) const;
+  bool param_elements(
+    const nlohmann::json &arg,
+    const std::string &enclosing_function,
+    std::vector<nlohmann::json> &out,
+    bool &direct,
+    unsigned depth) const;
+  bool call_site_list_literals(
+    const std::string &func_name,
+    size_t param_index,
+    std::vector<nlohmann::json> &out,
+    bool &direct,
+    unsigned depth) const;
+  bool literal_element_kinds(
+    const std::vector<nlohmann::json> &literals,
+    std::vector<std::vector<typet>> &kinds) const;
+  bool record_literal_positions(
+    const std::string &id,
+    const std::vector<nlohmann::json> &literals,
+    const std::vector<typet> &kinds);
+  bool record_literal_elements(
+    const std::string &id,
+    const std::vector<nlohmann::json> &literals,
+    bool positional);
+  bool mixes_str_and_number(
+    const std::string &probe,
+    const std::vector<typet> &kinds);
 
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
@@ -2350,6 +2386,14 @@ private:
     const exprt &operand,
     const nlohmann::json &element,
     exprt &reuse);
+
+  /// Prepares \p operand for two reads: returns the first read and sets
+  /// \p reread to the second, binding a side-effecting operand to a
+  /// temporary. Nil when such an operand cannot be bound.
+  exprt bind_operand_read_twice(
+    const exprt &operand,
+    const nlohmann::json &element,
+    exprt &reread);
 
   /**
    * @brief Determines if None comparison setup is needed.

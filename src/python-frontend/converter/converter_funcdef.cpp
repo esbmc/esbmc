@@ -1687,19 +1687,154 @@ void python_converter::seed_list_param_element_type(
     element_type_registry_.record(arg_id, "", elem_type);
 }
 
-/// When every call site passes parameter \p param_index of \p func_name the
-/// same list literal shape mixing strings and numbers, records its element
-/// types in order for \p param_id, so the list's elements are read as tagged
-/// scalars (#4797). Reports whether it recorded anything.
-bool python_converter::seed_mixed_call_site_elements(
-  const std::string &param_id,
+static bool is_name_node(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static bool is_unsigned_constant(const nlohmann::json &node)
+{
+  return node.is_object() && node.value("_type", "") == "Constant" &&
+         node.value("value", nlohmann::json()).is_number_unsigned();
+}
+
+static bool only_reads_fixed_positions(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_index = false);
+
+/// Whether \p node reads one element of \p name at a non-negative constant
+/// index, or at any index that leaves \p name alone when \p any_index, or
+/// takes its length.
+static bool reads_fixed_position(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_index)
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json none = nlohmann::json::object();
+  if (kind == "Subscript")
+    return is_name_node(node.value("value", none), name) &&
+           node.value("ctx", none).value("_type", "") == "Load" &&
+           (any_index
+              ? only_reads_fixed_positions(node["slice"], name, any_index)
+              : is_unsigned_constant(node.value("slice", none)));
+  const nlohmann::json args = node.value("args", nlohmann::json::array());
+  return kind == "Call" && node.value("func", none).value("id", "") == "len" &&
+         args.size() == 1 && is_name_node(args[0], name);
+}
+
+/// Whether every use of \p name in \p node reads one element at a
+/// non-negative constant index (any index with \p any_index) or takes its
+/// length. Such a list keeps the elements, and positions, its call sites gave
+/// it, so a constant index names one of them.
+static bool only_reads_fixed_positions(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_index)
+{
+  if (!node.is_object() && !node.is_array())
+    return true;
+  if (is_name_node(node, name))
+    return false;
+  if (node.is_object() && reads_fixed_position(node, name, any_index))
+    return true;
+  return std::all_of(node.begin(), node.end(), [&](const nlohmann::json &n) {
+    return only_reads_fixed_positions(n, name, any_index);
+  });
+}
+
+/// Whether \p name appears in \p node only as the callee of a direct call,
+/// so the calls collect_call_sites finds are every way it receives arguments.
+static bool
+only_called_directly(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object() && !node.is_array())
+    return true;
+  if (is_name_node(node, name))
+    return false;
+  const bool is_call = node.is_object() && node.value("_type", "") == "Call";
+  return std::all_of(node.items().begin(), node.items().end(), [&](auto item) {
+    return (is_call && item.key() == "func" &&
+            item.value().value("_type", "") == "Name") ||
+           only_called_directly(item.value(), name);
+  });
+}
+
+/// Whether the list parameter \p param_index of the module-level function
+/// \p func_name keeps the positions its call sites pass: only direct calls
+/// reach it, and its body only reads fixed positions of it, or with
+/// \p any_index only reads its elements.
+bool python_converter::param_keeps_positions(
   const std::string &func_name,
-  size_t param_index)
+  size_t param_index,
+  bool any_index) const
+{
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (def == nullptr || (*def)["args"]["args"].size() <= param_index)
+    return false;
+  return only_called_directly(*ast_json, func_name) &&
+         only_reads_fixed_positions(
+           (*def)["body"],
+           (*def)["args"]["args"][param_index].value("arg", ""),
+           any_index);
+}
+
+/// Collects the values \p arg can be when it is an element `p[i]` of a
+/// parameter p of \p enclosing_function that keeps what its call sites pass:
+/// for a constant i, element i of each display passed for p, otherwise every
+/// element (#8472).
+bool python_converter::param_elements(
+  const nlohmann::json &arg,
+  const std::string &enclosing_function,
+  std::vector<nlohmann::json> &out,
+  bool &direct,
+  unsigned depth) const
+{
+  const nlohmann::json *def =
+    find_function_def((*ast_json)["body"], enclosing_function);
+  if (depth > 3 || def == nullptr || arg.value("_type", "") != "Subscript")
+    return false;
+  const bool constant = is_unsigned_constant(arg["slice"]);
+  const nlohmann::json &params = (*def)["args"]["args"];
+  const auto param =
+    std::find_if(params.begin(), params.end(), [&](const nlohmann::json &p) {
+      return is_name_node(arg["value"], p.value("arg", ""));
+    });
+  const size_t index = std::distance(params.begin(), param);
+  std::vector<nlohmann::json> outer;
+  if (
+    param == params.end() ||
+    !param_keeps_positions(enclosing_function, index, !constant) ||
+    !call_site_list_literals(enclosing_function, index, outer, direct, depth))
+    return false;
+
+  for (const nlohmann::json &l : outer)
+    for (size_t i = 0; i < l["elts"].size(); ++i)
+    {
+      if (!constant || i == arg["slice"]["value"].get<size_t>())
+        out.push_back(l["elts"][i]);
+    }
+  return true;
+}
+
+/// Collects the list literals passed as parameter \p param_index of
+/// \p func_name: a list display, a name bound to one, or an element of a
+/// parameter (param_elements) that is a display. \p direct stays true only
+/// while every literal is a display at the call, which nothing can change
+/// before the callee reads it. Reports whether every call site passes one.
+bool python_converter::call_site_list_literals(
+  const std::string &func_name,
+  size_t param_index,
+  std::vector<nlohmann::json> &out,
+  bool &direct,
+  unsigned depth) const
 {
   std::vector<numpy_param_call_site> call_sites;
   collect_call_sites(*ast_json, "", call_sites);
 
-  std::optional<std::vector<typet>> shape;
+  bool complete = true;
   for (const numpy_param_call_site &site : call_sites)
   {
     const nlohmann::json &call = *site.call;
@@ -1707,38 +1842,248 @@ bool python_converter::seed_mixed_call_site_elements(
       call.value("func", nlohmann::json()).value("id", "") != func_name ||
       call["args"].size() <= param_index)
       continue;
+    const nlohmann::json &arg = call["args"][param_index];
     nlohmann::json literal;
-    if (!list_literal_for_call_arg(
-          call["args"][param_index],
-          site.enclosing_function,
-          *ast_json,
-          literal))
-      return false;
-    std::vector<typet> elems;
-    // get_typet throws on an element it cannot classify (a nested list, a
-    // call); such a literal is not a string/number mix.
-    try
+    if (
+      list_literal_for_call_arg(
+        arg, site.enclosing_function, *ast_json, literal))
     {
-      for (const auto &e : literal["elts"])
-        elems.push_back(type_handler_.get_typet(e));
+      direct = direct && arg.value("_type", "") == "List";
+      out.push_back(literal);
     }
-    catch (...)
+    else
     {
-      return false;
+      std::vector<nlohmann::json> elements;
+      const bool displays =
+        param_elements(
+          arg, site.enclosing_function, elements, direct, depth + 1) &&
+        std::all_of(
+          elements.begin(), elements.end(), [](const nlohmann::json &e) {
+            return e.value("_type", "") == "List";
+          });
+      if (displays)
+        out.insert(out.end(), elements.begin(), elements.end());
+      complete = displays && complete;
     }
-    if (shape && *shape != elems)
-      return false;
-    shape = std::move(elems);
+  }
+  return complete;
+}
+
+/// Types an unannotated parameter that every call fills with an element of a
+/// list parameter (param_elements) whose values are constants of one type,
+/// such as `k` in `f(*d)` over calls passing `[[3, 1], 2]` (#8472).
+void python_converter::refine_any_param_from_elements(
+  code_typet::argumentt &param_arg,
+  const std::string &func_name,
+  size_t param_index)
+{
+  if (
+    param_arg.type() != any_type() ||
+    !only_called_directly(*ast_json, func_name))
+    return;
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  std::vector<nlohmann::json> values;
+  bool direct = true;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json()).value("id", "") == func_name &&
+      call["args"].size() > param_index &&
+      !param_elements(
+        call["args"][param_index], site.enclosing_function, values, direct, 1))
+      return;
   }
 
-  const std::string probe = param_id + "$mixed_probe";
-  for (const typet &t : shape.value_or(std::vector<typet>()))
+  std::optional<typet> agreed;
+  for (const nlohmann::json &v : values)
+  {
+    if (v.value("_type", "") != "Constant" || v["value"].is_null())
+      return;
+    const typet t = v["value"].is_string() ? gen_pointer_type(char_type())
+                                           : type_handler_.get_typet(v);
+    if (agreed && *agreed != t)
+      return;
+    agreed = t;
+  }
+  if (!agreed)
+    return;
+  param_arg.type() = *agreed;
+  if (symbolt *sym = symbol_table_.find_symbol(param_arg.cmt_identifier()))
+    python_expr::set_symbol_type_if_carried(*sym, *agreed);
+}
+
+/// The element types of each literal, a nested display typed as the list
+/// model's pointer. False when an element cannot be classified.
+bool python_converter::literal_element_kinds(
+  const std::vector<nlohmann::json> &literals,
+  std::vector<std::vector<typet>> &kinds) const
+{
+  try
+  {
+    for (const nlohmann::json &literal : literals)
+    {
+      kinds.emplace_back();
+      for (const auto &e : literal["elts"])
+        kinds.back().push_back(
+          e.value("_type", "") == "List" ? type_handler_.get_list_type()
+                                         : type_handler_.get_typet(e));
+    }
+  }
+  catch (...)
+  {
+    return false;
+  }
+  return true;
+}
+
+static std::vector<typet> pooled_kinds(const std::vector<std::vector<typet>> &k)
+{
+  std::vector<typet> pooled;
+  for (const auto &literal : k)
+    pooled.insert(pooled.end(), literal.begin(), literal.end());
+  return pooled;
+}
+
+/// The nested list displays among \p literals' elements, at \p pos only when
+/// given.
+static std::vector<nlohmann::json> nested_lists(
+  const std::vector<nlohmann::json> &literals,
+  std::optional<size_t> pos)
+{
+  std::vector<nlohmann::json> inner;
+  for (const nlohmann::json &literal : literals)
+    for (size_t i = 0; i < literal["elts"].size(); ++i)
+      if (
+        (!pos || i == *pos) && literal["elts"][i].value("_type", "") == "List")
+        inner.push_back(literal["elts"][i]);
+  return inner;
+}
+
+/// Records one entry per position of \p kinds, every literal's shape, a list
+/// position recursing under its own id. False when a nested list has no
+/// exact element type.
+bool python_converter::record_literal_positions(
+  const std::string &id,
+  const std::vector<nlohmann::json> &literals,
+  const std::vector<typet> &kinds)
+{
+  const typet list_type = type_handler_.get_list_type();
+  auto elem_id = [&](size_t i) {
+    return kinds[i] == list_type ? id + "$" + std::to_string(i) : "";
+  };
+  for (size_t i = 0; i < kinds.size(); ++i)
+    if (
+      kinds[i] == list_type &&
+      !record_literal_elements(elem_id(i), nested_lists(literals, i), false))
+      return false;
+  for (size_t i = 0; i < kinds.size(); ++i)
+    element_type_registry_.record(id, elem_id(i), kinds[i]);
+  return true;
+}
+
+/// Records under \p id the element types of \p literals, the lists one
+/// parameter or element position receives (#8472). Elements of one type
+/// record it, a nested list recursing under its own id; strings mixed with
+/// numbers record each type, read through the runtime tag. Otherwise, with
+/// \p positional, literals of one shape record each position's type for a
+/// constant index. Records nothing and returns false when no read is exact.
+bool python_converter::record_literal_elements(
+  const std::string &id,
+  const std::vector<nlohmann::json> &literals,
+  bool positional)
+{
+  std::vector<std::vector<typet>> kinds;
+  if (!literal_element_kinds(literals, kinds))
+    return false;
+  const std::vector<typet> pooled = pooled_kinds(kinds);
+  if (pooled.empty())
+    return true;
+
+  if (std::all_of(pooled.begin(), pooled.end(), [&](const typet &t) {
+        return t == pooled[0] || (type_handler_.is_string_type(t) &&
+                                  type_handler_.is_string_type(pooled[0]));
+      }))
+  {
+    const std::string elem_id =
+      pooled[0] == type_handler_.get_list_type() ? id + "$elem" : "";
+    if (
+      !elem_id.empty() &&
+      !record_literal_elements(elem_id, nested_lists(literals, {}), false))
+      return false;
+    element_type_registry_.record(id, elem_id, pooled[0]);
+    return true;
+  }
+
+  if (mixes_str_and_number(id + "$mixed_probe", pooled))
+  {
+    for (const typet &t : pooled)
+      element_type_registry_.record(id, "", t);
+    return true;
+  }
+
+  return positional &&
+         std::all_of(
+           kinds.begin(),
+           kinds.end(),
+           [&](const auto &k) { return k == kinds[0]; }) &&
+         record_literal_positions(id, literals, kinds[0]);
+}
+
+/// Whether \p kinds, recorded under the scratch id \p probe, are strings and
+/// numbers only, both present.
+bool python_converter::mixes_str_and_number(
+  const std::string &probe,
+  const std::vector<typet> &kinds)
+{
+  for (const typet &t : kinds)
     element_type_registry_.record(probe, "", t);
-  const bool mixed = element_type_registry_.mixes_str_and_number(probe);
-  if (mixed)
-    for (const typet &t : *shape)
-      element_type_registry_.record(param_id, "", t);
-  return mixed;
+  return element_type_registry_.mixes_str_and_number(probe) &&
+         std::none_of(kinds.begin(), kinds.end(), [this](const typet &t) {
+           return t == type_handler_.get_list_type();
+         });
+}
+
+/// When every call site passes parameter \p param_index of \p func_name a
+/// list literal and together they mix strings and numbers, records their
+/// element types for \p param_id, so the list's elements are read as tagged
+/// scalars (#4797). Literals mixing a list with another type are recorded by
+/// record_literal_elements, or, where no read is exact, as their bare element
+/// types, which a read refuses (#8472). Reports whether it recorded anything.
+bool python_converter::seed_mixed_call_site_elements(
+  const std::string &param_id,
+  const std::string &func_name,
+  size_t param_index)
+{
+  std::vector<nlohmann::json> literals;
+  bool direct = true;
+  const bool complete =
+    call_site_list_literals(func_name, param_index, literals, direct, 0);
+
+  std::vector<std::vector<typet>> kinds;
+  if (!literal_element_kinds(literals, kinds))
+    return false;
+  const std::vector<typet> pooled = pooled_kinds(kinds);
+  const auto lists =
+    std::count(pooled.begin(), pooled.end(), type_handler_.get_list_type());
+  if (lists != 0 && lists != (std::ptrdiff_t)pooled.size())
+  {
+    const bool positional =
+      complete && direct && param_keeps_positions(func_name, param_index);
+    if (!record_literal_elements(param_id, literals, positional))
+      for (const typet &t : pooled)
+        element_type_registry_.record(param_id, "", t);
+    return true;
+  }
+
+  // A tagged read answers for any position, so the calls need not agree on
+  // where the strings and numbers sit (#8472).
+  if (!complete || !mixes_str_and_number(param_id + "$mixed_probe", pooled))
+    return false;
+  for (const typet &t : pooled)
+    element_type_registry_.record(param_id, "", t);
+  return true;
 }
 
 bool python_converter::infer_list_elem_type_from_call_sites(
@@ -3110,7 +3455,13 @@ size_t python_converter::register_function_argument(
       arg_type = any_type();
     }
     else
+    {
+      // The annotation may name a class defined later in the file; build it
+      // first so the copy of its instance attributes below finds its symbol.
+      code_blockt class_block;
+      process_forward_reference(element["annotation"], class_block);
       arg_type = get_type_from_annotation(element["annotation"], element);
+    }
   }
 
   // A bare `bytes` annotation carries no length (Python's type syntax has no
@@ -3396,11 +3747,15 @@ void python_converter::process_function_arguments(
   if (!is_model_file(function_node))
   {
     for (auto &param_arg : type.arguments())
+    {
+      refine_any_param_from_elements(
+        param_arg, id.get_function(), &param_arg - type.arguments().data());
       refine_any_param_to_list(
         param_arg,
         body,
         id.get_function(),
         &param_arg - type.arguments().data());
+    }
   }
 
   for (auto &param_arg : type.arguments())

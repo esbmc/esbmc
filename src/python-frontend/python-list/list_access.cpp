@@ -4239,12 +4239,17 @@ void python_list::handle_slice_assignment(
 /// none and neither arithmetic nor equality on it would behave. Recover what
 /// the call sites told us about this parameter, seeded when the function was
 /// converted (#7187). Returns `annotated` unchanged when this is not a
-/// bare-`list` parameter, or nothing was inferred for it.
+/// bare-`list` parameter, or nothing was inferred for it. Call sites that
+/// pass a list beside other types give each position its own type (#8472).
 typet python_list::bare_list_param_elem_type(
   const nlohmann::json &param_node,
   const std::string &param_id,
-  const typet &annotated)
+  const typet &annotated,
+  size_t index)
 {
+  if (mixes_list_and_other(param_id))
+    return elem_types().element_type(param_id, index);
+
   if (
     !param_node.contains("annotation") || !param_node["annotation"].is_object())
     return annotated;
@@ -4258,6 +4263,52 @@ typet python_list::bare_list_param_elem_type(
 
   const typet inferred = elem_types().element_type(param_id, 0);
   return inferred.is_empty() ? annotated : inferred;
+}
+
+bool python_list::mixes_list_and_other(const std::string &id) const
+{
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const auto *recorded = elem_types().find(id);
+  return recorded &&
+         std::any_of(
+           recorded->begin(),
+           recorded->end(),
+           [&](const auto &e) { return e.second == list_type; }) &&
+         elem_types().uniform_element_type(id) == typet();
+}
+
+/// A list whose elements mix a list with another type is read at one
+/// element's type only when the index is a constant and every list element
+/// carries its own id, which the call-site seeding gives a position it
+/// resolved. Any other read would pick one type for elements of several, so
+/// it is refused rather than misread (#8472).
+void python_list::reject_unresolved_element_read(
+  const exprt &array,
+  const nlohmann::json &slice_node) const
+{
+  if (!array.is_symbol())
+    return;
+  const std::string &id = array.identifier().as_string();
+  if (!mixes_list_and_other(id))
+    return;
+
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const auto &recorded = *elem_types().find(id);
+  const bool every_list_resolved =
+    std::none_of(recorded.begin(), recorded.end(), [&](const auto &e) {
+      return e.second == list_type && e.first.empty();
+    });
+  const bool constant_index = slice_node.value("_type", "") == "Constant" &&
+                              slice_node["value"].is_number_unsigned();
+  if (constant_index && every_list_resolved)
+    return;
+
+  const locationt l = converter_.get_location_from_decl(list_value_);
+  throw std::runtime_error(
+    "Reading an element of a list whose elements have different types is "
+    "supported only at a constant index into a list every call passes in one "
+    "shape (" +
+    l.get_file().as_string() + ":" + l.get_line().as_string() + ")");
 }
 
 std::optional<exprt> python_list::resolve_nested_list_element(
@@ -4527,6 +4578,8 @@ exprt python_list::handle_index_access(
     // Handle list types (symbol-based)
     typet elem_type;
 
+    reject_unresolved_element_read(array, slice_node);
+
     if (
       std::optional<exprt> nested =
         resolve_nested_list_element(array, pos_expr, index, elem_type))
@@ -4539,7 +4592,7 @@ exprt python_list::handle_index_access(
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
 
       elem_type = bare_list_param_elem_type(
-        list_node, array.identifier().as_string(), elem_type);
+        list_node, array.identifier().as_string(), elem_type, index);
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
