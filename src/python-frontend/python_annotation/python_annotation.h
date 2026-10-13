@@ -155,7 +155,10 @@ private:
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   std::string get_type_from_call(const Json &element);
   std::string get_type_from_method(const Json &call);
-  std::string get_type_from_ifexp(const Json &ifexp_node, const Json &body);
+  InferResult infer_type_from_ifexp(
+    const Json &ifexp_node,
+    const Json &body,
+    std::string &inferred_type);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>

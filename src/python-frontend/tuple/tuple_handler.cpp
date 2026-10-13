@@ -713,6 +713,44 @@ void tuple_handler::assign_starred_elements(
   target_block.copy_to_operands(assign);
 }
 
+/* A str member's length is unknown from a bare 'str' annotation, so use the
+ * fixed width get_tuple_expr pads stored strings to; get_typet("str") with
+ * no size would yield a degenerate char[0] that can never match a stored
+ * value (#5571). The #5444 preprocessor path may stamp a concrete string
+ * literal in place of the bare 'str' name (see
+ * core_visitors_mixin.py::_size_tuple_str_components) to recover a
+ * param-dict tuple[str, ...] key shape across the call boundary; that
+ * literal recovers the *structure*, but the member is still sized to the
+ * same fixed width so the struct byte layout agrees with the char array
+ * get_tuple_expr pads and stores at runtime. bytes members are rejected
+ * loudly: bytes values are modelled as int-list objects, and neither
+ * get_typet("bytes") (a degenerate int64[0] array) nor the list-pointer
+ * type lines up with how tuple construction stores them — reads through
+ * such an annotation produce silent false alarms rather than a crash. */
+typet tuple_handler::tuple_member_type_from_annotation(
+  const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_string())
+    return type_handler_.get_typet("str", tuple_str_member_size);
+  if (node.contains("id") && node["id"].is_string())
+  {
+    const std::string &id = node["id"].get<std::string>();
+    if (id == "str" || id == "string")
+      return type_handler_.get_typet("str", tuple_str_member_size);
+    if (id == "bytes")
+      throw std::runtime_error(
+        "tuple[bytes, ...] annotations are not supported");
+    return type_handler_.get_typet(id);
+  }
+  // get_typet(json) unwraps list[int] to the bare name `list`, which it
+  // then looks up as a variable and types void (#8511).
+  if (node.contains("_type") && node["_type"] == "Subscript")
+    return converter_.get_type_from_annotation(node, node);
+  return type_handler_.get_typet(node);
+}
+
 typet tuple_handler::get_tuple_type_from_annotation(
   const nlohmann::json &annotation_node)
 {
@@ -727,43 +765,11 @@ typet tuple_handler::get_tuple_type_from_annotation(
   // Build tag name matching the pattern used in get_tuple_expr
   std::vector<typet> element_types;
 
-  // A str member's length is unknown from a bare 'str' annotation, so use the
-  // fixed width get_tuple_expr pads stored strings to; get_typet("str") with
-  // no size would yield a degenerate char[0] that can never match a stored
-  // value (#5571). The #5444 preprocessor path may stamp a concrete string
-  // literal in place of the bare 'str' name (see
-  // core_visitors_mixin.py::_size_tuple_str_components) to recover a
-  // param-dict tuple[str, ...] key shape across the call boundary; that
-  // literal recovers the *structure*, but the member is still sized to the
-  // same fixed width so the struct byte layout agrees with the char array
-  // get_tuple_expr pads and stores at runtime. bytes members are rejected
-  // loudly: bytes values are modelled as int-list objects, and neither
-  // get_typet("bytes") (a degenerate int64[0] array) nor the list-pointer
-  // type lines up with how tuple construction stores them — reads through
-  // such an annotation produce silent false alarms rather than a crash.
-  auto elem_type_from = [this](const nlohmann::json &node) -> typet {
-    if (
-      node.contains("_type") && node["_type"] == "Constant" &&
-      node.contains("value") && node["value"].is_string())
-      return type_handler_.get_typet("str", tuple_str_member_size);
-    if (node.contains("id") && node["id"].is_string())
-    {
-      const std::string &id = node["id"].get<std::string>();
-      if (id == "str" || id == "string")
-        return type_handler_.get_typet("str", tuple_str_member_size);
-      if (id == "bytes")
-        throw std::runtime_error(
-          "tuple[bytes, ...] annotations are not supported");
-      return type_handler_.get_typet(id);
-    }
-    return type_handler_.get_typet(node);
-  };
-
   if (slice.contains("elts"))
   {
     // Multiple element types: tuple[int, str, float]
     for (const auto &elt : slice["elts"])
-      element_types.push_back(elem_type_from(elt));
+      element_types.push_back(tuple_member_type_from_annotation(elt));
   }
   else
   {
@@ -771,7 +777,7 @@ typet tuple_handler::get_tuple_type_from_annotation(
     // (a bare Name or nested subscript), not an elts list. Without this the
     // tuple would get zero components — the opaque struct the callers of this
     // function are specifically avoiding.
-    element_types.push_back(elem_type_from(slice));
+    element_types.push_back(tuple_member_type_from_annotation(slice));
   }
 
   return create_tuple_struct_type(element_types);
