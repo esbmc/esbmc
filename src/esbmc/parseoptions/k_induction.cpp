@@ -798,6 +798,14 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   // Restore the no assertion flag, before checking the other steps
   options.set_option("no-assertions", no_assertions);
 
+  // The pruning recurs at every k, so the forward condition can never prove
+  // the program under this bound; only the base case is left (#8555).
+  if (bmc.cs_bound_pruned)
+  {
+    options.set_option("disable-forward-condition", true);
+    return tvt(tvt::TV_UNKNOWN);
+  }
+
   switch (res)
   {
   case P_SATISFIABLE:
@@ -808,13 +816,6 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
     break;
 
   case P_UNSATISFIABLE:
-    // The pruning recurs at every k, so the forward condition can never prove
-    // the program under this bound; only the base case is left (#8555).
-    if (bmc.cs_bound_pruned)
-    {
-      options.set_option("disable-forward-condition", true);
-      break;
-    }
     log_result(
       "\nSolution found by the forward condition; "
       "all states are reachable (k = {:d})",

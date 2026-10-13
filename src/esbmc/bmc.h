@@ -60,7 +60,7 @@ public:
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
-  /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
+  /** Mirrors reachability_treet::cs_bound_pruned; set once run() returns. */
   bool cs_bound_pruned = false;
 
   virtual smt_resultt start_bmc();
@@ -263,6 +263,7 @@ private:
   /// claim discharged vacuously, the LTL monitor instrumented, and, under a
   /// k-step strategy, every row of the run's table Passed.
   bool proves_the_program() const;
+  bool fc_cut_by_context_bound() const;
 
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the
