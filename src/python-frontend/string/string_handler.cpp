@@ -41,10 +41,12 @@
 #include <iomanip>
 #include <limits>
 #include <optional>
+#include <set>
 #include <functional>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace python_expr;
@@ -305,78 +307,132 @@ static int count_name_assignments_in_node(
   return count;
 }
 
-// Returns true if `var_name` is mutated in place anywhere within `node`: an
-// in-place list method call (append/extend/insert/remove/pop/clear/sort/
-// reverse) or a subscript store (`var_name[i] = ...`). str.join uses this to
-// decide whether the static fold of a list variable's initializer is still
-// valid: once the list is mutated, the declaration initialiser no longer
-// reflects the runtime contents (e.g. `new_lst = []; new_lst.append(w)` folds
-// to "", #5163), so the join must go through the runtime model instead.
-// Conservative by design -- a false "mutated" only costs the (correct)
-// runtime dispatch, never correctness.
-static bool
-list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
+static bool is_name_node(const nlohmann::json &node, const std::string &id)
 {
-  if (!node.is_object() && !node.is_array())
-    return false;
+  return node.is_object() && node.contains("_type") &&
+         node["_type"] == "Name" && node.contains("id") && node["id"] == id;
+}
 
-  if (node.is_object() && node.contains("_type"))
+struct list_use_scan
+{
+  const std::string &var_name;
+  unsigned stores = 0;
+  // Reads of var_name that can neither change the list nor hand it to other
+  // code, keyed by address in the AST being scanned.
+  std::unordered_set<const nlohmann::json *> safe_reads;
+};
+
+static void mark_if_list_name(const nlohmann::json &node, list_use_scan &scan)
+{
+  if (is_name_node(node, scan.var_name))
+    scan.safe_reads.insert(&node);
+}
+
+static void
+mark_safe_call_reads(const nlohmann::json &call, list_use_scan &scan)
+{
+  static const std::set<std::string> pure_methods = {"count", "index", "copy"};
+  static const std::set<std::string> pure_builtins = {
+    "len",
+    "list",
+    "tuple",
+    "set",
+    "sorted",
+    "str",
+    "min",
+    "max",
+    "sum",
+    "any",
+    "all",
+    "enumerate",
+    "reversed",
+    "print"};
+
+  const auto &func = call["func"];
+  bool args_safe = false;
+  if (func["_type"] == "Attribute")
   {
-    const std::string type = node["_type"].get<std::string>();
-
-    // <var_name>.<mutator>(...): in-place list mutators
-    if (type == "Call" && node.contains("func"))
-    {
-      const auto &func = node["func"];
-      if (
-        func.contains("_type") && func["_type"] == "Attribute" &&
-        func.contains("attr") && func.contains("value") &&
-        func["value"].contains("_type") && func["value"]["_type"] == "Name" &&
-        func["value"].contains("id") && func["value"]["id"] == var_name)
-      {
-        static const std::array<const char *, 8> mutators = {
-          {"append",
-           "extend",
-           "insert",
-           "remove",
-           "pop",
-           "clear",
-           "sort",
-           "reverse"}};
-        const std::string attr = func["attr"].get<std::string>();
-        for (const char *m : mutators)
-          if (attr == m)
-            return true;
-      }
-    }
-
-    // <var_name>[i] = ...: subscript store
-    if (type == "Assign" && node.contains("targets"))
-    {
-      for (const auto &tgt : node["targets"])
-        if (
-          tgt.contains("_type") && tgt["_type"] == "Subscript" &&
-          tgt.contains("value") && tgt["value"].contains("_type") &&
-          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
-          tgt["value"]["id"] == var_name)
-          return true;
-    }
+    const std::string attr = func["attr"].get<std::string>();
+    if (pure_methods.count(attr))
+      mark_if_list_name(func["value"], scan);
+    args_safe = attr == "join";
   }
+  else if (func["_type"] == "Name")
+    args_safe = pure_builtins.count(func["id"].get<std::string>()) > 0;
 
+  if (args_safe)
+    for (const auto &arg : call["args"])
+      mark_if_list_name(arg, scan);
+}
+
+static void
+mark_safe_list_reads(const nlohmann::json &node, list_use_scan &scan)
+{
+  const std::string type = node["_type"].get<std::string>();
+  if (type == "Call" && node.contains("func") && node.contains("args"))
+    mark_safe_call_reads(node, scan);
+  else if (
+    type == "Subscript" && node.contains("ctx") &&
+    node["ctx"]["_type"] == "Load")
+    mark_if_list_name(node["value"], scan);
+  else if (type == "For" || type == "AsyncFor" || type == "comprehension")
+    mark_if_list_name(node["iter"], scan);
+  else if (type == "Compare")
+  {
+    mark_if_list_name(node["left"], scan);
+    for (const auto &cmp : node["comparators"])
+      mark_if_list_name(cmp, scan);
+  }
+}
+
+static bool declares_list_name_outer(
+  const nlohmann::json &node,
+  const std::string &var_name)
+{
+  return (node["_type"] == "Global" || node["_type"] == "Nonlocal") &&
+         std::find(node["names"].begin(), node["names"].end(), var_name) !=
+           node["names"].end();
+}
+
+// Returns true if the list bound to `scan.var_name` may hold something other
+// than its initialiser when it is read: the name is bound more than once, or
+// some read of it can mutate the list or let another name or a callee reach
+// it (`ys = xs; ys.append(..)`, #8422). str.join folds a list variable from
+// its initialiser only when this is false. Conservative by design: a false
+// "may change" only costs the (correct) runtime dispatch.
+static bool list_var_may_change(const nlohmann::json &node, list_use_scan &scan)
+{
   if (node.is_array())
   {
     for (const auto &elem : node)
-      if (list_var_is_mutated(elem, var_name))
+      if (list_var_may_change(elem, scan))
         return true;
+    return false;
   }
-  else if (node.is_object())
-  {
-    for (const auto &item : node.items())
-      if (list_var_is_mutated(item.value(), var_name))
-        return true;
-  }
+  if (!node.is_object() || !node.contains("_type"))
+    return false;
 
+  if (is_name_node(node, scan.var_name))
+  {
+    if (node.contains("ctx") && node["ctx"]["_type"] == "Store")
+      return ++scan.stores > 1;
+    return scan.safe_reads.count(&node) == 0;
+  }
+  if (declares_list_name_outer(node, scan.var_name))
+    return true;
+
+  mark_safe_list_reads(node, scan);
+  for (const auto &item : node.items())
+    if (list_var_may_change(item.value(), scan))
+      return true;
   return false;
+}
+
+static bool
+list_var_may_change(const std::string &var_name, python_converter &converter)
+{
+  list_use_scan scan{var_name};
+  return list_var_may_change(converter.get_ast_json()["body"], scan);
 }
 
 bool is_list_or_tuple_literal(const nlohmann::json &node)
@@ -2072,6 +2128,30 @@ static bool python_str_replace(
   return true;
 }
 
+// Resolve a join() iterable, following a single Name binding, to a literal
+// list/tuple.
+static bool resolve_join_iterable(
+  const nlohmann::json &arg,
+  python_converter &converter,
+  nlohmann::json &seq)
+{
+  seq = arg;
+  if (seq.contains("_type") && seq["_type"] == "Name" && seq.contains("id"))
+  {
+    const std::string id = seq["id"].get<std::string>();
+    if (list_var_may_change(id, converter))
+      return false;
+    nlohmann::json decl = json_utils::get_var_value(
+      id, converter.get_current_func_name(), converter.get_ast_json());
+    if (decl.empty() || !decl.contains("value"))
+      return false;
+    seq = decl["value"];
+  }
+  return seq.contains("_type") &&
+         (seq["_type"] == "List" || seq["_type"] == "Tuple") &&
+         seq.contains("elts");
+}
+
 // Fold a constant string-valued method call: `sep.join([...])` over a literal
 // list/tuple of constant strings, or `subject.replace(old, new[, count])`.
 // Only positional, constant-foldable arguments are handled; anything else
@@ -2104,23 +2184,8 @@ static bool fold_string_method_call(
       !fold_constant_string(func["value"], converter, sep, depth + 1))
       return false;
 
-    // Resolve the iterable, following a single Name binding, to a literal
-    // list/tuple of constant strings.
-    nlohmann::json seq = args[0];
-    if (seq.contains("_type") && seq["_type"] == "Name" && seq.contains("id"))
-    {
-      nlohmann::json decl = json_utils::get_var_value(
-        seq["id"].get<std::string>(),
-        converter.get_current_func_name(),
-        converter.get_ast_json());
-      if (decl.empty() || !decl.contains("value"))
-        return false;
-      seq = decl["value"];
-    }
-    if (
-      !seq.contains("_type") ||
-      (seq["_type"] != "List" && seq["_type"] != "Tuple") ||
-      !seq.contains("elts"))
+    nlohmann::json seq;
+    if (!resolve_join_iterable(args[0], converter, seq))
       return false;
 
     out.clear();
@@ -3500,28 +3565,15 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
-    // If the list is mutated in place after initialisation (e.g.
+    // If the list can change after initialisation (e.g.
     // new_lst = []; new_lst.append(w)), its declaration initialiser no longer
     // reflects the runtime contents, so the static fold below would join the
     // stale value -- an appended-to empty list folds to "" (#5163). Dispatch
-    // to the runtime model, which reads the actual list object. Scope the scan
-    // to the variable's own function (module body when at top level), matching
-    // how find_var_decl resolved it above.
+    // to the runtime model, which reads the actual list object.
+    if (list_var_may_change(var_name, converter_))
     {
-      const std::string &scope_func = converter_.get_current_func_name();
-      const nlohmann::json &ast = converter_.get_ast_json();
-      const nlohmann::json func_node =
-        scope_func.empty()
-          ? nlohmann::json()
-          : json_utils::try_find_function(ast["body"], scope_func);
-      const nlohmann::json &scan_body =
-        func_node.contains("body") ? func_node["body"] : ast["body"];
-      if (list_var_is_mutated(scan_body, var_name))
-      {
-        exprt list_expr = converter_.get_expr(list_arg);
-        return string_builder_->build_runtime_str_join_call(
-          separator, list_expr);
-      }
+      exprt list_expr = converter_.get_expr(list_arg);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
     list_node = &var_decl["value"];
