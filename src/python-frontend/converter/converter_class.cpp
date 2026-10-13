@@ -208,6 +208,70 @@ void python_converter::update_instance_from_self(
   copy_instance_attributes(sid.to_string(), obj_symbol_id);
 }
 
+// Record `owner` for each `class_name(...)` call under `node` whose argument
+// `param_idx` is `self`. Nested scopes are skipped: `self` may name another
+// object there.
+static void collect_self_ctor_args(
+  const nlohmann::json &node,
+  const std::string &class_name,
+  size_t param_idx,
+  const std::string &owner,
+  std::set<std::string> &classes)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_self_ctor_args(child, class_name, param_idx, owner, classes);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "Lambda" || kind == "ClassDef")
+    return;
+  if (
+    kind == "Call" && node["func"].value("id", "") == class_name &&
+    node.contains("args") && param_idx < node["args"].size() &&
+    node["args"][param_idx].value("_type", "") == "Name" &&
+    node["args"][param_idx].value("id", "") == "self")
+    classes.insert(owner);
+  for (const auto &child : node)
+    collect_self_ctor_args(child, class_name, param_idx, owner, classes);
+}
+
+// The type `self` gives `class_name`'s constructor argument `param_idx` when
+// a method of some class passes it, as in `Square(self, p)` inside a `Board`
+// method (#8510): `tag-Owner*` for one such class, Any for several, unset for
+// none.
+static typet self_ctor_arg_type(
+  const std::vector<const nlohmann::json *> &module_bodies,
+  const std::string &class_name,
+  int param_idx)
+{
+  std::set<std::string> classes;
+  for (const auto *body : module_bodies)
+    for (const auto &cls : *body)
+    {
+      if (cls.value("_type", "") != "ClassDef")
+        continue;
+      for (const auto &m : cls["body"])
+        if (
+          m.value("_type", "") == "FunctionDef" && !m["args"]["args"].empty() &&
+          m["args"]["args"][0].value("arg", "") == "self")
+          collect_self_ctor_args(
+            m["body"],
+            class_name,
+            param_idx,
+            cls["name"].get<std::string>(),
+            classes);
+    }
+  if (classes.empty())
+    return typet();
+  if (classes.size() > 1)
+    return any_type();
+  return gen_pointer_type(symbol_typet("tag-" + *classes.begin()));
+}
+
 typet python_converter::infer_attr_type_from_usage(
   const std::string &class_name,
   const std::string &attr_name)
@@ -502,7 +566,8 @@ typet python_converter::infer_attr_type_from_usage(
       // in, so rebuild var_to_class per body before scanning it.
       if (param_idx >= 0)
       {
-        typet ctor_unified;
+        typet ctor_unified =
+          self_ctor_arg_type(module_bodies, class_name, param_idx);
         for (const auto *b : module_bodies)
         {
           populate_var_map(*b);
@@ -904,6 +969,19 @@ void python_converter::process_forward_reference(
     current_class_name_ = saved_class;
     current_func_name_ = saved_func;
   }
+}
+
+void python_converter::build_forward_class(const typet &type)
+{
+  const std::string tag = type.identifier().as_string();
+  if (
+    type.id() != "symbol" || tag.rfind("tag-", 0) != 0 ||
+    symbol_table_.find_symbol(tag))
+    return;
+
+  nlohmann::json ref = {{"_type", "Name"}, {"id", tag.substr(4)}};
+  code_blockt class_block;
+  process_forward_reference(ref, class_block);
 }
 
 void python_converter::get_class_definition(

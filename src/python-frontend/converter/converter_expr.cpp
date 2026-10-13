@@ -2035,7 +2035,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (base_type.is_pointer())
           base_type = base_type.subtype();
         if (base_type.id() == "symbol")
+        {
+          build_forward_class(base_type);
           base_type = ns.follow(base_type);
+        }
 
         // Handle enum member attribute access before the general struct path.
         // e.g., TrafficLight.RED.value  -> the integer value of the member
