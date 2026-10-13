@@ -544,6 +544,10 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
+
+  bool function_may_be_called(const nlohmann::json &function_node) const;
+
   void
   get_class_definition(const nlohmann::json &class_node, codet &target_block);
 
