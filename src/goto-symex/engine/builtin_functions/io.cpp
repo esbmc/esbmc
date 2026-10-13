@@ -324,7 +324,8 @@ expr2tc goto_symext::printf_output_length(
       is_nil_type(target) || is_signedbv_type(target) != is_signed ||
       !is_bv_type(v))
       return expr2tc();
-    len = add2tc(len->type, len, decimal_length(typecast2tc(target, v), max_len));
+    len =
+      add2tc(len->type, len, decimal_length(typecast2tc(target, v), max_len));
   }
   max_len += text;
   len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));
