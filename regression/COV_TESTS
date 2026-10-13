@@ -2978,3 +2978,10 @@ regression/python/github_8366_module_shadowed
 regression/python/github_8366_star_unannotated
 regression/python/github_8366_star_unannotated_fail
 regression/python/github_8366_star_private_call_fail
+regression/python/github_8461
+regression/python/github_8461_alias_fail
+regression/python/github_8461_fail
+regression/python/github_8461_none_store
+regression/python/github_8461_same_class
+regression/python/github_8461_same_class_fail
+regression/python/github_8461_subclass
