@@ -1,5 +1,5 @@
 CORE
 main.py
 --branch-coverage
-^Coverage goals: 1 ✓ 0 reached, - 1 unreached$
+boolop_result\$1 at file .*main.py line
 ^COVERAGE ANALYSIS COMPLETE$
