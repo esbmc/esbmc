@@ -572,6 +572,11 @@ private:
     exprt &rhs);
   exprt
   keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
+  /// The right operand of @p element; a `str %` operand is only probed.
+  exprt get_right_operand_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &right,
+    const exprt &lhs);
   exprt build_division_guarded_binop(
     const std::string &op,
     exprt lhs,
@@ -585,6 +590,9 @@ private:
   /// The static types of the arguments a `str %` right operand supplies.
   std::vector<typet>
   percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
+  /// The f-string @p joined with each formatted operand stored as it is
+  /// evaluated, so its operands run once and in order.
+  exprt get_fstring_in_order(const nlohmann::json &joined);
   /// `str % args` with a literal format: an f-string when an argument is not
   /// constant, otherwise folded to a literal.
   exprt get_percent_format_expr(
@@ -1308,6 +1316,17 @@ private:
   /// The class statement that alone binds @p name in the file being
   /// converted, or null.
   const nlohmann::json *sole_class_binding(const std::string &name) const;
+  /// The def that alone binds @p method in the body of class @p class_name,
+  /// itself bound alone, or null.
+  const nlohmann::json *sole_method_def(
+    const std::string &class_name,
+    const std::string &method) const;
+  /// Whether a class other than @p class_name binds @p method and may derive
+  /// from @p class_name, so that a receiver typed @p class_name may run that
+  /// binding instead. A class whose bases cannot be resolved counts.
+  bool overridden_below(
+    const std::string &class_name,
+    const std::string &method) const;
   /// Whether the body of class @p class_name may bind @p name, hiding any
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)
