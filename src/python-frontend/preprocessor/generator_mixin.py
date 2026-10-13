@@ -19,6 +19,86 @@ def _is_contract_clause_call(expr):
             and expr.func.id in CONTRACT_CLAUSES)
 
 
+def _is_next_of_name(expr):
+    """True for `next(g)` on a bare name g."""
+    return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+            and expr.func.id == "next" and len(expr.args) == 1
+            and isinstance(expr.args[0], ast.Name))
+
+
+_LOOPS = (ast.For, ast.AsyncFor, ast.While)
+
+
+class _GeneratorConsumerScan:
+    """Per scope, the names used and stored, each `g = genfunc(...)` binding
+    and each `next(g)` call, with the context it runs in: "linear", "loop",
+    "try" or "branch"."""
+
+    def __init__(self, gen_defs, whole_value, new_scope, branching):
+        self.gen_defs = gen_defs
+        self.whole_value = whole_value
+        self.new_scope = new_scope
+        self.branching = branching
+        self.scopes = [{"all": set(), "stored": set(), "function": False}]
+        self.func_scope, self.bindings, self.calls, self.stores = {}, {}, {}, {}
+
+    def visit(self, n, scope, ctx):
+        self._record(n, scope, ctx)
+        if isinstance(n, self.new_scope):
+            self._visit_scope(n)
+            return
+        for field, value in ast.iter_fields(n):
+            child_ctx = self._child_ctx(n, field, ctx)
+            for child in value if isinstance(value, list) else [value]:
+                if isinstance(child, ast.AST):
+                    self.visit(child, scope, child_ctx)
+
+    def _record(self, n, scope, ctx):
+        if isinstance(n, ast.Name):
+            self.scopes[scope]["all"].add(n.id)
+            if isinstance(n.ctx, ast.Store):
+                self.scopes[scope]["stored"].add(n.id)
+                self.stores[n.id] = self.stores.get(n.id, 0) + 1
+        elif self._is_generator_binding(n):
+            self.bindings.setdefault(n.targets[0].id, []).append((scope, ctx, n.value.func.id))
+        elif _is_next_of_name(n):
+            self.calls.setdefault(n.args[0].id, []).append(
+                (scope, ctx, self.whole_value.get(id(n))))
+
+    def _is_generator_binding(self, n):
+        return (isinstance(n, ast.Assign) and len(n.targets) == 1
+                and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Call)
+                and isinstance(n.value.func, ast.Name) and n.value.func.id in self.gen_defs)
+
+    def _visit_scope(self, n):
+        is_function = isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+        params = {a.arg for a in self._params(n)} if is_function else set()
+        self.scopes.append({"all": set(params), "stored": params, "function": is_function})
+        child_scope = len(self.scopes) - 1
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            self.func_scope[n.name] = child_scope
+        child_ctx = "linear" if is_function else "branch"
+        for child in ast.iter_child_nodes(n):
+            self.visit(child, child_scope, child_ctx)
+
+    @staticmethod
+    def _params(fn):
+        args = fn.args
+        return [
+            a for a in args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
+            if a is not None
+        ]
+
+    def _child_ctx(self, n, field, ctx):
+        if field == "body" and isinstance(n, _LOOPS + (ast.Try, )):
+            if ctx != "linear":
+                return "branch"
+            return "try" if isinstance(n, ast.Try) else "loop"
+        if isinstance(n, _LOOPS + (ast.Try, ) + self.branching):
+            return "branch"
+        return ctx
+
+
 class GeneratorMixin:
 
     class _YieldToAppend(ast.NodeTransformer):
@@ -786,14 +866,72 @@ class GeneratorMixin:
     def _find_generator_next_call(self, node):
         """Return (gen_var, func_name) if node contains next(g) for a tracked generator, else None."""
         for child in ast.walk(node):
-            if (isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
-                    and child.func.id == "next" and len(child.args) == 1
-                    and isinstance(child.args[0], ast.Name)):
+            if _is_next_of_name(child):
                 gen_var = child.args[0].id
                 func_name = self.generator_vars.get(gen_var)
-                if func_name is not None:
+                if func_name is not None and gen_var not in self._gen_next_blacklist:
                     return (gen_var, func_name)
         return None
+
+    def _scan_generator_consumers(self, node):
+        """Blacklist generator variables whose next() calls cannot be inlined.
+
+        _inline_next_call picks each next(g)'s yield by its place in the
+        source, emits the generator's setup at the first next(g), and pastes
+        the generator's statements into the caller. That matches execution
+        only when:
+
+          * g is bound once, in straight-line code, and consumed in that scope;
+          * every next(g) is the whole value of an assignment or a statement;
+          * each next(g) runs in source order: straight-line code, or the last
+            one inside a try body. A generator whose only yield sits in a loop
+            gives the same value at every call, so after the first call any
+            position works, and the first may be an assignment directly in a
+            straight-line loop, whose setup _hoist_generator_inits emits;
+          * no name the generator binds is used by the caller, nor (in a
+            function) any name it reads bound by the caller.
+
+        A blacklisted next(g) is left alone, so it stays unsupported."""
+        gen_defs = {
+            n.name: n
+            for n in ast.walk(node) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and self._has_yield(n) and not self._is_recursive_call(n.name, n.body)
+            and not self._has_early_return_before_yield(n.body)
+        }
+        whole_value = {
+            id(stmt.value): type(stmt)
+            for stmt in ast.walk(node) if isinstance(stmt, (ast.Assign, ast.Expr))
+        }
+        scan = _GeneratorConsumerScan(
+            gen_defs, whole_value,
+            self._ast_types("FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "ListComp",
+                            "SetComp", "DictComp", "GeneratorExp"),
+            self._ast_types("If", "IfExp", "BoolOp", "With", "AsyncWith", "Match", "TryStar"))
+        scan.visit(node, 0, "linear")
+        self._gen_next_blacklist = {
+            var
+            for var in scan.bindings if not self._consumers_in_order(var, scan, gen_defs)
+        }
+
+    def _consumers_in_order(self, var, scan, gen_defs):
+        binds = scan.bindings[var]
+        scope, ctx, func_name = binds[0]
+        uses = scan.calls.get(var, [])
+        _, yields = self._collect_yields(gen_defs[func_name].body)
+        only_loop = len(yields) == 1 and yields[0][3]
+        gen_scope = scan.scopes[scan.func_scope[func_name]]
+        caller = scan.scopes[scope]
+        return (len(binds) == 1 and scan.stores.get(var) == 1 and ctx == "linear"
+                and all(s == scope and kind is not None for s, _, kind in uses) and all(
+                    self._use_in_order(i == 0, i == len(uses) - 1, c, kind, only_loop)
+                    for i, (_, c, kind) in enumerate(uses))
+                and not gen_scope["stored"] & caller["all"]
+                and not (caller["function"] and gen_scope["all"] & caller["stored"]))
+
+    @staticmethod
+    def _use_in_order(first, last, ctx, kind, only_loop):
+        return (ctx == "linear" or (ctx == "try" and last)
+                or (only_loop and (not first or (ctx == "loop" and kind is ast.Assign))))
 
     def _collect_loop_yields(self, stmt, yields):
         """Process a ``While``/``For`` body. Append yields and return ``True`` if any."""

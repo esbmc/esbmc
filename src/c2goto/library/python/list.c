@@ -121,7 +121,17 @@ size_t __ESBMC_list_size(const PyListObject *l)
 // ptr_free=1: payload has no pointer field, so we can reinterpret it as
 // uint64_t and use the 16/24/32-byte fast paths below. Pass 0 for opaque or
 // pointer-bearing structs — writing through a uint64_t lvalue would lose the
-// pointer object under ESBMC's byte-encoding.
+// pointer object under ESBMC's byte-encoding. ptr_free=2: the payload is one
+// pointer (a nested list or an object reference), copied as a pointer so the
+// element still names its object; an 8-byte integer copy would rebuild it
+// from bytes and every later read through it would range over all objects.
+// The storage of a pointer payload. A struct, not a bare `void *`, so the cell
+// is an object of its own kind and a SAME-OBJECT test between two cells folds.
+struct __ESBMC_pointer_cell
+{
+  void *ptr;
+};
+
 static inline void *__ESBMC_copy_value(
   const void *value,
   size_t size,
@@ -151,6 +161,14 @@ static inline void *__ESBMC_copy_value(
     return (void *)&__ESBMC_float_buf[idx];
   }
 
+  if (ptr_free == 2 && size == sizeof(void *))
+  {
+    struct __ESBMC_pointer_cell *cell =
+      __ESBMC_alloca(sizeof(struct __ESBMC_pointer_cell));
+    cell->ptr = *(void *const *)value;
+    return cell;
+  }
+
   void *copied = __ESBMC_alloca(size);
 
   // Branch-free 8-byte-aligned fast paths for the common small sizes. These
@@ -170,13 +188,13 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
-  else if (ptr_free && size == 24)
+  else if (ptr_free == 1 && size == 24)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
   }
-  else if (ptr_free && size == 32)
+  else if (ptr_free == 1 && size == 32)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
@@ -397,6 +415,14 @@ static inline size_t __ESBMC_elem_cmp_size(const PyObject *o, size_t elem_size)
   return (elem_size != 0) ? elem_size : o->size;
 }
 
+// max_depth, or the default when it is 0, capped at the physical stack size.
+static inline size_t __ESBMC_list_eq_depth_limit(size_t max_depth)
+{
+  size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
+  return depth_limit > __ESBMC_LIST_MAX_STACK ? __ESBMC_LIST_MAX_STACK
+                                              : depth_limit;
+}
+
 bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
@@ -413,43 +439,40 @@ bool __ESBMC_list_eq(
   if (l1->size != l2->size)
     return false;
 
-  // Use max_depth or default if 0, but cap at physical stack size
-  size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
-  if (depth_limit > __ESBMC_LIST_MAX_STACK)
-    depth_limit = __ESBMC_LIST_MAX_STACK;
+  const size_t depth_limit = __ESBMC_list_eq_depth_limit(max_depth);
 
-  // Use explicit stack to avoid recursive function calls
-  // This prevents state explosion from recursive unrolling
+  // An explicit stack rather than recursion keeps symex from unrolling a
+  // recursive call. The pair being compared lives in scalars and only the
+  // suspended outer pairs go on the stack: a read of the stack arrays does
+  // not constant-propagate once a pointer stored in them is not a literal
+  // address, so a flat list compared through them lost its object and every
+  // element width became symbolic.
   const PyListObject *stack_a[__ESBMC_LIST_MAX_STACK];
   const PyListObject *stack_b[__ESBMC_LIST_MAX_STACK];
   size_t stack_idx[__ESBMC_LIST_MAX_STACK];
   int top = 0;
 
-  // Initialize with first list pair
-  stack_a[0] = l1;
-  stack_b[0] = l2;
-  stack_idx[0] = 0;
-  top = 1;
+  const PyListObject *cur_a = l1;
+  const PyListObject *cur_b = l2;
+  size_t idx = 0;
 
-  while (top > 0)
+  while (1)
   {
-    int cur = top - 1;
-    const PyListObject *cur_a = stack_a[cur];
-    const PyListObject *cur_b = stack_b[cur];
-    size_t idx = stack_idx[cur];
-
-    // Finished comparing this list pair?
+    // Finished comparing this list pair? Resume the enclosing one.
     if (idx >= cur_a->size)
     {
+      if (top == 0)
+        break;
       top--;
+      cur_a = stack_a[top];
+      cur_b = stack_b[top];
+      idx = stack_idx[top];
       continue;
     }
 
-    // Advance index for next iteration
-    stack_idx[cur] = idx + 1;
-
     const PyObject *a = &cur_a->items[idx];
     const PyObject *b = &cur_b->items[idx];
+    idx++;
 
     // Same pointer => elements equal
     if (a->value == b->value)
@@ -517,7 +540,7 @@ bool __ESBMC_list_eq(
         return false;
 
       // Check depth limit and report if exceeded
-      if ((size_t)top >= depth_limit)
+      if ((size_t)top + 1 >= depth_limit)
       {
         // List depth unwinding assertion: similar to loop unwinding assertions.
         // If this fires, increase depth with --python-list-compare-depth
@@ -530,11 +553,14 @@ bool __ESBMC_list_eq(
         return false;
       }
 
-      // Push nested comparison onto stack
-      stack_a[top] = nested_a;
-      stack_b[top] = nested_b;
-      stack_idx[top] = 0;
+      // Suspend this pair and descend into the nested one
+      stack_a[top] = cur_a;
+      stack_b[top] = cur_b;
+      stack_idx[top] = idx;
       top++;
+      cur_a = nested_a;
+      cur_b = nested_b;
+      idx = 0;
     }
     else
     {

@@ -130,6 +130,15 @@ public:
   bool is_pointer_free(const typet &t) const;
 
   /*
+   * The `ptr_free` argument of a list-model store whose payload argument is
+   * `payload` and whose element has type `elem_type`. 2 when the payload is
+   * the address of a pointer -- a nested list or an object reference -- so
+   * the model copies it as a pointer and the stored element still names its
+   * object; otherwise is_pointer_free(elem_type) as 1 or 0.
+   */
+  exprt ptr_free_arg(const exprt &payload, const typet &elem_type) const;
+
+  /*
    * Converts a typet to its string representation.
    * @param t The typet to convert.
    * @return A string containing the type name.

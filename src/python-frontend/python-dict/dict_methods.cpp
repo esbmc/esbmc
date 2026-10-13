@@ -510,10 +510,9 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
     push_key_call.arguments().push_back(key_info.elem_size);
     push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
-    push_key_call.arguments().push_back(from_integer(
-      BigInt(converter_.get_type_handler().is_pointer_free(
-        key_info.elem_symbol->get_type())),
-      int_type()));
+    push_key_call.arguments().push_back(
+      converter_.get_type_handler().ptr_free_arg(
+        key_arg, key_info.elem_symbol->get_type()));
     push_key_call.type() = bool_type();
     push_key_call.location() = location;
     else_block.copy_to_operands(push_key_call);
@@ -562,10 +561,9 @@ exprt python_dict_handler::handle_dict_setdefault(
       push_value_call.arguments().push_back(value_info.elem_size);
       push_value_call.arguments().push_back(
         from_integer(BigInt(0), size_type()));
-      push_value_call.arguments().push_back(from_integer(
-        BigInt(converter_.get_type_handler().is_pointer_free(
-          value_info.elem_symbol->get_type())),
-        int_type()));
+      push_value_call.arguments().push_back(
+        converter_.get_type_handler().ptr_free_arg(
+          value_arg, value_info.elem_symbol->get_type()));
       push_value_call.type() = bool_type();
       push_value_call.location() = location;
       else_block.copy_to_operands(push_value_call);
