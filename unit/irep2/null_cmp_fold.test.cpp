@@ -106,3 +106,24 @@ TEST_CASE("&obj != (T *)NULL folds", "[irep2][simplify]")
   REQUIRE(is_constant_bool2t(s));
   REQUIRE(to_constant_bool2t(s).value);
 }
+
+TEST_CASE(
+  "a pointer-to-pointer bitcast folds like a typecast",
+  "[irep2][simplify]")
+{
+  // A pointer read back through a pointer to another pointer type.
+  expr2tc obj = symbol2tc(get_int32_type(), irep_idt("obj"));
+  type2tc void_ptr = pointer_type2tc(get_empty_type());
+  expr2tc read = bitcast2tc(void_ptr, address_of2tc(int_ptr(), obj));
+  expr2tc ne = notequal2tc(read, symbol2tc(void_ptr, irep_idt("NULL")));
+  expr2tc s = ne->simplify();
+  REQUIRE(is_constant_bool2t(s));
+  REQUIRE(to_constant_bool2t(s).value);
+
+  // A bitcast to an integer is the pointer's bits and stays a bitcast.
+  expr2tc to_int = bitcast2tc(
+    get_uint_type(config.ansi_c.pointer_width()),
+    address_of2tc(int_ptr(), obj));
+  expr2tc kept = to_int->simplify();
+  REQUIRE((is_nil_expr(kept) || is_bitcast2t(kept)));
+}
