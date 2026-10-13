@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view whose element type differs from the one inferred for the parameter is not supported$

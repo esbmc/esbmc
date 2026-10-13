@@ -372,6 +372,16 @@ def strategy_flags(strat):
   exit(1)
 
 
+def python_assertion_flags(prop):
+  """For any property but AssertionError, the program's own asserts are not
+  the question, yet a failing one stops the run before the property is
+  checked. --python-ignore-assertions turns each into an assume that ends its
+  path, as CPython stops there, so the other families are decided."""
+  if prop == Property.py_assertion:
+    return ""
+  return "--python-ignore-assertions "
+
+
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
@@ -390,7 +400,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # already carries --unlimited-k-steps in dargs.
     return (
       esbmc_path + "--sv-comp " + benchmark + " "
-      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps ")
+      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
+      + python_assertion_flags(prop))
 
   command_line = esbmc_path + dargs
 
