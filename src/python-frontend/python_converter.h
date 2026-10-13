@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/function_call/cache.h>
@@ -244,6 +245,12 @@ public:
   bool is_list_call_escaped(const std::string &id) const
   {
     return call_escaped_lists_.find(id) != call_escaped_lists_.end();
+  }
+
+  /// Runs @p check once every statement has been converted.
+  void defer_check(std::function<void()> check)
+  {
+    deferred_checks_.push_back(std::move(check));
   }
 
   bool type_assertions_enabled() const;
@@ -2730,6 +2737,7 @@ private:
   const global_scope &global_scope_;
   type_handler type_handler_;
   element_type_registry element_type_registry_;
+  std::vector<std::function<void()>> deferred_checks_;
   string_builder *string_builder_;
   symbol_generator sym_generator_;
 

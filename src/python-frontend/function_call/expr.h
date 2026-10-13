@@ -679,6 +679,12 @@ private:
   // General function call handler
   exprt handle_general_function_call();
 
+  /// The symbol of a method call's named receiver; null when it has no name.
+  symbolt *find_receiver_symbol(symbol_id &obj_symbol_id) const;
+
+  /// The value of a method call's receiver expression, passed as self.
+  exprt build_value_receiver(const symbolt &method) const;
+
   // --- handle_general_function_call() decomposition helpers ---
   // Each "try_"/optional-returning helper extracts a self-contained block of
   // handle_general_function_call(). A returned value is the result the caller

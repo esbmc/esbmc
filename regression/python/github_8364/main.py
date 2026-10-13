@@ -1,4 +1,4 @@
-# KNOWNBUG until #8384: a method call on a list element is not dispatched.
+# A method call on a list element dispatches to the element's class (#8384).
 class P:
     def size(self, k: int) -> int:
         return k

@@ -128,6 +128,15 @@ private:
    */
   typet enclosing_return_type() const;
 
+  /*
+   * The class of a method call's receiver that is not a plain name. For an
+   * item of a list of class instances (`xs[i].m()`) it is their class, so
+   * the call dispatches as `x = xs[i]; x.m()` does; otherwise "str". Throws
+   * when the list's items are not known to share one class, since no single
+   * method can then be chosen statically.
+   */
+  std::string subscript_receiver_class(const nlohmann::json &receiver) const;
+
   python_converter &converter_;
   const nlohmann::json &call_;
 };
