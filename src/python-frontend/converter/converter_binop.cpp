@@ -432,19 +432,42 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   return part;
 }
 
-// At least one variable and nothing else but constants: the f-string lowering
-// drops a call argument's side effects, and all-constant formats fold exactly.
+// At least one variable and nothing else but constants: all-constant formats
+// fold exactly.
 bool names_and_constants(const std::vector<nlohmann::json> &args)
 {
   bool has_name = false;
   for (const nlohmann::json &a : args)
   {
     const std::string kind = a.value("_type", "");
-    if (kind != "Name" && kind != "Constant")
+    if (kind == "Constant")
+      continue;
+    if (kind != "Name" && kind != "Attribute" && kind != "Call")
       return false;
-    has_name |= kind == "Name";
+    has_name = true;
   }
   return has_name;
+}
+
+// An attribute (a property getter) or a call may run code.
+bool may_run_code(const std::vector<nlohmann::json> &args)
+{
+  return std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
+    return a.value("_type", "") == "Attribute" ||
+           a.value("_type", "") == "Call";
+  });
+}
+
+// `"..." % right`, which converts `right` again from its AST (as an f-string
+// or a constant fold) and formats an Optional operand itself.
+bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
+{
+  if (!element.contains("left") || !element.contains("op"))
+    return false;
+  const nlohmann::json &left = element["left"];
+  return element["op"].value("_type", "") == "Mod" &&
+         left.value("_type", "") == "Constant" && left.contains("value") &&
+         left["value"].is_string() && type_utils::is_string_type(lhs.type());
 }
 
 // `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
@@ -671,9 +694,22 @@ exprt python_converter::lower_short_circuit_boolop(
     return nil_exprt();
   }
 
-  const locationt location = get_location_from_decl(element);
-  symbolt result_symbol =
-    create_return_temp_variable(type, location, "boolop_result");
+  return emit_guarded_boolop(
+    logical_expr, effects, truthy, get_location_from_decl(element));
+}
+
+/// Lowers the and/or \p logical_expr into a result temporary that each later
+/// operand updates in its own guarded block, after the statements its
+/// conversion planted in \p effects.
+exprt python_converter::emit_guarded_boolop(
+  const exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const locationt &location)
+{
+  const exprt::operandst &operands = logical_expr.operands();
+  symbolt result_symbol = create_return_temp_variable(
+    operands.front().type(), location, "boolop_result");
   symbol_table_.add(result_symbol);
   const exprt result = symbol_expr(result_symbol);
 
@@ -1503,10 +1539,15 @@ exprt python_converter::get_percent_format_expr(
   const std::map<std::string, nlohmann::json> &mapping,
   const std::vector<typet> &arg_types)
 {
-  if (
-    std::optional<nlohmann::json> joined =
-      percent_format_as_fstring(left, args, arg_types))
+  std::optional<nlohmann::json> joined =
+    percent_format_as_fstring(left, args, arg_types);
+  // A name runs no code, and a discarded type probe only needs the type.
+  if (joined && (!may_run_code(args) || in_rhs_type_probe_))
     return get_expr(*joined);
+  // An attribute or a call runs once, in order, ahead of the statement. Where
+  // that is not when Python runs it (a while test, an and/or tail), refuse.
+  if (joined && can_emit_runtime_guard())
+    return get_fstring_in_order(*joined);
   // Re-enter conversion through a synthesised Constant node so the folded
   // string flows through the exact same path as a string literal (e.g.
   // len("ab")), which materialises it correctly when consumed inline by
@@ -1515,6 +1556,30 @@ exprt python_converter::get_percent_format_expr(
   folded["value"] =
     py_percent_format(left["value"].get<std::string>(), args, mapping);
   return get_expr(folded);
+}
+
+exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
+{
+  exprt result = nil_exprt();
+  for (const nlohmann::json &value : joined["values"])
+  {
+    exprt part =
+      get_expr(value["_type"] == "Constant" ? value : value["value"]);
+    if (value["_type"] != "Constant")
+    {
+      convert_function_call_to_side_effect(part);
+      symbolt &tmp =
+        create_tmp_symbol(joined, "$str_mod$", part.type(), exprt());
+      add_instruction(code_declt(symbol_expr(tmp)));
+      add_instruction(code_assignt(symbol_expr(tmp), part));
+      part = string_handler_.convert_to_string(symbol_expr(tmp));
+    }
+    result = result.is_nil()
+               ? part
+               : string_handler_.handle_string_concatenation(
+                   result, part, nlohmann::json(), nlohmann::json());
+  }
+  return result;
 }
 
 std::vector<typet> python_converter::percent_arg_types(
@@ -1531,6 +1596,15 @@ std::vector<typet> python_converter::percent_arg_types(
     for (const exprt &op : rhs.operands())
       types.push_back(op.type());
   return types;
+}
+
+exprt python_converter::get_right_operand_expr(
+  const nlohmann::json &element,
+  const nlohmann::json &right,
+  const exprt &lhs)
+{
+  return is_literal_percent_format(element, lhs) ? probe_expr(right)
+                                                 : get_expr(right);
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -1553,7 +1627,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt *saved_lhs = current_lhs;
   current_lhs = nullptr;
   exprt lhs = get_expr(left);
-  exprt rhs = get_expr(right);
+  exprt rhs = get_right_operand_expr(element, right, lhs);
   current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison
@@ -2304,7 +2378,7 @@ exprt python_converter::resolve_optional_operands(
   const nlohmann::json &element,
   bool is_none_check)
 {
-  if (is_none_check)
+  if (is_none_check || is_literal_percent_format(element, lhs))
     return nil_exprt();
   auto none_flag = [&](exprt &operand) -> exprt {
     if (!type_utils::is_optional_struct(operand.type()))

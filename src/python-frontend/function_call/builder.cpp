@@ -634,7 +634,7 @@ symbol_id function_call_builder::build_function_id() const
           module_path_candidate = name;
 
           // Skip module names - let the module handling logic deal with them
-          if (converter_.is_imported_module(name))
+          if (converter_.is_module_receiver(name, node, call_))
             return typet();
 
           symbol_id var_sid(
@@ -808,7 +808,7 @@ symbol_id function_call_builder::build_function_id() const
 
     if (
       !json_utils::is_class(obj_name, ast) &&
-      converter_.is_imported_module(obj_name))
+      converter_.is_module_receiver(obj_name, func_json["value"], call_))
     {
       const auto &module_path = converter_.get_imported_module_path(obj_name);
 
@@ -1285,12 +1285,69 @@ void function_call_builder::raise_if_none_receiver() const
     converter_.get_location_from_decl(call_));
 }
 
+std::string
+function_call_builder::instance_class_name(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    if (
+      func.value("_type", "") == "Name" &&
+      json_utils::is_class(func["id"].get<std::string>(), converter_.ast()))
+      return func["id"].get<std::string>();
+    return "";
+  }
+
+  typet type;
+  if (kind == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(node["id"].get<std::string>());
+    const symbolt *symbol = converter_.find_symbol(sid.to_string());
+    if (!symbol)
+      return "";
+    type = symbol->get_type();
+  }
+  else if (kind == "Attribute")
+  {
+    const std::string base = instance_class_name(node["value"]);
+    const symbolt *base_class = converter_.find_symbol("tag-" + base);
+    const std::string attr = node["attr"].get<std::string>();
+    if (
+      base.empty() || !base_class || !base_class->get_type().is_struct() ||
+      !to_struct_type(base_class->get_type()).has_component(attr))
+      return "";
+    type = to_struct_type(base_class->get_type()).get_component(attr).type();
+  }
+
+  if (type.is_pointer())
+    type = type.subtype();
+  std::string tag;
+  if (type.id() == "symbol")
+    tag = type.identifier().as_string();
+  else if (type.is_struct())
+    tag = to_struct_type(type).tag().as_string();
+  return boost::starts_with(tag, "tag-") ? tag.substr(4) : tag;
+}
+
+bool function_call_builder::receiver_class_defines_method() const
+{
+  const auto &ast = converter_.ast();
+  const std::string cls = instance_class_name(call_["func"]["value"]);
+  return json_utils::is_class(cls, ast) &&
+         json_utils::class_defines_method(
+           ast["body"], cls, call_["func"]["attr"].get<std::string>());
+}
+
 exprt function_call_builder::build_method_call_on_receiver() const
 {
   if (receiver_is_bound_to_none())
     return converter_.get_exception_handler().gen_exception_raise(
       "AttributeError", none_has_no_attribute(call_));
   raise_if_none_receiver();
+  if (receiver_class_defines_method())
+    return nil_exprt();
   return converter_.get_string_handler().handle_string_attribute_call(call_);
 }
 

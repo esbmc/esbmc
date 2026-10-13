@@ -12,6 +12,7 @@
 #include <catch2/catch.hpp>
 
 #include "../testing-utils/goto_factory.h"
+#include <goto-programs/mark_decl_as_non_det.h>
 #include <pointer-analysis/andersen.h>
 #include <irep2/irep2_utils.h>
 
@@ -211,12 +212,11 @@ TEST_CASE("andersen frontend binds arguments and returns", "[andersen][goto]")
 }
 
 TEST_CASE(
-  "andersen frontend widens an unmodelled callee to TOP",
+  "andersen frontend treats a callee without a body as symex does",
   "[andersen][goto]")
 {
-  // The soundness case: nothing in the program says what ext() returns or what
-  // it does through the pointer it is handed.  Both must widen to TOP rather
-  // than stay empty, or a consumer would wrongly conclude "nothing aliases".
+  // Symex gives ext() a fresh result, whose dereference reaches no named
+  // object, and lets it write through none of its arguments.
   std::string src = R"(
     int a;
     int *ext(int **out);
@@ -234,18 +234,135 @@ TEST_CASE(
   andersen(functions);
 
   REQUIRE(
+    targets_of(andersen, functions, "main", "e") ==
+    std::set<std::string>{andersent::nondet_object_name});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+}
+
+TEST_CASE("andersen frontend widens an intrinsic to TOP", "[andersen][goto]")
+{
+  // Symex runs __ESBMC_ functions itself, whatever their body, and those may
+  // write through their arguments.
+  std::string src = R"(
+    int a;
+    int *__ESBMC_ext(int **out);
+    int main(void)
+    {
+      int *p = &a;
+      int **r = &p;
+      int *e = __ESBMC_ext(r);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
     targets_of(andersen, functions, "main", "e") == std::set<std::string>{"*"});
-  // ext() may write through r, so p may now point anywhere too.
   REQUIRE(targets_of(andersen, functions, "main", "p").count("*") == 1);
 }
 
 TEST_CASE(
-  "andersen frontend routes a pointer laundered through an integer to TOP",
+  "andersen frontend widens variadic arguments only for va_arg",
   "[andersen][goto]")
 {
-  // Nothing tracks the arithmetic an integer holding an address may undergo,
-  // so the value cast back out of x names any object.  Dropping the store into
-  // x would leave it empty and q would inherit that empty set.
+  // Symex reads an argument past the signature only through a va_arg in the
+  // callee's own frame.
+  std::string src = R"(
+    #include <stdarg.h>
+    int a, b;
+    int ignores(int n, ...)
+    {
+      return n;
+    }
+    int reads(int n, ...)
+    {
+      va_list ap;
+      va_start(ap, n);
+      int **pp = va_arg(ap, int **);
+      va_end(ap);
+      return 0;
+    }
+    int main(void)
+    {
+      int *p = &a;
+      int *q = &b;
+      ignores(1, &p);
+      reads(1, &q);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+  REQUIRE(targets_of(andersen, functions, "main", "q").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend copies the old object into realloc's",
+  "[andersen][goto]")
+{
+  // Symex copies the old contents into the new object and, on failure,
+  // returns the old pointer.
+  std::string src = R"(
+    #include <stdlib.h>
+    int a;
+    int main(void)
+    {
+      int **p = malloc(sizeof(int *));
+      *p = &a;
+      int **q = realloc(p, sizeof(int *));
+      int *r = *q;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend gives an integer constant no object",
+  "[andersen][goto]")
+{
+  // Symex resolves a non-zero integer used as a pointer to an invalid object,
+  // as it does an unconstrained pointer.
+  std::string src = R"(
+    int main(void)
+    {
+      int *c = (int *)0x1000;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "c") ==
+    std::set<std::string>{andersent::nondet_object_name});
+}
+
+TEST_CASE(
+  "andersen frontend tracks a pointer laundered through an integer",
+  "[andersen][goto]")
+{
+  // An integer carries the addresses it is computed from, as long as the
+  // arithmetic stays inside those objects, which the memory model already
+  // assumes.  Dropping the store into x would leave it empty and q would
+  // inherit that empty set.
   std::string src = R"(
     int a;
     int main(void)
@@ -262,24 +379,136 @@ TEST_CASE(
   andersen(functions);
 
   REQUIRE(
-    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"*"});
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"a"});
   // The laundering must not cost precision on the pointer itself.
   REQUIRE(
     targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
 }
 
 TEST_CASE(
-  "andersen frontend widens a nondet pointer to TOP",
+  "andersen frontend keeps memory behind an unconstrained pointer inert",
   "[andersen][goto]")
 {
-  // A call to a bodyless function is lowered to a nondet side effect: the
-  // resulting pointer is an unconstrained value symbolic execution may equate
-  // with the address of any object, so an empty set would under-approximate.
   std::string src = R"(
-    int *ext(void);
+    void ext(int **);
+    int x;
     int main(void)
     {
-      int *n = ext();
+      int **p;
+      int **r;
+      *p = &x;
+      ext(r);
+      int *q = *r;
+      int *s = *p;
+      return 0;
+    }
+  )";
+
+  program prog =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+  goto_functionst &functions = prog.functions;
+  mark_decl_as_non_det(prog.context).run(functions);
+  andersent andersen;
+  andersen(functions);
+
+  const std::set<std::string> nondet{andersent::nondet_object_name};
+  REQUIRE(targets_of(andersen, functions, "main", "q") == nondet);
+  REQUIRE(targets_of(andersen, functions, "main", "s") == nondet);
+}
+
+TEST_CASE(
+  "andersen frontend stores through the objects beside the nondet sentinel",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int nd(void);
+    int x;
+    int *cell;
+    int main(void)
+    {
+      int c = nd();
+      int **uninit;
+      int **p = c ? &cell : uninit;
+      *p = &x;
+      int *q = cell;
+      int *r = *p;
+      return 0;
+    }
+  )";
+
+  program prog =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+  goto_functionst &functions = prog.functions;
+  mark_decl_as_non_det(prog.context).run(functions);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"x"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") ==
+    std::set<std::string>{"x", andersent::nondet_object_name});
+}
+
+TEST_CASE(
+  "andersen frontend gives each call of an allocator its own object",
+  "[andersen][goto]")
+{
+  // wrap is malloc behind two calls, as kzalloc is behind kmalloc and
+  // ldv_malloc: every call returns an object of its own.
+  std::string src = R"(
+    #include <stdlib.h>
+    int x;
+    void *alloc(unsigned long n)
+    {
+      if (n == 0)
+        return 0;
+      void *r = malloc(n);
+      return r;
+    }
+    void *wrap(unsigned long n) { return alloc(n); }
+    int main(void)
+    {
+      int **p = wrap(8);
+      int **q = wrap(8);
+      *p = &x;
+      int *r = *q;
+      int *s = *p;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(targets_of(andersen, functions, "main", "r").empty());
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") == std::set<std::string>{"x"});
+}
+
+TEST_CASE(
+  "andersen frontend shares the object an allocator also keeps",
+  "[andersen][goto]")
+{
+  // keep stores what it allocates in g, so its calls may return the object g
+  // holds: they cannot be told apart.
+  std::string src = R"(
+    #include <stdlib.h>
+    int x;
+    void *g;
+    void *keep(unsigned long n)
+    {
+      void *r = malloc(n);
+      g = r;
+      return r;
+    }
+    int main(void)
+    {
+      int **p = keep(8);
+      int **q = keep(8);
+      *p = &x;
+      int *r = *q;
       return 0;
     }
   )";
@@ -289,7 +518,7 @@ TEST_CASE(
   andersen(functions);
 
   REQUIRE(
-    targets_of(andersen, functions, "main", "n") == std::set<std::string>{"*"});
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"x"});
 }
 
 TEST_CASE(
@@ -438,4 +667,70 @@ TEST_CASE(
   andersen(functions);
 
   REQUIRE(targets_of(andersen, functions, "main", "p").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend dereferences indexed and member accesses",
+  "[andersen][goto]")
+{
+  // Each of these reaches the object a pointer points to, not the pointer:
+  // dropping one would leave a points-to set too small, which is unsound.
+  std::string src = R"(
+    int a, b, c;
+    struct s
+    {
+      int *f;
+    } g;
+    int main(void)
+    {
+      int *p0 = &a;
+      int **pp = &p0;
+      pp[0] = &b;
+      *(pp + 0) = &c;
+      struct s *sp = &g;
+      g.f = &a;
+      int *x = sp->f;
+      int **y = &sp->f;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p0") ==
+    std::set<std::string>{"a", "b", "c"});
+  REQUIRE(
+    targets_of(andersen, functions, "", "g") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "x") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "y") == std::set<std::string>{"g"});
+}
+
+TEST_CASE(
+  "andersen frontend follows an address through integer arithmetic",
+  "[andersen][goto]")
+{
+  // CIL writes field accesses as `*(T *)((unsigned long)p + off)`: the
+  // integer still points into p's object, and an empty set would be unsound.
+  std::string src = R"(
+    int b[2];
+    int main(void)
+    {
+      long zero = 0;
+      long addr = (long)&b[0] + zero;
+      int *q = (int *)addr;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"b"});
 }
