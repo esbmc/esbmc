@@ -1447,8 +1447,15 @@ protected:
     const code_printf2t &call,
     size_t fmt_idx,
     size_t &max_len);
-  /** Assume a printf-family call's return value equals the length of the
-   *  output stored, when both are known. */
+  /** Store an unrenamed sprintf-family call's output and return the length
+   *  that call returns: the stored length, or for printf, fprintf and dprintf
+   *  with a used result, printf_output_length. Nil when unknown. */
+  expr2tc printf_return_length(
+    const expr2tc &lhs,
+    const code_printf2t &call,
+    size_t fmt_idx);
+  /** Assume a printf-family call's return value equals the length of its
+   *  output, when both are known. */
   void assume_printf_length(const expr2tc &retval, const expr2tc &len);
   /** Run `formatter` over an unrenamed printf-family call; false when the
    *  format is not a constant. `constant_args` is set when every argument

@@ -446,6 +446,36 @@ expr2tc goto_symext::symex_sprintf_store(const code_printf2t &call)
   return len;
 }
 
+expr2tc goto_symext::printf_return_length(
+  const expr2tc &lhs,
+  const code_printf2t &call,
+  size_t fmt_idx)
+{
+  const expr2tc stored = symex_sprintf_store(call);
+  if (!is_nil_expr(stored) || is_nil_expr(lhs))
+    return stored;
+  // asprintf returns -1 when allocation fails, and a v* call's arguments are
+  // behind its va_list, so only the direct stream forms return the length.
+  switch (call.kind)
+  {
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+    break;
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return expr2tc();
+  }
+  size_t max_len;
+  return printf_output_length(call, fmt_idx, max_len);
+}
+
 void goto_symext::assume_printf_length(
   const expr2tc &retval,
   const expr2tc &len)
@@ -660,7 +690,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
 
-  const expr2tc stored_len = symex_sprintf_store(to_code_printf2t(rhs));
+  const expr2tc output_len =
+    printf_return_length(lhs, to_code_printf2t(rhs), fmt_idx);
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
@@ -821,7 +852,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     }
   }
 
-  assume_printf_length(retval, stored_len);
+  assume_printf_length(retval, output_len);
 
   // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
   // The buffer size is modelled as 1 byte; exact sizing would need the
