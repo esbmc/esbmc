@@ -6267,9 +6267,10 @@ size_t function_call_expr::bind_call_receiver(
       // For constructor calls without assignment, delay creating temp var
       // get_return_statements() will handle return statements, we only handle
       // standalone calls (e.g., Positive(2))
-      // Self parameter will be added later if needed (see end of function)
-      // param_offset is 1 because first user arg maps to param[1] (skipping
-      // self)
+      // A nil placeholder holds self's slot until the end of finalize_call
+      // fills it, so keyword and default arguments, which are stored by
+      // parameter index, land in their own slots.
+      call.arguments().push_back(nil_exprt());
       param_offset = 1;
     }
   }
@@ -7178,10 +7179,8 @@ exprt function_call_expr::finalize_call(
   // needed
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
-    size_t num_provided_args = call_["args"].size();
-
-    // Only add self if arguments size matches user args (no self added yet)
-    if (call.arguments().size() == num_provided_args)
+    // Only add self if its placeholder is still unfilled
+    if (call.arguments().front().is_nil())
     {
       // Create temporary object as self parameter
       const std::string requested_class = function_id_.get_class();
@@ -7198,9 +7197,7 @@ exprt function_call_expr::finalize_call(
       temp_decl.location() = location;
       converter_.current_block->copy_to_operands(temp_decl);
 
-      // Insert self as first argument
-      call.arguments().insert(
-        call.arguments().begin(), gen_address_of(build_symbol(temp_self)));
+      call.arguments().front() = gen_address_of(build_symbol(temp_self));
 
       // Emit the constructor call directly as a FUNCTION_CALL instruction so
       // ESBMC inlines it (codet("expression") would produce OTHER and be

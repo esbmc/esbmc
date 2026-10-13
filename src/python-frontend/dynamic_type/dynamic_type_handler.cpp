@@ -20,9 +20,32 @@ namespace
 {
 using dynamic_type_detail::collect_if_node_literal_kinds;
 
-// Classifies a single `return <literal>` statement: "num", "str", or "" if
-// it isn't a literal return.
-std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
+using param_kinds_t = std::unordered_map<std::string, std::string>;
+
+// Kinds of the parameters annotated (or inferred from call sites) as int,
+// bool or str, so `return x` counts like a literal of that kind (#8523).
+param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
+{
+  param_kinds_t kinds;
+  if (!function_node.contains("args") || !function_node["args"].is_object())
+    return kinds;
+  for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
+  {
+    const auto &ann = arg.value("annotation", nlohmann::json());
+    const std::string type = ann.is_object() ? ann.value("id", "") : "";
+    if (type == "int" || type == "bool")
+      kinds[arg["arg"].get<std::string>()] = "num";
+    else if (type == "str")
+      kinds[arg["arg"].get<std::string>()] = "str";
+  }
+  return kinds;
+}
+
+// Classifies a single `return <literal>` or `return <param>` statement:
+// "num", "str", or "" if neither applies.
+std::string classify_return_literal_kind(
+  const nlohmann::json &ret_stmt,
+  const param_kinds_t &param_kinds)
 {
   if (!ret_stmt.is_object() || ret_stmt.value("_type", "") != "Return")
     return "";
@@ -30,6 +53,11 @@ std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
     return "";
 
   const auto &value = ret_stmt["value"];
+  if (value.value("_type", "") == "Name")
+  {
+    auto it = param_kinds.find(value.value("id", ""));
+    return it == param_kinds.end() ? "" : it->second;
+  }
   if (value.value("_type", "") != "Constant" || !value.contains("value"))
     return "";
 
@@ -46,6 +74,7 @@ std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
 // both of their arms.
 void collect_branch_return_kinds(
   const nlohmann::json &block,
+  const param_kinds_t &param_kinds,
   std::unordered_set<std::string> &kinds)
 {
   if (!block.is_array() || block.empty())
@@ -55,13 +84,13 @@ void collect_branch_return_kinds(
   if (last.is_object() && last.value("_type", "") == "If")
   {
     if (last.contains("body"))
-      collect_branch_return_kinds(last["body"], kinds);
+      collect_branch_return_kinds(last["body"], param_kinds, kinds);
     if (last.contains("orelse"))
-      collect_branch_return_kinds(last["orelse"], kinds);
+      collect_branch_return_kinds(last["orelse"], param_kinds, kinds);
     return;
   }
 
-  const std::string kind = classify_return_literal_kind(last);
+  const std::string kind = classify_return_literal_kind(last, param_kinds);
   if (!kind.empty())
     kinds.insert(kind);
 }
@@ -828,10 +857,12 @@ exprt dynamic_type_handler::build_isinstance_check(
 }
 
 bool dynamic_type_handler::detect_dynamic_return_type(
-  const nlohmann::json &function_body) const
+  const nlohmann::json &function_node) const
 {
+  const nlohmann::json &function_body = function_node["body"];
   if (!function_body.is_array())
     return false;
+  const param_kinds_t param_kinds = collect_param_kinds(function_node);
 
   for (size_t i = 0; i < function_body.size(); ++i)
   {
@@ -842,16 +873,16 @@ bool dynamic_type_handler::detect_dynamic_return_type(
       continue;
 
     std::unordered_set<std::string> kinds;
-    collect_branch_return_kinds(stmt["body"], kinds);
+    collect_branch_return_kinds(stmt["body"], param_kinds, kinds);
 
     if (stmt.contains("orelse") && !stmt["orelse"].empty())
-      collect_branch_return_kinds(stmt["orelse"], kinds);
+      collect_branch_return_kinds(stmt["orelse"], param_kinds, kinds);
     else if (i + 1 < function_body.size())
     {
       // No else: an idiomatic early return falls through to the next
       // statement at this level.
       const std::string next_kind =
-        classify_return_literal_kind(function_body[i + 1]);
+        classify_return_literal_kind(function_body[i + 1], param_kinds);
       if (!next_kind.empty())
         kinds.insert(next_kind);
     }
