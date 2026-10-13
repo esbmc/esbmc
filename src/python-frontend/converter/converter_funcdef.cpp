@@ -3110,7 +3110,12 @@ size_t python_converter::register_function_argument(
       arg_type = any_type();
     }
     else
+    {
+      // A class defined further down the file has no symbol yet; build it
+      // now, as a constructor call does, so the parameter type resolves.
+      process_forward_reference(element["annotation"]);
       arg_type = get_type_from_annotation(element["annotation"], element);
+    }
   }
 
   // A bare `bytes` annotation carries no length (Python's type syntax has no

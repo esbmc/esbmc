@@ -5846,7 +5846,7 @@ void python_converter::get_var_assign(
       nlohmann::json cls_ref;
       cls_ref["_type"] = "Name";
       cls_ref["id"] = opt_cls;
-      process_forward_reference(cls_ref, target_block);
+      process_forward_reference(cls_ref);
       typet st = type_handler_.get_typet(opt_cls);
       if (st.id() == "symbol" || st.is_struct())
       {
@@ -5899,9 +5899,7 @@ void python_converter::get_var_assign(
     ast_node.contains("value") && !ast_node["value"].is_null() &&
     ast_node["value"]["_type"] == "Call" &&
     type_handler_.is_constructor_call(ast_node["value"]))
-  {
-    process_forward_reference(ast_node["value"]["func"], target_block);
-  }
+    process_forward_reference(ast_node["value"]["func"]);
 
   // Handle dict subscript assignment: dict[key] = value
   if (

@@ -852,8 +852,7 @@ void python_converter::get_attributes_from_self(
 
 // Process forward reference
 void python_converter::process_forward_reference(
-  const nlohmann::json &annotation,
-  codet &target_block)
+  const nlohmann::json &annotation)
 {
   if (annotation.is_null())
     return;
@@ -896,7 +895,12 @@ void python_converter::process_forward_reference(
   {
     std::string saved_class = current_class_name_;
     std::string saved_func = current_func_name_;
-    get_class_definition(ref_class_node, target_block);
+    // find_class looks in the module body, so the class is module-scoped
+    // whatever function the reference sits in.
+    current_func_name_.clear();
+    code_blockt class_code;
+    get_class_definition(ref_class_node, class_code);
+    forward_class_code_.emplace(referenced_class, std::move(class_code));
     current_class_name_ = saved_class;
     current_func_name_ = saved_func;
   }
@@ -929,6 +933,14 @@ void python_converter::get_class_definition(
              "would share one symbol. Rename all but one.";
       throw std::runtime_error(oss.str());
     }
+  }
+
+  auto early = forward_class_code_.find(class_name);
+  if (early != forward_class_code_.end())
+  {
+    target_block.copy_to_operands(early->second);
+    forward_class_code_.erase(early);
+    return;
   }
 
   python_class_builder(*this, class_node).build(target_block);

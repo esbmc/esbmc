@@ -1130,10 +1130,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   // Check for forward-referenced constructor calls
   if (type_handler_.is_constructor_call(element))
-  {
-    code_blockt temp_block;
-    process_forward_reference(element["func"], temp_block);
-  }
+    process_forward_reference(element["func"]);
 
   // Handle indirect calls through subscript (e.g., {'+': lambda: 1.0}[x]())
   if (element["func"]["_type"] == "Subscript")

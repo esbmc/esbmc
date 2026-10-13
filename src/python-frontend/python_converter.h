@@ -2437,9 +2437,7 @@ private:
     const exprt &rhs,
     const std::string &op);
 
-  void process_forward_reference(
-    const nlohmann::json &annotation,
-    codet &target_block);
+  void process_forward_reference(const nlohmann::json &annotation);
 
   // =========================================================================
   // Optional type helpers
@@ -2866,6 +2864,10 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+
+  /// Class-level code of a class built before its `class` statement was
+  /// reached (a forward reference); emitted when that statement is.
+  std::unordered_map<std::string, code_blockt> forward_class_code_;
 
   /// Pool of every reachable imported module's parsed JSON AST, keyed by
   /// module name. Populated by @ref pre_collect_module_asts before any
