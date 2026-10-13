@@ -385,6 +385,20 @@ bool is_list_or_tuple_literal(const nlohmann::json &node)
          (node["_type"] == "List" || node["_type"] == "Tuple");
 }
 
+bool is_none_constant(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+// A char-typed value is a 1-char str, and a value of unknown type may still
+// hold a str at run time, so only these are known to make join() raise.
+bool is_non_str_join_item(const nlohmann::json &elem, const typet &type)
+{
+  return is_none_constant(elem) || type.is_bool() || type.is_floatbv() ||
+         (type_utils::is_integer_type(type) && !type_utils::is_char_type(type));
+}
+
 bool is_nonempty_constants(const nlohmann::json &elements)
 {
   return !elements.empty() &&
@@ -3439,6 +3453,31 @@ exprt string_handler::handle_string_attribute_call(
   return nil_exprt();
 }
 
+exprt string_handler::convert_join_items(
+  const nlohmann::json &elements,
+  std::vector<exprt> &elem_exprs)
+{
+  // Raising here would drop the calls in the other elements, which CPython
+  // evaluates before join() sees a bad item.
+  const bool may_raise = !json_utils::ast_contains_call(elements);
+  for (const auto &elem : elements)
+  {
+    exprt elem_expr = converter_.get_expr(elem);
+    if (may_raise && is_non_str_join_item(elem, elem_expr.type()))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "sequence item " + std::to_string(elem_exprs.size()) +
+          ": expected str instance, " +
+          (is_none_constant(elem)
+             ? std::string("NoneType")
+             : type_handler_.get_python_type_name(elem_expr.type())) +
+          " found");
+    ensure_string_array(elem_expr);
+    elem_exprs.push_back(elem_expr);
+  }
+  return nil_exprt();
+}
+
 exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 {
   // Validate JSON structure: ensure we have the required keys
@@ -3657,14 +3696,10 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     return empty_str;
   }
 
-  // Convert JSON elements to ESBMC expressions
   std::vector<exprt> elem_exprs;
-  for (const auto &elem : elements)
-  {
-    exprt elem_expr = converter_.get_expr(elem);
-    ensure_string_array(elem_expr);
-    elem_exprs.push_back(elem_expr);
-  }
+  const exprt raise = convert_join_items(elements, elem_exprs);
+  if (raise.is_not_nil())
+    return raise;
 
   // Edge case: single element returns the element itself (no separator)
   if (elem_exprs.size() == 1)
