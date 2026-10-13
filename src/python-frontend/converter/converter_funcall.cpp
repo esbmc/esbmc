@@ -839,6 +839,24 @@ python_converter::call_returned_function(const nlohmann::json &element)
   return call;
 }
 
+// The argument of list(...). A 1-D numpy array held in a static array
+// becomes the list of its elements, as a.tolist() builds it: the array
+// itself would reach list operations that expect a list object.
+exprt python_converter::list_argument_expr(const nlohmann::json &arg)
+{
+  const std::string id = arg.value("_type", "") == "Name"
+                           ? resolve_name_symbol_id(arg.value("id", ""))
+                           : std::string();
+  const symbolt *symbol = id.empty() ? nullptr : symbol_table_.find_symbol(id);
+  if (symbol == nullptr || numpy_array_symbols_.count(id) == 0)
+    return get_expr(arg);
+  const typet type = ns.follow(symbol->get_type());
+  std::optional<exprt> elements;
+  if (type.is_array() && !ns.follow(type.subtype()).is_array())
+    elements = build_numpy_descriptor_materialized_list(arg, true);
+  return elements ? *elements : get_expr(arg);
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1016,7 +1034,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Handle list(iterable) where iterable evaluates to a list — e.g.
     // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
     // d.items() returns the keys member as a placeholder list (correct size).
-    exprt arg_expr = get_expr(list_arg);
+    exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
       return arg_expr;
 

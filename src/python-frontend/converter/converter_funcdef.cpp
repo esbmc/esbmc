@@ -6,6 +6,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <util/base/encoding.h>
@@ -1687,19 +1688,154 @@ void python_converter::seed_list_param_element_type(
     element_type_registry_.record(arg_id, "", elem_type);
 }
 
-/// When every call site passes parameter \p param_index of \p func_name the
-/// same list literal shape mixing strings and numbers, records its element
-/// types in order for \p param_id, so the list's elements are read as tagged
-/// scalars (#4797). Reports whether it recorded anything.
-bool python_converter::seed_mixed_call_site_elements(
-  const std::string &param_id,
+static bool is_name_node(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static bool is_unsigned_constant(const nlohmann::json &node)
+{
+  return node.is_object() && node.value("_type", "") == "Constant" &&
+         node.value("value", nlohmann::json()).is_number_unsigned();
+}
+
+static bool only_reads_fixed_positions(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_index = false);
+
+/// Whether \p node reads one element of \p name at a non-negative constant
+/// index, or at any index that leaves \p name alone when \p any_index, or
+/// takes its length.
+static bool reads_fixed_position(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_index)
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json none = nlohmann::json::object();
+  if (kind == "Subscript")
+    return is_name_node(node.value("value", none), name) &&
+           node.value("ctx", none).value("_type", "") == "Load" &&
+           (any_index
+              ? only_reads_fixed_positions(node["slice"], name, any_index)
+              : is_unsigned_constant(node.value("slice", none)));
+  const nlohmann::json args = node.value("args", nlohmann::json::array());
+  return kind == "Call" && node.value("func", none).value("id", "") == "len" &&
+         args.size() == 1 && is_name_node(args[0], name);
+}
+
+/// Whether every use of \p name in \p node reads one element at a
+/// non-negative constant index (any index with \p any_index) or takes its
+/// length. Such a list keeps the elements, and positions, its call sites gave
+/// it, so a constant index names one of them.
+static bool only_reads_fixed_positions(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool any_index)
+{
+  if (!node.is_object() && !node.is_array())
+    return true;
+  if (is_name_node(node, name))
+    return false;
+  if (node.is_object() && reads_fixed_position(node, name, any_index))
+    return true;
+  return std::all_of(node.begin(), node.end(), [&](const nlohmann::json &n) {
+    return only_reads_fixed_positions(n, name, any_index);
+  });
+}
+
+/// Whether \p name appears in \p node only as the callee of a direct call,
+/// so the calls collect_call_sites finds are every way it receives arguments.
+static bool
+only_called_directly(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object() && !node.is_array())
+    return true;
+  if (is_name_node(node, name))
+    return false;
+  const bool is_call = node.is_object() && node.value("_type", "") == "Call";
+  return std::all_of(node.items().begin(), node.items().end(), [&](auto item) {
+    return (is_call && item.key() == "func" &&
+            item.value().value("_type", "") == "Name") ||
+           only_called_directly(item.value(), name);
+  });
+}
+
+/// Whether the list parameter \p param_index of the module-level function
+/// \p func_name keeps the positions its call sites pass: only direct calls
+/// reach it, and its body only reads fixed positions of it, or with
+/// \p any_index only reads its elements.
+bool python_converter::param_keeps_positions(
   const std::string &func_name,
-  size_t param_index)
+  size_t param_index,
+  bool any_index) const
+{
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (def == nullptr || (*def)["args"]["args"].size() <= param_index)
+    return false;
+  return only_called_directly(*ast_json, func_name) &&
+         only_reads_fixed_positions(
+           (*def)["body"],
+           (*def)["args"]["args"][param_index].value("arg", ""),
+           any_index);
+}
+
+/// Collects the values \p arg can be when it is an element `p[i]` of a
+/// parameter p of \p enclosing_function that keeps what its call sites pass:
+/// for a constant i, element i of each display passed for p, otherwise every
+/// element (#8472).
+bool python_converter::param_elements(
+  const nlohmann::json &arg,
+  const std::string &enclosing_function,
+  std::vector<nlohmann::json> &out,
+  bool &direct,
+  unsigned depth) const
+{
+  const nlohmann::json *def =
+    find_function_def((*ast_json)["body"], enclosing_function);
+  if (depth > 3 || def == nullptr || arg.value("_type", "") != "Subscript")
+    return false;
+  const bool constant = is_unsigned_constant(arg["slice"]);
+  const nlohmann::json &params = (*def)["args"]["args"];
+  const auto param =
+    std::find_if(params.begin(), params.end(), [&](const nlohmann::json &p) {
+      return is_name_node(arg["value"], p.value("arg", ""));
+    });
+  const size_t index = std::distance(params.begin(), param);
+  std::vector<nlohmann::json> outer;
+  if (
+    param == params.end() ||
+    !param_keeps_positions(enclosing_function, index, !constant) ||
+    !call_site_list_literals(enclosing_function, index, outer, direct, depth))
+    return false;
+
+  for (const nlohmann::json &l : outer)
+    for (size_t i = 0; i < l["elts"].size(); ++i)
+    {
+      if (!constant || i == arg["slice"]["value"].get<size_t>())
+        out.push_back(l["elts"][i]);
+    }
+  return true;
+}
+
+/// Collects the list literals passed as parameter \p param_index of
+/// \p func_name: a list display, a name bound to one, or an element of a
+/// parameter (param_elements) that is a display. \p direct stays true only
+/// while every literal is a display at the call, which nothing can change
+/// before the callee reads it. Reports whether every call site passes one.
+bool python_converter::call_site_list_literals(
+  const std::string &func_name,
+  size_t param_index,
+  std::vector<nlohmann::json> &out,
+  bool &direct,
+  unsigned depth) const
 {
   std::vector<numpy_param_call_site> call_sites;
   collect_call_sites(*ast_json, "", call_sites);
 
-  std::optional<std::vector<typet>> shape;
+  bool complete = true;
   for (const numpy_param_call_site &site : call_sites)
   {
     const nlohmann::json &call = *site.call;
@@ -1707,38 +1843,248 @@ bool python_converter::seed_mixed_call_site_elements(
       call.value("func", nlohmann::json()).value("id", "") != func_name ||
       call["args"].size() <= param_index)
       continue;
+    const nlohmann::json &arg = call["args"][param_index];
     nlohmann::json literal;
-    if (!list_literal_for_call_arg(
-          call["args"][param_index],
-          site.enclosing_function,
-          *ast_json,
-          literal))
-      return false;
-    std::vector<typet> elems;
-    // get_typet throws on an element it cannot classify (a nested list, a
-    // call); such a literal is not a string/number mix.
-    try
+    if (
+      list_literal_for_call_arg(
+        arg, site.enclosing_function, *ast_json, literal))
     {
-      for (const auto &e : literal["elts"])
-        elems.push_back(type_handler_.get_typet(e));
+      direct = direct && arg.value("_type", "") == "List";
+      out.push_back(literal);
     }
-    catch (...)
+    else
     {
-      return false;
+      std::vector<nlohmann::json> elements;
+      const bool displays =
+        param_elements(
+          arg, site.enclosing_function, elements, direct, depth + 1) &&
+        std::all_of(
+          elements.begin(), elements.end(), [](const nlohmann::json &e) {
+            return e.value("_type", "") == "List";
+          });
+      if (displays)
+        out.insert(out.end(), elements.begin(), elements.end());
+      complete = displays && complete;
     }
-    if (shape && *shape != elems)
-      return false;
-    shape = std::move(elems);
+  }
+  return complete;
+}
+
+/// Types an unannotated parameter that every call fills with an element of a
+/// list parameter (param_elements) whose values are constants of one type,
+/// such as `k` in `f(*d)` over calls passing `[[3, 1], 2]` (#8472).
+void python_converter::refine_any_param_from_elements(
+  code_typet::argumentt &param_arg,
+  const std::string &func_name,
+  size_t param_index)
+{
+  if (
+    param_arg.type() != any_type() ||
+    !only_called_directly(*ast_json, func_name))
+    return;
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  std::vector<nlohmann::json> values;
+  bool direct = true;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json()).value("id", "") == func_name &&
+      call["args"].size() > param_index &&
+      !param_elements(
+        call["args"][param_index], site.enclosing_function, values, direct, 1))
+      return;
   }
 
-  const std::string probe = param_id + "$mixed_probe";
-  for (const typet &t : shape.value_or(std::vector<typet>()))
+  std::optional<typet> agreed;
+  for (const nlohmann::json &v : values)
+  {
+    if (v.value("_type", "") != "Constant" || v["value"].is_null())
+      return;
+    const typet t = v["value"].is_string() ? gen_pointer_type(char_type())
+                                           : type_handler_.get_typet(v);
+    if (agreed && *agreed != t)
+      return;
+    agreed = t;
+  }
+  if (!agreed)
+    return;
+  param_arg.type() = *agreed;
+  if (symbolt *sym = symbol_table_.find_symbol(param_arg.cmt_identifier()))
+    python_expr::set_symbol_type_if_carried(*sym, *agreed);
+}
+
+/// The element types of each literal, a nested display typed as the list
+/// model's pointer. False when an element cannot be classified.
+bool python_converter::literal_element_kinds(
+  const std::vector<nlohmann::json> &literals,
+  std::vector<std::vector<typet>> &kinds) const
+{
+  try
+  {
+    for (const nlohmann::json &literal : literals)
+    {
+      kinds.emplace_back();
+      for (const auto &e : literal["elts"])
+        kinds.back().push_back(
+          e.value("_type", "") == "List" ? type_handler_.get_list_type()
+                                         : type_handler_.get_typet(e));
+    }
+  }
+  catch (...)
+  {
+    return false;
+  }
+  return true;
+}
+
+static std::vector<typet> pooled_kinds(const std::vector<std::vector<typet>> &k)
+{
+  std::vector<typet> pooled;
+  for (const auto &literal : k)
+    pooled.insert(pooled.end(), literal.begin(), literal.end());
+  return pooled;
+}
+
+/// The nested list displays among \p literals' elements, at \p pos only when
+/// given.
+static std::vector<nlohmann::json> nested_lists(
+  const std::vector<nlohmann::json> &literals,
+  std::optional<size_t> pos)
+{
+  std::vector<nlohmann::json> inner;
+  for (const nlohmann::json &literal : literals)
+    for (size_t i = 0; i < literal["elts"].size(); ++i)
+      if (
+        (!pos || i == *pos) && literal["elts"][i].value("_type", "") == "List")
+        inner.push_back(literal["elts"][i]);
+  return inner;
+}
+
+/// Records one entry per position of \p kinds, every literal's shape, a list
+/// position recursing under its own id. False when a nested list has no
+/// exact element type.
+bool python_converter::record_literal_positions(
+  const std::string &id,
+  const std::vector<nlohmann::json> &literals,
+  const std::vector<typet> &kinds)
+{
+  const typet list_type = type_handler_.get_list_type();
+  auto elem_id = [&](size_t i) {
+    return kinds[i] == list_type ? id + "$" + std::to_string(i) : "";
+  };
+  for (size_t i = 0; i < kinds.size(); ++i)
+    if (
+      kinds[i] == list_type &&
+      !record_literal_elements(elem_id(i), nested_lists(literals, i), false))
+      return false;
+  for (size_t i = 0; i < kinds.size(); ++i)
+    element_type_registry_.record(id, elem_id(i), kinds[i]);
+  return true;
+}
+
+/// Records under \p id the element types of \p literals, the lists one
+/// parameter or element position receives (#8472). Elements of one type
+/// record it, a nested list recursing under its own id; strings mixed with
+/// numbers record each type, read through the runtime tag. Otherwise, with
+/// \p positional, literals of one shape record each position's type for a
+/// constant index. Records nothing and returns false when no read is exact.
+bool python_converter::record_literal_elements(
+  const std::string &id,
+  const std::vector<nlohmann::json> &literals,
+  bool positional)
+{
+  std::vector<std::vector<typet>> kinds;
+  if (!literal_element_kinds(literals, kinds))
+    return false;
+  const std::vector<typet> pooled = pooled_kinds(kinds);
+  if (pooled.empty())
+    return true;
+
+  if (std::all_of(pooled.begin(), pooled.end(), [&](const typet &t) {
+        return t == pooled[0] || (type_handler_.is_string_type(t) &&
+                                  type_handler_.is_string_type(pooled[0]));
+      }))
+  {
+    const std::string elem_id =
+      pooled[0] == type_handler_.get_list_type() ? id + "$elem" : "";
+    if (
+      !elem_id.empty() &&
+      !record_literal_elements(elem_id, nested_lists(literals, {}), false))
+      return false;
+    element_type_registry_.record(id, elem_id, pooled[0]);
+    return true;
+  }
+
+  if (mixes_str_and_number(id + "$mixed_probe", pooled))
+  {
+    for (const typet &t : pooled)
+      element_type_registry_.record(id, "", t);
+    return true;
+  }
+
+  return positional &&
+         std::all_of(
+           kinds.begin(),
+           kinds.end(),
+           [&](const auto &k) { return k == kinds[0]; }) &&
+         record_literal_positions(id, literals, kinds[0]);
+}
+
+/// Whether \p kinds, recorded under the scratch id \p probe, are strings and
+/// numbers only, both present.
+bool python_converter::mixes_str_and_number(
+  const std::string &probe,
+  const std::vector<typet> &kinds)
+{
+  for (const typet &t : kinds)
     element_type_registry_.record(probe, "", t);
-  const bool mixed = element_type_registry_.mixes_str_and_number(probe);
-  if (mixed)
-    for (const typet &t : *shape)
-      element_type_registry_.record(param_id, "", t);
-  return mixed;
+  return element_type_registry_.mixes_str_and_number(probe) &&
+         std::none_of(kinds.begin(), kinds.end(), [this](const typet &t) {
+           return t == type_handler_.get_list_type();
+         });
+}
+
+/// When every call site passes parameter \p param_index of \p func_name a
+/// list literal and together they mix strings and numbers, records their
+/// element types for \p param_id, so the list's elements are read as tagged
+/// scalars (#4797). Literals mixing a list with another type are recorded by
+/// record_literal_elements, or, where no read is exact, as their bare element
+/// types, which a read refuses (#8472). Reports whether it recorded anything.
+bool python_converter::seed_mixed_call_site_elements(
+  const std::string &param_id,
+  const std::string &func_name,
+  size_t param_index)
+{
+  std::vector<nlohmann::json> literals;
+  bool direct = true;
+  const bool complete =
+    call_site_list_literals(func_name, param_index, literals, direct, 0);
+
+  std::vector<std::vector<typet>> kinds;
+  if (!literal_element_kinds(literals, kinds))
+    return false;
+  const std::vector<typet> pooled = pooled_kinds(kinds);
+  const auto lists =
+    std::count(pooled.begin(), pooled.end(), type_handler_.get_list_type());
+  if (lists != 0 && lists != (std::ptrdiff_t)pooled.size())
+  {
+    const bool positional =
+      complete && direct && param_keeps_positions(func_name, param_index);
+    if (!record_literal_elements(param_id, literals, positional))
+      for (const typet &t : pooled)
+        element_type_registry_.record(param_id, "", t);
+    return true;
+  }
+
+  // A tagged read answers for any position, so the calls need not agree on
+  // where the strings and numbers sit (#8472).
+  if (!complete || !mixes_str_and_number(param_id + "$mixed_probe", pooled))
+    return false;
+  for (const typet &t : pooled)
+    element_type_registry_.record(param_id, "", t);
+  return true;
 }
 
 bool python_converter::infer_list_elem_type_from_call_sites(
@@ -2261,6 +2607,57 @@ static const nlohmann::json *single_assigned_value(
   return nullptr;
 }
 
+// The value `name` holds at `line` of the scope of `function`: that of the
+// last top-level assignment above it. nullptr when the name is also bound in
+// a nested block or from another scope, where the path decides. A negative
+// `line` asks for the value of a name bound exactly once.
+static const nlohmann::json *reaching_assigned_value(
+  const nlohmann::json &module_body,
+  const std::string &function,
+  const std::string &name,
+  int line)
+{
+  const nlohmann::json &body =
+    function.empty() ? module_body
+                     : (*find_function_def(module_body, function))["body"];
+  if (declared_global_or_nonlocal(module_body, name))
+    return nullptr;
+  const nlohmann::json *reaching = nullptr;
+  std::size_t assignments = 0;
+  for (const auto &stmt : body)
+  {
+    if (
+      assignment_target_name(stmt) != name || !stmt.contains("value") ||
+      stmt["value"].is_null())
+      continue;
+    ++assignments;
+    if (line < 0 || stmt.value("lineno", 0) < line)
+      reaching = &stmt["value"];
+  }
+  const bool path_independent = count_scope_stores(body, name) == assignments &&
+                                (line >= 0 || assignments == 1);
+  return path_independent ? reaching : nullptr;
+}
+
+// The value of every assignment to `name` in the scope whose statements are
+// `node`, whatever block it is in.
+static void collect_assigned_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &out)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  if (node.is_object() && scope_kinds.count(node.value("_type", "")) != 0)
+    return;
+  if (
+    node.is_object() && assignment_target_name(node) == name &&
+    node.contains("value") && !node["value"].is_null())
+    out.push_back(&node["value"]);
+  for (const auto &child : node)
+    collect_assigned_values(child, name, out);
+}
+
 // The subscript a call argument denotes for code in `function`: the argument
 // itself, or the value of the name it is, followed through single
 // assignments. `function` becomes the scope the subscript is evaluated in.
@@ -2357,6 +2754,37 @@ python_converter::slice_view_info(
   return info;
 }
 
+// A view whose extents and strides are only known where it is created.
+python_converter::numpy_scalar_pointer_view_infot
+python_converter::runtime_view_info(std::size_t rank)
+{
+  numpy_scalar_pointer_view_infot info{};
+  info.stride = 1;
+  info.shape.assign(rank, 0);
+  info.strides.assign(rank, 1);
+  info.shape_symbols.assign(rank, "?");
+  info.stride_symbols.assign(rank, "?");
+  return info;
+}
+
+// slice_view_info, or the run-time layout when a bound or the step is not a
+// literal. nullopt for a literal zero step.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::slice_or_runtime_view_info(
+  std::size_t length,
+  const nlohmann::json &slice_node)
+{
+  if (
+    std::optional<numpy_scalar_pointer_view_infot> info =
+      slice_view_info(length, slice_node))
+    return info;
+  const std::optional<long long> step =
+    python_frontend::literal_slice_step(slice_node);
+  if (step && *step == 0)
+    return std::nullopt;
+  return runtime_view_info();
+}
+
 static bool is_index_node(const nlohmann::json &node)
 {
   const std::string type = node.value("_type", "");
@@ -2385,6 +2813,23 @@ python_converter::column_view_info(
   return info;
 }
 
+// `a[lo:hi:step]` on a rows x cols array: the selected rows.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::row_slice_view_info(
+  std::size_t rows,
+  std::size_t cols,
+  const nlohmann::json &slice_node)
+{
+  std::optional<numpy_scalar_pointer_view_infot> info =
+    slice_view_info(rows, slice_node);
+  if (!info)
+    return std::nullopt;
+  info->stride *= static_cast<long long>(cols);
+  info->shape = {info->length, cols};
+  info->strides = {info->stride, 1};
+  return info;
+}
+
 // Length, stride and shape of the view a subscript takes of an array of
 // `src_shape`: a 1-D slice, or a row or a column of a 2-D array. nullopt for
 // non-literal bounds and any other form.
@@ -2395,9 +2840,20 @@ python_converter::view_info_from_subscript(
 {
   const std::string slice_type = slice_node.value("_type", "");
   if (slice_type == "Slice" && src_shape.size() == 1)
-    return slice_view_info(src_shape[0], slice_node);
+    return slice_or_runtime_view_info(src_shape[0], slice_node);
   if (src_shape.size() != 2)
     return std::nullopt;
+  if (slice_type == "Slice")
+  {
+    if (
+      std::optional<numpy_scalar_pointer_view_infot> rows =
+        row_slice_view_info(src_shape[0], src_shape[1], slice_node))
+      return rows;
+    const std::optional<long long> step =
+      python_frontend::literal_slice_step(slice_node);
+    return step && *step == 0 ? std::nullopt
+                              : std::make_optional(runtime_view_info(2));
+  }
   if (slice_type == "Tuple")
     return column_view_info(src_shape[0], src_shape[1], slice_node);
   if (!is_index_node(slice_node))
@@ -2407,6 +2863,28 @@ python_converter::view_info_from_subscript(
   info.stride = 1;
   info.shape = {src_shape[1]};
   return info;
+}
+
+// The layout a parameter takes when two call sites pass `a` and `b`: theirs
+// when they agree, the run-time one of their rank when they differ or are
+// only known at the call site. nullopt when the element type or rank differ.
+std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
+python_converter::merge_view_layouts(
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+  const std::pair<typet, numpy_scalar_pointer_view_infot> &b)
+{
+  const typet unknown;
+  const typet &elem_type = a.first == unknown ? b.first : a.first;
+  if (a.first != unknown && b.first != unknown && a.first != b.first)
+    return std::nullopt;
+  if (
+    !a.second.is_symbolic() && !b.second.is_symbolic() &&
+    same_view_layout(a, b))
+    return a;
+  if (a.second.shape.size() != b.second.shape.size())
+    return std::nullopt;
+  return std::make_pair(elem_type, runtime_view_info(a.second.shape.size()));
 }
 
 bool python_converter::same_view_layout(
@@ -2466,67 +2944,246 @@ static bool forwards_param_being_inferred(
          visiting.count(view_param_key(enclosing_function, *forwarded)) != 0;
 }
 
-// Type of the literal `np.array(...)` bound to `arr_name` for code in
-// `function`.
+// Element kind ("int" or "float") of the array a numpy constructor with
+// literal arguments builds; "" when it is not read here.
+static std::string
+filled_array_dtype(const std::string &ctor, const nlohmann::json &call)
+{
+  const nlohmann::json keywords =
+    call.value("keywords", nlohmann::json::array());
+  if (ctor == "zeros" || ctor == "ones")
+  {
+    if (keywords.empty())
+      return "float";
+    return keywords.size() == 1 && keywords[0].value("arg", "") == "dtype"
+             ? keywords[0]["value"].value("id", "")
+             : "";
+  }
+  if (!keywords.empty())
+    return "";
+  return "float";
+}
+
+// Type of the array a numpy constructor other than `np.array` builds from
+// literal arguments: `zeros`, `ones`, `arange`, `linspace`. `np.full`,
+// `np.eye` and `np.identity` build a list, whose slices are copies.
+std::optional<typet> python_converter::numpy_filled_array_type(
+  const nlohmann::json &value,
+  const std::string &function) const
+{
+  if (
+    const std::optional<typet> arange =
+      numpy_arange_array_type(value, function))
+    return arange;
+  const std::optional<std::vector<std::size_t>> shape =
+    numpy_filled_array_shape(value);
+  if (!shape)
+    return std::nullopt;
+  const std::string dtype =
+    filled_array_dtype(value["func"].value("attr", ""), value);
+  if (dtype != "float" && dtype != "int")
+    return std::nullopt;
+  typet type = type_handler_.get_typet(dtype);
+  for (auto dim = shape->rbegin(); dim != shape->rend(); ++dim)
+    type = array_typet(type, from_integer(*dim, size_type()));
+  return type;
+}
+
+// Type of the array `np.arange` builds when bound to a name in `function`:
+// that of the literal its constant arguments materialize to, read the way
+// the conversion reads them.
+std::optional<typet> python_converter::numpy_arange_array_type(
+  const nlohmann::json &value,
+  const std::string &function) const
+{
+  if (
+    !is_numpy_array_constructor_expr(value) ||
+    value["func"].value("attr", "") != "arange" ||
+    !value.value("keywords", nlohmann::json::array()).empty())
+    return std::nullopt;
+  const std::optional<nlohmann::json> list =
+    numpy_call_expr::arange_literal(value["args"], function, *ast_json);
+  if (!list || !list->contains("elts") || (*list)["elts"].empty())
+    return std::nullopt;
+  return type_handler_.get_typet(*list);
+}
+
+// Shape of the non-empty array `zeros`, `ones` or `linspace` builds.
+std::optional<std::vector<std::size_t>>
+python_converter::numpy_filled_array_shape(const nlohmann::json &value) const
+{
+  static const std::set<std::string> filled = {"zeros", "ones", "linspace"};
+  if (!is_numpy_array_constructor_expr(value) || value["args"].empty())
+    return std::nullopt;
+  const std::string ctor = value["func"].value("attr", "");
+  const bool zeros_or_ones = ctor == "zeros" || ctor == "ones";
+  const bool tuple_shape = value["args"][0].value("_type", "") == "Tuple";
+  if (
+    filled.count(ctor) == 0 || (tuple_shape && !zeros_or_ones) ||
+    (zeros_or_ones && value["args"].size() != 1))
+    return std::nullopt;
+  const std::optional<std::vector<std::size_t>> shape =
+    get_numpy_constructor_shape(value);
+  const bool empty = !shape || shape->empty() ||
+                     std::find(shape->begin(), shape->end(), 0) != shape->end();
+  return empty ? std::nullopt : shape;
+}
+
+// Type of the array bound to `arr_name` where code in `function` reads it at
+// `line`: a literal `np.array(...)`, a call to a function returning one,
+// `np.zeros`/`np.ones`, or another name for such an array.
 std::optional<typet> python_converter::numpy_literal_array_type(
   const std::string &arr_name,
-  const std::string &function) const
+  const std::string &function,
+  int line,
+  unsigned depth) const
 {
   const nlohmann::json &module_body = (*ast_json)["body"];
   const std::optional<std::string> scope =
     binding_function(module_body, function, arr_name);
+  // Code of another scope runs at a time the line does not order.
   const nlohmann::json *value =
-    scope ? single_assigned_value(module_body, *scope, arr_name) : nullptr;
-  if (value == nullptr || !is_numpy_array_literal_call(*value))
+    scope ? reaching_assigned_value(
+              module_body, *scope, arr_name, *scope == function ? line : -1)
+          : nullptr;
+  if (value == nullptr)
     return std::nullopt;
-  return type_handler_.get_typet((*value)["args"][0]);
+  if (value->value("_type", "") == "Name")
+    return depth > 8 ? std::nullopt
+                     : numpy_literal_array_type(
+                         value->value("id", ""),
+                         *scope,
+                         value->value("lineno", -1),
+                         depth + 1);
+  if (
+    const std::optional<typet> type =
+      try_infer_numpy_array_arg_type(*value, module_body))
+    return type;
+  return numpy_filled_array_type(*value, *scope);
 }
 
-// Element type and layout of the view one call site passes as `arg`:
-// a parameter of the enclosing function forwarded unchanged, or a subscript
-// of a literal array, both resolved in the scope of the call.
+// `view[lo:hi:step]` on a 1-D view with constant length and stride.
+std::optional<python_converter::numpy_scalar_pointer_view_infot>
+python_converter::subview_info(
+  const numpy_scalar_pointer_view_infot &parent,
+  const nlohmann::json &slice_node)
+{
+  if (slice_node.value("_type", "") != "Slice" || parent.shape.size() != 1)
+    return std::nullopt;
+  if (parent.is_symbolic())
+    return runtime_view_info();
+  std::optional<numpy_scalar_pointer_view_infot> info =
+    slice_or_runtime_view_info(parent.length, slice_node);
+  if (!info || info->is_symbolic())
+    return info;
+  info->stride *= parent.stride;
+  info->strides.clear();
+  if (info->stride != 1)
+    info->strides = {info->stride};
+  return info;
+}
+
+// Layout of a name bound to a view by assignments nested in blocks of its
+// scope, as on the branches of an `if` or in a loop: what those views
+// share, so the run-time layout when they differ.
 std::optional<
   std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
-python_converter::infer_numpy_view_argument(
-  const numpy_param_call_site &site,
-  const nlohmann::json &arg,
-  std::set<std::string> &visiting) const
+python_converter::infer_branch_bound_view_layout(
+  const nlohmann::json &node,
+  const std::string &function,
+  std::set<std::string> &visiting,
+  unsigned depth) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+  const std::string name = node.value("id", "");
+  const std::optional<std::string> scope =
+    node.value("_type", "") == "Name" && depth <= 8
+      ? binding_function(module_body, function, name)
+      : std::nullopt;
+  if (!scope || declared_global_or_nonlocal(module_body, name))
+    return std::nullopt;
+  const nlohmann::json &body =
+    scope->empty() ? module_body
+                   : (*find_function_def(module_body, *scope))["body"];
+  std::vector<const nlohmann::json *> values;
+  collect_assigned_values(body, name, values);
+  if (values.empty() || values.size() != count_scope_stores(body, name))
+    return std::nullopt;
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> result;
+  for (const nlohmann::json *value : values)
+  {
+    const auto layout =
+      infer_numpy_view_layout(*value, *scope, visiting, depth + 1);
+    result = layout && result ? merge_view_layouts(*result, *layout) : layout;
+    if (!result)
+      return std::nullopt;
+  }
+  return result;
+}
+
+// Element type and layout of the view `node` denotes for code in `function`:
+// a parameter forwarded unchanged, or a subscript of a literal array or of
+// another such view.
+std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>>
+python_converter::infer_numpy_view_layout(
+  const nlohmann::json &node,
+  const std::string &function,
+  std::set<std::string> &visiting,
+  unsigned depth) const
 {
   const nlohmann::json &module_body = (*ast_json)["body"];
   if (
     const std::optional<std::size_t> forwarded =
-      forwarded_param_index(arg, module_body, site.enclosing_function))
+      forwarded_param_index(node, module_body, function))
   {
     std::pair<typet, numpy_scalar_pointer_view_infot> result;
     if (!try_infer_numpy_view_param(
-          site.enclosing_function,
-          *forwarded,
-          result.first,
-          result.second,
-          visiting))
+          function, *forwarded, result.first, result.second, visiting))
       return std::nullopt;
     return result;
   }
 
-  std::string scope = site.enclosing_function;
+  std::string scope = function;
   const nlohmann::json *subscript =
-    resolve_view_subscript(arg, module_body, scope);
+    resolve_view_subscript(node, module_body, scope);
+  if (subscript == nullptr)
+    return infer_branch_bound_view_layout(node, function, visiting, depth);
   if (
-    subscript == nullptr || !subscript->contains("slice") ||
+    !subscript->contains("slice") ||
     (*subscript)["value"].value("_type", "") != "Name")
     return std::nullopt;
-  const std::optional<typet> arr_type =
-    numpy_literal_array_type((*subscript)["value"].value("id", ""), scope);
-  if (!arr_type)
+  const nlohmann::json &base = (*subscript)["value"];
+  if (
+    const std::optional<typet> arr_type = numpy_literal_array_type(
+      base.value("id", ""), scope, subscript->value("lineno", -1)))
+  {
+    const auto shape_elem = array_type_shape_and_elem(*arr_type);
+    if (!shape_elem)
+      return std::nullopt;
+    const std::optional<numpy_scalar_pointer_view_infot> info =
+      view_info_from_subscript(shape_elem->first, (*subscript)["slice"]);
+    if (!info)
+      return std::nullopt;
+    return std::make_pair(shape_elem->second, *info);
+  }
+
+  // A slice of the parameter being inferred, passed to the same function:
+  // a 1-D view whose element type the other call sites give.
+  if (
+    forwards_param_being_inferred(base, module_body, scope, visiting) &&
+    (*subscript)["slice"].value("_type", "") == "Slice")
+    return std::make_pair(typet(), runtime_view_info());
+  if (depth > 8)
     return std::nullopt;
-  const auto shape_elem = array_type_shape_and_elem(*arr_type);
-  if (!shape_elem)
+  const auto parent = infer_numpy_view_layout(base, scope, visiting, depth + 1);
+  if (!parent)
     return std::nullopt;
   const std::optional<numpy_scalar_pointer_view_infot> info =
-    view_info_from_subscript(shape_elem->first, (*subscript)["slice"]);
+    subview_info(parent->second, (*subscript)["slice"]);
   if (!info)
     return std::nullopt;
-  return std::make_pair(shape_elem->second, *info);
+  return std::make_pair(parent->first, *info);
 }
 
 bool python_converter::try_infer_numpy_view_param(
@@ -2567,16 +3224,18 @@ bool python_converter::try_infer_numpy_view_param(
       arg == nullptr || forwards_param_being_inferred(
                           *arg, module_body, site.enclosing_function, visiting))
       continue;
-    const auto candidate = infer_numpy_view_argument(site, *arg, visiting);
-    analyzable =
-      candidate && (!result || same_view_layout(*result, *candidate));
+    const auto candidate =
+      infer_numpy_view_layout(*arg, site.enclosing_function, visiting);
+    const auto merged =
+      candidate && result ? merge_view_layouts(*result, *candidate) : candidate;
+    analyzable = merged.has_value();
     if (!analyzable)
       break;
-    result = candidate;
+    result = merged;
   }
 
   visiting.erase(key);
-  if (!analyzable || !result)
+  if (!analyzable || !result || result->first == typet())
     return false;
   out_elem_type = result->first;
   out_info = result->second;
@@ -3072,14 +3731,364 @@ void python_converter::register_numpy_view_param(
   const std::string &func_name,
   std::size_t param_index)
 {
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  // A caller converted earlier was told whether this parameter binds a view.
+  const auto assumed = numpy_view_params_assumed_.find(key);
+  if (
+    assumed != numpy_view_params_assumed_.end() &&
+    assumed->second != view_param.has_value())
+    throw std::runtime_error(
+      "TypeError: passing a numpy view to a function defined after its "
+      "caller is not supported for this parameter");
+  numpy_view_params_decided_.insert(key);
   if (!view_param)
     return;
   numpy_scalar_pointer_view_infot info = *view_param;
   info.source_id = arg_id;
+  if (info.is_symbolic())
+    declare_runtime_numpy_view_param(info, arg_id, key);
   numpy_pointer_view_info_[arg_id] = info;
   numpy_array_symbols_.insert(arg_id);
   numpy_view_param_symbols_.insert(arg_id);
-  numpy_view_params_.insert(func_name + "#" + std::to_string(param_index));
+  numpy_view_params_.insert(key);
+}
+
+// The element type and layout call sites give a parameter, inferred once.
+const std::optional<
+  std::pair<typet, python_converter::numpy_scalar_pointer_view_infot>> &
+python_converter::inferred_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  auto cached = numpy_view_param_layouts_.find(key);
+  if (cached != numpy_view_param_layouts_.end())
+    return cached->second;
+  std::pair<typet, numpy_scalar_pointer_view_infot> layout;
+  const bool inferred =
+    find_function_def((*ast_json)["body"], func_name) != nullptr &&
+    try_infer_numpy_view_param(
+      func_name, param_index, layout.first, layout.second);
+  return numpy_view_param_layouts_
+    .emplace(key, inferred ? std::make_optional(layout) : std::nullopt)
+    .first->second;
+}
+
+// Whether parameter `param_index` of `func_name` binds a view. For a function
+// defined after the caller being converted this is what its call sites
+// imply, which register_numpy_view_param confirms when it gets there.
+bool python_converter::is_bound_numpy_view_param(
+  const std::string &func_name,
+  std::size_t param_index)
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  if (numpy_view_params_decided_.count(key) != 0)
+    return numpy_view_params_.count(key) != 0;
+  const auto &layout = inferred_numpy_view_param(func_name, param_index);
+  return numpy_view_params_assumed_.emplace(key, layout.has_value())
+    .first->second;
+}
+
+// The view a call passes must have the element type its parameter was
+// given: the callee reads the storage through a pointer of that type.
+void python_converter::reject_numpy_view_argument_type_mismatch(
+  const nlohmann::json &call)
+{
+  const std::string func_name = call["func"].value("id", "");
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    const nlohmann::json &arg = call["args"][i];
+    if (
+      arg.value("_type", "") != "Name" ||
+      !is_bound_numpy_view_param(func_name, i))
+      continue;
+    const symbolt *symbol =
+      symbol_table_.find_symbol(resolve_name_symbol_id(arg.value("id", "")));
+    const auto &layout = inferred_numpy_view_param(func_name, i);
+    if (symbol == nullptr || !layout)
+      continue;
+    typet type = ns.follow(symbol->get_type());
+    while (type.is_pointer() || type.is_array())
+      type = ns.follow(type.subtype());
+    if (type != ns.follow(layout->first))
+      throw std::runtime_error(
+        "TypeError: passing a numpy view whose element type differs from "
+        "the one inferred for the parameter is not supported");
+  }
+}
+
+// The statics a caller writes the layout of a run-time view parameter to,
+// one extent and one stride per axis. Created on first use, which may be a
+// call converted before the callee.
+const python_converter::numpy_runtime_view_layoutt &
+python_converter::runtime_numpy_view_statics(
+  const std::string &key,
+  std::size_t rank)
+{
+  const auto existing = numpy_runtime_view_statics_.find(key);
+  if (existing != numpy_runtime_view_statics_.end())
+    return existing->second;
+  const typet ll_type = signedbv_typet(64);
+  locationt location;
+  location.set_file(current_python_file);
+  numpy_runtime_view_layoutt statics;
+  for (std::size_t axis = 0; axis < rank; ++axis)
+    for (std::vector<std::string> *ids : {&statics.extents, &statics.strides})
+    {
+      const std::string name =
+        "$numpy_view_layout$" + key + "$" + std::to_string(axis) +
+        (ids == &statics.extents ? "$extent" : "$stride");
+      const std::string id = "py:" + current_python_file + "@" + name;
+      symbolt symbol =
+        create_symbol(current_python_file, name, id, location, ll_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.static_lifetime = true;
+      symbol.set_value(migrate_expr(gen_zero(ll_type)));
+      symbol_table_.add(symbol);
+      ids->push_back(id);
+    }
+  return numpy_runtime_view_statics_.emplace(key, statics).first->second;
+}
+
+// A view parameter with a run-time layout reads it from the statics its
+// caller sets right before the call. The callee copies them into locals on
+// entry, so a nested call to itself leaves them intact.
+void python_converter::declare_runtime_numpy_view_param(
+  numpy_scalar_pointer_view_infot &info,
+  const std::string &arg_id,
+  const std::string &key)
+{
+  const symbolt &param = *symbol_table_.find_symbol(arg_id);
+  const typet ll_type = signedbv_typet(64);
+  numpy_runtime_view_layoutt locals;
+  for (std::size_t axis = 0; axis < info.shape.size(); ++axis)
+    for (std::vector<std::string> *ids : {&locals.extents, &locals.strides})
+    {
+      const std::string suffix =
+        "$numpy_view$" + std::to_string(axis) +
+        (ids == &locals.extents ? "$extent" : "$stride");
+      symbolt symbol = create_symbol(
+        current_python_file,
+        param.name.as_string() + suffix,
+        arg_id + suffix,
+        param.location,
+        ll_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol_table_.add(symbol);
+      ids->push_back(arg_id + suffix);
+    }
+  info.shape_symbols = locals.extents;
+  info.stride_symbols = locals.strides;
+  numpy_runtime_view_locals_[key] = {arg_id, locals};
+}
+
+// Whether `symbol_id` names a local of `function_id` itself, not of a
+// function nested in it.
+static bool
+is_local_of(const std::string &symbol_id, const std::string &function_id)
+{
+  const std::string prefix = function_id + "@";
+  return symbol_id.rfind(prefix, 0) == 0 &&
+         symbol_id.find('@', prefix.size()) == std::string::npos;
+}
+
+// Moves the declarations of `ids` out of the blocks nested in `code`.
+static void hoist_nested_declarations(
+  exprt &code,
+  const std::set<std::string> &ids,
+  exprt::operandst &out,
+  bool outermost)
+{
+  if (code.id() != "code")
+    return;
+  if (code.statement() != "block")
+  {
+    for (exprt &operand : code.operands())
+      hoist_nested_declarations(operand, ids, out, false);
+    return;
+  }
+  exprt::operandst kept;
+  for (exprt &operand : code.operands())
+  {
+    const bool declares =
+      !outermost && operand.id() == "code" && operand.statement() == "decl" &&
+      operand.operands().size() == 1 && operand.op0().is_symbol() &&
+      ids.count(operand.op0().identifier().as_string()) != 0;
+    if (declares)
+      out.push_back(operand);
+    else
+    {
+      hoist_nested_declarations(operand, ids, out, false);
+      kept.push_back(operand);
+    }
+  }
+  code.operands() = kept;
+}
+
+// Copies each run-time view layout the caller set into the callee's locals.
+void python_converter::prepend_runtime_numpy_view_prologue(
+  const std::string &function_id,
+  exprt &function_body)
+{
+  exprt::operandst prologue;
+  auto copy = [&](const std::string &local, const std::string &caller) {
+    const exprt local_expr = symbol_expr(*symbol_table_.find_symbol(local));
+    prologue.push_back(code_declt(local_expr));
+    prologue.push_back(code_assignt(
+      local_expr, symbol_expr(*symbol_table_.find_symbol(caller))));
+  };
+  for (const auto &[key, entry] : numpy_runtime_view_locals_)
+  {
+    const auto &[arg_id, locals] = entry;
+    if (!is_local_of(arg_id, function_id))
+      continue;
+    const numpy_runtime_view_layoutt &statics =
+      runtime_numpy_view_statics(key, locals.extents.size());
+    for (std::size_t axis = 0; axis < locals.extents.size(); ++axis)
+    {
+      copy(locals.extents[axis], statics.extents[axis]);
+      copy(locals.strides[axis], statics.strides[axis]);
+    }
+  }
+  // Layout variables of the function's local view names, and those names
+  // themselves when first bound inside a branch: a declaration there would
+  // end the name's life with the branch.
+  exprt::operandst declarations;
+  for (const std::string &local : numpy_view_layout_locals_)
+    if (is_local_of(local, function_id))
+      declarations.push_back(
+        code_declt(symbol_expr(*symbol_table_.find_symbol(local))));
+  std::set<std::string> views;
+  for (const auto &entry : numpy_view_layout_vars_)
+    if (is_local_of(entry.first, function_id))
+      views.insert(entry.first);
+  hoist_nested_declarations(function_body, views, declarations, true);
+  prologue.insert(prologue.begin(), declarations.begin(), declarations.end());
+  function_body.operands().insert(
+    function_body.operands().begin(), prologue.begin(), prologue.end());
+}
+
+static const char *const runtime_view_call_error =
+  "TypeError: passing a numpy view whose layout is read at run time to a "
+  "function is supported only where the call is what its statement "
+  "evaluates first and its arguments are names of views and contain no "
+  "calls";
+
+static bool contains_call_node(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  return std::any_of(node.begin(), node.end(), contains_call_node);
+}
+
+// The call of `x = f(...)`, `f(...)` or `return f(...)`; nullptr otherwise.
+static const nlohmann::json *statement_level_call(const nlohmann::json &stmt)
+{
+  const std::string kind = stmt.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign" && kind != "Expr" &&
+     kind != "Return") ||
+    !stmt.contains("value") || !stmt["value"].is_object() ||
+    stmt["value"].value("_type", "") != "Call" ||
+    stmt["value"]["func"].value("_type", "") != "Name")
+    return nullptr;
+  return &stmt["value"];
+}
+
+// Stores the layout of the view `call` passes for run-time parameter
+// `param_index` of the function it calls.
+void python_converter::store_runtime_numpy_view_layout(
+  const nlohmann::json &call,
+  std::size_t param_index,
+  codet &target_block)
+{
+  const std::string func_name = call["func"].value("id", "");
+  const std::size_t rank =
+    inferred_numpy_view_param(func_name, param_index)->second.shape.size();
+  const nlohmann::json *arg =
+    call_site_argument(call, (*ast_json)["body"], func_name, param_index);
+  const numpy_scalar_pointer_view_infot *info =
+    arg != nullptr && arg->value("_type", "") == "Name"
+      ? find_numpy_pointer_view_info(arg->value("id", ""))
+      : nullptr;
+  if (info == nullptr || std::max<std::size_t>(info->shape.size(), 1) != rank)
+    throw std::runtime_error(runtime_view_call_error);
+  const numpy_runtime_view_layoutt &statics = runtime_numpy_view_statics(
+    func_name + "#" + std::to_string(param_index), rank);
+  auto store = [&](const std::string &id, const exprt &value) {
+    code_assignt assign(symbol_expr(*symbol_table_.find_symbol(id)), value);
+    assign.location() = get_location_from_decl(call);
+    target_block.copy_to_operands(assign);
+  };
+  for (std::size_t axis = 0; axis < rank; ++axis)
+  {
+    store(statics.extents[axis], numpy_view_extent(*info, axis));
+    store(statics.strides[axis], numpy_view_stride(*info, axis));
+  }
+}
+
+// A statement-level call to a function that reads a parameter's layout at
+// run time: the layout of each such argument is stored for the callee before
+// the statement. Nothing may run between the stores and the call, so the
+// arguments must be free of calls.
+void python_converter::bind_runtime_numpy_view_arguments(
+  const nlohmann::json &statement,
+  codet &target_block)
+{
+  numpy_runtime_bound_call_ = nullptr;
+  const nlohmann::json *call = statement_level_call(statement);
+  if (call == nullptr)
+    return;
+  const std::vector<std::size_t> params =
+    runtime_numpy_view_params((*call)["func"].value("id", ""));
+  if (params.empty())
+    return;
+  if (
+    contains_call_node((*call)["args"]) ||
+    contains_call_node(call->value("keywords", nlohmann::json::array())))
+    throw std::runtime_error(runtime_view_call_error);
+
+  for (const std::size_t param_index : params)
+    store_runtime_numpy_view_layout(*call, param_index, target_block);
+  numpy_runtime_bound_call_ = call;
+}
+
+// The parameters of `func_name` that bind a view with a run-time layout.
+std::vector<std::size_t>
+python_converter::runtime_numpy_view_params(const std::string &func_name)
+{
+  std::vector<std::size_t> params;
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (def == nullptr || !def->contains("args"))
+    return params;
+  for (std::size_t i = 0; i < (*def)["args"]["args"].size(); ++i)
+  {
+    const auto &layout = inferred_numpy_view_param(func_name, i);
+    if (
+      layout && layout->second.is_symbolic() &&
+      is_bound_numpy_view_param(func_name, i))
+      params.push_back(i);
+  }
+  return params;
+}
+
+void python_converter::reject_unbound_runtime_numpy_view_call(
+  const nlohmann::json &call)
+{
+  // Conversion may hand over a copy of the statement, so the bound call is
+  // recognised by its source position.
+  const bool bound = numpy_runtime_bound_call_ != nullptr &&
+                     call.value("lineno", -1) ==
+                       numpy_runtime_bound_call_->value("lineno", -2) &&
+                     call.value("col_offset", -1) ==
+                       numpy_runtime_bound_call_->value("col_offset", -2);
+  if (
+    !bound && !runtime_numpy_view_params(call["func"].value("id", "")).empty())
+    throw std::runtime_error(runtime_view_call_error);
 }
 
 size_t python_converter::register_function_argument(
@@ -3110,7 +4119,13 @@ size_t python_converter::register_function_argument(
       arg_type = any_type();
     }
     else
+    {
+      // The annotation may name a class defined later in the file; build it
+      // first so the copy of its instance attributes below finds its symbol.
+      code_blockt class_block;
+      process_forward_reference(element["annotation"], class_block);
       arg_type = get_type_from_annotation(element["annotation"], element);
+    }
   }
 
   // A bare `bytes` annotation carries no length (Python's type syntax has no
@@ -3396,11 +4411,15 @@ void python_converter::process_function_arguments(
   if (!is_model_file(function_node))
   {
     for (auto &param_arg : type.arguments())
+    {
+      refine_any_param_from_elements(
+        param_arg, id.get_function(), &param_arg - type.arguments().data());
       refine_any_param_to_list(
         param_arg,
         body,
         id.get_function(),
         &param_arg - type.arguments().data());
+    }
   }
 
   for (auto &param_arg : type.arguments())
@@ -4380,6 +5399,7 @@ void python_converter::get_function_definition(
     // so straight-line retyping (#4770/#4774) is permitted on the function's
     // own unconditional statements — see the retype gate in get_var_assign.
     function_body = get_function_body_or_unsupported(function_node);
+    prepend_runtime_numpy_view_prologue(id.to_string(), function_body);
   }
 
   // Restore saved function return type (for nested function defs)

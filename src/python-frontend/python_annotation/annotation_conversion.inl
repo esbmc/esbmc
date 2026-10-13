@@ -1015,6 +1015,13 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
         element_type.rfind("tuple", 0) == 0 ||
         current_type.rfind("tuple", 0) == 0)
         return "";
+      // Nor does a list element beside a scalar: claiming list[int] reads the
+      // inner list as an int (#8472). The converter types such a parameter
+      // from its call sites instead.
+      if (
+        (element_type.rfind("list", 0) == 0) !=
+        (current_type.rfind("list", 0) == 0))
+        return "";
       // Non-numeric heterogeneity (e.g. str vs int) has no common element
       // type we can represent, so keep the historical int fallback.
       if (!all_numeric)

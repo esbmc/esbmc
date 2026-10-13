@@ -1431,6 +1431,12 @@ private:
     size_t param_index,
     typet &elem_type) const;
 
+  /// Types an unannotated parameter filled with constant list elements.
+  void refine_any_param_from_elements(
+    code_typet::argumentt &param_arg,
+    const std::string &func_name,
+    size_t param_index);
+
   /// Records a list-annotated parameter's element type for subscript reads.
   void seed_list_param_element_type(
     const nlohmann::json &element,
@@ -1447,6 +1453,36 @@ private:
     const std::string &func_name,
     size_t param_index,
     typet &out) const;
+  bool param_keeps_positions(
+    const std::string &func_name,
+    size_t param_index,
+    bool any_index = false) const;
+  bool param_elements(
+    const nlohmann::json &arg,
+    const std::string &enclosing_function,
+    std::vector<nlohmann::json> &out,
+    bool &direct,
+    unsigned depth) const;
+  bool call_site_list_literals(
+    const std::string &func_name,
+    size_t param_index,
+    std::vector<nlohmann::json> &out,
+    bool &direct,
+    unsigned depth) const;
+  bool literal_element_kinds(
+    const std::vector<nlohmann::json> &literals,
+    std::vector<std::vector<typet>> &kinds) const;
+  bool record_literal_positions(
+    const std::string &id,
+    const std::vector<nlohmann::json> &literals,
+    const std::vector<typet> &kinds);
+  bool record_literal_elements(
+    const std::string &id,
+    const std::vector<nlohmann::json> &literals,
+    bool positional);
+  bool mixes_str_and_number(
+    const std::string &probe,
+    const std::vector<typet> &kinds);
 
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
@@ -1817,15 +1853,41 @@ private:
     const nlohmann::json &ast_node,
     code_blockt &cond_prelude);
   void reject_live_numpy_view_copies_of(const nlohmann::json &args);
-  void reject_unnamed_numpy_view_argument(const nlohmann::json &call) const;
+  bool passes_numpy_view(const nlohmann::json &arg);
+  bool is_scalar_numpy_view_call(const nlohmann::json &call);
+  bool passes_unnamed_numpy_view_argument(const nlohmann::json &call);
+  bool contains_unnamed_numpy_view_argument(const nlohmann::json &node);
   const nlohmann::json &hoist_unnamed_numpy_view_arguments(
     const nlohmann::json &statement,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  nlohmann::json bind_numpy_view_temporary(
+    const nlohmann::json &statement,
+    const nlohmann::json &value,
+    const std::string &prefix,
+    codet &target_block);
+  bool hoist_numpy_view_arguments(
+    const std::string &key,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  bool needs_numpy_view_call_binding(const nlohmann::json &node);
+  bool split_conditional_numpy_view_assignment(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten);
+  bool needs_numpy_view_hoist(const nlohmann::json &node);
+  bool freeze_numpy_view_operand(
+    const nlohmann::json::json_pointer &path,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  bool hoist_first_evaluated_numpy_view_call(
+    const nlohmann::json::json_pointer &path,
+    bool skip,
     nlohmann::json &rewritten,
     codet &target_block);
   std::size_t numpy_view_arg_count_ = 0;
   /// Whether every `return` of @p func_node yields one of its bound view
   /// parameters.
-  bool returns_bound_numpy_view_param(const nlohmann::json &func_node) const;
+  bool returns_bound_numpy_view_param(const nlohmann::json &func_node);
   /// The view argument such a function hands back for @p call, or nullptr.
   const nlohmann::json *
   returned_numpy_view_argument(const nlohmann::json &call);
@@ -1847,7 +1909,7 @@ private:
     const nlohmann::json &value,
     const std::string &scope,
     std::size_t depth) const;
-  bool is_fold_only_numpy_function(const nlohmann::json &function_node) const;
+  bool is_fold_only_numpy_function(const nlohmann::json &function_node);
   /// Converts a function definition unless every call to it is folded.
   void get_unfolded_function_definition(const nlohmann::json &function_node);
   /// Records the storage of every view passed to a call that is not folded.
@@ -1978,6 +2040,7 @@ private:
     codet &target_block);
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
+  std::string numpy_view_source_of(const std::string &storage_id) const;
 
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
@@ -2358,6 +2421,14 @@ private:
     const nlohmann::json &element,
     exprt &reuse);
 
+  /// Prepares \p operand for two reads: returns the first read and sets
+  /// \p reread to the second, binding a side-effecting operand to a
+  /// temporary. Nil when such an operand cannot be bound.
+  exprt bind_operand_read_twice(
+    const exprt &operand,
+    const nlohmann::json &element,
+    exprt &reread);
+
   /**
    * @brief Determines if None comparison setup is needed.
    *
@@ -2720,6 +2791,9 @@ private:
     bool readonly;
     std::vector<std::size_t> shape;
     std::string source_id;
+    // The other storages a view bound to different arrays on different
+    // paths may point at.
+    std::set<std::string> other_sources;
     // Per-axis element strides of an N-D view over a scalar pointer; empty
     // for a contiguous view (typed pointer to rows) or a legacy 1-D view.
     std::vector<long long> strides;
@@ -2759,9 +2833,40 @@ private:
     std::set<std::string> &visiting) const;
   std::optional<typet> numpy_literal_array_type(
     const std::string &arr_name,
+    const std::string &function,
+    int line,
+    unsigned depth = 0) const;
+  std::optional<typet> numpy_filled_array_type(
+    const nlohmann::json &value,
     const std::string &function) const;
+  std::optional<typet> numpy_arange_array_type(
+    const nlohmann::json &value,
+    const std::string &function) const;
+  exprt list_argument_expr(const nlohmann::json &arg);
+  std::optional<std::vector<std::size_t>>
+  numpy_filled_array_shape(const nlohmann::json &value) const;
+  const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &
+  inferred_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index);
+  bool is_bound_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index);
+  void reject_numpy_view_argument_type_mismatch(const nlohmann::json &call);
+  std::map<
+    std::string,
+    std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>>
+    numpy_view_param_layouts_;
+  // Parameters whose conversion has decided whether they bind a view, and
+  // what callers converted before that were told.
+  std::set<std::string> numpy_view_params_decided_;
+  std::map<std::string, bool> numpy_view_params_assumed_;
   static std::optional<numpy_scalar_pointer_view_infot>
   slice_view_info(std::size_t length, const nlohmann::json &slice_node);
+  static std::optional<numpy_scalar_pointer_view_infot> row_slice_view_info(
+    std::size_t rows,
+    std::size_t cols,
+    const nlohmann::json &slice_node);
   static std::optional<numpy_scalar_pointer_view_infot> column_view_info(
     std::size_t rows,
     std::size_t cols,
@@ -2770,14 +2875,66 @@ private:
   view_info_from_subscript(
     const std::vector<std::size_t> &src_shape,
     const nlohmann::json &slice_node);
+  static numpy_scalar_pointer_view_infot
+  runtime_view_info(std::size_t rank = 1);
+  static std::optional<numpy_scalar_pointer_view_infot>
+  slice_or_runtime_view_info(
+    std::size_t length,
+    const nlohmann::json &slice_node);
+  static std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  merge_view_layouts(
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
+  // Symbol ids holding the extent and stride of each axis of a view whose
+  // layout is read at run time.
+  struct numpy_runtime_view_layoutt
+  {
+    std::vector<std::string> extents;
+    std::vector<std::string> strides;
+  };
+  // Keyed like numpy_view_params_: the statics every caller writes, and the
+  // parameter symbol with the callee's own copies.
+  std::map<std::string, numpy_runtime_view_layoutt> numpy_runtime_view_statics_;
+  std::map<std::string, std::pair<std::string, numpy_runtime_view_layoutt>>
+    numpy_runtime_view_locals_;
+  const nlohmann::json *numpy_runtime_bound_call_ = nullptr;
+  const numpy_runtime_view_layoutt &
+  runtime_numpy_view_statics(const std::string &key, std::size_t rank);
+  void declare_runtime_numpy_view_param(
+    numpy_scalar_pointer_view_infot &info,
+    const std::string &arg_id,
+    const std::string &key);
+  void prepend_runtime_numpy_view_prologue(
+    const std::string &function_id,
+    exprt &function_body);
+  void bind_runtime_numpy_view_arguments(
+    const nlohmann::json &statement,
+    codet &target_block);
+  void store_runtime_numpy_view_layout(
+    const nlohmann::json &call,
+    std::size_t param_index,
+    codet &target_block);
+  std::vector<std::size_t>
+  runtime_numpy_view_params(const std::string &func_name);
+  void reject_unbound_runtime_numpy_view_call(const nlohmann::json &call);
   static bool same_view_layout(
     const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
     const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
+  static std::optional<numpy_scalar_pointer_view_infot> subview_info(
+    const numpy_scalar_pointer_view_infot &parent,
+    const nlohmann::json &slice_node);
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
-  infer_numpy_view_argument(
-    const numpy_param_call_site &site,
-    const nlohmann::json &arg,
-    std::set<std::string> &visiting) const;
+  infer_branch_bound_view_layout(
+    const nlohmann::json &node,
+    const std::string &function,
+    std::set<std::string> &visiting,
+    unsigned depth) const;
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_numpy_view_layout(
+    const nlohmann::json &node,
+    const std::string &function,
+    std::set<std::string> &visiting,
+    unsigned depth = 0) const;
   std::optional<numpy_scalar_pointer_view_infot> infer_numpy_view_param_type(
     const std::string &func_name,
     std::size_t param_index,
@@ -2838,7 +2995,25 @@ private:
     const std::string &lhs_id,
     const numpy_scalar_pointer_view_infot &candidate,
     const typet &view_ptr_type,
-    const exprt &source) const;
+    const exprt &source);
+  bool can_merge_numpy_view_layouts(const std::string &view_id) const;
+  const numpy_runtime_view_layoutt &
+  numpy_view_layout_vars(const std::string &view_id, std::size_t rank);
+  void record_numpy_view_layout(
+    const std::string &view_id,
+    const std::string &storage_id);
+  void merge_numpy_view_binding(const std::string &view_id, bool same_kind);
+  static bool same_numpy_view_kind(
+    const numpy_scalar_pointer_view_infot &a,
+    const numpy_scalar_pointer_view_infot &b);
+  // Layout variables of each view name, the function-local ones among them,
+  // and the names whose metadata reads them.
+  std::map<std::string, numpy_runtime_view_layoutt> numpy_view_layout_vars_;
+  std::vector<std::string> numpy_view_layout_locals_;
+  std::set<std::string> numpy_merged_views_;
+  std::map<std::string, std::set<std::string>> numpy_view_other_sources_;
+  std::set<std::string> numpy_view_storage_roots(const std::string &id) const;
+  unsigned numpy_loop_depth_ = 0;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(
