@@ -895,14 +895,20 @@ void python_converter::process_forward_reference(
   {
     std::string saved_class = current_class_name_;
     std::string saved_func = current_func_name_;
+    std::vector<std::string> saved_scopes;
+    saved_scopes.swap(scope_stack_);
+    const typet saved_element_type = current_element_type;
     // find_class looks in the module body, so the class is module-scoped
-    // whatever function the reference sits in.
+    // whatever function the reference sits in: its body must not see that
+    // function's names.
     current_func_name_.clear();
     code_blockt class_code;
     get_class_definition(ref_class_node, class_code);
     forward_class_code_.emplace(referenced_class, std::move(class_code));
     current_class_name_ = saved_class;
     current_func_name_ = saved_func;
+    scope_stack_.swap(saved_scopes);
+    current_element_type = saved_element_type;
   }
 }
 

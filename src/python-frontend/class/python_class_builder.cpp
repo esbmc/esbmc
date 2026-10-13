@@ -94,6 +94,9 @@ bool python_class_builder::get_bases(struct_typet &st)
       continue;
 
     has_ud = true;
+    // A class built early by a forward reference can reach a base whose own
+    // class statement has not been converted yet.
+    conv_.process_forward_reference({{"_type", "Name"}, {"id", base}});
     auto *bsym = conv_.symbol_table_.find_symbol("tag-" + base);
     if (!bsym)
       throw std::runtime_error("Base class not found: " + base);

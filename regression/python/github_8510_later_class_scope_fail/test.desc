@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Variable 'z' is not defined at line 6\.$
