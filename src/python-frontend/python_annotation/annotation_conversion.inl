@@ -5251,8 +5251,92 @@ void python_annotation<Json>::add_annotation(Json &body)
       throw std::runtime_error(oss.str());
     }
 
-    update_assignment_node(element, inferred_type);
+    update_assignment_node(
+      element, widen_to_optional_scalar(element, inferred_type));
     if (itr != referenced_global_elements.end())
       *itr = element;
+  }
+}
+
+/// A name stored both None and a scalar on different paths is an Optional of
+/// that scalar, so an operation on it raises TypeError on the None path
+/// instead of reading None as a number (#8248).
+template <class Json>
+std::string python_annotation<Json>::widen_to_optional_scalar(
+  const Json &element,
+  const std::string &inferred_type)
+{
+  const Json &target = element["targets"][0];
+  if (target["_type"] != "Name")
+    return inferred_type;
+  const Json &scope = current_func != nullptr ? *current_func : ast_;
+  const auto key =
+    std::make_pair(&scope, target["id"].template get<std::string>());
+  auto it = optional_scalar_names_.find(key);
+  if (it == optional_scalar_names_.end())
+    it =
+      optional_scalar_names_.emplace(key, optional_scalar_of(key.second, scope))
+        .first;
+  return it->second.empty() ? inferred_type : it->second;
+}
+
+/// "Optional[T]" when every binding of `name` in `scope` is a plain
+/// `name = value` storing None or a value of one scalar type T, with at least
+/// one of each; "" otherwise.
+template <class Json>
+std::string python_annotation<Json>::optional_scalar_of(
+  const std::string &name,
+  const Json &scope)
+{
+  auto stores_none = [](const Json *store) {
+    const Json &value = (*store)["value"];
+    return value.value("_type", "") == "Constant" && value["value"].is_null();
+  };
+  std::vector<const Json *> stores;
+  collect_name_stores(name, scope["body"], stores);
+  if (
+    std::none_of(stores.begin(), stores.end(), stores_none) ||
+    json_utils::count_name_bindings(scope, name) != stores.size())
+    return "";
+
+  std::set<std::string> types;
+  for (const Json *store : stores)
+  {
+    std::string type;
+    if (stores_none(store))
+      type = "NoneType";
+    else
+      infer_type(*store, scope, type);
+    types.insert(type);
+  }
+  if (types.erase("NoneType") == 0 || types.size() != 1)
+    return "";
+  const std::string &scalar = *types.begin();
+  return scalar == "int" || scalar == "float" || scalar == "bool"
+           ? "Optional[" + scalar + "]"
+           : "";
+}
+
+/// The plain `name = value` statements in `body` and its nested blocks,
+/// excluding nested function and class scopes.
+template <class Json>
+void python_annotation<Json>::collect_name_stores(
+  const std::string &name,
+  const Json &body,
+  std::vector<const Json *> &stores)
+{
+  for (const Json &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    if (
+      kind == "Assign" && stmt["targets"].size() == 1 &&
+      stmt["targets"][0].value("_type", "") == "Name" &&
+      stmt["targets"][0].value("id", "") == name)
+      stores.push_back(&stmt);
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_name_stores(name, stmt[key], stores);
   }
 }
