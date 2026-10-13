@@ -600,19 +600,76 @@ static std::string module_binding_name(const nlohmann::json &stmt)
   return "";
 }
 
-/// The top-level statement of \p module binding \p name when that is the
-/// one binding of the name anywhere in the module, or nullptr. Any other
-/// binding (a second one, a local) leaves the name's value at a read
-/// depending on which binding ran.
+/// The statement binding \p name in \p body or in a block nested in it at
+/// module scope (an if, loop or try), or nullptr.
+static const nlohmann::json *
+find_module_binding(const nlohmann::json &body, const std::string &name)
+{
+  for (const auto &stmt : body)
+  {
+    if (module_binding_name(stmt) == name)
+      return &stmt;
+    const std::string kind = stmt.value("_type", "");
+    if (
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+      continue;
+    for (const char *field : {"body", "orelse", "finalbody", "handlers"})
+      if (stmt.contains(field) && stmt[field].is_array())
+        if (
+          const nlohmann::json *found = find_module_binding(stmt[field], name))
+          return found;
+  }
+  return nullptr;
+}
+
+/// Whether \p aug adds to a global of annotated type \p type a constant that
+/// leaves it that type.
+static bool keeps_type(const nlohmann::json &aug, const std::string &type)
+{
+  const nlohmann::json &value = aug["value"];
+  if (aug["op"].value("_type", "") == "Div" || value["_type"] != "Constant")
+    return false;
+  const nlohmann::json &constant = value["value"];
+  return (type == "int" && constant.is_number_integer()) ||
+         (type == "float" && constant.is_number()) ||
+         (type == "str" && constant.is_string());
+}
+
+/// The augmented assignments to \p name under \p node that keep it \p type.
+static std::size_t count_type_keeping_aug_assigns(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &type)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
+                  node["target"].value("id", "") == name &&
+                  keeps_type(node, type);
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_type_keeping_aug_assigns(child, name, type);
+  return n;
+}
+
+/// The module-scope statement binding \p name when that is the one binding
+/// of the name anywhere in the module, or nullptr. Any other binding (a second
+/// one, a local) leaves the name's value at a read depending on which binding
+/// ran. An augmented assignment that keeps the binding's type does not count:
+/// it reads the name first, so it raises unless the binding has already run.
 static const nlohmann::json *
 sole_module_binding(const nlohmann::json &module, const std::string &name)
 {
-  if (json_utils::count_name_bindings(module, name) != 1)
+  const nlohmann::json *binding = find_module_binding(module["body"], name);
+  if (!binding)
     return nullptr;
-  for (const auto &stmt : module["body"])
-    if (module_binding_name(stmt) == name)
-      return &stmt;
-  return nullptr;
+  const std::string type =
+    binding->contains("annotation") ? (*binding)["annotation"].value("id", "")
+                                    : "";
+  if (
+    json_utils::count_name_bindings(module, name) -
+      count_type_keeping_aug_assigns(module, name, type) !=
+    1)
+    return nullptr;
+  return binding;
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
