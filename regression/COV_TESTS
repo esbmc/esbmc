@@ -2507,6 +2507,8 @@ regression/python/for_user_iterator_subclass
 regression/python/for_user_iterator_no_iter
 regression/esbmc/sprintf_symbolic_output
 regression/esbmc/sprintf_symbolic_output_fail
+regression/ld/ld_graphical_unmodeled_block_branch_fail
+regression/ld/ld_graphical_floating_contact_branch_safe
 regression/esbmc/vsprintf_stores_output
 regression/esbmc/vsprintf_stores_output_fail
 regression/python/github_8352
