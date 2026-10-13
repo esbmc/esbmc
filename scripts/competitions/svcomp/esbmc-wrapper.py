@@ -495,9 +495,21 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
     esbmc_command_line += "--witness " + witness_path + " "
 
+  if concurrency_bound_applies(esbmc_command_line, witness_path):
+    # A bounded, k-capped run answers FALSE fast; anything it cannot settle
+    # is re-run without the context bound (#8555 config D).
+    bounded = esbmc_command_line.replace("--unlimited-k-steps ", "--max-k-step 10 ")
+    res = parse_result(run(bounded).decode(), prop)
+    if res != Result.unknown:
+      return res
+    esbmc_command_line = esbmc_command_line.replace("--context-bound 3 ", "")
+
   output = run(esbmc_command_line)
   res = parse_result(output.decode(), prop)
   return res
+
+def concurrency_bound_applies(command_line, witness_path):
+  return not witness_path and "--context-bound 3 " in command_line
 
 if __name__ == "__main__":
   # Options
