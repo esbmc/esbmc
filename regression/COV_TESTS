@@ -760,6 +760,8 @@ regression/python/starred_tuple_unpack_short_caught
 regression/python/starred_tuple_unpack_short_fail
 regression/python/starred_tuple_unpack_var
 regression/python/starred_tuple_unpack_var_fail
+regression/python/starred_call_argument
+regression/python/starred_call_argument_fail
 regression/python/str-concat1
 regression/python/str1
 regression/python/str_dunder_builtin
@@ -2619,6 +2621,12 @@ regression/python/github_8460_undecided_global
 regression/python/github_8460_undecided_global_decl
 regression/python/github_8460_undecided_lambda
 regression/python/github_8460_undecided_local
+regression/python/starred_call_argument_length_fail
+regression/python/starred_call_argument_length_caught
+regression/python/starred_call_argument_dict_unsupported
+regression/python/starred_call_argument_local_callee_unsupported
+regression/python/starred_call_argument_mixed_kinds_unsupported
+regression/python/starred_call_argument_list_result
 regression/python/github_8357
 regression/python/github_8357_class_assign
 regression/python/github_8357_fail
