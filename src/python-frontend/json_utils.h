@@ -228,6 +228,35 @@ bool is_property_method(
   return false;
 }
 
+/// True when `class_name` or one of its (transitive) base classes defines a
+/// method named `method_name`.
+template <typename JsonType>
+bool class_defines_method(
+  const JsonType &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const JsonType cls = find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+    if (
+      stmt.value("_type", std::string()) == "FunctionDef" &&
+      stmt.value("name", std::string()) == method_name)
+      return true;
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") && base["id"] != class_name &&
+        class_defines_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
+}
+
 /// Counts every ClassDef under @p node, at any depth.
 template <typename JsonType>
 std::size_t count_class_defs(const JsonType &node)

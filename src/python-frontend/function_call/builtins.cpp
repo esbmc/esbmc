@@ -10,6 +10,7 @@
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -902,6 +903,51 @@ exprt function_call_expr::handle_getattr()
   return converter_.get_expr(access);
 }
 
+// Whether @p body binds @p name, as one of its own statements, to a call of
+// @p cls.
+static bool body_constructs(
+  const nlohmann::json &body,
+  const std::string &name,
+  const std::string &cls)
+{
+  return std::any_of(body.begin(), body.end(), [&](const nlohmann::json &s) {
+    const nlohmann::json *target = binding_target(s);
+    return target && target->value("id", "") == name &&
+           s["value"].is_object() && s["value"]["_type"] == "Call" &&
+           s["value"]["func"].value("id", "") == cls;
+  });
+}
+
+// The class of the instance named by @p arg, or "" when its runtime class
+// can differ from the class @p expr is statically typed as. A variable bound
+// once, by its scope's own statement calling a class bound only by its
+// definition, holds an instance of exactly that class wherever it is bound.
+std::string function_call_expr::exact_instance_class(
+  const nlohmann::json &arg,
+  const exprt &expr) const
+{
+  if (
+    arg["_type"] != "Name" || !expr.type().is_pointer() ||
+    !expr.type().subtype().is_symbol())
+    return "";
+  const std::string name = arg["id"].get<std::string>();
+  const std::string cls =
+    type_handler_.get_python_type_name(expr.type().subtype());
+  const nlohmann::json &ast = converter_.get_ast_json();
+  const std::string &function = converter_.get_current_func_name();
+  const nlohmann::json scope =
+    function.empty()
+      ? nlohmann::json()
+      : find_function_by_path(ast, split_function_path(function));
+  const bool constructed =
+    body_constructs(ast["body"], name, cls) ||
+    (scope.contains("body") && body_constructs(scope["body"], name, cls));
+  return constructed && count_bindings(ast, name) == 1 &&
+             count_bindings(ast, cls) == 1
+           ? cls
+           : "";
+}
+
 exprt function_call_expr::handle_type_call() const
 {
   const auto &args = call_["args"];
@@ -909,6 +955,10 @@ exprt function_call_expr::handle_type_call() const
     throw std::runtime_error("type() requires exactly 1 argument");
 
   exprt arg_expr = converter_.get_expr(args[0]);
+  const std::string instance_class = exact_instance_class(args[0], arg_expr);
+  if (!instance_class.empty())
+    return converter_.make_class_object(instance_class);
+
   std::string type_name = type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
