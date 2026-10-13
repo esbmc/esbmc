@@ -1,0 +1,4 @@
+CORE
+gt.ld
+--ld-props props.yaml
+^ERROR: UnsupportedConstruct\(GT, tier=2\)
