@@ -70,7 +70,7 @@ void collect_subscript_arguments(
     return;
   if (type == "BoolOp")
     return collect_subscript_arguments(
-      node["values"][0], path / "values" / 0, out);
+      node["values"][0], json_pointer(path.to_string() + "/values/0"), out);
   if (is_named_call(node))
     for (std::size_t i = 0; i < node["args"].size(); ++i)
       if (
