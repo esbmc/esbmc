@@ -1,5 +1,6 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_handler.h>
@@ -654,10 +655,43 @@ exprt python_converter::handle_none_comparison(
   return isnone_expr;
 }
 
+/// The module-level name that owns the object `node` denotes, or "" when that
+/// is not provable from the AST. Each name on the way must be bound exactly
+/// once in the whole module, by a top-level statement, and every name but the
+/// owner by `name = other_name`. Such a name holds one object for the whole
+/// run, so two names with one owner are the same object, whatever the value
+/// is modelled as: a str is copied on assignment (#8412).
+static std::string
+sole_object_owner(const nlohmann::json &module, const nlohmann::json &node)
+{
+  std::set<std::string> seen;
+  for (const nlohmann::json *name = &node; name->value("_type", "") == "Name";)
+  {
+    const std::string id = (*name)["id"];
+    const nlohmann::json *value = json_utils::top_level_value(module, id);
+    if (
+      !value || json_utils::count_name_bindings(module, id) != 1 ||
+      !seen.insert(id).second)
+      return "";
+    if (value->value("_type", "") != "Name")
+      return id;
+    name = value;
+  }
+  return "";
+}
+
 /// Build the Python 'is' identity equality in IREP2. The operands are the
 /// raw values, or the arrays' base addresses when both sides are arrays.
-expr2tc python_converter::build_is_equality(const exprt &lhs, const exprt &rhs)
+expr2tc python_converter::build_is_equality(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
 {
+  const std::string owner = sole_object_owner(ast(), left);
+  if (!owner.empty() && owner == sole_object_owner(ast(), right))
+    return gen_true_expr();
+
   expr2tc lhs2, rhs2;
   if (lhs.type().is_array() && rhs.type().is_array())
   {
@@ -687,15 +721,21 @@ expr2tc python_converter::build_is_equality(const exprt &lhs, const exprt &rhs)
 /// Construct the expression for Python 'is' operator
 exprt python_converter::get_binary_operator_expr_for_is(
   const exprt &lhs,
-  const exprt &rhs)
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
 {
-  return migrate_expr_back(build_is_equality(lhs, rhs));
+  return migrate_expr_back(build_is_equality(lhs, rhs, left, right));
 }
 
 /// Construct the negation of an 'is' expression, used for 'is not'
-exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
+exprt python_converter::get_negated_is_expr(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
 {
-  return migrate_expr_back(not2tc(build_is_equality(lhs, rhs)));
+  return migrate_expr_back(not2tc(build_is_equality(lhs, rhs, left, right)));
 }
 
 exprt python_converter::handle_string_type_mismatch(

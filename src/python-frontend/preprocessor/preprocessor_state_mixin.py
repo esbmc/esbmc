@@ -20,6 +20,7 @@ class PreprocessorStateMixin:
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
+        self._hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
@@ -81,6 +82,11 @@ class PreprocessorStateMixin:
         # agrees (see _recover_param_dict_annotation).
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
+        # Filled by _scan_fixed_receivers; empty, an unpacked bound method
+        # is never resolved at its calls.
+        self.fixed_receivers = {}
+        self.once_bound_names = set()
+        self.module_statements = {}
         self.called_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.

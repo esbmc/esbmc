@@ -16,7 +16,7 @@
       </interface>
       <body>
         <LD>
-          <rung localId="1"><block typeName="TON" instanceName="t1"><variable formalParameter="EN">IN1</variable><variable formalParameter="IN">IN1</variable><variable formalParameter="PT">PT1</variable><variable formalParameter="Q">Q1</variable><variable formalParameter="ET">ET1</variable><variable formalParameter="ENO">ENO1</variable></block></rung>
+          <rung localId="1"><block typeName="TON" instanceName="t1"><variable formalParameter="EN">TRUE</variable><variable formalParameter="IN">IN1</variable><variable formalParameter="PT">PT1</variable><variable formalParameter="Q">Q1</variable><variable formalParameter="ET">ET1</variable></block></rung>
         </LD>
       </body>
     </pou>

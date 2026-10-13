@@ -1,6 +1,7 @@
 
 /* keep in sync with ../nextafter-spec/main.c */
 
+#include <float.h>
 #include <math.h>
 #include <errno.h>
 
@@ -51,8 +52,8 @@ int main()
      */
     assert(errno == ERANGE);
   }
-  if(isinf(x))
-    assert(isinf(z) == isinf(x));
+  if(isinf(x) && x != y)
+    assert(fabsf(z) == FLT_MAX);
 
   /* This is part of nextafter's behavior, but w/o a model of
    * feraiseexcept() and fetestexcept() we cannot prove it, yet.

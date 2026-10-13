@@ -345,6 +345,14 @@ public:
            !in_lazy_operand_;
   }
 
+  /// Bind a static cell, named under @p lambda_id, for each scalar free
+  /// variable of @p lambda_node that is a local of the enclosing function, as
+  /// create_capture_cells does for a nested `def`.
+  void capture_lambda_free_variables(
+    const nlohmann::json &lambda_node,
+    const std::string &lambda_id,
+    const locationt &location);
+
   // Hoists @p operand into a temporary when it carries a side effect, so a
   // guard and its use evaluate it once.
   exprt hoist_side_effecting_operand(
@@ -368,6 +376,26 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// How one scope binds a name: by an import, by anything else, or by a
+  /// `global`/`nonlocal` declaration handing it to an outer scope.
+  struct scope_bindings
+  {
+    bool by_import = false;
+    bool by_other = false;
+    bool declared_outer = false;
+  };
+  /// Whether @p receiver, a Name read by the call at @p use, is bound in its
+  /// scope by something other than an import, so that it is not the module
+  /// of the same name. Throws when the bindings leave that undecided.
+  bool name_shadows_module(
+    const nlohmann::json &receiver,
+    const nlohmann::json &use) const;
+  /// Whether @p receiver of the call at @p use is the imported module
+  /// @p module_name rather than a binding that shadows it.
+  bool is_module_receiver(
+    const std::string &module_name,
+    const nlohmann::json &receiver,
+    const nlohmann::json &use) const;
   std::string current_module_name() const;
 
   const std::string
@@ -516,6 +544,10 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
+
+  bool function_may_be_called(const nlohmann::json &function_node) const;
+
   void
   get_class_definition(const nlohmann::json &class_node, codet &target_block);
 
@@ -526,15 +558,32 @@ private:
   exprt get_named_expr(const nlohmann::json &element);
 
   /// True if a walrus operator (NamedExpr) appears anywhere in `node`'s tree.
-  /// Used to refuse a walrus in conditionally / repeatedly evaluated positions
-  /// (while-test, ternary branch, short-circuit operand) where the single
-  /// unconditional binding emitted by get_named_expr would be unsound.
+  /// Used to refuse a walrus in conditionally evaluated positions (ternary
+  /// branch, short-circuit operand) where the unconditional binding emitted by
+  /// get_named_expr would be unsound.
   static bool contains_named_expr(const nlohmann::json &node);
 
+  /// True if a walrus sits inside a lambda or comprehension within `node`.
+  static bool contains_nested_scope_named_expr(const nlohmann::json &node);
+
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  exprt get_binary_operator_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs);
+  exprt
+  keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
+  /// The right operand of @p element; a `str %` operand is only probed.
+  exprt get_right_operand_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &right,
+    const exprt &lhs);
   exprt build_division_guarded_binop(
     const std::string &op,
-    const exprt &lhs,
+    exprt lhs,
     exprt rhs,
     const nlohmann::json &element);
   exprt build_arithmetic_binop(
@@ -545,6 +594,9 @@ private:
   /// The static types of the arguments a `str %` right operand supplies.
   std::vector<typet>
   percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
+  /// The f-string @p joined with each formatted operand stored as it is
+  /// evaluated, so its operands run once and in order.
+  exprt get_fstring_in_order(const nlohmann::json &joined);
   /// `str % args` with a literal format: an f-string when an argument is not
   /// constant, otherwise folded to a literal.
   exprt get_percent_format_expr(
@@ -569,11 +621,23 @@ private:
 
   // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
   // `is not` paths); the public wrappers back-migrate once at the legacy seam.
-  expr2tc build_is_equality(const exprt &lhs, const exprt &rhs);
+  expr2tc build_is_equality(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+  exprt get_binary_operator_expr_for_is(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+  exprt get_negated_is_expr(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
   exprt get_resolved_value(const exprt &expr);
 
@@ -734,6 +798,20 @@ private:
     const std::vector<code_blockt> &effects,
     const std::function<exprt(const exprt &)> &truthy,
     const nlohmann::json &element);
+
+  exprt emit_guarded_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const locationt &location);
+
+  /// The and/or test of an if or while as one flat condition, which the
+  /// coverage modes instrument operand by operand. A later operand whose
+  /// conversion plants statements (a walrus binding, a bounds check) is
+  /// guarded by the operands before it instead.
+  exprt get_flat_boolop_test(
+    const nlohmann::json &test_node,
+    const std::function<exprt(const exprt &, const nlohmann::json &)> &to_bool);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
@@ -961,6 +1039,12 @@ private:
   code_blockt create_capture_cells(
     const nlohmann::json &function_node,
     const symbol_id &id,
+    const locationt &location);
+
+  code_blockt bind_capture_cells(
+    const std::set<std::string> &free_names,
+    const std::string &enclosing_scope,
+    const std::string &func_id,
     const locationt &location);
 
   /// Cell bindings produced by the last nested `get_function_definition`,
@@ -1210,6 +1294,16 @@ private:
     const std::string &method_name,
     bool is_ctor) const;
 
+  std::optional<bool> function_shadows_module(
+    const std::string &name,
+    const nlohmann::json &use) const;
+  /// The module's own bindings of @p name, with declared_outer meaning that a
+  /// function rebinds it through `global`. Memoised: a module call reads
+  /// them at every dispatch site, and each read walks the whole module.
+  const scope_bindings &module_bindings(const std::string &name) const;
+  mutable std::
+    map<std::pair<const nlohmann::json *, std::string>, scope_bindings>
+      module_bindings_memo_;
   using mro_memo =
     std::map<std::string, std::optional<std::vector<std::string>>>;
 
@@ -1226,6 +1320,17 @@ private:
   /// The class statement that alone binds @p name in the file being
   /// converted, or null.
   const nlohmann::json *sole_class_binding(const std::string &name) const;
+  /// The def that alone binds @p method in the body of class @p class_name,
+  /// itself bound alone, or null.
+  const nlohmann::json *sole_method_def(
+    const std::string &class_name,
+    const std::string &method) const;
+  /// Whether a class other than @p class_name binds @p method and may derive
+  /// from @p class_name, so that a receiver typed @p class_name may run that
+  /// binding instead. A class whose bases cannot be resolved counts.
+  bool overridden_below(
+    const std::string &class_name,
+    const std::string &method) const;
   /// Whether the body of class @p class_name may bind @p name, hiding any
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)
@@ -1477,6 +1582,18 @@ private:
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
+  symbolt *find_global_symbol(const symbol_id &sid);
+  exprt
+  module_function_expr(const std::string &name, const nlohmann::json &element);
+  void track_unbound_global(
+    const std::string &id,
+    const nlohmann::json &binding,
+    const typet &type);
+  void guard_unbound_global(
+    const std::string &id,
+    const std::string &name,
+    const nlohmann::json &element);
+  void mark_global_bound(const nlohmann::json &stmt, code_blockt &block);
   /// A parameter default, evaluated where the def is, so a method's default
   /// still sees the class body's names (#8200).
   exprt get_default_expr(const nlohmann::json &node);
@@ -2416,6 +2533,10 @@ private:
   /// Rewrite @p cond into a call to its class's __bool__ when there is one.
   exprt apply_bool_dunder(exprt cond, const locationt &location);
 
+  /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
+  /// other value comes back unchanged.
+  exprt apply_string_truthiness(const exprt &str, const locationt &location);
+
   /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
   exprt apply_bool_dunder_for_not(
     const std::string &op,
@@ -2796,6 +2917,11 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// A module global or function read by code converted before its binding,
+  /// mapped to the flag its binding sets and the type the reads took (#8369).
+  std::unordered_map<std::string, std::pair<std::string, typet>>
+    unbound_global_flags_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to

@@ -1,5 +1,6 @@
 import ast
 import copy
+import keyword
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -28,6 +29,7 @@ class CoreVisitorsMixin:
         "round": ("number", "ndigits"),
         "str": ("object", ),
     }
+    _SHADOW_TRACKED_BUILTINS = set(_BUILTIN_POSITIONAL_PARAMS) | {"getattr"}
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -487,12 +489,8 @@ class CoreVisitorsMixin:
         elif isinstance(target, ast.Name) and target.id in self.newtype_vars:
             self.newtype_vars.discard(target.id)
 
-        if (isinstance(target, ast.Name) and isinstance(node.value, ast.Attribute)
-                and isinstance(node.value.value, ast.Name) and target.id in self.called_names):
-            self.bound_method_vars[target.id] = node.value
+        if self._track_bound_method(target, node.value):
             return None
-        if isinstance(target, ast.Name) and target.id in self.bound_method_vars:
-            del self.bound_method_vars[target.id]
 
         self._update_variable_types_simple(target, node.value)
 
@@ -675,12 +673,53 @@ class CoreVisitorsMixin:
             return self.visit(node.args[0])
         return None
 
+    def _track_bound_method(self, target, value, resolvable=True):
+        """Drop `target = obj.attr` when the module calls `target`, so that
+        each later `target(...)` becomes `obj.attr(...)`, and forget a
+        `target` bound to anything else."""
+        if (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Name) and target.id in self.called_names):
+            self.bound_method_vars[target.id] = value
+            return True
+        if isinstance(target, ast.Name):
+            self.bound_method_vars.pop(target.id, None)
+        return False
+
+    def _is_resolvable_unpacked_method(self, target, value, statement):
+        """Whether unpacking `obj.m` into `target` may be resolved at each call
+        of `target`: the statement is top-level, `target` is bound nowhere
+        else, and `obj.m` is a method of a fixed instance (#8354)."""
+        return (id(statement) in self.module_statements and target.id in self.once_bound_names
+                and isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and value.attr in self.fixed_receivers.get(value.value.id, ()))
+
     def _maybe_rewrite_bound_method_call(self, node):
         if isinstance(node.func, ast.Name) and node.func.id in self.bound_method_vars:
             node.func = self.bound_method_vars[node.func.id]
             self.generic_visit(node)
             return node
         return None
+
+    def _maybe_rewrite_getattr_call(self, node):
+        """Call `getattr(o, "m")(...)` as `o.m(...)`, which it is exactly (#8457).
+
+        A name with `__` is left alone: the frontend stores a private `__m`
+        unmangled, so neither `__m` nor `_C__m` would resolve.
+        """
+        getter = node.func
+        if not (isinstance(getter, ast.Call) and isinstance(getter.func, ast.Name)
+                and getter.func.id == "getattr" and len(getter.args) == 2 and not getter.keywords
+                and not isinstance(getter.args[0], ast.Starred)
+                and not self._builtin_is_shadowed("getattr")):
+            return None
+        name = getter.args[1]
+        if not (isinstance(name, ast.Constant) and isinstance(name.value, str)
+                and name.value.isidentifier() and not keyword.iskeyword(name.value)
+                and "__" not in name.value):
+            return None
+        node.func = ast.copy_location(
+            ast.Attribute(value=getter.args[0], attr=name.value, ctx=ast.Load()), getter)
+        return self.visit(node)
 
     def _record_staticmethod(self, node, qualified_name):
         """Note a @staticmethod, whose call binds no receiver (#7546)."""
@@ -723,10 +762,6 @@ class CoreVisitorsMixin:
                 function_name = qualified_name
                 expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
-            elif method_name in self.functionParams:
-                function_name = method_name
-                expected_args = self._params_without_implicit_self(method_name)
-                kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"
@@ -780,7 +815,7 @@ class CoreVisitorsMixin:
                 bound.add(n.name)
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 bound.update(a.asname or a.name.split(".")[0] for a in n.names)
-        return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+        return bound & self._SHADOW_TRACKED_BUILTINS
 
     def _scan_builtin_shadow_names(self, module_node):
         """Builtin names bound at module scope, which every scope inherits."""
@@ -788,7 +823,7 @@ class CoreVisitorsMixin:
         for n in ast.walk(module_node):
             if isinstance(n, ast.Global):
                 # `global int` binds the module-level name from a function.
-                bound.update(set(n.names) & set(self._BUILTIN_POSITIONAL_PARAMS))
+                bound.update(set(n.names) & self._SHADOW_TRACKED_BUILTINS)
         return bound
 
     def _enter_builtin_shadow_scope(self, node):
@@ -1760,6 +1795,10 @@ class CoreVisitorsMixin:
         rewritten_bound = self._maybe_rewrite_bound_method_call(node)
         if rewritten_bound is not None:
             return rewritten_bound
+
+        rewritten_getattr = self._maybe_rewrite_getattr_call(node)
+        if rewritten_getattr is not None:
+            return rewritten_getattr
 
         rewritten_decimal = self._maybe_rewrite_decimal_call(node)
         if rewritten_decimal is not None:

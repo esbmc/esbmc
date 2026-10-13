@@ -5,5 +5,7 @@ x: int
 y: int
 x, y = foo()
 
-assert x == 2
-assert y == 1
+if nondet_bool():
+    assert x == 2
+if nondet_bool():
+    assert y == 1

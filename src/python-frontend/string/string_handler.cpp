@@ -11,6 +11,7 @@
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -2763,6 +2764,20 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   return nil_exprt();
 }
 
+/// Whether @p receiver is a Name for a module the program imported, and no
+/// binding in scope at the call @p use shadows it.
+static bool names_imported_module(
+  const python_converter &converter,
+  const nlohmann::json &receiver,
+  const nlohmann::json &use)
+{
+  return receiver.value("_type", "") == "Name" &&
+         receiver.value("id", nlohmann::json()).is_string() &&
+         !converter.get_imported_module_path(receiver["id"].get<std::string>())
+            .empty() &&
+         !converter.name_shadows_module(receiver, use);
+}
+
 exprt string_handler::handle_string_attribute_call(
   const nlohmann::json &call_json)
 {
@@ -2796,17 +2811,14 @@ exprt string_handler::handle_string_attribute_call(
   // true when a model .py file merely exists. The latter would misfire for a
   // local variable that shares a module's name (e.g. a parameter named
   // `string`), wrongly diverting `string.lower()` away from the str handler.
-  if (
-    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
-    receiver_json.contains("id") && receiver_json["id"].is_string() &&
-    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
-       .empty())
+  if (names_imported_module(converter_, receiver_json, call_json))
     return nil_exprt();
 
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr = converter_.get_expr(receiver_json);
+      cached_receiver_expr =
+        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
     return *cached_receiver_expr;
   };
 
