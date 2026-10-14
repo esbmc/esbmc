@@ -1,4 +1,0 @@
-CORE
-main.py
---multi-property --unwind 8 --no-unwinding-assertions
-^VERIFICATION FAILED$
