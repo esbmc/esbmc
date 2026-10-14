@@ -715,21 +715,34 @@ static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
 {
   const typet rhs_type = rhs.type();
   // is_bool() must be explicit since is_integer_type() excludes bool.
-  const bool is_real = rhs_type.is_floatbv() ||
-                       type_utils::is_integer_type(rhs_type) ||
-                       rhs_type.is_bool();
-  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  const bool rhs_is_real = rhs_type.is_floatbv() ||
+                           type_utils::is_integer_type(rhs_type) ||
+                           rhs_type.is_bool();
+  const bool lhs_is_real = lhs_type.is_floatbv() ||
+                           type_utils::is_integer_type(lhs_type) ||
+                           lhs_type.is_bool();
+
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && rhs_is_real)
   {
     rhs = promote_to_complex(rhs);
     return true;
   }
-  if (
-    rhs_type.is_bool() &&
-    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  if (rhs_type.is_bool() && lhs_is_real && !lhs_type.is_bool())
   {
     rhs = typecast_exprt(rhs, lhs_type);
     return true;
   }
+
+  // Lower None to nondet to prevent invalid typecasts to primitive types
+  // (#8132).
+  if (rhs_type == none_type() && lhs_is_real)
+  {
+    auto loc = rhs.location();
+    rhs = side_effect_expr_nondett(lhs_type);
+    rhs.location() = loc;
+    return true;
+  }
+
   return false;
 }
 
@@ -6160,6 +6173,14 @@ void python_converter::get_var_assign(
       return;
     }
 
+    const namespacet ns(symbol_table_);
+    const typet resolved_container = ns.follow(container_type);
+    const typet resolved_list = ns.follow(type_handler_.get_list_type());
+    const bool container_is_list =
+      resolved_container == resolved_list ||
+      (resolved_container.is_pointer() &&
+       ns.follow(resolved_container.subtype()) == resolved_list);
+
     // List slice assignment (a[i:j:k] = ...) is lowered to the
     // __ESBMC_list_slice_assign model, which mutates the target list in
     // place with CPython semantics. Falling through to the generic store
@@ -6174,14 +6195,6 @@ void python_converter::get_var_assign(
       target.contains("slice") && target["slice"].is_object() &&
       target["slice"].value("_type", "") == "Slice")
     {
-      const namespacet ns(symbol_table_);
-      const typet resolved_container = ns.follow(container_type);
-      const typet resolved_list = ns.follow(type_handler_.get_list_type());
-      const bool container_is_list =
-        resolved_container == resolved_list ||
-        (resolved_container.is_pointer() &&
-         ns.follow(resolved_container.subtype()) == resolved_list);
-
       if (
         container_is_list && ast_node.contains("value") &&
         !ast_node["value"].is_null())
@@ -6195,6 +6208,24 @@ void python_converter::get_var_assign(
       reject_numpy_view_slice_assignment(target);
       throw std::runtime_error(
         "Slice assignment is only supported on list targets");
+    }
+
+    if (
+      container_is_list && target.contains("slice") &&
+      target["slice"].is_object() && ast_node.contains("value") &&
+      !ast_node["value"].is_null())
+    {
+      is_converting_rhs = true;
+      exprt rhs = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      if (rhs.type() == none_type())
+      {
+        python_list list_handler(*this, target);
+        list_handler.handle_subscript_assign_none(
+          container_expr, target["slice"]);
+        return;
+      }
     }
   }
 
