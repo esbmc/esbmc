@@ -5,7 +5,7 @@ def register(f):
 @register
 def unsupported(x: int) -> int:
     match x:
-        case 1:
+        case int():
             return 1
     return 0
 

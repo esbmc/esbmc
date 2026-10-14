@@ -2857,6 +2857,10 @@ regression/python/github_8368_record_loop_unsupported
 regression/python/github_8368_record_loop_unsupported_fail
 regression/python/github_8368_record_param_unsupported
 regression/python/github_8368_record_param_unsupported_fail
+regression/esbmc/github_8554
+regression/esbmc/github_8554_new_leak_fail
+regression/esbmc/github_8554_old_leak_fail
+regression/esbmc/github_8554_over_cap
 regression/esbmc/github_8524
 regression/esbmc/github_8524_nondet
 regression/esbmc/github_8524_fail
@@ -2988,3 +2992,10 @@ regression/python/github_8248_module_none_fail
 regression/python/github_8248_other_binding
 regression/python/github_8248_unannotated_none
 regression/python/github_8248_unannotated_none_fail
+regression/python/github_8461
+regression/python/github_8461_alias_fail
+regression/python/github_8461_fail
+regression/python/github_8461_none_store
+regression/python/github_8461_same_class
+regression/python/github_8461_same_class_fail
+regression/python/github_8461_subclass
