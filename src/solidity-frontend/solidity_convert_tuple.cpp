@@ -87,10 +87,9 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
     typet mem_type;
     if (arg.value().contains("typeName"))
     {
-      if (get_type_description(
-            arg.value(),
-            arg.value()["typeName"]["typeDescriptions"],
-            mem_type))
+      if (
+        get_type_description(
+          arg.value(), arg.value()["typeName"]["typeDescriptions"], mem_type))
         return true;
     }
     else
@@ -361,8 +360,9 @@ bool solidity_convertert::get_tuple_function_ref(
     fn_def.contains("returnParameters"))
   {
     typet rt;
-    if (!get_type_description(fn_def["returnParameters"], rt) &&
-        get_sol_type(rt) == SolidityGrammar::SolType::TUPLE_RETURNS)
+    if (
+      !get_type_description(fn_def["returnParameters"], rt) &&
+      get_sol_type(rt) == SolidityGrammar::SolType::TUPLE_RETURNS)
     {
       exprt dump;
       if (!get_tuple_definition(fn_def) && !get_tuple_instance(fn_def, dump))
@@ -633,11 +633,13 @@ bool solidity_convertert::construct_tuple_assigments(
     return false;
   }
 
-  // A struct-typed tuple RHS can arrive as an UNRESOLVED symbol type (`tag-struct C.Holder`)
-  // rather than an inlined struct_typet -- this is what solc's synthesised public getter for a
-  // `mapping(K => Struct)` state variable produces, e.g. `(uint a, uint b) = c.Acc(k);`.
-  // `is_struct()` is false on the symbol type itself, so follow it through the namespace before
-  // deciding, and keep the resolved type so the component lookup below sees the real struct.
+  // A struct-typed tuple RHS can arrive as an UNRESOLVED symbol type
+  // (`tag-struct C.Holder`) rather than an inlined struct_typet -- this is what
+  // solc's synthesised public getter for a `mapping(K => Struct)` state
+  // variable produces, e.g. `(uint a, uint b) = c.Acc(k);`. `is_struct()` is
+  // false on the symbol type itself, so follow it through the namespace before
+  // deciding, and keep the resolved type so the component lookup below sees the
+  // real struct.
   {
     const typet &followed = ns.follow(new_rhs.type());
     if (followed.is_struct())
@@ -657,7 +659,8 @@ bool solidity_convertert::construct_tuple_assigments(
   if (!new_rhs.type().is_struct())
   {
     log_error(
-      "expecting struct type for tuple RHS, got id={} type_id={} followed_id={}",
+      "expecting struct type for tuple RHS, got id={} type_id={} "
+      "followed_id={}",
       new_rhs.id().as_string(),
       new_rhs.type().id().as_string(),
       ns.follow(new_rhs.type()).id().as_string());
@@ -713,9 +716,9 @@ bool solidity_convertert::construct_tuple_assigments(
     }
     else
     {
-      // The RHS is not a named tuple instance but an lvalue EXPRESSION -- this is
-      // what solc's synthesised getter for `mapping(K => Struct)` lowers to now
-      // that such a mapping is reached BY REFERENCE
+      // The RHS is not a named tuple instance but an lvalue EXPRESSION -- this
+      // is what solc's synthesised getter for `mapping(K => Struct)` lowers to
+      // now that such a mapping is reached BY REFERENCE
       // (`*(struct S *)map_fixed_arr_get(&m, k, sizeof(S))`, see
       // solidity_convert_mapping.cpp). Take the component straight off it.
       rop = member_exprt(new_rhs, comp.get("name"), comp.type());
@@ -762,13 +765,15 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
   // we'd recurse into the leaf branch with a non-tuple RHS and crash on
   // rhs["components"]. Unwrap whenever a single-element tuple contains a
   // tuple (or until LHS/RHS arity matches).
-  auto unwrap_paren_tuple = [](const nlohmann::json &n) -> const nlohmann::json & {
+  auto unwrap_paren_tuple =
+    [](const nlohmann::json &n) -> const nlohmann::json & {
     const nlohmann::json *cur = &n;
-    while (cur->is_object() && cur->value("nodeType", "") == "TupleExpression" &&
-           cur->contains("components") && (*cur)["components"].is_array() &&
-           (*cur)["components"].size() == 1 && !(*cur)["components"][0].is_null() &&
-           (*cur)["components"][0].is_object() &&
-           (*cur)["components"][0].value("nodeType", "") == "TupleExpression")
+    while (
+      cur->is_object() && cur->value("nodeType", "") == "TupleExpression" &&
+      cur->contains("components") && (*cur)["components"].is_array() &&
+      (*cur)["components"].size() == 1 && !(*cur)["components"][0].is_null() &&
+      (*cur)["components"][0].is_object() &&
+      (*cur)["components"][0].value("nodeType", "") == "TupleExpression")
       cur = &(*cur)["components"][0];
     return *cur;
   };
@@ -812,8 +817,7 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
       // otherwise misclassify as TUPLE_RETURNS and trip on the absent
       // `.expression` field inside get_tuple_function_ref.
       const bool rhs_is_fn_call =
-        rhs_val.is_object() &&
-        rhs_val.value("nodeType", "") == "FunctionCall";
+        rhs_val.is_object() && rhs_val.value("nodeType", "") == "FunctionCall";
       if (
         rhs_is_fn_call &&
         get_sol_type(rhs_t) == SolidityGrammar::SolType::TUPLE_RETURNS)
@@ -859,8 +863,7 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
                 return true;
 
               exprt member;
-              if (get_tuple_member_call(
-                    tuple_inst.identifier(), comp, member))
+              if (get_tuple_member_call(tuple_inst.identifier(), comp, member))
                 return true;
 
               get_tuple_assignment(expr, target, member);
@@ -888,13 +891,11 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
     {
       // Leaf LHS target — direct assignment
       exprt target;
-      if (get_expr(
-            lhs_comps[i], lhs_comps[i]["typeDescriptions"], target))
+      if (get_expr(lhs_comps[i], lhs_comps[i]["typeDescriptions"], target))
         return true;
 
       exprt value;
-      if (get_expr(
-            rhs_comps[i], rhs_comps[i]["typeDescriptions"], value))
+      if (get_expr(rhs_comps[i], rhs_comps[i]["typeDescriptions"], value))
         return true;
 
       get_tuple_assignment(expr, target, value);

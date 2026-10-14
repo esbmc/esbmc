@@ -77,29 +77,29 @@ __ESBMC_HIDE:;
  *
  * Replaces the unsound multiplicative `_ESBMC_abi_fold` (deleted in S5).
  */
-__attribute__((annotate("__ESBMC_inf_size:256")))
-uint256_t _ESBMC_keccak_table_256[1];
-__attribute__((annotate("__ESBMC_inf_size:512")))
-uint256_t _ESBMC_keccak_table_512[1];
-__attribute__((annotate("__ESBMC_inf_size:1024")))
-uint256_t _ESBMC_keccak_table_1024[1];
-__attribute__((annotate("__ESBMC_inf_size:2048")))
-uint256_t _ESBMC_keccak_table_2048[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:256"))) uint256_t _ESBMC_keccak_table_256[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:512"))) uint256_t _ESBMC_keccak_table_512[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:1024"))) uint256_t _ESBMC_keccak_table_1024[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:2048"))) uint256_t _ESBMC_keccak_table_2048[1];
 
-__attribute__((annotate("__ESBMC_inf_size:256")))
-uint256_t _ESBMC_sha256_table_256[1];
-__attribute__((annotate("__ESBMC_inf_size:512")))
-uint256_t _ESBMC_sha256_table_512[1];
-__attribute__((annotate("__ESBMC_inf_size:1024")))
-uint256_t _ESBMC_sha256_table_1024[1];
-__attribute__((annotate("__ESBMC_inf_size:2048")))
-uint256_t _ESBMC_sha256_table_2048[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:256"))) uint256_t _ESBMC_sha256_table_256[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:512"))) uint256_t _ESBMC_sha256_table_512[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:1024"))) uint256_t _ESBMC_sha256_table_1024[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:2048"))) uint256_t _ESBMC_sha256_table_2048[1];
 
-__attribute__((annotate("__ESBMC_inf_size:256")))
-address_t _ESBMC_ripemd160_table_256[1];
-__attribute__((annotate("__ESBMC_inf_size:512")))
-address_t _ESBMC_ripemd160_table_512[1];
-__attribute__((annotate("__ESBMC_inf_size:1024")))
-address_t _ESBMC_ripemd160_table_1024[1];
-__attribute__((annotate("__ESBMC_inf_size:2048")))
-address_t _ESBMC_ripemd160_table_2048[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:256"))) address_t _ESBMC_ripemd160_table_256[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:512"))) address_t _ESBMC_ripemd160_table_512[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:1024"))) address_t _ESBMC_ripemd160_table_1024[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:2048"))) address_t _ESBMC_ripemd160_table_2048[1];

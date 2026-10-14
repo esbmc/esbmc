@@ -144,10 +144,8 @@ struct Walker
 
 static void walk(Walker &w, const nlohmann::json &node, bool is_write_target);
 
-static void walk_children(
-  Walker &w,
-  const nlohmann::json &node,
-  bool is_write_target)
+static void
+walk_children(Walker &w, const nlohmann::json &node, bool is_write_target)
 {
   if (node.is_object())
   {
@@ -348,8 +346,7 @@ struct LocalInfo
   std::set<int> callees;
 };
 
-static std::map<int, LocalInfo> compute_local(
-  const ContractIndex &idx)
+static std::map<int, LocalInfo> compute_local(const ContractIndex &idx)
 {
   std::map<int, LocalInfo> out;
   for (const auto &kv : idx.body_by_id)
@@ -376,8 +373,8 @@ static std::map<int, LocalInfo> compute_local(
 }
 
 /// Iterate to a fixed point: footprint(f) = local(f) ∪ ⋃ footprint(callee).
-static std::map<int, RWSet> close_callgraph(
-  const std::map<int, LocalInfo> &local)
+static std::map<int, RWSet>
+close_callgraph(const std::map<int, LocalInfo> &local)
 {
   std::map<int, RWSet> closed;
   for (const auto &kv : local)
@@ -429,9 +426,8 @@ static bool is_orderable(const nlohmann::json &fn)
 
 } // namespace
 
-std::map<std::string, RWSet> compute_rw_sets(
-  const nlohmann::json &contract_def,
-  const nlohmann::json *ast)
+std::map<std::string, RWSet>
+compute_rw_sets(const nlohmann::json &contract_def, const nlohmann::json *ast)
 {
   ContractIndex idx = index_contract(contract_def, ast);
   auto local = compute_local(idx);

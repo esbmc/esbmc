@@ -187,8 +187,8 @@ bool solidity_convertert::get_function_params(
   typet param_type;
   if (pd.contains("typeName"))
   {
-    if (get_type_description(
-          pd, pd["typeName"]["typeDescriptions"], param_type))
+    if (
+      get_type_description(pd, pd["typeName"]["typeDescriptions"], param_type))
       return true;
   }
   else
@@ -445,7 +445,7 @@ bool solidity_convertert::get_statement(
     }
     if (
       get_expr(
-          stmt["expression"], stmt["expression"]["typeDescriptions"], new_expr))
+        stmt["expression"], stmt["expression"]["typeDescriptions"], new_expr))
       return true;
     // Bare expression-statement forms that reduce to no-op exprt shapes
     // (e.g. `MyAddress.wrap;` — a MemberAccess naming a UDVT wrap/unwrap
@@ -780,9 +780,9 @@ bool solidity_convertert::get_statement(
         {
           if (
             get_expr(
-                stmt["expression"],
-                stmt["expression"]["typeDescriptions"],
-                func_call))
+              stmt["expression"],
+              stmt["expression"]["typeDescriptions"],
+              func_call))
             return true;
           get_tuple_function_call(func_call);
         }
@@ -813,10 +813,11 @@ bool solidity_convertert::get_statement(
           {
             get_nondet_expr(lop.type(), rop);
           }
-          else if (get_tuple_member_call(
-                     rhs.identifier(),
-                     to_struct_type(rhs.type()).components().at(i),
-                     rop))
+          else if (
+            get_tuple_member_call(
+              rhs.identifier(),
+              to_struct_type(rhs.type()).components().at(i),
+              rop))
             return true;
 
           // do assignment
@@ -1090,9 +1091,9 @@ bool solidity_convertert::get_statement(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(cond, then);
 
-    // 3. Else: make a exprt for "falseBody" if the if-statement node contains an "else" block.
-    // solc 0.6.x always emits the field, with `null` when there is no else;
-    // 0.8.x omits it. Treat both as "no else".
+    // 3. Else: make a exprt for "falseBody" if the if-statement node contains
+    // an "else" block. solc 0.6.x always emits the field, with `null` when
+    // there is no else; 0.8.x omits it. Treat both as "no else".
     if (stmt.contains("falseBody") && !stmt["falseBody"].is_null())
     {
       codet else_expr = code_skipt();
@@ -1126,11 +1127,11 @@ bool solidity_convertert::get_statement(
       //     IF !(_Bool)return_value$_bytes_static_equal$2 THEN GOTO 1
       //
       // and branch coverage, which identifies a branch by its source location,
-      // reports "No branch detected" and generates 0 VCCs. MEASURED: it silently
-      // emptied `foundry_covgen_bytesN_fail`, whose whole subject is the branch
-      // `if (x == bytes4(0x12345678))`. A wrapper that loses the location does
-      // not break the branch, it makes it invisible to the pass that counts
-      // branches -- which for this project is worse.
+      // reports "No branch detected" and generates 0 VCCs. MEASURED: it
+      // silently emptied `foundry_covgen_bytesN_fail`, whose whole subject is
+      // the branch `if (x == bytes4(0x12345678))`. A wrapper that loses the
+      // location does not break the branch, it makes it invisible to the pass
+      // that counts branches -- which for this project is worse.
       if_expr.location() = loc;
       // The temporaries and then the branch, as one statement, so the enclosing
       // block cannot separate them.
@@ -1284,8 +1285,8 @@ bool solidity_convertert::get_statement(
     //    `uses_revert_observation` is set): a revert-CORRELATED lowering.  The
     //    call is hoisted out of the arms and the branch tests the real revert
     //    flag with a save / clear / snapshot / restore discipline, so the catch
-    //    arm is entered iff the call reverted within the captured scope, and the
-    //    single global flag behaves like a per-`try` scoped observation (no
+    //    arm is entered iff the call reverted within the captured scope, and
+    //    the single global flag behaves like a per-`try` scoped observation (no
     //    contamination from nested calls).  See
     //    docs/claude/solidity/revert-observation.md and plan.md.
     //
@@ -1590,8 +1591,9 @@ bool solidity_convertert::get_statement(
     {
       std::string unsupported_kind, unsupported_src;
       exprt precise;
-      if (try_lower_yul_block_precise(
-            stmt, loc, precise, unsupported_kind, unsupported_src))
+      if (
+        try_lower_yul_block_precise(
+          stmt, loc, precise, unsupported_kind, unsupported_src))
       {
         new_expr = precise;
         break;
@@ -2115,7 +2117,8 @@ bool solidity_convertert::convert_yul_expression(
       decl.contains("stateVariable") && decl["stateVariable"].get<bool>();
     if (get_var_decl_ref(decl, is_state, out))
       return true;
-    // Yul reads of internal-fn-ptr-typed locals see 0 (uninit fn-ptr semantics).
+    // Yul reads of internal-fn-ptr-typed locals see 0 (uninit fn-ptr
+    // semantics).
     if (out.type().get_bool("#sol_func_ptr"))
       out = from_integer(BigInt(0), u256);
     else
@@ -2433,8 +2436,9 @@ bool solidity_convertert::convert_yul_statement(
     exprt rhs;
     if (yul_stmt.contains("value") && yul_stmt["value"].is_object())
     {
-      if (convert_yul_expression(
-            yul_stmt["value"], src_to_decl, slot_refs, locals, loc, rhs))
+      if (
+        convert_yul_expression(
+          yul_stmt["value"], src_to_decl, slot_refs, locals, loc, rhs))
         return true;
     }
     else
@@ -2557,8 +2561,9 @@ bool solidity_convertert::convert_yul_statement(
     }
 
     exprt rhs;
-    if (convert_yul_expression(
-          rhs_node, src_to_decl, slot_refs, locals, loc, rhs))
+    if (
+      convert_yul_expression(
+        rhs_node, src_to_decl, slot_refs, locals, loc, rhs))
       return true;
     solidity_gen_typecast(ns, rhs, lhs.type());
     code_assignt assign(lhs, rhs);
@@ -2570,22 +2575,24 @@ bool solidity_convertert::convert_yul_statement(
   if (nt == "YulIf")
   {
     exprt cond_val;
-    if (convert_yul_expression(
-          yul_stmt["condition"], src_to_decl, slot_refs, locals, loc, cond_val))
+    if (
+      convert_yul_expression(
+        yul_stmt["condition"], src_to_decl, slot_refs, locals, loc, cond_val))
       return true;
     binary_relation_exprt cond_ne(
       cond_val, "notequal", from_integer(BigInt(0), u256));
 
     exprt body;
-    if (convert_yul_block(
-          yul_stmt["body"],
-          asm_id,
-          src_to_decl,
-          slot_refs,
-          locals,
-          local_seq,
-          loc,
-          body))
+    if (
+      convert_yul_block(
+        yul_stmt["body"],
+        asm_id,
+        src_to_decl,
+        slot_refs,
+        locals,
+        local_seq,
+        loc,
+        body))
       return true;
 
     codet if_expr("ifthenelse");
@@ -2598,8 +2605,9 @@ bool solidity_convertert::convert_yul_statement(
   if (nt == "YulSwitch")
   {
     exprt e;
-    if (convert_yul_expression(
-          yul_stmt["expression"], src_to_decl, slot_refs, locals, loc, e))
+    if (
+      convert_yul_expression(
+        yul_stmt["expression"], src_to_decl, slot_refs, locals, loc, e))
       return true;
 
     const auto &cases = yul_stmt["cases"];
@@ -2620,15 +2628,16 @@ bool solidity_convertert::convert_yul_statement(
     {
       if (is_default(c))
       {
-        if (convert_yul_block(
-              c["body"],
-              asm_id,
-              src_to_decl,
-              slot_refs,
-              locals,
-              local_seq,
-              loc,
-              tail))
+        if (
+          convert_yul_block(
+            c["body"],
+            asm_id,
+            src_to_decl,
+            slot_refs,
+            locals,
+            local_seq,
+            loc,
+            tail))
           return true;
         break;
       }
@@ -2642,20 +2651,22 @@ bool solidity_convertert::convert_yul_statement(
     for (auto it = non_default.rbegin(); it != non_default.rend(); ++it)
     {
       exprt key;
-      if (convert_yul_expression(
-            (*it)["value"], src_to_decl, slot_refs, locals, loc, key))
+      if (
+        convert_yul_expression(
+          (*it)["value"], src_to_decl, slot_refs, locals, loc, key))
         return true;
       equality_exprt cond(e, key);
       exprt body;
-      if (convert_yul_block(
-            (*it)["body"],
-            asm_id,
-            src_to_decl,
-            slot_refs,
-            locals,
-            local_seq,
-            loc,
-            body))
+      if (
+        convert_yul_block(
+          (*it)["body"],
+          asm_id,
+          src_to_decl,
+          slot_refs,
+          locals,
+          local_seq,
+          loc,
+          body))
         return true;
       codet if_expr("ifthenelse");
       if_expr.copy_to_operands(cond, body, tail);
@@ -2687,49 +2698,46 @@ bool solidity_convertert::convert_yul_statement(
       for (const auto &s : yul_stmt["pre"]["statements"])
       {
         exprt s_expr;
-        if (convert_yul_statement(
-              s,
-              asm_id,
-              src_to_decl,
-              slot_refs,
-              locals,
-              local_seq,
-              loc,
-              s_expr))
+        if (
+          convert_yul_statement(
+            s, asm_id, src_to_decl, slot_refs, locals, local_seq, loc, s_expr))
           return true;
         outer.copy_to_operands(s_expr);
       }
     }
 
     exprt cond_val;
-    if (convert_yul_expression(
-          yul_stmt["condition"], src_to_decl, slot_refs, locals, loc, cond_val))
+    if (
+      convert_yul_expression(
+        yul_stmt["condition"], src_to_decl, slot_refs, locals, loc, cond_val))
       return true;
     binary_relation_exprt cond_ne(
       cond_val, "notequal", from_integer(BigInt(0), u256));
 
     exprt post_expr;
-    if (convert_yul_block(
-          yul_stmt["post"],
-          asm_id,
-          src_to_decl,
-          slot_refs,
-          locals,
-          local_seq,
-          loc,
-          post_expr))
+    if (
+      convert_yul_block(
+        yul_stmt["post"],
+        asm_id,
+        src_to_decl,
+        slot_refs,
+        locals,
+        local_seq,
+        loc,
+        post_expr))
       return true;
 
     exprt body_expr;
-    if (convert_yul_block(
-          yul_stmt["body"],
-          asm_id,
-          src_to_decl,
-          slot_refs,
-          locals,
-          local_seq,
-          loc,
-          body_expr))
+    if (
+      convert_yul_block(
+        yul_stmt["body"],
+        asm_id,
+        src_to_decl,
+        slot_refs,
+        locals,
+        local_seq,
+        loc,
+        body_expr))
       return true;
 
     code_fort code_for;
@@ -2818,8 +2826,8 @@ bool solidity_convertert::convert_yul_statement(
       if (!yul_pack_slot0_fields(ns, lval, to_struct_type(rt), fields))
         return true;
       exprt w;
-      if (convert_yul_expression(
-            args[1], src_to_decl, slot_refs, locals, loc, w))
+      if (
+        convert_yul_expression(args[1], src_to_decl, slot_refs, locals, loc, w))
         return true;
       code_blockt blk;
       for (const auto &f : fields)
@@ -2859,8 +2867,8 @@ bool solidity_convertert::convert_yul_statement(
 
     // Lower the value expression and narrow to the state var's native type.
     exprt rhs;
-    if (convert_yul_expression(
-          args[1], src_to_decl, slot_refs, locals, loc, rhs))
+    if (
+      convert_yul_expression(args[1], src_to_decl, slot_refs, locals, loc, rhs))
       return true;
     solidity_gen_typecast(ns, rhs, lval.type());
 
@@ -2895,8 +2903,9 @@ bool solidity_convertert::convert_yul_block(
     for (const auto &s : yul_block["statements"])
     {
       exprt s_expr;
-      if (convert_yul_statement(
-            s, asm_id, src_to_decl, slot_refs, locals, local_seq, loc, s_expr))
+      if (
+        convert_yul_statement(
+          s, asm_id, src_to_decl, slot_refs, locals, local_seq, loc, s_expr))
         return true;
       blk.copy_to_operands(s_expr);
     }
@@ -2966,8 +2975,9 @@ bool solidity_convertert::try_lower_yul_block_precise(
   std::map<std::string, exprt> locals;
   int local_seq = 0;
 
-  if (convert_yul_block(
-        yul_root, asm_id, src_to_decl, slot_refs, locals, local_seq, loc, out))
+  if (
+    convert_yul_block(
+      yul_root, asm_id, src_to_decl, slot_refs, locals, local_seq, loc, out))
   {
     unsupported_kind = "convert_failure";
     unsupported_src = asm_stmt.value("src", "");

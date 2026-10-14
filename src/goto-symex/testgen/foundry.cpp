@@ -99,8 +99,9 @@ std::string effective_sol_type(const typet &t)
     }
     // An interface/contract-typed value lowers to `pointer<struct tag-I>` with
     // `#sol_type: CONTRACT` and `#sol_contract: I` on the pointer. Encode as
-    // "CONTRACT:<I>" so the reconstructor can synthesize a mock instance (a bare
-    // address literal would revert when the contract calls a method on it).
+    // "CONTRACT:<I>" so the reconstructor can synthesize a mock instance (a
+    // bare address literal would revert when the contract calls a method on
+    // it).
     if (ptag == "CONTRACT")
     {
       const std::string cn = t.get("#sol_contract").as_string();
@@ -426,12 +427,11 @@ std::string foundry_generator::default_sol_literal(
     return "false";
   if (has_prefix(sol_type, "UINT") || has_prefix(sol_type, "INT"))
     // Left at 0 deliberately. A numeric default is not an identity, so two of
-    // them being equal aliases nothing; and a non-zero amount is far more likely
-    // to trip a balance/overflow guard than a zero one.
+    // them being equal aliases nothing; and a non-zero amount is far more
+    // likely to trip a balance/overflow guard than a zero one.
     return "0";
   if (sol_type == "ADDRESS" || sol_type == "ADDRESS_PAYABLE")
-    return nth ? "address(uint160(" + std::to_string(nth) + "))"
-               : "address(0)";
+    return nth ? "address(uint160(" + std::to_string(nth) + "))" : "address(0)";
   // Fixed-size bytesN not exercised on the path: any value is faithful, and a
   // DISTINCT one is preferred for the aliasing reason above.
   if (unsigned n = parse_fixed_bytes_width(sol_type))
@@ -452,8 +452,8 @@ std::string foundry_generator::default_sol_literal(
     return elem.empty() ? "" : "new " + elem + "[](4)";
   }
   // `bytes` / `string`: an empty literal is a valid, compilable default. Sound
-  // when the value is sliced; the try/catch wrap tolerates any content-dependent
-  // divergence.
+  // when the value is sliced; the try/catch wrap tolerates any
+  // content-dependent divergence.
   if (sol_type == "BYTES_DYN")
     return "hex\"\"";
   if (sol_type == "STRING")
@@ -462,10 +462,10 @@ std::string foundry_generator::default_sol_literal(
 }
 
 // A struct type NAME (possibly "struct <tag>") that is the modeled bytes value
-// wrapper — `BytesStatic` (fixed bytesN) or `BytesDynamic` (`bytes`) — which have
-// their own renderers and must NOT be treated as a user struct. Matched exactly
-// (not by substring) so a legitimately-named user struct like `BytesBundle` is
-// not misclassified.
+// wrapper — `BytesStatic` (fixed bytesN) or `BytesDynamic` (`bytes`) — which
+// have their own renderers and must NOT be treated as a user struct. Matched
+// exactly (not by substring) so a legitimately-named user struct like
+// `BytesBundle` is not misclassified.
 static bool is_bytes_wrapper_struct(const std::string &name)
 {
   std::string n = name;
@@ -706,7 +706,8 @@ foundry_generator::dispatcher_callable(
   const std::string disp_id =
     "sol:@C@" + contract + "@_ESBMC_Nondet_Extcall_" + contract + "#";
   if (const symbolt *disp = ns.lookup(irep_idt(disp_id)))
-    collect_dispatch_calls(disp->get_value(), "sol:@C@" + contract + "@F@", calls);
+    collect_dispatch_calls(
+      disp->get_value(), "sol:@C@" + contract + "@F@", calls);
 
   return dispatcher_methods.emplace(contract, std::move(calls)).first->second;
 }
@@ -754,10 +755,11 @@ contract_is_library(const namespacet &ns, const std::string &contract)
 
 // Whether `contract` is a true Solidity interface (frontend stamps
 // `#sol_interface` on its constructor symbol, alongside `#sol_no_new`). Only an
-// interface is mocked — it is guaranteed to have no constructor arguments and no
-// abstract receive/fallback, so `contract ESBMCMock_<I> is <I> { <stubs> }` is
-// always fully implementable. An abstract contract (equally non-instantiable but
-// possibly carrying ctor args / an abstract receive-fallback) is NOT mocked.
+// interface is mocked — it is guaranteed to have no constructor arguments and
+// no abstract receive/fallback, so `contract ESBMCMock_<I> is <I> { <stubs> }`
+// is always fully implementable. An abstract contract (equally non-instantiable
+// but possibly carrying ctor args / an abstract receive-fallback) is NOT
+// mocked.
 static bool
 contract_is_interface(const namespacet &ns, const std::string &contract)
 {
@@ -829,9 +831,10 @@ const foundry_generator::mock_spec &foundry_generator::build_mock_spec(
   // Enumerate the interface's externally-visible functions. Inherited methods
   // are already inlined into the derived interface's `@F@` set (verified: a
   // `IChild is IBase` carries `IChild@F@<base-method>`), so no base walk is
-  // needed. A genuine method is a CODE symbol whose first argument is the `this`
-  // self-pointer; events (`void(a,b,c)`, no `this`) are thereby excluded. The
-  // only synthesized code-with-`this` members an interface carries are the
+  // needed. A genuine method is a CODE symbol whose first argument is the
+  // `this` self-pointer; events (`void(a,b,c)`, no `this`) are thereby
+  // excluded. The only synthesized code-with-`this` members an interface
+  // carries are the
   // `$`-prefixed call helpers (`$call`/`$send`/…) and its own constructor
   // (name == iface); everything else is a real interface method (including a
   // legally `_`-prefixed one), so those two are the only exclusions.
@@ -878,7 +881,8 @@ const foundry_generator::mock_spec &foundry_generator::build_mock_spec(
     const code_typet &ct = to_code_type(fn->get_type());
 
     // Parameter types (skip the `this` self-pointer). A parameter type that
-    // cannot be named as a Solidity type makes the whole interface unrenderable.
+    // cannot be named as a Solidity type makes the whole interface
+    // unrenderable.
     std::string params;
     std::string sig = name + "(";
     bool ok = true;
@@ -905,8 +909,8 @@ const foundry_generator::mock_spec &foundry_generator::build_mock_spec(
     if (!seen_sig.insert(sig).second)
       continue; // duplicate signature (already emitted) — skip
 
-    // Return type. Only a single, nameable return is supported; a tuple / struct
-    // / unnameable return degrades the whole interface (all-or-nothing).
+    // Return type. Only a single, nameable return is supported; a tuple /
+    // struct / unnameable return degrades the whole interface (all-or-nothing).
     std::string ret_sol, ret_default, ret_loc;
     const typet &rt = ct.return_type();
     if (rt.id() != "empty" && !rt.is_nil())
@@ -922,8 +926,9 @@ const foundry_generator::mock_spec &foundry_generator::build_mock_spec(
         ret_loc = " memory";
     }
 
-    // Mutability: mirror payable (a `pure` override of a payable interface fn is
-    // rejected by solc); every other mutability is validly tightened to `pure`.
+    // Mutability: mirror payable (a `pure` override of a payable interface fn
+    // is rejected by solc); every other mutability is validly tightened to
+    // `pure`.
     const std::string mut =
       fn->get_type().get_bool("#sol_payable") ? "payable" : "pure";
 
@@ -1080,7 +1085,8 @@ static bool symbol_is_payable(const namespacet &ns, const std::string &id)
   if (id.empty())
     return false;
   const symbolt *fn = ns.lookup(irep_idt(id));
-  return fn && fn->get_type().is_code() && fn->get_type().get_bool("#sol_payable");
+  return fn && fn->get_type().is_code() &&
+         fn->get_type().get_bool("#sol_payable");
 }
 
 // Wrap an integer literal in an explicit typed cast so Solidity's overload
@@ -1163,16 +1169,16 @@ foundry_generator::test_case foundry_generator::reconstruct(
 {
   // PROVENANCE: which verification obligation this case comes from.
   //
-  // The claim identity is the assert's `comment` (`<unit>:path:<id>`) — the same
-  // field the exit census is keyed on below, so no new plumbing and no new
+  // The claim identity is the assert's `comment` (`<unit>:path:<id>`) — the
+  // same field the exit census is keyed on below, so no new plumbing and no new
   // query. What needs care is WHICH assert.
   //
   // "Guard-true" is NOT enough, and the first version of this got it wrong. An
   // equation contains every path claim of the whole contract, and on any given
   // model a great many of them are guard-true: the ones that HOLD there are
   // guard-true too. Recording all of them produced a case labelled with six
-  // claims across three different units, which says nothing about where the case
-  // came from.
+  // claims across three different units, which says nothing about where the
+  // case came from.
   //
   // The obligation this counterexample REFUTES is the guard-true assert whose
   // condition is FALSE under the model — that is what "reached" means for a
@@ -1236,7 +1242,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
       {
         // Overloaded: pick the single candidate declaring every recovered
         // parameter name. No unique match (incl. no recovered args) -> we
-        // cannot know which overload ran, so mark unsupported rather than guess.
+        // cannot know which overload ran, so mark unsupported rather than
+        // guess.
         overloaded = true;
         std::string chosen;
         for (const auto &id : ids)
@@ -1356,7 +1363,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
         auto sit = recovered.find(decl.first);
         // A user struct value is a constant_struct — but so are `bytesN`
         // (BytesStatic) and `bytes` (BytesDynamic) values, which have their own
-        // renderers; exclude those by struct tag so they are not mis-routed here.
+        // renderers; exclude those by struct tag so they are not mis-routed
+        // here.
         bool is_user_struct = false;
         if (
           sit != recovered.end() && sit->second.value &&
@@ -1398,7 +1406,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
         // default to the same identity -- see default_slot_of for the measured
         // aliasing this removes.
         a.literal = default_sol_literal(decl.second, default_slot_of(a.param));
-      // A non-empty literal not sourced from a recovered value is a type default.
+      // A non-empty literal not sourced from a recovered value is a type
+      // default.
       a.defaulted = !a.literal.empty() && !from_recovered;
       if (a.literal.empty())
         out.supported = false;
@@ -1418,17 +1427,18 @@ foundry_generator::test_case foundry_generator::reconstruct(
   // first contract-method body that runs in it.
   std::map<std::string, std::map<std::string, sol_arg>> ctor_args;
   // ③A0 constructor-time env. A ctor branching on block.timestamp is satisfied
-  // by the deploy-time ambient (set in initialize(), before the dispatcher loop);
-  // Foundry's `new C()` deploys under the default timestamp, so the ctor can
-  // revert in setUp and fail the whole suite. Recover the deploy-time value and
-  // whether the ctor reads it, to emit `vm.warp` before the deploy.
+  // by the deploy-time ambient (set in initialize(), before the dispatcher
+  // loop); Foundry's `new C()` deploys under the default timestamp, so the ctor
+  // can revert in setUp and fail the whole suite. Recover the deploy-time value
+  // and whether the ctor reads it, to emit `vm.warp` before the deploy.
   expr2tc ctor_block_timestamp;
   bool ctor_reads_timestamp = false;
   // ③A0 constructor-time msg.sender (deployer identity). A ctor binding
   // `owner = msg.sender` stores the deploy-time sender; recover it so setUp can
-  // `vm.startPrank` before `new C()`, making a later `onlyOwner` check match (or
-  // mismatch) a known owner. `ctor_sender_dirty` guards against a ctor whose own
-  // body makes a nested call that overwrites msg_sender before the owner bind.
+  // `vm.startPrank` before `new C()`, making a later `onlyOwner` check match
+  // (or mismatch) a known owner. `ctor_sender_dirty` guards against a ctor
+  // whose own body makes a nested call that overwrites msg_sender before the
+  // owner bind.
   expr2tc ctor_msg_sender;
   bool ctor_reads_msg_sender = false;
   bool ctor_sender_shadowed = false;
@@ -1441,8 +1451,9 @@ foundry_generator::test_case foundry_generator::reconstruct(
   // ③A0 constructor-time msg.value. A `payable` ctor that requires/branches on
   // msg.value must be deployed with `new C{value: v}(...)` (and the test funded
   // via vm.deal), else a `require(msg.value >= N)` reverts setUp and fails the
-  // whole suite. Recover the deploy-time value + whether the ctor reads it; only
-  // emit for a payable ctor (sending value to a non-payable ctor cannot compile).
+  // whole suite. Recover the deploy-time value + whether the ctor reads it;
+  // only emit for a payable ctor (sending value to a non-payable ctor cannot
+  // compile).
   expr2tc ctor_msg_value;
   bool ctor_reads_value = false;
   bool ctor_is_payable = false;
@@ -1481,24 +1492,25 @@ foundry_generator::test_case foundry_generator::reconstruct(
   };
   std::vector<segment> segs;
   // This counterexample refutes a path claim that is a NAMED OBSTACLE, so the
-  // case reconstructed from it must not be shipped (see sol_call::named_obstacle
-  // and collect()). Kept per-reconstruction rather than per-segment: the flag has
-  // to survive every route by which `calls` can be built, including the fallback
-  // that has no segment.
+  // case reconstructed from it must not be shipped (see
+  // sol_call::named_obstacle and collect()). Kept per-reconstruction rather
+  // than per-segment: the flag has to survive every route by which `calls` can
+  // be built, including the fallback that has no segment.
   bool path_named_obstacle = false;
 
   // ③A0 environment pinning. `_sol_per_tx_reseed` assigns the globals
   // `msg_value` / `block_timestamp` in the dispatcher prologue JUST BEFORE the
-  // tx's Extcall guard marker, so the reseed for tx N precedes segment N's push.
-  // Buffer the most recent recovered values and attach them to the next segment
-  // when its marker fires.
+  // tx's Extcall guard marker, so the reseed for tx N precedes segment N's
+  // push. Buffer the most recent recovered values and attach them to the next
+  // segment when its marker fires.
   expr2tc pending_msg_value, pending_block_timestamp, pending_msg_sender;
   // True iff the symbol NAME denotes the EVM ambient C global `base`
   // (solidity_blockchain.c), NOT a user Solidity symbol that merely ends with
   // the same word. User symbols live in the `sol:` namespace
   // (`sol:@C@<C>@F@<f>@block_timestamp`); the C globals do not, so a `sol:`
   // prefix is a decisive exclusion — otherwise a user variable named
-  // `block_timestamp` / `msg_value` would false-match and trigger a spurious pin.
+  // `block_timestamp` / `msg_value` would false-match and trigger a spurious
+  // pin.
   auto is_env_global = [](const std::string &name, const char *base) -> bool {
     if (has_prefix(name, "sol:"))
       return false;
@@ -1531,12 +1543,13 @@ foundry_generator::test_case foundry_generator::reconstruct(
     const std::string f = step.source.pc->location.file().as_string();
     return f.size() >= 4 && f.compare(f.size() - 4, 4, ".sol") == 0;
   };
-  // A step is an ambient/library helper (excluded from user-level block.timestamp
-  // read detection) iff it is in a KNOWN source that is not a user `.sol` file.
-  // The ambient model (`initialize` / `_sol_per_tx_reseed` and their internal
-  // block.timestamp reads) lives in the C library, and `location.function()`
-  // returns the bare short name for BOTH a user `initialize()` and the library
-  // one — so the file, not the function name, is the discriminator.
+  // A step is an ambient/library helper (excluded from user-level
+  // block.timestamp read detection) iff it is in a KNOWN source that is not a
+  // user `.sol` file. The ambient model (`initialize` / `_sol_per_tx_reseed`
+  // and their internal block.timestamp reads) lives in the C library, and
+  // `location.function()` returns the bare short name for BOTH a user
+  // `initialize()` and the library one — so the file, not the function name, is
+  // the discriminator.
   //
   // ---- AN EMPTY FILE IS UNKNOWN, NOT "LIBRARY" ----
   //
@@ -1574,10 +1587,11 @@ foundry_generator::test_case foundry_generator::reconstruct(
 
   // Resolve a covered function name to the dispatcher-callable method that owns
   // it. A method with modifiers runs its body inside a synthetic wrapper
-  // `<method>_<modifier>` (get_modifier_function_name) that the dispatcher never
-  // calls directly, so a branch covered inside the wrapper names the wrapper,
-  // not the external entry — and the segment would get no method (dropping the
-  // call, or falling back without env pins). The wrapper symbol carries
+  // `<method>_<modifier>` (get_modifier_function_name) that the dispatcher
+  // never calls directly, so a branch covered inside the wrapper names the
+  // wrapper, not the external entry — and the segment would get no method
+  // (dropping the call, or falling back without env pins). The wrapper symbol
+  // carries
   // `#sol_modifier_wrapper_for` (stamped by the frontend) naming its real
   // method; that is authoritative, unlike a name-prefix guess which is
   // ambiguous because `_` is a legal identifier char (`a_b_mod` could be
@@ -1627,10 +1641,10 @@ foundry_generator::test_case foundry_generator::reconstruct(
     // Revert fidelity: the covered branch-coverage claim is the one kept assert
     // whose guard is true on this path. When goto_coverage marked its edge as a
     // DETECTED revert (Phase A: a `revert CustomError(...)` reaching a
-    // `#sol_error` call — NOT `require(cond, ...)` failures, which lower with no
-    // detectable terminator), the transaction active at this step reverts, so
-    // its call is wrapped in a precise vm.expectRevert(). Undetected reverts are
-    // caught by the try/catch fallback in write_foundry_file instead.
+    // `#sol_error` call — NOT `require(cond, ...)` failures, which lower with
+    // no detectable terminator), the transaction active at this step reverts,
+    // so its call is wrapped in a precise vm.expectRevert(). Undetected reverts
+    // are caught by the try/catch fallback in write_foundry_file instead.
     if (
       step.is_assert() && !segs.empty() &&
       step.source.pc->location.get_bool("sol_revert_edge"))
@@ -1725,7 +1739,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
       assert_refuted =
         v && is_constant_bool2t(v) && !to_constant_bool2t(v).value;
       if (step.comment.as_string().find(":path:") != std::string::npos)
-        (assert_refuted ? claim_ids : claim_holds).insert(step.comment.as_string());
+        (assert_refuted ? claim_ids : claim_holds)
+          .insert(step.comment.as_string());
       // ---- Is THIS case's provenance a NAMED OBSTACLE? ----
       //
       // Keyed off the REFUTED claim, which is exactly the obligation this case
@@ -1745,10 +1760,11 @@ foundry_generator::test_case foundry_generator::reconstruct(
 
     // The covered coverage claim (a guard-true assert) is AUTHORITATIVE for the
     // active transaction's method: its source location names the function whose
-    // branch is covered. In a multi-function whole-unit dispatcher the segment's
-    // method is otherwise guessed from the first recovered param / executed body
-    // and can latch onto the WRONG function (e.g. a dock claim mis-attributed to
-    // ship), so override the guess with the covered method here.
+    // branch is covered. In a multi-function whole-unit dispatcher the
+    // segment's method is otherwise guessed from the first recovered param /
+    // executed body and can latch onto the WRONG function (e.g. a dock claim
+    // mis-attributed to ship), so override the guess with the covered method
+    // here.
     //
     // THE REFUTED CLAIM NAMES THE METHOD, and it does so in its own identity
     // rather than through its source location. This was a measured
@@ -1771,8 +1787,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
     // first.
     //
     // The claim's own identity does not depend on a location:
-    // `sol:@C@<C>@F@<m>#<id>:path:<n>` names the unit outright. Use it, and fall
-    // back to the location only when the identity does not parse.
+    // `sol:@C@<C>@F@<m>#<id>:path:<n>` names the unit outright. Use it, and
+    // fall back to the location only when the identity does not parse.
     if (step.is_assert() && assert_refuted && !segs.empty())
     {
       std::string named; // method named by the claim identity itself
@@ -1796,8 +1812,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
         }
       }
       if (named.empty())
-        named =
-          resolve_dispatcher_method(segs.back().contract, step_location_method(step));
+        named = resolve_dispatcher_method(
+          segs.back().contract, step_location_method(step));
       if (!named.empty())
         segs.back().method = named;
     }
@@ -1859,11 +1875,12 @@ foundry_generator::test_case foundry_generator::reconstruct(
       continue;
     }
     // ③A0: recover msg.sender. Three msg_sender writes exist: the per-tx reseed
-    // (top-level sender for the next segment), the deploy-time initialize() (the
-    // deployer identity a ctor stores as `owner`), and nested/high/low-level
-    // call wrappers that overwrite it with the caller address. The last makes
-    // the active tx's top-level sender un-reproducible via `vm.prank`, so it
-    // marks the segment (or ctor) sender-dirty and no sender pin is emitted.
+    // (top-level sender for the next segment), the deploy-time initialize()
+    // (the deployer identity a ctor stores as `owner`), and
+    // nested/high/low-level call wrappers that overwrite it with the caller
+    // address. The last makes the active tx's top-level sender un-reproducible
+    // via `vm.prank`, so it marks the segment (or ctor) sender-dirty and no
+    // sender pin is emitted.
     if (assign_sym && lhs_is_env_global(step.original_lhs, "msg_sender"))
     {
       if (from_reseed)
@@ -1971,8 +1988,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
           step.source.pc->location.file().as_string(),
           step.source.pc->location.function().as_string(),
           is_env_helper_step(step) ? 1 : 0,
-          reads_global(step.is_assignment() ? step.rhs : step.cond,
-                       "msg_sender")
+          reads_global(
+            step.is_assignment() ? step.rhs : step.cond, "msg_sender")
             ? 1
             : 0,
           names);
@@ -2049,7 +2066,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
         // actually call it. A recovered parameter may belong to a modifier/aux
         // helper (`<method>_<modifier>`) the dispatcher never enters directly;
         // its value still belongs to the real method, but its name must not be
-        // emitted as the call. The real entry is set from source-location below.
+        // emitted as the call. The real entry is set from source-location
+        // below.
         if (segs.back().method.empty())
         {
           const std::string rm = resolve_dispatcher_method(c, m);
@@ -2166,12 +2184,12 @@ foundry_generator::test_case foundry_generator::reconstruct(
   // A payable ctor reading a nonzero msg.value must deploy with `{value:}`.
   const bool ctor_needs_value =
     ctor_reads_value && ctor_is_payable && ctor_value_nonzero;
-  // A NON-payable ctor cannot legally receive value in the EVM, yet ESBMC's model
-  // seeds a nondet deploy msg.value regardless, so it may produce a construction
-  // counterexample that relies on a nonzero value (e.g. a contradictory
-  // `require(msg.value > 0)` in a non-payable ctor). Forge cannot reproduce it —
-  // `new C()` sends 0 and setUp reverts — so mark that deploy UNSUPPORTED rather
-  // than emit a guaranteed-reverting test.
+  // A NON-payable ctor cannot legally receive value in the EVM, yet ESBMC's
+  // model seeds a nondet deploy msg.value regardless, so it may produce a
+  // construction counterexample that relies on a nonzero value (e.g. a
+  // contradictory `require(msg.value > 0)` in a non-payable ctor). Forge cannot
+  // reproduce it — `new C()` sends 0 and setUp reverts — so mark that deploy
+  // UNSUPPORTED rather than emit a guaranteed-reverting test.
   const bool ctor_value_unsendable =
     ctor_reads_value && !ctor_is_payable && ctor_value_nonzero;
   const bool ctor_needs_env = ctor_reads_timestamp || ctor_needs_deployer ||
@@ -2203,7 +2221,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
     if (ctor_needs_env && kv.first == ctor_ts_contract)
     {
       attach_ctor_env(cc);
-      // Non-payable ctor needing a nonzero deploy value: degrade to UNSUPPORTED.
+      // Non-payable ctor needing a nonzero deploy value: degrade to
+      // UNSUPPORTED.
       if (ctor_value_unsendable)
       {
         cc.supported = false;
@@ -2212,11 +2231,11 @@ foundry_generator::test_case foundry_generator::reconstruct(
       ctor_env_attached = true;
     }
     // A base-forwarded (remapped) deploy ctor gets its recovered args from a
-    // base, but any param not matched there falls to a type DEFAULT. A defaulted
-    // ctor arg can violate a ctor `require` and revert setUp (e.g. St1inch's
-    // `feeReceiver_ = address(0)` / a zero `expBase_`), so degrade to UNSUPPORTED
-    // unless EVERY arg is recovered or a mock. (EscrowDst's args are all
-    // recovered/mock, so it still renders.)
+    // base, but any param not matched there falls to a type DEFAULT. A
+    // defaulted ctor arg can violate a ctor `require` and revert setUp (e.g.
+    // St1inch's `feeReceiver_ = address(0)` / a zero `expBase_`), so degrade to
+    // UNSUPPORTED unless EVERY arg is recovered or a mock. (EscrowDst's args
+    // are all recovered/mock, so it still renders.)
     if (deploy_remapped && kv.first == ctor_ts_contract)
     {
       if (std::any_of(cc.args.begin(), cc.args.end(), [](const sol_arg &a) {
@@ -2351,7 +2370,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
       const std::string mark = "@_ESBMC_Nondet_Extcall_";
       size_t p = id.find(mark);
       if (
-        s.get_type().is_code() && has_prefix(id, "sol:@C@") && p != std::string::npos)
+        s.get_type().is_code() && has_prefix(id, "sol:@C@") &&
+        p != std::string::npos)
         disp_contracts.insert(id.substr(7, p - 7));
     });
 
@@ -2534,7 +2554,8 @@ foundry_generator::test_case foundry_generator::reconstruct(
   // that looked responsible, which means the mechanism had been INFERRED rather
   // than seen. Printing the decision is how the next one gets seen instead.
   {
-    std::string dbg = "foundry attribution: refuted={" + out_claims + "} segs=[";
+    std::string dbg =
+      "foundry attribution: refuted={" + out_claims + "} segs=[";
     for (const auto &s : segs)
       dbg += s.contract + "." + (s.method.empty() ? "<none>" : s.method) + " ";
     // ---- THE CTOR-TIME SENDER DECISION, PRINTED ----
@@ -2543,16 +2564,16 @@ foundry_generator::test_case foundry_generator::reconstruct(
     // deployer; the setUp `vm.startPrank` around `new C()` comes from
     // ctor_needs_deployer ALONE. When the first fires and the second does not,
     // the emitted case calls under the counterexample's sender while `owner`
-    // still holds the TEST CONTRACT -- and an `onlyOwner` require reverts on the
-    // UNMODIFIED contract, which is the one outcome this generator exists never
-    // to produce.
+    // still holds the TEST CONTRACT -- and an `onlyOwner` require reverts on
+    // the UNMODIFIED contract, which is the one outcome this generator exists
+    // never to produce.
     //
     // MEASURED on bench/FeeVault (`address public owner = msg.sender;`, no
     // explicit constructor): both emitted cases carry `vm.prank(...)` and
     // neither setUp carries `vm.startPrank`, so `test_cov_0` is RED. Which of
     // the two inputs to ctor_needs_deployer was false -- the ctor never seen to
-    // READ msg.sender, or the read seen but marked DIRTY by a shadowing write --
-    // is not recoverable from the emitted file, and the two need different
+    // READ msg.sender, or the read seen but marked DIRTY by a shadowing write
+    // -- is not recoverable from the emitted file, and the two need different
     // fixes. So the decision is printed beside the attribution it belongs to,
     // rather than inferred from the artifact afterwards.
     dbg += "] ctor_env={reads_sender=";
@@ -2626,8 +2647,8 @@ void foundry_generator::collect(
   // obstructed one would then ship it under a clean provenance.
   //
   // Counted, and reported by generate(). A silent refusal is indistinguishable
-  // from a path that was never witnessed, and "we excluded N of them and here is
-  // why" is the entire value of the obstacle machinery over a shrug.
+  // from a path that was never witnessed, and "we excluded N of them and here
+  // is why" is the entire value of the obstacle machinery over a shrug.
   for (const auto &c : tc)
     if (c.named_obstacle)
     {
@@ -2704,9 +2725,9 @@ std::string foundry_generator::fingerprint(const test_case &tc)
     // ---- NOT GATED ON `payable`, AND THAT GATE WAS THE MERGE ----
     //
     // `payable` decides whether `{value: N}` can be RENDERED (Solidity refuses
-    // `c.f{value: 1}(x)` on a non-payable method). It says nothing about whether
-    // two counterexamples are the SAME counterexample, which is the only
-    // question a dedup fingerprint asks. Gating the fold on it made a
+    // `c.f{value: 1}(x)` on a non-payable method). It says nothing about
+    // whether two counterexamples are the SAME counterexample, which is the
+    // only question a dedup fingerprint asks. Gating the fold on it made a
     // non-payable unit's two ABI-value-gate paths -- no value sent, and value
     // sent and rejected by the entry -- collapse onto ONE case labelled with
     // BOTH path ids.
@@ -2855,8 +2876,9 @@ size_t foundry_generator::write_foundry_file(
       if (it != ctor.end() && it->second->ctor_unrecovered)
         ib.unrecovered = true;
       ib.ctor_args = it == ctor.end() ? std::string() : join_args(*it->second);
-      // ③A0 ctor-time env: a ctor reading block.timestamp must be deployed under
-      // a matching vm.warp, else `new C()` reverts in setUp and fails the suite.
+      // ③A0 ctor-time env: a ctor reading block.timestamp must be deployed
+      // under a matching vm.warp, else `new C()` reverts in setUp and fails the
+      // suite.
       if (it != ctor.end() && it->second->warp && it->second->block_timestamp)
       {
         const std::string t =
@@ -2865,7 +2887,8 @@ size_t foundry_generator::write_foundry_file(
           ib.ctor_warp = t;
       }
       // ③A0 ctor-time deployer: a ctor binding `owner = msg.sender` must deploy
-      // under a known identity so an `onlyOwner` call can match (or mismatch) it.
+      // under a known identity so an `onlyOwner` call can match (or mismatch)
+      // it.
       if (it != ctor.end() && it->second->deployer && it->second->msg_sender)
       {
         const std::string d =
@@ -2891,8 +2914,9 @@ size_t foundry_generator::write_foundry_file(
     for (const auto &ib : plan)
     {
       s += ib.contract + "(" + (ib.buildable ? ib.ctor_args : "!") + ")";
-      // ③A0: a ctor whose initialized state depends on the deploy timestamp must
-      // not share one setUp warp across cases needing different timestamps.
+      // ③A0: a ctor whose initialized state depends on the deploy timestamp
+      // must not share one setUp warp across cases needing different
+      // timestamps.
       if (!ib.ctor_warp.empty())
         s += "@warp" + ib.ctor_warp;
       // ③A0: a different deploy sender means a different owner — cases needing
@@ -2949,7 +2973,8 @@ size_t foundry_generator::write_foundry_file(
         }
         for (const auto &si : a.struct_imports)
           imports.insert(si);
-        // An interface-arg mock `is <iface>` must import <iface> from the source.
+        // An interface-arg mock `is <iface>` must import <iface> from the
+        // source.
         if (!a.mock_iface.empty())
         {
           imports.insert(a.mock_iface);
@@ -2992,11 +3017,11 @@ size_t foundry_generator::write_foundry_file(
   for (const auto &c : imports)
     f << "import {" << c << "} from \"./" << src_base << "\";\n";
 
-  // Interface-arg mocks: emit one `contract ESBMCMock_<iface> is <iface>` with a
-  // default-returning stub per interface method, so a constructor/method taking
-  // an `<iface>` handle can be deployed. Its calls to the handle return fixed
-  // defaults — reproducing ESBMC's havoc of those calls for every branch except
-  // one that depends on a specific return value ([approx], noted below).
+  // Interface-arg mocks: emit one `contract ESBMCMock_<iface> is <iface>` with
+  // a default-returning stub per interface method, so a constructor/method
+  // taking an `<iface>` handle can be deployed. Its calls to the handle return
+  // fixed defaults — reproducing ESBMC's havoc of those calls for every branch
+  // except one that depends on a specific return value ([approx], noted below).
   for (const auto &iface : mock_ifaces_used)
   {
     auto it = mock_specs.find(iface);
@@ -3027,9 +3052,10 @@ size_t foundry_generator::write_foundry_file(
     }
 
     // Interface-arg mock instances this group deploys: (var name, iface),
-    // unique in first-seen order. The var names already appear in the ctor/method
-    // argument literals (`mk_<iface>_<key>`), so a distinct alias key => a
-    // distinct instance (reproducing `a != b`), a shared key => one instance.
+    // unique in first-seen order. The var names already appear in the
+    // ctor/method argument literals (`mk_<iface>_<key>`), so a distinct alias
+    // key => a distinct instance (reproducing `a != b`), a shared key => one
+    // instance.
     std::vector<std::pair<std::string, std::string>> mock_insts;
     {
       std::set<std::string> seen;
@@ -3067,9 +3093,10 @@ size_t foundry_generator::write_foundry_file(
       f << "    " << mi.first << " = new ESBMCMock_" << mi.second << "();\n";
     // ③A0 ctor-time env: if any deployed contract's constructor reads
     // block.timestamp, vm.warp to the deploy-time value BEFORE constructing, so
-    // a `require(block.timestamp ...)` in the ctor does not revert setUp and fail
-    // the whole suite. One warp suffices (the per-tx warps in test_cov_* are
-    // monotonically >= this, matching ESBMC's non-decreasing block.timestamp).
+    // a `require(block.timestamp ...)` in the ctor does not revert setUp and
+    // fail the whole suite. One warp suffices (the per-tx warps in test_cov_*
+    // are monotonically >= this, matching ESBMC's non-decreasing
+    // block.timestamp).
     for (const auto &ib : plan)
       if (ib.buildable && !ib.ctor_warp.empty())
       {
@@ -3168,10 +3195,10 @@ size_t foundry_generator::write_foundry_file(
           if (!t.empty())
             deal_line = "    vm.warp(" + t + ");\n" + deal_line;
         }
-        // ③A0: msg.sender pin — vm.prank sets the sender for the NEXT call ONLY,
-        // so it must be the last cheatcode before the call. Appended after
-        // warp/deal, emitted only in call-emitting branches (and only for a
-        // top-level sender-clean read — see reconstruct()).
+        // ③A0: msg.sender pin — vm.prank sets the sender for the NEXT call
+        // ONLY, so it must be the last cheatcode before the call. Appended
+        // after warp/deal, emitted only in call-emitting branches (and only for
+        // a top-level sender-clean read — see reconstruct()).
         if (call.prank && call.msg_sender)
         {
           const std::string sdr = format_sol_value("ADDRESS", call.msg_sender);
@@ -3187,10 +3214,10 @@ size_t foundry_generator::write_foundry_file(
         // could not be rendered at all. The value pin is suppressed for a
         // non-payable method, correctly, because Solidity REFUSES
         // `c.f{value: 1}(x)` at compile time there. The consequence was not a
-        // missing test but a wrong one: with the value dropped, the call text is
-        // identical to the sibling path's, the dedup key collapsed them (fixed
-        // separately), and the surviving case named both path ids while walking
-        // only one.
+        // missing test but a wrong one: with the value dropped, the call text
+        // is identical to the sibling path's, the dedup key collapsed them
+        // (fixed separately), and the surviving case named both path ids while
+        // walking only one.
         //
         // The EVM does allow sending value to a non-payable function; the
         // callee simply rejects it. So the faithful replay is a low-level call,
@@ -3229,7 +3256,8 @@ size_t foundry_generator::write_foundry_file(
             const std::string st = sol_type_to_solidity(a.sol_type);
             if (st.empty())
             {
-              abi_sig.clear(); // cannot name the type -> cannot build a selector
+              abi_sig
+                .clear(); // cannot name the type -> cannot build a selector
               break;
             }
             if (!first)
@@ -3291,7 +3319,8 @@ size_t foundry_generator::write_foundry_file(
           // the call reverts at run time, the test fails, which is exactly the
           // divergence worth hearing about.
           f << deal_line;
-          f << "    // [asserted] path exits normally; a revert fails the test\n";
+          f << "    // [asserted] path exits normally; a revert fails the "
+               "test\n";
           f << "    " << recv << "." << call.method << value_brace << "("
             << join_args(call) << ");\n";
         }
@@ -3325,19 +3354,21 @@ void foundry_generator::generate() const
 
   // REPORTED BEFORE THE EMPTY CHECK, deliberately. If every witnessed path of a
   // run is a named obstacle then `test_cases` is empty and the early return
-  // below fires -- and a run that refused N counterexamples would print the same
-  // "no test cases collected" line as a run that witnessed nothing at all. Those
-  // are opposite situations: one found counterexamples and threw them away on
-  // purpose, the other found none. Collapsing them is the shape of failure this
-  // whole change exists to remove, so the count goes out first.
+  // below fires -- and a run that refused N counterexamples would print the
+  // same "no test cases collected" line as a run that witnessed nothing at all.
+  // Those are opposite situations: one found counterexamples and threw them
+  // away on purpose, the other found none. Collapsing them is the shape of
+  // failure this whole change exists to remove, so the count goes out first.
   //
   // An absolute number, never a ratio, matching how the obstacle warning itself
   // is reported in goto_coverage.cpp: an obstacle is not partial credit.
   if (suppressed_obstacle)
     log_warning(
-      "Foundry: {} counterexample(s) REFUSED -- their path is a NAMED OBSTACLE, "
+      "Foundry: {} counterexample(s) REFUSED -- their path is a NAMED "
+      "OBSTACLE, "
       "i.e. the model admits an execution the chain does not have, so a test "
-      "replaying one is RED on the UNMODIFIED contract. The paths remain in the "
+      "replaying one is RED on the UNMODIFIED contract. The paths remain in "
+      "the "
       "coverage denominator (they are real); what is refused is turning them "
       "into tests. See the NAMED OBSTACLE report above for which units and why",
       suppressed_obstacle);
@@ -3366,8 +3397,10 @@ void foundry_generator::generate() const
       "Foundry: reconstruction accounting -- {} dispatcher segment(s) acquired "
       "NO method and contributed no call; in {} reconstruction(s) NO callable "
       "call existed and a CONSTRUCTOR was already present, so the "
-      "coverage-claim FALLBACK ran to reconstruct the covered method. Under the "
-      "previous `calls.empty()` guard those {} case(s) were instead refused for "
+      "coverage-claim FALLBACK ran to reconstruct the covered method. Under "
+      "the "
+      "previous `calls.empty()` guard those {} case(s) were instead refused "
+      "for "
       "having an EMPTY BODY -- the constructor made `calls` non-empty while "
       "holding nothing callable. This is the empty-body route that does NOT "
       "involve an unrenderable argument: an unsupported call is still pushed "
@@ -3440,16 +3473,17 @@ void foundry_generator::generate() const
     {
       std::string breakdown;
       for (const auto &bt : by_type)
-        breakdown +=
-          (breakdown.empty() ? "" : ", ") + bt.first + " x" +
-          std::to_string(bt.second);
+        breakdown += (breakdown.empty() ? "" : ", ") + bt.first + " x" +
+                     std::to_string(bt.second);
       log_warning(
         "Foundry: {} call(s) carry {} DEFAULTED argument(s) ({}). A defaulted "
         "argument is a TYPE DEFAULT substituted because no value was recovered "
-        "for that parameter -- the emitted call therefore exercises a DIFFERENT "
+        "for that parameter -- the emitted call therefore exercises a "
+        "DIFFERENT "
         "input than the counterexample did, while reading exactly like a "
         "faithful replay. Not refused: the reconstruction cannot yet tell "
-        "\"sliced because irrelevant\" (a faithful default) from \"relevant but "
+        "\"sliced because irrelevant\" (a faithful default) from \"relevant "
+        "but "
         "unrecoverable\" (a wrong test), and refusing every default would "
         "silently shrink the suite. This count is what that decision needs",
         d_calls,
@@ -3576,9 +3610,10 @@ void foundry_generator::generate() const
         "Foundry: {} deploy(s) UNSUPPORTED (constructor args not recovered on "
         "this path)",
         unrec.size());
-    // A DETECTED reverting edge (Phase A: conservative #sol_error straight-line)
-    // is wrapped in a precise vm.expectRevert(); report both counts so the
-    // wrapping (and the silently revert-tolerant try/catch fallback) is visible.
+    // A DETECTED reverting edge (Phase A: conservative #sol_error
+    // straight-line) is wrapped in a precise vm.expectRevert(); report both
+    // counts so the wrapping (and the silently revert-tolerant try/catch
+    // fallback) is visible.
     size_t revert_cases = 0;
     for (const auto &tc : cs)
       for (const auto &call : tc)
@@ -3656,8 +3691,8 @@ void foundry_generator::generate() const
         "Foundry: {} call(s) wrapped in revert-tolerant try/catch "
         "(outcome not confirmed)",
         revert_tolerant);
-    // ③A0: report payable calls whose msg.value was pinned (vm.deal + {value:}),
-    // so the environment reconstruction is visible/assertable.
+    // ③A0: report payable calls whose msg.value was pinned (vm.deal +
+    // {value:}), so the environment reconstruction is visible/assertable.
     size_t value_pinned = 0, time_pinned = 0, sender_pinned = 0;
     for (const auto &tc : cs)
       for (const auto &call : tc)

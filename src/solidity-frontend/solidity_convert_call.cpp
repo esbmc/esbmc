@@ -559,8 +559,9 @@ bool solidity_convertert::assign_param_nondet(
       typet t;
       if (p_node.contains("typeName"))
       {
-        if (get_type_description(
-              p_node, p_node["typeName"]["typeDescriptions"], t))
+        if (
+          get_type_description(
+            p_node, p_node["typeName"]["typeDescriptions"], t))
           return true;
       }
       else
@@ -909,9 +910,9 @@ bool solidity_convertert::handle_forge_std_assert(
   //   (a >= b ? a - b : b - a)
   // which is underflow-free for unsigned operands (the dominant real usage) and
   // matches forge-std's stdMath.delta exactly. The delta is cast to maxDelta's
-  // type before the comparison. (Extreme int256 spans whose difference overflows
-  // the signed operand type are a residual — real forge-std widens internally;
-  // typical test magnitudes are unaffected.)
+  // type before the comparison. (Extreme int256 spans whose difference
+  // overflows the signed operand type are a residual — real forge-std widens
+  // internally; typical test magnitudes are unaffected.)
   if (name == "assertApproxEqAbs" || name == "assertApproxEqAbsDecimal")
   {
     if (!expr.contains("arguments") || expr["arguments"].size() < 3)
@@ -950,10 +951,11 @@ bool solidity_convertert::handle_forge_std_assert(
   }
 
   // Arity-2 comparison assertions.
-  // The `*Decimal` variants have an extra trailing `decimals` argument that only
-  // affects failure-message formatting, NOT the pass/fail verdict (verified vs
-  // real forge), so they map to the same comparison on args[0]/args[1] and the
-  // 3rd arg is simply ignored. `assertEqUint` is an alias of `assertEq`.
+  // The `*Decimal` variants have an extra trailing `decimals` argument that
+  // only affects failure-message formatting, NOT the pass/fail verdict
+  // (verified vs real forge), so they map to the same comparison on
+  // args[0]/args[1] and the 3rd arg is simply ignored. `assertEqUint` is an
+  // alias of `assertEq`.
   bool is_eq = false, is_neq = false;
   const char *rel = nullptr;
   if (name == "assertEq" || name == "assertEqUint" || name == "assertEqDecimal")
@@ -1008,9 +1010,10 @@ bool solidity_convertert::handle_forge_std_assert(
   {
     if (is_bytes_type(a0.type()))
     {
-      // Mirror the existing `bytes == bytes` lowering (solidity_convert_expr.cpp
-      // BO_EQ/BO_NE): operands are passed by address via aux vars, the pool by
-      // member, and the return type is the C bool (`bool_t`), not bool_typet().
+      // Mirror the existing `bytes == bytes` lowering
+      // (solidity_convert_expr.cpp BO_EQ/BO_NE): operands are passed by address
+      // via aux vars, the pool by member, and the return type is the C bool
+      // (`bool_t`), not bool_typet().
       side_effect_expr_function_callt beq;
       get_library_function_call_no_args(
         "bytes_dynamic_equal", "c:@F@bytes_dynamic_equal", bool_t, l, beq);
@@ -1123,8 +1126,9 @@ bool solidity_convertert::handle_foundry_cheatcode(
 
   // Block/tx-environment setters — each is a single deterministic global
   // assignment (the simplest, least-error-prone cheatcodes). Each verified
-  // against real `forge test`. All take one argument; coinbase is address-typed,
-  // the rest uint256 — handled generically by converting with the arg's own type.
+  // against real `forge test`. All take one argument; coinbase is
+  // address-typed, the rest uint256 — handled generically by converting with
+  // the arg's own type.
   //   vm.warp(t)       -> block_timestamp = t
   //   vm.roll(n)       -> block_number    = n
   //   vm.fee(x)        -> block_basefee   = x
@@ -1199,8 +1203,8 @@ bool solidity_convertert::handle_foundry_cheatcode(
   return false;
 }
 
-/** 
- * Conversion: 
+/**
+ * Conversion:
   constructor()
   {
     this->_ESBMC_bind_cname = get_nondet_cname(); // unless we have a new
@@ -1332,11 +1336,11 @@ bool solidity_convertert::get_high_level_member_access(
       }
       else if (
         get_high_level_call_wrapper(
-                 cname,
-                 cur_this_expr,
-                 front_block,
-                 back_block,
-                 nonContractNamesList.count(cname) != 0))
+          cname,
+          cur_this_expr,
+          front_block,
+          back_block,
+          nonContractNamesList.count(cname) != 0))
         return true;
 
       for (auto op : front_block.operands())
@@ -1582,18 +1586,19 @@ bool solidity_convertert::get_high_level_member_access(
         // a differential harness: P and M are two such types).
         if (
           model_transaction(
-              expr, this_expr, _base, balance, l, front_block, back_block))
+            expr, this_expr, _base, balance, l, front_block, back_block))
         {
           log_error("failed to model the transaction property changes");
           return true;
         }
       }
-      else if (get_high_level_call_wrapper(
-                 cname,
-                 this_expr,
-                 front_block,
-                 back_block,
-                 nonContractNamesList.count(cname) != 0))
+      else if (
+        get_high_level_call_wrapper(
+          cname,
+          this_expr,
+          front_block,
+          back_block,
+          nonContractNamesList.count(cname) != 0))
         return true;
 
       // Record the calling instance's $address in the global
@@ -1828,8 +1833,9 @@ bool solidity_convertert::get_low_level_member_accsss(
       // pass into call.arguments() so the user-side value expression is
       // evaluated exactly once (the assert references the same snapshot).
       exprt value_for_call;
-      if (emit_balance_drain_wrapper(
-            cname, this_object, value, loc, value_for_call))
+      if (
+        emit_balance_drain_wrapper(
+          cname, this_object, value, loc, value_for_call))
         return true;
 
       std::string func_id = "sol:@C@" + cname + "@F@$call#1";
@@ -1892,8 +1898,8 @@ bool solidity_convertert::get_low_level_member_accsss(
 
     // --reentry-balance-drain-check: see emit_balance_drain_wrapper
     exprt value_for_call;
-    if (emit_balance_drain_wrapper(
-          cname, this_object, arg, loc, value_for_call))
+    if (
+      emit_balance_drain_wrapper(cname, this_object, arg, loc, value_for_call))
       return true;
 
     std::string func_name = "transfer";
@@ -1913,8 +1919,8 @@ bool solidity_convertert::get_low_level_member_accsss(
 
     // --reentry-balance-drain-check: see emit_balance_drain_wrapper
     exprt value_for_call;
-    if (emit_balance_drain_wrapper(
-          cname, this_object, arg, loc, value_for_call))
+    if (
+      emit_balance_drain_wrapper(cname, this_object, arg, loc, value_for_call))
       return true;
 
     std::string func_name = "send";
@@ -3081,9 +3087,9 @@ bool solidity_convertert::try_get_delegate_shadow_call(
     then.move_to_operands(assign_succ);
 
     // Delegatecall dispatches by function signature, not by address.
-    // The candidate was already matched by name in try_get_delegate_shadow_call,
-    // so emit the inlined body unconditionally. With only one matching candidate
-    // per signature, there is no ambiguity.
+    // The candidate was already matched by name in
+    // try_get_delegate_shadow_call, so emit the inlined body unconditionally.
+    // With only one matching candidate per signature, there is no ambiguity.
     wrapper_block.move_to_operands(then);
   }
 
@@ -3253,7 +3259,12 @@ void solidity_convertert::emit_call_revert_clear(
   get_aux_var(nm, id);
   symbolt s;
   get_default_symbol(
-    s, get_modulename_from_path(absolute_path), flag_sym->get_type(), nm, id, loc);
+    s,
+    get_modulename_from_path(absolute_path),
+    flag_sym->get_type(),
+    nm,
+    id,
+    loc);
   s.lvalue = true;
   s.file_local = true;
   saved_out = symbol_exprt(move_symbol_to_context(s)->id, flag_sym->get_type());
@@ -3282,7 +3293,12 @@ void solidity_convertert::emit_call_revert_return(
   get_aux_var(nm, id);
   symbolt s;
   get_default_symbol(
-    s, get_modulename_from_path(absolute_path), flag_sym->get_type(), nm, id, loc);
+    s,
+    get_modulename_from_path(absolute_path),
+    flag_sym->get_type(),
+    nm,
+    id,
+    loc);
   s.lvalue = true;
   s.file_local = true;
   symbol_exprt reverted(move_symbol_to_context(s)->id, flag_sym->get_type());
@@ -3535,12 +3551,13 @@ bool solidity_convertert::model_transaction(
   const symbolt &msg_value_sym = *context.find_symbol("c:@msg_value");
   exprt msg_value = symbol_expr(msg_value_sym);
 
-  if (get_high_level_call_wrapper(
-        cname,
-        this_expr,
-        front_block,
-        back_block,
-        nonContractNamesList.count(cname) != 0))
+  if (
+    get_high_level_call_wrapper(
+      cname,
+      this_expr,
+      front_block,
+      back_block,
+      nonContractNamesList.count(cname) != 0))
     return true;
 
   exprt this_balance = member_exprt(this_expr, "$balance", val_t);

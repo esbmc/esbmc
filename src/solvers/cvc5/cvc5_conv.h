@@ -182,8 +182,8 @@ public:
     smt_astt *inputargs,
     bool const_array,
     smt_sortt domain) override;
-  smt_astt
-  tuple_array_of(const expr2tc &init_value, unsigned long domain_width) override;
+  smt_astt tuple_array_of(const expr2tc &init_value, unsigned long domain_width)
+    override;
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   expr2tc tuple_get(const expr2tc &expr) override;

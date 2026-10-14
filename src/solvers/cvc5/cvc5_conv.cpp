@@ -1481,8 +1481,7 @@ smt_astt cvc5_smt_ast::update(
     cv->cvc5_tuple_update(a, idx, updateval->a), sort);
 }
 
-smt_astt
-cvc5_smt_ast::project(smt_solver_baset *ctx, unsigned int elem) const
+smt_astt cvc5_smt_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   cvc5_convt *cv = static_cast<cvc5_convt *>(ctx);
 
@@ -1579,8 +1578,7 @@ smt_astt cvc5_convt::tuple_array_create(
       !arrtype.size_is_infinite && !is_nil_expr(arrtype.array_size) &&
       is_constant_int2t(arrtype.array_size))
     {
-      std::string name =
-        mk_fresh_name("cvc5_convt::tuple_array_create_const");
+      std::string name = mk_fresh_name("cvc5_convt::tuple_array_create_const");
       cvc5::Term out = slv.mkConst(cvc5_arr_sort, name);
       std::size_t N = to_constant_int2t(arrtype.array_size).as_ulong();
       for (std::size_t i = 0; i < N; ++i)
@@ -1660,8 +1658,7 @@ expr2tc cvc5_convt::tuple_get(const type2tc &type, smt_astt sym)
       cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 1),
       convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
       get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
@@ -1700,8 +1697,7 @@ expr2tc cvc5_convt::tuple_get(const expr2tc &expr)
       cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 1),
       convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
       get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));

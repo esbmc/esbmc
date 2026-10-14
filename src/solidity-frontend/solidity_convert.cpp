@@ -213,8 +213,8 @@ bool solidity_convertert::convert()
   // scan of the merged AST keeps non-using units byte-for-byte unchanged.
   // See docs/claude/solidity/revert-observation.md.
   // Foundry `vm.expectRevert(...)` reuses the same revert-observation machinery
-  // (the next-call `assert(_ESBMC_sol_reverted_flag)` needs reverts to be marked
-  // rather than path-pruned), so its presence also enables the gate.
+  // (the next-call `assert(_ESBMC_sol_reverted_flag)` needs reverts to be
+  // marked rather than path-pruned), so its presence also enables the gate.
   // `--solidity-path-coverage` also enables the gate: a require/revert failure
   // is one of the complete paths it enumerates, so that path must stay FEASIBLE
   // (marked + returned) instead of being pruned by the legacy
@@ -293,13 +293,14 @@ bool solidity_convertert::convert()
     const std::string &focus_cnt = *tgt_cnt_set.begin();
 
     // --focus-function names a SET (comma- or space-separated); see
-    // util/config/focus_function.h for why the parsing lives there rather than here.
-    // EVERY name is checked, and every name that matched nothing is reported in
-    // ONE message. Reporting only the first would make a user with a
-    // ten-function list fix one typo per run, and -- worse -- a list whose first
-    // name is right and whose second is wrong would pass this check entirely if
-    // the loop stopped at the first success.
-    const std::vector<std::string> focus_names = focus_function_names(focus_func);
+    // util/config/focus_function.h for why the parsing lives there rather than
+    // here. EVERY name is checked, and every name that matched nothing is
+    // reported in ONE message. Reporting only the first would make a user with
+    // a ten-function list fix one typo per run, and -- worse -- a list whose
+    // first name is right and whose second is wrong would pass this check
+    // entirely if the loop stopped at the first success.
+    const std::vector<std::string> focus_names =
+      focus_function_names(focus_func);
     if (focus_names.empty())
     {
       log_error(
@@ -685,7 +686,8 @@ void solidity_convertert::topological_sort(
         continue;
       // add the node's corresponding JSON file to the sorted result
       sorted_files.push_back(path_to_json[node]);
-      // Update the in-degree of neighbouring nodes and add the new node with in-degree 0 to the queue
+      // Update the in-degree of neighbouring nodes and add the new node with
+      // in-degree 0 to the queue
       for (const auto &neighbor : graph[node])
       {
         if (node != neighbor)
@@ -1443,10 +1445,10 @@ bool solidity_convertert::build_enclosing_debit_helper()
   exprt encl_this =
     symbol_expr(*context.find_symbol("c:@_ESBMC_enclosing_contract_this"));
 
-  // Emit one `if (encl_this == (void*)&_ESBMC_Object_<C>) { ...$balance -= val; }`
-  // per known contract.  No `else` chaining — each branch short-
-  // circuits on its own equality check, and at most one branch fires
-  // at runtime (pointer equality is exclusive).
+  // Emit one `if (encl_this == (void*)&_ESBMC_Object_<C>) { ...$balance -= val;
+  // }` per known contract.  No `else` chaining — each branch short- circuits on
+  // its own equality check, and at most one branch fires at runtime (pointer
+  // equality is exclusive).
   for (const auto &cn : contractNamesList)
   {
     if (nonContractNamesList.count(cn) != 0)

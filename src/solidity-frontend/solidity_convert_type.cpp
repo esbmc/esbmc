@@ -215,8 +215,9 @@ bool solidity_convertert::get_type_description(
     }
 
     typet base_type;
-    if (!decl.empty() && decl.contains("typeName") &&
-        decl["typeName"].contains("baseType"))
+    if (
+      !decl.empty() && decl.contains("typeName") &&
+      decl["typeName"].contains("baseType"))
     {
       // From variable declaration: use AST baseType node directly
       nlohmann::json inner_decl;
@@ -353,8 +354,9 @@ bool solidity_convertert::get_type_description(
         for (const char *suf :
              {" storage ref", " storage", " memory", " calldata"})
         {
-          if (s.size() > strlen(suf) &&
-              s.compare(s.size() - strlen(suf), strlen(suf), suf) == 0)
+          if (
+            s.size() > strlen(suf) &&
+            s.compare(s.size() - strlen(suf), strlen(suf), suf) == 0)
           {
             s.erase(s.size() - strlen(suf));
             return;
@@ -499,8 +501,9 @@ bool solidity_convertert::get_type_description(
         // scan backwards from end for "_$" followed by digits
         for (size_t i = rest.size(); i >= 2; --i)
         {
-          if (rest[i - 2] == '_' && rest[i - 1] == '$' && i < rest.size() &&
-              std::isdigit(rest[i]))
+          if (
+            rest[i - 2] == '_' && rest[i - 1] == '$' && i < rest.size() &&
+            std::isdigit(rest[i]))
             return rest.substr(0, i - 2);
         }
         return "";
@@ -519,8 +522,9 @@ bool solidity_convertert::get_type_description(
       //    pointer.  mapping(K=>V)[] is semantically equivalent to
       //    mapping(uint => mapping(K=>V)) + a length counter.  The pointer/
       //    malloc model cannot handle infinite-sized mapping elements.
-      if (get_sol_type(sub_type) == SolidityGrammar::SolType::MAPPING &&
-          sub_type.is_array())
+      if (
+        get_sol_type(sub_type) == SolidityGrammar::SolType::MAPPING &&
+        sub_type.is_array())
       {
         new_type = array_typet();
         new_type.size(exprt("infinity"));
@@ -809,8 +813,7 @@ bool solidity_convertert::get_array_to_pointer_type(
   // Recognise the common element-type prefixes in Solidity's
   // typeString (e.g. "uint8[]", "uint256[] calldata",
   // "int256[]", "address[]") and map to the matching scalar type.
-  const std::string ts =
-    type_descriptor["typeString"].get<std::string>();
+  const std::string ts = type_descriptor["typeString"].get<std::string>();
 
   // uintN / intN
   auto try_int_width = [&](const std::string &prefix, bool is_signed) -> bool {
@@ -826,8 +829,8 @@ bool solidity_convertert::get_array_to_pointer_type(
     unsigned bits = std::stoul(ts.substr(start, e - start));
     if (bits == 0 || bits > 256 || (bits % 8) != 0)
       return false;
-    new_type = is_signed ? (typet)signedbv_typet(bits)
-                         : (typet)unsignedbv_typet(bits);
+    new_type =
+      is_signed ? (typet)signedbv_typet(bits) : (typet)unsignedbv_typet(bits);
     new_type.cpp_type(is_signed ? "signed_int" : "unsigned_int");
     return true;
   };
@@ -1294,17 +1297,19 @@ bool solidity_convertert::get_array_pointer_type(
         decl["typeName"].contains("typeDescriptions") &&
             decl["typeName"]["typeDescriptions"].contains("typeString") &&
             decl["typeName"]["typeDescriptions"]["typeString"].is_string()
-          ? decl["typeName"]["typeDescriptions"]["typeString"].get<std::string>()
+          ? decl["typeName"]["typeDescriptions"]["typeString"]
+              .get<std::string>()
           : std::string();
       auto lb = ts.rfind('[');
       auto rb = ts.rfind(']');
       if (lb != std::string::npos && rb != std::string::npos && rb > lb + 1)
       {
         const std::string inner = ts.substr(lb + 1, rb - lb - 1);
-        if (!inner.empty() &&
-            std::all_of(inner.begin(), inner.end(), [](unsigned char ch) {
-              return std::isdigit(ch);
-            }))
+        if (
+          !inner.empty() &&
+          std::all_of(inner.begin(), inner.end(), [](unsigned char ch) {
+            return std::isdigit(ch);
+          }))
           length = inner;
       }
     }
@@ -1317,7 +1322,7 @@ bool solidity_convertert::get_array_pointer_type(
     {
       if (
         get_constant_value(
-            len_node["referencedDeclaration"].get<int>(), length))
+          len_node["referencedDeclaration"].get<int>(), length))
         length.clear();
     }
 
@@ -1587,8 +1592,7 @@ void solidity_convertert::convert_type_expr(
             loc,
             nondet_b);
           src_expr = make_aux_var(nondet_b, loc);
-          set_sol_type(
-            src_expr.type(), SolidityGrammar::SolType::BYTES_DYN);
+          set_sol_type(src_expr.type(), SolidityGrammar::SolType::BYTES_DYN);
           return;
         }
 
@@ -1734,7 +1738,8 @@ void solidity_convertert::convert_type_expr(
     }
     else if (
       (SolidityGrammar::is_address_type(dest_sol_type)) &&
-      (src_sol_type == SolidityGrammar::SolType::CONTRACT || src_sol_type == SolidityGrammar::SolType::UNSET))
+      (src_sol_type == SolidityGrammar::SolType::CONTRACT ||
+       src_sol_type == SolidityGrammar::SolType::UNSET))
     {
       // CONTRACT: address(instance) ==> instance.address
       // EMPTY: address(this) ==> this.address
@@ -1817,8 +1822,7 @@ void solidity_convertert::convert_type_expr(
             context.find_symbol(prefix + b) == nullptr &&
             get_contract_definition(b))
           {
-            log_error(
-              "failed to convert contract {} referenced by a cast", b);
+            log_error("failed to convert contract {} referenced by a cast", b);
             abort();
           }
       }
@@ -1838,7 +1842,8 @@ void solidity_convertert::convert_type_expr(
       set_sol_type(src_expr.type(), SolidityGrammar::SolType::CONTRACT);
     }
     else if (
-      (src_sol_type == SolidityGrammar::SolType::ARRAY_LITERAL) && src_type.id() == typet::id_array)
+      (src_sol_type == SolidityGrammar::SolType::ARRAY_LITERAL) &&
+      src_type.id() == typet::id_array)
     {
       // this means we are handling a constant array
       // which should be assigned to an array pointer
@@ -1988,4 +1993,3 @@ void solidity_convertert::convert_type_expr(
       solidity_gen_typecast(ns, src_expr, dest_type);
   }
 }
-

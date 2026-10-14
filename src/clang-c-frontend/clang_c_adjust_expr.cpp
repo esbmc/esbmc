@@ -853,7 +853,8 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     if (final_array_type.is_array())
       iw = final_array_type.get("#esbmc_index_width");
     if (!iw.empty())
-      gen_typecast(ns, index_expr, unsignedbv_typet(std::stoul(iw.as_string())));
+      gen_typecast(
+        ns, index_expr, unsignedbv_typet(std::stoul(iw.as_string())));
     else
       gen_typecast(ns, index_expr, index_type());
   }
@@ -1233,11 +1234,11 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
   }
 
   // Compound assignment (`x += a`). Widening the LVALUE here is what makes
-  // goto_check's Solidity narrowing workaround (goto_check.cpp, "detect implicit
-  // narrowing in assignments like (signed int)x = (signed int)x + 10") necessary
-  // at all -- that workaround fires only when the target IS a typecast, which is
-  // why `x += 10` was caught and `x = x + 1` was not. With the promotion gone,
-  // both shapes produce the same 8-bit claim.
+  // goto_check's Solidity narrowing workaround (goto_check.cpp, "detect
+  // implicit narrowing in assignments like (signed int)x = (signed int)x + 10")
+  // necessary at all -- that workaround fires only when the target IS a
+  // typecast, which is why `x += 10` was caught and `x = x + 1` was not. With
+  // the promotion gone, both shapes produce the same 8-bit claim.
   if (!sol_keeps_operand_width(op0, op1))
     gen_typecast_arithmetic(ns, op0, op1);
 }

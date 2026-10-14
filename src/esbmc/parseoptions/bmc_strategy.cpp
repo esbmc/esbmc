@@ -356,7 +356,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
               goto_functions.reached_mul_claims,
               pytest_gen,
               ctest_gen,
-            foundry_gen);
+              foundry_gen);
           return conclude();
         }
       }

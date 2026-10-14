@@ -23,7 +23,8 @@ unsigned int sol_max_cnt;
  * encoding stays uniform; lookup is linear in sol_eoa_max_cnt and
  * therefore needs --unwind ≥ number of distinct EOAs touched. */
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_eoa_addr_array[1];
-__attribute__((annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_balance_array[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_balance_array[1];
 /* Per-address code / codehash summary arrays, sharing the EOA address
  * pool: same slot index for the same address regardless of which
  * property was read first.  First-touch initialises both fields to a
@@ -34,7 +35,8 @@ __attribute__((annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_balance_array[1]
  * keep reading their own $code / $codehash fields, which are already
  * stable per-instance from constructor time. */
 __attribute__((annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_code_array[1];
-__attribute__((annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_codehash_array[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_codehash_array[1];
 /* Per-address `.code.length` summary. Solidity's `.code` lowers to a
  * 256-bit identity token (sol_eoa_code_array slot), but the user-
  * observable `.length` member of bytes can't reach that token, so two
@@ -42,46 +44,47 @@ __attribute__((annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_codehash_array[1
  * nondets and fail `addr.code.length == addr.code.length` invariants.
  * Parallel summary array keyed by the same EOA pool gives both reads
  * the same length per-address. */
-__attribute__((annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_code_length_array[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) uint256_t sol_eoa_code_length_array[1];
 unsigned int sol_eoa_max_cnt;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
 {
 __ESBMC_HIDE:;
-    if(tgt == (address_t)0)
-      return -1;
-
-    for (unsigned int i = 0; i < sol_max_cnt; i++)
-    {
-        if ((address_t)sol_addr_array[i] == (address_t)tgt)
-            return i;
-    }
+  if (tgt == (address_t)0)
     return -1;
+
+  for (unsigned int i = 0; i < sol_max_cnt; i++)
+  {
+    if ((address_t)sol_addr_array[i] == (address_t)tgt)
+      return i;
+  }
+  return -1;
 }
 bool _ESBMC_cmp_cname(const char *c_1, const char *c_2)
 {
 __ESBMC_HIDE:;
-    return c_1 == c_2;
+  return c_1 == c_2;
 }
 void *_ESBMC_get_obj(address_t addr, const char *cname)
 {
 __ESBMC_HIDE:;
-    int idx = _ESBMC_get_addr_array_idx(addr);
-    if (idx == -1)
-        // this means it's not previously stored
-        return NULL;
-    if (_ESBMC_cmp_cname(sol_cname_array[idx], cname))
-        return sol_obj_array[idx];
+  int idx = _ESBMC_get_addr_array_idx(addr);
+  if (idx == -1)
+    // this means it's not previously stored
     return NULL;
+  if (_ESBMC_cmp_cname(sol_cname_array[idx], cname))
+    return sol_obj_array[idx];
+  return NULL;
 }
 void update_addr_obj(address_t addr, void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-    // __ESBMC_assume(obj != NULL);
-    sol_addr_array[sol_max_cnt] = addr;
-    sol_obj_array[sol_max_cnt] = obj;
-    sol_cname_array[sol_max_cnt] = cname;
-    ++sol_max_cnt;
+  // __ESBMC_assume(obj != NULL);
+  sol_addr_array[sol_max_cnt] = addr;
+  sol_obj_array[sol_max_cnt] = obj;
+  sol_cname_array[sol_max_cnt] = cname;
+  ++sol_max_cnt;
 }
 /* DEFAULT (loose) variant.  Generate a nondet address and constrain
  * it to be distinct from prior allocations, via an unrolled if-chain
@@ -92,26 +95,42 @@ __ESBMC_HIDE:;
 address_t _ESBMC_get_unique_address(void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-    address_t tmp = (address_t)nondet_uint();
-    __ESBMC_assume(tmp != (address_t)0);
-    if (sol_max_cnt > 0)  __ESBMC_assume(tmp != sol_addr_array[0]);
-    if (sol_max_cnt > 1)  __ESBMC_assume(tmp != sol_addr_array[1]);
-    if (sol_max_cnt > 2)  __ESBMC_assume(tmp != sol_addr_array[2]);
-    if (sol_max_cnt > 3)  __ESBMC_assume(tmp != sol_addr_array[3]);
-    if (sol_max_cnt > 4)  __ESBMC_assume(tmp != sol_addr_array[4]);
-    if (sol_max_cnt > 5)  __ESBMC_assume(tmp != sol_addr_array[5]);
-    if (sol_max_cnt > 6)  __ESBMC_assume(tmp != sol_addr_array[6]);
-    if (sol_max_cnt > 7)  __ESBMC_assume(tmp != sol_addr_array[7]);
-    if (sol_max_cnt > 8)  __ESBMC_assume(tmp != sol_addr_array[8]);
-    if (sol_max_cnt > 9)  __ESBMC_assume(tmp != sol_addr_array[9]);
-    if (sol_max_cnt > 10) __ESBMC_assume(tmp != sol_addr_array[10]);
-    if (sol_max_cnt > 11) __ESBMC_assume(tmp != sol_addr_array[11]);
-    if (sol_max_cnt > 12) __ESBMC_assume(tmp != sol_addr_array[12]);
-    if (sol_max_cnt > 13) __ESBMC_assume(tmp != sol_addr_array[13]);
-    if (sol_max_cnt > 14) __ESBMC_assume(tmp != sol_addr_array[14]);
-    if (sol_max_cnt > 15) __ESBMC_assume(tmp != sol_addr_array[15]);
-    update_addr_obj(tmp, obj, cname);
-    return tmp;
+  address_t tmp = (address_t)nondet_uint();
+  __ESBMC_assume(tmp != (address_t)0);
+  if (sol_max_cnt > 0)
+    __ESBMC_assume(tmp != sol_addr_array[0]);
+  if (sol_max_cnt > 1)
+    __ESBMC_assume(tmp != sol_addr_array[1]);
+  if (sol_max_cnt > 2)
+    __ESBMC_assume(tmp != sol_addr_array[2]);
+  if (sol_max_cnt > 3)
+    __ESBMC_assume(tmp != sol_addr_array[3]);
+  if (sol_max_cnt > 4)
+    __ESBMC_assume(tmp != sol_addr_array[4]);
+  if (sol_max_cnt > 5)
+    __ESBMC_assume(tmp != sol_addr_array[5]);
+  if (sol_max_cnt > 6)
+    __ESBMC_assume(tmp != sol_addr_array[6]);
+  if (sol_max_cnt > 7)
+    __ESBMC_assume(tmp != sol_addr_array[7]);
+  if (sol_max_cnt > 8)
+    __ESBMC_assume(tmp != sol_addr_array[8]);
+  if (sol_max_cnt > 9)
+    __ESBMC_assume(tmp != sol_addr_array[9]);
+  if (sol_max_cnt > 10)
+    __ESBMC_assume(tmp != sol_addr_array[10]);
+  if (sol_max_cnt > 11)
+    __ESBMC_assume(tmp != sol_addr_array[11]);
+  if (sol_max_cnt > 12)
+    __ESBMC_assume(tmp != sol_addr_array[12]);
+  if (sol_max_cnt > 13)
+    __ESBMC_assume(tmp != sol_addr_array[13]);
+  if (sol_max_cnt > 14)
+    __ESBMC_assume(tmp != sol_addr_array[14]);
+  if (sol_max_cnt > 15)
+    __ESBMC_assume(tmp != sol_addr_array[15]);
+  update_addr_obj(tmp, obj, cname);
+  return tmp;
 }
 
 /* PRECISE (sound) variant.  Same contract as the loose variant but
@@ -139,18 +158,18 @@ __ESBMC_HIDE:;
 address_t _ESBMC_get_unique_address_precise(void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-    address_t tmp = (address_t)nondet_uint();
-    __ESBMC_assume(tmp != (address_t)0);
-    for (unsigned int i = 0; i < sol_max_cnt; i++)
-        __ESBMC_assume(tmp != sol_addr_array[i]);
-    update_addr_obj(tmp, obj, cname);
-    return tmp;
+  address_t tmp = (address_t)nondet_uint();
+  __ESBMC_assume(tmp != (address_t)0);
+  for (unsigned int i = 0; i < sol_max_cnt; i++)
+    __ESBMC_assume(tmp != sol_addr_array[i]);
+  update_addr_obj(tmp, obj, cname);
+  return tmp;
 }
 const char *_ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
 {
 __ESBMC_HIDE:;
-    unsigned int rand = nondet_uint() % len;
-    return c_array[rand];
+  unsigned int rand = nondet_uint() % len;
+  return c_array[rand];
 }
 
 /* EOA balance lookup. Returns slot index or -1 if address is not yet
@@ -159,12 +178,12 @@ __ESBMC_HIDE:;
 int _ESBMC_eoa_get_idx(address_t addr)
 {
 __ESBMC_HIDE:;
-    for (unsigned int i = 0; i < sol_eoa_max_cnt; i++)
-    {
-        if (sol_eoa_addr_array[i] == addr)
-            return (int)i;
-    }
-    return -1;
+  for (unsigned int i = 0; i < sol_eoa_max_cnt; i++)
+  {
+    if (sol_eoa_addr_array[i] == addr)
+      return (int)i;
+  }
+  return -1;
 }
 
 /* Find or insert. On insert, the new slot's initial balance is nondet
@@ -180,31 +199,31 @@ __ESBMC_HIDE:;
 unsigned int _ESBMC_eoa_get_or_init(address_t addr)
 {
 __ESBMC_HIDE:;
-    int idx = _ESBMC_eoa_get_idx(addr);
-    if (idx != -1)
-        return (unsigned int)idx;
-    unsigned int new_idx = sol_eoa_max_cnt;
-    sol_eoa_addr_array[new_idx] = addr;
-    sol_eoa_balance_array[new_idx] = nondet_uint256();
-    sol_eoa_code_array[new_idx] = nondet_uint256();
-    sol_eoa_codehash_array[new_idx] = nondet_uint256();
-    sol_eoa_code_length_array[new_idx] = nondet_uint256();
-    ++sol_eoa_max_cnt;
-    return new_idx;
+  int idx = _ESBMC_eoa_get_idx(addr);
+  if (idx != -1)
+    return (unsigned int)idx;
+  unsigned int new_idx = sol_eoa_max_cnt;
+  sol_eoa_addr_array[new_idx] = addr;
+  sol_eoa_balance_array[new_idx] = nondet_uint256();
+  sol_eoa_code_array[new_idx] = nondet_uint256();
+  sol_eoa_codehash_array[new_idx] = nondet_uint256();
+  sol_eoa_code_length_array[new_idx] = nondet_uint256();
+  ++sol_eoa_max_cnt;
+  return new_idx;
 }
 
 void _ESBMC_eoa_credit(address_t addr, uint256_t val)
 {
 __ESBMC_HIDE:;
-    unsigned int idx = _ESBMC_eoa_get_or_init(addr);
-    sol_eoa_balance_array[idx] += val;
+  unsigned int idx = _ESBMC_eoa_get_or_init(addr);
+  sol_eoa_balance_array[idx] += val;
 }
 
 uint256_t _ESBMC_eoa_balance_of(address_t addr)
 {
 __ESBMC_HIDE:;
-    unsigned int idx = _ESBMC_eoa_get_or_init(addr);
-    return sol_eoa_balance_array[idx];
+  unsigned int idx = _ESBMC_eoa_get_or_init(addr);
+  return sol_eoa_balance_array[idx];
 }
 
 /* Per-address `.code` summary. Returns the same 256-bit value across
@@ -215,16 +234,16 @@ __ESBMC_HIDE:;
 uint256_t _ESBMC_code_of(address_t addr)
 {
 __ESBMC_HIDE:;
-    unsigned int idx = _ESBMC_eoa_get_or_init(addr);
-    return sol_eoa_code_array[idx];
+  unsigned int idx = _ESBMC_eoa_get_or_init(addr);
+  return sol_eoa_code_array[idx];
 }
 
 /* Per-address `.codehash` summary; same shape as _ESBMC_code_of. */
 uint256_t _ESBMC_codehash_of(address_t addr)
 {
 __ESBMC_HIDE:;
-    unsigned int idx = _ESBMC_eoa_get_or_init(addr);
-    return sol_eoa_codehash_array[idx];
+  unsigned int idx = _ESBMC_eoa_get_or_init(addr);
+  return sol_eoa_codehash_array[idx];
 }
 
 /* Per-address `.code.length` summary; same shape as _ESBMC_code_of.
@@ -235,6 +254,6 @@ __ESBMC_HIDE:;
 uint256_t _ESBMC_code_length_of(address_t addr)
 {
 __ESBMC_HIDE:;
-    unsigned int idx = _ESBMC_eoa_get_or_init(addr);
-    return sol_eoa_code_length_array[idx];
+  unsigned int idx = _ESBMC_eoa_get_or_init(addr);
+  return sol_eoa_code_length_array[idx];
 }

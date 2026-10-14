@@ -603,7 +603,8 @@ bool solidity_convertert::get_function_definition(
           const symbolt *save_sym_ptr = context.find_symbol(save_id);
           if (save_sym_ptr != nullptr)
           {
-            exprt this_deref = dereference_exprt(this_expr, save_sym_ptr->get_type());
+            exprt this_deref =
+              dereference_exprt(this_expr, save_sym_ptr->get_type());
             code_declt save_decl(symbol_expr(*save_sym_ptr));
             code_assignt save_init(symbol_expr(*save_sym_ptr), this_deref);
             wrapped.copy_to_operands(save_decl);
@@ -634,12 +635,13 @@ bool solidity_convertert::get_function_definition(
         wrapped.copy_to_operands(assign_set_this);
 
         // A body ending in a VALUELESS `return;` makes the restores below
-        // unreachable, so goto conversion deletes them -- and with them the only
-        // positive evidence that the path exited normally. Measured: a named
-        // multi-return that falls off the end (aqua's `safeBalances`, and a
-        // tuple `return (a, b);` which lowers to member binds plus a valueless
-        // return) produced a body with NO restore instruction at all, and its
-        // exits were reported `undetermined`, which is a path R0 cannot serve.
+        // unreachable, so goto conversion deletes them -- and with them the
+        // only positive evidence that the path exited normally. Measured: a
+        // named multi-return that falls off the end (aqua's `safeBalances`, and
+        // a tuple `return (a, b);` which lowers to member binds plus a
+        // valueless return) produced a body with NO restore instruction at all,
+        // and its exits were reported `undetermined`, which is a path R0 cannot
+        // serve.
         //
         // Put the restores BEFORE that trailing return rather than deleting it.
         // Deleting would be wrong in general -- a valueless return elsewhere in
@@ -963,8 +965,9 @@ bool solidity_convertert::build_revert_rollback_block(
   if (current_functionDecl->contains("returnParameters"))
   {
     typet ret_type;
-    if (get_type_description(
-          (*current_functionDecl)["returnParameters"], ret_type))
+    if (
+      get_type_description(
+        (*current_functionDecl)["returnParameters"], ret_type))
       return true;
     if (ret_type.is_not_nil() && ret_type.id() != "empty")
     {
@@ -1445,8 +1448,9 @@ bool solidity_convertert::get_func_modifier(
     // identifier char and the delimiter is unescaped, so the name alone cannot
     // be split back to the real method reliably (`a_b_mod` is ambiguous between
     // `a`+`b_mod` and `a_b`+`mod`). The Foundry coverage-test generator reads
-    // this authoritative marker to attribute a covered branch inside the wrapper
-    // to its externally-callable method, rather than guessing by name prefix.
+    // this authoritative marker to attribute a covered branch inside the
+    // wrapper to its externally-callable method, rather than guessing by name
+    // prefix.
     {
       typet t = a_sym.get_type();
       t.set("#sol_modifier_wrapper_for", f_name);
@@ -1741,7 +1745,7 @@ bool solidity_convertert::get_func_modifier(
 
       if (
         insert_modifier_json(
-            ast_node, c_name, next_aux_func_name, modifier_func))
+          ast_node, c_name, next_aux_func_name, modifier_func))
         return true;
       assert(modifier_func != nullptr);
       auto old_decl = current_functionDecl;

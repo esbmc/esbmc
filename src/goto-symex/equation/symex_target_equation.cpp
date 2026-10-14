@@ -330,10 +330,10 @@ enum class WalkResult
 // source_offset (so we can verify offset progression).
 struct ByteResolution
 {
-  expr2tc
-    typed_source; // For RESOLVED_LIT: the typed pointer. For RESOLVED_IF: an if2tc tree.
-  BigInt
-    source_offset; // Only meaningful for RESOLVED_LIT leaves; if-tree per-arm offsets must agree.
+  expr2tc typed_source; // For RESOLVED_LIT: the typed pointer. For RESOLVED_IF:
+                        // an if2tc tree.
+  BigInt source_offset; // Only meaningful for RESOLVED_LIT leaves; if-tree
+                        // per-arm offsets must agree.
   WalkResult result;
 };
 
@@ -502,9 +502,9 @@ check_typed_source_coherence(const std::vector<ByteResolution> &per_byte)
   return true;
 }
 
-// High-level: try to recover the typed pointer source for a matched byte-CONCAT.
-// Returns nil expr on failure (any soundness gate). On success, returns the
-// typed pointer (or if2tc-of-typed-pointers) — pointer-typed.
+// High-level: try to recover the typed pointer source for a matched
+// byte-CONCAT. Returns nil expr on failure (any soundness gate). On success,
+// returns the typed pointer (or if2tc-of-typed-pointers) — pointer-typed.
 static expr2tc try_recover(
   const expr2tc &concat,
   const expr2tc &dyn_obj_symbol,

@@ -15,25 +15,24 @@
 
 /// Parse a Solidity AST "src" field ("offset:length:fileIndex") and
 /// return the substring of the original source.
-static std::string extract_src(
-  const std::string &source,
-  const std::string &src_field)
+static std::string
+extract_src(const std::string &source, const std::string &src_field)
 {
   auto colon1 = src_field.find(':');
   auto colon2 = src_field.find(':', colon1 + 1);
   if (colon1 == std::string::npos || colon2 == std::string::npos)
     return {};
   size_t offset = std::stoull(src_field.substr(0, colon1));
-  size_t length = std::stoull(src_field.substr(colon1 + 1, colon2 - colon1 - 1));
+  size_t length =
+    std::stoull(src_field.substr(colon1 + 1, colon2 - colon1 - 1));
   if (offset + length > source.size())
     return {};
   return source.substr(offset, length);
 }
 
 /// Find a ContractDefinition node by name in the top-level AST.
-static const nlohmann::json *find_contract(
-  const nlohmann::json &ast,
-  const std::string &name)
+static const nlohmann::json *
+find_contract(const nlohmann::json &ast, const std::string &name)
 {
   if (!ast.contains("nodes"))
     return nullptr;
@@ -102,8 +101,8 @@ static std::string collect_dependency_definitions(
   struct Dep
   {
     const nlohmann::json *node;
-    std::string name;                 // empty for non-named nodes
-    std::vector<std::string> bases;   // only for contract/interface (not library)
+    std::string name;               // empty for non-named nodes
+    std::vector<std::string> bases; // only for contract/interface (not library)
     // `inheritable` = participates in the inheritance DAG (regular contract,
     //                 abstract contract, or interface).  Libraries and
     //                 non-contract nodes (structs, enums, free functions,
@@ -392,9 +391,8 @@ static bool param_needs_memory_location(const std::string &ts)
 
 /// Prefix parameter names to avoid collisions between funcA and funcB.
 /// Returns e.g. "uint256 a_a, address a_b".
-static std::string emit_prefixed_params(
-  const nlohmann::json &func_def,
-  const std::string &prefix)
+static std::string
+emit_prefixed_params(const nlohmann::json &func_def, const std::string &prefix)
 {
   std::string out;
   if (
@@ -423,9 +421,8 @@ static std::string emit_prefixed_params(
 }
 
 /// Emit prefixed argument names: "a_x, a_y".
-static std::string emit_prefixed_args(
-  const nlohmann::json &func_def,
-  const std::string &prefix)
+static std::string
+emit_prefixed_args(const nlohmann::json &func_def, const std::string &prefix)
 {
   std::string out;
   if (
@@ -451,20 +448,20 @@ struct StateVar
 {
   std::string name;
   std::string type_string;
-  std::string visibility;   // "public" / "internal" / "private"
+  std::string visibility; // "public" / "internal" / "private"
   bool is_mapping;
-  bool is_returnable;       // can be read via a Solidity getter (auto or shadow)
-  int id;                   // AST id, used to detect references from function bodies
+  bool is_returnable; // can be read via a Solidity getter (auto or shadow)
+  int id;             // AST id, used to detect references from function bodies
   std::vector<std::string> mapping_key_types; // for (nested) mappings
-  std::string value_type_string; // leaf value type for mapping; equals type_string for scalar
+  std::string value_type_string; // leaf value type for mapping; equals
+                                 // type_string for scalar
 };
 
 /// Recursively walk an AST node and collect every `referencedDeclaration`
 /// integer.  This captures any identifier whose binding points to another
 /// declaration (state vars, locals, functions, modifiers, ...).
-static void collect_referenced_decls(
-  const nlohmann::json &node,
-  std::set<int> &ids)
+static void
+collect_referenced_decls(const nlohmann::json &node, std::set<int> &ids)
 {
   if (node.is_object())
   {
@@ -502,8 +499,9 @@ static void collect_mapping_keys(
 /// node's own typeString.
 static std::string extract_leaf_value_type(const nlohmann::json &type_name)
 {
-  if (type_name.value("nodeType", "") == "Mapping" &&
-      type_name.contains("valueType"))
+  if (
+    type_name.value("nodeType", "") == "Mapping" &&
+    type_name.contains("valueType"))
     return extract_leaf_value_type(type_name["valueType"]);
   return type_name.value("typeDescriptions", nlohmann::json{})
     .value("typeString", "");
@@ -521,59 +519,58 @@ static std::vector<StateVar> collect_state_vars(
   const nlohmann::json &contract_def,
   const nlohmann::json *ast = nullptr)
 {
-  auto one_contract = [&](const nlohmann::json &c, bool is_base,
-                          std::vector<StateVar> &out) {
-    if (!c.contains("nodes"))
-      return;
-    for (const auto &node : c["nodes"])
-    {
-      if (node.value("nodeType", "") != "VariableDeclaration")
-        continue;
-      if (!node.value("stateVariable", false))
-        continue;
-      if (node.value("constant", false))
-        continue;
-      const std::string mut = node.value("mutability", "");
-      if (mut == "constant" || mut == "immutable")
-        continue;
-      const std::string vis = node.value("visibility", "internal");
-      if (is_base && vis == "private")
-        continue;
-
-      StateVar sv;
-      sv.name = node.value("name", "");
-      sv.type_string =
-        node.value("typeDescriptions", nlohmann::json{})
-          .value("typeString", "");
-      sv.visibility = vis;
-      sv.is_mapping = false;
-      sv.id = node.value("id", -1);
-
-      if (
-        node.contains("typeName") &&
-        node["typeName"].value("nodeType", "") == "Mapping")
+  auto one_contract =
+    [&](const nlohmann::json &c, bool is_base, std::vector<StateVar> &out) {
+      if (!c.contains("nodes"))
+        return;
+      for (const auto &node : c["nodes"])
       {
-        sv.is_mapping = true;
-        collect_mapping_keys(node["typeName"], sv.mapping_key_types);
-        sv.value_type_string = extract_leaf_value_type(node["typeName"]);
-        sv.is_returnable = is_scalar_returnable_type(sv.value_type_string);
-        for (const auto &k : sv.mapping_key_types)
-          if (!is_scalar_returnable_type(k))
-          {
-            sv.is_returnable = false;
-            break;
-          }
-      }
-      else
-      {
-        sv.value_type_string = sv.type_string;
-        sv.is_returnable = is_scalar_returnable_type(sv.type_string);
-      }
+        if (node.value("nodeType", "") != "VariableDeclaration")
+          continue;
+        if (!node.value("stateVariable", false))
+          continue;
+        if (node.value("constant", false))
+          continue;
+        const std::string mut = node.value("mutability", "");
+        if (mut == "constant" || mut == "immutable")
+          continue;
+        const std::string vis = node.value("visibility", "internal");
+        if (is_base && vis == "private")
+          continue;
 
-      if (!sv.name.empty())
-        out.push_back(sv);
-    }
-  };
+        StateVar sv;
+        sv.name = node.value("name", "");
+        sv.type_string = node.value("typeDescriptions", nlohmann::json{})
+                           .value("typeString", "");
+        sv.visibility = vis;
+        sv.is_mapping = false;
+        sv.id = node.value("id", -1);
+
+        if (
+          node.contains("typeName") &&
+          node["typeName"].value("nodeType", "") == "Mapping")
+        {
+          sv.is_mapping = true;
+          collect_mapping_keys(node["typeName"], sv.mapping_key_types);
+          sv.value_type_string = extract_leaf_value_type(node["typeName"]);
+          sv.is_returnable = is_scalar_returnable_type(sv.value_type_string);
+          for (const auto &k : sv.mapping_key_types)
+            if (!is_scalar_returnable_type(k))
+            {
+              sv.is_returnable = false;
+              break;
+            }
+        }
+        else
+        {
+          sv.value_type_string = sv.type_string;
+          sv.is_returnable = is_scalar_returnable_type(sv.type_string);
+        }
+
+        if (!sv.name.empty())
+          out.push_back(sv);
+      }
+    };
 
   std::vector<StateVar> vars;
   one_contract(contract_def, /*is_base=*/false, vars);
@@ -688,7 +685,8 @@ static std::string inject_tod_bal_getter(const std::string &contract_src)
 /// by emitting
 ///   function __tod_get_x() public view returns (uint256) { return x; }
 /// (scalar case) or
-///   function __tod_get_m(K1 a, K2 b) public view returns (V) { return m[a][b]; }
+///   function __tod_get_m(K1 a, K2 b) public view returns (V) { return m[a][b];
+///   }
 /// (mapping case) into the contract source, which compiles cleanly under
 /// a standard Solidity compiler and exposes the underlying storage slot
 /// through a callable interface.  The harness then routes reads through
@@ -856,10 +854,7 @@ static bool emit_harness_contract(
   const nlohmann::json *fb = find_function(cdef, func_b, &ast);
   if (!fa || !fb)
   {
-    log_error(
-      "TOD harness: function '{}' or '{}' not found",
-      func_a,
-      func_b);
+    log_error("TOD harness: function '{}' or '{}' not found", func_a, func_b);
     return false;
   }
 
@@ -895,8 +890,7 @@ static bool emit_harness_contract(
   // Phase 4: TOD-Balance.  If the closed footprint puts the virtual
   // __balance token in the shared set, both functions touch ETH balance —
   // emit `assert(address(c1).balance == address(c2).balance)`.
-  bool emit_balance_assert =
-    shared_ids.count(solidity_tod::kBalanceId) != 0;
+  bool emit_balance_assert = shared_ids.count(solidity_tod::kBalanceId) != 0;
 
   // Constructor params
   std::string ctor_params_decl;
@@ -958,8 +952,7 @@ static bool emit_harness_contract(
   // get pruned by the `balance < value -> assume(false)` revert model.
   // Requires the test() function itself to be payable so msg.value can
   // cover both `new C{value: __initBal}()` calls.
-  bool ctor_payable =
-    ctor && ctor->value("stateMutability", "") == "payable";
+  bool ctor_payable = ctor && ctor->value("stateMutability", "") == "payable";
   bool fund_copies = emit_balance_assert && ctor_payable;
 
   out << "contract " << harness_name << " {\n";
@@ -993,10 +986,10 @@ static bool emit_harness_contract(
   }
   else
   {
-    out << "        " << c1_name << " c1 = new " << c1_name << "("
-        << ctor_args << ");\n";
-    out << "        " << c2_name << " c2 = new " << c2_name << "("
-        << ctor_args << ");\n\n";
+    out << "        " << c1_name << " c1 = new " << c1_name << "(" << ctor_args
+        << ");\n";
+    out << "        " << c2_name << " c2 = new " << c2_name << "(" << ctor_args
+        << ");\n\n";
   }
 
   // For TOD-Balance, exclude harness-internal addresses from any
@@ -1006,19 +999,20 @@ static bool emit_harness_contract(
   // harness relies on.
   if (emit_balance_assert)
   {
-    auto collect_addr_params = [](const nlohmann::json &fdef,
-                                  const std::string &prefix,
-                                  std::vector<std::string> &out_list) {
-      if (!fdef.contains("parameters") ||
-          !fdef["parameters"].contains("parameters"))
+    auto collect_addr_params = [](
+                                 const nlohmann::json &fdef,
+                                 const std::string &prefix,
+                                 std::vector<std::string> &out_list) {
+      if (
+        !fdef.contains("parameters") ||
+        !fdef["parameters"].contains("parameters"))
         return;
       for (const auto &p : fdef["parameters"]["parameters"])
       {
-        const std::string ts = p.value("typeDescriptions", nlohmann::json{})
-                                 .value("typeString", "");
+        const std::string ts =
+          p.value("typeDescriptions", nlohmann::json{}).value("typeString", "");
         const std::string name = p.value("name", "");
-        if (
-          (ts == "address" || ts == "address payable") && !name.empty())
+        if ((ts == "address" || ts == "address payable") && !name.empty())
           out_list.push_back(prefix + "_" + name);
       }
     };
@@ -1056,12 +1050,14 @@ static bool emit_harness_contract(
   // the raw call's `assume(false)` path pruning, which is unchanged.
   const bool wrap_a = body_may_revert_explicitly(*fa);
   const bool wrap_b = body_may_revert_explicitly(*fb);
-  auto emit_call = [&](std::ostringstream &o, const std::string &c,
-                       const std::string &fn, const std::string &args,
-                       bool wrap) {
+  auto emit_call = [&](
+                     std::ostringstream &o,
+                     const std::string &c,
+                     const std::string &fn,
+                     const std::string &args,
+                     bool wrap) {
     if (wrap)
-      o << "        try " << c << "." << fn << "(" << args
-        << ") {} catch {}\n";
+      o << "        try " << c << "." << fn << "(" << args << ") {} catch {}\n";
     else
       o << "        " << c << "." << fn << "(" << args << ");\n";
   };
@@ -1116,15 +1112,13 @@ static bool emit_harness_contract(
       {
         for (const auto &k1 : key_sets[0])
           for (const auto &k2 : key_sets[1])
-            out << "        assert(c1." << getter << "(" << k1 << ", "
-                << k2 << ") == c2." << getter << "(" << k1 << ", "
-                << k2 << "));\n";
+            out << "        assert(c1." << getter << "(" << k1 << ", " << k2
+                << ") == c2." << getter << "(" << k1 << ", " << k2 << "));\n";
       }
       else
       {
-        out << "        // Skipped: " << sv.name
-            << " (deeply nested mapping, " << key_sets.size()
-            << " levels)\n";
+        out << "        // Skipped: " << sv.name << " (deeply nested mapping, "
+            << key_sets.size() << " levels)\n";
       }
     }
     else if (!sv.is_mapping)
@@ -1179,8 +1173,7 @@ static bool emit_harness_contract_race(
   const nlohmann::json *fb = find_function(cdef, func_b, &ast);
   if (!fa || !fb)
   {
-    log_error(
-      "TOD harness: function '{}' or '{}' not found", func_a, func_b);
+    log_error("TOD harness: function '{}' or '{}' not found", func_a, func_b);
     return false;
   }
 
@@ -1193,12 +1186,10 @@ static bool emit_harness_contract_race(
   std::set<int> asserted_ids;
   auto it_a = rw_by_name.find(func_a);
   if (it_a != rw_by_name.end())
-    asserted_ids.insert(
-      it_a->second.writes.begin(), it_a->second.writes.end());
+    asserted_ids.insert(it_a->second.writes.begin(), it_a->second.writes.end());
   auto it_b = rw_by_name.find(func_b);
   if (it_b != rw_by_name.end())
-    asserted_ids.insert(
-      it_b->second.writes.begin(), it_b->second.writes.end());
+    asserted_ids.insert(it_b->second.writes.begin(), it_b->second.writes.end());
 
   std::vector<StateVar> shared_vars;
   for (const auto &sv : all_state_vars)
@@ -1286,8 +1277,8 @@ static bool emit_harness_contract_race(
   // pre-race state S, then deep-copy so c1 and c2 observe the same S.
   // The intrinsics are the stable ESBMC ABI (see get_call_expr in
   // solidity_convert_expr.cpp).
-  out << "        " << contract << " c1 = new " << contract << "("
-      << ctor_args << ");\n";
+  out << "        " << contract << " c1 = new " << contract << "(" << ctor_args
+      << ");\n";
   out << "        __ESOL_nondet_state_forward(c1);\n";
   out << "        " << contract << " c2 = __ESOL_deep_copy(c1);\n";
   // Require distinct $address so any mapping state var (keyed by
@@ -1299,18 +1290,19 @@ static bool emit_harness_contract_race(
 
   const bool wrap_a = body_may_revert_explicitly(*fa);
   const bool wrap_b = body_may_revert_explicitly(*fb);
-  auto emit_call = [&](std::ostringstream &o, const std::string &c,
-                       const std::string &fn, const std::string &args,
-                       bool wrap) {
+  auto emit_call = [&](
+                     std::ostringstream &o,
+                     const std::string &c,
+                     const std::string &fn,
+                     const std::string &args,
+                     bool wrap) {
     if (wrap)
-      o << "        try " << c << "." << fn << "(" << args
-        << ") {} catch {}\n";
+      o << "        try " << c << "." << fn << "(" << args << ") {} catch {}\n";
     else
       o << "        " << c << "." << fn << "(" << args << ");\n";
   };
 
-  out << "        // Order 1: c1 runs " << func_a << " then " << func_b
-      << "\n";
+  out << "        // Order 1: c1 runs " << func_a << " then " << func_b << "\n";
   emit_call(out, "c1", func_a, fa_args, wrap_a);
   emit_call(out, "c1", func_b, fb_args, wrap_b);
   out << "\n        // Order 2: c2 runs " << func_b << " then " << func_a
@@ -1358,22 +1350,21 @@ static bool emit_harness_contract_race(
       {
         for (const auto &k1 : key_sets[0])
           for (const auto &k2 : key_sets[1])
-            out << "        __tod_race_check(c1." << getter << "(" << k1
-                << ", " << k2 << ") == c2." << getter << "(" << k1 << ", "
-                << k2 << "));\n";
+            out << "        __tod_race_check(c1." << getter << "(" << k1 << ", "
+                << k2 << ") == c2." << getter << "(" << k1 << ", " << k2
+                << "));\n";
       }
       else
       {
-        out << "        // Skipped: " << sv.name
-            << " (deeply nested mapping, " << key_sets.size()
-            << " levels)\n";
+        out << "        // Skipped: " << sv.name << " (deeply nested mapping, "
+            << key_sets.size() << " levels)\n";
       }
     }
     else if (!sv.is_mapping)
     {
       const std::string getter = state_var_getter_name(sv);
-      out << "        __tod_race_check(c1." << getter << "() == c2."
-          << getter << "());\n";
+      out << "        __tod_race_check(c1." << getter << "() == c2." << getter
+          << "());\n";
     }
   }
 
@@ -1454,13 +1445,17 @@ std::string generate_tod_harness(
   if (mode != TodHarnessMode::Balance)
   {
     out << "// ESBMC intrinsic stubs (the frontend ignores the bodies).\n"
-           "function __ESOL_nondet_state_forward(" << contract << " c) {\n"
+           "function __ESOL_nondet_state_forward("
+        << contract
+        << " c) {\n"
            "    // replaced by ESBMC with a bounded nondet-dispatch loop\n"
            "    // over c's public/external methods.\n"
            "}\n"
-           "function __ESOL_deep_copy(" << contract << " src) pure returns ("
-        << contract << ") {\n"
-           "    // replaced by ESBMC with _ESBMC_clone_" << contract
+           "function __ESOL_deep_copy("
+        << contract << " src) pure returns (" << contract
+        << ") {\n"
+           "    // replaced by ESBMC with _ESBMC_clone_"
+        << contract
         << ": per-field deep copy of *src\n"
            "    // into a fresh instance with a distinct $address and\n"
            "    // independent heap-allocated array buffers.\n"
@@ -1515,7 +1510,14 @@ std::string generate_tod_harness(
     out << "// ===== TOD harness =====\n";
     const nlohmann::json *ctor = find_constructor(*cdef);
     if (!emit_harness_contract_race(
-          out, *cdef, ast, state_vars, rw_by_name, ctor, contract, func_a,
+          out,
+          *cdef,
+          ast,
+          state_vars,
+          rw_by_name,
+          ctor,
+          contract,
+          func_a,
           func_b))
       return {};
   }

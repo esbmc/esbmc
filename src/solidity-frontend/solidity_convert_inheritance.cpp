@@ -119,10 +119,8 @@ void solidity_convertert::merge_inheritance_ast(
         // same-name FunctionDefinition WITH body, so the dispatcher
         // resolves to the implementation.
         if (
-          i.contains("nodeType") &&
-          i["nodeType"] == "FunctionDefinition" &&
-          i.contains("body") && !i["body"].is_null() &&
-          i.contains("name"))
+          i.contains("nodeType") && i["nodeType"] == "FunctionDefinition" &&
+          i.contains("body") && !i["body"].is_null() && i.contains("name"))
         {
           const std::string i_fname = i["name"].get<std::string>();
           for (auto c_it = c_node["nodes"].begin();

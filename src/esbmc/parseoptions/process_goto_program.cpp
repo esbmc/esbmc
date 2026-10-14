@@ -921,12 +921,12 @@ bool esbmc_parseoptionst::process_goto_program(
       if (cmdline.isset("contract") && !cmdline.isset("coverage-whole-unit"))
         tmp.scope_contract = cmdline.getval("contract");
       // --focus-function scoping. The frontend already narrows which entry the
-      // DISPATCHER may call; this narrows what gets ENUMERATED AND INSTRUMENTED,
-      // so a focused run's published numbers describe the focused unit instead
-      // of the whole contract. Measured on aqua `--focus-function dock`: 2846
-      // paths in the denominator, of which 2783 belong to units the dispatcher
-      // cannot enter in that run, so `Path Coverage` read 0.07% where the honest
-      // figure against `dock`'s own 63 paths is 3.17%.
+      // DISPATCHER may call; this narrows what gets ENUMERATED AND
+      // INSTRUMENTED, so a focused run's published numbers describe the focused
+      // unit instead of the whole contract. Measured on aqua `--focus-function
+      // dock`: 2846 paths in the denominator, of which 2783 belong to units the
+      // dispatcher cannot enter in that run, so `Path Coverage` read 0.07%
+      // where the honest figure against `dock`'s own 63 paths is 3.17%.
       //
       // Read here rather than inside the pass, like every other knob, so the
       // pass keeps having no command-line dependency of its own.
@@ -943,13 +943,13 @@ bool esbmc_parseoptionst::process_goto_program(
       // paths to 2796 (ship contributes 2733) and the run was killed at the
       // 300 s outer timeout with no usable answer, at tx=1 and again at tx=2.
       //
-      // THE SUBSET IS CHECKED, NOT ASSUMED. `util/config/focus_function.h` is right
-      // that the dispatcher filter and the instrumentation filter must not
-      // disagree; the direction it names -- dispatchable but uninstrumented --
-      // is what this option deliberately creates and it is the harmless one (a
-      // smaller, honestly-published denominator). The other direction is not:
-      // an instrumented unit the dispatcher cannot enter reports every path
-      // `unit-not-entered`, which reads as "nothing reaches this code" and
+      // THE SUBSET IS CHECKED, NOT ASSUMED. `util/config/focus_function.h` is
+      // right that the dispatcher filter and the instrumentation filter must
+      // not disagree; the direction it names -- dispatchable but uninstrumented
+      // -- is what this option deliberately creates and it is the harmless one
+      // (a smaller, honestly-published denominator). The other direction is
+      // not: an instrumented unit the dispatcher cannot enter reports every
+      // path `unit-not-entered`, which reads as "nothing reaches this code" and
       // means "nothing was asked to". So every name here must also be selected
       // by --focus-function, and a name that is not REFUSES the run.
       //
@@ -1129,7 +1129,8 @@ bool esbmc_parseoptionst::process_goto_program(
           log_error(
             "--solidity-path-coverage: {} were given together ({}). These are "
             "three mutually exclusive stage-2/3 modes implemented as three "
-            "branches at the end of one pass, and each one leaves the unit loop "
+            "branches at the end of one pass, and each one leaves the unit "
+            "loop "
             "as soon as it fires -- so passing two does not run two, it runs "
             "the first and silently discards the rest. Historically that "
             "discarded run then failed with a message about the unit NAME, "
@@ -1149,10 +1150,10 @@ bool esbmc_parseoptionst::process_goto_program(
       // just a mismatch on paper — it is fatal in practice, because a Solidity
       // external call is modelled as a nondet RE-ENTRY into the contract's own
       // dispatcher, so `t.call("")` recurses without a bound. Measured: a
-      // two-function contract with one `.call` unwound `_ESBMC_Nondet_Extcall_C`
-      // 944 times and died with `ERROR: Out of memory`; a plain `for` loop with
-      // no --unwind did the same. Both terminate immediately once a bound
-      // exists.
+      // two-function contract with one `.call` unwound
+      // `_ESBMC_Nondet_Extcall_C` 944 times and died with `ERROR: Out of
+      // memory`; a plain `for` loop with no --unwind did the same. Both
+      // terminate immediately once a bound exists.
       //
       // So: honour an explicit --unwind, and otherwise ADOPT the enumeration's
       // own bound as the unwind bound and say so. Truncation stays visible —

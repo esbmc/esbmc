@@ -1153,11 +1153,12 @@ protected:
     bool &handled);
   /// forge-std assertion lowering (F1.b). `assertEq/assertTrue/assertFalse/
   /// assertGt/assertLt/assertGe/assertLe/assertNotEq(...)` are Test-base
-  /// helpers whose bodies route through forge-std `fail()` + logs, so they never
-  /// surface as ESBMC assertions. Recognized by name and lowered to a native
-  /// `assert(<comparison>)` (immediate-assert; equivalent to Foundry's
+  /// helpers whose bodies route through forge-std `fail()` + logs, so they
+  /// never surface as ESBMC assertions. Recognized by name and lowered to a
+  /// native `assert(<comparison>)` (immediate-assert; equivalent to Foundry's
   /// failed-flag for the "does the test fail" question). Sets `handled = true`
-  /// when it recognized and lowered the call. Returns true only on a hard error.
+  /// when it recognized and lowered the call. Returns true only on a hard
+  /// error.
   bool handle_forge_std_assert(
     const std::string &name,
     const nlohmann::json &expr,
@@ -1321,11 +1322,11 @@ protected:
   /// the supported subset (let / := / pure-256-bit builtins / if / switch /
   /// for / nested blocks / number+bool literals).  Returns false when the
   /// block contains any unsupported Yul construct; on false, populates
-  /// `unsupported_kind` (e.g. "YulFunctionCall:mload" or "YulFunctionDefinition")
-  /// and `unsupported_src` (solc source range) so the caller can include them
-  /// in the over-approximation warning.  The all-or-nothing rule guarantees
-  /// the precise portion can never observe a write the havoc'd portion would
-  /// have made.
+  /// `unsupported_kind` (e.g. "YulFunctionCall:mload" or
+  /// "YulFunctionDefinition") and `unsupported_src` (solc source range) so the
+  /// caller can include them in the over-approximation warning.  The
+  /// all-or-nothing rule guarantees the precise portion can never observe a
+  /// write the havoc'd portion would have made.
   bool try_lower_yul_block_precise(
     const nlohmann::json &asm_stmt,
     const locationt &loc,
@@ -1587,10 +1588,10 @@ protected:
   std::vector<std::pair<std::string, std::string>>
     current_function_restored_globals;
   // Forward-incremental flag updated by get_block as it walks the
-  // body's top-level statements: ORed with `statement_is_mutation_top_level(stmt)`
-  // after each statement is converted.  build_revert_rollback_block
-  // reads this flag to decide whether the rollback at the current
-  // site needs to restore `*this` (mutation has been observed
+  // body's top-level statements: ORed with
+  // `statement_is_mutation_top_level(stmt)` after each statement is converted.
+  // build_revert_rollback_block reads this flag to decide whether the rollback
+  // at the current site needs to restore `*this` (mutation has been observed
   // earlier in the body — emit `*this = save; return [nondet]`) or
   // can lower to plain early-return (no mutation yet — emit just
   // `return [nondet]`).  Per-rollback granularity replaces the v2
@@ -1613,12 +1614,12 @@ protected:
   // or must keep the legacy path-pruning `__ESBMC_assume`.  Saved/restored
   // alongside current_functionDecl.
   bool current_function_revert_observable = false;
-  // Foundry `vm.expectRevert(...)` support: armed at the cheatcode site, consumed
-  // by the next external call (get_high_level_member_access injects
-  // `assert(_ESBMC_sol_reverted_flag)` after that call, so the call must revert).
-  // Selector/return-data payloads are ignored (conservative: may miss a wrong
-  // test, never false-WRONG). Requires uses_revert_observation (set when the
-  // source references "expectRevert").
+  // Foundry `vm.expectRevert(...)` support: armed at the cheatcode site,
+  // consumed by the next external call (get_high_level_member_access injects
+  // `assert(_ESBMC_sol_reverted_flag)` after that call, so the call must
+  // revert). Selector/return-data payloads are ignored (conservative: may miss
+  // a wrong test, never false-WRONG). Requires uses_revert_observation (set
+  // when the source references "expectRevert").
   bool pending_expect_revert = false;
   // Track whether we are inside a Solidity "unchecked { ... }" block.
   // When true, arithmetic overflow checks should be suppressed.
@@ -1672,8 +1673,8 @@ protected:
   // generator synthesizes a mock ONLY for a true interface (no constructor,
   // no state, no receive/fallback, all functions external+abstract) so that
   // `contract ESBMCMock_<I> is <I> { <stubs> }` is always fully implementable;
-  // an abstract contract (which may take constructor args or declare an abstract
-  // receive/fallback) is not mockable and degrades to UNSUPPORTED.
+  // an abstract contract (which may take constructor args or declare an
+  // abstract receive/fallback) is not mockable and degrades to UNSUPPORTED.
   std::set<std::string> interfaceNamesList;
   // for mapping hack
   std::set<std::string> newContractSet;

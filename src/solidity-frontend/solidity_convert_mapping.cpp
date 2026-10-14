@@ -103,8 +103,7 @@ bool solidity_convertert::build_mapping_t_init_value(
 
   if (mid_idx != (unsigned)-1)
   {
-    exprt mid_expr =
-      from_integer(next_mapping_mid++, comps[mid_idx].type());
+    exprt mid_expr = from_integer(next_mapping_mid++, comps[mid_idx].type());
     inits.operands()[mid_idx] = mid_expr;
   }
 
@@ -190,8 +189,8 @@ bool solidity_convertert::get_dynamic_pool(
       return true;
   }
 
-  pool =
-    member_exprt(cur_this_expr, "$dynamic_pool", symbol_typet(lib_prefix + "BytesPool"));
+  pool = member_exprt(
+    cur_this_expr, "$dynamic_pool", symbol_typet(lib_prefix + "BytesPool"));
 
   return false;
 }
@@ -314,45 +313,51 @@ bool walk_for_storage_ref(const nlohmann::json &node, int mapping_decl_id)
   {
     const std::string nt = node.value("nodeType", std::string());
     // VariableDeclaration with storageLocation == "storage"
-    if (nt == "VariableDeclaration" &&
-        node.value("storageLocation", std::string()) == "storage")
+    if (
+      nt == "VariableDeclaration" &&
+      node.value("storageLocation", std::string()) == "storage")
     {
       // Only the *initializer* matters for alias detection.  The decl
       // itself just declares a storage pointer; the alias is established
-      // on assignment.  Initializer lives on parent VariableDeclarationStatement
-      // — we'll catch it when we visit that node, below.
+      // on assignment.  Initializer lives on parent
+      // VariableDeclarationStatement — we'll catch it when we visit that node,
+      // below.
     }
-    if (nt == "VariableDeclarationStatement" &&
-        node.contains("declarations") &&
-        node.contains("initialValue"))
+    if (
+      nt == "VariableDeclarationStatement" && node.contains("declarations") &&
+      node.contains("initialValue"))
     {
       bool any_storage = false;
       for (const auto &d : node["declarations"])
       {
-        if (d.is_object() &&
-            d.value("storageLocation", std::string()) == "storage")
+        if (
+          d.is_object() &&
+          d.value("storageLocation", std::string()) == "storage")
         {
           any_storage = true;
           break;
         }
       }
-      if (any_storage &&
-          expr_targets_decl(node["initialValue"], mapping_decl_id))
+      if (
+        any_storage && expr_targets_decl(node["initialValue"], mapping_decl_id))
         return true;
     }
     // Direct assignment to an existing storage pointer:
     //   `T[N] storage p = m[k];` is the decl form above, but
     //   `p = m[k];` after-the-fact also creates an alias.
-    if (nt == "Assignment" && node.contains("leftHandSide") &&
-        node.contains("rightHandSide"))
+    if (
+      nt == "Assignment" && node.contains("leftHandSide") &&
+      node.contains("rightHandSide"))
     {
       // Check if LHS type is "storage ref" by inspecting typeString.
       const auto &lhs = node["leftHandSide"];
-      if (lhs.is_object() && lhs.contains("typeDescriptions") &&
-          lhs["typeDescriptions"].is_object() &&
-          lhs["typeDescriptions"].value("typeString", std::string())
-              .find(" storage ref") != std::string::npos &&
-          expr_targets_decl(node["rightHandSide"], mapping_decl_id))
+      if (
+        lhs.is_object() && lhs.contains("typeDescriptions") &&
+        lhs["typeDescriptions"].is_object() &&
+        lhs["typeDescriptions"]
+            .value("typeString", std::string())
+            .find(" storage ref") != std::string::npos &&
+        expr_targets_decl(node["rightHandSide"], mapping_decl_id))
         return true;
     }
     for (const auto &kv : node.items())
@@ -377,9 +382,10 @@ bool walk_for_storage_ref(const nlohmann::json &node, int mapping_decl_id)
 // Returns the maximum depth seen across all references in the subtree.
 // 0 means the mapping is referenced WITHOUT any IndexAccess wrapping
 // (passed by name, e.g. `f(m)` — partial access for our purposes).
-unsigned max_indexaccess_depth_to(const nlohmann::json &node,
-                                  int mapping_decl_id,
-                                  unsigned current_depth = 0)
+unsigned max_indexaccess_depth_to(
+  const nlohmann::json &node,
+  int mapping_decl_id,
+  unsigned current_depth = 0)
 {
   if (!node.is_object() && !node.is_array())
     return 0;
@@ -392,19 +398,22 @@ unsigned max_indexaccess_depth_to(const nlohmann::json &node,
 
     // Direct Identifier: if it matches our mapping, its depth in the
     // enclosing access chain is current_depth.
-    if (nt == "Identifier" &&
-        node.value("referencedDeclaration", -1) == mapping_decl_id)
+    if (
+      nt == "Identifier" &&
+      node.value("referencedDeclaration", -1) == mapping_decl_id)
       return current_depth;
 
     // IndexAccess: descend into baseExpression with depth+1, but ALSO
     // descend into indexExpression with depth=0 (a fresh subtree).
     if (nt == "IndexAccess" && node.contains("baseExpression"))
     {
-      best = std::max(best,
+      best = std::max(
+        best,
         max_indexaccess_depth_to(
           node["baseExpression"], mapping_decl_id, current_depth + 1));
       if (node.contains("indexExpression"))
-        best = std::max(best,
+        best = std::max(
+          best,
           max_indexaccess_depth_to(
             node["indexExpression"], mapping_decl_id, 0));
       return best;
@@ -412,14 +421,13 @@ unsigned max_indexaccess_depth_to(const nlohmann::json &node,
 
     // Any other node: descend into all subtrees with fresh depth=0.
     for (const auto &kv : node.items())
-      best = std::max(best,
-        max_indexaccess_depth_to(kv.value(), mapping_decl_id, 0));
+      best = std::max(
+        best, max_indexaccess_depth_to(kv.value(), mapping_decl_id, 0));
   }
   else
   {
     for (const auto &el : node)
-      best = std::max(best,
-        max_indexaccess_depth_to(el, mapping_decl_id, 0));
+      best = std::max(best, max_indexaccess_depth_to(el, mapping_decl_id, 0));
   }
   return best;
 }
@@ -427,9 +435,10 @@ unsigned max_indexaccess_depth_to(const nlohmann::json &node,
 // Return true if the subtree contains any reference to the mapping that
 // is NOT inside an IndexAccess chain at least `expected_depth` deep.
 // Used to detect partial accesses (`m`, `m[k]` for 2D, etc.).
-bool walk_for_partial_access(const nlohmann::json &node,
-                             int mapping_decl_id,
-                             unsigned expected_depth)
+bool walk_for_partial_access(
+  const nlohmann::json &node,
+  int mapping_decl_id,
+  unsigned expected_depth)
 {
   if (node.is_object())
   {
@@ -439,8 +448,8 @@ bool walk_for_partial_access(const nlohmann::json &node,
     // count the chain depth — depth less than expected is a partial access.
     if (nt == "IndexAccess" && node.contains("baseExpression"))
     {
-      unsigned d = max_indexaccess_depth_to(
-        node, mapping_decl_id, /*current_depth=*/0);
+      unsigned d =
+        max_indexaccess_depth_to(node, mapping_decl_id, /*current_depth=*/0);
       if (d > 0 && d < expected_depth)
         return true;
       // Even if this chain is OK (d == expected_depth or d == 0), we still
@@ -454,8 +463,9 @@ bool walk_for_partial_access(const nlohmann::json &node,
 
     // Direct Identifier match outside any IndexAccess chain: depth 0,
     // partial access.
-    if (nt == "Identifier" &&
-        node.value("referencedDeclaration", -1) == mapping_decl_id)
+    if (
+      nt == "Identifier" &&
+      node.value("referencedDeclaration", -1) == mapping_decl_id)
       return true;
 
     for (const auto &kv : node.items())
@@ -514,8 +524,8 @@ bool solidity_convertert::has_partial_mapping_access(
   return false;
 }
 
-unsigned solidity_convertert::array_nesting_depth(
-  const typet &fixed_array_t) const
+unsigned
+solidity_convertert::array_nesting_depth(const typet &fixed_array_t) const
 {
   unsigned depth = 0;
   const typet *cur = &fixed_array_t;
@@ -549,8 +559,9 @@ bool solidity_convertert::compute_flat_extent(
       return false;
     unsigned long ni = n.to_uint64();
     // overflow guard: keep extent < 2^32 so the bit-shift fits comfortably
-    if (ni == 0 || ni > (1ul << 32) || inner_extent > (1ul << 32) ||
-        inner_extent * ni > (1ul << 32))
+    if (
+      ni == 0 || ni > (1ul << 32) || inner_extent > (1ul << 32) ||
+      inner_extent * ni > (1ul << 32))
       return false;
     inner_extent *= ni;
     cur = &cur->subtype();
@@ -575,7 +586,8 @@ bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
       node["typeDescriptions"].contains("typeString") &&
       node["typeDescriptions"]["typeString"].is_string())
     {
-      const std::string &ts = node["typeDescriptions"]["typeString"].get_ref<const std::string &>();
+      const std::string &ts =
+        node["typeDescriptions"]["typeString"].get_ref<const std::string &>();
       // Match "bytes", "bytes storage pointer", "bytes memory", etc.
       // Also match "string" variants since string uses BytesDynamic internally.
       // Inline literals carry the `literal_string "..."` / `literal_bytes
@@ -583,9 +595,8 @@ bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
       // call site and therefore drive `$dynamic_pool` use just like a
       // declared state var would.
       if (
-        ts == "bytes" || ts.substr(0, 6) == "bytes " ||
-        ts == "string" || ts.substr(0, 7) == "string " ||
-        ts.substr(0, 14) == "literal_string" ||
+        ts == "bytes" || ts.substr(0, 6) == "bytes " || ts == "string" ||
+        ts.substr(0, 7) == "string " || ts.substr(0, 14) == "literal_string" ||
         ts.substr(0, 13) == "literal_bytes")
         return true;
     }
@@ -811,13 +822,13 @@ bool solidity_convertert::get_new_mapping_index_access(
   // A STRUCT value must be reached through a POINTER, not copied out by value.
   // `map_generic_get` hands back a COPY of the slot, so the frontend lowered
   //     Acc[k].b = x;   ->   aux = map_<S>_get(&Acc,k); aux.b = x;
-  // i.e. the field write landed in a temporary and was LOST, and every read came
-  // back as the zero default -- measured with a fixed key, so it was not a key
-  // mismatch: `mapping(K=>uint)` and a plain scalar both round-trip a cross-contract
-  // write, `mapping(K=>Struct)` did not. `map_fixed_arr_get` is the existing
-  // lazily-allocating, pointer-returning helper (it treats the payload as an opaque
-  // byte slab, so it is value-type agnostic); routing STRUCT through it makes reads
-  // and writes hit the SAME slot.
+  // i.e. the field write landed in a temporary and was LOST, and every read
+  // came back as the zero default -- measured with a fixed key, so it was not a
+  // key mismatch: `mapping(K=>uint)` and a plain scalar both round-trip a
+  // cross-contract write, `mapping(K=>Struct)` did not. `map_fixed_arr_get` is
+  // the existing lazily-allocating, pointer-returning helper (it treats the
+  // payload as an opaque byte slab, so it is value-type agnostic); routing
+  // STRUCT through it makes reads and writes hit the SAME slot.
   const bool struct_by_ref =
     (val_flg == "generic" && val_sol_type == SolidityGrammar::SolType::STRUCT);
   if (struct_by_ref)
@@ -985,7 +996,8 @@ bool solidity_convertert::get_new_mapping_index_access(
   }
   else if (struct_by_ref)
   {
-    // (struct S *)map_fixed_arr_get(&m, k, sizeof(S)) dereferenced, so the caller's
+    // (struct S *)map_fixed_arr_get(&m, k, sizeof(S)) dereferenced, so the
+    // caller's
     // `.field` access is an LVALUE into the stored slot.
     typet sptr = gen_pointer_type(value_t);
     solidity_gen_typecast(ns, call, sptr);

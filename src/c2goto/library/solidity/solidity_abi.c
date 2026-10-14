@@ -92,11 +92,11 @@ __ESBMC_HIDE:;
  * abi.encode(c,d), both 512-bit) share the same table; the wide-BV concat
  * keys disambiguate. Sites with different widths use different tables.
  */
-__attribute__((annotate("__ESBMC_inf_size:256")))
-uint256_t _ESBMC_abi_table_256[1];
-__attribute__((annotate("__ESBMC_inf_size:512")))
-uint256_t _ESBMC_abi_table_512[1];
-__attribute__((annotate("__ESBMC_inf_size:1024")))
-uint256_t _ESBMC_abi_table_1024[1];
-__attribute__((annotate("__ESBMC_inf_size:2048")))
-uint256_t _ESBMC_abi_table_2048[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:256"))) uint256_t _ESBMC_abi_table_256[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:512"))) uint256_t _ESBMC_abi_table_512[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:1024"))) uint256_t _ESBMC_abi_table_1024[1];
+__attribute__((
+  annotate("__ESBMC_inf_size:2048"))) uint256_t _ESBMC_abi_table_2048[1];

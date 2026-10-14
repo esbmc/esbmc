@@ -877,8 +877,9 @@ bool solidity_convertert::get_sol_builtin_ref(
           get_sol_dynarray_state(base.type()))
         {
           // Dynarray state var: write element at len, then increment len.
-          // T1.1 Stage S1: `len_ref` is now `<arr>_dynarray_len[this->$address]`
-          // (addr-keyed) so two `new C()` instances no longer share length.
+          // T1.1 Stage S1: `len_ref` is now
+          // `<arr>_dynarray_len[this->$address]` (addr-keyed) so two `new C()`
+          // instances no longer share length.
           assert(base.is_symbol());
           std::string len_id = base.identifier().as_string() + "_dynarray_len";
           const symbolt *len_sym = ns.lookup(len_id);
@@ -1159,8 +1160,8 @@ bool solidity_convertert::get_sol_builtin_ref(
                 return true;
               }
             }
-            else if (get_expr(
-                       func["arguments"][0], expr["argumentTypes"][0], val))
+            else if (
+              get_expr(func["arguments"][0], expr["argumentTypes"][0], val))
               return true;
             solidity_gen_typecast(ns, val, base_t.subtype());
 
@@ -1197,9 +1198,9 @@ bool solidity_convertert::get_sol_builtin_ref(
             }
             else
             {
-              /* Generic path: `_ESBMC_array_push(array, &element, sizeof(element))`.
-               * The helper takes a void* element pointer so we bind `val`
-               * to a local and pass its address. */
+              /* Generic path: `_ESBMC_array_push(array, &element,
+               * sizeof(element))`. The helper takes a void* element pointer so
+               * we bind `val` to a local and pass its address. */
               std::string elem_name =
                 "_mdelem#" + std::to_string(aux_counter++);
               std::string elem_id;

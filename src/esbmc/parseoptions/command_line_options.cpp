@@ -655,7 +655,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // unroll of N transaction bodies (no loop). That reconstructs unreliably —
     // the generator can mis-attribute which method ran in each transaction (it
     // emitted `fire(); fire();` where `arm(); fire();` was needed) — so the two
-    // flags are incompatible: route the transaction bound through the live loop.
+    // flags are incompatible: route the transaction bound through the live
+    // loop.
     if (cmdline.isset("solidity-max-tx"))
     {
       log_error(
@@ -667,9 +668,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     }
     // The live loop is an unbounded `while(nondet_bool())`; symex needs a
     // whole-program bounding strategy or it diverges. Loop-specific bounds
-    // (--unwindset / --unwindsetname) are NOT accepted here: they target a named
-    // loop, not necessarily the dispatcher, so they cannot guarantee the loop is
-    // bounded. Require an explicit global strategy rather than guessing.
+    // (--unwindset / --unwindsetname) are NOT accepted here: they target a
+    // named loop, not necessarily the dispatcher, so they cannot guarantee the
+    // loop is bounded. Require an explicit global strategy rather than
+    // guessing.
     if (
       !cmdline.isset("unwind") && !cmdline.isset("incremental-bmc") &&
       !cmdline.isset("k-induction") && !cmdline.isset("k-induction-parallel") &&
@@ -1024,15 +1026,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
       "dump-violation-info", cmdline.getval("dump-violation-info"));
 
   // Solidity complete-path coverage needs REVERTS to be observable rather than
-  // path-pruned: a `require`/`revert` failure is one of the paths it enumerates,
-  // and the legacy lowering both erases it (`__ESBMC_assume(false)`) and leaves
-  // the surviving edge byte-identical to a plain early `return`, so the exit
-  // cannot be classified. Publish the flag as a boolean here — BEFORE
-  // `config.options` is captured — because the frontend runs long before the
-  // coverage dispatch, and `get_bool_option` on the raw NULL-valued CLI flag
-  // would read as false. Setting it enables the in-tree revert-observation gate
-  // (solidity_convert.cpp), which is regression-locked by the assert_revert_*
-  // suite and, unlike --bound, does not change external-call modelling.
+  // path-pruned: a `require`/`revert` failure is one of the paths it
+  // enumerates, and the legacy lowering both erases it
+  // (`__ESBMC_assume(false)`) and leaves the surviving edge byte-identical to a
+  // plain early `return`, so the exit cannot be classified. Publish the flag as
+  // a boolean here — BEFORE `config.options` is captured — because the frontend
+  // runs long before the coverage dispatch, and `get_bool_option` on the raw
+  // NULL-valued CLI flag would read as false. Setting it enables the in-tree
+  // revert-observation gate (solidity_convert.cpp), which is regression-locked
+  // by the assert_revert_* suite and, unlike --bound, does not change
+  // external-call modelling.
   if (cmdline.isset("solidity-path-coverage"))
     options.set_option("solidity-path-coverage-enabled", true);
 
@@ -1054,9 +1057,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     if (!cmdline.isset("solidity-path-coverage"))
     {
-      log_error("--path-cov-arith-resolve is only meaningful with "
-                "--solidity-path-coverage: it re-solves a COMPLETE PATH claim, "
-                "and no other mode emits one.");
+      log_error(
+        "--path-cov-arith-resolve is only meaningful with "
+        "--solidity-path-coverage: it re-solves a COMPLETE PATH claim, "
+        "and no other mode emits one.");
       abort();
     }
     if (

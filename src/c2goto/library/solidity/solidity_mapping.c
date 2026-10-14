@@ -27,11 +27,11 @@ __attribute__((annotate("__ESBMC_inf_size:480"))) void *_ESBMC_map_storage[1];
 typedef unsigned BIGINT(480) _ESBMC_map_key_t;
 
 /* Stage-2-only placeholder: the frontend at solidity_convert_decl.cpp:935-944
- * still emits a per-state-var `__ESBMC_inf_size struct _ESBMC_Mapping _ESBMC_inf_<name>[]`
- * symbol per mapping.  We don't use those slots at runtime — they exist
- * solely so that the symbol table has a unique linker-assigned address per
- * state var, which we reinterpret as the `mid` ID in `map_get_raw`.  Stage 3
- * drops both the placeholder and the frontend allocation. */
+ * still emits a per-state-var `__ESBMC_inf_size struct _ESBMC_Mapping
+ * _ESBMC_inf_<name>[]` symbol per mapping.  We don't use those slots at runtime
+ * — they exist solely so that the symbol table has a unique linker-assigned
+ * address per state var, which we reinterpret as the `mid` ID in `map_get_raw`.
+ * Stage 3 drops both the placeholder and the frontend allocation. */
 struct _ESBMC_Mapping
 {
   uint8_t _stage2_placeholder;
@@ -62,12 +62,12 @@ struct _ESBMC_Mapping
  */
 struct mapping_t
 {
-  void *base;              /* legacy unused (kept so existing frontend
-                              `mapping_t = { &_ESBMC_inf_*, this->$address }`
-                              init keeps type-checking; runtime ignores) */
-  uint64_t mid;            /* per-state-var unique ID — frontend assigns
-                              from solidity_convertert::next_mapping_mid */
-  address_t addr : 160;    /* clone keyspace partition */
+  void *base;           /* legacy unused (kept so existing frontend
+                           `mapping_t = { &_ESBMC_inf_*, this->$address }`
+                           init keeps type-checking; runtime ignores) */
+  uint64_t mid;         /* per-state-var unique ID — frontend assigns
+                           from solidity_convertert::next_mapping_mid */
+  address_t addr : 160; /* clone keyspace partition */
 } __attribute__((packed));
 
 /* Fold (mid, addr, key) into a 64-bit slot index.  Pure XOR fold of
@@ -82,9 +82,8 @@ struct mapping_t
  * (2026-04-30) regression-locked under
  * `mapping_idx_fold_collision_pass_knownbug` and ledger entry #22.
  * Closure requires 256-bit array-domain support across solvers. */
-static inline _ESBMC_map_key_t _ESBMC_map_idx(uint64_t mid,
-                                              address_t addr,
-                                              uint256_t key)
+static inline _ESBMC_map_key_t
+_ESBMC_map_idx(uint64_t mid, address_t addr, uint256_t key)
 {
 __ESBMC_HIDE:;
   _ESBMC_map_key_t result = (_ESBMC_map_key_t)mid;
@@ -245,13 +244,12 @@ __ESBMC_HIDE:;
  */
 struct mapping_t_fast
 {
-  uint64_t mid;            /* per-state-var unique ID */
+  uint64_t mid; /* per-state-var unique ID */
 };
 
 /* Fold (mid, key) into a 64-bit slot index.  See `_ESBMC_map_idx` above
  * for the rationale of the pure-XOR fold over multiplicative mixing. */
-static inline _ESBMC_map_key_t _ESBMC_map_idx_fast(uint64_t mid,
-                                                   uint256_t key)
+static inline _ESBMC_map_key_t _ESBMC_map_idx_fast(uint64_t mid, uint256_t key)
 {
 __ESBMC_HIDE:;
   _ESBMC_map_key_t result = (_ESBMC_map_key_t)mid;
@@ -333,7 +331,11 @@ __ESBMC_HIDE:;
 }
 
 /* generic */
-void map_generic_set_fast(struct mapping_t_fast *m, uint256_t k, const void *v, size_t sz)
+void map_generic_set_fast(
+  struct mapping_t_fast *m,
+  uint256_t k,
+  const void *v,
+  size_t sz)
 {
 __ESBMC_HIDE:;
   void *p = malloc(sz);

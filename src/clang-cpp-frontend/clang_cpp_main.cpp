@@ -84,14 +84,13 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
     {
       const irep_idt &lhs_id = assignment.lhs().identifier();
       const std::string &s = id2string(lhs_id);
-      is_sol_peer_instance =
-        s.find("_ESBMC_Object_") != std::string::npos;
+      is_sol_peer_instance = s.find("_ESBMC_Object_") != std::string::npos;
     }
     namespacet ns(context);
     if (!is_sol_peer_instance)
     {
-      exprt zero = gen_zero(
-        get_complete_type(assignment.lhs().type(), ns), true);
+      exprt zero =
+        gen_zero(get_complete_type(assignment.lhs().type(), ns), true);
       if (zero.is_not_nil())
       {
         // Guard against gen_zero returning nil for unresolved/dependent types

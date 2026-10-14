@@ -97,11 +97,11 @@ void solidity_convertert::mark_ctor_instantiability(
           bases += (bases.empty() ? "" : " ") + nm->second;
       }
     if (!bases.empty())
-      {
-        typet t = ctor->get_type();
-        t.set("#sol_bases", bases);
-        ctor->set_type(std::move(t));
-      }
+    {
+      typet t = ctor->get_type();
+      t.set("#sol_bases", bases);
+      ctor->set_type(std::move(t));
+    }
   }
 
   if (nonContractNamesList.count(contract_name) == 0)
@@ -115,21 +115,21 @@ void solidity_convertert::mark_ctor_instantiability(
   // abstract contract / interface (which cannot be called at all). The
   // Foundry generator emits a static call for the former.
   if (libraryNamesList.count(contract_name))
-    {
-      typet t = ctor->get_type();
-      t.set("#sol_library", true);
-      ctor->set_type(std::move(t));
-    }
+  {
+    typet t = ctor->get_type();
+    t.set("#sol_library", true);
+    ctor->set_type(std::move(t));
+  }
   // Mark a true interface. The Foundry generator synthesizes an
   // `ESBMCMock_<I> is <I>` only for an interface (guaranteed no constructor
   // args and no abstract receive/fallback, so the mock is always fully
   // implementable); an abstract contract is not mockable.
   if (interfaceNamesList.count(contract_name))
-    {
-      typet t = ctor->get_type();
-      t.set("#sol_interface", true);
-      ctor->set_type(std::move(t));
-    }
+  {
+    typet t = ctor->get_type();
+    t.set("#sol_interface", true);
+    ctor->set_type(std::move(t));
+  }
 }
 
 // add a empty constructor to the contract
@@ -347,16 +347,17 @@ bool solidity_convertert::get_unbound_function(
     const auto methods = funcSignatures[c_name];
 
     // --focus-function: when the caller is the target contract and a focus is
-    // set, restrict the dispatch loop to the functions it names. Other contracts
-    // (e.g. cross-contract targets reached from inside a focused function) keep
-    // their full nondet dispatch.
+    // set, restrict the dispatch loop to the functions it names. Other
+    // contracts (e.g. cross-contract targets reached from inside a focused
+    // function) keep their full nondet dispatch.
     //
-    // The value names a SET, not one function: `--focus-function a,b` keeps both
-    // entries. Membership goes through focus_function_selects() -- the same
-    // parser the path-coverage pass narrows INSTRUMENTATION with -- so the two
-    // cannot disagree about which entries exist. A disagreement would be silent
-    // in the worst direction: an entry this loop kept but the pass did not
-    // instrument is a unit the harness can enter and no claim ever measures.
+    // The value names a SET, not one function: `--focus-function a,b` keeps
+    // both entries. Membership goes through focus_function_selects() -- the
+    // same parser the path-coverage pass narrows INSTRUMENTATION with -- so the
+    // two cannot disagree about which entries exist. A disagreement would be
+    // silent in the worst direction: an entry this loop kept but the pass did
+    // not instrument is a unit the harness can enter and no claim ever
+    // measures.
     const bool focus_applies = !focus_func.empty() && tgt_cnt_set.size() == 1 &&
                                c_name == *tgt_cnt_set.begin();
 
@@ -1283,8 +1284,9 @@ bool solidity_convertert::build_tod_clone_helper(
       const typet &comp_type = comp.type();
       exprt dst_field = member_exprt(c_deref, comp_name, comp_type);
       exprt src_field = member_exprt(base_deref, comp_name, comp_type);
-      if (emit_clone_deep_copy_fixup(
-            dst_field, src_field, comp_type, c_addr_member, func_body))
+      if (
+        emit_clone_deep_copy_fixup(
+          dst_field, src_field, comp_type, c_addr_member, func_body))
         return true;
     }
   }
@@ -1544,8 +1546,9 @@ bool solidity_convertert::emit_clone_deep_copy_fixup(
         code_assignt elem_copy(dst_elem, src_elem);
         func_body.move_to_operands(elem_copy);
       }
-      if (emit_clone_deep_copy_fixup(
-            dst_elem, src_elem, elem_t, clone_addr_expr, func_body))
+      if (
+        emit_clone_deep_copy_fixup(
+          dst_elem, src_elem, elem_t, clone_addr_expr, func_body))
         return true;
     }
     return false;
@@ -1570,8 +1573,9 @@ bool solidity_convertert::emit_clone_deep_copy_fixup(
       const typet &ct = comp.type();
       exprt dst_sub = member_exprt(dst_lvalue, comp_name, ct);
       exprt src_sub = member_exprt(src_lvalue, comp_name, ct);
-      if (emit_clone_deep_copy_fixup(
-            dst_sub, src_sub, ct, clone_addr_expr, func_body))
+      if (
+        emit_clone_deep_copy_fixup(
+          dst_sub, src_sub, ct, clone_addr_expr, func_body))
         return true;
     }
     return false;
@@ -1712,12 +1716,13 @@ bool solidity_convertert::emit_ctor_deep_init_fixup(
         disambig = "anon_" + std::to_string(next_mapping_mid);
 
       exprt inits;
-      if (build_mapping_t_init_value(
-            current_baseContractName,
-            disambig,
-            ctor_this_expr,
-            lvalue.location(),
-            inits))
+      if (
+        build_mapping_t_init_value(
+          current_baseContractName,
+          disambig,
+          ctor_this_expr,
+          lvalue.location(),
+          inits))
         return true;
 
       code_assignt assign(lvalue, inits);
@@ -2110,15 +2115,16 @@ bool solidity_convertert::move_initializer_to_ctor(
       // final `_assign` insert at `begin()` places `_assign` in front
       // of all the fix statements, so forward-execution is:
       //     _assign  (this->field = calloc(outer) or zero_struct)
-      //     fix1     (this->field[0] = calloc(inner)  / this->field.sub = calloc(...))
-      //     fix2
+      //     fix1     (this->field[0] = calloc(inner)  / this->field.sub =
+      //     calloc(...)) fix2
       //     ...
       code_blockt fix_block;
       // Seed the path with the outer state-var's name so any nested
       // mapping field gets a globally-unique `_ESBMC_inf_<C>_<path>[]`
       // backing array name.
-      if (emit_ctor_deep_init_fixup(
-            lhs, comp.type(), fix_block, comp.name().as_string()))
+      if (
+        emit_ctor_deep_init_fixup(
+          lhs, comp.type(), fix_block, comp.name().as_string()))
       {
         log_error("Phase 2 ctor deep-init fixup failed");
         return true;
@@ -2232,7 +2238,8 @@ void solidity_convertert::flush_pending_into_body(
     wrapper.operands().push_back(op);
   }
   // Drop the moved tail; statements queued before the body (e.g. by a for/if
-  // condition) stay pending so the enclosing block flushes them unconditionally.
+  // condition) stay pending so the enclosing block flushes them
+  // unconditionally.
   fops.resize(front_base);
 
   convert_expression_to_code(body);

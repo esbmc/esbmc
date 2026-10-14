@@ -184,8 +184,7 @@ bool goto_symext::get_unwind_recursion(
         });
       if (stack_it != cur_state->call_stack.rend())
       {
-        for (auto cur = cur_state->call_stack.rbegin(); cur != stack_it;
-             ++cur)
+        for (auto cur = cur_state->call_stack.rbegin(); cur != stack_it; ++cur)
         {
           if (matches_harness_helper(id2string(cur->function_identifier)))
           {

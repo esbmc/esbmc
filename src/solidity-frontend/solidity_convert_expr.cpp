@@ -715,8 +715,8 @@ bool solidity_convertert::get_expr(
         func_ref.contains("typeName") &&
         func_ref["typeName"].contains("typeDescriptions"))
       {
-        if (get_type_description(
-              func_ref["typeName"]["typeDescriptions"], var_t))
+        if (
+          get_type_description(func_ref["typeName"]["typeDescriptions"], var_t))
           return true;
       }
       else
@@ -1136,8 +1136,10 @@ bool solidity_convertert::get_expr(
                 const symbolt *struct_sym =
                   context.find_symbol(prefix + alt_cname);
                 if (
-                  struct_sym == nullptr || struct_sym->get_type().id() != "struct" ||
-                  !to_struct_type(struct_sym->get_type()).has_component("$address"))
+                  struct_sym == nullptr ||
+                  struct_sym->get_type().id() != "struct" ||
+                  !to_struct_type(struct_sym->get_type())
+                     .has_component("$address"))
                   continue;
 
                 exprt obj_ref;
@@ -2355,10 +2357,11 @@ bool solidity_convertert::get_call_expr(
           expr["arguments"].is_array() && !expr["arguments"].empty())
         {
           exprt recipient;
-          if (get_expr(
-                expr["arguments"][0],
-                expr["arguments"][0]["typeDescriptions"],
-                recipient))
+          if (
+            get_expr(
+              expr["arguments"][0],
+              expr["arguments"][0]["typeDescriptions"],
+              recipient))
             return true;
 
           typet val_t = unsignedbv_typet(256);
@@ -3015,8 +3018,9 @@ bool solidity_convertert::get_call_expr(
     if (it != expr.end() && it->is_array() && !it->empty())
     {
       nlohmann::json clean_expr = reorder_arguments(expr, callee_expr_json);
-      if (get_library_function_call(
-            callee_expr, type, decl_ref, clean_expr, call))
+      if (
+        get_library_function_call(
+          callee_expr, type, decl_ref, clean_expr, call))
         return true;
     }
     else
@@ -3261,8 +3265,8 @@ bool solidity_convertert::get_contract_member_call_expr(
           // Public state var getter — the MemberAccess references
           // the VariableDeclaration; the getter returns the var's
           // declared type.
-          if (get_type_description(
-                fdecl["typeName"]["typeDescriptions"], ret_t))
+          if (
+            get_type_description(fdecl["typeName"]["typeDescriptions"], ret_t))
             return true;
           have_type = true;
         }
@@ -3328,12 +3332,13 @@ bool solidity_convertert::get_contract_member_call_expr(
     // (re-entrancy via `I(msg.sender).f()`, ERC777 `tokensReceived`,
     // approveAndCall, ...) is silently missed — a soundness false
     // negative.
-    if (get_expr(
-          resolved_caller,
-          resolved_caller.contains("typeDescriptions")
-            ? resolved_caller["typeDescriptions"]
-            : nlohmann::json(nullptr),
-          base))
+    if (
+      get_expr(
+        resolved_caller,
+        resolved_caller.contains("typeDescriptions")
+          ? resolved_caller["typeDescriptions"]
+          : nlohmann::json(nullptr),
+        base))
       return true;
 
     // Rewrap the raw address as a CONTRACT pointer to the cast target's
@@ -3381,8 +3386,8 @@ bool solidity_convertert::get_contract_member_call_expr(
           fnode == "VariableDeclaration" && fdecl.contains("typeName") &&
           fdecl["typeName"].contains("typeDescriptions"))
         {
-          if (get_type_description(
-                fdecl["typeName"]["typeDescriptions"], ret_t))
+          if (
+            get_type_description(fdecl["typeName"]["typeDescriptions"], ret_t))
             return true;
           have_type = true;
         }
@@ -3408,8 +3413,9 @@ bool solidity_convertert::get_contract_member_call_expr(
     const nlohmann::json &base_expr_json =
       find_decl_ref(contract_var_id); // contract
 
-    // contract C{ Base x; x.call();} where base.contractname != current_ContractName;
-    // therefore, we need to extract the based contract name
+    // contract C{ Base x; x.call();} where base.contractname !=
+    // current_ContractName; therefore, we need to extract the based contract
+    // name
     if (base_expr_json.empty())
     {
       // assume it's 'this'
@@ -3561,14 +3567,14 @@ bool solidity_convertert::get_contract_member_call_expr(
           return true;
         }
         typet level_key_t;
-        if (get_type_description(
-              (*cur_typename)["keyType"]["typeDescriptions"], level_key_t))
+        if (
+          get_type_description(
+            (*cur_typename)["keyType"]["typeDescriptions"], level_key_t))
           return true;
         exprt key_expr;
-        if (get_expr(
-              args[i],
-              (*cur_typename)["keyType"]["typeDescriptions"],
-              key_expr))
+        if (
+          get_expr(
+            args[i], (*cur_typename)["keyType"]["typeDescriptions"], key_expr))
           return true;
         gen_mapping_key_typecast(
           current_contractName, key_expr, location, level_key_t);
@@ -3577,8 +3583,9 @@ bool solidity_convertert::get_contract_member_call_expr(
         per_level_keys.push_back(key_expr);
 
         cur_typename = &(*cur_typename)["valueType"];
-        if (get_type_description(
-              (*cur_typename)["typeDescriptions"], leaf_value_t))
+        if (
+          get_type_description(
+            (*cur_typename)["typeDescriptions"], leaf_value_t))
           return true;
         leaf_val_sol_type = get_sol_type(leaf_value_t);
       }
@@ -3650,14 +3657,15 @@ bool solidity_convertert::get_contract_member_call_expr(
         {
           auto _mem_call = member_exprt(base, comp.name(), comp.type());
           bool is_mapping_set = false;
-          if (get_new_mapping_index_access(
-                leaf_value_t,
-                leaf_val_sol_type,
-                is_mapping_set,
-                _mem_call,
-                key_for_call,
-                location,
-                new_expr))
+          if (
+            get_new_mapping_index_access(
+              leaf_value_t,
+              leaf_val_sol_type,
+              is_mapping_set,
+              _mem_call,
+              key_for_call,
+              location,
+              new_expr))
             return true;
           break;
         }
@@ -3685,14 +3693,15 @@ bool solidity_convertert::get_contract_member_call_expr(
           get_static_contract_instance_ref(base_cname, storage_base);
           auto _mem_call = member_exprt(storage_base, comp.name(), comp.type());
           bool is_mapping_set = false;
-          if (get_new_mapping_index_access(
-                leaf_value_t,
-                leaf_val_sol_type,
-                is_mapping_set,
-                _mem_call,
-                key_for_call,
-                location,
-                new_expr))
+          if (
+            get_new_mapping_index_access(
+              leaf_value_t,
+              leaf_val_sol_type,
+              is_mapping_set,
+              _mem_call,
+              key_for_call,
+              location,
+              new_expr))
             return true;
           break;
         }
@@ -3708,14 +3717,15 @@ bool solidity_convertert::get_contract_member_call_expr(
         exprt ladder;
         {
           bool is_mapping_set = false;
-          if (get_new_mapping_index_access(
-                leaf_value_t,
-                leaf_val_sol_type,
-                is_mapping_set,
-                default_mem,
-                key_for_call,
-                location,
-                ladder))
+          if (
+            get_new_mapping_index_access(
+              leaf_value_t,
+              leaf_val_sol_type,
+              is_mapping_set,
+              default_mem,
+              key_for_call,
+              location,
+              ladder))
             return true;
         }
 
@@ -3743,14 +3753,15 @@ bool solidity_convertert::get_contract_member_call_expr(
           auto alt_mem = member_exprt(alt_storage, comp.name(), comp.type());
           exprt alt_read;
           bool is_mapping_set = false;
-          if (get_new_mapping_index_access(
-                leaf_value_t,
-                leaf_val_sol_type,
-                is_mapping_set,
-                alt_mem,
-                key_for_call,
-                location,
-                alt_read))
+          if (
+            get_new_mapping_index_access(
+              leaf_value_t,
+              leaf_val_sol_type,
+              is_mapping_set,
+              alt_mem,
+              key_for_call,
+              location,
+              alt_read))
             return true;
 
           ladder = if_exprt(cmp, alt_read, ladder);
@@ -3860,9 +3871,10 @@ bool solidity_convertert::get_contract_member_call_expr(
     // nondet path and the cheatcode become a silent no-op. Recognized
     // cheatcodes lower to their effect here; unrecognized ones fall through.
     // forge-std splits cheatcodes across `interface VmSafe` (view/pure) and
-    // `interface Vm is VmSafe` (state-changing). A handle may be typed as either
-    // (e.g. StdUtils uses `VmSafe constant vm`), so both must be gated or a
-    // VmSafe call escapes to the nondet no-op path and breaks prune soundness.
+    // `interface Vm is VmSafe` (state-changing). A handle may be typed as
+    // either (e.g. StdUtils uses `VmSafe constant vm`), so both must be gated
+    // or a VmSafe call escapes to the nondet no-op path and breaks prune
+    // soundness.
     if (base_cname == "Vm" || base_cname == "VmSafe")
     {
       locationt cl;
@@ -3945,7 +3957,8 @@ bool solidity_convertert::get_contract_member_call_expr(
       // Consume a pending vm.expectRevert(): assert the call just built
       // reverted. Emitted into the back block so it runs AFTER the call; the
       // revert flag reflects the callee's outcome (public entry clears it, a
-      // revert marks it). Requires uses_revert_observation (set for expectRevert).
+      // revert marks it). Requires uses_revert_observation (set for
+      // expectRevert).
       if (pending_expect_revert)
       {
         pending_expect_revert = false;
@@ -4024,7 +4037,8 @@ bool solidity_convertert::get_index_access_expr(
       get_sol_type(base_var_t) == SolidityGrammar::SolType::MAPPING &&
       base_var_json.contains("referencedDeclaration"))
     {
-      // Resolve the var ref and fetch the mapping decl JSON for typeName walking.
+      // Resolve the var ref and fetch the mapping decl JSON for typeName
+      // walking.
       exprt array;
       if (get_expr(base_var_json, literal_type, array))
         return true;
@@ -4076,12 +4090,14 @@ bool solidity_convertert::get_index_access_expr(
             tn->is_object() && tn->value("nodeType", "") == "Mapping" &&
             tn->contains("keyType") && tn->contains("valueType"));
           typet level_key_t;
-          if (get_type_description(
-                (*tn)["keyType"]["typeDescriptions"], level_key_t))
+          if (
+            get_type_description(
+              (*tn)["keyType"]["typeDescriptions"], level_key_t))
             return true;
           exprt key_expr;
-          if (get_expr(
-                *idx_jsons[i], (*idx_jsons[i])["typeDescriptions"], key_expr))
+          if (
+            get_expr(
+              *idx_jsons[i], (*idx_jsons[i])["typeDescriptions"], key_expr))
             return true;
           gen_mapping_key_typecast(
             current_contractName, key_expr, location, level_key_t);
@@ -4098,14 +4114,15 @@ bool solidity_convertert::get_index_access_expr(
         exprt combined_key;
         combine_mapping_keys_256(folded_keys, combined_key);
         bool is_mapping_set = is_mapping_set_lvalue(expr);
-        if (get_new_mapping_index_access(
-              leaf_value_t,
-              leaf_val_sol_type,
-              is_mapping_set,
-              array,
-              combined_key,
-              location,
-              new_expr))
+        if (
+          get_new_mapping_index_access(
+            leaf_value_t,
+            leaf_val_sol_type,
+            is_mapping_set,
+            array,
+            combined_key,
+            location,
+            new_expr))
           return true;
         return false;
       }
@@ -4119,10 +4136,11 @@ bool solidity_convertert::get_index_access_expr(
 
   // Per-mapping flat-array encoder leaf access.
   // For mapping(K => T[N]) / mapping(K => T[N0]...[Nk-1]) declared with the
-  // flat encoder (see solidity_convert_decl.cpp:245-311 — `t.set("#sol_mapping_flat_encoded", true)`),
-  // every access reaches the scalar leaf (the decl-time gate proved no
-  // partial accesses).  Walk the full IndexAccess chain and emit a single
-  // composed index_exprt — no slab pointer, no helper call.
+  // flat encoder (see solidity_convert_decl.cpp:245-311 —
+  // `t.set("#sol_mapping_flat_encoded", true)`), every access reaches the
+  // scalar leaf (the decl-time gate proved no partial accesses).  Walk the full
+  // IndexAccess chain and emit a single composed index_exprt — no slab pointer,
+  // no helper call.
   //
   // Composed index = (key_zext_to_W << inner_bits) | inner_offset, where
   //   inner_offset = ((... ((idx_0 * N0) + idx_1) * N1 + idx_2) * N2 + ...)
@@ -4162,9 +4180,9 @@ bool solidity_convertert::get_index_access_expr(
         const nlohmann::json &map_decl_json =
           find_decl_ref((*cur)["referencedDeclaration"].get<int>());
         typet val_t;
-        if (get_type_description(
-              map_decl_json["typeName"]["valueType"]["typeDescriptions"],
-              val_t))
+        if (
+          get_type_description(
+            map_decl_json["typeName"]["valueType"]["typeDescriptions"], val_t))
           return true;
 
         std::vector<unsigned long> dim_sizes;
@@ -4195,13 +4213,14 @@ bool solidity_convertert::get_index_access_expr(
 
           // Lower the key.
           exprt key_pos;
-          if (get_expr(
-                *idx_jsons[0], (*idx_jsons[0])["typeDescriptions"], key_pos))
+          if (
+            get_expr(
+              *idx_jsons[0], (*idx_jsons[0])["typeDescriptions"], key_pos))
             return true;
           typet key_t;
-          if (get_type_description(
-                map_decl_json["typeName"]["keyType"]["typeDescriptions"],
-                key_t))
+          if (
+            get_type_description(
+              map_decl_json["typeName"]["keyType"]["typeDescriptions"], key_t))
             return true;
           gen_mapping_key_typecast(
             current_contractName, key_pos, location, key_t);
@@ -4218,8 +4237,9 @@ bool solidity_convertert::get_index_access_expr(
           for (size_t j = 1; j < idx_jsons.size(); ++j)
           {
             exprt this_idx;
-            if (get_expr(
-                  *idx_jsons[j], (*idx_jsons[j])["typeDescriptions"], this_idx))
+            if (
+              get_expr(
+                *idx_jsons[j], (*idx_jsons[j])["typeDescriptions"], this_idx))
               return true;
             solidity_gen_typecast(ns, this_idx, idx_t);
             exprt mul("*", idx_t);
@@ -4307,9 +4327,9 @@ bool solidity_convertert::get_index_access_expr(
 
       // Fast path: static-singleton mapping lowered to `array<V, inf>`
       // with a scalar / struct V. Skip when the decl layer has forced
-      // `mapping_t` (fixed-array-value mapping, `#sol_mapping_fixed_arr_value`),
-      // in which case `array.type()` is the mapping_t struct and must
-      // flow through the helper below.
+      // `mapping_t` (fixed-array-value mapping,
+      // `#sol_mapping_fixed_arr_value`), in which case `array.type()` is the
+      // mapping_t struct and must flow through the helper below.
       if (!is_new_expr && array.type().is_array())
       {
         xor_fold_key_to_64bit(pos);
@@ -4554,77 +4574,76 @@ bool solidity_convertert::get_index_access_expr(
   // the runtime `_ESBMC_array_length(a)` header for dynamic ones. State-var
   // dyn-arrays and the byte/string/calldata approximations are handled on their
   // own paths above; this only augments the plain pointer fall-through below.
-  auto emit_pointer_array_bounds_check = [&](
-                                           const exprt &array_expr,
-                                           const typet &base_type) {
-    if (
-      !config.options.get_bool_option("bounds-check") ||
-      config.options.get_bool_option("no-bounds-check"))
-      return;
-    if (!array_expr.type().is_pointer())
-      return;
-
-    SolidityGrammar::SolType base_sol = get_sol_type(base_type);
-    if (
-      base_sol != SolidityGrammar::SolType::DYNARRAY &&
-      base_sol != SolidityGrammar::SolType::ARRAY &&
-      base_sol != SolidityGrammar::SolType::ARRAY_LITERAL)
-      return;
-
-    // Locate the length. Fixed arrays carry it as `#sol_array_size` metadata
-    // (on the pointer type, the base type, or its element subtype); dynamic
-    // arrays keep it in the runtime allocation header.
-    exprt len_expr;
-    std::string fixed_size;
-    if (!array_expr.type().get("#sol_array_size").empty())
-      fixed_size = array_expr.type().get("#sol_array_size").as_string();
-    else if (!base_type.get("#sol_array_size").empty())
-      fixed_size = base_type.get("#sol_array_size").as_string();
-    else if (
-      base_type.has_subtype() &&
-      !base_type.subtype().get("#sol_array_size").empty())
-      fixed_size = base_type.subtype().get("#sol_array_size").as_string();
-
-    if (!fixed_size.empty())
-      len_expr = from_integer(std::stoul(fixed_size), unsignedbv_typet(256));
-    else if (base_sol == SolidityGrammar::SolType::DYNARRAY)
-    {
-      // The dynamic length is read with `_ESBMC_array_length(array)`, which
-      // embeds `array` a second time (the access itself still indexes it). If
-      // the base is not a plain symbol (e.g. `make()[i]`), evaluating it twice
-      // would duplicate its side effects, so only emit the check for a stable
-      // symbol base; otherwise degrade to no check.
-      if (!array_expr.is_symbol())
+  auto emit_pointer_array_bounds_check =
+    [&](const exprt &array_expr, const typet &base_type) {
+      if (
+        !config.options.get_bool_option("bounds-check") ||
+        config.options.get_bool_option("no-bounds-check"))
         return;
-      // No length header symbol → cannot bound; degrade to no check.
-      if (context.find_symbol("c:@F@_ESBMC_array_length") == nullptr)
+      if (!array_expr.type().is_pointer())
         return;
-      side_effect_expr_function_callt length_call;
-      get_library_function_call_no_args(
-        "_ESBMC_array_length",
-        "c:@F@_ESBMC_array_length",
-        uint_type(),
-        location,
-        length_call);
-      length_call.arguments().push_back(array_expr);
-      // _ESBMC_array_length returns uint32; widen to uint256 for the compare.
-      solidity_gen_typecast(ns, length_call, unsignedbv_typet(256));
-      len_expr = length_call;
-    }
-    else
-      return;
 
-    exprt bounds_pos = pos;
-    solidity_gen_typecast(ns, bounds_pos, len_expr.type());
-    exprt in_bounds = binary_relation_exprt(bounds_pos, "<", len_expr);
+      SolidityGrammar::SolType base_sol = get_sol_type(base_type);
+      if (
+        base_sol != SolidityGrammar::SolType::DYNARRAY &&
+        base_sol != SolidityGrammar::SolType::ARRAY &&
+        base_sol != SolidityGrammar::SolType::ARRAY_LITERAL)
+        return;
 
-    code_assertt bounds_assert(in_bounds);
-    bounds_assert.location() = location;
-    bounds_assert.location().comment(
-      "dereference failure: array bounds violated");
-    bounds_assert.location().property("array bounds");
-    move_to_front_block(bounds_assert);
-  };
+      // Locate the length. Fixed arrays carry it as `#sol_array_size` metadata
+      // (on the pointer type, the base type, or its element subtype); dynamic
+      // arrays keep it in the runtime allocation header.
+      exprt len_expr;
+      std::string fixed_size;
+      if (!array_expr.type().get("#sol_array_size").empty())
+        fixed_size = array_expr.type().get("#sol_array_size").as_string();
+      else if (!base_type.get("#sol_array_size").empty())
+        fixed_size = base_type.get("#sol_array_size").as_string();
+      else if (
+        base_type.has_subtype() &&
+        !base_type.subtype().get("#sol_array_size").empty())
+        fixed_size = base_type.subtype().get("#sol_array_size").as_string();
+
+      if (!fixed_size.empty())
+        len_expr = from_integer(std::stoul(fixed_size), unsignedbv_typet(256));
+      else if (base_sol == SolidityGrammar::SolType::DYNARRAY)
+      {
+        // The dynamic length is read with `_ESBMC_array_length(array)`, which
+        // embeds `array` a second time (the access itself still indexes it). If
+        // the base is not a plain symbol (e.g. `make()[i]`), evaluating it
+        // twice would duplicate its side effects, so only emit the check for a
+        // stable symbol base; otherwise degrade to no check.
+        if (!array_expr.is_symbol())
+          return;
+        // No length header symbol → cannot bound; degrade to no check.
+        if (context.find_symbol("c:@F@_ESBMC_array_length") == nullptr)
+          return;
+        side_effect_expr_function_callt length_call;
+        get_library_function_call_no_args(
+          "_ESBMC_array_length",
+          "c:@F@_ESBMC_array_length",
+          uint_type(),
+          location,
+          length_call);
+        length_call.arguments().push_back(array_expr);
+        // _ESBMC_array_length returns uint32; widen to uint256 for the compare.
+        solidity_gen_typecast(ns, length_call, unsignedbv_typet(256));
+        len_expr = length_call;
+      }
+      else
+        return;
+
+      exprt bounds_pos = pos;
+      solidity_gen_typecast(ns, bounds_pos, len_expr.type());
+      exprt in_bounds = binary_relation_exprt(bounds_pos, "<", len_expr);
+
+      code_assertt bounds_assert(in_bounds);
+      bounds_assert.location() = location;
+      bounds_assert.location().comment(
+        "dereference failure: array bounds violated");
+      bounds_assert.location().property("array bounds");
+      move_to_front_block(bounds_assert);
+    };
 
   emit_pointer_array_bounds_check(array, base_t);
 
@@ -4719,10 +4738,11 @@ bool solidity_convertert::get_index_range_access_expr(
     expr.contains("startExpression") && !expr["startExpression"].is_null();
   if (have_s)
   {
-    if (get_expr(
-          expr["startExpression"],
-          expr["startExpression"]["typeDescriptions"],
-          s_expr))
+    if (
+      get_expr(
+        expr["startExpression"],
+        expr["startExpression"]["typeDescriptions"],
+        s_expr))
       return true;
   }
   else
@@ -4733,10 +4753,11 @@ bool solidity_convertert::get_index_range_access_expr(
     expr.contains("endExpression") && !expr["endExpression"].is_null();
   if (have_e)
   {
-    if (get_expr(
-          expr["endExpression"],
-          expr["endExpression"]["typeDescriptions"],
-          e_expr))
+    if (
+      get_expr(
+        expr["endExpression"],
+        expr["endExpression"]["typeDescriptions"],
+        e_expr))
       return true;
   }
 
@@ -4909,10 +4930,11 @@ bool solidity_convertert::get_new_object_expr(
     {
       assert(expr.contains("arguments") && expr["arguments"].size() == 1);
       exprt size_expr;
-      if (get_expr(
-            expr["arguments"][0],
-            expr["expression"]["argumentTypes"][0],
-            size_expr))
+      if (
+        get_expr(
+          expr["arguments"][0],
+          expr["expression"]["argumentTypes"][0],
+          size_expr))
         return true;
 
       side_effect_expr_function_callt mcall;

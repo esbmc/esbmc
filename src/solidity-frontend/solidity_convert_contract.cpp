@@ -117,7 +117,8 @@ const path_cov_fixturet &path_cov_fixture()
   {
     if (!j["state"].is_object())
     {
-      log_error("--path-cov-fixture: \"state\" must be an object of name:value");
+      log_error(
+        "--path-cov-fixture: \"state\" must be an object of name:value");
       abort();
     }
     for (auto it = j["state"].begin(); it != j["state"].end(); ++it)

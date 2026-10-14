@@ -36,9 +36,10 @@ private:
     // Interface-arg mock synthesis: when this argument is an interface/abstract
     // contract handle (`#sol_type: CONTRACT`), `mock_iface` names the interface
     // and a deployed `ESBMCMock_<iface>` instance is passed instead of a
-    // literal. `mock_key` (the parameter name) gives each interface argument its
-    // OWN mock instance (fresh-per-slot), so two handles a constructor forces
-    // distinct (`a != b`) get distinct deployed addresses. Empty otherwise.
+    // literal. `mock_key` (the parameter name) gives each interface argument
+    // its OWN mock instance (fresh-per-slot), so two handles a constructor
+    // forces distinct (`a != b`) get distinct deployed addresses. Empty
+    // otherwise.
     std::string mock_iface;
     std::string mock_key;
     // True when the literal is a type DEFAULT (0/address(0)/…) because no value
@@ -79,20 +80,21 @@ private:
     // describe something that cannot happen and a test built from it is RED on
     // the UNMODIFIED contract.
     //
-    // goto_coverage.h states the rule outright -- "a marked path ... must not be
-    // turned into a test. Marking without excluding would be worthless" -- and
-    // the marking half was the only half implemented. MEASURED:
+    // goto_coverage.h states the rule outright -- "a marked path ... must not
+    // be turned into a test. Marking without excluding would be worthless" --
+    // and the marking half was the only half implemented. MEASURED:
     // named_obstacle_paths has exactly three readers and all three sit under
-    // `if (tri == "U")` in bmc.cpp, so a REFUTED path never reaches any of them.
-    // Refuted is the only kind that ever becomes a test. The regression
+    // `if (tri == "U")` in bmc.cpp, so a REFUTED path never reaches any of
+    // them. Refuted is the only kind that ever becomes a test. The regression
     // solidity_path_cov_residual_unit_call_obstacle pins 5 obstacle paths of
     // which just ONE shows as `named-obstacle` in the report -- the other four
     // are F, and flowed straight through to this generator.
     //
-    // Set from the SAME (comment, location) key the census stores, alongside the
-    // normal_exit_paths lookup, rather than by matching the prettified claim text
-    // later: a detector keyed on a string that does not round-trip is a detector
-    // that never fires, which is the failure this is fixing, one layer down.
+    // Set from the SAME (comment, location) key the census stores, alongside
+    // the normal_exit_paths lookup, rather than by matching the prettified
+    // claim text later: a detector keyed on a string that does not round-trip
+    // is a detector that never fires, which is the failure this is fixing, one
+    // layer down.
     bool named_obstacle = false;
     // ③A0 environment pinning: the msg.value the solver picked for this call's
     // transaction (recovered from the per-tx `_sol_per_tx_reseed`). Emitted as
@@ -102,8 +104,8 @@ private:
     bool payable = false;
     // ③A0 block.timestamp pinning: the timestamp the solver picked, emitted as
     // `vm.warp(N)` ONLY when `warp` (the covered path actually reads
-    // block.timestamp) — otherwise a nondet timestamp is noise that can spuriously
-    // revert unrelated arithmetic. Nil / !warp -> no warp.
+    // block.timestamp) — otherwise a nondet timestamp is noise that can
+    // spuriously revert unrelated arithmetic. Nil / !warp -> no warp.
     expr2tc block_timestamp;
     bool warp = false;
     // ③A0 msg.sender pinning (deployer coordination): the per-tx sender the
@@ -116,18 +118,20 @@ private:
     expr2tc msg_sender;
     bool prank = false;
     bool deployer = false;
-    // Set on a ctor carrier that had to be marked unsupported because the model's
-    // deploy path needs a nonzero msg.value the (non-payable) constructor cannot
-    // legally receive — used only to emit an accurate UNSUPPORTED reason.
+    // Set on a ctor carrier that had to be marked unsupported because the
+    // model's deploy path needs a nonzero msg.value the (non-payable)
+    // constructor cannot legally receive — used only to emit an accurate
+    // UNSUPPORTED reason.
     bool ctor_value_unsendable = false;
     // Set on a deploy-time env carrier for a PARAMETERIZED constructor whose
     // arguments were not recovered (e.g. `--focus-function` mode nondets them):
     // the deploy is marked UNSUPPORTED rather than emit all-default args, which
-    // could revert setUp (a require on a zero default) and break the whole suite.
+    // could revert setUp (a require on a zero default) and break the whole
+    // suite.
     bool ctor_unrecovered = false;
     // Set on a deploy ctor whose args were recovered under a BASE contract and
-    // remapped onto the deploy contract (empty derived body forwarding to a base
-    // ctor, e.g. EscrowDst -> BaseEscrow). Reported for visibility.
+    // remapped onto the deploy contract (empty derived body forwarding to a
+    // base ctor, e.g. EscrowDst -> BaseEscrow). Reported for visibility.
     bool ctor_remapped = false;
   };
 
@@ -178,19 +182,22 @@ private:
   /// only a constructor; it does not say which of two very different things
   /// happened, and the two need opposite fixes:
   ///
-  ///   (a) a call to the unit WAS built and came back unsupported -- an argument
+  ///   (a) a call to the unit WAS built and came back unsupported -- an
+  ///   argument
   ///       type that cannot be rendered. Then the fix is in the renderer.
-  ///   (b) no dispatcher segment ever acquired a method, so no call was built at
+  ///   (b) no dispatcher segment ever acquired a method, so no call was built
+  ///   at
   ///       all, and the coverage-claim FALLBACK that exists to repair exactly
   ///       that could not run because `calls` was already non-empty -- holding
   ///       nothing but the constructor. Then the fix is the fallback's guard.
   ///
-  /// (a) is ruled out by construction on the ordinary route: an unsupported call
-  /// is still pushed into `calls`, so it satisfies `method != contract` and the
-  /// empty-body refusal never fires for it. But "ruled out by reading the code"
-  /// is exactly the standard this project has been burned by twice -- argument
-  /// aliasing and the transaction bound were both plausible, cheap, and refuted
-  /// by measurement. So the distinction gets a COUNTER before it gets a fix.
+  /// (a) is ruled out by construction on the ordinary route: an unsupported
+  /// call is still pushed into `calls`, so it satisfies `method != contract`
+  /// and the empty-body refusal never fires for it. But "ruled out by reading
+  /// the code" is exactly the standard this project has been burned by twice --
+  /// argument aliasing and the transaction bound were both plausible, cheap,
+  /// and refuted by measurement. So the distinction gets a COUNTER before it
+  /// gets a fix.
   ///
   /// `segments_without_method` counts dispatcher segments dropped by the
   /// `!s.method.empty()` guard: a loop-only branch never sets the segment's
@@ -208,9 +215,10 @@ private:
   /// there were no segments AT ALL -- per-claim slicing removes the
   /// dispatcher's first tx-guard, which is the very case the fallback exists
   /// for -- and the constructor blocked the repair. Kept after the fix rather
-  /// than deleted: it is what separates this route from an unrenderable-argument
-  /// route on the next benchmark, and a measurement removed once it has served
-  /// one investigation makes the next one start from a guess.
+  /// than deleted: it is what separates this route from an
+  /// unrenderable-argument route on the next benchmark, and a measurement
+  /// removed once it has served one investigation makes the next one start from
+  /// a guess.
   mutable size_t segments_without_method = 0;
   mutable size_t fallback_rescued_ctor_only = 0;
 
@@ -225,7 +233,8 @@ private:
   /// Contracts Solidity forbids `new` on (abstract / interface / library),
   /// detected from the `#sol_no_new` flag stamped on their constructor symbol.
   /// The generator degrades their instantiation to UNSUPPORTED so the emitted
-  /// test always compiles. Populated during reconstruct() (needs the namespace).
+  /// test always compiles. Populated during reconstruct() (needs the
+  /// namespace).
   mutable std::set<std::string> non_instantiable;
 
   /// Contracts that are Solidity libraries (no `this` self-pointer on their
@@ -255,11 +264,11 @@ private:
   mutable std::map<std::string, mock_spec> mock_specs;
 
   /// Build (or fetch cached) the mock for an interface/abstract contract:
-  /// enumerate its externally-visible functions from the symbol table (inherited
-  /// methods are already inlined into the derived interface's `@F@` set) and
-  /// render a default-returning `override` stub for each. All-or-nothing: any
-  /// unrenderable param/return type, or zero functions found, yields
-  /// `renderable == false`.
+  /// enumerate its externally-visible functions from the symbol table
+  /// (inherited methods are already inlined into the derived interface's `@F@`
+  /// set) and render a default-returning `override` stub for each.
+  /// All-or-nothing: any unrenderable param/return type, or zero functions
+  /// found, yields `renderable == false`.
   const mock_spec &
   build_mock_spec(const namespacet &ns, const std::string &iface) const;
 
@@ -333,11 +342,12 @@ private:
   /// literal `<Qualified>(f0, f1, …)`. Field source types (UDVT / bytesN /
   /// address / …) come from the DECLARED struct tag symbol (`tag-struct
   /// <Qualified>`), which retains them (the recovered value's migrated type is
-  /// stripped); synthetic `anon_pad$*` padding components are skipped; each real
-  /// field reuses format_sol_value/default_sol_literal (recursing for a nested
-  /// struct field). `qualified` is set to the struct's Solidity name for import.
-  /// All-or-nothing: returns "" if any field (or a fixed-array field) cannot
-  /// render, so the call degrades to UNSUPPORTED rather than emit a bad literal.
+  /// stripped); synthetic `anon_pad$*` padding components are skipped; each
+  /// real field reuses format_sol_value/default_sol_literal (recursing for a
+  /// nested struct field). `qualified` is set to the struct's Solidity name for
+  /// import. All-or-nothing: returns "" if any field (or a fixed-array field)
+  /// cannot render, so the call degrades to UNSUPPORTED rather than emit a bad
+  /// literal.
   static std::string format_struct_literal(
     const namespacet &ns,
     const expr2tc &value,

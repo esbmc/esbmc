@@ -109,10 +109,7 @@ void collect_local_ids(const nlohmann::json &node, std::set<int> &ids)
   }
 }
 
-void remap_ids(
-  nlohmann::json &node,
-  const std::set<int> &local_ids,
-  int offset)
+void remap_ids(nlohmann::json &node, const std::set<int> &local_ids, int offset)
 {
   if (node.is_object())
   {
@@ -151,9 +148,7 @@ void remap_ids(
 // called, never assigned/stored/passed through). Returns false if any
 // non-call usage is found. We walk manually so we can distinguish the
 // "expression" child of a FunctionCall from any other containing field.
-bool param_used_only_for_calls(
-  const nlohmann::json &subtree,
-  int target_id)
+bool param_used_only_for_calls(const nlohmann::json &subtree, int target_id)
 {
   if (subtree.is_object())
   {
@@ -424,8 +419,7 @@ bool solidity_convertert::monomorphize_fn_ptr_params()
       }
       const nlohmann::json &cb_def = find_node_by_id(root, cb);
       if (
-        cb_def.empty() ||
-        cb_def.value("nodeType", "") != "FunctionDefinition")
+        cb_def.empty() || cb_def.value("nodeType", "") != "FunctionDefinition")
       {
         resolvable = false;
         break;
@@ -541,7 +535,8 @@ bool solidity_convertert::monomorphize_fn_ptr_params()
     nlohmann::json receiver = nlohmann::json::object();
     bool has_receiver = false;
     if (
-      implicit_self == 1 && callee_expr.value("nodeType", "") == "MemberAccess" &&
+      implicit_self == 1 &&
+      callee_expr.value("nodeType", "") == "MemberAccess" &&
       callee_expr.contains("expression"))
     {
       receiver = callee_expr["expression"];

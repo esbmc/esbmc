@@ -13,7 +13,8 @@
 ///
 ///   1. the Solidity frontend's validator (`solidity_convertert::convert`),
 ///      which fails the conversion when a named function does not exist;
-///   2. the frontend's dispatcher filter (`get_unbound_function`), which decides
+///   2. the frontend's dispatcher filter (`get_unbound_function`), which
+///   decides
 ///      which entries the harness may call;
 ///   3. the path-coverage pass (`goto_coveraget::focus_selects_unit`), which
 ///      decides which units are ENUMERATED AND INSTRUMENTED, and hence what the
@@ -36,16 +37,16 @@
 ///
 /// Whitespace is accepted because `--contract` already takes its list that way
 /// (`--contract "C1 C2"`, split with `istringstream >>`), and a user who has
-/// just written one is entitled to expect the other to behave the same. Comma is
-/// accepted because a shell user writing a list without quotes reaches for it
-/// first. Empty fields (`a,,b`, a trailing comma) are dropped rather than
+/// just written one is entitled to expect the other to behave the same. Comma
+/// is accepted because a shell user writing a list without quotes reaches for
+/// it first. Empty fields (`a,,b`, a trailing comma) are dropped rather than
 /// becoming an empty name that matches nothing and is diagnosed as a typo.
 ///
 /// MATCHING IS EXACT, per name, on the SOURCE-LEVEL function name. It is not a
 /// prefix or substring test: `--focus-function pub` must not select `pubx`, and
-/// a name-only match deliberately keeps EVERY OVERLOAD of that name, because the
-/// dispatcher offers all of them and an entry that can be entered must not be
-/// left unmeasured.
+/// a name-only match deliberately keeps EVERY OVERLOAD of that name, because
+/// the dispatcher offers all of them and an entry that can be entered must not
+/// be left unmeasured.
 
 /// Split a `--focus-function` value into the function names it selects.
 /// Order is preserved (so diagnostics list names as the user wrote them) and

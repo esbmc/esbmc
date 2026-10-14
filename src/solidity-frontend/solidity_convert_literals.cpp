@@ -51,10 +51,9 @@ bool solidity_convertert::convert_integer_literal(
           return true;
         }
       }
-      std::string mantissa =
-        (e_pos_d == std::string::npos)
-          ? the_value
-          : the_value.substr(0, e_pos_d);
+      std::string mantissa = (e_pos_d == std::string::npos)
+                               ? the_value
+                               : the_value.substr(0, e_pos_d);
       bool neg = !mantissa.empty() && mantissa[0] == '-';
       if (neg)
         mantissa.erase(mantissa.begin());

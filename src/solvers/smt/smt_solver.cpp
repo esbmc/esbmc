@@ -3093,8 +3093,7 @@ bool array_chain_has_infinite_level(const type2tc &type)
 static bool selects_flattened_dimension(const index2t &index)
 {
   if (
-    !is_index2t(index.source_value) ||
-    is_vector_type(index.source_value->type))
+    !is_index2t(index.source_value) || is_vector_type(index.source_value->type))
     return false;
 
   const expr2tc *root = &index.source_value;
@@ -4136,8 +4135,7 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
     if (is_struct_type(leaf))
     {
       const std::vector<type2tc> &leaf_members = struct_union_members(leaf);
-      const std::vector<irep_idt> &leaf_names =
-        struct_union_member_names(leaf);
+      const std::vector<irep_idt> &leaf_names = struct_union_member_names(leaf);
 
       // Walk the (possibly nested) array_of initializer down to the struct
       // value being broadcast into every slot.

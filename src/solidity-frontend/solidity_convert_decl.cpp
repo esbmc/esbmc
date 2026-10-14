@@ -75,8 +75,8 @@ bool solidity_convertert::get_non_function_decl(
 //
 // (1) `this.f(...)` call sites.  On a real EVM this is an EXTERNAL call: it
 //     re-enters through the ABI, so inside `f` the value of `msg.sender` is the
-//     CONTRACT'S OWN ADDRESS, not the original caller. The frontend lowers it to
-//     the same direct call as a plain `f(a)` (measured), which keeps the
+//     CONTRACT'S OWN ADDRESS, not the original caller. The frontend lowers it
+//     to the same direct call as a plain `f(a)` (measured), which keeps the
 //     caller's msg.sender — so the model is not merely missing a branch, it
 //     disagrees with the EVM. A `require(msg.sender == owner)` inside `f` fails
 //     on-chain when reached via `this.f()` and can pass in the model. Any test
@@ -391,15 +391,15 @@ bool solidity_convertert::get_var_decl(
     // "static singleton" optimisation. The chained-subtype lowering
     // `array<T[N], inf>` / `array<T[M][N], inf>` produces an
     // unbounded array whose element sort is itself an array sort —
-    // array_convt cannot represent that (see src/solvers/smt/array_conv.cpp:92-95,
-    // bitwuzla reports "terms with mismatching sort at indices 0 and 1").
-    // Routing this mapping through the mapping_t + map_fixed_arr_get
-    // helper sidesteps the nested-array sort entirely. Restrict to
-    // single-level mappings: nested `mapping(K1=>mapping(K2=>T[N]))`
-    // would also need access-layer combine_mapping_keys_256 gating on
-    // the rewritten type, which is not in scope here.
-    // 1D fixed array leaves carry SolType::ARRAY_LITERAL; 2D+ nested
-    // fixed arrays (e.g. T[M][N]) carry SolType::ARRAY — accept both.
+    // array_convt cannot represent that (see
+    // src/solvers/smt/array_conv.cpp:92-95, bitwuzla reports "terms with
+    // mismatching sort at indices 0 and 1"). Routing this mapping through the
+    // mapping_t + map_fixed_arr_get helper sidesteps the nested-array sort
+    // entirely. Restrict to single-level mappings: nested
+    // `mapping(K1=>mapping(K2=>T[N]))` would also need access-layer
+    // combine_mapping_keys_256 gating on the rewritten type, which is not in
+    // scope here. 1D fixed array leaves carry SolType::ARRAY_LITERAL; 2D+
+    // nested fixed arrays (e.g. T[M][N]) carry SolType::ARRAY — accept both.
     SolidityGrammar::SolType leaf_sol = get_sol_type(cur_type->subtype());
     if (
       cur_type == &t && cur_type->is_array() &&
@@ -1207,8 +1207,9 @@ bool solidity_convertert::get_var_decl(
     const exprt &addr_owner_this = have_ctor_this ? ctor_this_expr : this_expr;
 
     exprt inits;
-    if (build_mapping_t_init_value(
-          current_contractName, name, addr_owner_this, location_begin, inits))
+    if (
+      build_mapping_t_init_value(
+        current_contractName, name, addr_owner_this, location_begin, inits))
       return true;
 
     added_symbol.set_value(migrate_expr(inits));
@@ -1735,11 +1736,11 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     std::string ev_name, ev_id;
     get_function_definition_name(ast_node, ev_name, ev_id);
     if (symbolt *ev_sym = context.find_symbol(ev_id))
-      {
-        typet t = ev_sym->get_type();
-        t.set("sol_event", true);
-        ev_sym->set_type(std::move(t));
-      }
+    {
+      typet t = ev_sym->get_type();
+      t.set("sol_event", true);
+      ev_sym->set_type(std::move(t));
+    }
   }
   else if (node_type == "ContractDefinition" && ast_node["abstract"] == true)
   {
@@ -1876,8 +1877,8 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
 void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
 {
   //? will this affect find_decl_ref?
-  // 0.6.x emits `body: null` for unimplemented functions (interface / abstract);
-  // 0.8.x omits the field entirely. Either form means "no body".
+  // 0.6.x emits `body: null` for unimplemented functions (interface /
+  // abstract); 0.8.x omits the field entirely. Either form means "no body".
   auto missing_body = [](const nlohmann::json &n) {
     return !n.contains("body") || n["body"].is_null();
   };

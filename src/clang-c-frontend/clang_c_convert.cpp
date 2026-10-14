@@ -738,8 +738,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
           // 256→64 fold unsoundness).
           if (name.size() > 16 && name[16] == ':')
           {
-            unsigned w =
-              static_cast<unsigned>(std::stoul(name.substr(17)));
+            unsigned w = static_cast<unsigned>(std::stoul(name.substr(17)));
             t.set("#esbmc_index_width", std::to_string(w));
           }
         }

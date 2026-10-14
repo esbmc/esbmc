@@ -1853,8 +1853,7 @@ void value_sett::assign_rec(
   {
     const index2t &idx = to_index2t(lhs);
     assert(
-      is_array_type(idx.source_value) ||
-      is_vector_type(idx.source_value) ||
+      is_array_type(idx.source_value) || is_vector_type(idx.source_value) ||
       is_dynamic_object2t(idx.source_value));
 
     // Array-type index (rare in Solidity — most arrays are pointer-backed

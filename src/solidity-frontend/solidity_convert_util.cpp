@@ -174,9 +174,10 @@ unsigned int solidity_convertert::get_line_number(
 
   // the line number can be calculated by counting the number of line breaks
   // prior to the identifier.
-  // Clamp byte_position to contract_contents.size() to avoid heap-buffer-overflow
-  // when AST nodes carry synthetic/out-of-range src offsets (observed on
-  // auxiliary vars populated before typechecking in large import closures).
+  // Clamp byte_position to contract_contents.size() to avoid
+  // heap-buffer-overflow when AST nodes carry synthetic/out-of-range src
+  // offsets (observed on auxiliary vars populated before typechecking in large
+  // import closures).
   if (byte_position > contract_contents.size())
     byte_position = contract_contents.size();
   unsigned int loc = std::count(
@@ -1041,7 +1042,8 @@ bool solidity_convertert::is_new_created_decl(int decl_id) const
 {
   // Recognise both shapes:
   //   new C(args)            -> FunctionCall(NewExpression, args)
-  //   new C{value: v}(args)  -> FunctionCall(FunctionCallOptions(NewExpression), args)
+  //   new C{value: v}(args)  ->
+  //   FunctionCall(FunctionCallOptions(NewExpression), args)
   auto is_new_call = [](const nlohmann::json &v) {
     if (
       !v.is_object() || v.value("nodeType", "") != "FunctionCall" ||

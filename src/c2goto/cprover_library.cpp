@@ -734,8 +734,7 @@ void add_cprover_library(contextt &context, const languaget *language)
   // built with size_t=64 in the binary, so under --16/--32 the size_t
   // argument at call sites will be implicitly zero-extended by ESBMC's type
   // conversion — callers pass small values that fit the stored 64-bit slot.
-  const bool is_solidity_lang =
-    (language && language->id() == "solidity_ast");
+  const bool is_solidity_lang = (language && language->id() == "solidity_ast");
 #else
   const bool is_solidity_lang = false;
 #endif
@@ -768,7 +767,8 @@ void add_cprover_library(contextt &context, const languaget *language)
     {
       if (language)
       {
-        // C library sources must be parsed with C frontend, not the current language
+        // C library sources must be parsed with C frontend, not the current
+        // language
         std::unique_ptr<languaget> c_lang(new_language(language_idt::C));
         return add_bundled_library_sources(context, *c_lang);
       }

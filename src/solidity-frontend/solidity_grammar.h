@@ -26,8 +26,8 @@ enum ContractBodyElementT
   EnumDef,     // rule enum-definition
   ErrorDef,    // rule error-definition
   EventDef,    // rule event-definition
-  UsingForDef,            // rule using-for-directive
-  ModifierDef,            // rule modifier-definition
+  UsingForDef, // rule using-for-directive
+  ModifierDef, // rule modifier-definition
   UserDefinedValueTypeDef, // `type T is <elementary>;` (pre-registered)
   ContractBodyElementTError
 };
@@ -267,12 +267,12 @@ enum StatementT
   WhileStatement,
   DoWhileStatement,
   StatementTError,
-  ContinueStatement,    // rule continue
-  BreakStatement,       // rule break
-  RevertStatement,      // rule revert
-  EmitStatement,        // rule emit
-  PlaceholderStatement, //rule placeholder
-  TryStatement,          // rule try
+  ContinueStatement,      // rule continue
+  BreakStatement,         // rule break
+  RevertStatement,        // rule revert
+  EmitStatement,          // rule emit
+  PlaceholderStatement,   // rule placeholder
+  TryStatement,           // rule try
   InlineAssemblyStatement // rule inline assembly (havoc)
 };
 StatementT get_statement_t(const nlohmann::json &stmt);

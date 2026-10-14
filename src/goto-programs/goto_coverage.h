@@ -220,22 +220,24 @@ public:
   // made is "every uncovered path carries a named reason; there is no
   // unexplained remainder". A U cell that can also absorb an implementation
   // defect makes that claim false — and it has absorbed one three times already
-  // (ordinal-key mismatch, the RETURN exit, `rawBalances`). Each time the broken
-  // case was indistinguishable from an honest solver timeout, because "we do not
-  // know" is a legitimate, expected outcome.
+  // (ordinal-key mismatch, the RETURN exit, `rawBalances`). Each time the
+  // broken case was indistinguishable from an honest solver timeout, because
+  // "we do not know" is a legitimate, expected outcome.
   //
   // So every U must be classifiable, and a U that is not is a HARD FAILURE
   // rather than a quiet residue. The tokens:
   //
   //   named-obstacle      the unit is disqualified (the model admits an
   //                       execution the chain does not have). Not an unknown at
-  //                       all — a declared exclusion that no verdict can change.
+  //                       all — a declared exclusion that no verdict can
+  //                       change.
   //   bounded-holds       the solver proved no witness AT THIS EXPLORATION.
   //                       Honest and precise: it is not "unreachable", it is
   //                       "no witness within the declared tx/unwind bound from
   //                       the post-constructor entry state".
   //   solver-unknown      the solver returned UNKNOWN/error, or an inductive
-  //                       step could not prove it. The genuine "we do not know".
+  //                       step could not prove it. The genuine "we do not
+  //                       know".
   //   not-solved-this-run the claim was instrumented but never reached the
   //                       solver. The entry-liveness audit catches the case
   //                       where a WHOLE unit is in this state; this token is
@@ -282,8 +284,8 @@ public:
   // introduces a U with no reason. THE PARTITION ARGUMENT ONLY HOLDS WHILE THE
   // CLASSIFICATION HAS NO CATCH-ALL: the implementation's `default` arm returns
   // "" so the caller aborts. Mapping `default` to any token instead would make
-  // the abort dead code while everything still looked fine — do not add one when
-  // a fifth verdict value appears; add an explicit case for it.
+  // the abort dead code while everything still looked fine — do not add one
+  // when a fifth verdict value appears; add an explicit case for it.
   //
   // Returns the token, or "" when the path is not a U (which callers treat as
   // the hard failure above).
@@ -356,13 +358,14 @@ public:
   //                                   120166 instrumented paths, zero
   //                                   verification conditions. Hard failure.
   //
-  // Keeping the reason (rather than a bare set) is what makes this usable BEYOND
-  // token selection. The planned entry-liveness WITNESS — an `assert(false)` at
-  // each unit's body head that must be refuted — has the rule "not refuted =>
-  // hard failure", and applying that rule uniformly would abort the moment
-  // anyone passes --focus-function. It must consult this same distinction:
-  // SKIP the check for focus-excluded units, REQUIRE refutation for the rest.
-  // Recording only "not entered" would force that layer to rediscover the split.
+  // Keeping the reason (rather than a bare set) is what makes this usable
+  // BEYOND token selection. The planned entry-liveness WITNESS — an
+  // `assert(false)` at each unit's body head that must be refuted — has the
+  // rule "not refuted => hard failure", and applying that rule uniformly would
+  // abort the moment anyone passes --focus-function. It must consult this same
+  // distinction: SKIP the check for focus-excluded units, REQUIRE refutation
+  // for the rest. Recording only "not entered" would force that layer to
+  // rediscover the split.
   //
   // Filled by audit_entry_liveness (which runs before any figure is printed).
   // Today the defect entries never survive to a reader — the audit aborts on
@@ -456,19 +459,20 @@ public:
   // Paths whose certified region is NARROWER than it would otherwise be,
   // because their unit lost paths to the goal cap. Keyed like all_claims.
   //
-  // This is deliberately NOT named_obstacle_paths, and the reason is mechanical.
-  // Certification is a query — `assume(L <= x <= U); assert(tr == pi)` — and the
-  // goal cap limits only how many EXIT ASSERTS are emitted. Phase-1 accounting
-  // still updates `tr`/`cnt` on every decision of every path, dropped ones
-  // included, so an input that walks a dropped path carries that path's number
-  // at the exit, the query fails on it, and the candidate interval is rejected
-  // and shrunk. The query never needed the dropped path to have been enumerated.
+  // This is deliberately NOT named_obstacle_paths, and the reason is
+  // mechanical. Certification is a query — `assume(L <= x <= U); assert(tr ==
+  // pi)` — and the goal cap limits only how many EXIT ASSERTS are emitted.
+  // Phase-1 accounting still updates `tr`/`cnt` on every decision of every
+  // path, dropped ones included, so an input that walks a dropped path carries
+  // that path's number at the exit, the query fails on it, and the candidate
+  // interval is rejected and shrunk. The query never needed the dropped path to
+  // have been enumerated.
   //
   // A `require` lowered to a control-flow-free assume is the opposite case and
-  // stays an obstacle: there the reverting execution does not exist in the model
-  // at all, so no query can see it and no interval can be shrunk away from it.
-  // Existing-but-unenumerated and non-existent are different failures, and only
-  // the second can ship a test that is red on the unmodified contract.
+  // stays an obstacle: there the reverting execution does not exist in the
+  // model at all, so no query can see it and no interval can be shrunk away
+  // from it. Existing-but-unenumerated and non-existent are different failures,
+  // and only the second can ship a test that is red on the unmodified contract.
   static std::map<std::pair<std::string, std::string>, std::string>
     truncation_weakened;
 
@@ -586,10 +590,10 @@ public:
     // The cause is not that the value is harvested and dropped for want of a
     // bucket -- that is the extcall_returns story and it does not apply here.
     // The value NEVER EXISTS as an assignment: the dispatcher calls a unit with
-    // no lvalue (`FUNCTION_CALL: tern_lit(&obj, NONDET, NONDET)`) and the RETURN
-    // instruction carries an EXPRESSION, not a write to any symbol. The rival
-    // explanation, "it is written but after the harvest's break", is REFUTED by
-    // the same goto dump.
+    // no lvalue (`FUNCTION_CALL: tern_lit(&obj, NONDET, NONDET)`) and the
+    // RETURN instruction carries an EXPRESSION, not a write to any symbol. The
+    // rival explanation, "it is written but after the harvest's break", is
+    // REFUTED by the same goto dump.
     //
     // So the instrumenter materialises it into a ghost at the RETURN site,
     // placed BEFORE the path asserts precisely so it falls inside the harvest's
@@ -682,7 +686,8 @@ public:
   static std::atomic<size_t> live_decided;
   static std::atomic<size_t> claims_total_atomic;
 
-  // ---- THIS RUN DID NOT CONCLUDE, AND EVERYTHING BELOW IS CONDITIONED ON IT --
+  // ---- THIS RUN DID NOT CONCLUDE, AND EVERYTHING BELOW IS CONDITIONED ON IT
+  // --
   //
   // Empty means the solve loop ran to the end. Non-empty names how it died, and
   // is the single fact that changes three otherwise-unrelated behaviours:
@@ -700,8 +705,8 @@ public:
   //   * audit_entry_liveness stops aborting. Its premise -- "a unit with
   //     instrumented claims should have been entered" -- only holds for a run
   //     that reached the end of its job loop. On a run that died at claim 1 of
-  //     N almost every unit is legitimately un-entered, and aborting there would
-  //     destroy the partial report on its way out.
+  //     N almost every unit is legitimately un-entered, and aborting there
+  //     would destroy the partial report on its way out.
   static std::string path_cov_partial_reason;
 
   // The claim comments the per-claim solve loop was actually given, i.e. the
@@ -761,9 +766,9 @@ public:
   // three claims or three thousand; a mechanism whose price is unmeasured is
   // one nobody can decide to keep.
   static std::set<std::pair<std::string, std::string>> arith_revert_only_paths;
-  static std::atomic<size_t> arith_resolve_queries;   // re-solves attempted
-  static std::atomic<size_t> arith_resolve_replaced;  // better witness found
-  static std::atomic<size_t> arith_resolve_ms;        // wall time, ms
+  static std::atomic<size_t> arith_resolve_queries;  // re-solves attempted
+  static std::atomic<size_t> arith_resolve_replaced; // better witness found
+  static std::atomic<size_t> arith_resolve_ms;       // wall time, ms
   // How many arithmetic-check claims the equation carried at all. Printed even
   // when it is ZERO, and especially then: zero means no check was enabled or
   // none reached this unit, and without the number a run that re-solved nothing
@@ -780,13 +785,13 @@ public:
   // How many times a DECIDED verdict was kept because a later solve of the same
   // claim key came back without one. Printed on every path-coverage run,
   // including at zero: "the guard fired N times" and "the guard was never
-  // needed" are different statements, and a guard whose only evidence is that it
-  // compiles is the shape this pass has shipped twice.
+  // needed" are different statements, and a guard whose only evidence is that
+  // it compiles is the shape this pass has shipped twice.
   //
   // Non-zero means the same claim key reached the solve loop more than once --
-  // which is itself a defect (duplicate instrumentation), measured on st1inch as
-  // 10 VCCs for 5 paths. So this counter is simultaneously the fix's effect and
-  // the other defect's detector.
+  // which is itself a defect (duplicate instrumentation), measured on st1inch
+  // as 10 VCCs for 5 paths. So this counter is simultaneously the fix's effect
+  // and the other defect's detector.
   static std::atomic<size_t> verdicts_preserved;
 
   // Signal-safe snapshot for path coverage, mirroring branch coverage's
@@ -800,8 +805,8 @@ public:
   // Each enumerated path's DECISION DEPTH, keyed like all_claims.
   //
   // Reported because the next stage cannot be driven without it: every stage-2
-  // query identifies a path by `tr == enc && cnt == depth`, and `enc` alone does
-  // not identify it — the `cnt` conjunct is what stops a longer path whose
+  // query identifies a path by `tr == enc && cnt == depth`, and `enc` alone
+  // does not identify it — the `cnt` conjunct is what stops a longer path whose
   // 64-bit `tr` wrapped from firing a shorter path's claim. A driver reading
   // only the report had to be told the depth by hand, which is exactly the kind
   // of out-of-band knowledge that makes an interface not one.
@@ -810,12 +815,13 @@ public:
 
   // ---- THE ORDERED DECISION SEQUENCE BEHIND A PATH ----
   //
-  // `path_id` is `enc`, and `enc` is a pure bit accumulator: the k-th decision's
-  // ARM is `(enc >> (depth-k)) & 1` arithmetically, but nothing about the source
-  // location is mixed into it. Which SITE each bit came from is path-dependent
-  // (bit 3 of one path and bit 3 of a sibling come from different instructions
-  // once their prefixes diverge), so no external consumer can recover it from
-  // the report. The information exists only here, during enumeration.
+  // `path_id` is `enc`, and `enc` is a pure bit accumulator: the k-th
+  // decision's ARM is `(enc >> (depth-k)) & 1` arithmetically, but nothing
+  // about the source location is mixed into it. Which SITE each bit came from
+  // is path-dependent (bit 3 of one path and bit 3 of a sibling come from
+  // different instructions once their prefixes diverge), so no external
+  // consumer can recover it from the report. The information exists only here,
+  // during enumeration.
   //
   // It is needed for the one comparison this pass has never been able to make:
   // projecting the witnessed (F) path set onto the DECISIONS those paths walk,
@@ -826,7 +832,8 @@ public:
   // enumerate 120166 paths; storing a location string per path per decision is
   // the reason the pre-existing (log-only) recorder is gated off by default.
   // Here the DESCRIPTORS live in a per-unit table whose size is the number of
-  // distinct decision sites (tens), and the per-prefix map holds a 32-bit index.
+  // distinct decision sites (tens), and the per-prefix map holds a 32-bit
+  // index.
   //
   // Keyed by the PREFIX `enc` value the decision produced, so a path's sequence
   // is read off by walking `enc >> (depth-1)`, `enc >> (depth-2)`, ..., `enc`.
@@ -845,10 +852,10 @@ public:
     //
     // Both arms are published because the mapping is INVERTED and inverting it
     // in the consumer is a silent, plausible-looking error: a probe assert(P)
-    // fails when P is false, so `assert(guard)` covers the FALL-THROUGH edge and
-    // `assert(!guard)` the GOTO-TAKEN edge. Path polarity TRUE (taken) therefore
-    // corresponds to the claim keyed on the NEGATED guard. Getting it backwards
-    // still produces a number.
+    // fails when P is false, so `assert(guard)` covers the FALL-THROUGH edge
+    // and `assert(!guard)` the GOTO-TAKEN edge. Path polarity TRUE (taken)
+    // therefore corresponds to the claim keyed on the NEGATED guard. Getting it
+    // backwards still produces a number.
     //
     // ⚠ IT IS DIAGNOSTIC, NOT A JOIN KEY AGAINST --branch-coverage. MEASURED on
     // regression/esbmc-solidity/solidity_path_cov_exit_kinds, same contract,
@@ -876,15 +883,16 @@ public:
     // The synthesised ABI non-payable gate (`msg_value == 0`). It is a decision
     // of the PATH metric with NO branch-coverage counterpart, and its location
     // is COPIED from the unit's first body instruction — so a consumer matching
-    // on location alone would credit itself with a real decision sitting on that
-    // line. Flagged at the source rather than left for the consumer to guess
-    // from the condition text.
+    // on location alone would credit itself with a real decision sitting on
+    // that line. Flagged at the source rather than left for the consumer to
+    // guess from the condition text.
     bool synthetic_abi_gate = false;
   };
   // unit id -> that unit's interned decision descriptors.
   static std::map<std::string, std::vector<path_decisiont>> path_decision_table;
   // unit id -> (prefix enc -> index into the table above).
-  static std::map<std::string, std::map<uint64_t, uint32_t>> path_decision_index;
+  static std::map<std::string, std::map<uint64_t, uint32_t>>
+    path_decision_index;
 
   // ---- THE PER-PATH EMIT SEQUENCE (R0's event rung) ----
   //
@@ -1033,12 +1041,12 @@ public:
   // non-focused units there -- or merely skipping their degradation, which also
   // rewrites their bodies -- would change what lands inside the focused unit,
   // and every `enc` would silently mean something else: a smaller, faster run
-  // with different answers. Leaving the loop alone keeps the focused unit's body
-  // BIT-IDENTICAL to its body in a whole-contract run, which is also what makes
-  // the covered-set argument below hold.
+  // with different answers. Leaving the loop alone keeps the focused unit's
+  // body BIT-IDENTICAL to its body in a whole-contract run, which is also what
+  // makes the covered-set argument below hold.
   //
-  // The price is stated rather than optimised away: a focused run still pays the
-  // whole contract's expansion and degradation cost.
+  // The price is stated rather than optimised away: a focused run still pays
+  // the whole contract's expansion and degradation cost.
   std::string focus_function = "";
 
   // ---- --path-cov-instrument-only: DISPATCH WIDE, INSTRUMENT NARROW ----
@@ -1111,8 +1119,8 @@ public:
   // for modifier renaming. MEASURED on regression solidity_path_cov_modifier_-
   // expands: with a modifier the UNIT keeps the source name
   // (`sol:@C@M@F@set#38`) and the renamed body `set_onlyOwner` is the NON-unit
-  // that gets expanded into it -- so the prefix rule buys nothing here and would
-  // over-match a sibling public function whose name merely starts with
+  // that gets expanded into it -- so the prefix rule buys nothing here and
+  // would over-match a sibling public function whose name merely starts with
   // `<focus>_`.
   static bool
   focus_selects_unit(const std::string &unit_id, const std::string &focus);
@@ -1167,8 +1175,8 @@ public:
   // rather than a pass of its own: expansion, the ABI gate, Phase-1 accounting,
   // the `tr`-completeness invariant and both censuses must all still run. They
   // are the defences, and a certification mode that bypassed them would be
-  // certifying against accounting nobody checked. It also matters that the query
-  // uses the SAME `tr` the enumeration uses — if the two used different
+  // certifying against accounting nobody checked. It also matters that the
+  // query uses the SAME `tr` the enumeration uses — if the two used different
   // accounting, the immunity-to-truncation argument would not hold.
   //
   // Empty => disabled, and the pass behaves exactly as before.
@@ -1176,7 +1184,8 @@ public:
   // Spec for the outer-box batch (see report_outer_boxes). Empty => disabled.
   std::string path_cov_outer_box_path = "";
 
-  // ---- STAGE 3: POST-STATE ASSERTION SYNTHESIS (--path-cov-assert <json>) ----
+  // ---- STAGE 3: POST-STATE ASSERTION SYNTHESIS (--path-cov-assert <json>)
+  // ----
   //
   // The certification query says WHICH inputs walk a path. It says nothing
   // about what that path DOES, and a generated test needs both: the region
@@ -1277,7 +1286,8 @@ public:
   // `[0,254] U [256, 2^160-1]` — and they differ by a factor of 5.7e45. The
   // subtraction can only keep the side that contains its own counterexample,
   // so the side it keeps is decided by a value nobody chose. With a hole, BOTH
-  // cases produce `[0, 2^160-1] \ {255}` and the counterexample stops mattering.
+  // cases produce `[0, 2^160-1] \ {255}` and the counterexample stops
+  // mattering.
   //
   // A hole is legal under exactly the rule the side cuts already obey: it must
   // keep a KNOWN member of this path's domain (its own counterexample), and it
@@ -1299,7 +1309,8 @@ public:
   // shrunk with, so a witness-less refutation leaves the generalisation loop
   // with nothing to do. Its symptom would be "the loop does not converge" or
   // "the loop collapses to a point", several hundred lines away from a string
-  // prefix. Checking it here costs one comparison; finding it there costs hours.
+  // prefix. Checking it here costs one comparison; finding it there costs
+  // hours.
   //
   // `ce_payload_requested` narrows the check to where its premise holds. The
   // counterexample payload is only harvested when the report asks for it; a run
@@ -1313,24 +1324,24 @@ public:
   // ---- STAGE 2, step 1: THE OUTER BOX (--path-cov-outer-box <json>) ----
   //
   // The certification query answers "is this box inside D_pi?". It does not say
-  // where to look, and the way NOT to find out is to widen from the CE point and
-  // ask again each time — that is a search, it has no terminating condition, and
-  // it sits exactly on the "too coarse fails / too fine is expensive" dilemma
-  // that got the widening route withdrawn.
+  // where to look, and the way NOT to find out is to widen from the CE point
+  // and ask again each time — that is a search, it has no terminating
+  // condition, and it sits exactly on the "too coarse fails / too fine is
+  // expensive" dilemma that got the widening route withdrawn.
   //
-  // Instead measure the OUTER box first: `assume(tr == pi); assert(temp_c <= U)`
-  // says D_pi is CONTAINED in the box. Assumption fixed, assertions varied — so
-  // an entire ladder of candidate bounds, for every coordinate and every path,
-  // is judged in ONE run. Then the certified region is computed by SUBTRACTING
-  // the siblings' outer boxes, which costs no query at all: path domains
-  // partition the input space, so an input in nobody else's outer box must walk
-  // this path.
+  // Instead measure the OUTER box first: `assume(tr == pi); assert(temp_c <=
+  // U)` says D_pi is CONTAINED in the box. Assumption fixed, assertions varied
+  // — so an entire ladder of candidate bounds, for every coordinate and every
+  // path, is judged in ONE run. Then the certified region is computed by
+  // SUBTRACTING the siblings' outer boxes, which costs no query at all: path
+  // domains partition the input space, so an input in nobody else's outer box
+  // must walk this path.
   //
   // The ladder's SPAN comes from the sibling counterexamples — a sibling CE at
-  // value v proves the boundary lies between this path's CE and v, so the probes
-  // go there instead of across the whole 256-bit type. The tool does not compute
-  // that span: the driver passes it in, keeping the method abstract and the tool
-  // free of any dependence on its own report format.
+  // value v proves the boundary lies between this path's CE and v, so the
+  // probes go there instead of across the whole 256-bit type. The tool does not
+  // compute that span: the driver passes it in, keeping the method abstract and
+  // the tool free of any dependence on its own report format.
   //
   // Resolution is stated honestly rather than implied: K non-adaptive probes in
   // one batch give resolution (hi-lo)/(K+1), NOT log(hi-lo) — that would need K
@@ -1350,19 +1361,20 @@ public:
   // the subtraction is over SIBLINGS, so a path that got no probes still has to
   // be visible as "unmeasured" rather than silently treated as absent.
   static std::vector<std::pair<uint64_t, uint64_t>> path_cov_outer_box_paths;
-  // (enc, coordinate) -> that path's counterexample value on it. Supplied by the
-  // driver from the enumeration run. Needed because a subtraction cut is legal
-  // only if it keeps a KNOWN member of the path's domain; without one there is
-  // nothing to stop the greedy cut from carving away the real region.
+  // (enc, coordinate) -> that path's counterexample value on it. Supplied by
+  // the driver from the enumeration run. Needed because a subtraction cut is
+  // legal only if it keeps a KNOWN member of the path's domain; without one
+  // there is nothing to stop the greedy cut from carving away the real region.
   static std::map<std::pair<uint64_t, std::string>, std::string>
     path_cov_outer_box_ce;
   // Each coordinate's own TYPE range, as decimal strings. This is an outer
   // bound for free — every value of a `uint256` is in [0, 2^256-1] — and taking
-  // it is not an optimisation but a correctness fix: a probe like `a >= 0` on an
-  // unsigned type is a tautology, gets simplified out of the formula, and comes
-  // back with NO verdict. Read as "this bound was not established" it leaves the
-  // coordinate half-open and blocks the subtraction entirely, which is exactly
-  // what happened before this was added. Probes then only ever TIGHTEN it.
+  // it is not an optimisation but a correctness fix: a probe like `a >= 0` on
+  // an unsigned type is a tautology, gets simplified out of the formula, and
+  // comes back with NO verdict. Read as "this bound was not established" it
+  // leaves the coordinate half-open and blocks the subtraction entirely, which
+  // is exactly what happened before this was added. Probes then only ever
+  // TIGHTEN it.
   static std::map<std::string, std::pair<std::string, std::string>>
     path_cov_outer_box_type_range;
   // Coordinates pinned for this batch. Every measured and every subtracted
@@ -1464,12 +1476,12 @@ public:
   // ladder then prints a full set of certified post-state assertions about a
   // region that contains nothing.
   //
-  // So one extra claim is emitted at pi's OWN exit carrying only the antecedent,
-  // `tr != enc || cnt != depth`. It is REFUTED exactly when some execution
-  // admitted by the region walks THIS path -- which is the property the whole
-  // ladder is conditioned on. Placing it at ENTRY instead would only witness
-  // that the unit is reachable, which is a strictly weaker statement and would
-  // pass on a region that reaches the unit but never this path.
+  // So one extra claim is emitted at pi's OWN exit carrying only the
+  // antecedent, `tr != enc || cnt != depth`. It is REFUTED exactly when some
+  // execution admitted by the region walks THIS path -- which is the property
+  // the whole ladder is conditioned on. Placing it at ENTRY instead would only
+  // witness that the unit is reachable, which is a strictly weaker statement
+  // and would pass on a region that reaches the unit but never this path.
   //
   // Kept out of `path_cov_assert_candidates` on purpose: it is a precondition
   // of the table, not a row of it, and counting it would make every ladder
