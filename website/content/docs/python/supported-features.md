@@ -224,7 +224,9 @@ Byte sequences and integer class methods:
 - **`ImportError` guards**: Imports inside `try/except ImportError` are handled statically
 
 **Built-in exception hierarchy**:
-- `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `IndexError`, `KeyError`, `ZeroDivisionError`, `ImportError`
+- `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `ArithmeticError`, `LookupError`, `ImportError`
+- `ArithmeticError` → `ZeroDivisionError`, `OverflowError`, `FloatingPointError`
+- `LookupError` → `IndexError`, `KeyError`
 - `BaseException` → `KeyboardInterrupt` (raisable and catchable; like `BaseException` itself, its `__init__` takes a required argument)
 - `OSError` → `FileNotFoundError`, `FileExistsError`, `PermissionError`
 
