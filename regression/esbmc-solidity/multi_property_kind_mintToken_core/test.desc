@@ -1,5 +1,6 @@
 CORE
 contract.solast
 --sol contract.sol --cvc5 --k-induction --unsigned-overflow-check --no-standard-check --focus-function mintToken --multi-property --max-k-step 4
-^\[Multi-property\] (all claims resolved|k-induction bound exhausted)
-^VERIFICATION UNKNOWN$
+FAILED +\[mintToken\.arithmetic-overflow\.1\] +line +23
+FAILED +\[mintToken\.arithmetic-overflow\.2\] +line +24
+^VERIFICATION FAILED$
