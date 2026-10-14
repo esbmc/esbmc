@@ -8696,6 +8696,16 @@ exprt python_converter::narrow_optional_return(
   return unwrap_optional_if_needed(base);
 }
 
+static std::string unsupported_statement_message(const nlohmann::json &element)
+{
+  // The preprocessor lowers a match whose patterns are all literals, values,
+  // captures, wildcards or alternatives of these.
+  if (element["_type"] == "Match")
+    return "match statements with sequence, mapping or class patterns, or "
+           "with a guard that has a nested scope, are not supported";
+  return element["_type"].get<std::string>() + " statements are not supported";
+}
+
 exprt python_converter::get_block(
   const nlohmann::json &ast_block,
   bool is_function_body,
@@ -9074,8 +9084,7 @@ exprt python_converter::get_block(
       break;
     case StatementType::UNKNOWN:
     default:
-      throw std::runtime_error(
-        element["_type"].get<std::string>() + " statements are not supported");
+      throw std::runtime_error(unsupported_statement_message(element));
     }
   }
 
