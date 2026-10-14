@@ -19,6 +19,10 @@ Module: Unit tests for symbolt -- specifically the legacy / IREP2
 #include <util/irep/std_code.h>
 #include <util/symtab/symbol.h>
 
+#include <barrier>
+#include <thread>
+#include <vector>
+
 SCENARIO(
   "Constructed symbol validity checks",
   "[core][utils][symbol__validity_checks]")
@@ -402,4 +406,65 @@ TEST_CASE(
   REQUIRE_FALSE(is_block(a.get_value2()));
   REQUIRE(b.get_value().is_code());
   REQUIRE(is_block(b.get_value2()));
+}
+
+namespace
+{
+// Runs `getter` on a fresh symbol from several threads released together, the
+// way --parallel-solving's solver threads read the shared symbol table.
+template <typename Setup, typename Getter>
+void read_concurrently(Setup setup, Getter getter)
+{
+  constexpr int threads = 8;
+  symbolt reference;
+  setup(reference);
+  const auto expected = getter(reference);
+
+  for (int round = 0; round < 200; ++round)
+  {
+    symbolt sym;
+    setup(sym);
+
+    std::vector<std::decay_t<decltype(expected)>> seen(threads);
+    std::barrier start(threads);
+    std::vector<std::thread> pool;
+    for (int t = 0; t < threads; ++t)
+      pool.emplace_back([&, t] {
+        start.arrive_and_wait();
+        seen[t] = getter(sym);
+      });
+    for (auto &t : pool)
+      t.join();
+
+    for (const auto &r : seen)
+      REQUIRE(r == expected);
+  }
+}
+
+typet make_legacy_struct_type()
+{
+  struct_typet st;
+  for (int i = 0; i < 16; ++i)
+    st.components().emplace_back(
+      "S::f" + std::to_string(i), "f" + std::to_string(i), int_type());
+  return st;
+}
+} // namespace
+
+TEST_CASE(
+  "symbolt: concurrent first reads of the lazy caches agree (#8565)",
+  "[core][utils][symbol]")
+{
+  read_concurrently(
+    [](symbolt &s) { s.set_type(make_legacy_struct_type()); },
+    [](const symbolt &s) -> const type2tc & { return s.get_type2(); });
+  read_concurrently(
+    [](symbolt &s) { s.set_type(migrate_type(make_legacy_struct_type())); },
+    [](const symbolt &s) -> const typet & { return s.get_type(); });
+  read_concurrently(
+    [](symbolt &s) { s.set_value(from_integer(7, int_type())); },
+    [](const symbolt &s) -> const expr2tc & { return s.get_value2(); });
+  read_concurrently(
+    [](symbolt &s) { s.set_value(gen_ulong(7)); },
+    [](const symbolt &s) -> const exprt & { return s.get_value(); });
 }

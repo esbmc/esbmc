@@ -513,22 +513,55 @@ static bool module_level_binding_is_import(
   return *is_import;
 }
 
-/// How the function being converted binds @p name: as a parameter or local
-/// (true), by an import alone (false), or not at all (empty).
-std::optional<bool> python_converter::function_shadows_module(
+/// How @p function binds @p name: by an import alone (true), as a parameter or
+/// another local (false), or not at all (empty).
+static std::optional<bool> function_binding_is_import(
+  const nlohmann::json &function,
   const std::string &name,
-  const nlohmann::json &use) const
+  const nlohmann::json &use)
 {
-  const nlohmann::json &function = *enclosing_function_node_;
   if (may_bind_name(function["args"], name, true))
-    return true;
+    return false;
   scope_bindings local;
   collect_scope_bindings(function["body"], name, local);
   if (local.declared_outer || (!local.by_import && !local.by_other))
     return std::nullopt;
   if (local.by_import && local.by_other)
     throw undecided_module_binding(name, use);
-  return local.by_other;
+  return local.by_import;
+}
+
+std::optional<bool> python_converter::binding_is_import(
+  const nlohmann::json &module,
+  const scope_bindings &global,
+  const nlohmann::json *function,
+  bool in_class,
+  bool in_order,
+  const std::string &name,
+  const nlohmann::json &use)
+{
+  if (function)
+    if (const auto local = function_binding_is_import(*function, name, use))
+      return local;
+
+  const bool rebound = global.by_other || global.declared_outer;
+  if (!global.by_import)
+    return rebound ? std::optional<bool>(false) : std::nullopt;
+  if (!rebound && !in_order)
+    return true;
+  if (global.declared_outer || function || in_class)
+    throw undecided_module_binding(name, use);
+  return module_level_binding_is_import(module["body"], name, use);
+}
+
+python_converter::scope_bindings python_converter::module_scope_bindings(
+  const nlohmann::json &module,
+  const std::string &name)
+{
+  scope_bindings found;
+  collect_scope_bindings(module["body"], name, found);
+  found.declared_outer = declares_global(module, name);
+  return found;
 }
 
 bool python_converter::name_shadows_module(
@@ -541,20 +574,15 @@ bool python_converter::name_shadows_module(
     return false;
   const std::string name = receiver["id"].get<std::string>();
 
-  if (enclosing_function_node_)
-    if (const std::optional<bool> local = function_shadows_module(name, use))
-      return *local;
-
-  const scope_bindings &global = module_bindings(name);
-  if (!global.by_other && !global.declared_outer)
-    return false;
-  if (!global.by_import)
-    return true;
-  if (
-    global.declared_outer || enclosing_function_node_ ||
-    !current_class_name_.empty())
-    throw undecided_module_binding(name, use);
-  return !module_level_binding_is_import((*ast_json)["body"], name, use);
+  const std::optional<bool> is_import = binding_is_import(
+    *ast_json,
+    module_bindings(name),
+    enclosing_function_node_,
+    !current_class_name_.empty(),
+    false,
+    name,
+    use);
+  return is_import && !*is_import;
 }
 
 const python_converter::scope_bindings &
@@ -563,10 +591,7 @@ python_converter::module_bindings(const std::string &name) const
   const auto [entry, inserted] =
     module_bindings_memo_.try_emplace({ast_json, name});
   if (inserted)
-  {
-    collect_scope_bindings((*ast_json)["body"], name, entry->second);
-    entry->second.declared_outer = declares_global(*ast_json, name);
-  }
+    entry->second = module_scope_bindings(*ast_json, name);
   return entry->second;
 }
 

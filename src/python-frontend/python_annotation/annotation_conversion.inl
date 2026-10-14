@@ -951,10 +951,8 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       if (!copied.empty())
         return copied;
 
-      // Check built-in functions first
-      auto it = builtin_functions().find(func_name);
-      if (it != builtin_functions().end())
-        return it->second;
+      if (builtin_functions().count(func_name))
+        return get_builtin_call_type(arg);
 
       // For user-defined functions, try to get return type
       try
@@ -1135,6 +1133,21 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
 }
 
 template <class Json>
+std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
+{
+  const std::string &func_name = call["func"]["id"];
+  // abs() of a float or a complex is a float; the table's int covers the rest.
+  if (func_name == "abs" && call.contains("args") && call["args"].size() == 1)
+  {
+    const std::string arg_type = get_argument_type(call["args"][0]);
+    if (arg_type == "float" || arg_type == "complex")
+      return "float";
+  }
+  auto it = builtin_functions().find(func_name);
+  return it != builtin_functions().end() ? it->second : func_name;
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_type_from_binary_expr(
   const Json &stmt,
   const Json &body)
@@ -1262,7 +1275,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
       const std::string &func_name = lhs["func"]["id"];
 
       if (type_utils::is_builtin_type(func_name))
-        type = func_name; // float() returns float, int() returns int, etc.
+        type = get_builtin_call_type(lhs);
       else
         type = get_function_return_type(
           func_name, body); // For user-defined functions
@@ -1867,6 +1880,11 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
       type_utils::is_type_identifier(rhs_var_name) ||
       type_utils::is_python_exceptions(rhs_var_name))
       return "type";
+
+    // A name read from an import is left to the converter, which types it as
+    // it does the name used directly (#8366).
+    if (reads_import(rhs_var_name, element["value"]))
+      return "";
 
     const auto &lineno = element["lineno"].template get<int>();
 
@@ -3090,6 +3108,8 @@ InferResult python_annotation<Json>::infer_type(
       return InferResult::UNKNOWN;
 
     inferred_type = get_type_from_rhs_variable(stmt, body);
+    if (inferred_type.empty() && value_type == "Name")
+      return InferResult::UNKNOWN;
   }
 
   // Get type from RHS binary expression
@@ -3840,7 +3860,7 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
     if (!is_star)
       continue;
     auto module = module_manager_->get_module(node["module"]);
-    if (!module)
+    if (!module || !module->star_import_binds(func_name))
       continue;
     auto func_info = module->get_function(func_name);
     if (func_info.name_.empty())
@@ -3850,6 +3870,50 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
     return func_info.return_type_;
   }
   return "";
+}
+
+template <class Json>
+bool python_annotation<Json>::reads_import(
+  const std::string &name,
+  const Json &use) const
+{
+  if (parent_func)
+    return false;
+  for (const auto &node : ast_["body"])
+  {
+    const Json names = node.value("names", Json::array());
+    if (
+      node.value("_type", "") != "ImportFrom" ||
+      std::none_of(names.begin(), names.end(), [](const Json &alias) {
+        return alias.value("name", "") == "*";
+      }))
+      continue;
+    const Json from = node.value("module", Json());
+    const auto module =
+      module_manager_ && from.is_string()
+        ? module_manager_->get_module(from.template get<std::string>())
+        : nullptr;
+    if (
+      !module || !module->star_import_binds(name) ||
+      module->get_function(name).name_.empty())
+      return false;
+  }
+  try
+  {
+    return python_converter::binding_is_import(
+             ast_,
+             python_converter::module_scope_bindings(ast_, name),
+             current_func,
+             !current_class_name_.empty(),
+             current_func == nullptr,
+             name,
+             use)
+      .value_or(false);
+  }
+  catch (const std::runtime_error &)
+  {
+    return false;
+  }
 }
 
 template <class Json>
@@ -5061,6 +5125,26 @@ void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
   }
 }
 
+/// Annotates the else block of an if, and the else and finally blocks of a
+/// try. Handler bodies are annotated at module scope only: inside a function,
+/// an `except E as v` that rebinds a local of another type does not lower once
+/// its body starts with a declaration.
+template <class Json>
+void python_annotation<Json>::annotate_branch_blocks(Json &element)
+{
+  for (const char *field : {"orelse", "finalbody"})
+  {
+    if (!element.contains(field) || element[field].empty())
+      continue;
+    Json block = {{"body", element[field]}};
+    add_annotation(block);
+    element[field] = block["body"];
+  }
+  if (current_func_name_context_.empty() && element.contains("handlers"))
+    for (Json &handler : element["handlers"])
+      add_annotation(handler);
+}
+
 template <class Json>
 void python_annotation<Json>::add_annotation(Json &body)
 {
@@ -5087,17 +5171,8 @@ void python_annotation<Json>::add_annotation(Json &body)
       if (stmt_type == "While")
         infer_loop_variable_types(element);
 
-      // Process else block if it exists
-      if (
-        stmt_type == "If" && element.contains("orelse") &&
-        !element["orelse"].empty())
-      {
-        // Create a temporary body structure for the else block
-        Json else_body = {{"body", element["orelse"]}};
-        add_annotation(else_body);
-        // Update the original orelse with annotated version
-        element["orelse"] = else_body["body"];
-      }
+      if (stmt_type != "While")
+        annotate_branch_blocks(element);
 
       continue;
     }
