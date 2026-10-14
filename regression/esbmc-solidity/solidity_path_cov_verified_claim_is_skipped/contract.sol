@@ -21,12 +21,12 @@
 //
 // WHAT THIS TEST PINS, and why each line is here rather than a prettier one:
 //
-//   * `, ✓ [1-9][0-9]* skipped` -- `report_simple_summary` prints that field
-//     ONLY when `summary.skipped_properties > 0`, and that counter can only be
-//     incremented by the branch this repair revives. On the defective build the
-//     field is ABSENT from the `Properties:` line entirely, so this pin is RED
-//     there for any contract with a duplicated instantiation. It is the whole
-//     point of the test.
+//   * `N copy(ies) of already-witnessed path claim(s) were not solved again`
+//     -- printed ONLY when the skip counter is non-zero, and that counter can
+//     only be incremented by the branch this repair revives. On the defective
+//     build the line is ABSENT entirely, so this pin is RED there for any
+//     contract with a duplicated instantiation. It is the whole point of the
+//     test.
 //
 //   * `^Path Status: F 3, I 0, U 0$` -- the soundness half. The skip must not
 //     cost coverage. If a future change extends the skip to already-PASSED

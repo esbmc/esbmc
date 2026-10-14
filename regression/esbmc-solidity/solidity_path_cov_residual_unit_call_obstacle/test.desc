@@ -10,4 +10,4 @@ NAMED OBSTACLE \(same containment as a branch-free assume
 ^Complete Paths : 13$
 ^Path Status: F 11, I 0, U 2$
 ^U Reasons: named-obstacle 1, unit-not-entered 0, bounded-holds 1, solver-unknown 0, not-solved-this-run 0, run-died-before-solving 0, claim-budget-exceeded 0$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

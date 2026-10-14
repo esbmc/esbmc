@@ -6,4 +6,4 @@ contract.sol
 ^WARNING: --solidity-path-coverage: unit 'sol:@C@Ret@F@j_void_require_bare_return#219' has 1 exit\(s\) with NO positive evidence of a normal exit, by cause: \(1\) 0 .*\(2\) 1 at END_FUNCTION having SKIPPED this unit's epilogue .*\(3\) 0
 ^Complete Paths : 42$
 ^Path Exits: normal 26, revert 14, undetermined 2$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

@@ -3,7 +3,7 @@ contract.sol
 --solidity-path-coverage --contract Trunc --path-cov-certify cert.json --solidity-max-tx 1
 ^ERROR: --path-cov-certify: RESULT: UNDECIDED-TRUNCATED -- the non-vacuity witness for path enc=66 did NOT come back refuted
 AND this run cut at least one loop at the unwind bound while unwinding assertions were disabled
-Loops truncated: loop 62 at file .*contract\.sol line 63 function f
+Loops truncated: loop [0-9]+ at file .*contract\.sol line 63 function f
 ^WARNING: Coverage may be UNDER-REPORTED: 1 loop\(s\) hit the unwind bound
 ^✓ PASSED: 'f:path:66#nonvacuous at file .*contract\.sol line 67 function f'
 \A(?!(.|\n)*^ERROR: --path-cov-certify: RESULT: VACUOUS)

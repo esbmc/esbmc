@@ -12,4 +12,4 @@ contract.sol
 ^--solidity-path-coverage: instrumented 9 complete path\(s\) across 3 unit\(s\)
 ^Path Status: F 9, I 0, U 0$
 ^--solidity-path-coverage: EVENT SEQUENCES published for 9 of 9 witnessed path\(s\), 4 of them non-empty \(8 emit\(s\) total\)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

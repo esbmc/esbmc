@@ -7,4 +7,4 @@ contract.sol
 ^Reached : 3$
 ^Path Coverage: 100%$
 ^Path Status: F 3, I 0, U 0$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

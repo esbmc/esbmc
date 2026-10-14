@@ -10,4 +10,4 @@ contract.sol
 ^Path Status: F 6, I 0, U 0$
 \A(?!(?:.|\n)*per-function path/length cap)
 \A(?!(?:.|\n)*NAMED OBSTACLE)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

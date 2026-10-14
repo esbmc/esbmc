@@ -3,4 +3,4 @@ contract.solast
 --sol contract.sol --contract PayCtor --branch-coverage --generate-foundry-testcase --no-assertions
 ^Generated Foundry coverage test with 2 case\(s\)
 ^Foundry: 2 call\(s\) with pinned msg.value \(payable env\)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

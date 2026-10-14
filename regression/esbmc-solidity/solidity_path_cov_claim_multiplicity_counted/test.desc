@@ -4,5 +4,5 @@ contract.sol
 ^--solidity-path-coverage: instrumented 4 complete path\(s\) across 1 unit\(s\)
 ^Claim Multiplicity: 1 extra solve\(s\) beyond the first across all keys; worst key 'take:path:\d+[^']*' decided 2 time\(s\); ceiling not enforced \(--path-cov-max-claim-solves unset\); 1 decided verdict\(s\) superseded by a different decided verdict
 ^Path Status: F 4, I 0, U 0
-^VERIFICATION FAILED
+^COVERAGE ANALYSIS COMPLETE$
 \A(?!(.|\n)*INTERNAL DEFECT)

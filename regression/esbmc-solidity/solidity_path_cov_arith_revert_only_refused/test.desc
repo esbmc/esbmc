@@ -5,4 +5,4 @@ contract.sol
 1 path\(s\) PROVEN reachable only through a checked-arithmetic revert, 1 Foundry case\(s\) REFUSED
 ^Generated Foundry coverage test with 2 case\(s\)
 ^Foundry: 2 of 2 case\(s\) name the obligation
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

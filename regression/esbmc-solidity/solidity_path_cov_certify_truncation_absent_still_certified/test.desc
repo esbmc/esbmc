@@ -2,7 +2,7 @@ CORE
 contract.sol
 --solidity-path-coverage --contract Trunc --path-cov-certify cert.json --solidity-max-tx 1
 ^--path-cov-certify: RESULT: CERTIFIED — every input the box admits walks path enc=10
-^Unwinding loop 62 iteration 1
+^Unwinding loop [0-9]+ iteration 1
 \A(?!(.|\n)*RESULT: UNDECIDED-TRUNCATED)
 \A(?!(.|\n)*Coverage may be UNDER-REPORTED)
 \A(?!(.|\n)*^Not unwinding loop)

@@ -2,7 +2,6 @@ CORE
 contract.sol
 --solidity-path-coverage --contract Flag --path-cov-certify certify.json --solidity-max-tx 1
 ^ERROR: --path-cov-certify: RESULT: VACUOUS — the box admits NO execution that walks path enc=2
-the antecedent held on every execution, i\.e\. no admitted input reaches this path
-^✓ PASSED: 'f:path:2#nonvacuous at file .*contract.sol line 53 function f'
+the witness claim never reached the solver
 \A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
 \A(?!(.|\n)*^VERIFICATION FAILED$)

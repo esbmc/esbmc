@@ -6,4 +6,4 @@ contract.sol
 ^Generated Foundry coverage test with 7 case\(s\): C.cov.t.sol$
 ^Foundry: 7 of 7 case\(s\) name the obligation they were reconstructed from, standing for 7 refuted path claim\(s\)$
 ^Foundry: 5 call\(s\) emitted bare \(exit census confirmed normal; a revert fails the test\)$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

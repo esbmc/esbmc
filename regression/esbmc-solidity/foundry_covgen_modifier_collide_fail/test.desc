@@ -2,4 +2,4 @@ CORE
 contract.solast
 --sol contract.sol --contract Collide --branch-coverage --generate-foundry-testcase --no-assertions
 ^Generated Foundry coverage test with 4 case\(s\)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

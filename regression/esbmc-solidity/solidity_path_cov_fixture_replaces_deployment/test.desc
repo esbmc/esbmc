@@ -8,6 +8,6 @@ contract.sol
 ^--solidity-path-coverage: 3 of 3 instrumented path claim\(s\) reached the solver across 1 unit\(s\)
 ^Path Coverage: 100%
 ^Path Status: F 3, I 0, U 0
-^VERIFICATION FAILED
+^COVERAGE ANALYSIS COMPLETE$
 \A(?!(.|\n)*INTERNAL DEFECT)
 \A(?!(.|\n)*^Generated 0 VCC\(s\))

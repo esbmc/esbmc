@@ -10,4 +10,4 @@ contract.sol
 ^--solidity-path-coverage: instrumented 4 complete path\(s\) across 2 unit\(s\)
 ^Complete Paths : 4$
 \A(?!(?:.|\n)*have drifted)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

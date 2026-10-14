@@ -6,4 +6,4 @@ contract.sol
 ^Reached : 3$
 ^Path Coverage: 100%$
 ^Path Exits: normal 1, revert 2, undetermined 0$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

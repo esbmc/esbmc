@@ -2,4 +2,4 @@ CORE
 contract.solast
 --sol contract.sol --contract Test --k-induction --max-k-step 5 --k-step 1 --no-standard-check --branch-coverage-claims
 ^No branch detected$
-^VERIFICATION SUCCESSFUL$
+^COVERAGE ANALYSIS COMPLETE$

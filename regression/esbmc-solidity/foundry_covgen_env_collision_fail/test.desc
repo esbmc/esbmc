@@ -2,4 +2,4 @@ CORE
 contract.solast
 --sol contract.sol --contract Collide --branch-coverage --generate-foundry-testcase --no-assertions --k-induction --unlimited-k-steps
 ^Generated Foundry coverage test with 2 case\(s\)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

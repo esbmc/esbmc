@@ -7,4 +7,4 @@ contract.sol
 ^WARNING: Foundry: 4 counterexample\(s\) REFUSED -- their path is a NAMED OBSTACLE
 ^Generated Foundry coverage test with 7 case\(s\): C.cov.t.sol$
 ^Foundry: 7 of 7 case\(s\) name the obligation they were reconstructed from, standing for 7 refuted path claim\(s\)$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

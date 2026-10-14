@@ -7,4 +7,4 @@ contract.sol
 ^Reached : 4$
 ^Path Exits: normal 2, revert 2, undetermined 0$
 ^Path Status: F 4, I 0, U 0$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

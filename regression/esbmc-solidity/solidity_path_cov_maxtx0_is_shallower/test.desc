@@ -5,4 +5,4 @@ contract.sol
 ^Complete Paths : 5$
 ^Reached : 4$
 ^Path Status: F 4, I 0, U 1$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

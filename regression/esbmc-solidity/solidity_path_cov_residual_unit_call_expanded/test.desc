@@ -7,4 +7,4 @@ contract.sol
 ^Complete Paths : 17$
 \A(?!(?:.|\n)*NAMED OBSTACLE)
 \A(?!(?:.|\n)*deeper than the call depth bound)
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

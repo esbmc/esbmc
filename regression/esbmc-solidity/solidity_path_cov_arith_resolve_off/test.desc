@@ -3,4 +3,4 @@ contract.sol
 --contract D10_WrapNotPanic --solidity-path-coverage --cov-report-json --solidity-max-tx 1 --overflow-check
 ^Arithmetic Re-solve: OFF \(--path-cov-arith-resolve\)
 ^Complete Paths : 3$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

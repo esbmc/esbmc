@@ -11,4 +11,4 @@ contract.sol
 ^Path Coverage: 80%$
 ^Path Status: F 4, I 0, U 1$
 ^U Reasons: named-obstacle 0, unit-not-entered 0, bounded-holds 1, solver-unknown 0, not-solved-this-run 0, run-died-before-solving 0, claim-budget-exceeded 0$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

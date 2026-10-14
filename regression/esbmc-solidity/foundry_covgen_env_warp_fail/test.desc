@@ -3,4 +3,4 @@ contract.solast
 --sol contract.sol --contract Timelock --branch-coverage --generate-foundry-testcase --no-assertions --k-induction --unlimited-k-steps
 ^Generated Foundry coverage test with 2 case\(s\)
 ^Foundry: [0-9]+ call\(s\) with pinned block\.timestamp \(vm\.warp\)$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

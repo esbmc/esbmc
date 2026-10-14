@@ -8,4 +8,4 @@ contract.sol
 ^Complete Paths : 9$
 ^Reached : 8$
 ^Path Status: F 8, I 0, U 1$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS INCOMPLETE
