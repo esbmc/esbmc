@@ -246,22 +246,22 @@ void add_havoc_assigns(
 }
 
 /// Havoc the loop's modified variables in front of its head. With an
-/// @p entry_cond, an execution whose concrete state does not enter the loop
-/// jumps over the havocs (and over the ASSUME(entry_cond) placed after them)
-/// straight to the head, which then exits with that state. Without the jump
-/// the ASSUME would kill every zero-trip execution, and with it every claim
-/// past the loop, so the inductive step could prove them vacuously.
+/// @p exits_at_head, an execution whose concrete state leaves the loop at its
+/// head jumps over the havocs (and over the ASSUME(entry_cond) placed after
+/// them) straight to the head, which then exits with that state. Without the
+/// jump the ASSUME would kill every zero-trip execution, and with it every
+/// claim past the loop, so the inductive step could prove them vacuously.
 void make_nondet_assign(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
   const havocst &havocs,
-  const expr2tc &entry_cond)
+  const expr2tc &exits_at_head)
 {
   goto_programt dest;
-  if (!is_nil_expr(entry_cond))
+  if (!is_nil_expr(exits_at_head))
   {
     goto_programt::targett skip = dest.add_instruction(GOTO);
-    skip->guard = not2tc(entry_cond);
+    skip->guard = exits_at_head;
     skip->inductive_step_instruction = true;
     skip->location = loop_head->location;
     // Auxiliary: coverage must not count it as a branch of the program.
@@ -278,7 +278,7 @@ void make_nondet_assign(
   // edge past the loop's exit IF.
   const goto_programt::targett first = loop_head;
   std::advance(loop_head, inserted);
-  if (!is_nil_expr(entry_cond))
+  if (!is_nil_expr(exits_at_head))
     first->targets.push_back(loop_head);
 }
 
@@ -317,6 +317,23 @@ void remove_unrelated_loop_cond(guardst &guards, const loopst &loop)
     else
       ++g;
   }
+}
+
+/// The guard of the loop head when the head is the loop's own exit test, i.e.
+/// the condition under which the loop runs zero times; nil otherwise. Only
+/// that test qualifies: it is evaluated before any body instruction, whereas a
+/// break test elsewhere in the body reads values the body has yet to compute.
+expr2tc exit_guard_at_head(
+  goto_programt::const_targett loop_head,
+  goto_programt::const_targett loop_exit)
+{
+  if (
+    !loop_head->is_goto() || is_true(loop_head->guard) ||
+    loop_head->targets.size() != 1)
+    return expr2tc();
+  const auto target = loop_head->targets.front();
+  return target->location_number > loop_exit->location_number ? loop_head->guard
+                                                              : expr2tc();
 }
 
 /// The per-branch loop-entry guards combined into one condition, or nil when
@@ -366,7 +383,7 @@ void assume_loop_entry_cond_before_loop(
   // runs *after* make_nondet_assign in transform_loop, so the layout
   // becomes
   //
-  //   IF !entry_cond GOTO loop_head [inductive_step] <- make_nondet_assign
+  //   IF exits_at_head GOTO loop_head [inductive_step] <- make_nondet_assign
   //   NONDET havocs               [inductive_step]   <- make_nondet_assign
   //   ASSUME(entry_cond)          [inductive_step]   <- this insert
   //   loop_head: IF !cond GOTO exit                  <- original IF
@@ -581,13 +598,13 @@ void transform_loop(
   // and the ASSUME ends up between the havocs and the IF.
 
   const expr2tc entry_cond = loop_entry_cond(guards);
+  // Only an inserted ASSUME can kill a zero-trip execution.
+  const expr2tc exits_at_head = zero_trip_bypass && !is_nil_expr(entry_cond)
+                                  ? exit_guard_at_head(loop_head, loop_exit)
+                                  : expr2tc();
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(
-    goto_function,
-    loop_head,
-    havocs,
-    zero_trip_bypass ? entry_cond : expr2tc());
+  make_nondet_assign(goto_function, loop_head, havocs, exits_at_head);
 
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(goto_function, loop_head, entry_cond);
