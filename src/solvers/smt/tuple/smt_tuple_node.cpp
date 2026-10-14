@@ -88,8 +88,12 @@ smt_astt smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   // Walk the array dimensions to the leaf.  K = 1 (the immediate
   // subtype is the struct itself, not an array) keeps the historical
   // single-level array_conv route verbatim → byte-identical.
+  // Only a chain with an infinite level (Solidity's nested mappings) takes
+  // the struct-of-arrays route: a finite one, a VLA included, flattens to a
+  // single array like every other finite array of arrays.
   const array_type2t &outer = to_array_type(sym.type);
-  bool k_ge_2 = is_array_type(outer.subtype);
+  bool k_ge_2 =
+    is_array_type(outer.subtype) && array_chain_has_infinite_level(sym.type);
 
   type2tc leaf = sym.type;
   while (is_array_type(leaf))

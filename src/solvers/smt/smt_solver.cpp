@@ -4133,8 +4133,11 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
   // unconstrained symbol, which made unwritten deep struct-valued mapping
   // slots read nondet — see deep_mapping_structval_*_zeroinit tests.)  K=1
   // (immediate subtype is the struct) keeps the historical tuple_array_of
-  // route below -> byte-identical.
-  if (is_array_type(arrtype.subtype))
+  // route below -> byte-identical. Finite chains flatten instead, matching
+  // mk_tuple_array_symbol.
+  if (
+    is_array_type(arrtype.subtype) &&
+    array_chain_has_infinite_level(arrof.type))
   {
     type2tc leaf = arrof.type;
     while (is_array_type(leaf))
