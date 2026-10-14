@@ -2857,6 +2857,12 @@ regression/python/github_8368_record_loop_unsupported
 regression/python/github_8368_record_loop_unsupported_fail
 regression/python/github_8368_record_param_unsupported
 regression/python/github_8368_record_param_unsupported_fail
+regression/esbmc/github_8524
+regression/esbmc/github_8524_nondet
+regression/esbmc/github_8524_fail
+regression/esbmc/github_8524_unterminated_fail
+regression/esbmc/github_8524_null_fail
+regression/esbmc/github_8524_two_targets_fail
 regression/python/github_8358_dict_value
 regression/python/github_8358_dict_value_fail
 regression/python/github_8358_list_call
