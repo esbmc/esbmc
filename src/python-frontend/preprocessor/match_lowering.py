@@ -69,6 +69,29 @@ def _guard_is_rewritable(guard):
                        ast.NamedExpr)) for n in ast.walk(guard))
 
 
+def _is_lowerable(node, bound):
+    return all(names is not None
+               for names in bound) and all(case.guard is None or _guard_is_rewritable(case.guard)
+                                           for case in node.cases)
+
+
+def _case_branch(case, names, subject, orelse):
+    """The statements running @p case when it matches and @p orelse otherwise."""
+    conditions = [_test(case.pattern, subject)]
+    if case.guard is not None:
+        conditions.append(_ReadSubject(names, subject).visit(case.guard))
+    conditions = [c for c in conditions if c is not None]
+    bindings = [
+        ast.Assign(targets=[ast.Name(id=n, ctx=ast.Store())], value=copy.deepcopy(subject))
+        for n in sorted(names)
+    ]
+    body = bindings + case.body
+    if not conditions:
+        return body
+    test = conditions[0] if len(conditions) == 1 else ast.BoolOp(op=ast.And(), values=conditions)
+    return [ast.If(test=test, body=body, orelse=orelse)]
+
+
 class _MatchLowering(ast.NodeTransformer):
 
     def __init__(self):
@@ -78,9 +101,7 @@ class _MatchLowering(ast.NodeTransformer):
         """An if/elif chain equivalent to @p node, or @p node if none is built."""
         self.generic_visit(node)
         bound = [_bound_names(case.pattern) for case in node.cases]
-        if any(names is None for names in bound) or any(
-                case.guard is not None and not _guard_is_rewritable(case.guard)
-                for case in node.cases):
+        if not _is_lowerable(node, bound):
             return node
 
         prefix = []
@@ -93,21 +114,7 @@ class _MatchLowering(ast.NodeTransformer):
 
         orelse = []
         for case, names in reversed(list(zip(node.cases, bound))):
-            conditions = [_test(case.pattern, subject)]
-            if case.guard is not None:
-                conditions.append(_ReadSubject(names, subject).visit(case.guard))
-            conditions = [c for c in conditions if c is not None]
-            bindings = [
-                ast.Assign(targets=[ast.Name(id=n, ctx=ast.Store())], value=copy.deepcopy(subject))
-                for n in sorted(names)
-            ]
-            body = bindings + case.body
-            if not conditions:
-                orelse = body
-                continue
-            test = conditions[0] if len(conditions) == 1 else ast.BoolOp(op=ast.And(),
-                                                                         values=conditions)
-            orelse = [ast.If(test=test, body=body, orelse=orelse)]
+            orelse = _case_branch(case, names, subject, orelse)
 
         lowered = prefix + (orelse or [ast.Pass()])
         for stmt in lowered:
