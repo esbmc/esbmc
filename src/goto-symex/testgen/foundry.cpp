@@ -98,15 +98,14 @@ std::string effective_sol_type(const typet &t)
         return "ARRAY:" + elem;
     }
     // An interface/contract-typed value lowers to `pointer<struct tag-I>` with
-    // `#sol_type: CONTRACT` and `#sol_contract: I` on the pointer. Encode as
-    // "CONTRACT:<I>" so the reconstructor can synthesize a mock instance (a
-    // bare address literal would revert when the contract calls a method on
-    // it).
-    if (ptag == "CONTRACT")
+    // `#sol_type: CONTRACT` on the pointer. Encode as "CONTRACT:<I>" so the
+    // reconstructor can synthesize a mock instance (a bare address literal
+    // would revert when the contract calls a method on it).
+    if (ptag == "CONTRACT" && t.subtype().id() == typet::t_symbol)
     {
-      const std::string cn = t.get("#sol_contract").as_string();
-      if (!cn.empty())
-        return "CONTRACT:" + cn;
+      const std::string id = t.subtype().identifier().as_string();
+      if (id.compare(0, 4, "tag-") == 0)
+        return "CONTRACT:" + id.substr(4);
     }
     // A `string` value lowers to a `char *` with `#sol_type: STRING` stamped on
     // the pointer. Surface it so a string call-argument is rendered as a
@@ -996,7 +995,7 @@ static unsigned recover_nondet_string_length(
   };
   for (auto const &step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(step.guard).is_true())
+    if (step.ignore || !smt_conv.l_get(step.guard).is_true())
       continue;
     if (step.is_assignment())
     {
@@ -1038,7 +1037,7 @@ expr2tc foundry_generator::recover_focus_param(
   {
     if (found)
       break;
-    if (!smt_conv.l_get(step.guard).is_true())
+    if (step.ignore || !smt_conv.l_get(step.guard).is_true())
       continue;
     if (step.is_assignment())
       visit(step.rhs);
@@ -1633,8 +1632,69 @@ foundry_generator::test_case foundry_generator::reconstruct(
     return "";
   };
 
+  // ③A0: does this tx's BODY read block.timestamp (or msg.sender/value)?
+  // Only then is a pin faithful and non-noisy. Env-helper steps
+  // (reseed/initialize) are excluded so their internal reads are not
+  // mis-attributed to the body.
+  auto note_env_reads = [&](const symex_target_equationt::SSA_stept &step) {
+    if (!is_env_helper_step(step))
+    {
+      const bool a = step.is_assignment();
+      const bool c = step.is_assume() || step.is_assert();
+      // An assignment to the global itself is the phi merge of its versions
+      // at a control-flow join, not a read by the body.
+      auto reads = [&](const char *g) {
+        return (a && !lhs_is_env_global(step.original_lhs, g) &&
+                reads_global(step.rhs, g)) ||
+               (c && reads_global(step.cond, g));
+      };
+      if (!segs.empty())
+      {
+        if (!segs.back().reads_timestamp && reads("block_timestamp"))
+          segs.back().reads_timestamp = true;
+        // A read taken while a call wrapper holds the sender saw the callee's
+        // identity, which `vm.prank` (a TOP-LEVEL pin) cannot reproduce — that,
+        // not the bare existence of a wrapper on some other branch, is what
+        // makes the pin unfaithful.
+        if (reads("msg_sender"))
+        {
+          if (segs.back().sender_shadowed)
+            segs.back().sender_dirty = true;
+          else
+            segs.back().reads_msg_sender = true;
+        }
+      }
+      // A pre-segment (ctor-body) read means the constructor depends on the
+      // deploy-time ambient (attributed to the deploy contract above).
+      else
+      {
+        if (!ctor_reads_timestamp && reads("block_timestamp"))
+          ctor_reads_timestamp = true;
+        if (reads("msg_sender"))
+        {
+          if (ctor_sender_shadowed)
+            ctor_sender_dirty = true;
+          else
+            ctor_reads_msg_sender = true;
+        }
+        if (!ctor_reads_value && reads("msg_value"))
+          ctor_reads_value = true;
+      }
+    }
+  };
+
   for (auto const &step : target.SSA_steps)
   {
+    // A sliced step is not part of the formula, so the model holds no value
+    // for it, and asking for its guard would encode new terms after the
+    // solve. An unconditional sliced assignment still ran on this path,
+    // though, and its reads decide which env values the case must pin.
+    if (step.ignore)
+    {
+      if (step.is_assignment() && is_true(step.guard))
+        note_env_reads(step);
+      continue;
+    }
     if (!smt_conv.l_get(step.guard).is_true())
       continue;
 
@@ -1996,50 +2056,7 @@ foundry_generator::test_case foundry_generator::reconstruct(
       }
     }
 
-    // ③A0: does this tx's BODY read block.timestamp? Only then is a vm.warp
-    // faithful and non-noisy. Exclude env-helper steps (reseed/initialize) so
-    // their internal block.timestamp reads are not mis-attributed to the body.
-    if (!is_env_helper_step(step))
-    {
-      const bool a = step.is_assignment();
-      const bool c = step.is_assume() || step.is_assert();
-      auto reads = [&](const char *g) {
-        return (a && reads_global(step.rhs, g)) ||
-               (c && reads_global(step.cond, g));
-      };
-      if (!segs.empty())
-      {
-        if (!segs.back().reads_timestamp && reads("block_timestamp"))
-          segs.back().reads_timestamp = true;
-        // A read taken while a call wrapper holds the sender saw the callee's
-        // identity, which `vm.prank` (a TOP-LEVEL pin) cannot reproduce — that,
-        // not the bare existence of a wrapper on some other branch, is what
-        // makes the pin unfaithful.
-        if (reads("msg_sender"))
-        {
-          if (segs.back().sender_shadowed)
-            segs.back().sender_dirty = true;
-          else
-            segs.back().reads_msg_sender = true;
-        }
-      }
-      // A pre-segment (ctor-body) read means the constructor depends on the
-      // deploy-time ambient (attributed to the deploy contract above).
-      else
-      {
-        if (!ctor_reads_timestamp && reads("block_timestamp"))
-          ctor_reads_timestamp = true;
-        if (reads("msg_sender"))
-        {
-          if (ctor_sender_shadowed)
-            ctor_sender_dirty = true;
-          else
-            ctor_reads_msg_sender = true;
-        }
-        if (!ctor_reads_value && reads("msg_value"))
-          ctor_reads_value = true;
-      }
-    }
+    note_env_reads(step);
 
     // A recovered nondet parameter value.
     expr2tc nondet =
@@ -2377,7 +2394,9 @@ foundry_generator::test_case foundry_generator::reconstruct(
 
     for (auto const &step : target.SSA_steps)
     {
-      if (!step.is_assert() || !smt_conv.l_get(step.guard).is_true())
+      if (
+        !step.is_assert() || step.ignore ||
+        !smt_conv.l_get(step.guard).is_true())
         continue;
       // THE CLAIM'S OWN IDENTITY NAMES THE METHOD; ITS LOCATION DOES NOT.
       //
