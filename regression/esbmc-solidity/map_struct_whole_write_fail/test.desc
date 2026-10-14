@@ -1,0 +1,4 @@
+CORE
+contract.sol
+--contract C
+^VERIFICATION FAILED$
