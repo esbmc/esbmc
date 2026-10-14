@@ -591,7 +591,12 @@ private:
   {
     const std::string name = callee_name(call["func"]);
     const std::optional<size_t> callee = resolve_callee(call["func"], caller);
-    if (!callee)
+    // A bare name the caller also binds otherwise (`from lib import f` beside
+    // its own `def f`) may reach a function resolve_callee did not pick.
+    const bool rebound =
+      is_node(call["func"], "Name") &&
+      json_utils::count_name_bindings(*modules_[caller].read, name) > 1;
+    if (!callee || rebound)
     {
       poisoned_.insert(name);
       return;
@@ -623,6 +628,19 @@ private:
           *callee != caller);
   }
 
+  /// The function name @p node may carry outside callee position: a Name or
+  /// Attribute value, or an import that rebinds it (`from lib import f as g`).
+  static std::string escaped_name(const nlohmann::json &node)
+  {
+    if (is_node(node, "Name") || is_node(node, "Attribute"))
+      return callee_name(node);
+    if (
+      is_node(node, "alias") && !node["asname"].is_null() &&
+      node["asname"] != node["name"])
+      return node["name"].get<std::string>();
+    return "";
+  }
+
   /// Walk every node, class and function bodies included. A Name or Attribute
   /// outside callee position may carry the function anywhere, so its name is
   /// poisoned.
@@ -637,8 +655,8 @@ private:
     if (!node.is_object())
       return;
 
-    if (!is_callee && (is_node(node, "Name") || is_node(node, "Attribute")))
-      poisoned_.insert(callee_name(node));
+    if (!is_callee)
+      poisoned_.insert(escaped_name(node));
 
     const bool is_call = is_node(node, "Call");
     if (is_call)
@@ -653,7 +671,11 @@ private:
     for (const auto &[key, entry] : bound_)
     {
       const auto &[module, func, param] = key;
-      if (!entry.type || !entry.from_other_module || poisoned_.count(func))
+      // A function its module binds again (a second def in an `if`) is not
+      // the one find_function returns.
+      if (
+        !entry.type || !entry.from_other_module || poisoned_.count(func) ||
+        json_utils::count_name_bindings(*modules_[module].read, func) != 1)
         continue;
 
       nlohmann::json &arg = (*find_function(
