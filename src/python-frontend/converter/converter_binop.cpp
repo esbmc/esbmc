@@ -543,6 +543,18 @@ static exprt *find_subexpr(exprt &e, const exprt &what)
   return nullptr;
 }
 
+// The str comparison rebuilds its operands through irep2, which can change
+// their legacy form, so normalise both sides before matching.
+static exprt *find_normalised_subexpr(exprt &e, exprt &what)
+{
+  expr2tc e2, what2;
+  migrate_expr(e, e2);
+  migrate_expr(what, what2);
+  e = migrate_expr_back(e2);
+  what = migrate_expr_back(what2);
+  return find_subexpr(e, what);
+}
+
 exprt python_converter::hoist_side_effecting_operand(
   const exprt &operand,
   const nlohmann::json &element,
@@ -890,6 +902,24 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
+
+// An unmodelled call stands for a nondet of no type. In arithmetic with a
+// number it is an unknown number of that type; left untyped, it builds an
+// arithmetic expression whose operand widths IREP2 cannot check.
+static void
+type_untyped_nondet_operand(const std::string &op, exprt &lhs, exprt &rhs)
+{
+  auto untyped_nondet = [](const exprt &e) {
+    return e.type().is_empty() && e.statement() == "nondet";
+  };
+  if (type_utils::is_relational_op(op))
+    return;
+  if (untyped_nondet(lhs) && is_number(rhs.type()))
+    lhs.type() = rhs.type();
+  else if (untyped_nondet(rhs) && is_number(lhs.type()))
+    rhs.type() = lhs.type();
+}
+
 // Sound over-approximation for a relational comparison that cannot be lowered
 // to a typed binop. Returns nil when the comparison lowers normally.
 static exprt relational_nondet_fallback(
@@ -1154,7 +1184,7 @@ std::pair<exprt, exprt> python_converter::chained_pair_operands(
     op1 = get_expr(comparators[i]);
     convert_function_call_to_side_effect(op1);
     // first_pair already evaluates comparators[0]; bind it there.
-    exprt *first = i == 0 ? find_subexpr(first_pair, op1) : nullptr;
+    exprt *first = i == 0 ? find_normalised_subexpr(first_pair, op1) : nullptr;
     exprt bound =
       first ? bind_chained_comparator(op1, element, reuse) : nil_exprt();
     if (bound.is_not_nil())
@@ -1202,6 +1232,17 @@ exprt python_converter::bind_chained_comparator(
   bound.location() = loc;
   reuse = symbol_expr(tmp);
   return bound;
+}
+
+exprt python_converter::bind_operand_read_twice(
+  const exprt &operand,
+  const nlohmann::json &element,
+  exprt &reread)
+{
+  reread = operand;
+  if (!has_side_effect(operand))
+    return operand;
+  return bind_chained_comparator(operand, element, reread);
 }
 
 /// The `range(...)` call a membership test of x can evaluate arithmetically:
@@ -1720,6 +1761,7 @@ exprt python_converter::get_binary_operator_expr(
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+  type_untyped_nondet_operand(op, lhs, rhs);
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before

@@ -617,7 +617,16 @@ public:
   typet bare_list_param_elem_type(
     const nlohmann::json &param_node,
     const std::string &param_id,
-    const typet &annotated);
+    const typet &annotated,
+    size_t index);
+
+  /// True when the recorded elements of \p id mix a list with another type.
+  bool mixes_list_and_other(const std::string &id) const;
+
+  /// Refuses a read that no single recorded element type answers (#8472).
+  void reject_unresolved_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
 
   /**
    * @brief Create an empty set
@@ -899,6 +908,40 @@ public:
     codet &target_block);
 
 private:
+  /// Emits `size = len(list_expr)` and a ValueError unless it fits @p fixed
+  /// targets (at least @p fixed when @p starred); returns the size.
+  exprt check_unpack_length(
+    const exprt &list_expr,
+    size_t fixed,
+    bool starred,
+    const locationt &loc,
+    codet &target_block);
+
+  typet unpack_elem_type(
+    const std::string &list_id,
+    size_t i,
+    const typet &fallback) const;
+
+  /// The recorded index @p from_end entries from the end, or SIZE_MAX.
+  size_t
+  recorded_index_from_end(const std::string &list_id, size_t from_end) const;
+
+  void record_starred_elem_types(
+    const std::string &list_id,
+    const std::string &star_id,
+    size_t before_star,
+    size_t after_star,
+    const typet &elem_type);
+
+  /// Binds @p val, element @p i of the list @p list_id, to @p tgt_node.
+  void assign_unpack_target(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &tgt_node,
+    const std::string &list_id,
+    size_t i,
+    const exprt &val,
+    codet &target_block);
+
   friend class python_dict_handler;
 
   // Evaluates value_node once and snapshots it into a fresh temporary, so a
@@ -1013,6 +1056,10 @@ private:
     const exprt &array,
     const nlohmann::json &col_index_node);
 
+  std::optional<exprt> try_build_numpy_view_subview(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
   std::optional<exprt> try_copy_numpy_pointer_view_slice(
     const exprt &array,
     const typet &elem_type,
@@ -1045,8 +1092,9 @@ private:
 
   /// Emits the runtime offset/stride/length of a[lo:hi:st] over a length-n
   /// axis, raising ValueError for st == 0.
-  symbolic_slice_params
-  emit_symbolic_slice_params(const nlohmann::json &slice_node, long long n);
+  symbolic_slice_params emit_symbolic_slice_params(
+    const nlohmann::json &slice_node,
+    const exprt &extent);
 
   /**
    * @brief a[lo:hi:st] with a non-literal step st. Assigned to a bare name it

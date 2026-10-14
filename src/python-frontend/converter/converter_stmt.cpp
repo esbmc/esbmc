@@ -1417,11 +1417,15 @@ void python_converter::handle_list_literal_unpacking(
   // Assign targets before the star
   for (size_t i = 0; i < before_star; i++)
   {
+    is_converting_rhs = true;
+    // A call is a statement until it is turned into the value it returns
+    exprt elem_expr = to_value_expr(get_expr(elements[i]), ns);
+    is_converting_rhs = false;
+
     if (targets[i]["_type"] != "Name")
     {
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        targets[i]["_type"].get<std::string>());
+      unpack_nested_target(ast_node, targets[i], elem_expr, target_block);
+      continue;
     }
 
     std::string var_name = targets[i]["id"].get<std::string>();
@@ -1429,10 +1433,6 @@ void python_converter::handle_list_literal_unpacking(
     var_sid.set_object(var_name);
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    is_converting_rhs = true;
-    exprt elem_expr = get_expr(elements[i]);
-    is_converting_rhs = false;
 
     if (!var_symbol)
     {
@@ -1511,11 +1511,16 @@ void python_converter::handle_list_literal_unpacking(
     size_t target_idx = static_cast<size_t>(star_idx) + 1 + i;
     size_t elem_idx = elements.size() - after_star + i;
 
+    is_converting_rhs = true;
+    // A call is a statement until it is turned into the value it returns
+    exprt elem_expr = to_value_expr(get_expr(elements[elem_idx]), ns);
+    is_converting_rhs = false;
+
     if (targets[target_idx]["_type"] != "Name")
     {
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        targets[target_idx]["_type"].get<std::string>());
+      unpack_nested_target(
+        ast_node, targets[target_idx], elem_expr, target_block);
+      continue;
     }
 
     std::string var_name = targets[target_idx]["id"].get<std::string>();
@@ -1523,10 +1528,6 @@ void python_converter::handle_list_literal_unpacking(
     var_sid.set_object(var_name);
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    is_converting_rhs = true;
-    exprt elem_expr = get_expr(elements[elem_idx]);
-    is_converting_rhs = false;
 
     if (!var_symbol)
     {
@@ -3133,13 +3134,17 @@ void python_converter::reject_numpy_view_slice_assignment(
       "TypeError: slice assignment through a numpy view is not supported");
 }
 
-// An element read out of a view parameter is a scalar, not a view.
+// An element read out of a view parameter, or into the temporary an operand
+// is bound to, is a scalar, not a view.
 bool python_converter::is_scalar_read_of_numpy_view_param(
   const exprt &lhs,
   const std::string &storage_id) const
 {
   const typet &type = lhs.type();
-  return numpy_view_param_symbols_.count(storage_id) != 0 &&
+  const bool operand_temporary =
+    lhs.identifier().as_string().find("$numpy_view_tmp$") != std::string::npos;
+  return (operand_temporary ||
+          numpy_view_param_symbols_.count(storage_id) != 0) &&
          (type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
           type.is_bool());
 }
@@ -3212,7 +3217,8 @@ void python_converter::record_numpy_view_copy(
     // A pointer view aliases its source through the pointer itself, so it is
     // not a copy to mirror writes into; the source is kept to detach it when
     // the source name is rebound.
-    pointer_view->second.source_id = storage_id;
+    pointer_view->second.source_id = numpy_view_source_of(storage_id);
+    record_numpy_view_layout(lhs_id, storage_id);
     numpy_view_copy_sources_.erase(lhs_id);
     numpy_array_symbols_.insert(lhs_id);
     return;
@@ -3220,6 +3226,18 @@ void python_converter::record_numpy_view_copy(
 
   numpy_view_copy_sources_[lhs_id] = storage_id;
   numpy_array_symbols_.insert(lhs_id);
+}
+
+// A view of a view is detached together with its parent, so it records the
+// storage the parent views.
+std::string
+python_converter::numpy_view_source_of(const std::string &storage_id) const
+{
+  const auto parent = numpy_pointer_view_info_.find(storage_id);
+  return parent != numpy_pointer_view_info_.end() &&
+             !parent->second.source_id.empty()
+           ? parent->second.source_id
+           : storage_id;
 }
 
 symbolt *
@@ -3275,8 +3293,16 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   {
     const std::string view_source_id =
       resolve_numpy_array_storage_alias_id(entry.second.source_id);
+    const bool other_source = std::any_of(
+      entry.second.other_sources.begin(),
+      entry.second.other_sources.end(),
+      [&](const std::string &other) {
+        return same_numpy_storage_id(
+          resolve_numpy_array_storage_alias_id(other), rebound_storage_id);
+      });
     if (
-      same_numpy_storage_id(view_source_id, rebound_storage_id) &&
+      (other_source ||
+       same_numpy_storage_id(view_source_id, rebound_storage_id)) &&
       !is_local_to_other_function(entry.first, current_func_name_))
       view_ids.push_back(entry.first);
   }
@@ -4080,8 +4106,10 @@ bool python_converter::is_numpy_param_slice(
        slice["elts"].begin(), slice["elts"].end(), [](const auto &axis) {
          return axis.value("_type", "") == "Slice";
        }));
-  return has_slice_axis && numpy_param_shapes_.count(resolve_name_symbol_id(
-                             subscript["value"].value("id", ""))) != 0;
+  const std::string id =
+    resolve_name_symbol_id(subscript["value"].value("id", ""));
+  return has_slice_axis && (numpy_param_shapes_.count(id) != 0 ||
+                            numpy_pointer_view_info_.count(id) != 0);
 }
 
 typet python_converter::resolve_any_subscript_array_type(
@@ -4324,6 +4352,25 @@ bool python_converter::handle_unpacking_assignment(
     }
   }
 
+  // Restored on return: converting the RHS may unpack in turn
+  struct restore_trust
+  {
+    bool &flag;
+    const bool saved;
+    ~restore_trust()
+    {
+      flag = saved;
+    }
+  } restore{unpack_record_trusted_, unpack_record_trusted_};
+  unpack_record_trusted_ = unpack_record_is_trusted(ast_node["value"]);
+
+  // The literal path evaluates each element once, so the RHS is not built
+  if (ast_node["value"]["_type"] == "List")
+  {
+    handle_list_literal_unpacking(ast_node, target, target_block);
+    return true;
+  }
+
   // Get RHS
   is_converting_rhs = true;
   exprt rhs = get_expr(ast_node["value"]);
@@ -4358,12 +4405,6 @@ bool python_converter::handle_unpacking_assignment(
       return true;
     }
 
-    const auto &value_node = ast_node["value"];
-    if (value_node["_type"] == "List")
-    {
-      handle_list_literal_unpacking(ast_node, target, target_block);
-      return true;
-    }
     if (rhs.type() == get_type_handler().get_list_type())
     {
       python_list list(*this, ast_node["value"]);
@@ -4375,6 +4416,115 @@ bool python_converter::handle_unpacking_assignment(
   throw std::runtime_error(
     "Cannot unpack " + rhs.type().id_string() +
     " - only tuples and arrays can be unpacked");
+}
+
+namespace
+{
+// A literal whose every element is a literal or a constant: no list it
+// builds can be reached from anywhere else.
+bool is_plain_literal(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return is_plain_literal(node["operand"]);
+  if (kind != "List" && kind != "Tuple")
+    return false;
+  for (const auto &elt : node["elts"])
+    if (!is_plain_literal(elt))
+      return false;
+  return true;
+}
+
+// The names @p node reads, other than the callee of a call.
+void collect_read_names(
+  const nlohmann::json &node,
+  std::vector<std::string> &names)
+{
+  if (node.is_object() && node.value("_type", "") == "Name")
+    names.push_back(node.value("id", ""));
+  for (const auto &[key, child] : node.items())
+    if (child.is_structured() && !(key == "func" && node.is_object()))
+      collect_read_names(child, names);
+}
+
+std::size_t
+count_name_nodes(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
+                  node.value("id", "") == name;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_nodes(child, name);
+  return n;
+}
+} // namespace
+
+// The registry records types flow-insensitively, and a store through an alias
+// does not update it. Trust it only for lists the right-hand side builds
+// itself or reads from a variable bound once, to a plain literal, and named
+// nowhere else, so no branch, loop or alias can have changed its elements.
+bool python_converter::unpack_record_is_trusted(
+  const nlohmann::json &value) const
+{
+  std::vector<std::string> names;
+  collect_read_names(value, names);
+  for (const std::string &name : names)
+  {
+    const nlohmann::json decl =
+      json_utils::find_var_decl(name, current_function_name(), ast());
+    if (
+      json_utils::count_name_bindings(ast(), name) != 1 ||
+      count_name_nodes(ast(), name) != 2 || !decl.contains("value") ||
+      !is_plain_literal(decl["value"]))
+      return false;
+  }
+  return true;
+}
+
+void python_converter::unpack_nested_target(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const exprt &value,
+  codet &target_block)
+{
+  const std::string &tgt_type = target["_type"].get<std::string>();
+  if (tgt_type != "Tuple" && tgt_type != "List")
+    throw std::runtime_error(
+      "List unpacking only supports simple names, not " + tgt_type);
+
+  exprt rhs = value;
+  // A call is read once per element unless its result is held
+  if (value.id() == "sideeffect")
+  {
+    symbolt &tmp =
+      create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.copy_to_operands(value);
+    target_block.copy_to_operands(decl);
+    rhs = symbol_expr(tmp);
+  }
+  rhs.type() = ns.follow(value.type());
+  if (tuple_handler_->is_tuple_type(rhs.type()))
+  {
+    tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+    return;
+  }
+
+  // Without exactly recorded element types the targets could not be typed
+  if (
+    unpack_record_trusted_ && value.is_symbol() &&
+    value.type() == get_type_handler().get_list_type() &&
+    element_type_registry_.find(value.identifier().as_string()))
+  {
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(ast_node, target, value, target_block);
+    return;
+  }
+
+  throw std::runtime_error(
+    "Cannot unpack non-tuple element into nested target");
 }
 
 void python_converter::desugar_unpacking_with_lvalue_targets(
@@ -5327,6 +5477,19 @@ std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
   return "";
 }
 
+std::string python_converter::alias_rhs_class(const nlohmann::json &rhs)
+{
+  const std::string cls = flow_rhs_class(rhs);
+  if (!cls.empty() || rhs.value("_type", "") != "Name")
+    return cls;
+  symbol_id sid = create_symbol_id();
+  sid.set_object(rhs["id"].get<std::string>());
+  const symbolt *symbol = find_symbol(sid.to_string());
+  return symbol && is_user_class_pointer(symbol->get_type())
+           ? class_name_of(symbol->get_type().subtype())
+           : "";
+}
+
 std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 {
   if (
@@ -5718,14 +5881,59 @@ bool python_converter::rewrite_divergent_conditional_assign(
   return true;
 }
 
+/// `self.a = self.m`, where every store to `a` binds a method of its
+/// receiver: store the method itself, and let a call through `a` pass the
+/// receiver again.
+bool python_converter::try_bound_method_store(
+  const nlohmann::json &ast_node,
+  codet &block)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  const nlohmann::json &value = ast_node.value("value", nlohmann::json());
+  if (
+    target.value("_type", "") != "Attribute" || !value.is_object() ||
+    value.value("_type", "") != "Attribute")
+    return false;
+  const attribute_functions *held =
+    function_attribute(target["attr"].get<std::string>());
+  if (!held || !held->bound)
+    return false;
+
+  const locationt location = get_location_from_decl(ast_node);
+  current_element_type = any_type();
+  const exprt lhs = create_lhs_expression(target, nullptr, location);
+  if (lhs.type() != any_type())
+    throw std::runtime_error(
+      "storing a bound method in typed attribute '" +
+      target["attr"].get<std::string>() + "' is not supported");
+  const std::string id =
+    bound_method_id(current_class_name_, value["attr"].get<std::string>())
+      .value();
+  const symbolt *method = find_symbol(id);
+  const exprt function =
+    method ? symbol_expr(*method) : symbol_exprt(id, code_typet());
+  code_assignt store(
+    lhs, typecast_exprt(address_of_exprt(function), lhs.type()));
+  store.location() = location;
+  block.copy_to_operands(store);
+  return true;
+}
+
+bool python_converter::try_dedicated_assign(
+  const nlohmann::json &ast_node,
+  codet &block)
+{
+  return rewrite_divergent_conditional_assign(ast_node, block) ||
+         try_tagged_var_assign(ast_node, block) ||
+         try_bound_method_store(ast_node, block);
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  if (rewrite_divergent_conditional_assign(ast_node, target_block))
-    return;
-
-  if (try_tagged_var_assign(ast_node, target_block))
+  if (try_dedicated_assign(ast_node, target_block))
     return;
 
   // Extract type information
@@ -5804,7 +6012,7 @@ void python_converter::get_var_assign(
       ast_node["value"]["func"].contains("id"))
       cls = ast_node["value"]["func"]["id"].get<std::string>();
     else
-      cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+      cls = alias_rhs_class(ast_node["value"]); // aliasing: `b = a`
     // `y = f(...)` where f returns a class: type y as `Cls*` so the returned
     // reference is bound (not value-copied into a struct local).
     if (cls.empty())
@@ -7376,6 +7584,23 @@ exprt python_converter::get_flat_boolop_test(
     get_location_from_decl(test_node));
 }
 
+namespace
+{
+struct loop_depth_guard
+{
+  unsigned &depth;
+  const bool active;
+  loop_depth_guard(unsigned &d, bool a) : depth(d), active(a)
+  {
+    depth += active;
+  }
+  ~loop_depth_guard()
+  {
+    depth -= active;
+  }
+};
+} // namespace
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -7389,6 +7614,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     contains_nested_scope_named_expr(ast_node["test"]))
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
+
+  const loop_depth_guard loop_guard(
+    numpy_loop_depth_, ast_node.value("_type", "") == "While");
 
   // Copy current type
   typet t = current_element_type;
@@ -8187,7 +8415,8 @@ void python_converter::get_return_statements(
   if (reject_or_defer_numpy_view_name_return(ast_node, target_block))
     return;
 
-  exprt return_value = get_return_value(ast_node["value"]);
+  exprt return_value =
+    python_expr::decay_function_to_pointer(get_return_value(ast_node["value"]));
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
@@ -8479,6 +8708,7 @@ exprt python_converter::get_block(
       hoisted_element,
       block);
     check_numpy_view_statement(element);
+    bind_runtime_numpy_view_arguments(element, block);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)

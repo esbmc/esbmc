@@ -392,49 +392,29 @@ void python_list::handle_list_var_unpacking(
     }
   }
 
+  if (elem_type == typet())
+    elem_type = infer_elem_type_from_call_return(ast_node["value"], converter_);
+
   // Final fallback: treat elements as Any rather than aborting the conversion.
   // Mirrors the subscript-read path which falls back to any_type() when the
   // element type cannot be inferred (see `python_list::get_expr`).
   if (elem_type == typet())
     elem_type = any_type();
 
-  // Helper: find or create a variable symbol and assign an expression to it
-  auto assign_to_target = [&](
-                            const nlohmann::json &tgt_node, const exprt &val) {
-    if (tgt_node["_type"] != "Name")
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        tgt_node["_type"].get<std::string>());
+  const std::string list_id =
+    list_expr.is_symbol() ? list_expr.identifier().as_string() : "";
 
-    const std::string var_name = tgt_node["id"].get<std::string>();
-    symbol_id var_sid = converter_.create_symbol_id();
-    var_sid.set_object(var_name);
-    symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-    if (!var_symbol)
-    {
-      symbolt new_symbol = converter_.create_symbol(
-        loc.get_file().as_string(),
-        var_name,
-        var_sid.to_string(),
-        loc,
-        val.type());
-      new_symbol.lvalue = true;
-      new_symbol.file_local = true;
-      new_symbol.is_extern = false;
-      var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
-    }
-    code_assignt assign(build_symbol(*var_symbol), val);
-    assign.location() = loc;
-    target_block.copy_to_operands(assign);
-  };
+  const exprt size_var = check_unpack_length(
+    list_expr, before_star + after_star, star_idx >= 0, loc, target_block);
 
   // Assign targets before the star using concrete indices
   for (size_t i = 0; i < before_star; i++)
   {
     exprt idx = from_integer(i, size_type());
     exprt list_at = build_list_at_call(list_expr, idx, list_value_);
-    exprt val = extract_pyobject_value(list_at, elem_type);
-    assign_to_target(targets[i], val);
+    exprt val =
+      extract_pyobject_value(list_at, unpack_elem_type(list_id, i, elem_type));
+    assign_unpack_target(ast_node, targets[i], list_id, i, val, target_block);
   }
 
   // Handle starred target: collect remaining elements into a new list
@@ -449,35 +429,14 @@ void python_list::handle_list_var_unpacking(
     // Create new list for the starred variable
     symbolt &star_list = create_list();
 
-    // Compute source list size once
-    const symbolt *size_func =
-      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-    assert(size_func);
-
-    symbolt &size_var = converter_.create_tmp_symbol(
-      list_value_, "$unpack_size$", size_type(), gen_zero(size_type()));
-    code_declt size_decl(build_symbol(size_var));
-    target_block.copy_to_operands(size_decl);
-
-    code_function_callt size_call;
-    size_call.function() = build_symbol(*size_func);
-    size_call.arguments().push_back(
-      list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr));
-    size_call.lhs() = build_symbol(size_var);
-    size_call.type() = size_type();
-    size_call.location() = loc;
-    target_block.copy_to_operands(size_call);
-
     // upper = size - after_star. size_var and the literal are both size_type
     // (synthetic), so build the subtraction in IREP2 (V.3).
     exprt upper_expr;
     if (after_star > 0)
-      upper_expr = build_sub(
-        build_symbol(size_var),
-        from_integer(after_star, size_type()),
-        size_type());
+      upper_expr =
+        build_sub(size_var, from_integer(after_star, size_type()), size_type());
     else
-      upper_expr = build_symbol(size_var);
+      upper_expr = size_var;
 
     // Loop: for loop_idx = before_star; loop_idx < upper; loop_idx++
     symbolt &loop_idx = converter_.create_tmp_symbol(
@@ -540,18 +499,20 @@ void python_list::handle_list_var_unpacking(
     while_loop.copy_to_operands(loop_cond, loop_body);
     target_block.copy_to_operands(while_loop);
 
-    // Record element type for the starred list
-    elem_types().record(star_list.id.as_string(), "", elem_type);
+    const std::string &star_id = star_list.id.as_string();
+    record_starred_elem_types(
+      list_id, star_id, before_star, after_star, elem_type);
 
     // Assign the new list to the starred variable and register its type info
-    assign_to_target(star_value, build_symbol(star_list));
+    assign_unpack_target(
+      ast_node, star_value, list_id, 0, build_symbol(star_list), target_block);
     // Also register the starred variable's own symbol id so subsequent list
     // method calls (e.g., rest.append(x)) can look up the element type.
     {
       const std::string var_name = star_value["id"].get<std::string>();
       symbol_id var_sid = converter_.create_symbol_id();
       var_sid.set_object(var_name);
-      elem_types().record(var_sid.to_string(), "", elem_type);
+      elem_types().assign_from(star_id, var_sid.to_string());
     }
 
     // Assign targets after the star using size_var
@@ -561,12 +522,152 @@ void python_list::handle_list_var_unpacking(
       // index = size - (after_star - j). size_var and the literal are both
       // size_type (synthetic), so build the subtraction in IREP2 (V.3).
       exprt after_idx = build_sub(
-        build_symbol(size_var),
-        from_integer(after_star - j, size_type()),
-        size_type());
+        size_var, from_integer(after_star - j, size_type()), size_type());
+      const size_t i = recorded_index_from_end(list_id, after_star - j);
       exprt list_at = build_list_at_call(list_expr, after_idx, list_value_);
-      exprt val = extract_pyobject_value(list_at, elem_type);
-      assign_to_target(targets[target_idx], val);
+      exprt val = extract_pyobject_value(
+        list_at, unpack_elem_type(list_id, i, elem_type));
+      assign_unpack_target(
+        ast_node, targets[target_idx], list_id, i, val, target_block);
     }
   }
+}
+
+exprt python_list::check_unpack_length(
+  const exprt &list_expr,
+  size_t fixed,
+  bool starred,
+  const locationt &loc,
+  codet &target_block)
+{
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  assert(size_func);
+
+  symbolt &size_var = converter_.create_tmp_symbol(
+    list_value_, "$unpack_size$", size_type(), gen_zero(size_type()));
+  code_declt size_decl(build_symbol(size_var));
+  target_block.copy_to_operands(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = build_symbol(*size_func);
+  size_call.arguments().push_back(
+    list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr));
+  size_call.lhs() = build_symbol(size_var);
+  size_call.type() = size_type();
+  size_call.location() = loc;
+  target_block.copy_to_operands(size_call);
+
+  // CPython takes every value before it binds a target
+  const exprt expected = from_integer(fixed, size_type());
+  auto raise_value_error = [&](const exprt &cond, const std::string &msg) {
+    codet raise("expression");
+    raise.copy_to_operands(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError",
+        msg + " values to unpack (expected " + (starred ? "at least " : "") +
+          std::to_string(fixed) + ")"));
+    code_ifthenelset guard;
+    guard.cond() = cond;
+    guard.then_case() = raise;
+    guard.location() = loc;
+    guard.location().property("skipped");
+    target_block.copy_to_operands(guard);
+  };
+  raise_value_error(
+    build_less_than(build_symbol(size_var), expected), "not enough");
+  if (!starred)
+    raise_value_error(
+      build_greater_than(build_symbol(size_var), expected), "too many");
+  return build_symbol(size_var);
+}
+
+typet python_list::unpack_elem_type(
+  const std::string &list_id,
+  size_t i,
+  const typet &fallback) const
+{
+  // A target takes the type a constant-index read of its element would, so
+  // each element of a mixed list keeps its own type
+  return elem_types().find(list_id) ? elem_types().element_type(list_id, i)
+                                    : fallback;
+}
+
+size_t python_list::recorded_index_from_end(
+  const std::string &list_id,
+  size_t from_end) const
+{
+  // Past the recorded entries the first element's type stands in
+  const size_t n = elem_types().size(list_id);
+  return n >= from_end ? n - from_end : SIZE_MAX;
+}
+
+void python_list::record_starred_elem_types(
+  const std::string &list_id,
+  const std::string &star_id,
+  size_t before_star,
+  size_t after_star,
+  const typet &elem_type)
+{
+  // A mixed list's starred slice keeps each element's own type
+  const element_type_registry::entries *recorded = elem_types().find(list_id);
+  if (!recorded || elem_types().uniform_element_type(list_id) != typet())
+  {
+    elem_types().record(star_id, "", elem_type);
+    return;
+  }
+  for (size_t k = before_star; k + after_star < recorded->size(); k++)
+    elem_types().record(star_id, recorded->at(k).first, recorded->at(k).second);
+}
+
+void python_list::assign_unpack_target(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &tgt_node,
+  const std::string &list_id,
+  size_t i,
+  const exprt &val,
+  codet &target_block)
+{
+  const locationt loc = converter_.get_location_from_decl(ast_node);
+
+  // A nested target unpacks the element, held in a temporary so it is read
+  // once, and a nested list takes the element types recorded for element i
+  if (tgt_node["_type"] != "Name")
+  {
+    // An element typed from an untrusted record is not unpacked further
+    if (elem_types().find(list_id) && !converter_.unpack_record_trusted_)
+      throw std::runtime_error(
+        "Cannot unpack non-tuple element into nested target");
+    symbolt &elem = converter_.create_tmp_symbol(
+      list_value_, "$unpack_elem$", val.type(), exprt());
+    code_declt elem_decl(build_symbol(elem));
+    elem_decl.copy_to_operands(val);
+    target_block.copy_to_operands(elem_decl);
+    elem_types().assign_from(
+      elem_types().element_id(list_id, i), elem.id.as_string());
+    converter_.unpack_nested_target(
+      ast_node, tgt_node, build_symbol(elem), target_block);
+    return;
+  }
+
+  const std::string var_name = tgt_node["id"].get<std::string>();
+  symbol_id var_sid = converter_.create_symbol_id();
+  var_sid.set_object(var_name);
+  symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+  if (!var_symbol)
+  {
+    symbolt new_symbol = converter_.create_symbol(
+      loc.get_file().as_string(),
+      var_name,
+      var_sid.to_string(),
+      loc,
+      val.type());
+    new_symbol.lvalue = true;
+    new_symbol.file_local = true;
+    new_symbol.is_extern = false;
+    var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
+  }
+  code_assignt assign(build_symbol(*var_symbol), val);
+  assign.location() = loc;
+  target_block.copy_to_operands(assign);
 }

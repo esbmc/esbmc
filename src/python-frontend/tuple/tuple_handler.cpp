@@ -571,25 +571,20 @@ void tuple_handler::handle_tuple_unpacking(
     const size_t i = t < star_idx ? t : t + n - targets.size();
     const std::string tgt_type = targets[t]["_type"].get<std::string>();
 
-    // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. Resolve the
-    // element's (possibly symbol-referenced) type to a concrete struct, build
-    // the member access temp.element_i, and recurse so the sub-pattern is
-    // unpacked element-wise.
+    // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. A literal's
+    // operand is the element itself, so a list built in place keeps its
+    // recorded element types.
     if (tgt_type == "Tuple" || tgt_type == "List")
     {
-      const typet resolved =
-        converter_.name_space().follow(tuple_type.components()[i].type());
-      // Guard before recursing: unpacking a non-tuple element into a nested
-      // pattern (e.g. `(a, b), c = (5, 3)`) is a TypeError in Python. Reject it
-      // explicitly so the recursive to_struct_type() never casts a non-struct.
-      if (!is_tuple_type(resolved))
-      {
-        throw std::runtime_error(
-          "Cannot unpack non-tuple element into nested target");
-      }
-      std::string member_name = "element_" + std::to_string(i);
-      exprt nested_rhs = build_member(rhs, member_name, resolved);
-      handle_tuple_unpacking(ast_node, targets[t], nested_rhs, target_block);
+      converter_.unpack_nested_target(
+        ast_node,
+        targets[t],
+        rhs.id() == "struct" ? rhs.operands()[i]
+                             : build_member(
+                                 rhs,
+                                 "element_" + std::to_string(i),
+                                 tuple_type.components()[i].type()),
+        target_block);
       continue;
     }
 

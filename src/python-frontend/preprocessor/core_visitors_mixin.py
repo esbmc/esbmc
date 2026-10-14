@@ -489,8 +489,9 @@ class CoreVisitorsMixin:
         elif isinstance(target, ast.Name) and target.id in self.newtype_vars:
             self.newtype_vars.discard(target.id)
 
-        if self._track_bound_method(target, node.value):
-            return None
+        captured = self._track_bound_method(target, node.value)
+        if captured is not None:
+            return captured
 
         self._update_variable_types_simple(target, node.value)
 
@@ -674,16 +675,43 @@ class CoreVisitorsMixin:
         return None
 
     def _track_bound_method(self, target, value, resolvable=True):
-        """Drop `target = obj.attr` when the module calls `target`, so that
+        """Replace `target = obj.attr` when the module calls `target`, so that
         each later `target(...)` becomes `obj.attr(...)`, and forget a
-        `target` bound to anything else."""
-        if (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute)
-                and isinstance(value.value, ast.Name) and target.id in self.called_names):
+        `target` bound to anything else. Where `_captures_receiver` holds,
+        `obj` is first stored in a fresh name, so each call acts on the object
+        `obj` gave at the binding (#8439). Returns the statements replacing
+        the binding, or None if it stays."""
+        captures = self._captures_receiver(target, value)
+        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
+                (captures or isinstance(value.value, ast.Name)) and target.id in self.called_names):
+            if isinstance(target, ast.Name):
+                self.bound_method_vars.pop(target.id, None)
+            return None
+        if not captures:
             self.bound_method_vars[target.id] = value
-            return True
-        if isinstance(target, ast.Name):
-            self.bound_method_vars.pop(target.id, None)
-        return False
+            return []
+        receiver = f"ESBMC_bound_receiver_{self._next_unpack_tmp_id()}"
+        self.bound_method_vars[target.id] = ast.Attribute(value=ast.Name(id=receiver,
+                                                                         ctx=ast.Load()),
+                                                          attr=value.attr,
+                                                          ctx=ast.Load())
+        capture = ast.Assign(targets=[ast.Name(id=receiver, ctx=ast.Store())], value=value.value)
+        self._update_variable_types_simple(capture.targets[0], value.value)
+        return [ast.fix_missing_locations(ast.copy_location(capture, value))]
+
+    def _captures_receiver(self, target, value):
+        """Whether `target = obj.attr` stores `obj` for the calls of `target`:
+        nothing else binds `target` in the scope being visited, or its bindings
+        run in source order (#8467), so each call sees the last binding above
+        it, and `obj` is a call or a name that is not only bound by an import,
+        a definition or a builtin."""
+        if not (isinstance(target, ast.Name) and isinstance(value, ast.Attribute)):
+            return False
+        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+        _, counts = self.scope_binding_counts.get(scope, (None, {}))
+        return (counts.get(target.id) == 1 or (scope, target.id) in self.in_order_bindings) and (
+            isinstance(value.value, ast.Call) or
+            (isinstance(value.value, ast.Name) and value.value.id in self.variable_names))
 
     def _is_resolvable_unpacked_method(self, target, value, statement):
         """Whether unpacking `obj.m` into `target` may be resolved at each call

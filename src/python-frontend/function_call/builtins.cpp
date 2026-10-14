@@ -979,47 +979,170 @@ exprt function_call_expr::handle_divmod() const
   return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
 }
 
-exprt function_call_expr::handle_issubclass() const
+static const std::string abc_prefix = "collections.abc.";
+
+/// The class a classinfo node names: a collections.abc class as
+/// "collections.abc.<name>", any other Name as its id, and otherwise empty.
+static std::string
+class_key(const nlohmann::json &node, const nlohmann::json &ast)
 {
-  const auto &args = call_["args"];
-  if (args.size() != 2)
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "issubclass() takes exactly 2 arguments");
+  const std::string name = json_utils::dotted_name(node);
+  const std::string abc = json_utils::collections_abc_class(ast, name);
+  if (!abc.empty())
+    return abc_prefix + abc;
+  return node["_type"] == "Name" ? name : "";
+}
 
-  // arg 1 must be a class, i.e. a Name referring to a class or builtin type.
-  if (args[0]["_type"] != "Name")
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "issubclass() arg 1 must be a class");
-  const std::string cls = args[0]["id"].get<std::string>();
+/// The collections.abc classes each builtin class and each such ABC is a
+/// subclass of, as CPython 3.14 reports them. Hashable here says whether the
+/// class itself is hashable, not whether Hashable is among its bases.
+static const std::vector<std::string> *abc_supers(const std::string &key)
+{
+  static const std::unordered_map<std::string, std::vector<std::string>>
+    supers = {
+      {"int", {"Hashable"}},
+      {"float", {"Hashable"}},
+      {"complex", {"Hashable"}},
+      {"bool", {"Hashable"}},
+      {"str",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"bytes",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"bytearray",
+       {"Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence",
+        "MutableSequence"}},
+      {"list",
+       {"Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence",
+        "MutableSequence"}},
+      {"tuple",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"dict",
+       {"Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Mapping",
+        "MutableMapping"}},
+      {"set",
+       {"Iterable", "Container", "Sized", "Collection", "Set", "MutableSet"}},
+      {"frozenset",
+       {"Hashable", "Iterable", "Container", "Sized", "Collection", "Set"}},
+      {"range",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"object", {"Hashable"}},
+      {"type", {"Hashable", "Callable"}},
+      {"collections.abc.Hashable", {}},
+      {"collections.abc.Iterable", {"Hashable"}},
+      {"collections.abc.Iterator", {"Hashable", "Iterable"}},
+      {"collections.abc.Reversible", {"Hashable", "Iterable"}},
+      {"collections.abc.Generator", {"Hashable", "Iterable", "Iterator"}},
+      {"collections.abc.Container", {"Hashable"}},
+      {"collections.abc.Sized", {"Hashable"}},
+      {"collections.abc.Collection",
+       {"Hashable", "Iterable", "Container", "Sized"}},
+      {"collections.abc.Callable", {"Hashable"}},
+      {"collections.abc.Sequence",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection"}},
+      {"collections.abc.MutableSequence",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"collections.abc.Set", {"Iterable", "Container", "Sized", "Collection"}},
+      {"collections.abc.MutableSet",
+       {"Iterable", "Container", "Sized", "Collection", "Set"}},
+      {"collections.abc.Mapping",
+       {"Iterable", "Container", "Sized", "Collection"}},
+      {"collections.abc.MutableMapping",
+       {"Iterable", "Container", "Sized", "Collection", "Mapping"}},
+  };
+  auto it = supers.find(key);
+  return it == supers.end() ? nullptr : &it->second;
+}
 
-  // arg 2 is a class, a tuple of classes or a union of classes.
-  std::vector<nlohmann::json> info;
-  collect_classinfo(args[1], info);
-  std::vector<std::string> targets;
-  for (const auto &n : info)
-    if (n["_type"] == "Name")
-      targets.push_back(n["id"].get<std::string>());
-    else if (n["_type"] == "Tuple")
-      return converter_.get_exception_handler().gen_exception_raise(
-        "TypeError", "unsupported operand type(s) for |");
+/// The methods by whose presence a structural collections.abc class
+/// (one with a __subclasshook__) admits a class that does not inherit it.
+static const std::vector<std::string> *abc_hook_methods(const std::string &key)
+{
+  static const std::unordered_map<std::string, std::vector<std::string>>
+    methods = {
+      {"collections.abc.Iterable", {"__iter__"}},
+      {"collections.abc.Iterator", {"__iter__", "__next__"}},
+      {"collections.abc.Reversible", {"__reversed__", "__iter__"}},
+      {"collections.abc.Generator",
+       {"__iter__", "__next__", "send", "throw", "close"}},
+      {"collections.abc.Container", {"__contains__"}},
+      {"collections.abc.Sized", {"__len__"}},
+      {"collections.abc.Collection", {"__len__", "__iter__", "__contains__"}},
+      {"collections.abc.Callable", {"__call__"}},
+  };
+  auto it = methods.find(key);
+  return it == methods.end() ? nullptr : &it->second;
+}
 
-  if (targets.empty())
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "issubclass() arg 2 must be a class or tuple of classes");
+static bool defines_method(const nlohmann::json &cls, const std::string &name)
+{
+  const auto &body = cls["body"];
+  return std::any_of(body.begin(), body.end(), [&name](const auto &stmt) {
+    return stmt["_type"] == "FunctionDef" && stmt["name"] == name;
+  });
+}
 
-  // Collect the ancestors of `cls` by walking the AST class hierarchy.
-  // Every class is implicitly a subclass of object; bool subclasses int.
-  const auto &ast = converter_.ast();
+/// `cls` and the classes it inherits, explicitly or implicitly, nearest
+/// first. For single inheritance this is the method resolution order.
+static std::vector<std::string>
+class_ancestors(const std::string &cls, const nlohmann::json &ast)
+{
   std::vector<std::string> ancestors;
   std::vector<std::string> work{cls};
-  auto seen = [&ancestors](const std::string &c) {
-    return std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end();
-  };
   while (!work.empty())
   {
     std::string c = work.back();
     work.pop_back();
-    if (seen(c))
+    if (std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end())
       continue;
     ancestors.push_back(c);
 
@@ -1028,13 +1151,113 @@ exprt function_call_expr::handle_issubclass() const
 
     const auto cls_node = json_utils::find_class(ast["body"], c);
     if (!cls_node.empty() && cls_node.contains("bases"))
-      for (const auto &b : cls_node["bases"])
-        if (b["_type"] == "Name")
-          work.push_back(b["id"].get<std::string>());
+    {
+      const auto &bases = cls_node["bases"];
+      for (auto b = bases.rbegin(); b != bases.rend(); ++b)
+      {
+        const std::string key = class_key(*b, ast);
+        if (!key.empty())
+          work.push_back(key);
+      }
+    }
+  }
+  return ancestors;
+}
+
+/// Whether instances of a class are hashable: the nearest class to define
+/// __hash__ or __eq__ decides, as defining __eq__ alone sets __hash__ to None.
+static bool is_hashable(
+  const std::vector<std::string> &ancestors,
+  const nlohmann::json &ast)
+{
+  for (const std::string &c : ancestors)
+  {
+    const auto cls_node = json_utils::find_class(ast["body"], c);
+    if (!cls_node.empty())
+    {
+      if (defines_method(cls_node, "__hash__"))
+        return true;
+      if (defines_method(cls_node, "__eq__"))
+        return false;
+    }
+    else if (const auto *supers = abc_supers(c))
+      return std::find(supers->begin(), supers->end(), "Hashable") !=
+             supers->end();
+  }
+  return true;
+}
+
+/// Whether a class with @p ancestors is a subclass of @p target: by
+/// inheritance, by a builtin's registration with a collections.abc class, or
+/// by defining the methods a structural collections.abc class looks for.
+static bool is_subclass(
+  const std::vector<std::string> &ancestors,
+  const std::string &target,
+  const nlohmann::json &ast)
+{
+  auto inherits = [&ancestors](const std::string &c) {
+    return std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end();
+  };
+  if (target == "object" || inherits(target))
+    return true;
+  if (!target.starts_with(abc_prefix))
+    return false;
+  if (target == abc_prefix + "Hashable")
+    return is_hashable(ancestors, ast);
+
+  const std::string abc = target.substr(abc_prefix.size());
+  for (const std::string &c : ancestors)
+    if (const auto *supers = abc_supers(c))
+      if (std::find(supers->begin(), supers->end(), abc) != supers->end())
+        return true;
+
+  const auto *methods = abc_hook_methods(target);
+  return methods &&
+         std::all_of(methods->begin(), methods->end(), [&](const auto &m) {
+           return std::any_of(
+             ancestors.begin(), ancestors.end(), [&](const auto &c) {
+               const auto cls_node = json_utils::find_class(ast["body"], c);
+               return !cls_node.empty() && defines_method(cls_node, m);
+             });
+         });
+}
+
+exprt function_call_expr::handle_issubclass() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 2)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() takes exactly 2 arguments");
+
+  // arg 1 must be a class: a Name referring to a class or builtin type, or a
+  // collections.abc class.
+  const auto &ast = converter_.ast();
+  const std::string cls = class_key(args[0], ast);
+  if (cls.empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() arg 1 must be a class");
+
+  // arg 2 is a class, a tuple of classes or a union of classes.
+  std::vector<nlohmann::json> info;
+  collect_classinfo(args[1], info);
+  std::vector<std::string> targets;
+  for (const auto &n : info)
+  {
+    if (n["_type"] == "Tuple")
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "unsupported operand type(s) for |");
+    const std::string key = class_key(n, ast);
+    if (!key.empty())
+      targets.push_back(key);
   }
 
+  if (targets.empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() arg 2 must be a class or tuple of classes");
+
+  const std::vector<std::string> ancestors = class_ancestors(cls, ast);
   for (const std::string &t : targets)
-    if (t == "object" || seen(t))
+    if (is_subclass(ancestors, t, ast))
       return true_exprt();
   return false_exprt();
 }
