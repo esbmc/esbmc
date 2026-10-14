@@ -3504,7 +3504,9 @@ void bmct::report_result(smt_resultt &res)
   // A coverage run replaced the program's assertions with reachability
   // probes, so it neither proved nor refuted anything about the program.
   // Its result is the [Coverage] block, not a verification verdict.
-  if (options.get_bool_option("coverage-measurement"))
+  if (
+    options.get_bool_option("coverage-measurement") &&
+    !goto_coveraget::path_cov_query_mode())
     return;
 
   // Dead-code analysis is advisory. Its instrumented reachability probes are
@@ -4385,10 +4387,12 @@ coverage_silences_claim(bool goto_cov, bool dead_code, const std::string &prop)
 }
 
 /// A coverage probe: SAT means "this location is reachable". It is not a
-/// property, so it must not be reported as one (issue #6387).
+/// property, so it must not be reported as one (issue #6387). The claims of a
+/// path-coverage query are properties.
 static bool is_coverage_goal(bool cov_run, const std::string &prop)
 {
-  return cov_run && prop == "instrumented assertion";
+  return cov_run && !goto_coveraget::path_cov_query_mode() &&
+         prop == "instrumented assertion";
 }
 
 /// Which ESBMC this is. Hashing the executable is the fallback when the build
@@ -4819,6 +4823,9 @@ smt_resultt bmct::multi_property_check(
       ? (size_t)std::stoul(options.get_option("path-cov-fault-mid-witness"))
       : 0;
 
+  // Jobs skipped because their claim key was already witnessed.
+  std::atomic<size_t> skipped_witnessed_copies{0};
+
   auto job_function = [this,
                        &eq,
                        &ce_counter,
@@ -4843,6 +4850,7 @@ smt_resultt bmct::multi_property_check(
                        &is_dead_code,
                        &is_cov_run,
                        &is_keep_verified,
+                       &skipped_witnessed_copies,
                        &fingerprint_dump,
                        &proof_cache,
                        &proof_cache_verify,
@@ -4987,7 +4995,10 @@ smt_resultt bmct::multi_property_check(
 
     // skip if we have already verified
     if (is_verified && !is_keep_verified)
+    {
+      ++skipped_witnessed_copies;
       return;
+    }
 
     // Slice
     if (!options.get_bool_option("no-slice"))
@@ -5100,6 +5111,17 @@ smt_resultt bmct::multi_property_check(
       solver_result,
       claim.claim_loc,
       claim.claim_msg);
+
+    // The claims of a path-coverage query are properties, and the query's
+    // RESULT line may end the run before any table is printed, so each verdict
+    // is named here.
+    if (goto_coveraget::path_cov_query_mode() && !is_cov_silent)
+    {
+      if (solver_result == P_UNSATISFIABLE)
+        log_status("✓ PASSED: '{}'", prettify_solidity_expr(claim.claim_cstr));
+      else if (solver_result == P_SATISFIABLE)
+        log_status("✗ FAILED: '{}'", prettify_solidity_expr(claim.claim_cstr));
+    }
 
     // After UNSAT, probe whether the path to the kept claim is reachable.
     // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
@@ -5710,7 +5732,7 @@ smt_resultt bmct::multi_property_check(
       while (enum_result == P_SATISFIABLE)
       {
         witness_recordt w;
-        build_goto_trace(local_eq, *solver_ptr, w.trace);
+        build_goto_trace(local_eq, *solver_ptr, w.trace, keep_hidden_steps);
         // Collecting nondet values walks every SSA step and queries the
         // solver model per nondet symbol — non-trivial on coverage runs
         // with many claims and large arrays. Skip it when we don't need
@@ -6755,8 +6777,11 @@ smt_resultt bmct::multi_property_check(
       }
 
       // No claim of a coverage run drives a verdict: the program was never
-      // checked against the assertions the instrumentation replaced.
-      if (!is_goto_cov)
+      // checked against the assertions the instrumentation replaced. A
+      // path-coverage query's instrumented claims are its properties.
+      if (
+        !is_goto_cov || (goto_coveraget::path_cov_query_mode() &&
+                         claim.claim_property == "instrumented assertion"))
       {
         std::lock_guard lock(result_mutex);
         final_result = solver_result;
@@ -6968,6 +6993,14 @@ smt_resultt bmct::multi_property_check(
   // A warm run solves nothing, so without this the report shows no solver
   // activity at all and gives no sign of where the verdicts came from.
   log_proof_cache_summary(proof_cache.get());
+
+  // One claim reaches the job loop once per physical copy of its unit; the
+  // copies of a claim already witnessed are not solved again.
+  if (is_path_cov && skipped_witnessed_copies > 0)
+    log_status(
+      "--solidity-path-coverage: {} copy(ies) of already-witnessed path "
+      "claim(s) were not solved again",
+      skipped_witnessed_copies.load());
 
   // For coverage with fixed bound unwinding
   if (
@@ -7296,7 +7329,9 @@ void bmct::report_property_verdicts(smt_resultt res) const
 
   if (options.get_bool_option("coverage-measurement"))
   {
-    report_coverage_goal_verdicts(verdicts);
+    // A path-coverage query names each claim's verdict as it is solved.
+    if (!goto_coveraget::path_cov_query_mode())
+      report_coverage_goal_verdicts(verdicts);
     return;
   }
 

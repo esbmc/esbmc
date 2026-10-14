@@ -663,6 +663,16 @@ void show_simplified_location(std::ostream &out, const locationt &location)
   out << dest << "\n";
 }
 
+/// A call binds its arguments at the callee's first instruction, whatever
+/// that instruction is, so such a step cannot be recognised by its pc.
+static bool binds_parameter(const namespacet &ns, const goto_trace_stept &step)
+{
+  if (!is_symbol2t(step.original_lhs))
+    return false;
+  const symbolt *s = ns.lookup(to_symbol2t(step.original_lhs).thename);
+  return s != nullptr && s->is_parameter;
+}
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -792,7 +802,7 @@ void show_goto_trace(
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
+        step.pc->is_function_call() || binds_parameter(ns, step))
       {
         if (simplify_trace)
         {

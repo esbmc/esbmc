@@ -2385,9 +2385,14 @@ void goto_coveraget::audit_entry_liveness(const std::string &focus_function)
   {
     size_t instrumented = 0; // claims actually put to the solver this run
     size_t decided = 0;      // of those, how many came back with a verdict
+    size_t simplified = 0;   // settled by symex before any solver call
   };
   std::map<std::string, tally> per_unit;
   size_t total_instrumented = 0, total_decided = 0;
+
+  // A claim symex's simplifier settles never reaches the solver, yet symex
+  // only meets it by entering its unit, so it is evidence the unit was entered.
+  const auto symex_verdicts = goto_functionst::property_verdicts.snapshot();
 
   {
     std::lock_guard lock(claim_outcome_mutex);
@@ -2412,6 +2417,8 @@ void goto_coveraget::audit_entry_liveness(const std::string &focus_function)
         ++t.decided;
         ++total_decided;
       }
+      else if (symex_verdicts.count(key.first + " at " + key.second))
+        ++t.simplified;
     }
   }
 
@@ -2427,7 +2434,7 @@ void goto_coveraget::audit_entry_liveness(const std::string &focus_function)
 
   std::vector<std::string> dead, dead_by_design;
   for (const auto &[unit, t] : per_unit)
-    if (t.instrumented > 0 && t.decided == 0)
+    if (t.instrumented > 0 && t.decided == 0 && t.simplified == 0)
     {
       // Recorded for BOTH branches, WITH the cause. Whether or not the absence
       // is a defect, a path of this unit must be reported as "the unit was
@@ -2484,6 +2491,21 @@ void goto_coveraget::audit_entry_liveness(const std::string &focus_function)
       dead.size(),
       names,
       path_cov_partial_reason);
+    return;
+  }
+
+  // A query's box may contradict the path it asks about, and symex then
+  // finds every claim of the unit unreachable before any solver call. That is
+  // the vacuous query the mode's own RESULT line reports, not a harness that
+  // failed to enter the unit.
+  if (path_cov_query_mode())
+  {
+    log_status(
+      "--solidity-path-coverage: {} unit(s) had claims instrumented but none "
+      "reached the solver: {}. Under a path-coverage query this is what a box "
+      "admitting no execution of the unit produces; see the RESULT line",
+      dead.size(),
+      names);
     return;
   }
 

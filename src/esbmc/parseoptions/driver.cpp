@@ -1609,7 +1609,8 @@ int esbmc_parseoptionst::doit()
   // result is the [Coverage] block closed by the completeness line. Printed
   // here, once, so it lands after the last block (k-induction prints one per
   // phase).
-  if (is_coverage)
+  // A path-coverage query keeps the verdict it printed, and its exit code.
+  if (is_coverage && !goto_coveraget::path_cov_query_mode())
   {
     report_coverage_completeness();
     return 0;

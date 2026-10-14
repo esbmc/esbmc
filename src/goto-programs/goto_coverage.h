@@ -1463,6 +1463,16 @@ public:
   static bool path_cov_assert_mode;
   static std::vector<assert_candidatet> path_cov_assert_candidates;
 
+  /// Certification, outer-box and assert modes borrow the path instrumentation
+  /// to ask verification queries: their claims are properties that hold or
+  /// fail, not reachability probes, so the run keeps its verdict and prints no
+  /// [Coverage] block.
+  static bool path_cov_query_mode()
+  {
+    return path_cov_certify_mode || path_cov_outer_box_mode ||
+           path_cov_assert_mode;
+  }
+
   // ---- THE NON-VACUITY WITNESS, and why the ladder is worthless without it --
   //
   // The region is ASSUMED at unit entry. Every structural gate on it is
