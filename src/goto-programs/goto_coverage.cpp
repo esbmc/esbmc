@@ -2837,6 +2837,7 @@ void goto_coveraget::branch_coverage()
   // all_claims is the no-skip static universe, rebuilt every call
   // (Item 2c). covered_set/outpath start clean unless a path is given.
   all_claims.clear();
+  claim_negation.clear();
   covered_set.clear();
   covered_set_outpath.clear();
 
@@ -2953,6 +2954,10 @@ void goto_coveraget::branch_coverage()
           // so skipping can never inflate coverage.
           all_claims.insert(k_g);
           all_claims.insert(k_ng);
+          // The direction --dead-code-check reports dead when a probe is
+          // never violated, as get_total_cond_assert() records it.
+          claim_negation[k_g] = from_expr(ns, "", neg);
+          claim_negation[k_ng] = from_expr(ns, "", gen_not_expr(neg));
 
           // Item 2b: an edge already witnessed P_SATISFIABLE in a prior
           // run (covered_set) is not re-instrumented — fewer SMT
