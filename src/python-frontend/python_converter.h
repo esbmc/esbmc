@@ -2932,6 +2932,9 @@ private:
     const nlohmann::json &value,
     const std::string &function) const;
   exprt list_argument_expr(const nlohmann::json &arg);
+  typet subscript_call_return_type(
+    const exprt &func_ptr,
+    const nlohmann::json &func_node);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

@@ -1,0 +1,5 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+assertion c == 2$
+^VERIFICATION FAILED$
